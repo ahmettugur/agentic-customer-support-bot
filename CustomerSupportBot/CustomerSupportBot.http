@@ -1,0 +1,10 @@
+@CustomerSupportBot_HostAddress = http://localhost:5021
+
+POST {{CustomerSupportBot_HostAddress}}/chat/
+Content-Type: application/json
+
+{
+  "query": "Dell XPS 15 hakkında bilgi verir misiniz?"
+}
+
+###

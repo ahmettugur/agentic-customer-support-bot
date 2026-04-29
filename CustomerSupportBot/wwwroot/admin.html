@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HITL Admin Panel — Approvals &amp; Escalations</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+
+<div class="admin-layout">
+    <!-- HEADER -->
+    <header class="admin-header">
+        <div class="admin-header-left">
+            <a href="/" class="btn-icon" title="Sohbete dön">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"/>
+                </svg>
+            </a>
+            <div class="admin-header-info">
+                <h1>HITL Admin Panel</h1>
+                <p class="muted">Human-in-the-Loop · Onay bekleyen tool çağrıları &amp; açık eskalasyonlar</p>
+            </div>
+        </div>
+        <div class="admin-header-right">
+            <label class="auto-refresh-toggle">
+                <input type="checkbox" id="autoRefreshToggle" checked>
+                <span>Auto-refresh (3sn)</span>
+            </label>
+            <button class="btn-secondary" id="refreshBtn" title="Yenile">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                    <path d="M21 3v5h-5"/>
+                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                    <path d="M3 21v-5h5"/>
+                </svg>
+                Yenile
+            </button>
+        </div>
+    </header>
+
+    <!-- TABS -->
+    <nav class="admin-tabs">
+        <button class="tab-btn active" data-tab="approvals">
+            Onay Kuyruğu <span class="badge" id="pendingApprovalsBadge">0</span>
+        </button>
+        <button class="tab-btn" data-tab="escalations">
+            Eskalasyonlar <span class="badge badge-warn" id="openEscalationsBadge">0</span>
+        </button>
+        <button class="tab-btn" data-tab="chats">
+            Aktif Sohbetler <span class="badge badge-live" id="activeChatsBadge">0</span>
+        </button>
+        <button class="tab-btn" data-tab="history">
+            Geçmiş
+        </button>
+        <button class="tab-btn" data-tab="analytics">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
+            </svg>
+            Analytics
+        </button>
+    </nav>
+
+    <!-- TAB CONTENT -->
+    <main class="admin-main">
+        <!-- TAB: APPROVALS -->
+        <section class="tab-content active" id="tab-approvals">
+            <div class="tab-header">
+                <h2>Onay Bekleyen Tool Çağrıları</h2>
+                <p class="muted">
+                    LLM bir yan etkili tool (order_placement_tool, complaint_registration_tool) çağırmak istiyor.
+                    Onay verilmezse <strong>60 saniye</strong> sonra otomatik reddedilir.
+                </p>
+            </div>
+            <div class="cards-list" id="approvalsList">
+                <div class="empty-state">Onay bekleyen istek yok.</div>
+            </div>
+        </section>
+
+        <!-- TAB: ESCALATIONS -->
+        <section class="tab-content" id="tab-escalations">
+            <div class="escalations-layout">
+                <aside class="escalations-sidebar">
+                    <h3>Kapanmış Eskalasyonlar <span class="badge badge-muted" id="closedEscalationsBadge">0</span></h3>
+                    <p class="muted small">Çözüldü veya dismiss edildi.</p>
+                    <div class="cards-list compact" id="closedEscalationsList">
+                        <div class="empty-state">Henüz kapanmış eskalasyon yok.</div>
+                    </div>
+                </aside>
+                <div class="escalations-main">
+                    <div class="tab-header">
+                        <h2>Açık Eskalasyonlar</h2>
+                        <p class="muted">
+                            Specialist ajan <code>needs_escalation</code> status'u döndürdü — bir insan temsilcisi bakmalı.
+                        </p>
+                    </div>
+                    <div class="cards-list" id="escalationsList">
+                        <div class="empty-state">Açık eskalasyon yok.</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: ACTIVE CHATS -->
+        <section class="tab-content" id="tab-chats">
+            <div class="tab-header">
+                <h2>Aktif Canlı Sohbetler</h2>
+                <p class="muted">
+                    Bir session'ı eskalasyon kartından <strong>Devral & Sohbet</strong> ile alabilirsin —
+                    veya aşağıdaki listeden zaten Human modda olan bir session'ın sohbetine bağlanabilirsin.
+                </p>
+            </div>
+            <div class="chats-layout">
+                <aside class="chats-sidebar">
+                    <h3>Aktif Session'lar</h3>
+                    <div class="cards-list" id="activeChatsList">
+                        <div class="empty-state">Aktif sohbet yok.</div>
+                    </div>
+                </aside>
+                <div class="chat-panel-host" id="chatPanelHost">
+                    <div class="empty-state">Sol taraftan bir session seç ya da bir eskalasyondan devral.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: ANALYTICS -->
+        <section class="tab-content" id="tab-analytics">
+            <div class="tab-header">
+                <h2>Conversation Analytics</h2>
+                <p class="muted">Oturum seçerek detaylı analiz görüntüleyin veya genel istatistikleri izleyin.</p>
+            </div>
+
+            <div class="analytics-layout">
+                <!-- Session Selector Sidebar -->
+                <aside class="analytics-session-sidebar">
+                    <div class="analytics-sidebar-header">
+                        <h3>Oturumlar</h3>
+                        <button class="btn-all-analytics" id="showAggregateBtn" title="Genel istatistikleri göster">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
+                            </svg>
+                            Genel
+                        </button>
+                    </div>
+                    <div class="analytics-session-list" id="analyticsSessionList">
+                        <div class="empty-state small-empty">Yükleniyor…</div>
+                    </div>
+                </aside>
+
+                <!-- Analytics Content -->
+                <div class="analytics-content" id="analyticsContent">
+
+                    <!-- ═══ AGGREGATE VIEW (default) ═══ -->
+                    <div id="analyticsAggregateView">
+                        <!-- Summary Cards -->
+                        <div class="analytics-summary" id="analyticsSummary">
+                            <div class="analytics-card">
+                                <div class="analytics-card-icon sessions">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg>
+                                </div>
+                                <div class="analytics-card-data">
+                                    <div class="analytics-card-value" id="statTotalSessions">0</div>
+                                    <div class="analytics-card-label">Toplam Oturum</div>
+                                </div>
+                            </div>
+                            <div class="analytics-card">
+                                <div class="analytics-card-icon messages">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                </div>
+                                <div class="analytics-card-data">
+                                    <div class="analytics-card-value" id="statTotalMessages">0</div>
+                                    <div class="analytics-card-label">Toplam Mesaj</div>
+                                </div>
+                            </div>
+                            <div class="analytics-card">
+                                <div class="analytics-card-icon rating">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                                </div>
+                                <div class="analytics-card-data">
+                                    <div class="analytics-card-value" id="statAverageRating">0</div>
+                                    <div class="analytics-card-label">Ortalama Puan (<span id="statTotalRatings">0</span> değerlendirme)</div>
+                                </div>
+                            </div>
+                            <div class="analytics-card">
+                                <div class="analytics-card-icon avg">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                                </div>
+                                <div class="analytics-card-data">
+                                    <div class="analytics-card-value" id="statAvgMessages">0</div>
+                                    <div class="analytics-card-label">Ort. Mesaj/Oturum</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Charts Row -->
+                        <div class="analytics-charts">
+                            <div class="analytics-chart-card">
+                                <h3>Puan Dağılımı</h3>
+                                <div class="rating-distribution" id="ratingDistribution"></div>
+                            </div>
+                            <div class="analytics-chart-card">
+                                <h3>Onay İstatistikleri</h3>
+                                <div class="approval-stats" id="approvalStats"></div>
+                            </div>
+                            <div class="analytics-chart-card">
+                                <h3>Eskalasyon İstatistikleri</h3>
+                                <div class="escalation-stats" id="escalationStats"></div>
+                            </div>
+                        </div>
+
+                        <!-- Sentiment Summary -->
+                        <div class="analytics-summary analytics-summary-tight">
+                            <div class="analytics-card">
+                                <div class="analytics-card-icon sentiment-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>
+                                </div>
+                                <div class="analytics-card-data">
+                                    <div class="analytics-card-value" id="statAvgSentiment">0.5</div>
+                                    <div class="analytics-card-label">Ort. Duygu Skoru</div>
+                                </div>
+                            </div>
+                            <div class="analytics-card">
+                                <div class="analytics-card-icon negative-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>
+                                </div>
+                                <div class="analytics-card-data">
+                                    <div class="analytics-card-value" id="statNegativeSessions">0</div>
+                                    <div class="analytics-card-label">Olumsuz Oturum</div>
+                                </div>
+                            </div>
+                            <div class="analytics-card">
+                                <div class="analytics-card-icon alert-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                                </div>
+                                <div class="analytics-card-data">
+                                    <div class="analytics-card-value" id="statSentimentAlerts">0</div>
+                                    <div class="analytics-card-label">Duygu Uyarısı</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Distribution Row -->
+                        <div class="analytics-charts">
+                            <div class="analytics-chart-card">
+                                <h3>Duygu Dağılımı</h3>
+                                <div class="distribution-list" id="sentimentDistribution">
+                                    <div class="empty-state">Veri yok.</div>
+                                </div>
+                            </div>
+                            <div class="analytics-chart-card">
+                                <h3>Niyet (Intent) Dağılımı</h3>
+                                <div class="distribution-list" id="intentDistribution">
+                                    <div class="empty-state">Veri yok.</div>
+                                </div>
+                            </div>
+                            <div class="analytics-chart-card">
+                                <h3>Faz Dağılımı</h3>
+                                <div class="distribution-list" id="phaseDistribution">
+                                    <div class="empty-state">Veri yok.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ratings Row -->
+                        <div class="analytics-charts">
+                            <div class="analytics-chart-card">
+                                <h3>Son Değerlendirmeler</h3>
+                                <div class="recent-ratings-list" id="recentRatingsList">
+                                    <div class="empty-state">Henüz değerlendirme yok.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ SESSION VIEW (session seçildiğinde) ═══ -->
+                    <div id="analyticsSessionView" class="hidden">
+                        <div class="session-analytics-header" id="sessionAnalyticsHeader"></div>
+                        <div class="session-analytics-body" id="sessionAnalyticsBody"></div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB: HISTORY -->
+        <section class="tab-content" id="tab-history">
+            <div class="tab-header">
+                <h2>Geçmiş</h2>
+                <p class="muted">Son 50 onay kararı + son 50 eskalasyon.</p>
+            </div>
+            <h3>Onay Geçmişi</h3>
+            <div class="cards-list" id="historyApprovalsList">
+                <div class="empty-state">Henüz karar kaydı yok.</div>
+            </div>
+            <h3 class="section-spaced">Eskalasyon Geçmişi</h3>
+            <div class="cards-list" id="historyEscalationsList">
+                <div class="empty-state">Henüz eskalasyon yok.</div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<!-- TEMPLATES -->
+<template id="approval-card-template">
+    <article class="card card-approval">
+        <header class="card-header">
+            <div class="card-title">
+                <span class="tool-tag" data-tool></span>
+                <code class="card-id" data-id></code>
+            </div>
+            <time class="muted" data-time></time>
+        </header>
+        <div class="card-body">
+            <div class="card-row">
+                <span class="label">Agent:</span> <span data-agent></span>
+            </div>
+            <div class="card-row">
+                <span class="label">Kullanıcı:</span> <span class="user-query" data-query></span>
+            </div>
+            <div class="card-row">
+                <span class="label">Session:</span> <code class="session-id" data-session></code>
+            </div>
+            <details class="card-params">
+                <summary>Parametreler</summary>
+                <pre data-params></pre>
+            </details>
+        </div>
+        <footer class="card-actions">
+            <button class="btn-primary btn-approve" data-approve>
+                ✓ Onayla
+            </button>
+            <button class="btn-danger btn-reject" data-reject>
+                ✗ Reddet
+            </button>
+        </footer>
+    </article>
+</template>
+
+<template id="escalation-card-template">
+    <article class="card card-escalation">
+        <header class="card-header">
+            <div class="card-title">
+                <span class="status-tag" data-status></span>
+                <code class="card-id" data-id></code>
+            </div>
+            <time class="muted" data-time></time>
+        </header>
+        <div class="card-body">
+            <div class="card-row">
+                <span class="label">Agent:</span> <span data-agent></span>
+            </div>
+            <div class="card-row">
+                <span class="label">Sebep:</span> <span data-reason></span>
+            </div>
+            <div class="card-row">
+                <span class="label">Kullanıcı:</span> <span class="user-query" data-query></span>
+            </div>
+            <details class="card-params">
+                <summary>Eksik bağlam + yanıt özeti</summary>
+                <pre data-context></pre>
+            </details>
+        </div>
+        <footer class="card-actions">
+            <button class="btn-secondary btn-ack" data-ack>
+                📋 Üstlen
+            </button>
+            <button class="btn-primary btn-takeover" data-takeover title="Session'ı Human moda al ve canlı sohbet başlat">
+                💬 Devral & Sohbet
+            </button>
+            <button class="btn-secondary btn-replan" data-replan title="Bot'un mevcut planı sıfırlansın; müşterinin sonraki mesajı yeniden değerlendirilsin">
+                🔄 Yeniden Planla
+            </button>
+            <button class="btn-primary btn-resolve" data-resolve>
+                ✓ Çöz
+            </button>
+            <button class="btn-danger btn-dismiss" data-dismiss>
+                ✗ Dismiss
+            </button>
+        </footer>
+    </article>
+</template>
+
+<template id="active-chat-card-template">
+    <article class="card card-active-chat" data-session>
+        <header class="card-header">
+            <div class="card-title">
+                <span class="status-tag human">LIVE</span>
+                <code class="card-id" data-sid></code>
+            </div>
+            <time class="muted" data-time></time>
+        </header>
+        <div class="card-body">
+            <div class="card-row">
+                <span class="label">Temsilci:</span> <span data-agent></span>
+            </div>
+            <div class="card-row">
+                <span class="label">Mesaj:</span> <span data-count></span>
+            </div>
+            <div class="card-row">
+                <span class="label">Duygu:</span> <span class="sentiment-badge" data-sentiment>😐 Nötr</span>
+            </div>
+        </div>
+        <footer class="card-actions">
+            <button class="btn-primary btn-open-chat" data-open>Sohbeti Aç</button>
+        </footer>
+    </article>
+</template>
+
+<template id="chat-panel-template">
+    <div class="chat-panel">
+        <header class="chat-panel-header">
+            <div class="chat-panel-title">
+                <span class="status-tag human">LIVE</span>
+                <div>
+                    <div class="chat-panel-session" data-sid></div>
+                    <div class="chat-panel-subtitle">
+                        Temsilci: <span data-agent></span>
+                        · Giriş: <span data-entered></span>
+                    </div>
+                </div>
+            </div>
+            <span class="sentiment-badge" data-sentiment>😐 Nötr</span>
+            <button class="btn-secondary btn-replan" data-replan-chat title="Bot'un mevcut planını sıfırla; müşterinin sonraki mesajı yeniden analiz edilsin">
+                🔄 Yeniden Planla
+            </button>
+            <button class="btn-danger btn-release" data-release>Sohbeti Bitir</button>
+        </header>
+        <div class="chat-panel-messages" data-messages></div>
+        <form class="chat-panel-composer" data-composer>
+            <textarea data-textarea rows="2" placeholder="Kullanıcıya yazın… (Enter: gönder, Shift+Enter: yeni satır)"></textarea>
+            <button type="submit" class="btn-primary">Gönder</button>
+        </form>
+    </div>
+</template>
+
+<template id="history-approval-template">
+    <article class="card card-history">
+        <header class="card-header">
+            <div class="card-title">
+                <span class="tool-tag" data-tool></span>
+                <span class="status-tag" data-status></span>
+                <code class="card-id" data-id></code>
+            </div>
+            <time class="muted" data-time></time>
+        </header>
+        <div class="card-body">
+            <div class="card-row" data-decided-row>
+                <span class="label">Karar:</span> <span data-decided-by></span> · <span data-decision-reason></span>
+            </div>
+        </div>
+    </article>
+</template>
+
+<template id="closed-escalation-compact-template">
+    <article class="card card-history compact-card">
+        <header class="card-header">
+            <div class="card-title">
+                <span class="status-tag" data-status></span>
+                <code class="card-id" data-id></code>
+            </div>
+            <time class="muted" data-time></time>
+        </header>
+        <div class="card-body">
+            <div class="card-row">
+                <span class="label">Agent:</span> <span data-agent></span>
+            </div>
+            <div class="card-row">
+                <span class="label">Sebep:</span> <span class="user-query" data-reason></span>
+            </div>
+            <details class="card-params">
+                <summary>Çözüm</summary>
+                <pre data-resolution></pre>
+            </details>
+        </div>
+        <footer class="card-actions compact-actions">
+            <button class="btn-secondary btn-view-transcript" data-view-transcript title="Bu eskalasyona ait konuşma geçmişini göster">
+                💬 Konuşmayı Gör
+            </button>
+        </footer>
+    </article>
+</template>
+
+<template id="history-escalation-template">
+    <article class="card card-history">
+        <header class="card-header">
+            <div class="card-title">
+                <span class="status-tag" data-status></span>
+                <code class="card-id" data-id></code>
+            </div>
+            <time class="muted" data-time></time>
+        </header>
+        <div class="card-body">
+            <div class="card-row">
+                <span class="label">Agent:</span> <span data-agent></span>
+            </div>
+            <div class="card-row" data-resolution-row>
+                <span class="label">Çözüm:</span> <span data-resolution></span>
+            </div>
+        </div>
+    </article>
+</template>
+
+<!-- Transcript Modal — kapanmış eskalasyonların konuşma detayı -->
+<div class="modal-overlay hidden" id="transcriptModal" role="dialog" aria-modal="true" aria-labelledby="transcriptModalTitle">
+    <div class="modal">
+        <header class="modal-header">
+            <div>
+                <h3 id="transcriptModalTitle">Konuşma Geçmişi</h3>
+                <p class="muted small" id="transcriptModalSubtitle"></p>
+            </div>
+            <button class="btn-icon" id="transcriptModalClose" title="Kapat" aria-label="Kapat">✕</button>
+        </header>
+        <div class="modal-body">
+            <div class="chat-panel-messages" id="transcriptMessages">
+                <div class="empty-state">Yükleniyor…</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reusable Prompt Modal — onay/red gerekçesi, eskalasyon aksiyonları için -->
+<div class="modal-overlay hidden" id="promptModal" role="dialog" aria-modal="true" aria-labelledby="promptModalTitle">
+    <form class="modal modal-prompt" id="promptModalForm" autocomplete="off">
+        <header class="modal-header">
+            <div>
+                <h3 id="promptModalTitle">Bilgi gerekiyor</h3>
+                <p class="muted small" id="promptModalSubtitle"></p>
+            </div>
+            <button type="button" class="btn-icon" id="promptModalClose" title="İptal" aria-label="İptal">✕</button>
+        </header>
+        <div class="modal-body modal-prompt-body">
+            <label class="form-label" id="promptModalLabel" for="promptModalInput">Yanıtınız</label>
+            <textarea
+                id="promptModalInput"
+                class="form-control"
+                rows="3"
+                maxlength="500"
+                placeholder=""
+                aria-describedby="promptModalHint"></textarea>
+            <p class="form-hint" id="promptModalHint"></p>
+            <p class="form-error hidden" id="promptModalError"></p>
+        </div>
+        <footer class="modal-footer">
+            <button type="button" class="btn-secondary" id="promptModalCancel">İptal</button>
+            <button type="submit" class="btn-primary" id="promptModalSubmit">Onayla</button>
+        </footer>
+    </form>
+</div>
+
+<script src="js/admin.js"></script>
+</body>
+</html>
