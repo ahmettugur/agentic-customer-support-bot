@@ -82,7 +82,12 @@ class ChatUI {
 
         const bubble = document.createElement("div");
         bubble.className = "message-bubble";
-        bubble.textContent = text;
+        if (role === "bot") {
+            bubble.classList.add("md");
+            bubble.innerHTML = this.renderMarkdown(text);
+        } else {
+            bubble.textContent = text;
+        }
         content.appendChild(bubble);
 
         messageDiv.appendChild(avatar);
@@ -270,6 +275,29 @@ class ChatUI {
         const div = document.createElement("div");
         div.textContent = str;
         return div.innerHTML;
+    }
+
+    /**
+     * Bot mesajını markdown'dan HTML'e dönüştürür.
+     * marked + DOMPurify CDN'den yüklü değilse plain-text fallback yapar.
+     */
+    renderMarkdown(text) {
+        const safe = text == null ? "" : String(text);
+        if (typeof window.marked === "undefined" || typeof window.DOMPurify === "undefined") {
+            return this.escapeHtml(safe).replace(/\n/g, "<br>");
+        }
+        try {
+            const html = window.marked.parse(safe, {
+                breaks: true,
+                gfm: true,
+                async: false
+            });
+            return window.DOMPurify.sanitize(html, {
+                USE_PROFILES: { html: true }
+            });
+        } catch {
+            return this.escapeHtml(safe).replace(/\n/g, "<br>");
+        }
     }
 
     clearMessages() {
@@ -650,6 +678,12 @@ class ChatUI {
         streamCtx.messageDiv.classList.remove("streaming");
         streamCtx.bubble.classList.remove("streaming-bubble");
         streamCtx.cursor.remove();
+        // Markdown render: streaming sırasında tokenler text olarak akar,
+        // mesaj tamamlandığında md formatına çevirip bubble'ı yeniden çiziyoruz.
+        if (streamCtx.text && streamCtx.text.length > 0) {
+            streamCtx.bubble.classList.add("md");
+            streamCtx.bubble.innerHTML = this.renderMarkdown(streamCtx.text);
+        }
         this.hideAgentStatus(streamCtx);
     }
 

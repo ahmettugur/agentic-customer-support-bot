@@ -30,4 +30,19 @@ public class WorkflowGuardOptions
     /// Maksimum workflow iterasyon sayısı (MAF superstep).
     /// </summary>
     public int MaxIterations { get; set; } = 20;
+
+    /// <summary>
+    /// Aynı specialist agent'a yapılabilecek maksimum dinamik handoff sayısı (ping-pong koruması).
+    /// </summary>
+    public int MaxHandoffsPerAgent { get; set; } = 2;
+
+    /// <summary>
+    /// Planning sonucunda intent confidence bu eşiğin altındaysa clarification yoluna sap.
+    /// </summary>
+    public double PlanConfidenceThreshold { get; set; } = 0.7;
+
+    /// <summary>
+    /// LLM-fallback agent seçim prompt'una eklenen son mesaj sayısı (context window).
+    /// </summary>
+    public int SelectionContextWindow { get; set; } = 8;
 }

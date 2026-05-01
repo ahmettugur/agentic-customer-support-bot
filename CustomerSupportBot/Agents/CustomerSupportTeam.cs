@@ -26,7 +26,7 @@ namespace CustomerSupportBot.Agents;
 /// Müşteri destek ajan takımını yönetir.
 /// Ajanları oluşturur, workflow'u başlatır ve sonuçları işler.
 /// </summary>
-public class CustomerSupportTeam
+public class CustomerSupportTeam : ICustomerSupportTeam
 {
     // Ajanlar bir kez oluşturulur (stateless) — workflow ise her istek için taze üretilir
     private readonly ChatClientAgent _planningAgent;
@@ -43,8 +43,7 @@ public class CustomerSupportTeam
     private readonly RevisionService _revisionService;
     private readonly PromptService _prompts;
     private readonly ApprovalGateService _approvalGate;
-
-
+    private readonly ILoggerFactory _loggerFactory;
 
     public CustomerSupportTeam(
         IChatClient chatClient,
@@ -53,7 +52,8 @@ public class CustomerSupportTeam
         IReasoningTraceStore traceStore,
         RevisionService revisionService,
         PromptService prompts,
-        ApprovalGateService approvalGate)
+        ApprovalGateService approvalGate,
+        ILoggerFactory loggerFactory)
     {
         _contextPipeline = contextPipeline;
         _chatClient = chatClient;
@@ -61,6 +61,7 @@ public class CustomerSupportTeam
         _revisionService = revisionService;
         _prompts = prompts;
         _approvalGate = approvalGate;
+        _loggerFactory = loggerFactory;
 
         // Guard ayarlarını appsettings.json'dan oku
         _guards = new WorkflowGuardOptions();
@@ -129,9 +130,11 @@ public class CustomerSupportTeam
             .CreateGroupChatBuilderWith(agents =>
             {
                 return new CustomerSupportChatManager(
-                    agents, _chatClient, _prompts,
-                    maxMessages: _guards.MaxIterations,
-                    maxDuplicateToolCalls: _guards.MaxDuplicateToolCalls)
+                    agents,
+                    _chatClient,
+                    _prompts,
+                    _guards,
+                    _loggerFactory.CreateLogger<CustomerSupportChatManager>())
                 {
                     MaximumIterationCount = _guards.MaxIterations
                 };

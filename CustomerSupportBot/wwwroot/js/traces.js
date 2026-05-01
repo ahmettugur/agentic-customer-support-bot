@@ -68,7 +68,7 @@ class TraceDashboard {
     // ─── Session fetch ───
     async loadSessions() {
         try {
-            const res = await fetch(`${TraceDashboard.API_BASE}/traces/sessions`);
+            const res = await window.Auth.fetch(`${TraceDashboard.API_BASE}/traces/sessions`);
             this.sessions = await res.json();
             this.els.sessionCount.textContent = this.sessions.length;
             this.renderSessionList();
@@ -142,7 +142,7 @@ class TraceDashboard {
     // ─── Load traces for session ───
     async loadTracesForSession(sessionId) {
         try {
-            const res = await fetch(`${TraceDashboard.API_BASE}/traces/by-session/${sessionId}`);
+            const res = await window.Auth.fetch(`${TraceDashboard.API_BASE}/traces/by-session/${sessionId}`);
             this.allTraces = await res.json();
             this.els.count.textContent = this.allTraces.length;
             this.els.label.textContent = 'trace (oturum)';
@@ -163,7 +163,7 @@ class TraceDashboard {
 
     async loadAllTraces() {
         try {
-            const res = await fetch(`${TraceDashboard.API_BASE}/traces/recent?count=50`);
+            const res = await window.Auth.fetch(`${TraceDashboard.API_BASE}/traces/recent?count=50`);
             this.allTraces = await res.json();
             this.els.count.textContent = this.allTraces.length;
             this.els.label.textContent = 'trace (tümü)';

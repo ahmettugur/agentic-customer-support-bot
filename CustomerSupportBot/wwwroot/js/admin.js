@@ -77,7 +77,7 @@ class AdminPanel {
     }
 
     async fetchJson(url, options = {}) {
-        const r = await fetch(url, options);
+        const r = await window.Auth.fetch(url, options);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
     }
@@ -852,8 +852,8 @@ class AdminPanel {
             console.warn('History load failed:', e);
         }
 
-        // Canlı SSE aboneliği (bu session'ın admin kanalı)
-        const es = new EventSource(AdminPanel.API.subscribeChat(sessionId));
+        // Canlı SSE aboneliği (bu session'ın admin kanalı) — JWT query param ile
+        const es = new EventSource(window.Auth.eventSourceUrl(AdminPanel.API.subscribeChat(sessionId)));
         this.chatPanelState.eventSource = es;
 
         es.addEventListener('bridge_message', (ev) => {

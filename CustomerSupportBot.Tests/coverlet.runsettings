@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <!-- coverlet (XPlat Code Coverage) configuration -->
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <Exclude>[*]Microsoft.AspNetCore.OpenApi.Generated.*,[*]System.Runtime.CompilerServices.*,[*]System.Text.RegularExpressions.Generated.*,[*]Program,[*]*.Program,[*]*&lt;*&gt;d__*,[*]*&lt;*&gt;c,[*]*&lt;*&gt;c__*</Exclude>
+          <ExcludeByFile>**/*.g.cs,**/*.Generated.cs,**/Program.cs,**/obj/**,**/Microsoft.AspNetCore.OpenApi/**</ExcludeByFile>
+          <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverageAttribute,DebuggerNonUserCodeAttribute</ExcludeByAttribute>
+          <SkipAutoProps>true</SkipAutoProps>
+          <UseSourceLink>true</UseSourceLink>
+          <DeterministicReport>false</DeterministicReport>
+        </Configuration>
+      </DataCollector>
+
+      <!-- Microsoft.CodeCoverage (used by VS Code C# Dev Kit "Run Tests with Coverage") -->
+      <DataCollector friendlyName="Code Coverage">
+        <Configuration>
+          <CodeCoverage>
+            <ModulePaths>
+              <Include>
+                <ModulePath>.*CustomerSupportBot.dll$</ModulePath>
+              </Include>
+              <Exclude>
+                <ModulePath>.*Tests.dll$</ModulePath>
+                <ModulePath>.*xunit.*</ModulePath>
+                <ModulePath>.*Microsoft\.AspNetCore\..*</ModulePath>
+                <ModulePath>.*Microsoft\.Extensions\..*</ModulePath>
+                <ModulePath>.*System\..*</ModulePath>
+                <ModulePath>.*Newtonsoft\..*</ModulePath>
+                <ModulePath>.*FluentAssertions.*</ModulePath>
+                <ModulePath>.*NSubstitute.*</ModulePath>
+                <ModulePath>.*coverlet.*</ModulePath>
+              </Exclude>
+            </ModulePaths>
+
+            <Sources>
+              <Exclude>
+                <Source>.*\\obj\\.*</Source>
+                <Source>.*\.g\.cs$</Source>
+                <Source>.*\.Generated\.cs$</Source>
+                <Source>.*Program\.cs$</Source>
+              </Exclude>
+            </Sources>
+
+            <Functions>
+              <Exclude>
+                <Function>^Microsoft\.AspNetCore\.OpenApi\.Generated\..*</Function>
+                <Function>^System\.Runtime\.CompilerServices\..*</Function>
+                <Function>^System\.Text\.RegularExpressions\.Generated\..*</Function>
+                <Function>^Program\..*</Function>
+                <Function>^.*\.Program\..*</Function>
+                <Function>.*&lt;.*&gt;d__.*</Function>
+                <Function>.*&lt;.*&gt;c__.*</Function>
+                <Function>.*&lt;.*&gt;b__.*</Function>
+              </Exclude>
+            </Functions>
+
+            <Attributes>
+              <Exclude>
+                <Attribute>^System\.Diagnostics\.DebuggerHiddenAttribute$</Attribute>
+                <Attribute>^System\.Diagnostics\.DebuggerNonUserCodeAttribute$</Attribute>
+                <Attribute>^System\.CodeDom\.Compiler\.GeneratedCodeAttribute$</Attribute>
+                <Attribute>^System\.Diagnostics\.CodeAnalysis\.ExcludeFromCodeCoverageAttribute$</Attribute>
+                <Attribute>^System\.Runtime\.CompilerServices\.CompilerGeneratedAttribute$</Attribute>
+              </Exclude>
+            </Attributes>
+
+            <UseVerifiableInstrumentation>True</UseVerifiableInstrumentation>
+            <AllowLowIntegrityProcesses>True</AllowLowIntegrityProcesses>
+            <CollectFromChildProcesses>True</CollectFromChildProcesses>
+            <CollectAspDotNet>False</CollectAspDotNet>
+          </CodeCoverage>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

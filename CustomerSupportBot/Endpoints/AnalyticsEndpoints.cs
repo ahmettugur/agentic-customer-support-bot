@@ -14,9 +14,10 @@ public static class AnalyticsEndpoints
 {
     public static IEndpointRouteBuilder MapAnalyticsEndpoints(this IEndpointRouteBuilder app)
     {
-        // ─── ANALYTICS DASHBOARD ───
+        // ─── ANALYTICS DASHBOARD (admin-only) ───
         app.MapGet("/analytics/dashboard", (AnalyticsService analytics) =>
-            Results.Json(analytics.GetDashboard()));
+            Results.Json(analytics.GetDashboard()))
+            .RequireAuthorization("Admin");
 
         // GET /analytics/session/{sid} — Tek bir oturum için detaylı analytics
         app.MapGet("/analytics/session/{sid}", (string sid, AnalyticsService analytics) =>
@@ -25,9 +26,10 @@ public static class AnalyticsEndpoints
             return result == null
                 ? Results.NotFound(new { error = "Session bulunamadı." })
                 : Results.Json(result);
-        });
+        })
+            .RequireAuthorization("Admin");
 
-        // ─── CONVERSATION RATING ───
+        // ─── CONVERSATION RATING (public — kullanıcı oturum açmadan rating bırakır) ───
         app.MapPost("/sessions/{sid}/rating",
             (string sid, RatingInput body, IRatingStore ratings, ISessionManager sessions) =>
             {
@@ -55,7 +57,8 @@ public static class AnalyticsEndpoints
 
         app.MapGet("/analytics/ratings/recent",
             (IRatingStore ratings, int count = 20) =>
-                Results.Json(ratings.GetRecent(count)));
+                Results.Json(ratings.GetRecent(count)))
+            .RequireAuthorization("Admin");
 
         return app;
     }
