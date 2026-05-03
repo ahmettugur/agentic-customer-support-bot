@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres
-    container_name: postgres
+    container_name: aibot_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: Ahmet1990.
@@ -17,9 +17,9 @@ services:
 
   redis:
     image: redis
-    container_name: redis
+    container_name: aibot_redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
