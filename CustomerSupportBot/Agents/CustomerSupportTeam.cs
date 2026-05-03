@@ -40,7 +40,6 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     private readonly IChatClient _chatClient;
     private readonly WorkflowGuardOptions _guards;
     private readonly IReasoningTraceStore _traceStore;
-    private readonly RevisionService _revisionService;
     private readonly PromptService _prompts;
     private readonly ApprovalGateService _approvalGate;
     private readonly ILoggerFactory _loggerFactory;
@@ -50,7 +49,6 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         ContextPipeline contextPipeline,
         IConfiguration configuration,
         IReasoningTraceStore traceStore,
-        RevisionService revisionService,
         PromptService prompts,
         ApprovalGateService approvalGate,
         ILoggerFactory loggerFactory)
@@ -58,7 +56,6 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         _contextPipeline = contextPipeline;
         _chatClient = chatClient;
         _traceStore = traceStore;
-        _revisionService = revisionService;
         _prompts = prompts;
         _approvalGate = approvalGate;
         _loggerFactory = loggerFactory;
@@ -301,9 +298,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
                     if (planning != null) trace.Planning = planning;
                     var specialistReasonings = WorkflowResponseExtractor.ExtractSpecialistReasoningsFromOutput(output);
                     if (specialistReasonings.Count > 0) trace.SpecialistReasonings.AddRange(specialistReasonings);
-                    var finalCritique = WorkflowResponseExtractor.ExtractFinalCritiqueFromOutput(output);
-                    if (finalCritique != null) trace.FinalCritique = finalCritique;
-                    if (planning != null || specialistReasonings.Count > 0 || finalCritique != null)
+                    if (planning != null || specialistReasonings.Count > 0)
                         _traceStore.Update(trace);
                     break;
 
@@ -346,28 +341,6 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         if (WorkflowResponseExtractor.ContainsAgentRoutingMessage(result))
             result = await RewriteRoutingMessageAsync(result, query);
 
-        // Revizyon kontrolü
-        if (RevisionService.ShouldRevise(trace.FinalCritique))
-        {
-            trace.FirstDraftResponse = result;
-            trace.WasRevised = true;
-
-            yield return new StreamEvent(StreamEventTypes.Agent,
-                new { name = "RevisionAgent", status = "running" });
-
-            var revised = await _revisionService.ReviseAsync(
-                query, result, trace.FinalCritique!, effectiveCt);
-
-            yield return new StreamEvent(StreamEventTypes.Agent,
-                new { name = "RevisionAgent", status = "done" });
-
-            revised = WorkflowResponseExtractor.RemoveTerminationMarkers(revised);
-            revised = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(revised);
-            result = revised;
-
-            _traceStore.Update(trace);
-        }
-
         // HITL — escalation tespiti
         _approvalGate.ProcessPendingEscalations(trace, query, result);
 
@@ -378,7 +351,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
 
         // Response stream
         yield return new StreamEvent(StreamEventTypes.ResponseStart,
-            new { terminationReason, revised = trace.WasRevised });
+            new { terminationReason });
 
         await foreach (var chunk in WorkflowResponseExtractor.StreamTextInChunksAsync(result, effectiveCt))
         {
@@ -386,7 +359,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         }
 
         yield return new StreamEvent(StreamEventTypes.ResponseComplete,
-            new { text = result, terminationReason, revised = trace.WasRevised });
+            new { text = result, terminationReason });
     }
 
     // ════════════════════════════════════════════════════════════════

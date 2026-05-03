@@ -43,20 +43,6 @@ public class ReasoningTrace
     /// </summary>
     public List<SpecialistReasoning> SpecialistReasonings { get; set; } = new();
 
-    /// <summary>
-    /// ResponseAgent'ın nihai yanıtı üretmeden önce yaptığı
-    /// Self-critique. Kullanıcıya yansıtılmaz, gözlemlenebilirlik için trace'te tutulur.
-    /// </summary>
-    public ResponseCritique? FinalCritique { get; set; }
-
-    /// <summary>
-    /// Ileri — Revizyon tetiklendiyse ilk taslak metin (critique'e göre iyileştirilmeden önce).
-    /// </summary>
-    public string? FirstDraftResponse { get; set; }
-
-    /// <summary>ileri — Revizyon uygulandı mı?</summary>
-    public bool WasRevised { get; set; }
-
     /// <summary>Ziyaret edilen agent'lar (zaman sıralı).</summary>
     public List<AgentVisit> AgentVisits { get; set; } = new();
 

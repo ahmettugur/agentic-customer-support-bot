@@ -48,29 +48,6 @@ public static class WorkflowResponseExtractor
     }
 
     /// <summary>
-    /// Workflow çıktısından ResponseAgent mesajını bulup selfCritique JSON'unu parse eder.
-    /// </summary>
-    public static ResponseCritique? ExtractFinalCritiqueFromOutput(WorkflowOutputEvent output)
-    {
-        if (output.Data is not IEnumerable<ChatMessage> chatMessages) return null;
-
-        ChatMessage? critiqueMsg = null;
-        foreach (var msg in chatMessages)
-        {
-            if (string.IsNullOrWhiteSpace(msg.Text)) continue;
-            var isResponseAgent = msg.AuthorName != null
-                && msg.AuthorName.StartsWith(WellKnown.AgentNames.Response, StringComparison.OrdinalIgnoreCase);
-            var hasSelfCritique = msg.Text.Contains($"\"{WellKnown.JsonProperties.SelfCritique}\"", StringComparison.Ordinal);
-            if ((isResponseAgent || hasSelfCritique) && hasSelfCritique)
-            {
-                critiqueMsg = msg;
-            }
-        }
-
-        return critiqueMsg != null ? ResponseCritiqueParser.TryParse(critiqueMsg.Text) : null;
-    }
-
-    /// <summary>
     /// Workflow çıktısından PlanningAgent mesajını bulup yapılandırılmış PlanningResult'u parse eder.
     /// </summary>
     public static PlanningResult? ExtractPlanningFromOutput(WorkflowOutputEvent output)

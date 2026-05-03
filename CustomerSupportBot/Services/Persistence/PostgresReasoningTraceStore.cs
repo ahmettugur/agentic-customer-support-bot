@@ -193,12 +193,9 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
             existing.IterationCount = t.IterationCount;
             existing.Error = t.Error;
             existing.EstimatedTokens = t.EstimatedTokens;
-            existing.FirstDraftResponse = t.FirstDraftResponse;
-            existing.WasRevised = t.WasRevised;
             existing.ReasoningJson = Serialize(t.Reasoning);
             existing.PlanningJson = Serialize(t.Planning);
             existing.SpecialistReasoningsJson = Serialize(t.SpecialistReasonings) ?? "[]";
-            existing.FinalCritiqueJson = Serialize(t.FinalCritique);
             existing.AgentVisitsJson = Serialize(t.AgentVisits) ?? "[]";
             existing.ToolCallsJson = Serialize(t.ToolCalls) ?? "[]";
         }
@@ -217,12 +214,9 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
         IterationCount = t.IterationCount,
         Error = t.Error,
         EstimatedTokens = t.EstimatedTokens,
-        FirstDraftResponse = t.FirstDraftResponse,
-        WasRevised = t.WasRevised,
         ReasoningJson = Serialize(t.Reasoning),
         PlanningJson = Serialize(t.Planning),
         SpecialistReasoningsJson = Serialize(t.SpecialistReasonings) ?? "[]",
-        FinalCritiqueJson = Serialize(t.FinalCritique),
         AgentVisitsJson = Serialize(t.AgentVisits) ?? "[]",
         ToolCallsJson = Serialize(t.ToolCalls) ?? "[]"
     };
@@ -239,12 +233,9 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
         IterationCount = e.IterationCount,
         Error = e.Error,
         EstimatedTokens = e.EstimatedTokens,
-        FirstDraftResponse = e.FirstDraftResponse,
-        WasRevised = e.WasRevised,
         Reasoning = Deserialize<ReasoningResult>(e.ReasoningJson),
         Planning = Deserialize<PlanningResult>(e.PlanningJson),
         SpecialistReasonings = Deserialize<List<SpecialistReasoning>>(e.SpecialistReasoningsJson) ?? new(),
-        FinalCritique = Deserialize<ResponseCritique>(e.FinalCritiqueJson),
         AgentVisits = Deserialize<List<AgentVisit>>(e.AgentVisitsJson) ?? new(),
         ToolCalls = Deserialize<List<ToolInvocation>>(e.ToolCallsJson) ?? new()
     };

@@ -47,7 +47,6 @@ public static class ApplicationServicesExtensions
         services.AddSingleton<EntityVerifier>();
         services.AddSingleton<ReasoningSanityChecker>();
         services.AddSingleton<ReasoningService>();
-        services.AddSingleton<RevisionService>();
         services.AddSingleton<CustomerSupportTeam>();
         services.AddSingleton<ICustomerSupportTeam>(sp => sp.GetRequiredService<CustomerSupportTeam>());
         services.AddSingleton<EvaluationRunner>();

@@ -130,8 +130,7 @@ public class EvaluationRunner
                 ExpectedTools = scenario.ExpectedTools,
                 SpecialistReasonings = trace?.SpecialistReasonings ?? new(),
                 Reasoning = trace?.Reasoning,
-                Planning = trace?.Planning,
-                FinalCritique = trace?.FinalCritique
+                Planning = trace?.Planning
             };
 
             foreach (var criterion in scenario.SuccessCriteria)

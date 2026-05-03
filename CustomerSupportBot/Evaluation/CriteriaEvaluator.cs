@@ -167,18 +167,6 @@ public static class CriteriaEvaluator
             };
         }
 
-        // ─── hallucination yok (best-effort) ───
-        if (lower.Contains("no_hallucinated") || lower.Contains("no hallucination"))
-        {
-            var risk = ctx.FinalCritique?.HallucinationRisk ?? 0.0;
-            return new CriterionResult
-            {
-                Criterion = c,
-                Passed = risk <= 0.3,
-                Evaluation = $"hallucinationRisk={risk:F2} (≤0.3 bekleniyor)"
-            };
-        }
-
         // ─── response contains order status ───
         if (lower.Contains("order status") || lower.Contains("sipariş durumu") || lower.Contains("ordered list"))
         {
@@ -254,5 +242,4 @@ public class ScenarioRunContext
     public List<SpecialistReasoning> SpecialistReasonings { get; set; } = new();
     public ReasoningResult? Reasoning { get; set; }
     public PlanningResult? Planning { get; set; }
-    public ResponseCritique? FinalCritique { get; set; }
 }
