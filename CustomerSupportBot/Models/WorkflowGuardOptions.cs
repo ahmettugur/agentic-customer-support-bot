@@ -41,8 +41,4 @@ public class WorkflowGuardOptions
     /// </summary>
     public double PlanConfidenceThreshold { get; set; } = 0.7;
 
-    /// <summary>
-    /// LLM-fallback agent seçim prompt'una eklenen son mesaj sayısı (context window).
-    /// </summary>
-    public int SelectionContextWindow { get; set; } = 8;
 }

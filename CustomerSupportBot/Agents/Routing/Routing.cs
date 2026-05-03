@@ -5,11 +5,9 @@
 //   FirstTurnStrategy
 //     → PlanRoutingStrategy
 //       → ReflectionRoutingStrategy
-//         → LlmFallbackRoutingStrategy
 //
-// Manager bu listede ilk null-olmayan sonucu alır; hiçbiri seçim yapmazsa PlanningAgent'a düşer.
+// Manager bu listede ilk null-olmayan sonucu alır; hiçbiri seçim yapmazsa PlanningAgent'a düşer (no-op fallback).
 
-using System.Text.RegularExpressions;
 using CustomerSupportBot.Models;
 using CustomerSupportBot.Services;
 using Microsoft.Agents.AI;
@@ -33,7 +31,6 @@ internal static class Branches
     public const string ReflectionEscalation = "reflection_escalation";
     public const string ReflectionHandoff = "reflection_handoff";
     public const string ReflectionComplete = "reflection_complete";
-    public const string LlmFallback = "llm_fallback";
 }
 
 /// <summary>
@@ -46,8 +43,6 @@ internal sealed class RoutingContext
     public required AIAgent PlanningAgent { get; init; }
     public required AIAgent ResponseAgent { get; init; }
     public required WorkflowGuardOptions Guards { get; init; }
-    public required IChatClient ChatClient { get; init; }
-    public required string SelectionSystemPrompt { get; init; }
     public required ILogger Logger { get; init; }
 
     /// <summary>Strict allow-list — bilinmeyen isimler null döner.</summary>
@@ -203,63 +198,3 @@ internal sealed class ReflectionRoutingStrategy : IRoutingStrategy
         ValueTask.FromResult<RoutingResult?>(new RoutingResult(a, b));
 }
 
-// ════════════════════════════════════════════════════════════════
-// 4) LlmFallback — LLM'e sor, allow-list ile validate et
-// ════════════════════════════════════════════════════════════════
-internal sealed partial class LlmFallbackRoutingStrategy : IRoutingStrategy
-{
-    private readonly RoutingContext _ctx;
-    public LlmFallbackRoutingStrategy(RoutingContext ctx) => _ctx = ctx;
-
-    public async ValueTask<RoutingResult?> TrySelectAsync(
-        IReadOnlyList<ChatMessage> history, ChatMessage? lastMessage, CancellationToken ct)
-    {
-        var window = Math.Max(1, _ctx.Guards.SelectionContextWindow);
-        var prompt = new List<ChatMessage>(capacity: 1 + window)
-        {
-            new(ChatRole.System, _ctx.SelectionSystemPrompt)
-        };
-        foreach (var msg in history.TakeLast(window))
-            prompt.Add(new ChatMessage(msg.Role, msg.Text ?? ""));
-
-        Microsoft.Extensions.AI.ChatResponse response;
-        try
-        {
-            response = await _ctx.ChatClient
-                .GetResponseAsync(prompt, cancellationToken: ct)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _ctx.Logger.LogWarning(ex, "LLM-based agent selection call failed");
-            return new RoutingResult(_ctx.PlanningAgent, Branches.LlmFallback);
-        }
-
-        var name = ExtractFirstAgentToken(response.Text?.Trim());
-        var resolved = _ctx.Resolve(name);
-        if (resolved == null)
-        {
-            if (!string.IsNullOrWhiteSpace(name))
-                _ctx.Logger.LogWarning(
-                    "LLM returned unknown agent name '{Name}' (raw='{Raw}')",
-                    name, response.Text);
-            return new RoutingResult(_ctx.PlanningAgent, Branches.LlmFallback);
-        }
-
-        return new RoutingResult(resolved, Branches.LlmFallback);
-    }
-
-    private static string? ExtractFirstAgentToken(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return null;
-        var match = AgentTokenRegex().Match(text);
-        return match.Success ? match.Value : text.Trim();
-    }
-
-    [GeneratedRegex(@"[A-Za-z_][A-Za-z0-9_]*Agent", RegexOptions.Compiled)]
-    private static partial Regex AgentTokenRegex();
-}

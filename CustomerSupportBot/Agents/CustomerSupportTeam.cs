@@ -131,8 +131,6 @@ public class CustomerSupportTeam : ICustomerSupportTeam
             {
                 return new CustomerSupportChatManager(
                     agents,
-                    _chatClient,
-                    _prompts,
                     _guards,
                     _loggerFactory.CreateLogger<CustomerSupportChatManager>())
                 {

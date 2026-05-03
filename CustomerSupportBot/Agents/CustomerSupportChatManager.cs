@@ -2,7 +2,7 @@
 // LLM tabanlı grup sohbet yöneticisi.
 //
 // Routing kararları Strategy pattern ile çözülür (Routing/Routing.cs):
-//   FirstTurn → Plan → Reflection → LlmFallback
+//   FirstTurn → Plan → Reflection
 //
 // Bu sınıf yalnızca:
 //   1) Strategy zincirini koşturmak,
@@ -41,8 +41,6 @@ public class CustomerSupportChatManager : GroupChatManager
 
     public CustomerSupportChatManager(
         IReadOnlyList<AIAgent> agents,
-        IChatClient chatClient,
-        PromptService prompts,
         WorkflowGuardOptions guards,
         ILogger<CustomerSupportChatManager> logger)
     {
@@ -63,21 +61,12 @@ public class CustomerSupportChatManager : GroupChatManager
                 $"Required agent missing: {WellKnown.AgentNames.Response}");
         _responseAgent = response;
 
-        // Selection prompt sabit — bir kez render et
-        var agentDescriptions = string.Join("\n",
-            agentsByName.Values.Select(a => $"- {a.Name}: {a.Description}"));
-        var selectionSystemPrompt = prompts.Render(
-            "services/chat-manager-selection",
-            new Dictionary<string, string?> { ["AGENT_DESCRIPTIONS"] = agentDescriptions });
-
         var ctx = new RoutingContext
         {
             AgentsByName = agentsByName,
             PlanningAgent = _planningAgent,
             ResponseAgent = _responseAgent,
             Guards = _guards,
-            ChatClient = chatClient,
-            SelectionSystemPrompt = selectionSystemPrompt,
             Logger = _logger
         };
 
@@ -86,7 +75,6 @@ public class CustomerSupportChatManager : GroupChatManager
             new FirstTurnStrategy(ctx),
             new PlanRoutingStrategy(ctx),
             new ReflectionRoutingStrategy(ctx),
-            new LlmFallbackRoutingStrategy(ctx),
         ];
     }
 
