@@ -1,6 +1,6 @@
 # Reasoning
 
-Bu dokümanda sistemdeki **reasoning (düşünme)** mekanizmaları ayrıntılı anlatılır. Bu sistem "tek bir LLM çağrısı sorar-yanıtlar" yapmak yerine, **4 farklı katmanda explicit structured reasoning** üretir. Her katman kendi JSON şemasını kullanır, trace'e kaydedilir ve downstream kararlarını etkiler.
+Bu dokümanda sistemdeki **reasoning (düşünme)** mekanizmaları ayrıntılı anlatılır. Bu sistem "tek bir LLM çağrısı sorar-yanıtlar" yapmak yerine, **3 farklı katmanda explicit structured reasoning** üretir. Her katman kendi JSON şemasını kullanır, trace'e kaydedilir ve downstream kararlarını etkiler.
 
 ## Neden birden fazla reasoning katmanı?
 
@@ -11,9 +11,9 @@ Naif yaklaşım: "Ajanın kendisi düşünsün, yanıt versin." Bu yaklaşımın
 - **Niyet-karar uyumsuzluğu** — Ajan kullanıcıyı yanlış anlayıp doğru araç çağırabilir (tersine doğru anlayıp yanlış araç çağırabilir).
 - **Kalite güvencesi yok** — Hallucination veya eksik yanıt sessizce geçer.
 
-Çözüm: **Her kritik karar öncesi/sonrası explicit structured reasoning** üret. Reasoning'i trace'e kaydet, eşik ihlalinde revize et.
+Çözüm: **Her kritik karar öncesi/sonrası explicit structured reasoning** üret. Reasoning'i trace'e kaydet.
 
-## 4 katmanlı reasoning
+## 3 katmanlı reasoning
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -37,15 +37,6 @@ Naif yaklaşım: "Ajanın kendisi düşünsün, yanıt versin." Bu yaklaşımın
 │  Model: gpt-4o                                                 │
 │  Çıktı: SpecialistReasoning JSON (preToolCheck + post…)        │
 │  Amaç: Parametre doğrulama + tool sonrası değerlendirme        │
-└────────────────────┬───────────────────────────────────────────┘
-                     │
-                     ▼
-┌────────────────────────────────────────────────────────────────┐
-│  Katman 4 — Response Self-Critique (ResponseAgent)             │
-│  Model: gpt-4o                                                 │
-│  Çıktı: ResponseCritique JSON                                  │
-│  Amaç: Kalite kontrol — tone, completeness, hallucinationRisk  │
-│  Eşik ihlali → RevisionService (5. katman: rewrite)            │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -292,98 +283,6 @@ if (!string.IsNullOrWhiteSpace(reflection.HandoffSuggestion)
 
 ---
 
-## Katman 4 — Response Self-Critique
-
-**Prompt**: `Prompts/agents/response-agent.md`
-**Çıktı modeli**: `Models/ResponseCritique.cs`
-**Parser**: `Services/ResponseCritiqueParser.cs`
-
-ResponseAgent kullanıcıya yanıt yazar, TERMINATE marker'ı koyar, **sonra** kendi cevabını eleştirir:
-
-```json
-{
-  "selfCritique": {
-    "addressesUserQuery": true,
-    "tone": "appropriate",
-    "completeness": 0.95,
-    "hallucinationRisk": 0.0,
-    "sources": ["OrderInquiryAgent.resultNotes"],
-    "issuesFound": [],
-    "revisionNeeded": false,
-    "revisionNotes": ""
-  }
-}
-```
-
-### Alanların amacı
-
-| Alan | Eşik | Dashboard kullanımı |
-|---|---|---|
-| `addressesUserQuery` | Bool | Kullanıcının sorusunu gerçekten yanıtladı mı? |
-| `tone` | 5 değer | Türkçe samimi/empatik ton kontrolü |
-| `completeness` | 0.0-1.0 | < 0.6 = yetersiz, revize |
-| `hallucinationRisk` | 0.0-1.0 | > 0.3 = uydurma riski, revize |
-| `sources` | String[] | Beslenilen kaynaklar (trace dashboard için) |
-| `issuesFound` | String[] | Öz-tespit edilen sorunlar |
-| `revisionNeeded` | Bool | Model kendi revizyon ihtiyacını flag'ler |
-
-### Revizyon kararı
-
-`@Services/RevisionService.cs:27-35`:
-
-```csharp
-public static bool ShouldRevise(ResponseCritique? critique)
-{
-    if (critique == null) return false;
-    if (critique.RevisionNeeded) return true;             // Model kendi işaretledi
-    if (!critique.AddressesUserQuery) return true;        // Ana soru yanıtlanmadı
-    if (critique.Completeness < 0.6) return true;         // Eksik
-    if (critique.HallucinationRisk > 0.3) return true;    // Uydurma riski
-    return false;
-}
-```
-
-Eşiklerin **herhangi biri** aşılırsa → revizyon tetiklenir.
-
-### Hallucination sıfır tolerans
-
-Prompt'ta açıkça belirtilir: "Specialist çıktısında OLMAYAN veri/numara ürettin mi? Sıfır tolerans — uydurma sipariş/müşteri/ürün numarası YASAK." Bu kural `hallucinationRisk > 0.3` eşiğiyle sıkı tutulur.
-
----
-
-## Katman 5 — Revision (koşullu)
-
-**Dosya**: `@Services/RevisionService.cs`
-**Prompt'lar**: `Prompts/services/revision-system.md` + `revision-user.md`
-
-`ShouldRevise=true` ise `RevisionService.ReviseAsync` ikinci bir LLM çağrısı yapar:
-
-```
-[System] revision-system.md
-  "Sen bir müşteri destek yanıt düzeltici asistanısın. …
-   KURALLAR: Türkçe/samimi/empatik, doğru verileri koru, uydurma yapma, …"
-
-[User]   revision-user.md (placeholder'larla render edilmiş)
-  "ORİJİNAL SORU: {{ORIGINAL_QUERY}}
-   İLK TASLAK YANIT: {{FIRST_DRAFT}}
-   CRITIQUE TESPİTLERİ:
-     - addressesUserQuery: {{ADDRESSES_USER_QUERY}}
-     - completeness: {{COMPLETENESS}}
-     - hallucinationRisk: {{HALLUCINATION_RISK}}
-     - tone: {{TONE}}
-     - issuesFound: {{ISSUES}}
-     - revisionNotes: {{REVISION_NOTES}}
-   Lütfen yukarıdaki tespitlere göre iyileştirilmiş yanıtı üret."
-```
-
-Revizyon **tek-geçişli** (sonsuz döngü yok):
-
-- Revizyon başarısızsa (LLM hata/timeout) → orijinal taslak kullanılır
-- Revize edilmiş metin de `StripTechnicalJsonBlocks` + `CleanTerminateMarker` temizliklerinden geçer
-- Trace'e `WasRevised=true` + `FirstDraftResponse` alanları yazılır
-
----
-
 ## Trace'e yansıma
 
 Tüm bu katmanların çıktıları tek bir `ReasoningTrace` nesnesinde birleştirilir:
@@ -400,9 +299,6 @@ public class ReasoningTrace
     public ReasoningResult? Reasoning { get; set; }              // Katman 1
     public PlanningResult? Planning { get; set; }                // Katman 2
     public List<SpecialistReasoning> SpecialistReasonings { … }  // Katman 3
-    public ResponseCritique? FinalCritique { get; set; }         // Katman 4
-    public string? FirstDraftResponse { get; set; }              // Katman 5
-    public bool WasRevised { get; set; }
 
     public List<AgentVisit> AgentVisits { … }
     public List<ToolInvocation> ToolCalls { … }
@@ -479,20 +375,7 @@ Ajan "hangi aracı seçmeliyim?" diye tereddüt etmez.
 
 **Specialist output**: "Sipariş bulunamadı." (`ORDER_NOT_FOUND`)
 
-**ResponseAgent taslak**: "ORD-1 siparişiniz kargolandı, 3 Nisan'da teslim edilecek."
-
-**Self-critique**:
-
-```json
-{
-  "hallucinationRisk": 0.85,
-  "sources": [],
-  "issuesFound": ["Specialist ORDER_NOT_FOUND döndü ama yanıt sipariş var gibi yazılmış"],
-  "revisionNeeded": true
-}
-```
-
-`RevisionService.ShouldRevise=true` → yeniden yazılır:
+ResponseAgent prompt'unda hallucination sıfır tolerans kuralı vardır: "Specialist çıktısında OLMAYAN veri/numara üretme. Uydurma sipariş/müşteri/ürün numarası YASAK." Bu kural sayesinde ResponseAgent doğrudan doğru yanıtı üretir:
 "Üzgünüm, 'ORD-1' numaralı siparişi sistemimizde bulamadım. Sipariş numarasını kontrol eder misiniz?"
 
 ---
@@ -502,12 +385,10 @@ Ajan "hangi aracı seçmeliyim?" diye tereddüt etmez.
 | Katman | Model | Girdi | Çıktı | Tetiklenme | Hata toleransı |
 |---|---|---|---|---|---|
 | Global Reasoning | o4-mini | Sorgu + history + state | `ReasoningResult` | Her istekte | Fallback boş sonuç |
-| Planning | gpt-4o | +Context +Hint +Entities | `PlanningResult` | Her istekte | Parser null → LLM selection fallback |
+| Planning | gpt-4o | +Context +Hint +Entities | `PlanningResult` | Her istekte | Parser null → varsayılan fallback |
 | Specialist Pre/Post | gpt-4o | +Tool sonucu | `SpecialistReasoning` | Specialist aktivasyonunda | Pre-check fail → tool skip |
-| Self-Critique | gpt-4o | +Kendi yanıt | `ResponseCritique` | ResponseAgent sonunda | null → revizyon atla |
-| Revision | gpt-4o | +Critique | İyileştirilmiş metin | `ShouldRevise=true` ise | Hata → orijinal taslak |
 
-Bu 5 katman birlikte çalışarak **explicit reasoning + kalite gates + izlenebilirlik** sağlar.
+Bu 3 katman birlikte çalışarak **explicit reasoning + kalite gates + izlenebilirlik** sağlar.
 
 ---
 
@@ -552,7 +433,7 @@ User query
 └──────────────────────┬───────────────────────────────────────────┘
                        │ hint + issues → PlanningAgent
                        ▼
-  [Mevcut 2-5. katmanlar: Planning → Specialist → Critique → Revision]
+  [Mevcut 2-3. katmanlar: Planning → Specialist → Response]
 ```
 
 ## 1. Entity Grounding (ReAct-lite)
@@ -873,11 +754,9 @@ Streaming tarafında:
 | **1.5 Sanity Check** | Deterministic | ❌ | result + verified | `List<ReasoningIssue>` |
 | 2. Planning | LLM | ✅ gpt-4o | + hint | `PlanningResult` |
 | 3. Specialist Pre/Post | LLM | ✅ gpt-4o | + tool | `SpecialistReasoning` |
-| 4. Self-Critique | LLM | ✅ gpt-4o | + yanıt | `ResponseCritique` |
-| 5. Revision | LLM | ✅ gpt-4o | + critique | İyileştirilmiş metin |
 
-**Toplam katman**: 7 (2 deterministic + 5 LLM)
-**LLM çağrı sayısı per request**: 5 (şu an — ideal durum, branch'lere göre daha az)
+**Toplam katman**: 5 (2 deterministic + 3 LLM)
+**LLM çağrı sayısı per request**: 4 (reasoning + planning + specialist + response)
 **Deterministic kontrol**: 2 (EntityVerifier + SanityChecker) — **sıfır ekstra API maliyeti**.
 
 ## "Gerçek reasoning" denkliği
@@ -886,7 +765,7 @@ Streaming tarafında:
 |---|---|---|
 | **Grounded reasoning (ReAct)** | ❌ Sadece regex format | ✅ DB lookup ile verified |
 | **Structured reasoning trace** | ⚠️ String listesi | ✅ Object array + grounding + confidence |
-| **Self-verification** | ⚠️ LLM self-critique (response'ta) | ✅ Deterministic sanity checker (reasoning'te) |
+| **Self-verification** | ⚠️ Yok | ✅ Deterministic sanity checker (reasoning'te) |
 | **Decomposition** | ❌ Tek intent | ✅ SubTasks (model + prompt + UI) |
 | **Iterative refinement** | ❌ | ✅ Compound query — her subtask için ayrı workflow run (orkestrasyon) |
 | **Self-consistency (N samples)** | ❌ | ❌ (maliyet — 3-5x LLM çağrısı) |

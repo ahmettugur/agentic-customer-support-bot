@@ -114,10 +114,8 @@ MAF'ın `GroupChatManager` soyut sınıfından türetilmiş iki abstract metodu 
 └──────────────────┬──────────────────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────────────────┐
-│ 3. Fallback: LLM-based selection                            │
-│    chat-manager-selection.md prompt + son 8 mesaj →        │
-│    LLM'den agent adı iste                                   │
-│    Hata olursa _agents[0] (= PlanningAgent)                 │
+│ 3. Fallback: Varsayılan agent                               │
+│    İlk iki katman başarısızsa ResponseAgent'a düşülür       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -186,24 +184,9 @@ if (lastMessage != null && IsSpecialistMessage(lastMessage))
 
 **Dinamik handoff örneği**: OrderInquiryAgent sipariş bulamadı, kullanıcı "şikayet etmek istiyorum" dedi → specialist `handoffSuggestion=ComplaintAgent` üretebilir. ChatManager bunu görüp ComplaintAgent'a geçer. Ama **aynı ajana maksimum 2 kez** handoff yapılabilir — sonra zorla ResponseAgent'a düşer (ping-pong koruması).
 
-### 3. Katman: LLM fallback
+### 3. Katman: Varsayılan fallback
 
-İlk iki katman başarısızsa LLM'e "hangi ajan konuşmalı?" diye sorulur (`chat-manager-selection.md`):
-
-```
-[System] Bir grup sohbet yöneticisisiniz. …
-         Mevcut ajanlar: <agent listesi>
-         Kurallar:
-           - İlk turda her zaman PlanningAgent seçilir.
-           - PlanningAgent mesajında bir ajan adı geçiyorsa o ajanı seçin.
-           - Bir ajan aracı kullanarak görevini tamamladıysa ResponseAgent'ı seçin.
-           - ResponseAgent hiçbir zaman PlanningAgent'tan hemen önce seçilmez.
-           - PlanningAgent'tan sonra ASLA tekrar PlanningAgent seçmeyin.
-           - SADECE ajan adını döndürün.
-[Last-8 messages olarak bağlam]
-```
-
-LLM çağrısı hata verirse `_agents[0]` (= PlanningAgent) fallback kullanılır.
+İlk iki katman başarısızsa (parse hatası, bilinmeyen mesaj vb.) ResponseAgent'a düşülür.
 
 ---
 
@@ -365,18 +348,15 @@ Tipik bir başarılı turda mesaj sırası:
 [7] (Asst: OrderInquiryAgent) ```json{"postToolReflection":{"status":"done","handoffSuggestion":"ResponseAgent"}}``` + kısa özet
     ▸ ChatManager: reflection.status=done → ResponseAgent'a geç
 [8] (Asst: ResponseAgent)     "ORD-1 siparişiniz kargolandı…
-                               TERMINATE: reason=completed
-                               ```json{"selfCritique":{...}}```"
+                               TERMINATE: reason=completed"
     ▸ ChatManager: TERMINATE tespit edildi → ShouldTerminate=true
 ───────────────── Workflow biter ─────────────────
 ```
 
 Sonrasında:
-- `ExtractFinalCritiqueFromOutput` → critique parse
-- `ShouldRevise` → false (completeness=0.95, hallucinationRisk=0.0)
-- `CleanTerminateMarker` + `StripTechnicalJsonBlocks` ile temizleme
+- `RemoveTerminationMarkers` + `RemoveTechnicalJsonBlocks` ile temizleme
 - Kullanıcıya: "ORD-1 siparişiniz kargolandı…"
-- Trace kayıt: `FinalCritique`, `TerminationReason=completed`, `IterationCount=4`
+- Trace kayıt: `TerminationReason=completed`, `IterationCount=4`
 
 ### Admin Replan override (one-shot)
 
@@ -427,13 +407,11 @@ raw result
   ▼
 CleanTerminateMarker        # "TERMINATE: reason=..." ve sonrasını sil
   ▼
-StripTechnicalJsonBlocks    # preToolCheck/resultConfidence/postToolReflection/selfCritique JSON'larını sil
+StripTechnicalJsonBlocks    # preToolCheck/resultConfidence/postToolReflection JSON'larını sil
   ▼
 IsInternalRoutingMessage?   # Agent adı içeriyorsa...
   ▼ yes
 RewriteRoutingMessageAsync  # LLM ile kullanıcı dostu metne çevir
-  ▼
-RevisionService.ShouldRevise? → ReviseAsync  # critique eşik altındaysa
   ▼
 final text → SSE stream / JSON response
 ```
@@ -449,8 +427,7 @@ Her workflow koşusu için `IReasoningTraceStore.StartTrace` çağrılır ve her
 | İstek geldi | `TraceId`, `SessionId`, `UserQuery`, `StartedAt` |
 | Reasoning tamamlandı | `Reasoning` |
 | Her agent başladı/bitti | `AgentVisits[].StartedAt/CompletedAt/Duration` |
-| Workflow bitti | `Planning`, `SpecialistReasonings[]`, `FinalCritique` |
-| (Koşullu) revizyon | `FirstDraftResponse`, `WasRevised` |
+| Workflow bitti | `Planning`, `SpecialistReasonings[]` |
 | Tamamlama | `CompletedAt`, `TerminationReason`, `FinalResponse`, `IterationCount` |
 
 `GET /traces/recent?count=20` ile listelenir, `GET /traces/{traceId}` ile tam detay alınır. Ring buffer — son 500 trace tutulur.
@@ -460,7 +437,7 @@ Her workflow koşusu için `IReasoningTraceStore.StartTrace` çağrılır ve her
 ## Özet
 
 - **Workflow** = 6 ajan + `CustomerSupportChatManager` (MAF `GroupChatManager` türevi)
-- **Ajan seçim** 3 katmanlı: PlanningAgent JSON → specialist reflection → LLM fallback
+- **Ajan seçim** 3 katmanlı: PlanningAgent JSON → specialist reflection → varsayılan (ResponseAgent)
 - **Terminasyon** 3 koşul: TERMINATE marker | max iteration | repeated tool call
 - **Guard'lar** appsettings'den konfigüre edilir; timeout, max iteration, duplicate tool protection
 - **Çıktı** temizleme pipeline'ı TERMINATE + teknik JSON + routing sızıntısını arındırır
@@ -583,9 +560,9 @@ response_complete: { text, decomposed: true, subTaskCount: N, ... }
 
 | Senaryo | LLM çağrısı |
 |---|---|
-| Normal tek-görev | 5 (reasoning + planning + specialist + critique + optional revision) |
-| 2 subtask compound | ~9 (1 reasoning + 2×planning + 2×specialist + 2×critique + optional 2×revision) |
-| N subtask | ~1 + 4N |
+| Normal tek-görev | 4 (reasoning + planning + specialist + response) |
+| 2 subtask compound | ~7 (1 reasoning + 2×planning + 2×specialist + 2×response) |
+| N subtask | ~1 + 3N |
 
 Üst seviye reasoning (compound algılayan) **bir kez** çalışır. Her alt subtask kendi planning + specialist + response döngüsünü yapar — bu, mini-reasoning üretme maliyeti yerine parent reasoning'in bir kere daha amortize edilmesini sağlar.
 
@@ -598,4 +575,3 @@ Her subtask recursive `RunAsync` çağrısı **kendi** `ReasoningTrace`'ini üre
 - **Paralel değil, sıralı**: Subtask'ler sırayla çalışır (`foreach`). İlk subtask tamamlanmadan ikincisi başlamaz.
 - **N trace**: Her subtask bağımsız trace üretir. Üst seviye için tek bir "parent trace" yoktur — ileride `ReasoningTrace.ParentTraceId` gibi bir alan eklenebilir.
 - **Dependency graph yok**: `SubTask.Dependencies` alanı şu an **şeffaf** — helper'lar sadece `Order` alanına göre sıralama yapar. İleride topolojik sıralama / paralel execution eklenebilir.
-- **Revision her subtask için ayrı**: Her alt workflow kendi self-critique üretir. Final aggregated response için toplu re-critique yapılmaz.

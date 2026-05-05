@@ -116,15 +116,6 @@ public interface IReasoningSanityRule
 
 ---
 
-### `RevisionService` — `Services/RevisionService.cs`
-
-ResponseAgent self-critique eşikleri aşarsa **ikinci bir LLM çağrısıyla** yanıtı yeniden yazar:
-
-- **`static ShouldRevise(critique)` → bool** — eşikler: `revisionNeeded=true` VEYA `completeness<0.6` VEYA `hallucinationRisk>0.3` VEYA `addressesUserQuery=false`.
-- **`ReviseAsync(originalQuery, firstDraft, critique, ct?)` → string** — `revision-system.md` + `revision-user.md` prompt'larıyla ikinci geçiş. Başarısızsa `firstDraft`'ı döndürür (tek-geçişli; sonsuz döngü yok).
-
----
-
 ### `PromptService` — `Services/PromptService.cs`
 
 `Prompts/**/*.md` dosyalarını uygulama başlangıcında belleğe yükler (her istekte disk I/O yok). Key format: `agents/planning-agent`, `services/reasoning-system` (uzantı atılır, path ayıracı `/`'e normalize edilir).
@@ -242,18 +233,6 @@ Statik sınıf. Specialist ajan çıktısından `SpecialistReasoning` çıkarır
   3. `ParsePreToolCheck` → `PreToolCheck` alt objesi.
   4. `ParsePostToolReflection` → `PostToolReflection`; `status` alanı `NormalizeStatus` ile kanonikleştirilir (`done | needs_followup | needs_escalation | failed | partial`).
   5. `handoffSuggestion` "null"/"none" string'leri → `null`.
-
----
-
-### `ResponseCritiqueParser` — `Services/ResponseCritiqueParser.cs`
-
-Statik sınıf. ResponseAgent çıktısından `ResponseCritique` çıkarır:
-
-- **`TryParse(responseOutput)` → `ResponseCritique?`** —
-  1. Regex ile TÜM ` ```json ... ``` ` bloklarını tarar ve `"selfCritique"` anahtarı olanı veya `addressesUserQuery/completeness/hallucinationRisk` alanlarından birini içereni seçer.
-  2. İnline JSON fallback — `"selfCritique"` anahtarını textte bulup geriye doğru `{` arar, `FindMatchingBrace` ile dengeli blok çıkarır.
-  3. `NormalizeTone` ile ton değerini 5 kanonik değere maple (`appropriate | too_formal | too_casual | impolite | robotic`).
-  4. Sayısal alanlar `0.0-1.0` arasında clamp.
 
 ---
 
@@ -407,26 +386,13 @@ ChatManager `handoffSuggestion`'a bakarak dinamik handoff yapar.
 
 ---
 
-### `ResponseCritique` — `Models/ResponseCritique.cs`
-
-ResponseAgent'ın kendi yanıtına verdiği kalite değerlendirmesi. **Kullanıcıya gösterilmez** — sadece trace'e yazılır.
-
-- `AddressesUserQuery` (bool), `Tone` (string), `Completeness` (double)
-- `HallucinationRisk` (double) — kritik alan; RevisionService bu alana bakar
-- `Sources` — hangi specialist/tool çıktısından beslenildi
-- `IssuesFound` — tespit edilen sorunlar
-- `RevisionNeeded`, `RevisionNotes`
-
----
-
 ### `ReasoningTrace` + `AgentVisit` + `ToolInvocation` — `Models/ReasoningTrace.cs`
 
 Bir workflow koşusunun **tam kaydı**:
 
 - Kimlik: `TraceId` (GUID), `SessionId`, `UserQuery`
 - Zaman: `StartedAt`, `CompletedAt`, `DurationMs` (computed)
-- Reasoning parçaları: `Reasoning` (`ReasoningResult`), `Planning` (`PlanningResult?`), `SpecialistReasonings`, `FinalCritique` (`ResponseCritique?`)
-- Revizyon: `FirstDraftResponse?`, `WasRevised`
+- Reasoning parçaları: `Reasoning` (`ReasoningResult`), `Planning` (`PlanningResult?`), `SpecialistReasonings`
 - Agent/tool kayıtları: `AgentVisits`, `ToolCalls`
 - Sonuç: `TerminationReason`, `FinalResponse` (max 2000 char), `IterationCount`, `Error?`, `EstimatedTokens`
 
@@ -649,7 +615,6 @@ services.AddSingleton<ReasoningChatClient>(sp =>
 
 // Prompts & services
 services.AddSingleton<PromptService>()
-services.AddSingleton<RevisionService>()
 services.AddSingleton<EntityVerifier>()
 services.AddSingleton<ReasoningSanityChecker>()
 services.AddSingleton<ReasoningService>()

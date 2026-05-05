@@ -86,7 +86,6 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │   ├── SubTask.cs                   # compound query alt görev
 │   ├── VerifiedEntities.cs          # entity grounding sonucu (DB verify)
 │   ├── SpecialistReasoning.cs       # Specialist pre/post-tool JSON
-│   ├── ResponseCritique.cs          # ResponseAgent self-critique
 │   ├── ReasoningTrace.cs            # tüm trace modeli
 │   ├── ToolResult.cs                # tool dönüş zarfı (+ ToolError)
 │   ├── WorkflowGuardOptions.cs      # timeout/iteration/token limiti
@@ -105,11 +104,8 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │       ├── reasoning-system.md
 │       ├── reasoning-history-note.md
 │       ├── reasoning-hint.md
-│       ├── revision-system.md
-│       ├── revision-user.md
 │       ├── routing-rewrite-system.md
-│       ├── routing-rewrite-user.md
-│       └── chat-manager-selection.md
+│       └── routing-rewrite-user.md
 │
 ├── Services/                        # Domain servisleri
 │   ├── PromptService.cs             # MD loader + {{placeholder}} render
@@ -117,7 +113,6 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │   ├── ReasoningChatClient.cs       # IChatClient wrapper (reasoning model)
 │   ├── EntityVerifier.cs            # Katman 0 — entity extract + DB verify (no LLM)
 │   ├── ReasoningSanityChecker.cs    # Katman 1.5 — IReasoningSanityRule + 8 rule sınıfı
-│   ├── RevisionService.cs           # critique eşik altıysa yanıtı yeniden yaz
 │   ├── ChatStreamOrchestrator.cs    # SSE streaming chat akışı
 │   ├── ChatEventOrchestrator.cs     # SSE persistent event stream (per-session)
 │   ├── HitlStreamSubscription.cs    # HITL approval/escalation event subscription
@@ -135,8 +130,7 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │   ├── IReasoningTraceStore.cs      # trace arayüzü
 │   ├── InMemoryReasoningTraceStore.cs# ring-buffer (max 500)
 │   ├── PlanningResultParser.cs      # PlanningAgent JSON parser
-│   ├── SpecialistReasoningParser.cs # specialist JSON parser
-│   └── ResponseCritiqueParser.cs    # critique JSON parser
+│   └── SpecialistReasoningParser.cs # specialist JSON parser
 │
 ├── Tools/
 │   └── CustomerSupportTools.cs      # 6 static tool fonksiyonu
@@ -163,9 +157,8 @@ EntityVerifier        (singleton)  ─┤  no dependencies, deterministic
 ReasoningSanityChecker(singleton)  ─┤  ILogger bağımlılığı var
 ReasoningService      (singleton)  ─┤  depends: ReasoningChatClient, PromptService,
                                     │             EntityVerifier, ReasoningSanityChecker
-RevisionService       (singleton)  ─┤  depends: IChatClient, PromptService
 CustomerSupportTeam   (singleton)  ─┤  depends: IChatClient, ContextPipeline, IConfiguration,
-                                    │             IReasoningTraceStore, RevisionService, PromptService
+                                    │             IReasoningTraceStore, PromptService
 EvaluationRunner      (singleton)  ─┤  depends: CustomerSupportTeam, ReasoningService, ...
                                     │
 IReasoningTraceStore  (singleton)  ─│→ InMemoryReasoningTraceStore (ring buffer, max 500)
@@ -236,7 +229,6 @@ CLIENT                ChatEndpoints           ReasoningService         CustomerS
   │                        │                        │                         │     postToolReflection
   │                        │                        │                         │   ResponseAgent ▶ TERMINATE ← Katman 4
   │                        │                        │                         │
-  │                        │                        │                         │ Parse critique → Revision?  ← Katman 5
   │                        │                        │                         │ Trace kayıt edilir
   │                        │◀── response text ──────────────────────────────  │
   │                        │                        │                         │
@@ -277,9 +269,9 @@ Benzer akış ama her adım ayrı bir SSE event'i olarak akıtılır:
 | `reasoning_delta` | Her ~20ms reasoning token chunk'ı | `{ text }` |
 | `reasoning_complete` | Reasoning JSON parse + sanity check tamamlanınca | `ReasoningResult` (`steps`, `subTasks`, `sanityIssues` dahil) |
 | `agent` | Her executor invoke/complete / orchestrator / subtask boundary | `{ name, status, ...[decomposed metadata] }` |
-| `response_start` | ResponseAgent TERMINATE üretince veya aggregated sonuç hazırsa | `{ terminationReason, revised, [decomposed, subTaskCount] }` |
+| `response_start` | ResponseAgent TERMINATE üretince veya aggregated sonuç hazırsa | `{ terminationReason, [decomposed, subTaskCount] }` |
 | `response_delta` | Kelime kelime son yanıt | `{ text }` |
-| `response_complete` | Yanıt bitince | `{ text, terminationReason, revised, [decomposed, subTaskCount] }` |
+| `response_complete` | Yanıt bitince | `{ text, terminationReason, [decomposed, subTaskCount] }` |
 | `done` | Stream sonu | `{ sessionId }` |
 | `error` | Hata / timeout | `{ message }` |
 
@@ -303,7 +295,7 @@ Bkz. `@Models/StreamEvent.cs` — tüm tip sabitleri.
 
 Tasarımda **iki ayrı chat client** kullanılır. Her ikisi de `AiClientFactory` tarafından seçili sağlayıcı (OpenAI / Azure OpenAI / Anthropic) için üretilir:
 
-1. **`IChatClient`** (default: OpenAI → `gpt-4o`, Azure → `gpt-5.1` deployment, Anthropic → `claude-haiku-4-5`) — tüm ajanlar, ChatManager LLM-based selection, RevisionService, ConversationSummaryProvider, RewriteRoutingMessage.
+1. **`IChatClient`** (default: OpenAI → `gpt-4o`, Azure → `gpt-5.1` deployment, Anthropic → `claude-haiku-4-5`) — tüm ajanlar, ConversationSummaryProvider, RewriteRoutingMessage.
 2. **`ReasoningChatClient`** (default: OpenAI → `o4-mini`, Azure → reasoning deployment, Anthropic → reasoning modeli) — **sadece** `ReasoningService` kullanır; OpenAI/Azure'da `reasoning_effort` parametresi gönderilir.
 
 Bu ayrım sayesinde:

@@ -843,9 +843,9 @@ curl http://localhost:5099/traces/recent?count=5 | jq '.[0]'
 
 ### "Hallucination yakalanmıyor"
 
-**Olası sebep**: `ResponseAgent` self-critique doğru üretilmiyor.
+**Olası sebep**: `ResponseAgent` prompt'undaki hallucination sıfır tolerans kuralı yeterince sıkı değil.
 
-**Kontrol**: `/traces/{id}.finalCritique.hallucinationRisk` değeri ne? Eğer 0.0 gelen durumlarda bile uydurma varsa, prompt'ta "hallucinationRisk" kuralını sıkılaştırın ve örnek ekleyin.
+**Kontrol**: Trace'deki `FinalResponse` alanını specialist tool çıktısıyla karşılaştırın. Eğer specialist'te olmayan veri response'ta varsa, `Prompts/agents/response-agent.md` prompt'unda hallucination kuralını sıkılaştırın ve örnek ekleyin.
 
 ### "Compound query'de ikinci görev yapılmıyor" (compound query)
 
@@ -925,7 +925,7 @@ Not: `ReasoningResult`'ın yeni alanları (`Steps`, `SubTasks`, `SanityIssues`) 
 
 ### 🕳️ Sanity checker kuralları workflow'u durdurmaz
 
-`ReasoningSanityChecker` **sadece işaretleme** yapar — issue severity'si `Error` olsa bile workflow devam eder. Bu kasıtlı bir tasarım: sanity check *bilgi*, *gate* değil. Eğer bir kural ciddi olduğuna inanıyorsanız, ya (1) otomatik revision için `RevisionService.ShouldRevise`'a benzer bir gate yazın, ya da (2) reasoning promptunu güncelleyerek kuralın tetiklenmesini engelleyin.
+`ReasoningSanityChecker` **sadece işaretleme** yapar — issue severity'si `Error` olsa bile workflow devam eder. Bu kasıtlı bir tasarım: sanity check *bilgi*, *gate* değil. Eğer bir kural ciddi olduğuna inanıyorsanız, ya (1) reasoning promptunu güncelleyerek kuralın tetiklenmesini engelleyin, ya da (2) `CustomerSupportTeam` içinde sanity issue'ya göre workflow'u durduran bir guard ekleyin.
 
 ### 🕳️ Recursive `RunAsync` session/trace kirletir
 

@@ -11,7 +11,7 @@ Sistemde **6 ajan** vardır. Hepsi MAF `ChatClientAgent` olarak `@Agents/Custome
 | **OrderPlacementAgent** | Sipariş oluşturma (yan etkili) | `order_placement_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
 | **OrderInquiryAgent** | Sipariş sorgusu (read-only) | `order_status_tool` + `get_last_order_tool` + `get_all_orders_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
 | **ComplaintAgent** | Şikayet kaydı (yan etkili) | `complaint_registration_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
-| **ResponseAgent** | Son yanıt + self-critique | Yok | ✅ `ResponseCritique` JSON | Turun **sonu** |
+| **ResponseAgent** | Son yanıt + TERMINATE | Yok | — | Turun **sonu** |
 
 **Pozisyon** sütunu kritiktir — ChatManager ajan seçimini pozisyon tabanlı yapar: ilk tur PlanningAgent, spesialist tool çağırdıktan sonra ResponseAgent, TERMINATE ile sonlanır. Bkz. [workflow.md](workflow.md).
 
@@ -57,7 +57,7 @@ Bir ajan MAF'ta **monolitik bir LLM çağrısı** değildir. Tek bir agent itera
 │    - Specialist → preToolCheck { requiredParams, missing,        │
 │                                  canProceed, confidence, ... }   │
 │    - Planning   → { detectedIntent, selectedAgent, ... }         │
-│    - Response   → self-critique öncesi ilk draft                  │
+│    - Response   → kullanıcıya yönelik nihai yanıt + TERMINATE   │
 │  • Parser: SpecialistReasoningParser / PlanningResultParser       │
 │    — 3 katmanlı JSON extract (fenced → triple backtick → raw {})  │
 │  • Hata → next sub-component atlanır                              │
@@ -115,13 +115,13 @@ Bir ajan MAF'ta **monolitik bir LLM çağrısı** değildir. Tek bir agent itera
 | 1. Input Prep | + önceki specialist çıktıları (resultNotes, ToolResult özetleri) |
 | 2. LLM Reasoning | **Draft yanıt** + kullanıcıya Türkçe mesaj |
 | 3. Tool | ❌ Atlandı |
-| 4. Reflection | `ResponseCritique` JSON + TERMINATE marker + opsiyonel `RevisionService.ReviseAsync` |
+| 4. Reflection | TERMINATE marker |
 
 ### Sub-component'ler arası veri akışı
 
-Bir ajanın sub-component 2 çıktısı (`SpecialistReasoning`, `PlanningResult`, `ResponseCritique`) parser'lar tarafından yapılandırılır ve **iki yere** yazılır:
+Bir ajanın sub-component 2 çıktısı (`SpecialistReasoning`, `PlanningResult`) parser'lar tarafından yapılandırılır ve **iki yere** yazılır:
 
-1. **`ReasoningTrace`** içine — `ReasoningTrace.SpecialistReasonings[]`, `Planning`, `FinalCritique` alanlarına
+1. **`ReasoningTrace`** içine — `ReasoningTrace.SpecialistReasonings[]`, `Planning` alanlarına
 2. **Workflow'un bir sonraki iterasyonuna** — agent mesajı olarak görünür, ChatManager ve sonraki agent'lar okur
 
 `StripTechnicalJsonBlocks` (workflow output temizleme) **sadece kullanıcıya dönen final response**'u temizler — agent'lar arası mesajlarda JSON blokları görünmeye devam eder (onlara gerekli).
@@ -382,22 +382,18 @@ Bu davranış **ping-pong'u önler** — kullanıcı şikayet için `CUST-001` v
 **Dosya**: `Prompts/agents/response-agent.md`
 **Kod**: `CustomerSupportTeam.cs:106-110`
 **Tool**: Yok.
-**Çıktı modeli**: `Models/ResponseCritique.cs`
-**Parser**: `Services/ResponseCritiqueParser.cs`
-
 ### Sorumluluk
 
-Diğer ajanlardan gelen bilgiyi **temiz, samimi ve empatik bir Türkçe yanıta** çevirir, TERMINATE marker'ı ile sonlandırır ve kendi çıktısını self-critique eder.
+Diğer ajanlardan gelen bilgiyi **temiz, samimi ve empatik bir Türkçe yanıta** çevirir ve TERMINATE marker'ı ile sonlandırır.
 
 ### Çıktı formatı (sırayla)
 
 ```
 1) Kullanıcıya yönelik nihai yanıt metni
 2) TERMINATE: reason=<completed | awaiting_user_input | escalation_needed | not_found | error>
-3) ```json { "selfCritique": { ... } } ```
 ```
 
-Bölüm 2 + 3 kullanıcıya **yansıtılmaz** — `CustomerSupportTeam.CleanTerminateMarker` ve `StripTechnicalJsonBlocks` tarafından temizlenir. Self-critique sadece `ReasoningTrace.FinalCritique` alanına yazılır.
+TERMINATE marker'ı kullanıcıya **yansıtılmaz** — `WorkflowResponseExtractor.RemoveTerminationMarkers` ve `RemoveTechnicalJsonBlocks` tarafından temizlenir.
 
 ### Escalation farkındalığı
 
@@ -421,45 +417,6 @@ Kullanıcı mesajı **birden fazla bağımsız işlem** içeriyorsa (ör. *"ORD-
 - `TERMINATE: reason=completed` yine **tek sefer**, yanıtın en sonunda olur.
 
 Ancak pratikte `CustomerSupportTeam.RunDecomposedAsync` her subtask için **ayrı** bir workflow run çalıştırdığı için ResponseAgent her run'da kendi subtask sonucunu tek başına üretir. `CustomerSupportTeam` bu parçaları `JoinAggregatedParts` ile `\n\n---\n\n` ayırıcılı tek bir metin halinde birleştirir ve başlık olarak `**{order}) {description}**` ekler. Yani gerçek maddelenmiş format **orkestrasyon katmanında** oluşur; ResponseAgent prompt kuralı, tek-workflow fallback senaryosu için bir güvencedir.
-
-### Self-critique alanları
-
-```json
-{
-  "selfCritique": {
-    "addressesUserQuery": true,
-    "tone": "appropriate | too_formal | too_casual | robotic | impolite",
-    "completeness": 0.95,
-    "hallucinationRisk": 0.0,
-    "sources": ["OrderInquiryAgent.resultNotes"],
-    "issuesFound": [],
-    "revisionNeeded": false,
-    "revisionNotes": ""
-  }
-}
-```
-
-- **`hallucinationRisk`**: Specialist çıktısında olmayan sipariş/ürün/müşteri numarası üretildi mi? **Sıfır tolerans** — uydurma yasak.
-- **`completeness`**: 1.0 = tam, 0.6 = kısmi, 0.3 = yetersiz.
-- **`revisionNeeded`**: Model bunu işaretlese de, `RevisionService.ShouldRevise` karar mercisi — ayrı eşikler var (bkz. [reasoning.md](reasoning.md#revizyon-kararı)).
-
-### Revizyon tetikleyicileri
-
-`@Services/RevisionService.cs:27-35`:
-
-```csharp
-public static bool ShouldRevise(ResponseCritique? critique)
-{
-    if (critique == null) return false;
-    if (critique.RevisionNeeded) return true;
-    if (!critique.AddressesUserQuery) return true;
-    if (critique.Completeness < 0.6) return true;
-    if (critique.HallucinationRisk > 0.3) return true;
-    return false;
-}
-```
-
-Eşiklerden biri aşılırsa `RevisionService.ReviseAsync` ilk taslağı + critique'i yeni bir LLM çağrısına sokar ve iyileştirilmiş metni kullanır. Tek-geçişli — sonsuz döngü olmaz.
 
 ---
 

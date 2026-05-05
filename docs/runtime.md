@@ -140,7 +140,7 @@ Pattern → [patterns.md#9-guardrails--circuit-breaker](patterns.md).
 2. AiClientFactory        → IChatClient + ReasoningChatClient (singleton)
 3. PromptService          → Prompts/**/*.md eager load (eksikse fail-fast)
 4. Domain servisler       → EntityVerifier, ReasoningSanityChecker, ReasoningService,
-                            RevisionService, ContextPipeline + IContextProvider'lar
+                            ContextPipeline + IContextProvider'lar
 5. HITL altyapısı         → IApprovalQueue, IEscalationSink, IChatModeRegistry, IChatBridge
 6. Persistence            → InMemorySessionManager (ISessionManager + IConversationStore aynı instance),
                             InMemoryReasoningTraceStore (ring buffer, max 500)
@@ -171,11 +171,10 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
 
 | Servis | Sorumluluk |
 |---|---|
-| `ChatStreamOrchestrator` | `/chat/stream` endpoint'inin tüm akışı: mod kontrolü → reasoning stream → workflow stream → critique → revision → done |
+| `ChatStreamOrchestrator` | `/chat/stream` endpoint'inin tüm akışı: mod kontrolü → reasoning stream → workflow stream → done |
 | `ChatEventOrchestrator` | Persistent SSE — `/chat/events/{sid}` üzerinde HITL mod değişimi, eskalasyon yaşam döngüsü, admin/system mesajları, `bot_typing` |
 | `ReasoningService` | Pre-analysis: entity verification + reasoning LLM çağrısı + sanity check (8 kural) |
 | `CustomerSupportTeam` | Workflow yapısı (PlanningAgent → Specialist → ResponseAgent), MAF `GroupChatManager`, compound query decomposition |
-| `RevisionService` | Critic-revise döngüsü — düşük completeness yanıtlarını iyileştirir |
 
 ### HITL altyapısı
 
@@ -230,8 +229,7 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
   │◀── agent (ResponseAgent, run)   ───┤   │   ├─ ChatManager: ResponseAgent
   │◀── response_start               ───┤   │   ├─ ResponseAgent.RunStreamingAsync
   │◀── response_delta × N           ───┤   │   ├─ TERMINATE detection
-  │◀── response_complete            ───┤   │   ├─ Critique parse → ShouldRevise?
-  │                                    │   │   └─ (revize gerekirse RevisionService)
+  │◀── response_complete            ───┤   │   └─ TERMINATE detection + temizleme
   │                                    │   │
   │                                    │   ├─ Phase 4: AddExchange + RecordBotExchange
   │◀── sentiment_update             ───┤   ├─ Phase 5: sentiment SSE
@@ -368,9 +366,7 @@ Tam SSE event sözleşmeleri → [api.md#5-sse-event-şemaları](api.md#5-sse-ev
 - Reasoning JSON (intent, steps, sanity issues)
 - Agent dizilimi (PlanningAgent → Specialist → ResponseAgent)
 - Tool çağrıları + parametreler + sonuç
-- ResponseAgent self-critique (completeness, hallucinationRisk)
 - Termination reason (`completed | escalation_needed | not_found | error | …`)
-- Revision yapıldı mı?
 
 ### Yaygın sorunlar
 

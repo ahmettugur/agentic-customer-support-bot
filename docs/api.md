@@ -259,9 +259,6 @@ Son N trace'i döner. Varsayılan `count=20`.
     "reasoning": { /* ReasoningResult */ },
     "planning": { /* PlanningResult? */ },
     "specialistReasonings": [...],
-    "finalCritique": { /* ResponseCritique? */ },
-    "firstDraftResponse": null,
-    "wasRevised": false,
     "agentVisits": [
       {"agentName": "PlanningAgent", "startedAt": "...", "completedAt": "...", "durationMs": 580, "output": "..."},
       {"agentName": "OrderInquiryAgent", ...}

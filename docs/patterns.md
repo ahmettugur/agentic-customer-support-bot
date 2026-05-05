@@ -15,7 +15,7 @@ Bu dokümanda sistemde uygulanan **agentic design pattern'leri** haritalanır. H
 | 2 | **Router Agent** | PlanningAgent + ChatManager | ⭐⭐⭐ |
 | 3 | **ReAct (Reason + Act)** | Specialist ajanlar | ⭐⭐⭐ |
 | 4 | **Structured Output (JSON Schema)** | 5+ ayrı reasoning modeli | ⭐⭐⭐ |
-| 5 | **Self-Reflection / Critic-Revise** | ResponseAgent + RevisionService | ⭐⭐⭐ |
+| 5 | **Self-Reflection** | Specialist pre/post-tool reasoning | ⭐⭐ |
 | 6 | **Tool Use + Pre-Tool Validation** | Specialist `preToolCheck` | ⭐⭐⭐ |
 | 7 | **Group Chat (Multi-Agent Orchestration)** | MAF `GroupChatManager` türevi | ⭐⭐⭐ |
 | 8 | **Dynamic Handoff (Agent-to-Agent)** | `postToolReflection.handoffSuggestion` | ⭐⭐ |
@@ -118,7 +118,6 @@ Reason   → postToolReflection {status: "done", handoffSuggestion: "ResponseAge
 | Global reasoning | `ReasoningResult` | `ReasoningService` (o4-mini) | `ReasoningService.ParseReasoning` |
 | Planning | `PlanningResult` | PlanningAgent | `PlanningResultParser` |
 | Specialist | `SpecialistReasoning` | 4 specialist | `SpecialistReasoningParser` |
-| Critique | `ResponseCritique` | ResponseAgent | `ResponseCritiqueParser` |
 
 **Robust parsing stratejisi**: Her parser önce ` ```json …``` ` fence'ini arar, sonra serbest ` ``` …``` `, sonra düz JSON ( `{...}` ) — üç fallback seviyesi. Parse başarısızsa `null` döner, downstream graceful fallback kullanır.
 
@@ -128,44 +127,19 @@ Reason   → postToolReflection {status: "done", handoffSuggestion: "ResponseAge
 
 ---
 
-## 5. Self-Reflection / Critic-Revise
+## 5. Self-Reflection
 
-**Tanım**: LLM'in kendi çıktısını eleştirmesi (critic) ve eşik aşılırsa yeniden yazması (revise). İnsan review'ının LLM ile simülasyonu.
+**Tanım**: LLM'in kendi çıktısını değerlendirmesi. Tool çağrısı öncesi ve sonrası structured reasoning üreterek karar kalitesini artırır.
 
-**Gerçekleme**: İki aşamalı:
+**Gerçekleme**: Specialist ajanlar tool çağrısı etrafında iki aşamalı reflection yapar:
 
-**a) Critic**: ResponseAgent kendi yanıtını JSON ile eleştirir (`ResponseCritique`):
+**a) Pre-tool check**: Tool çağrılmadan önce `preToolCheck` JSON'u üretilir — eksik parametre varsa tool çağrılmaz.
 
-```json
-{
-  "addressesUserQuery": true,
-  "tone": "appropriate",
-  "completeness": 0.95,
-  "hallucinationRisk": 0.0,
-  "revisionNeeded": false
-}
-```
+**b) Post-tool reflection**: Tool sonrası `postToolReflection` JSON'u üretilir — `status`, `handoffSuggestion`, `summary` alanları ile sonraki adım belirlenir.
 
-**b) Revise**: `RevisionService.ShouldRevise` eşik kontrolü yapar:
+**Dosya**: `@Prompts/agents/{specialist}-agent.md`, `@Models/SpecialistReasoning.cs`
 
-```csharp
-@Services/RevisionService.cs:27-35
-if (critique.RevisionNeeded) return true;
-if (!critique.AddressesUserQuery) return true;
-if (critique.Completeness < 0.6) return true;
-if (critique.HallucinationRisk > 0.3) return true;
-```
-
-Eşiklerden biri aşılırsa `ReviseAsync` ilk taslağı + critique'i ikinci bir LLM çağrısına sokar.
-
-**Dosya**:
-
-- `@Services/RevisionService.cs`
-- `@Prompts/services/revision-{system,user}.md`
-
-**Tek-geçişli**: Revize edilmiş metin yeniden eleştirilmez. Sonsuz döngü riski yok.
-
-**Neden?** Üretken modeller bazen kullanıcının sorusunu atlayabilir, uydurma verebilir, yanlış ton kullanabilir. Critic adımı bu hataları yakalar; revise adımı düzeltir.
+**Neden?** Tool çağrıları yan etkili olabilir (sipariş oluşturma, şikayet kaydetme). Pre-check eksik parametreyle yan etkili çağrıyı engeller; post-reflection sonuç değerlendirmesi yapar.
 
 ---
 
@@ -374,8 +348,6 @@ TraceId, SessionId, UserQuery, StartedAt, CompletedAt, DurationMs
 Reasoning          (Katman 1)
 Planning           (Katman 2)
 SpecialistReasonings[] (Katman 3)
-FinalCritique      (Katman 4)
-FirstDraftResponse, WasRevised  (Katman 5)
 AgentVisits[], ToolCalls[]
 TerminationReason, FinalResponse, IterationCount, Error
 ```
@@ -398,7 +370,7 @@ public string Render(string key, IDictionary<string, string?>? vars);
 ```
 
 `Prompts/agents/planning-agent.md` → `_prompts.Get("agents/planning-agent")`
-`Prompts/services/revision-user.md` → `_prompts.Render("services/revision-user", vars)`
+`Prompts/services/reasoning-system.md` → `_prompts.Render("services/reasoning-system", vars)`
 
 `{{PLACEHOLDER}}` şablon syntax'ı regex ile ikame edilir. `README.md`/`NOTES.md` loader tarafından atlanır.
 
@@ -915,11 +887,6 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
  │ └─────────────────────────────────────┘ │
  └────────────────────┬────────────────────┘
                       ▼
- ┌─────────────────────────────────────────┐
- │ Critic-Revise          — Katman 4 + 5   │
- │ (self-critique → RevisionService)       │
- └────────────────────┬────────────────────┘
-                      ▼
               Final response to user
               (compound ise:
                JoinAggregatedParts ile birleştirildi)
@@ -941,7 +908,7 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
 |---|---|
 | Planner-Executor, Router | `Prompts/agents/planning-agent.md`, `Models/PlanningResult.cs`, `Services/PlanningResultParser.cs` |
 | ReAct | `Prompts/agents/{product,order-placement,order-inquiry,complaint}-agent.md`, `Models/SpecialistReasoning.cs`, `Services/SpecialistReasoningParser.cs` |
-| Critic-Revise | `Prompts/agents/response-agent.md`, `Models/ResponseCritique.cs`, `Services/RevisionService.cs`, `Prompts/services/revision-{system,user}.md` |
+| Self-Reflection | `Prompts/agents/{specialist}-agent.md`, `Models/SpecialistReasoning.cs`, `Services/SpecialistReasoningParser.cs` |
 | Group Chat + Guardrails | `Agents/CustomerSupportChatManager.cs`, `Models/WorkflowGuardOptions.cs` |
 | Tool Use + Validation | `Tools/CustomerSupportTools.cs`, `Models/ToolResult.cs` |
 | Dynamic Handoff | `CustomerSupportChatManager.SelectNextAgentAsync` (L108-153) |
