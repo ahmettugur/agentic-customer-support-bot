@@ -49,7 +49,25 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │  AiClientFactory → { OpenAI | AzureOpenAI | Anthropic }          │
 │    ├─ IChatClient            (chat / specialist / response)        │
 │    └─ ReasoningChatClient    (o-series / reasoning deployment)     │
-│  FakeDatabase (Product/Order/Complaint)  │  IdExtractor (regex) │
+│  PostgreSQL (sessions/traces/approvals/escalations/lessons*)     │
+│  Qdrant (cs_knowledge / cs_episodic / cs_lessons collections)    │
+│  FakeDatabase (Product/Order/Complaint demo)  │  IdExtractor (regex)│
+└─────────────────────────────────────────────────────────────────┘
+
+(*) Lesson'lar şu an in-memory; PostgresLessonStore opsiyoneldir.
+
+┌─────────────────────────────────────────────────────────────────┐
+│                  INTELLIGENCE LAYERS                             │
+│  Semantic Memory (Qdrant)                                         │
+│    ├─ KnowledgeBaseIngestor (startup MD → chunks → embed → upsert)│
+│    ├─ SemanticMemoryService (facade — Episodic/Lessons/Knowledge)│
+│    └─ SemanticMemoryContextProvider (RAG → context pipeline)     │
+│  Self-Improving Loop                                              │
+│    ├─ LessonMiner (low-rated/error trace → LLM → Lesson proposals)│
+│    └─ Approve → Qdrant cs_lessons → next conversation context    │
+│  Replay UI (`/replay.html?traceId=...`) — step-by-step trace player│
+│                                                                   │
+│  Detay: docs/intelligence.md                                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -66,8 +84,10 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 ├── Endpoints/                       # HTTP yüzeyi
 │   ├── ChatEndpoints.cs             # POST /chat + /chat/stream (SSE)
 │   ├── SessionEndpoints.cs          # GET /sessions/... (debug + sidebar)
-│   ├── TraceEndpoints.cs            # GET /traces/... (dashboard)
+│   ├── TraceEndpoints.cs            # GET /traces/... (dashboard + replay)
 │   ├── EvaluationEndpoints.cs       # POST /evaluation/run
+│   ├── MemoryEndpoints.cs           # /memory/stats|search|ingest (admin)
+│   ├── ImprovementsEndpoints.cs     # /improvements/* (admin self-improve loop)
 │   └── SseWriter.cs                 # SSE event helper
 │
 ├── Evaluation/                      # Senaryo tabanlı test
@@ -122,7 +142,16 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │   ├── IContextProvider.cs          # provider arayüzü
 │   ├── Providers/
 │   │   ├── CustomerContextProvider.cs   # FakeDatabase'den müşteri geçmişi
-│   │   └── ConversationSummaryProvider.cs# 8+ mesaj → LLM özet
+│   │   ├── ConversationSummaryProvider.cs# 8+ mesaj → LLM özet
+│   │   └── SemanticMemoryContextProvider.cs # Qdrant RAG (KB + lessons)
+│   ├── Memory/                          # Semantic memory (Qdrant + embedding)
+│   │   ├── IEmbeddingService.cs / OpenAiEmbeddingService.cs
+│   │   ├── IVectorMemoryStore.cs / QdrantVectorMemoryStore.cs
+│   │   ├── SemanticMemoryService.cs        # facade (Episodic/Lessons/Knowledge)
+│   │   └── KnowledgeBaseIngestor.cs        # IHostedService (KB → chunks → Qdrant)
+│   ├── Improvement/                     # Self-improving loop
+│   │   ├── ILessonStore.cs / InMemoryLessonStore.cs
+│   │   └── LessonMiner.cs                  # mine + approve + reject
 │   ├── ISessionManager.cs           # oturum arayüzü
 │   ├── IConversationStore.cs        # geçmiş arayüzü (aynı sınıf implement eder)
 │   ├── InMemorySessionManager.cs    # in-memory session + history
@@ -135,10 +164,17 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 ├── Tools/
 │   └── CustomerSupportTools.cs      # 6 static tool fonksiyonu
 │
+├── KnowledgeBase/                    # RAG kaynak dokümanları (md)
+│   ├── iade-politikasi.md
+│   ├── kargo-teslimat.md
+│   └── sss.md
+│
 └── wwwroot/                         # Statik frontend
     ├── index.html
+    ├── admin.html                   # admin paneli (Improvements tab dahil)
+    ├── replay.html                  # trace step-by-step replay UI
     ├── css/styles.css
-    ├── js/chat-ui.js
+    ├── js/chat-ui.js / improvements.js / replay.js / traces.js
     └── chatbot.png / user.png
 ```
 

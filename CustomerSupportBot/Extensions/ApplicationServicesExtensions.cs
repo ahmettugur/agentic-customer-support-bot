@@ -58,12 +58,27 @@ public static class ApplicationServicesExtensions
         // Context provider'lar
         services.AddSingleton<IContextProvider, CustomerContextProvider>();
         services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
+        services.AddSingleton<IContextProvider>(sp =>
+        {
+            // SemanticMemoryService opsiyonel — yoksa no-op provider üret
+            var mem = sp.GetService<Services.Memory.SemanticMemoryService>();
+            if (mem == null) return new NoopContextProvider();
+            return new Services.Providers.SemanticMemoryContextProvider(
+                mem,
+                sp.GetRequiredService<ISessionManager>(),
+                sp.GetRequiredService<ILogger<Services.Providers.SemanticMemoryContextProvider>>());
+        });
         services.AddSingleton<ContextPipeline>();
 
         // Güvenlik — deterministik input gate
         services.AddSingleton<InputGuard>();
 
         services.AddSingleton<AnalyticsService>();
+
+        // ─── Self-Improvement (LessonMiner) ───
+        // SelfImprovementOptions binding burada değil — AiServicesExtensions'ta IConfiguration var.
+        services.AddSingleton<Services.Improvement.ILessonStore, Services.Improvement.InMemoryLessonStore>();
+        services.AddSingleton<Services.Improvement.LessonMiner>();
 
         return services;
     }

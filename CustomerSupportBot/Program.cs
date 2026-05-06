@@ -34,6 +34,8 @@ var adminScope = app.MapGroup("").RequireAuthorization("Admin");
 adminScope.MapAdminEndpoints();
 adminScope.MapTraceEndpoints();
 adminScope.MapEvaluationEndpoints();
+adminScope.MapMemoryEndpoints();
+adminScope.MapImprovementsEndpoints();
 
 app.MapAnalyticsEndpoints();
 

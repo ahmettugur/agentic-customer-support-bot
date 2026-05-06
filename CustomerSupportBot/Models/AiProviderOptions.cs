@@ -19,8 +19,8 @@ public sealed class AiOptions
 {
     public const string SectionName = "AI";
 
-    /// <summary>Aktif sağlayıcı (varsayılan: OpenAI).</summary>
-    public AiProvider Provider { get; set; } = AiProvider.OpenAI;
+    /// <summary>Aktif sağlayıcı (appsettings'ten gelir).</summary>
+    public AiProvider Provider { get; set; }
 
     public OpenAiOptions OpenAI { get; set; } = new();
     public AzureOpenAiOptions AzureOpenAI { get; set; } = new();
@@ -31,9 +31,9 @@ public sealed class AiOptions
 public sealed class OpenAiOptions
 {
     public string? ApiKey { get; set; }
-    public string Model { get; set; } = "gpt-4o";
+    public string? Model { get; set; }
     public string? ReasoningModel { get; set; }
-    public string ReasoningEffort { get; set; } = "medium";
+    public string? ReasoningEffort { get; set; }
 }
 
 /// <summary>Azure OpenAI ayarları (deployment-tabanlı).</summary>
@@ -42,17 +42,17 @@ public sealed class AzureOpenAiOptions
     public string? Endpoint { get; set; }
     public string? ApiKey { get; set; }
     /// <summary>Azure'da yayınlanmış deployment adı (model değil).</summary>
-    public string Deployment { get; set; } = "gpt-5.1";
+    public string? Deployment { get; set; }
     public string? ReasoningDeployment { get; set; }
-    public string ReasoningEffort { get; set; } = "medium";
+    public string? ReasoningEffort { get; set; }
 }
 
 /// <summary>Anthropic Claude ayarları.</summary>
 public sealed class AnthropicOptions
 {
     public string? ApiKey { get; set; }
-    public string Model { get; set; } = "claude-haiku-4-5";
+    public string? Model { get; set; }
     public string? ReasoningModel { get; set; }
     /// <summary>Çıktı token üst sınırı (Anthropic zorunlu kılıyor).</summary>
-    public int MaxTokens { get; set; } = 4096;
+    public int MaxTokens { get; set; }
 }

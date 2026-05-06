@@ -240,6 +240,8 @@ class TraceDashboard {
                     <span class="badge badge-${this.escapeHtml(t.terminationReason || '')}">${this.escapeHtml(t.terminationReason || '—')}</span>
                     <code>${this.escapeHtml(t.traceId)}</code>
                     <code>session: ${this.escapeHtml((t.sessionId || '').substring(0, 8))}…</code>
+                    <a class="btn-secondary" style="margin-left:auto;text-decoration:none;font-size:12px;padding:4px 10px"
+                       href="/replay.html?traceId=${encodeURIComponent(t.traceId)}" target="_blank">▶ Replay</a>
                 </div>
             </div>
         `;

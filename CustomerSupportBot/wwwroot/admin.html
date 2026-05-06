@@ -63,6 +63,18 @@
             </svg>
             Analytics
         </button>
+        <button class="tab-btn" data-tab="improvements">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+            Improvements <span class="badge" id="proposedLessonsBadge">0</span>
+        </button>
+        <a class="tab-btn" href="/replay.html" target="_blank" style="text-decoration:none">
+            ▶ Replay
+        </a>
+        <a class="tab-btn" href="/traces.html" target="_blank" style="text-decoration:none">
+            🧭 Traces
+        </a>
     </nav>
 
     <!-- TAB CONTENT -->
@@ -299,6 +311,26 @@
             <h3 class="section-spaced">Eskalasyon Geçmişi</h3>
             <div class="cards-list" id="historyEscalationsList">
                 <div class="empty-state">Henüz eskalasyon yok.</div>
+            </div>
+        </section>
+
+        <!-- TAB: IMPROVEMENTS (Self-Improving Loop) -->
+        <section class="tab-content" id="tab-improvements">
+            <div class="tab-header" style="display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <h2>Self-Improving Loop</h2>
+                    <p class="muted">Düşük puanlı / hatalı trace'lerden LLM tarafından çıkarılan ders önerileri. Onaylananlar Qdrant Lessons collection'ına yazılır ve sonraki konuşmalarda context'e dönerler.</p>
+                </div>
+                <button class="btn-primary" id="mineLessonsBtn">⚙️ Yeni Tarama Çalıştır</button>
+            </div>
+            <div class="improvements-stats" id="improvementsStats" style="margin:12px 0;font-family:ui-monospace,monospace;font-size:12px;color:#555"></div>
+            <h3>Önerilen (Onay Bekleyen)</h3>
+            <div class="cards-list" id="proposedLessonsList">
+                <div class="empty-state">Henüz öneri yok. "Yeni Tarama Çalıştır" deyin.</div>
+            </div>
+            <h3 class="section-spaced">Onaylanmış Dersler</h3>
+            <div class="cards-list" id="approvedLessonsList">
+                <div class="empty-state">Henüz onaylanmış ders yok.</div>
             </div>
         </section>
     </main>
@@ -554,5 +586,6 @@
 <script src="js/auth.js"></script>
 <script>window.Auth.requireAuth();</script>
 <script src="js/admin.js"></script>
+<script src="js/improvements.js"></script>
 </body>
 </html>

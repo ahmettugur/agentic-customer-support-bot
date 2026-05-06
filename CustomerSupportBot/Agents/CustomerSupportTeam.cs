@@ -13,11 +13,13 @@
 
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using CustomerSupportBot.Models;
 using CustomerSupportBot.Services;
+using CustomerSupportBot.Services.Memory;
 using CustomerSupportBot.Tools;
 
 namespace CustomerSupportBot.Agents;
@@ -43,6 +45,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     private readonly PromptService _prompts;
     private readonly ApprovalGateService _approvalGate;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly SemanticMemoryService? _semanticMemory;
 
     public CustomerSupportTeam(
         IChatClient chatClient,
@@ -51,7 +54,8 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         IReasoningTraceStore traceStore,
         PromptService prompts,
         ApprovalGateService approvalGate,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        SemanticMemoryService? semanticMemory = null)
     {
         _contextPipeline = contextPipeline;
         _chatClient = chatClient;
@@ -59,6 +63,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         _prompts = prompts;
         _approvalGate = approvalGate;
         _loggerFactory = loggerFactory;
+        _semanticMemory = semanticMemory;
 
         // Guard ayarlarını appsettings.json'dan oku
         _guards = new WorkflowGuardOptions();
@@ -344,7 +349,13 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         // HITL — escalation tespiti
         _approvalGate.ProcessPendingEscalations(trace, query, result);
 
+        // AgentVisit.Output alanlarını trace'in zenginleştirilmiş verisinden doldur.
+        PopulateAgentVisitOutputs(trace, result);
+
         // Trace'i tamamla
+
+        // Episodic memory — fire & forget (kullanıcıya yanıt akışını bloklama)
+        WriteEpisodicMemorySafe(trace, query, result);
         _traceStore.Complete(trace.TraceId,
             terminationReason: terminationReason,
             finalResponse: result);
@@ -360,6 +371,89 @@ public class CustomerSupportTeam : ICustomerSupportTeam
 
         yield return new StreamEvent(StreamEventTypes.ResponseComplete,
             new { text = result, terminationReason });
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Episodic memory yazımı
+    // ════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Workflow framework, ExecutorCompleted event'inde agent'ın ürettiği metni
+    /// taşımıyor. Bu yüzden trace tamamlanırken agent çıktılarını,
+    /// trace'in zenginleştirilmiş verisinden post-hoc olarak doldururuz:
+    ///   - PlanningAgent_*    → trace.Planning (JSON özeti)
+    ///   - *Agent_*  (specialist) → eşleşen SpecialistReasoning JSON'u
+    ///   - ResponseAgent_*    → final response (truncate)
+    /// </summary>
+    private static void PopulateAgentVisitOutputs(ReasoningTrace trace, string finalResult)
+    {
+        const int MaxLen = 1500;
+        static string Truncate(string s) => s.Length <= MaxLen ? s : s[..MaxLen] + "…";
+
+        foreach (var visit in trace.AgentVisits)
+        {
+            if (!string.IsNullOrWhiteSpace(visit.Output)) continue;
+
+            var name = visit.AgentName ?? "";
+            // executorId tipik olarak "AgentName_<hash>" veya bare "AgentName" şeklinde gelir.
+            var baseName = name.Split('_', 2)[0];
+
+            string? output = null;
+
+            if (baseName.StartsWith("Planning", StringComparison.OrdinalIgnoreCase) && trace.Planning != null)
+            {
+                output = JsonSerializer.Serialize(trace.Planning, _prettyJson);
+            }
+            else if (baseName.StartsWith("Response", StringComparison.OrdinalIgnoreCase))
+            {
+                output = finalResult;
+            }
+            else if (trace.SpecialistReasonings.Count > 0)
+            {
+                // Aynı baseName'e sahip specialist reasoning(ler)i topla.
+                var matching = trace.SpecialistReasonings
+                    .Where(s => string.Equals(s.AgentName, baseName, StringComparison.OrdinalIgnoreCase)
+                             || s.AgentName.StartsWith(baseName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (matching.Count > 0)
+                {
+                    output = JsonSerializer.Serialize(matching.Count == 1 ? matching[0] : (object)matching, _prettyJson);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(output))
+                visit.Output = Truncate(output);
+        }
+    }
+
+    private static readonly JsonSerializerOptions _prettyJson = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+
+    private void WriteEpisodicMemorySafe(ReasoningTrace trace, string query, string response)
+    {
+        if (_semanticMemory is null || !_semanticMemory.Enabled) return;
+        if (string.IsNullOrWhiteSpace(query) || string.IsNullOrWhiteSpace(response)) return;
+
+        var sessionId = trace.SessionId;
+        var traceId = trace.TraceId;
+        var intent = trace.Reasoning?.Intent ?? trace.Planning?.DetectedIntent;
+        var memory = _semanticMemory;
+        var logger = _loggerFactory.CreateLogger<CustomerSupportTeam>();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await memory.WriteEpisodeAsync(sessionId, traceId, query, response, intent, rating: null);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Episodic memory yazımı başarısız oldu (traceId={TraceId})", traceId);
+            }
+        });
     }
 
     // ════════════════════════════════════════════════════════════════

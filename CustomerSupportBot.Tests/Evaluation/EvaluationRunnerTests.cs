@@ -20,7 +20,6 @@ public class EvaluationRunnerTests
         var contextPipeline = new ContextPipeline(
             Array.Empty<IContextProvider>(), NullLogger<ContextPipeline>.Instance);
         var traceStore = new InMemoryReasoningTraceStore();
-        var revisionService = new RevisionService(chatClient, prompts);
         var approvalOpts = new ApprovalOptions { Enabled = false };
         var queue = new InMemoryApprovalQueue(
             Options.Create(approvalOpts), NullLogger<InMemoryApprovalQueue>.Instance);
@@ -30,7 +29,7 @@ public class EvaluationRunnerTests
 
         var team = new CustomerSupportTeam(
             chatClient, contextPipeline, configuration, traceStore,
-            revisionService, prompts, approvalGate, NullLoggerFactory.Instance);
+            prompts, approvalGate, NullLoggerFactory.Instance);
 
         var reasoningClient = new ReasoningChatClient(chatClient, "gpt-test", "low");
         var entityVerifier = new EntityVerifier(NullLogger<EntityVerifier>.Instance);

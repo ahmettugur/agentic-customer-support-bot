@@ -35,7 +35,6 @@ public class CustomerSupportTeamTests
         var providers = Array.Empty<IContextProvider>();
         var contextPipeline = new ContextPipeline(providers, NullLogger<ContextPipeline>.Instance);
         var traceStore = new InMemoryReasoningTraceStore();
-        var revisionService = new RevisionService(chatClient, prompts);
 
         var approvalOpts = new ApprovalOptions { Enabled = false };
         var queue = new InMemoryApprovalQueue(
@@ -52,7 +51,6 @@ public class CustomerSupportTeamTests
             contextPipeline,
             configuration,
             traceStore,
-            revisionService,
             prompts,
             approvalGate,
             loggerFactory);

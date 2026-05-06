@@ -8,6 +8,9 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 - **Structured reasoning** — Her adımda açık akıl yürütme ve kendi kendini doğrulama
 - **Human-in-the-Loop (HITL)** — Kritik işlemlerde insan onayı
 - **Gerçek zamanlı streaming** — SSE üzerinden canlı yanıt akışı
+- **Semantic Memory + RAG** — Qdrant tabanlı bilgi tabanı + episodik bellek (geçmiş konuşmalar)
+- **Self-Improving Loop** — Düşük puanlı trace'lerden LLM ile öğrenilmiş "lesson" üretip admin onayıyla bilgi tabanına geri besleme
+- **Trace Replay UI** — Bir workflow koşusunu adım adım yeniden oynatma (debug + demo)
 
 ---
 
@@ -136,7 +139,10 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 | Framework | .NET 10 (ASP.NET Core Minimal API) |
 | Ajan Framework | Microsoft Agents Framework (MAF) 1.1.0 |
 | AI Soyutlamaları | `Microsoft.Extensions.AI` |
-| LLM Sağlayıcı | OpenAI (`gpt-5.4`, `o4-mini`) |
+| LLM Sağlayıcı | OpenAI (`gpt-5.4`, `o4-mini`) / Azure OpenAI / Anthropic |
+| Embedding | OpenAI `text-embedding-3-small` (1536-dim) |
+| Vector Store | **Qdrant** (gRPC, Cosine distance) |
+| Kalıcı Veri | PostgreSQL 16 (EF Core 10) + Redis (opsiyonel) |
 | OpenAPI | `Microsoft.AspNetCore.OpenApi` 10.0.5 |
 | Serileştirme | System.Text.Json (camelCase enum string'leri) |
 | YAML Ayrıştırma | YamlDotNet 16.2.1 |
@@ -149,7 +155,8 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 ### Gereksinimler
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- **OpenAI API key**
+- **Docker** — PostgreSQL + Qdrant container'ları için (`docker compose up -d`)
+- **OpenAI API key** (chat + embedding) veya Azure OpenAI
 
 ### Yapılandırma
 
@@ -199,6 +206,13 @@ curl -X POST http://localhost:<port>/chat/ \
 | `/approvals/{id}/reject` | `POST` | Bir tool çağrısını reddet |
 | `/escalations` | `GET` | Yükseltmeleri listele |
 | `/escalations/{id}/resolve` | `POST` | Bir yükseltmeyi çöz |
+| `/memory/stats` | `GET` | Qdrant collection sayıları + embedding config (admin) |
+| `/memory/search?kind=knowledge&q=...` | `GET` | Semantic memory'de arama (admin) |
+| `/memory/ingest` | `POST` | KnowledgeBase/*.md dosyalarını yeniden ingest et (admin) |
+| `/improvements/mine` | `POST` | Düşük puanlı/hatalı trace'leri tarayıp lesson aday üret (admin) |
+| `/improvements?status=Proposed` | `GET` | Lesson'ları listele (Proposed / Approved / Rejected) |
+| `/improvements/{id}/approve` | `POST` | Lesson'ı onayla → Qdrant Lessons collection'a yaz |
+| `/improvements/{id}/reject` | `POST` | Lesson'ı reddet |
 
 Tam API referansı için [`docs/api.md`](docs/api.md) dosyasına bakın.
 
@@ -222,6 +236,36 @@ Senaryo tabanlı değerlendirme, `EvaluationRunner` tarafından yürütülür. H
 ```bash
 curl -X POST http://localhost:<port>/evaluation/run
 ```
+
+---
+
+## Semantic Memory, Self-Improving Loop ve Replay UI
+
+Bot üç ek "akıllı" katman içerir:
+
+### 🧠 Semantic Memory (Qdrant + RAG)
+- `KnowledgeBase/*.md` dosyaları (iade politikası, kargo, SSS) startup'ta chunk'lara bölünür, embedding'lenir ve **Qdrant**'a yazılır.
+- Her workflow tamamlandığında **episodik bellek** (soru + yanıt + intent) yazılır.
+- `SemanticMemoryContextProvider` her sorguda Knowledge + Lessons aramasını context pipeline'a enjekte eder (citation'lı).
+- Embedding sağlayıcı: OpenAI / Azure OpenAI (`text-embedding-3-small`, 1536-dim).
+- Yapılandırma: `appsettings.json > SemanticMemory` (`Enabled`, `TopK`, `MinScore`, `ChunkSize`).
+- Endpoints (admin): `/memory/stats`, `/memory/search`, `/memory/ingest`.
+
+### 🎓 Self-Improving Loop
+- `LessonMiner` düşük puanlı (`stars ≤ MinRatingForLesson`), hatalı veya sanity-fail trace'leri toplar; LLM'e "Şu durumda Y yap" şeklinde **uygulanabilir dersler** çıkarır.
+- Üretilen `Lesson`'lar `Proposed` statüsünde admin panelinde görünür.
+- Admin **Approve** ettiğinde lesson Qdrant `Lessons` collection'a yazılır → sonraki konuşmalarda `SemanticMemoryContextProvider` üzerinden context'e döner. Loop kapanır.
+- Yapılandırma: `appsettings.json > SelfImprovement`.
+- Endpoints (admin): `/improvements/mine`, `/improvements?status=...`, `/improvements/{id}/approve|reject`.
+- Admin UI: `/admin.html` → **Improvements** sekmesi.
+
+### ▶ Replay UI
+- `/replay.html` — bir trace'i adım adım yeniden oynatmaya yarayan görsel araç.
+- Timeline: `Init → Reasoning → Planning → AgentVisits + SpecialistReasonings + ToolCalls (chronological) → Final`
+- Play / pause / step / hız (0.5×–5×) / deep-link (`?traceId=...`).
+- Trace dashboard'tan ve admin panelinden "▶ Replay" linki ile erişilebilir.
+
+Detay için: [`docs/intelligence.md`](docs/intelligence.md).
 
 ---
 
@@ -310,6 +354,7 @@ CustomerSupportBot/
 | [`docs/workflow.md`](docs/workflow.md) | İş akışı fazları, compound query orkestrasyonu |
 | [`docs/patterns.md`](docs/patterns.md) | Tasarım desenleri: ReAct, Self-Reflection, Chain-of-Thought, sub-agent vs sub-component |
 | [`docs/reasoning.md`](docs/reasoning.md) | Reasoning servisi, sanity check'ler, entity doğrulama, yapılandırılmış çıktı |
+| [`docs/intelligence.md`](docs/intelligence.md) | **Yeni** — Semantic memory (Qdrant), Self-Improving Loop, Replay UI |
 | [`docs/developer-guide.md`](docs/developer-guide.md) | Ajan, tool ve prompt ekleme için geliştirici rehberi |
 | [`docs/reference.md`](docs/reference.md) | Sınıf/arayüz kontratları (C# API referansı) |
 

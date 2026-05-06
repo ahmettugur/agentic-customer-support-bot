@@ -8,7 +8,7 @@ public class AiClientFactoryTests
     [Fact]
     public void OpenAI_NoApiKey_Throws()
     {
-        var opts = new AiOptions { Provider = AiProvider.OpenAI };
+        var opts = new AiOptions { Provider = AiProvider.OpenAI, OpenAI = { Model = "gpt-x" } };
         Action act = () => AiClientFactory.CreateStandardChatClient(opts);
         act.Should().Throw<InvalidOperationException>().WithMessage("*OpenAI:ApiKey*");
     }
@@ -16,7 +16,7 @@ public class AiClientFactoryTests
     [Fact]
     public void AzureOpenAI_NoEndpoint_Throws()
     {
-        var opts = new AiOptions { Provider = AiProvider.AzureOpenAI };
+        var opts = new AiOptions { Provider = AiProvider.AzureOpenAI, AzureOpenAI = { Deployment = "d" } };
         Action act = () => AiClientFactory.CreateStandardChatClient(opts);
         act.Should().Throw<InvalidOperationException>().WithMessage("*Endpoint*");
     }
@@ -27,7 +27,7 @@ public class AiClientFactoryTests
         var opts = new AiOptions
         {
             Provider = AiProvider.AzureOpenAI,
-            AzureOpenAI = { Endpoint = "https://example.openai.azure.com" }
+            AzureOpenAI = { Endpoint = "https://example.openai.azure.com", Deployment = "d" }
         };
         Action act = () => AiClientFactory.CreateStandardChatClient(opts);
         act.Should().Throw<InvalidOperationException>().WithMessage("*ApiKey*");
@@ -36,7 +36,7 @@ public class AiClientFactoryTests
     [Fact]
     public void Anthropic_NoApiKey_Throws()
     {
-        var opts = new AiOptions { Provider = AiProvider.Anthropic };
+        var opts = new AiOptions { Provider = AiProvider.Anthropic, Anthropic = { Model = "claude-x" } };
         Action act = () => AiClientFactory.CreateStandardChatClient(opts);
         act.Should().Throw<InvalidOperationException>().WithMessage("*Anthropic*");
     }
@@ -47,7 +47,7 @@ public class AiClientFactoryTests
         var opts = new AiOptions
         {
             Provider = AiProvider.OpenAI,
-            OpenAI = { ApiKey = "sk-stub" }
+            OpenAI = { ApiKey = "sk-stub", Model = "gpt-x" }
         };
         var client = AiClientFactory.CreateStandardChatClient(opts);
         client.Should().NotBeNull();
@@ -56,7 +56,7 @@ public class AiClientFactoryTests
     [Fact]
     public void Reasoning_OpenAI_NoKey_Throws()
     {
-        var opts = new AiOptions { Provider = AiProvider.OpenAI };
+        var opts = new AiOptions { Provider = AiProvider.OpenAI, OpenAI = { Model = "gpt-x" } };
         Action act = () => AiClientFactory.CreateReasoningChatClient(opts);
         act.Should().Throw<InvalidOperationException>();
     }
@@ -67,7 +67,7 @@ public class AiClientFactoryTests
         var opts = new AiOptions
         {
             Provider = AiProvider.OpenAI,
-            OpenAI = { ApiKey = "sk-stub", ReasoningModel = "o1-mini" }
+            OpenAI = { ApiKey = "sk-stub", Model = "gpt-x", ReasoningModel = "o1-mini", ReasoningEffort = "medium" }
         };
         var client = AiClientFactory.CreateReasoningChatClient(opts);
         client.Should().NotBeNull();
@@ -76,7 +76,7 @@ public class AiClientFactoryTests
     [Fact]
     public void Reasoning_Azure_NoEndpoint_Throws()
     {
-        var opts = new AiOptions { Provider = AiProvider.AzureOpenAI };
+        var opts = new AiOptions { Provider = AiProvider.AzureOpenAI, AzureOpenAI = { Deployment = "d" } };
         Action act = () => AiClientFactory.CreateReasoningChatClient(opts);
         act.Should().Throw<InvalidOperationException>();
     }
@@ -87,7 +87,7 @@ public class AiClientFactoryTests
         var opts = new AiOptions
         {
             Provider = AiProvider.Anthropic,
-            Anthropic = { ApiKey = "stub", ReasoningModel = "claude-x" }
+            Anthropic = { ApiKey = "stub", Model = "claude-x", ReasoningModel = "claude-x", MaxTokens = 1024 }
         };
         var client = AiClientFactory.CreateReasoningChatClient(opts);
         client.Should().NotBeNull();

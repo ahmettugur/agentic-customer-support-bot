@@ -706,7 +706,17 @@ ISO 8601 string'leri:
 | GET | `/analytics/ratings/recent` | `AnalyticsEndpoints` inline | `ConversationRating[]` JSON |
 | POST | `/sessions/{sid}/rating` | `AnalyticsEndpoints` inline | `{ok, rating}` JSON |
 | GET | `/sessions/{sid}/rating` | `AnalyticsEndpoints` inline | `ConversationRating?` JSON |
+| GET | `/memory/stats` | `MemoryEndpoints` inline | `{enabled, collections, config}` JSON (admin) |
+| GET | `/memory/search?q=...&kind=knowledge|episodic|lesson&topK=N` | `MemoryEndpoints` inline | `[{score, doc}]` JSON (admin) |
+| POST | `/memory/ingest` | `MemoryEndpoints` inline | `{status:"ok"}` JSON — KnowledgeBase'i yeniden tarar (admin) |
+| POST | `/improvements/mine` | `ImprovementsEndpoints` inline | `MiningRunReport` JSON — düşük puanlı/hatalı trace'leri tara, lesson öner (admin) |
+| GET | `/improvements?status=Proposed\|Approved\|Rejected` | `ImprovementsEndpoints` inline | `Lesson[]` JSON (admin) |
+| GET | `/improvements/proposed` | `ImprovementsEndpoints` inline | `Lesson[]` JSON (admin) |
+| GET | `/improvements/{id}` | `ImprovementsEndpoints` inline | `Lesson` JSON (admin) |
+| POST | `/improvements/{id}/approve` | `ImprovementsEndpoints` inline | `{id, status:"approved"}` — Qdrant'a upsert eder (admin) |
+| POST | `/improvements/{id}/reject` | `ImprovementsEndpoints` inline | `{id, status:"rejected"}` JSON (admin) |
 | GET | `/admin` → `/admin.html` | Admin panel UI | HTML |
+| GET | `/replay.html?traceId=...` | Replay UI (static) | HTML — `/traces/{id}` JSON üzerinden adım-adım replay |
 
 ---
 

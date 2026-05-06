@@ -30,8 +30,6 @@ public class CustomerSupportChatManagerTests
         agents.AddRange(extra);
         return new CustomerSupportChatManager(
             agents,
-            Substitute.For<IChatClient>(),
-            _prompts,
             guards ?? new WorkflowGuardOptions(),
             NullLogger<CustomerSupportChatManager>.Instance);
     }
@@ -42,8 +40,6 @@ public class CustomerSupportChatManagerTests
         var agents = new List<AIAgent> { MakeAgent(WellKnown.AgentNames.Response) };
         Action act = () => new CustomerSupportChatManager(
             agents,
-            Substitute.For<IChatClient>(),
-            _prompts,
             new WorkflowGuardOptions(),
             NullLogger<CustomerSupportChatManager>.Instance);
         act.Should().Throw<InvalidOperationException>().WithMessage("*Planning*");
@@ -55,8 +51,6 @@ public class CustomerSupportChatManagerTests
         var agents = new List<AIAgent> { MakeAgent(WellKnown.AgentNames.Planning) };
         Action act = () => new CustomerSupportChatManager(
             agents,
-            Substitute.For<IChatClient>(),
-            _prompts,
             new WorkflowGuardOptions(),
             NullLogger<CustomerSupportChatManager>.Instance);
         act.Should().Throw<InvalidOperationException>().WithMessage("*Response*");

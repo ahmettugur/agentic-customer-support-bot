@@ -84,46 +84,6 @@ public class WorkflowResponseExtractorOutputTests
             .Should().Be("");
     }
 
-    // ─── ExtractFinalCritiqueFromOutput ───
-
-    [Fact]
-    public void ExtractFinalCritiqueFromOutput_NotChatMessages_ReturnsNull()
-    {
-        WorkflowResponseExtractor.ExtractFinalCritiqueFromOutput(Out("plain string"))
-            .Should().BeNull();
-    }
-
-    [Fact]
-    public void ExtractFinalCritiqueFromOutput_NoCritiqueMessage_ReturnsNull()
-    {
-        var messages = new List<ChatMessage>
-        {
-            Msg(ChatRole.Assistant, "düz yanıt", WellKnown.AgentNames.Response),
-        };
-        WorkflowResponseExtractor.ExtractFinalCritiqueFromOutput(Out(messages))
-            .Should().BeNull();
-    }
-
-    [Fact]
-    public void ExtractFinalCritiqueFromOutput_ResponseAgentWithSelfCritique_Parses()
-    {
-        var critiqueJson = """
-        {
-          "selfCritique": {
-            "isComplete": true,
-            "issues": [],
-            "rating": "good"
-          }
-        }
-        """;
-        var messages = new List<ChatMessage>
-        {
-            Msg(ChatRole.Assistant, critiqueJson, WellKnown.AgentNames.Response),
-        };
-        var result = WorkflowResponseExtractor.ExtractFinalCritiqueFromOutput(Out(messages));
-        result.Should().NotBeNull();
-    }
-
     // ─── ExtractPlanningFromOutput ───
 
     [Fact]

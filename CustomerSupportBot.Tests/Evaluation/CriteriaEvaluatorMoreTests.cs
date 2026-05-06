@@ -146,36 +146,8 @@ public class CriteriaEvaluatorMoreTests
     }
 
     // ─── no_hallucinated / no hallucination ───
-    [Fact]
-    public void NoHallucination_LowRisk_Pass()
-    {
-        var ctx = new ScenarioRunContext
-        {
-            FinalCritique = new ResponseCritique { HallucinationRisk = 0.1 }
-        };
-        var r = CriteriaEvaluator.Evaluate("no hallucination", ctx);
-        r.Passed.Should().BeTrue();
-    }
-
-    [Fact]
-    public void NoHallucination_HighRisk_Fail()
-    {
-        var ctx = new ScenarioRunContext
-        {
-            FinalCritique = new ResponseCritique { HallucinationRisk = 0.8 }
-        };
-        var r = CriteriaEvaluator.Evaluate("no_hallucinated", ctx);
-        r.Passed.Should().BeFalse();
-    }
-
-    [Fact]
-    public void NoHallucination_NoCritique_Pass()
-    {
-        // Risk default 0.0 → low → pass
-        var ctx = new ScenarioRunContext();
-        var r = CriteriaEvaluator.Evaluate("no hallucination", ctx);
-        r.Passed.Should().BeTrue();
-    }
+    // Not: FinalCritique/ResponseCritique tipi kaldırıldı; bu kriter artık
+    // veri olmadan değerlendirilmiyor. İlgili testler düşürüldü.
 
     // ─── order status ───
     [Fact]

@@ -44,6 +44,15 @@ Generated\ Files/
 # [Tt]est[Rr]esult*/
 # [Bb]uild[Ll]og.*
 
+# Test results (dotnet test output, coverage, .trx, .coverage)
+[Tt]est[Rr]esults/
+**/[Tt]est[Rr]esults/
+*.trx
+*.coverage
+*.coveragexml
+coverage.cobertura.xml
+coverage.opencover.xml
+
 # NUnit
 # *.VisualState.xml
 # TestResult.xml
