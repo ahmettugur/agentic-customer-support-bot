@@ -1,0 +1,61 @@
+# OpenTelemetry Collector Configuration
+# This configuration file enables trace collection from the AI.Api application
+# and exports traces to Jaeger for visualization
+
+receivers:
+  # OTLP gRPC receiver for receiving traces from applications
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Batch processor to group traces before exporting
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+    send_batch_max_size: 2048
+
+  # Memory limiter to prevent OOMKilled
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Attributes processor to add resource attributes
+  attributes:
+    actions:
+      - key: service.name
+        value: AI.Api
+        action: upsert
+      - key: environment
+        value: development
+        action: upsert
+
+exporters:
+  # OTLP gRPC exporter to send traces to Jaeger
+  otlp:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Debug exporter for console output (replaces deprecated logging)
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    # Traces pipeline configuration
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, attributes]
+      exporters: [otlp, debug]
+
+  # Extensions for health checks
+  extensions: [health_check]
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133

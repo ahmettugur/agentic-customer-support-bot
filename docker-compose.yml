@@ -70,7 +70,7 @@ services:
   # Elasticsearch for Jaeger storage
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
-    container_name: elasticsearch
+    container_name: aibot_elasticsearch
     environment:
       - cluster.name=elasticsearch
       - discovery.type=single-node
@@ -90,7 +90,7 @@ services:
   # Kibana for Elasticsearch visualization
   kibana:
     image: docker.elastic.co/kibana/kibana:9.2.0
-    container_name: kibana
+    container_name: aibot_kibana
     restart: unless-stopped
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
@@ -108,9 +108,34 @@ services:
       retries: 3
       start_period: 40s
 
+
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: aibot_otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    ports:
+      # OTLP gRPC receiver
+      - "4317:4317"
+      # OTLP HTTP receiver
+      - "4318:4318"
+      # Health check endpoint
+      - "13133:13133"
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    environment:
+      - GOGC=80
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:13133/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   jaeger:
     image: jaegertracing/all-in-one:latest
-    container_name: jaeger
+    container_name: aibot_jaeger
     restart: unless-stopped
     environment:
       - COLLECTOR_OTLP_ENABLED=true
