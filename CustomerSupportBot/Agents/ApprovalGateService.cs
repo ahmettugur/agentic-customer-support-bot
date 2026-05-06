@@ -8,6 +8,8 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using CustomerSupportBot.Models;
 using CustomerSupportBot.Services;
+using CustomerSupportBot.Services.Personalization;
+using CustomerSupportBot.Services.Routing;
 using CustomerSupportBot.Tools;
 
 namespace CustomerSupportBot.Agents;
@@ -23,17 +25,29 @@ public class ApprovalGateService
     private readonly ApprovalOptions _approvalOptions;
     private readonly IEscalationSink _escalationSink;
     private readonly IApprovalContextAccessor _contextAccessor;
+    private readonly ISkillsBasedRouter? _router;
+    private readonly IHumanAgentRegistry? _agentRegistry;
+    private readonly ICustomerProfileStore? _profileStore;
+    private readonly ISessionManager? _sessionManager;
 
     public ApprovalGateService(
         IApprovalQueue approvalQueue,
         IOptions<ApprovalOptions> approvalOptions,
         IEscalationSink escalationSink,
-        IApprovalContextAccessor contextAccessor)
+        IApprovalContextAccessor contextAccessor,
+        ISkillsBasedRouter? router = null,
+        IHumanAgentRegistry? agentRegistry = null,
+        ICustomerProfileStore? profileStore = null,
+        ISessionManager? sessionManager = null)
     {
         _approvalQueue = approvalQueue;
         _approvalOptions = approvalOptions.Value;
         _escalationSink = escalationSink;
         _contextAccessor = contextAccessor;
+        _router = router;
+        _agentRegistry = agentRegistry;
+        _profileStore = profileStore;
+        _sessionManager = sessionManager;
     }
 
     /// <summary>
@@ -196,7 +210,7 @@ public class ApprovalGateService
             var reflection = sr.PostToolReflection!;
             try
             {
-                _escalationSink.Create(new EscalationRequest
+                var newRequest = new EscalationRequest
                 {
                     SessionId = trace.SessionId,
                     TraceId = trace.TraceId,
@@ -209,13 +223,67 @@ public class ApprovalGateService
                     ResponseSummary = finalResponse.Length > 500
                         ? finalResponse[..500] + "…"
                         : finalResponse
-                });
+                };
+
+                // ─── Smart Routing & Skills-Based Escalation (#11) ───
+                ApplyRoutingDecisionSafe(newRequest, trace, sr.AgentName);
+
+                _escalationSink.Create(newRequest);
+
+                // Atanan temsilcinin yükünü +1 yap (varsa)
+                if (!string.IsNullOrWhiteSpace(newRequest.SuggestedAgentId))
+                    _agentRegistry?.IncrementLoad(newRequest.SuggestedAgentId);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
                     $"[HITL] Escalation sink failed: {ex.Message}");
             }
+        }
+    }
+
+    /// <summary>
+    /// Router enjekteyse skill çıkarımı + en iyi temsilci atama yapılır.
+    /// Hata durumunda eskalasyon kaydı bozulmaz — routing alanları boş kalır.
+    /// </summary>
+    private void ApplyRoutingDecisionSafe(
+        EscalationRequest req,
+        ReasoningTrace trace,
+        string? agentName)
+    {
+        if (_router == null) return;
+        try
+        {
+            // Müşteri profili — varsa skill çıkarımına dahil edilir.
+            Models.Memory.CustomerProfile? profile = null;
+            string? customerId = null;
+            if (!string.IsNullOrWhiteSpace(trace.SessionId) && _sessionManager != null)
+            {
+                customerId = _sessionManager.GetSession(trace.SessionId!)?.State.CustomerId;
+            }
+            if (!string.IsNullOrWhiteSpace(customerId) && _profileStore != null)
+            {
+                profile = _profileStore.Get(customerId!);
+            }
+
+            var decision = _router.Decide(trace, agentName, profile);
+            req.RequiredSkills = decision.MatchedSkills.Concat(decision.MissingSkills)
+                                                       .Distinct(StringComparer.Ordinal)
+                                                       .ToList();
+            req.SuggestedAgentId = decision.SuggestedAgentId;
+            req.SuggestedAgentName = decision.SuggestedAgentName;
+            req.MatchScore = decision.MatchScore;
+            req.RoutingNote = decision.Note;
+
+            // Öncelik — şikayet ve düşük match score'da yükselt
+            if (string.Equals(agentName, WellKnown.AgentNames.Complaint, StringComparison.OrdinalIgnoreCase))
+                req.Priority = EscalationPriority.High;
+            else if (decision.MatchScore < 0.3 && req.Priority < EscalationPriority.High)
+                req.Priority = EscalationPriority.High;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Routing] Decision failed: {ex.Message}");
         }
     }
 }

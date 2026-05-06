@@ -1130,6 +1130,18 @@ body {
     font-weight: 700;
 }
 
+.agent-chip-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #6366f1;
+    color: #fff;
+    letter-spacing: 0.3px;
+    margin-left: 4px;
+    text-transform: uppercase;
+}
+
 @keyframes chip-pulse {
     0%, 100% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.4); opacity: 0.6; }

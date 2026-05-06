@@ -157,6 +157,11 @@
 .tab-content.active { display: block; }
 
 .tab-header { margin-bottom: var(--space-5); }
+.tab-header.tab-header--row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
 .tab-header h2 {
     margin: 0;
     font-size: var(--font-size-lg);
@@ -1246,4 +1251,13 @@
     .card-actions { flex-direction: column; }
     .card-actions button { width: 100%; }
     .analytics-summary { grid-template-columns: 1fr 1fr; }
+}
+
+/* ��� Utility classes (replaces inline styles) ��� */
+.tab-btn--link { text-decoration: none; }
+.improvements-stats {
+    margin: 12px 0;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    color: #555;
 }

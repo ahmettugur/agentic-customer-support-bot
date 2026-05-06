@@ -5,6 +5,7 @@ Bu doküman, bot'un üç "akıllı" katmanını detaylı anlatır:
 1. **Semantic Memory + RAG** — Qdrant tabanlı bilgi tabanı + episodik bellek
 2. **Self-Improving Loop** — Düşük puanlı trace'lerden ders çıkarıp Qdrant'a geri besleme
 3. **Replay UI** — Bir trace'i adım adım yeniden oynatma
+4. **Per-Customer Personalization Memory** — Müşteri profili (intent freq, ürün ilgi, dil/ton, rating) + admin LLM consolidate
 
 > Bu üç özellik **birlikte** çalışır: Replay → debug → düşük puan → LessonMiner → Approve → Qdrant Lessons → sonraki konuşmalarda context.
 
@@ -256,7 +257,51 @@ wwwroot/js/replay.js       # TraceReplay class (load + buildSteps + render + tra
 
 ---
 
-## 4. Operasyonel Notlar
+## 4. Per-Customer Personalization Memory
+
+Semantic memory **konuşma içeriği** üzerinde çalışırken, personalization memory **müşteri davranış profili** üzerinde çalışır. İkisi farklı amaçlara hizmet eder ve birbirini tamamlar.
+
+### 4.1 Çift Katmanlı Profil Güncelleme
+
+```
+Workflow tamamlandı  ───► RecordInteraction (heuristik, LLM-siz)
+                            • TotalTurns++
+                            • IntentFrequency[finalIntent]++
+                            • ProductInterests (FakeDatabase.ProductCatalog substring match)
+                            • PreferredLanguage (TR-chars / regex)
+                            • RecentRatings (rating geldiyse)
+
+Admin "Refresh"      ───► ConsolidateAsync (LLM)
+                            • IChatClient → JSON {summary, preferredTone}
+                            • Summary + ton tercihi güncellenir
+                            • Heuristik alanlar dokunulmaz
+```
+
+Bu ayrım önemli: heuristik tarafı **her turda** (ücretsiz) çalışır; LLM consolidate **opsiyonel** ve admin tetikli — token maliyeti kontrolü.
+
+### 4.2 Context Pipeline'a Enjeksiyon
+
+`CustomerProfileContextProvider` `Order = 6` ile çalışır (CustomerContext = 0 ve SemanticMemory = 7 arasında). `state.CustomerId` set'liyse `## 👤 Müşteri Profili` blok'u system message olarak ajanlara verilir.
+
+| Alan | Örnek Çıktı |
+|---|---|
+| Top intent'ler | "En sık niyet: order_inquiry (6 kez), complaint (2 kez)" |
+| Ürün ilgi alanı | "İlgilendiği ürünler: Dell XPS 15, iPhone 15 Pro" |
+| Ton tercihi | "Ton tercihi: concise" |
+| Rating özeti | "Son ortalama puan: 4.0/5 (4 oturum)" |
+| Admin notu | "Admin notu: VIP müşteri" |
+
+> Bu blok ajanların stil kararına etki eder; **business kararına değil** (örn: VIP kullanıcıya bile aynı iade politikası uygulanır).
+
+### 4.3 Operasyonel
+
+- **Persistance**: `InMemoryCustomerProfileStore` — restart'ta kaybolur. (Roadmap: `PostgresCustomerProfileStore`)
+- **Privacy**: `DELETE /customers/{id}/profile` ile profil tamamen silinebilir (GDPR right-to-be-forgotten).
+- **Throttle**: `RecordInteraction` LLM kullanmaz — rate limit yok.
+
+---
+
+## 5. Operasyonel Notlar
 
 ### 4.1 Docker
 
@@ -294,7 +339,7 @@ docker compose up -d postgres qdrant
 
 ---
 
-## 5. Gelecek İşler
+## 6. Gelecek İşler
 
 - Episodic memory'i `SemanticMemoryContextProvider`'a dahil etmek (şu an sadece KB + Lessons context'e dönüyor)
 - `PostgresLessonStore` — Proposed lesson'lar restart'ta da kalsın

@@ -25,22 +25,28 @@ public static class AiClientFactory
     };
 
     /// <summary>Reasoning model wrapper'ı üretir.</summary>
-    public static ReasoningChatClient CreateReasoningChatClient(AiOptions options)
+    /// <param name="decorate">
+    /// İç IChatClient'ı (telemetri vb.) dekore etmek için opsiyonel sarmalayıcı.
+    /// Null ise iç client doğrudan kullanılır.
+    /// </param>
+    public static ReasoningChatClient CreateReasoningChatClient(AiOptions options, Func<IChatClient, IChatClient>? decorate = null)
     {
+        decorate ??= c => c;
+
         switch (options.Provider)
         {
             case AiProvider.AzureOpenAI:
             {
                 var az = options.AzureOpenAI;
                 var deployment = !string.IsNullOrWhiteSpace(az.ReasoningDeployment) ? az.ReasoningDeployment! : Require(az.Deployment, "AI:AzureOpenAI:Deployment");
-                var client = CreateAzureChatClient(az, deployment);
+                var client = decorate(CreateAzureChatClient(az, deployment));
                 return new ReasoningChatClient(client, deployment, Require(az.ReasoningEffort, "AI:AzureOpenAI:ReasoningEffort"));
             }
             case AiProvider.Anthropic:
             {
                 var an = options.Anthropic;
                 var model = !string.IsNullOrWhiteSpace(an.ReasoningModel) ? an.ReasoningModel! : Require(an.Model, "AI:Anthropic:Model");
-                var client = CreateAnthropicChatClient(an, model);
+                var client = decorate(CreateAnthropicChatClient(an, model));
                 // Anthropic'te ayrı bir reasoning effort kavramı yoktur — etiket olarak medium taşınır.
                 return new ReasoningChatClient(client, model, "medium");
             }
@@ -48,7 +54,7 @@ public static class AiClientFactory
             {
                 var oa = options.OpenAI;
                 var model = !string.IsNullOrWhiteSpace(oa.ReasoningModel) ? oa.ReasoningModel! : Require(oa.Model, "AI:OpenAI:Model");
-                var client = CreateOpenAIChatClient(oa, model);
+                var client = decorate(CreateOpenAIChatClient(oa, model));
                 return new ReasoningChatClient(client, model, Require(oa.ReasoningEffort, "AI:OpenAI:ReasoningEffort"));
             }
         }

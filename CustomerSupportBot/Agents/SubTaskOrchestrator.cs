@@ -98,4 +98,52 @@ public class SubTaskOrchestrator
     {
         return string.Join("\n\n---\n\n", parts);
     }
+
+    /// <summary>
+    /// Sıralı subtask listesini yan-etkisiz (paralel) ve yan-etkili (serial)
+    /// gruplara ayırır. Order alanına göre sırayla iterasyon yapılır; aynı türde
+    /// ardı ardına gelen subtask'lar tek bir grupta toplanır. Bu sayede sıralama
+    /// (örn. read → write → read) korunmuş olur.
+    /// </summary>
+    public static List<SubTaskGroup> Partition(
+        IEnumerable<SubTask> subTasks,
+        ParallelExecutionOptions options)
+    {
+        var ordered = subTasks.OrderBy(s => s.Order).ToList();
+        var groups = new List<SubTaskGroup>();
+        if (ordered.Count == 0) return groups;
+
+        bool currentParallel = options.Enabled && options.IsReadOnly(ordered[0]);
+        var currentBatch = new List<SubTask> { ordered[0] };
+
+        for (var i = 1; i < ordered.Count; i++)
+        {
+            var sub = ordered[i];
+            var canParallel = options.Enabled && options.IsReadOnly(sub);
+
+            // Aynı tür bloka ekle (paralel ise MaxDegreeOfParallelism üst sınırı uygulanır
+            // — runner SemaphoreSlim ile zaten throttle ediyor).
+            if (canParallel == currentParallel)
+            {
+                currentBatch.Add(sub);
+            }
+            else
+            {
+                groups.Add(new SubTaskGroup(currentParallel, currentBatch));
+                currentBatch = new List<SubTask> { sub };
+                currentParallel = canParallel;
+            }
+        }
+
+        groups.Add(new SubTaskGroup(currentParallel, currentBatch));
+        return groups;
+    }
 }
+
+/// <summary>
+/// Birlikte yürütülecek subtask grubu.
+/// <see cref="Parallel"/> = true ise grup elemanları aynı anda Task.WhenAll
+/// ile başlatılabilir; aksi halde sırayla yürütülmelidir.
+/// </summary>
+public record SubTaskGroup(bool Parallel, IReadOnlyList<SubTask> Items);
+

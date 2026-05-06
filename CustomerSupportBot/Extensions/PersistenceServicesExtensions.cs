@@ -32,6 +32,12 @@ public static class PersistenceServicesExtensions
 
         // HITL stores
         services.Configure<ApprovalOptions>(configuration.GetSection("HumanInTheLoop"));
+        // Smart Routing — RoutingOptions binding (#11)
+        services.Configure<RoutingOptions>(configuration.GetSection("Routing"));
+        // Parallel Execution (#E) + SLA Guardian (#H)
+        services.Configure<ParallelExecutionOptions>(
+            configuration.GetSection(ParallelExecutionOptions.SectionName));
+        services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
         if (opts.Provider == PersistenceProvider.Postgres)
         {
             services.AddSingleton<IApprovalQueue, PostgresApprovalQueue>();

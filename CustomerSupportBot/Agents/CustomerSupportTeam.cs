@@ -46,6 +46,8 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     private readonly ApprovalGateService _approvalGate;
     private readonly ILoggerFactory _loggerFactory;
     private readonly SemanticMemoryService? _semanticMemory;
+    private readonly Services.Personalization.CustomerProfileService? _profileService;
+    private readonly ParallelExecutionOptions _parallelOptions;
 
     public CustomerSupportTeam(
         IChatClient chatClient,
@@ -55,7 +57,8 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         PromptService prompts,
         ApprovalGateService approvalGate,
         ILoggerFactory loggerFactory,
-        SemanticMemoryService? semanticMemory = null)
+        SemanticMemoryService? semanticMemory = null,
+        Services.Personalization.CustomerProfileService? profileService = null)
     {
         _contextPipeline = contextPipeline;
         _chatClient = chatClient;
@@ -64,10 +67,15 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         _approvalGate = approvalGate;
         _loggerFactory = loggerFactory;
         _semanticMemory = semanticMemory;
+        _profileService = profileService;
 
         // Guard ayarlarını appsettings.json'dan oku
         _guards = new WorkflowGuardOptions();
         configuration.GetSection("WorkflowGuards").Bind(_guards);
+
+        // Parallel sub-task execution ayarları (#E)
+        _parallelOptions = new ParallelExecutionOptions();
+        configuration.GetSection(ParallelExecutionOptions.SectionName).Bind(_parallelOptions);
 
         // ─── AJANLARI OLUŞTUR ───
 
@@ -356,6 +364,10 @@ public class CustomerSupportTeam : ICustomerSupportTeam
 
         // Episodic memory — fire & forget (kullanıcıya yanıt akışını bloklama)
         WriteEpisodicMemorySafe(trace, query, result);
+
+        // Per-customer profile — heuristic update (LLM-siz, ucuz)
+        UpdateCustomerProfileSafe(session, trace, query, result);
+
         _traceStore.Complete(trace.TraceId,
             terminationReason: terminationReason,
             finalResponse: result);
@@ -454,6 +466,33 @@ public class CustomerSupportTeam : ICustomerSupportTeam
                 logger.LogWarning(ex, "Episodic memory yazımı başarısız oldu (traceId={TraceId})", traceId);
             }
         });
+    }
+
+    private void UpdateCustomerProfileSafe(Models.AgentSession? session, ReasoningTrace trace, string query, string response)
+    {
+        if (_profileService is null) return;
+        var customerId = session?.State.CustomerId;
+        if (string.IsNullOrWhiteSpace(customerId)) return;
+
+        var intent = trace.Reasoning?.Intent ?? trace.Planning?.DetectedIntent;
+        var logger = _loggerFactory.CreateLogger<CustomerSupportTeam>();
+
+        try
+        {
+            // Senkron ve ucuz (LLM çağırmaz) — fire & forget gerekmez ama
+            // exception bile olsa response stream'i bloklamasın diye try/catch.
+            _profileService.RecordInteraction(
+                customerId: customerId,
+                userQuery: query,
+                botResponse: response,
+                intent: intent,
+                rating: null,
+                isNewSession: false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Customer profile güncellemesi başarısız (customerId={Id})", customerId);
+        }
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -609,19 +648,59 @@ public class CustomerSupportTeam : ICustomerSupportTeam
 
         runningHistory.Add(new ChatMessage(ChatRole.User, query));
 
-        foreach (var subTask in reasoning.SubTasks.OrderBy(s => s.Order))
+        var groups = SubTaskOrchestrator.Partition(reasoning.SubTasks, _parallelOptions);
+        var collected = new SortedDictionary<int, string>();
+
+        foreach (var group in groups)
         {
-            var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(subTask);
-            var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, subTask);
+            if (group.Parallel && group.Items.Count > 1)
+            {
+                // Yan-etkisiz alt görevleri paralel çalıştır.
+                using var sem = new SemaphoreSlim(
+                    Math.Max(1, _parallelOptions.MaxDegreeOfParallelism));
+                var historySnapshot = runningHistory.ToList();
 
-            var subResponse = await RunAsync(subQuery, runningHistory, session, subReasoning);
-            parts.Add(SubTaskOrchestrator.FormatSubTaskResult(subTask, subResponse));
+                var tasks = group.Items.Select(async sub =>
+                {
+                    await sem.WaitAsync().ConfigureAwait(false);
+                    try
+                    {
+                        var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
+                        var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
+                        var subResp = await RunAsync(subQuery, historySnapshot, session, subReasoning)
+                            .ConfigureAwait(false);
+                        return (sub, subResp);
+                    }
+                    finally { sem.Release(); }
+                });
 
-            runningHistory.Add(new ChatMessage(ChatRole.User, subQuery));
-            runningHistory.Add(new ChatMessage(ChatRole.Assistant, subResponse));
+                var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+
+                // Order'a göre sırala — paralel batch'te de output deterministic kalsın
+                foreach (var (sub, resp) in results.OrderBy(t => t.sub.Order))
+                {
+                    collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, resp);
+                    runningHistory.Add(new ChatMessage(ChatRole.User,
+                        SubTaskOrchestrator.FormatSubTaskQuery(sub)));
+                    runningHistory.Add(new ChatMessage(ChatRole.Assistant, resp));
+                }
+            }
+            else
+            {
+                foreach (var sub in group.Items)
+                {
+                    var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
+                    var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
+                    var subResp = await RunAsync(subQuery, runningHistory, session, subReasoning)
+                        .ConfigureAwait(false);
+                    collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, subResp);
+                    runningHistory.Add(new ChatMessage(ChatRole.User, subQuery));
+                    runningHistory.Add(new ChatMessage(ChatRole.Assistant, subResp));
+                }
+            }
         }
 
-        return SubTaskOrchestrator.AggregateSubTaskResults(parts);
+        return SubTaskOrchestrator.AggregateSubTaskResults(collected.Values.ToList());
     }
 
     private async IAsyncEnumerable<StreamEvent> RunDecomposedStreamingAsync(
@@ -636,72 +715,138 @@ public class CustomerSupportTeam : ICustomerSupportTeam
             : new List<ChatMessage>();
         runningHistory.Add(new ChatMessage(ChatRole.User, query));
 
-        var parts = new List<string>();
+        var collected = new SortedDictionary<int, string>();
         var total = reasoning.SubTasks.Count;
+        var groups = SubTaskOrchestrator.Partition(reasoning.SubTasks, _parallelOptions);
+        var parallelGroupCount = groups.Count(g => g.Parallel && g.Items.Count > 1);
 
         yield return new StreamEvent(StreamEventTypes.Agent,
-            new { name = "Orchestrator", status = "decomposing", subTaskCount = total });
-
-        var index = 0;
-        foreach (var subTask in reasoning.SubTasks.OrderBy(s => s.Order))
-        {
-            index++;
-            var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(subTask);
-            var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, subTask);
-
-            yield return new StreamEvent(StreamEventTypes.Agent,
-                new
-                {
-                    name = $"SubTask#{index}",
-                    status = "running",
-                    description = subTask.Description,
-                    targetAgent = subTask.TargetAgent,
-                    order = subTask.Order,
-                    total
-                });
-
-            var subResponseBuilder = new StringBuilder();
-            await foreach (var evt in RunStreamingAsync(
-                subQuery, runningHistory, session, subReasoning, ct))
+            new
             {
-                switch (evt.Type)
+                name = "Orchestrator",
+                status = "decomposing",
+                subTaskCount = total,
+                groupCount = groups.Count,
+                parallelGroups = parallelGroupCount
+            });
+
+        foreach (var group in groups)
+        {
+            if (group.Parallel && group.Items.Count > 1)
+            {
+                // Paralel batch — her alt görevin "running" eventini önce yay,
+                // sonra hepsini Task.WhenAll ile çalıştır, son olarak Order'a göre
+                // sıralı "done" eventleri emit et. Sub-task delta'ları dış stream'e
+                // sızdırılmaz (UI karışmasın); aggregate response sonda akıtılır.
+                foreach (var sub in group.Items)
                 {
-                    case var t when t == StreamEventTypes.ResponseDelta:
-                        subResponseBuilder.Append(WorkflowResponseExtractor.ExtractDeltaText(evt.Data));
-                        break;
+                    yield return new StreamEvent(StreamEventTypes.Agent,
+                        new
+                        {
+                            name = $"SubTask#{sub.Order}",
+                            status = "running",
+                            description = sub.Description,
+                            targetAgent = sub.TargetAgent,
+                            order = sub.Order,
+                            total,
+                            parallel = true
+                        });
+                }
 
-                    case var t when t == StreamEventTypes.ResponseStart
-                                 || t == StreamEventTypes.ResponseComplete:
-                        break;
+                var historySnapshot = runningHistory.ToList();
+                using var sem = new SemaphoreSlim(
+                    Math.Max(1, _parallelOptions.MaxDegreeOfParallelism));
 
-                    case var t when t == StreamEventTypes.ReasoningStart
-                                 || t == StreamEventTypes.ReasoningDelta
-                                 || t == StreamEventTypes.ReasoningComplete:
-                        break;
+                var tasks = group.Items.Select(async sub =>
+                {
+                    await sem.WaitAsync(ct).ConfigureAwait(false);
+                    try
+                    {
+                        var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
+                        var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
+                        var resp = await RunAsync(subQuery, historySnapshot, session, subReasoning)
+                            .ConfigureAwait(false);
+                        return (sub, resp);
+                    }
+                    finally { sem.Release(); }
+                }).ToList();
 
-                    case var t when t == StreamEventTypes.Error:
-                        yield return evt;
-                        break;
+                var results = await Task.WhenAll(tasks).ConfigureAwait(false);
 
-                    default:
-                        yield return evt;
-                        break;
+                foreach (var (sub, resp) in results.OrderBy(t => t.sub.Order))
+                {
+                    collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, resp);
+                    runningHistory.Add(new ChatMessage(ChatRole.User,
+                        SubTaskOrchestrator.FormatSubTaskQuery(sub)));
+                    runningHistory.Add(new ChatMessage(ChatRole.Assistant, resp));
+
+                    yield return new StreamEvent(StreamEventTypes.Agent,
+                        new { name = $"SubTask#{sub.Order}", status = "done", order = sub.Order });
                 }
             }
+            else
+            {
+                foreach (var sub in group.Items)
+                {
+                    yield return new StreamEvent(StreamEventTypes.Agent,
+                        new
+                        {
+                            name = $"SubTask#{sub.Order}",
+                            status = "running",
+                            description = sub.Description,
+                            targetAgent = sub.TargetAgent,
+                            order = sub.Order,
+                            total,
+                            parallel = false
+                        });
 
-            var subResponse = subResponseBuilder.ToString().Trim();
-            parts.Add(SubTaskOrchestrator.FormatSubTaskResult(subTask, subResponse));
-            runningHistory.Add(new ChatMessage(ChatRole.User, subQuery));
-            runningHistory.Add(new ChatMessage(ChatRole.Assistant, subResponse));
+                    var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
+                    var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
+                    var subResponseBuilder = new StringBuilder();
 
-            yield return new StreamEvent(StreamEventTypes.Agent,
-                new { name = $"SubTask#{index}", status = "done", order = subTask.Order });
+                    await foreach (var evt in RunStreamingAsync(
+                        subQuery, runningHistory, session, subReasoning, ct))
+                    {
+                        switch (evt.Type)
+                        {
+                            case var t when t == StreamEventTypes.ResponseDelta:
+                                subResponseBuilder.Append(WorkflowResponseExtractor.ExtractDeltaText(evt.Data));
+                                break;
+
+                            case var t when t == StreamEventTypes.ResponseStart
+                                         || t == StreamEventTypes.ResponseComplete:
+                                break;
+
+                            case var t when t == StreamEventTypes.ReasoningStart
+                                         || t == StreamEventTypes.ReasoningDelta
+                                         || t == StreamEventTypes.ReasoningComplete:
+                                break;
+
+                            case var t when t == StreamEventTypes.Error:
+                                yield return evt;
+                                break;
+
+                            default:
+                                yield return evt;
+                                break;
+                        }
+                    }
+
+                    var subResponse = subResponseBuilder.ToString().Trim();
+                    collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, subResponse);
+                    runningHistory.Add(new ChatMessage(ChatRole.User, subQuery));
+                    runningHistory.Add(new ChatMessage(ChatRole.Assistant, subResponse));
+
+                    yield return new StreamEvent(StreamEventTypes.Agent,
+                        new { name = $"SubTask#{sub.Order}", status = "done", order = sub.Order });
+                }
+            }
         }
 
         yield return new StreamEvent(StreamEventTypes.Agent,
             new { name = "Orchestrator", status = "aggregating" });
 
-        var aggregated = SubTaskOrchestrator.AggregateSubTaskResults(parts);
+        var aggregated = SubTaskOrchestrator.AggregateSubTaskResults(collected.Values.ToList());
 
         yield return new StreamEvent(StreamEventTypes.ResponseStart,
             new

@@ -11,6 +11,12 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 - **Semantic Memory + RAG** — Qdrant tabanlı bilgi tabanı + episodik bellek (geçmiş konuşmalar)
 - **Self-Improving Loop** — Düşük puanlı trace'lerden LLM ile öğrenilmiş "lesson" üretip admin onayıyla bilgi tabanına geri besleme
 - **Trace Replay UI** — Bir workflow koşusunu adım adım yeniden oynatma (debug + demo)
+- **OpenTelemetry + Maliyet Telemetrisi** — Tüm LLM çağrıları, ajan adımları ve tool kullanımları için OTLP-uyumlu trace + metric (Jaeger/Prometheus/Grafana). Model bazlı USD maliyet ve token muhasebesi.
+- **Per-Customer Personalization Memory** — Her müşteri için kalıcı profil (sık niyet, ürün ilgi alanları, dil/ton tercihi, son rating'ler). Heuristik güncelleme + admin tetikli LLM consolidate. Profil ContextPipeline üzerinden tüm ajanlara enjekte edilir.
+- **Smart Routing & Skills-Based Escalation** — Eskalasyon oluştuğunda intent + müşteri profili üzerinden gerekli skill tag'leri çıkarılır ve `IHumanAgentRegistry`'deki temsilciler arasında en iyi skill + dil + load match'iyle aday önerilir. Manuel re-route + load tracking + auto-decrement.
+- **Low-Code Workflow Designer** — Admin'in JSON tabanlı mini iş akışları (trigger keywords, regex extractor, respond/lookup/branch/setVariable adımları) tanımlayıp çalıştırabildiği deterministik (LLM-siz) "fast path" motoru. `wwwroot/workflow-designer.html` küçük UI.
+- **Parallel SubTask Execution** — Compound query'lerde (ör. "ORD-1 ve ORD-2 durumu") yan-etkisiz alt görevler (Product/OrderInquiry) `Task.WhenAll` ile paralel çalışır; yan-etkili olanlar (OrderPlacement/Complaint) HITL gate'i nedeniyle sıralı kalır. p50 latency düşer.
+- **SLA / Response Time Guardian** — Bekleyen onay ve açık eskalasyonları periyodik tarayan `BackgroundService`. Eşik aşılan onaylar `AutoReject`, eskalasyonların önceliği otomatik **bir kademe yükseltilir** (Low→Normal→High→Critical). Admin `/sla/status` ve `/sla/events` endpoint'lerinden görür.
 
 ---
 
@@ -213,6 +219,22 @@ curl -X POST http://localhost:<port>/chat/ \
 | `/improvements?status=Proposed` | `GET` | Lesson'ları listele (Proposed / Approved / Rejected) |
 | `/improvements/{id}/approve` | `POST` | Lesson'ı onayla → Qdrant Lessons collection'a yaz |
 | `/improvements/{id}/reject` | `POST` | Lesson'ı reddet |
+| `/telemetry/cost` | `GET` | Model bazlı toplam token + USD maliyet özetini döndürür (admin) |
+| `/telemetry/cost/models` | `GET` | Fiyat tablosunda tanımlı bilinen modelleri listeler (admin) |
+| `/telemetry/cost/reset` | `POST` | In-memory maliyet sayaçlarını sıfırlar (admin) |
+| `/customers` | `GET` | Profil kaydı olan müşterileri listeler (admin) |
+| `/customers/{id}/profile` | `GET` | Belirli müşterinin kalıcı profilini döner (admin) |
+| `/customers/{id}/profile/refresh` | `POST` | LLM ile profil özetini ve ton tercihini yeniler (admin) |
+| `/customers/{id}/profile/note` | `PUT` | Profile admin notu ekler/günceller (admin) |
+| `/customers/{id}/profile` | `DELETE` | Profil kaydını siler (admin) |
+| `/agents` | `GET`/`POST` | İnsan müşteri temsilcisi listesi / yeni temsilci oluştur (admin) |
+| `/agents/{id}` | `GET`/`PUT`/`DELETE` | Temsilci detay / kısmi güncelle / sil (admin) |
+| `/escalations/{id}/reroute` | `POST` | Eskalasyonu manuel olarak başka temsilciye atar (admin) |
+| `/workflows` | `GET`/`POST` | Low-code workflow tanımları listele / oluştur (admin) |
+| `/workflows/{id}` | `GET`/`PUT`/`DELETE` | Tanım detay / upsert / sil (admin) |
+| `/workflows/{id}/test` | `POST` | Verilen input ile workflow'u dry-run çalıştırır ve trace döner (admin) |
+| `/sla/status` | `GET` | SLA Guardian güncel durum: pending/open sayı, en eski yaş, ihlal sayısı (admin) |
+| `/sla/events` | `GET` | Son SLA warn/breach olayları (admin) |
 
 Tam API referansı için [`docs/api.md`](docs/api.md) dosyasına bakın.
 

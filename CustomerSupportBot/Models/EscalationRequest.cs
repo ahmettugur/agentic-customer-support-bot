@@ -50,6 +50,29 @@ public class EscalationRequest
 
     /// <summary>Çözüm notu.</summary>
     public string? Resolution { get; set; }
+
+    // ─── Smart Routing & Skills-Based Escalation (#11) ───
+
+    /// <summary>
+    /// Routing kararı — bu vaka için gerekli skill tag'leri (örn: "complaint", "refund", "tr").
+    /// SkillsBasedRouter otomatik doldurur; admin manuel düzenleyebilir.
+    /// </summary>
+    public List<string> RequiredSkills { get; set; } = new();
+
+    /// <summary>Routing önceliği — Low/Normal/High/Critical.</summary>
+    public EscalationPriority Priority { get; set; } = EscalationPriority.Normal;
+
+    /// <summary>Router'ın önerdiği temsilci ID'si (HumanAgent.Id). Admin değiştirebilir.</summary>
+    public string? SuggestedAgentId { get; set; }
+
+    /// <summary>Router'ın önerdiği temsilcinin adı (UI gösterim için).</summary>
+    public string? SuggestedAgentName { get; set; }
+
+    /// <summary>Routing skor (0..1) — yüksek olan daha iyi eşleşme.</summary>
+    public double MatchScore { get; set; }
+
+    /// <summary>Routing açıklaması (skill match detayı, neden bu temsilci).</summary>
+    public string? RoutingNote { get; set; }
 }
 
 /// <summary>

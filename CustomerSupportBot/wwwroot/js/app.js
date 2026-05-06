@@ -292,7 +292,7 @@ class ChatApp {
                 break;
 
             case "agent":
-                this.ui.setAgentStatus(streamCtx, data?.name, data?.status);
+                this.ui.setAgentStatus(streamCtx, data?.name, data?.status, data);
                 break;
 
             case "response_start":

@@ -11,6 +11,11 @@ Backend `CustomerSupportBot` üzerinde tanımlı **tüm HTTP endpoint'leri** + *
 - [5. SSE event şemaları](#5-sse-event-şemaları)
 - [6. Genel JSON konvansiyonları](#6-genel-json-konvansiyonları)
 - [7. Admin endpoints (HITL)](#7-admin-endpoints-hitl)
+- [8. Telemetry endpoints](#8-telemetry-endpoints)
+- [9. Personalization endpoints](#9-personalization-endpoints)
+- [10. Smart Routing endpoints](#10-smart-routing-endpoints)
+- [11. Workflow Designer endpoints](#11-workflow-designer-endpoints)
+- [12. SLA Guardian endpoints](#12-sla-guardian-endpoints)
 
 Sınıf/interface sözleşmeleri → [reference.md](reference.md).
 
@@ -1115,6 +1120,437 @@ Müşteri tarafından görünen akış: yeşil temsilci bandı kalkar → sistem
 ```
 
 `Enabled=false` yaparsanız tüm HITL mekanizması bypass edilir — eski davranış korunur. Detay → `@Models/ApprovalOptions.cs`.
+
+---
+
+## 8. Telemetry endpoints
+
+**Dosya**: `@Endpoints/TelemetryEndpoints.cs` — admin scope'unda.
+
+OpenTelemetry pipeline'ı (`ActivitySource = "CustomerSupportBot"`, `Meter = "CustomerSupportBot"`) tüm LLM çağrılarını, ajan adımlarını ve tool kullanımlarını yayar; OTLP endpoint set edildiyse Jaeger / Prometheus / Grafana / Application Insights gibi backend'lere gönderilir. Aşağıdaki endpoint'ler ek olarak in-memory aggregat edilen **token + USD maliyet** özetine erişim sağlar.
+
+Pricing tablosu ve OTLP exporter ayarları → [runtime.md#telemetry](runtime.md#telemetry).
+
+### `GET /telemetry/cost`
+
+Model bazlı toplam token + USD maliyet özetini döner.
+
+**Response** (`CostSnapshot`):
+
+```json
+{
+  "totalCalls": 142,
+  "totalInputTokens": 184320,
+  "totalOutputTokens": 56204,
+  "totalCostUsd": 1.0473,
+  "byModel": [
+    {
+      "model": "gpt-5.4",
+      "calls": 88,
+      "inputTokens": 165000,
+      "outputTokens": 51000,
+      "costUsd": 0.9225,
+      "averageLatencyMs": 1820,
+      "lastUsed": "2026-04-21T19:31:00Z"
+    },
+    {
+      "model": "gpt-5.4-nano",
+      "calls": 54,
+      "inputTokens": 19320,
+      "outputTokens": 5204,
+      "costUsd": 0.0322,
+      "averageLatencyMs": 540,
+      "lastUsed": "2026-04-21T19:30:55Z"
+    }
+  ]
+}
+```
+
+`byModel` koleksiyonu `costUsd` azalan sırada gelir; admin dashboard'da "en pahalı model" widget'ı için doğrudan kullanılabilir.
+
+### `GET /telemetry/cost/models`
+
+`appsettings.json > Telemetry.Pricing` tablosunda tanımlı bilinen model adlarını döner. Fiyat tablosunda olmayan modeller `default` girişi varsa onunla, yoksa `costUsd = 0` ile kaydedilir.
+
+```json
+{ "knownModels": ["default", "gpt-5.4", "gpt-5.4-nano", "text-embedding-3-large", "claude-haiku-4-5"] }
+```
+
+### `POST /telemetry/cost/reset`
+
+In-memory maliyet sayaçlarını sıfırlar. OpenTelemetry meter counter'larını **etkilemez** (onlar exporter tarafına gönderildikten sonra zaten reset olur). Sadece `/telemetry/cost` snapshot'ı temizlenir.
+
+```json
+{ "reset": true }
+```
+
+> ⚠️ Bu endpoint'lerin tamamı `RequireAuthorization("Admin")` scope altındadır.
+
+---
+
+## 9. Personalization endpoints
+
+**Dosya**: `@Endpoints/PersonalizationEndpoints.cs` — admin scope.
+
+Per-customer kalıcı profil yönetimi. Her workflow turunun bitiminde `state.CustomerId` set'liyse `CustomerProfileService.RecordInteraction` heuristik olarak (LLM-siz) niyet frekansı, ürün ilgi alanları, dil ve son rating bilgilerini günceller. Profil bir sonraki konuşmada `CustomerProfileContextProvider` (Order = 6) üzerinden tüm ajanlara enjekte edilir.
+
+LLM ile özet + ton tercihi üretmek için admin `POST /customers/{id}/profile/refresh` endpoint'ini tetikler (her turda LLM çağırmaz — maliyet kontrolü).
+
+### `GET /customers`
+
+Profil kayıt listesi (`lastInteraction` azalan).
+
+```json
+{
+  "count": 2,
+  "items": [
+    { "customerId": "CUST-1990", "totalSessions": 3, "totalTurns": 12, "lastInteractionAt": "2026-04-21T19:31:00Z", "preferredLanguage": "tr", "preferredTone": "concise", "summary": "Sık sipariş takibi yapan müşteri." },
+    { "customerId": "CUST-2024", "totalSessions": 1, "totalTurns": 4, "lastInteractionAt": "2026-04-21T18:10:00Z", "preferredLanguage": "tr", "preferredTone": "neutral", "summary": null }
+  ]
+}
+```
+
+`take` query parametresi opsiyonel (default 100).
+
+### `GET /customers/{id}/profile`
+
+Belirli müşteri için tam profili döner.
+
+**Response** (`CustomerProfile`):
+
+```json
+{
+  "customerId": "CUST-1990",
+  "preferredLanguage": "tr",
+  "preferredTone": "concise",
+  "intentFrequency": { "order_inquiry": 6, "complaint": 2, "product_inquiry": 4 },
+  "productInterests": ["Dell XPS 15", "Apple iPhone 15 Pro"],
+  "recentRatings": [4, 5, 3, 4],
+  "summary": "Dell XPS 15 ve iPhone müşterisi; kısa ve net yanıt tercih eder.",
+  "adminNote": "VIP müşteri",
+  "totalSessions": 3,
+  "totalTurns": 12,
+  "createdAt": "2026-04-01T10:00:00Z",
+  "lastInteractionAt": "2026-04-21T19:31:00Z",
+  "lastConsolidatedAt": "2026-04-21T19:31:05Z"
+}
+```
+
+`404 Not Found` — profil yoksa.
+
+### `POST /customers/{id}/profile/refresh`
+
+LLM ile `summary` ve `preferredTone` alanlarını günceller. Diğer alanlar (heuristik) korunur.
+
+**Response**: güncellenmiş `CustomerProfile`. Profil yoksa `404`.
+
+### `PUT /customers/{id}/profile/note`
+
+Profile admin notu ekler veya günceller. Profil yoksa otomatik oluşturulur.
+
+**Request**:
+
+```json
+{ "note": "Kurumsal müşteri, fatura adresi farklı." }
+```
+
+`note: null` → mevcut admin notu silinir.
+
+### `DELETE /customers/{id}/profile`
+
+Profil kaydını tamamen siler.
+
+- `204 No Content` — silindi
+- `404 Not Found` — kayıt zaten yoktu
+
+> ⚠️ Tüm endpoint'ler `RequireAuthorization("Admin")` scope altındadır.
+
+---
+
+## 10. Smart Routing endpoints
+
+**Dosya**: `@Endpoints/AgentsEndpoints.cs` — admin scope.
+
+İnsan müşteri temsilcisi (HumanAgent) registry'si ve eskalasyon manuel re-route. Bir eskalasyon oluşturulduğunda `SkillsBasedRouter` otomatik olarak en iyi temsilciyi `EscalationRequest.SuggestedAgentId` alanına yazar; bu endpoint'ler ile registry yönetilir veya öneri admin tarafından override edilir.
+
+### Routing kararının çalışma mantığı
+
+1. **Skill çıkarımı** — `RoutingOptions.IntentSkillMap` ile reasoning trace'inin `Reasoning.Intent`'i tag'lere çevrilir (örn: `"şikayet" → ["complaint"]`). Specialist agent adı tematik tag ekler (`ComplaintAgent → "complaint"`). Müşteri profili `AdminNote`'unda eşleşen `ProfileKeywordSkillMap` anahtar kelimeleri (örn: `"VIP" → "vip"`) tag listesine eklenir. Müşterinin `PreferredLanguage`'i (`tr`/`en`) de gereksinim olarak listeye girer.
+2. **Aday filtreleme** — `IHumanAgentRegistry.GetActive()` üzerinden `IsActive=true` ve `CurrentLoad < MaxConcurrentLoad` olan temsilciler listelenir.
+3. **Skor** — `score = (1 - LanguageWeight) * skillMatch + LanguageWeight * langMatch + Priority * 0.05 + loadFactor * 0.05`. Eşik altı (`MinMatchScore`) match'lerde `SuggestedAgentId` boş bırakılır (admin manuel atar).
+4. **Load tracking** — Yeni eskalasyon yaratıldığında atanan temsilcinin `CurrentLoad`'u +1 olur; eskalasyon resolve/dismiss olunca otomatik -1 olur (`WireRoutingLoadTracking` event hook).
+
+### `GET /agents`
+
+Tüm kayıtlı temsilciler — aktif olanlar üstte, sonra ada göre alfabetik.
+
+```json
+{
+  "count": 3,
+  "items": [
+    {
+      "id": "agent-zeynep",
+      "displayName": "Zeynep Kaya",
+      "email": "zeynep@example.com",
+      "skills": ["complaint", "enterprise", "vip"],
+      "languages": ["tr", "en"],
+      "isActive": true,
+      "maxConcurrentLoad": 4,
+      "currentLoad": 1,
+      "priority": 2,
+      "createdAt": "2026-04-01T10:00:00Z",
+      "lastAssignedAt": "2026-04-21T19:31:00Z"
+    }
+  ]
+}
+```
+
+### `GET /agents/{id}`
+
+Tek temsilci. `404 Not Found` — yoksa.
+
+### `POST /agents`
+
+Yeni temsilci ekler.
+
+```json
+{
+  "displayName": "Burak Şen",
+  "email": "burak@example.com",
+  "skills": ["order", "product", "tech"],
+  "languages": ["tr", "en"],
+  "maxConcurrentLoad": 6,
+  "priority": 1
+}
+```
+
+`displayName` zorunlu. Yanıt: oluşturulan `HumanAgent` kaydı + `Location: /agents/{id}` header.
+
+### `PUT /agents/{id}`
+
+Kısmi güncelleme — yalnızca payload'da gönderilen alanlar uygulanır. `null`/eksik alanlar dokunulmaz.
+
+```json
+{ "isActive": false, "skills": ["complaint", "vip"] }
+```
+
+`404 Not Found` — temsilci yoksa.
+
+### `DELETE /agents/{id}`
+
+Temsilci kaydını siler (mevcut eskalasyonların `SuggestedAgentId`'leri etkilenmez — admin manuel re-route yapabilir).
+
+- `204 No Content` — silindi
+- `404 Not Found` — yoktu
+
+### `POST /escalations/{id}/reroute`
+
+Bir eskalasyonu manuel olarak başka bir temsilciye atar (router önerisini override eder).
+
+**Request**:
+
+```json
+{ "agentId": "agent-zeynep", "reason": "Müşteri önceden Zeynep ile çalışmıştı." }
+```
+
+`agentId: null` → atama tamamen kaldırılır (eski temsilcinin load'u -1). Eski + yeni atamada `CurrentLoad` otomatik güncellenir.
+
+**Response**: güncellenmiş `EscalationRequest`.
+
+> ⚠️ Tüm endpoint'ler `RequireAuthorization("Admin")` scope altındadır.
+
+---
+
+## 11. Workflow Designer endpoints
+
+**Dosya**: `@Endpoints/WorkflowEndpoints.cs` — admin scope.
+
+JSON tabanlı, deterministik (LLM-siz) low-code workflow definition CRUD ve dry-run test endpoint'leri. Admin UI: [`/workflow-designer.html`](../CustomerSupportBot/wwwroot/workflow-designer.html).
+
+### `WorkflowDefinition` şeması
+
+```jsonc
+{
+  "id": "siparis-durumu-hizli-yanit",       // POST'ta boş bırakılabilir; name'den slug üretilir
+  "name": "Sipariş Durumu Hızlı Yanıt",
+  "description": "ORD- ile başlayan sipariş numarası varsa OrderStatus tool'unu çağırır.",
+  "version": 1,                                // upsert'te otomatik artar
+  "isActive": true,
+  "triggerKeywords": ["sipariş", "durumu", "kargo"],
+  "inputPatterns": {                            // regex → variable
+    "orderId": "(ORD-\\d+)"
+  },
+  "steps": [
+    { "type": "Branch", "condition": "orderId exists", "skipNext": 2 },
+    { "type": "Respond", "template": "Sipariş numaranızı paylaşır mısınız (ör. ORD-1)?" },
+    { "type": "Branch", "condition": "true == true", "skipNext": 99 },   // erken çıkış
+    { "type": "Lookup", "tool": "order_status_tool",
+      "parameters": { "orderId": "$orderId" }, "storeAs": "lookup" },
+    { "type": "Respond", "template": "📦 {lookup}" }
+  ]
+}
+```
+
+### Adım tipleri
+
+| Type | Alanlar | Davranış |
+|---|---|---|
+| `Respond` | `template` | `{var}` placeholder'ları variables'tan substitute edilir, output'a satır olarak eklenir |
+| `Lookup` | `tool`, `parameters` (key→`$varName` veya literal), `storeAs` | Yan etkisiz tool çağırır (`product_inquiry_tool`, `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`); sonucu `{storeAs}`, `{storeAs}.success`, `{storeAs}.message`, `{storeAs}.data` (JSON) variables'larına yazar |
+| `Branch` | `condition`, `skipNext` (default 1) | `var exists` / `var missing` / `var == "value"` / `var != "value"`. False ise sonraki `skipNext` adım atlanır |
+| `SetVariable` | `variableName`, `variableValue` | Template substitute edilmiş değeri variable'a yazar |
+
+> ⚠️ **Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`, `human_handoff_tool`) workflow içinden çağrılamaz** — HITL approval gate'ini bypass etmemek için executor reddeder.
+
+### `GET /workflows`
+
+```json
+{ "count": 2, "items": [ /* WorkflowDefinition[] */ ] }
+```
+
+### `GET /workflows/{id}`
+
+`404 Not Found` — yoksa.
+
+### `POST /workflows`
+
+Yeni workflow ekler. `id` boş bırakılırsa `name`'den slug (Türkçe karakterler ASCII'ye normalize edilerek) üretilir. Aynı `id` zaten varsa upsert davranır ve `version`'u artırır.
+
+`name` zorunlu. Yanıt: kaydedilmiş `WorkflowDefinition`. `Location: /workflows/{id}` header'ı set edilir.
+
+### `PUT /workflows/{id}`
+
+Path'teki `id` ile body birleştirilir; full-replace upsert (kısmi update değil).
+
+### `DELETE /workflows/{id}`
+
+- `204 No Content` — silindi
+- `404 Not Found` — yoktu
+
+### `POST /workflows/{id}/test`
+
+Workflow'u verilen input ile dry-run çalıştırır. Production trafiğini etkilemez.
+
+**Request**:
+
+```json
+{
+  "input": "ORD-1 durumu nedir?",
+  "variables": { "customerId": "CUST-001" }
+}
+```
+
+**Response** (`WorkflowExecutionResult`):
+
+```json
+{
+  "workflowId": "siparis-durumu-hizli-yanit",
+  "success": true,
+  "finalResponse": "📦 order_status_tool → success=True, msg=Sipariş No: ORD-1, …",
+  "stepTraces": [
+    { "stepId": "abc123", "type": "Branch", "skipped": false, "output": "condition=True" },
+    { "stepId": "def456", "type": "Lookup", "output": "order_status_tool → success=True, …" },
+    { "stepId": "ghi789", "type": "Respond", "output": "📦 …" }
+  ],
+  "finalVariables": { "input": "ORD-1 durumu nedir?", "orderId": "ORD-1", "lookup.success": "true", "...": "..." },
+  "startedAt": "2026-04-21T20:00:00Z",
+  "durationMs": 4
+}
+```
+
+> ⚠️ Tüm endpoint'ler `RequireAuthorization("Admin")` scope altındadır.
+
+---
+
+## 12. SLA Guardian endpoints
+
+**Dosya**: `@Endpoints/SlaEndpoints.cs` — admin scope.
+
+Bekleyen onaylar ve açık eskalasyonlar için SLA tarama servisi (`SlaGuardianService` BackgroundService). Eşik aşılan onaylar `AutoReject`, eskalasyonların önceliği otomatik bir kademe yükseltilir.
+
+### `GET /sla/status`
+
+Güncel kuyruk durumu ve SLA istatistikleri.
+
+```json
+{
+  "enabled": true,
+  "pollIntervalSeconds": 5,
+  "approvals": {
+    "pendingCount": 2,
+    "oldestSeconds": 38,
+    "warnAfter": 20,
+    "breachAfter": 45,
+    "onBreach": "AutoReject",
+    "breachCountRecent": 1
+  },
+  "escalations": {
+    "openCount": 1,
+    "oldestSeconds": 122,
+    "warnAfter": 60,
+    "breachAfter": 180,
+    "boostPriorityOnBreach": true,
+    "breachCountRecent": 0
+  }
+}
+```
+
+### `GET /sla/events?count=100`
+
+Son `count` adet warn / breach kaydı. Default 100, max 500.
+
+```json
+{
+  "count": 3,
+  "items": [
+    {
+      "id": "e1c2a8b3f7d2",
+      "timestamp": "2026-05-06T13:42:11Z",
+      "kind": "approval",
+      "severity": "breach",
+      "targetId": "appr-9k2x",
+      "ageSeconds": 47,
+      "action": "AutoReject",
+      "note": "Pending 47s — threshold 45s aşıldı"
+    },
+    {
+      "id": "a92f...",
+      "timestamp": "2026-05-06T13:41:55Z",
+      "kind": "escalation",
+      "severity": "breach",
+      "targetId": "esc-7u9q",
+      "ageSeconds": 195,
+      "action": "PriorityBoost:Normal->High",
+      "note": "Açık 195s — threshold 180s aşıldı"
+    }
+  ]
+}
+```
+
+### Konfigürasyon
+
+```jsonc
+{
+  "Sla": {
+    "Enabled": true,
+    "PollIntervalSeconds": 5,
+    "Approvals": {
+      "WarnAfterSeconds": 20,
+      "BreachAfterSeconds": 45,
+      "OnBreach": "AutoReject"   // None | AutoReject | AutoApprove
+    },
+    "Escalations": {
+      "WarnAfterSeconds": 60,
+      "BreachAfterSeconds": 180,
+      "BoostPriorityOnBreach": true
+    }
+  }
+}
+```
+
+> ⚠️ Tek bir kayda ait aynı `severity` event'i sadece **bir kez** yayınlanır (`ISlaEventSink.LastEmittedAt` ile dedupe). Idempotent tarama.
+
+> ⚠️ Tüm endpoint'ler `RequireAuthorization("Admin")` scope altındadır.
 
 ---
 

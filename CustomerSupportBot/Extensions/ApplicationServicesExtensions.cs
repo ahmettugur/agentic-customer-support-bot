@@ -5,7 +5,6 @@ using CustomerSupportBot.Evaluation;
 using CustomerSupportBot.Services;
 using CustomerSupportBot.Services.Providers;
 using Microsoft.AspNetCore.RateLimiting;
-
 namespace CustomerSupportBot.Extensions;
 
 public static class ApplicationServicesExtensions
@@ -58,6 +57,7 @@ public static class ApplicationServicesExtensions
         // Context provider'lar
         services.AddSingleton<IContextProvider, CustomerContextProvider>();
         services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
+        services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();
         services.AddSingleton<IContextProvider>(sp =>
         {
             // SemanticMemoryService opsiyonel — yoksa no-op provider üret
@@ -79,6 +79,27 @@ public static class ApplicationServicesExtensions
         // SelfImprovementOptions binding burada değil — AiServicesExtensions'ta IConfiguration var.
         services.AddSingleton<Services.Improvement.ILessonStore, Services.Improvement.InMemoryLessonStore>();
         services.AddSingleton<Services.Improvement.LessonMiner>();
+
+        // ─── Per-Customer Personalization ───
+        services.AddSingleton<Services.Personalization.ICustomerProfileStore,
+            Services.Personalization.InMemoryCustomerProfileStore>();
+        services.AddSingleton<Services.Personalization.CustomerProfileService>();
+
+        // ─── Smart Routing & Skills-Based Escalation (#11) ───
+        services.AddSingleton<Services.Routing.IHumanAgentRegistry,
+            Services.Routing.InMemoryHumanAgentRegistry>();
+        services.AddSingleton<Services.Routing.ISkillsBasedRouter,
+            Services.Routing.SkillsBasedRouter>();
+
+        // ─── Low-Code Workflow Designer (#14) ───
+        services.AddSingleton<Services.Workflow.IWorkflowDefinitionStore,
+            Services.Workflow.InMemoryWorkflowDefinitionStore>();
+        services.AddSingleton<Services.Workflow.WorkflowExecutor>();
+
+        // ─── SLA / Response Time Guardian (#H) ───
+        services.AddSingleton<Services.Sla.ISlaEventSink,
+            Services.Sla.InMemorySlaEventSink>();
+        services.AddHostedService<Services.Sla.SlaGuardianService>();
 
         return services;
     }

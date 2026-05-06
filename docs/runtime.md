@@ -120,6 +120,106 @@ Pattern → [patterns.md#9-guardrails--circuit-breaker](patterns.md).
 
 `Enabled = false` yaparsanız **tüm HITL mekanizması** bypass edilir (klasik bot davranışı). Detay → [api.md#7-admin-endpoints-hitl](api.md#7-admin-endpoints-hitl).
 
+### `Routing`
+
+Smart Routing & Skills-Based Escalation konfigürasyonu. Bir eskalasyon (`needs_escalation`) oluşturulduğunda `SkillsBasedRouter` reasoning trace + müşteri profili → skill tag çıkarımı yapar ve `IHumanAgentRegistry`'deki adaylar arasında en iyi match'i seçer.
+
+```jsonc
+"Routing": {
+  "Enabled": true,
+  "LoadBalancingEnabled": true,
+  "LanguageWeight": 0.2,            // skor formülünde dil eşleşmesinin ağırlığı
+  "MinMatchScore": 0.1,             // bu eşik altında SuggestedAgentId boş bırakılır
+  "IntentSkillMap": {
+    "şikayet": ["complaint"],
+    "sipariş_oluşturma": ["order"],
+    "ürün_bilgisi": ["product"]
+  },
+  "ProfileKeywordSkillMap": {
+    "VIP": "vip",
+    "kurumsal": "enterprise"
+  },
+  "SeedAgents": [
+    {
+      "Id": "agent-ayse",
+      "DisplayName": "Ayşe Yılmaz",
+      "Skills": ["complaint", "refund", "vip"],
+      "Languages": ["tr"],
+      "MaxConcurrentLoad": 5,
+      "Priority": 1
+    }
+  ]
+}
+```
+
+`Enabled = false` yaparsanız routing devre dışı kalır; eskalasyonlar admin manuel atayana kadar atanmamış kalır. `EscalationRequest`'in yeni alanları: `RequiredSkills`, `Priority`, `SuggestedAgentId`, `SuggestedAgentName`, `MatchScore`, `RoutingNote`. Detay → [api.md#10-smart-routing-endpoints](api.md#10-smart-routing-endpoints).
+
+### `Telemetry`
+
+Uygulama tüm LLM çağrılarını (chat + reasoning, OpenAI / Azure OpenAI / Anthropic), ajan adımlarını, tool çağrılarını ve workflow turlarını **OpenTelemetry** üzerinden span ve metric olarak yayar. Ek olarak her LLM çağrısının token kullanımı ve **USD maliyeti** (`Pricing` tablosuyla) hesaplanır.
+
+```jsonc
+"Telemetry": {
+  "Enabled": true,
+  "ServiceName": "CustomerSupportBot",
+  "ServiceVersion": "1.0.0",
+  "TracingEnabled": true,
+  "MetricsEnabled": true,
+  "Otlp": {
+    "Endpoint": "http://localhost:4317", // boş bırakılırsa exporter eklenmez (sadece in-process metric)
+    "Protocol": "grpc",                    // grpc | httpprotobuf
+    "Headers": ""
+  },
+  "Pricing": {
+    "default":               { "InputPer1K": 0.00015, "OutputPer1K": 0.0006 },
+    "gpt-5.4":               { "InputPer1K": 0.0025,  "OutputPer1K": 0.01 },
+    "gpt-5.4-nano":          { "InputPer1K": 0.00015, "OutputPer1K": 0.0006 },
+    "text-embedding-3-large":{ "InputPer1K": 0.00013, "OutputPer1K": 0 },
+    "claude-haiku-4-5":      { "InputPer1K": 0.001,   "OutputPer1K": 0.005 }
+  }
+}
+```
+
+**Yayılan span'ler** (`ActivitySource = "CustomerSupportBot"`):
+
+| Span | Kind | Önemli tag'ler |
+|---|---|---|
+| `ai.chat`, `ai.chat.stream` | Client | `ai.model`, `ai.provider`, `ai.tokens.input/output`, `ai.cost.usd`, `ai.duration.ms` |
+| `agent.<name>` | Internal | `agent.name`, `session.id`, `trace.id` |
+| `tool.<name>` | Internal | `tool.name`, `session.id` |
+
+**Yayılan metric'ler** (`Meter = "CustomerSupportBot"`):
+
+| Metric | Tip | Birim |
+|---|---|---|
+| `ai.llm.calls` | Counter | `{call}` |
+| `ai.tokens.input` / `ai.tokens.output` | Counter | `{token}` |
+| `ai.cost.usd` | Counter | `USD` |
+| `ai.llm.duration` | Histogram | `ms` |
+| `agent.tool.invocations` | Counter | `{call}` |
+| `agent.workflow.duration` | Histogram | `ms` |
+| `agent.workflow.completions` | Counter | `{run}` |
+
+Bunlara ek olarak ASP.NET Core, HttpClient ve EF Core instrumentation otomatik etkindir.
+
+**Uçtan uca kurulum (Jaeger ile)**:
+
+```powershell
+docker compose up -d jaeger elasticsearch     # OTLP receiver: 4317 (gRPC), 4318 (HTTP)
+dotnet run --project CustomerSupportBot
+# Jaeger UI: http://localhost:16686  → Service: CustomerSupportBot
+```
+
+`Otlp.Endpoint` boş bırakılırsa span/metric'ler dışarı yazılmaz; ancak in-memory **maliyet özeti** her durumda admin endpoint'inden okunabilir:
+
+```http
+GET /telemetry/cost            → model bazlı toplam token + USD
+GET /telemetry/cost/models     → bilinen model listesi
+POST /telemetry/cost/reset     → in-memory sayaçları sıfırla
+```
+
+Tüm `Telemetry` ayarı kapatılmak istenirse `Telemetry.Enabled = false` — tracing + metric pipeline'ı devre dışı kalır, `IChatClient` doğrudan kullanılır.
+
 ### Logging
 
 `Microsoft.Extensions.Logging` standart yapılandırma; `appsettings.json > Logging > LogLevel` ile kategori bazlı seviye ayarlanabilir. Kritik kategoriler:
@@ -137,18 +237,20 @@ Pattern → [patterns.md#9-guardrails--circuit-breaker](patterns.md).
 
 ```
 1. Config oku             → AI:Provider seçilir
-2. AiClientFactory        → IChatClient + ReasoningChatClient (singleton)
-3. PromptService          → Prompts/**/*.md eager load (eksikse fail-fast)
-4. Domain servisler       → EntityVerifier, ReasoningSanityChecker, ReasoningService,
+2. AddTelemetryServices   → ActivitySource + Meter + (opsiyonel) OTLP exporter
+3. AiClientFactory        → IChatClient + ReasoningChatClient (TelemetryChatClient ile sarılı)
+4. PromptService          → Prompts/**/*.md eager load (eksikse fail-fast)
+5. Domain servisler       → EntityVerifier, ReasoningSanityChecker, ReasoningService,
                             ContextPipeline + IContextProvider'lar
-5. HITL altyapısı         → IApprovalQueue, IEscalationSink, IChatModeRegistry, IChatBridge
-6. Persistence            → InMemorySessionManager (ISessionManager + IConversationStore aynı instance),
+6. HITL altyapısı         → IApprovalQueue, IEscalationSink, IChatModeRegistry, IChatBridge
+7. Persistence            → InMemorySessionManager (ISessionManager + IConversationStore aynı instance),
                             InMemoryReasoningTraceStore (ring buffer, max 500)
-7. CustomerSupportTeam    → Agent worker'lar (lazy — ilk istekte construct edilir)
-8. Endpoint mapping       → MapChatEndpoints, MapSessionEndpoints, MapTraceEndpoints,
-                            MapEvaluationEndpoints, MapAdminEndpoints, MapAnalyticsEndpoints
-9. Static files           → wwwroot/ (chat + admin UI)
-10. app.Run()             → Kestrel dinler (default :5021)
+8. CustomerSupportTeam    → Agent worker'lar (lazy — ilk istekte construct edilir)
+9. Endpoint mapping       → MapChatEndpoints, MapSessionEndpoints, MapTraceEndpoints,
+                            MapEvaluationEndpoints, MapAdminEndpoints, MapAnalyticsEndpoints,
+                            MapTelemetryEndpoints
+10. Static files          → wwwroot/ (chat + admin UI)
+11. app.Run()             → Kestrel dinler (default :5021)
 ```
 
 DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](architecture.md#dependency-injection-haritası).
@@ -193,6 +295,60 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
 | `InMemorySessionManager` | Session + LLM-facing conversation history (User/Asistan turları). Restart kayıp! |
 | `InMemoryReasoningTraceStore` | Ring buffer 500 — her workflow turu için 1 `ReasoningTrace` |
 | `IChatBridge` history | Ring buffer 200 — admin paneline tam transkript (Bot/User/Admin/System) |
+
+### Telemetri
+
+| Servis | Sorumluluk |
+|---|---|
+| `TelemetryChatClient` | `IChatClient` `DelegatingChatClient` wrapper'ı — her LLM çağrısı için span açar, token + USD maliyet + latency kaydeder. Streaming (`UsageContent`) dahil |
+| `CustomerSupportTelemetry` | Tek noktada `ActivitySource` + `Meter` + counter/histogram tanımları |
+| `ICostCalculator` / `CostCalculator` | `Telemetry.Pricing` tablosundan model adı → USD/1K token mapping |
+| `CostUsageStore` | In-memory model bazlı agregat (admin `/telemetry/cost` endpoint'i okur) |
+
+### Per-Customer Personalization
+
+| Servis | Sorumluluk |
+|---|---|
+| `ICustomerProfileStore` (`InMemoryCustomerProfileStore`) | Müşteri ID → `CustomerProfile` mapping (case-insensitive) |
+| `CustomerProfileService` | Heuristik `RecordInteraction` (LLM-siz, her turda) + admin tetikli `ConsolidateAsync` (LLM özet + ton çıkarımı) |
+| `CustomerProfileContextProvider` | Order = 6; `state.CustomerId` set'liyse profil bilgisini context'e enjekte eder (üç ajan da görür) |
+| Hook | `CustomerSupportTeam` workflow tamamlanınca `RecordInteraction` çağrılır — episodik bellek yazımıyla aynı hat |
+
+### Smart Routing & Skills-Based Escalation
+
+| Servis | Sorumluluk |
+|---|---|
+| `IHumanAgentRegistry` (`InMemoryHumanAgentRegistry`) | İnsan müşteri temsilcisi kayıtları (skill tag, dil, max load, current load). Seed `Routing.SeedAgents` config'inden yüklenir |
+| `ISkillsBasedRouter` (`SkillsBasedRouter`) | Reasoning trace + opsiyonel müşteri profilinden skill gereksinimlerini çıkarır, en iyi skill + dil + load match'iyle aday seçer. LLM-siz, deterministik (<1ms) |
+| Hook | `ApprovalGateService.ProcessPendingEscalations` artık her yeni `EscalationRequest`'e routing alanlarını (`SuggestedAgentId`, `MatchScore`, `RequiredSkills`, `Priority`, `RoutingNote`) doldurur ve `IncrementLoad` çağırır |
+| Auto-decrement | `WireRoutingLoadTracking` başlangıçta `IEscalationSink.RequestDecided` event'ine bağlanır; eskalasyon resolve/dismiss olunca atanan temsilcinin `CurrentLoad`'unu -1 yapar |
+
+### Low-Code Workflow Designer
+
+| Servis | Sorumluluk |
+|---|---|
+| `IWorkflowDefinitionStore` (`InMemoryWorkflowDefinitionStore`) | Workflow tanımlarını saklar; upsert'te otomatik versiyon artırır ve Türkçe karakterleri normalize ederek slug üretir |
+| `WorkflowExecutor` | Tanımı deterministik olarak yorumlar (LLM-siz). Adım tipleri: `Respond` (template `{var}` substitute), `Lookup` (yan etkisiz tool çağrısı), `Branch` (`var exists/missing/==/!=`), `SetVariable`. `OrderPlacement`/`Complaint`/`HumanHandoff` tool'ları yasaklı (HITL gate'i bypass etmemek için) |
+| Admin UI | `wwwroot/workflow-designer.html` — JSON editor + dry-run test butonu |
+
+### Parallel SubTask Execution (#E)
+
+| Servis | Sorumluluk |
+|---|---|
+| `ParallelExecutionOptions` | `Enabled`, `MaxDegreeOfParallelism` (default 4), `ReadOnlyAgents` listesi (default: `ProductInquiryAgent`, `OrderInquiryAgent`) |
+| `SubTaskOrchestrator.Partition()` | Sıralı `SubTask` listesini gruplara ayırır: aynı türde (read-only / write) ardı ardına gelen alt görevler tek grup. Sıra (1→2→3) korunur |
+| `CustomerSupportTeam.RunDecomposedAsync` | Her grup için `Task.WhenAll` (paralel) veya `foreach` (serial) kullanır. Paralel batch için `SemaphoreSlim` ile throttle. Streaming sürümünde sub-task delta'ları dış stream'e sızmaz; yalnızca status (`running`/`done`) eventleri ve son aggregate response yayınlanır |
+| Sıra korunması | Tüm gruplar arası sırayla yürütülür; aggregate output `SortedDictionary<int, string>` üzerinden `Order`'a göre toplanır — paralel batch'te bile deterministic |
+
+### SLA / Response Time Guardian (#H)
+
+| Servis | Sorumluluk |
+|---|---|
+| `SlaOptions` | `PollIntervalSeconds`, `Approvals.{Warn,Breach}AfterSeconds`, `Approvals.OnBreach` (`None` / `AutoReject` / `AutoApprove`), `Escalations.{Warn,Breach}AfterSeconds`, `Escalations.BoostPriorityOnBreach` |
+| `SlaPolicyEvaluator` | Saf yan-etkisiz karar verici. Bir kayıtın yaşına ve sink'teki son emit zamanına göre `WarnEvent` / `BreachEvent` ve aksiyon üretir. Aynı target+severity için tekrar event üretmez (idempotent) |
+| `ISlaEventSink` (`InMemorySlaEventSink`) | Son 500 event'i tutar. `LastEmittedAt(kind, targetId, severity)` ile dedupe sağlar |
+| `SlaGuardianService` | `BackgroundService` — `PollIntervalSeconds`'te bir `IApprovalQueue.GetPending()` ve `IEscalationSink.GetOpen()` taraması yapar. Breach olunca onayları `IApprovalQueue.Decide(false)` ile reddeder; eskalasyon önceliğini bir kademe yükseltir (Critical sabit) |
+| Endpoints | `GET /sla/status` — anlık özet; `GET /sla/events?count=N` — son olaylar |
 
 ---
 
@@ -358,6 +514,50 @@ Tam SSE event sözleşmeleri → [api.md#5-sse-event-şemaları](api.md#5-sse-ev
 ---
 
 ## 9. Gözlemleme ve sorun giderme
+
+### OpenTelemetry trace + metric (Jaeger)
+
+Uygulama OTLP-uyumlu trace + metric yayar. `appsettings.json > Telemetry.Otlp.Endpoint` set edildiğinde tüm span/metric'ler exporter üzerinden gider; Jaeger UI'da (`http://localhost:16686`) servis adı **CustomerSupportBot** olarak görünür.
+
+Tipik bir chat akışının span hiyerarşisi:
+
+```
+POST /chat/stream                 (ASP.NET Core instrumentation)
+└─ ai.chat.stream                 ← ReasoningChatClient (model=o-series)
+└─ agent.PlanningAgent
+└─ agent.OrderInquiryAgent
+   └─ ai.chat                     ← standart IChatClient
+   └─ tool.order_status_tool
+└─ agent.ResponseAgent
+   └─ ai.chat
+```
+
+Her `ai.chat*` span'i şu tag'leri taşır: `ai.model`, `ai.provider`, `ai.tokens.input`, `ai.tokens.output`, `ai.cost.usd`, `ai.duration.ms`. Kibana / Jaeger üzerinde bu tag'lerle filtreleme yapılabilir.
+
+### Maliyet özeti
+
+OTLP exporter ayağa kaldırılmasa bile maliyet bilgisi her zaman in-memory tutulur. Admin endpoint:
+
+```http
+GET /telemetry/cost
+```
+
+Yanıt örneği:
+
+```json
+{
+  "totalCalls": 142,
+  "totalInputTokens": 184320,
+  "totalOutputTokens": 56204,
+  "totalCostUsd": 1.0473,
+  "byModel": [
+    { "model": "gpt-5.4", "calls": 88, "inputTokens": 165000, "outputTokens": 51000, "costUsd": 0.9225, "averageLatencyMs": 1820, "lastUsed": "2026-04-21T19:31:00Z" },
+    { "model": "gpt-5.4-nano", "calls": 54, "inputTokens": 19320, "outputTokens": 5204, "costUsd": 0.0322, "averageLatencyMs": 540, "lastUsed": "2026-04-21T19:30:55Z" }
+  ]
+}
+```
+
+Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 
 ### Trace dashboard
 

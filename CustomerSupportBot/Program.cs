@@ -5,6 +5,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddLogging();
+builder.Services.AddTelemetryServices(builder.Configuration);
 builder.Services.AddAiServices(builder.Configuration);
 builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddApplicationServices();
@@ -13,6 +14,7 @@ builder.Services.AddAuthenticationServices(builder.Configuration);
 var app = builder.Build();
 
 await app.MigrateIfDevelopmentAsync();
+app.WireRoutingLoadTracking();
 
 app.UseCors();
 app.UseRateLimiter();
@@ -36,6 +38,11 @@ adminScope.MapTraceEndpoints();
 adminScope.MapEvaluationEndpoints();
 adminScope.MapMemoryEndpoints();
 adminScope.MapImprovementsEndpoints();
+adminScope.MapTelemetryEndpoints();
+adminScope.MapPersonalizationEndpoints();
+adminScope.MapAgentsEndpoints();
+adminScope.MapWorkflowEndpoints();
+adminScope.MapSlaEndpoints();
 
 app.MapAnalyticsEndpoints();
 

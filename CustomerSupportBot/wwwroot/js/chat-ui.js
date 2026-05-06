@@ -652,19 +652,39 @@ class ChatUI {
     }
 
     /** Agent status chip'i günceller. */
-    setAgentStatus(streamCtx, agentName, status) {
+    setAgentStatus(streamCtx, agentName, status, extra) {
         const friendlyName = this.friendlyAgentName(agentName);
+        const parallel = !!(extra && extra.parallel);
+        const badge = parallel
+            ? '<span class="agent-chip-badge">paralel</span>'
+            : '';
         if (status === "running") {
             streamCtx.agentChip.className = "agent-chip running";
             streamCtx.agentChip.innerHTML = `
                 <span class="agent-chip-dot"></span>
-                <span class="agent-chip-text">${this.escapeHtml(friendlyName)} çalışıyor...</span>
+                <span class="agent-chip-text">${this.escapeHtml(friendlyName)} çalışıyor…</span>
+                ${badge}
             `;
         } else if (status === "done") {
             streamCtx.agentChip.className = "agent-chip done";
             streamCtx.agentChip.innerHTML = `
                 <span class="agent-chip-check">✓</span>
                 <span class="agent-chip-text">${this.escapeHtml(friendlyName)} tamamlandı</span>
+                ${badge}
+            `;
+        } else if (status === "decomposing") {
+            streamCtx.agentChip.className = "agent-chip running";
+            const total = (extra && extra.subTaskCount) || "?";
+            const pg = (extra && extra.parallelGroups) || 0;
+            streamCtx.agentChip.innerHTML = `
+                <span class="agent-chip-dot"></span>
+                <span class="agent-chip-text">Orkestratör: ${this.escapeHtml(String(total))} alt görev—${pg} paralel grup</span>
+            `;
+        } else if (status === "aggregating") {
+            streamCtx.agentChip.className = "agent-chip running";
+            streamCtx.agentChip.innerHTML = `
+                <span class="agent-chip-dot"></span>
+                <span class="agent-chip-text">Sonuçlar birleştiriliyor…</span>
             `;
         }
     }
@@ -694,8 +714,12 @@ class ChatUI {
             "OrderPlacementAgent": "Sipariş Ajanı",
             "OrderInquiryAgent": "Sipariş Sorgu Ajanı",
             "ComplaintAgent": "Şikayet Ajanı",
-            "ResponseAgent": "Yanıt Ajanı"
+            "ResponseAgent": "Yanıt Ajanı",
+            "Orchestrator": "Orkestratör"
         };
+        if (id && id.startsWith("SubTask#")) {
+            return `Alt Görev ${id.substring(8)}`;
+        }
         // MAF executor ID'leri "PlanningAgent_<hash>" formatında olabilir
         for (const key of Object.keys(map)) {
             if (id && id.startsWith(key)) return map[key];

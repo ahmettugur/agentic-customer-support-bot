@@ -2,6 +2,7 @@ using CustomerSupportBot.Models;
 using CustomerSupportBot.Models.Memory;
 using CustomerSupportBot.Services;
 using CustomerSupportBot.Services.Memory;
+using CustomerSupportBot.Services.Telemetry;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
@@ -16,13 +17,15 @@ public static class AiServicesExtensions
         services.AddSingleton<IChatClient>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<AiOptions>>().Value;
-            return AiClientFactory.CreateStandardChatClient(options);
+            var inner = AiClientFactory.CreateStandardChatClient(options);
+            return WrapWithTelemetry(sp, inner, ResolveStandardModel(options), options.Provider.ToString());
         });
 
         services.AddSingleton<ReasoningChatClient>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<AiOptions>>().Value;
-            return AiClientFactory.CreateReasoningChatClient(options);
+            return AiClientFactory.CreateReasoningChatClient(options, inner =>
+                WrapWithTelemetry(sp, inner, ResolveReasoningModel(options), options.Provider.ToString()));
         });
 
         // ─── Semantic Memory (Qdrant + embedding) ───
@@ -41,4 +44,35 @@ public static class AiServicesExtensions
 
         return services;
     }
+
+    private static IChatClient WrapWithTelemetry(IServiceProvider sp, IChatClient inner, string modelHint, string provider)
+    {
+        var telemetryOptions = sp.GetRequiredService<IOptions<TelemetryOptions>>().Value;
+        if (!telemetryOptions.Enabled)
+        {
+            return inner;
+        }
+
+        return new TelemetryChatClient(
+            inner,
+            sp.GetRequiredService<ICostCalculator>(),
+            sp.GetRequiredService<CostUsageStore>(),
+            modelHint,
+            provider,
+            sp.GetRequiredService<ILogger<TelemetryChatClient>>());
+    }
+
+    private static string ResolveStandardModel(AiOptions options) => options.Provider switch
+    {
+        AiProvider.AzureOpenAI => options.AzureOpenAI.Deployment ?? "(unknown)",
+        AiProvider.Anthropic => options.Anthropic.Model ?? "(unknown)",
+        _ => options.OpenAI.Model ?? "(unknown)"
+    };
+
+    private static string ResolveReasoningModel(AiOptions options) => options.Provider switch
+    {
+        AiProvider.AzureOpenAI => options.AzureOpenAI.ReasoningDeployment ?? options.AzureOpenAI.Deployment ?? "(unknown)",
+        AiProvider.Anthropic => options.Anthropic.ReasoningModel ?? options.Anthropic.Model ?? "(unknown)",
+        _ => options.OpenAI.ReasoningModel ?? options.OpenAI.Model ?? "(unknown)"
+    };
 }

@@ -15,7 +15,6 @@
     <PackageReference Include="Microsoft.Agents.AI.Abstractions" Version="1.4.0" />
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.4.0" />
     <PackageReference Include="ModelContextProtocol" Version="1.2.0" />
-    <PackageReference Include="OpenTelemetry.Api" Version="1.15.3" />
     <PackageReference Include="YamlDotNet" Version="17.1.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.7" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
@@ -26,6 +25,18 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
     <PackageReference Include="Qdrant.Client" Version="1.17.0" />
+
+    <!-- OpenTelemetry - Distributed Tracing -->
+    <PackageReference Include="OpenTelemetry" Version="1.15.3" />
+    <PackageReference Include="OpenTelemetry.Api" Version="1.15.3" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
+
+    <PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.15.2" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" Version="1.14.0-beta.2" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.14.0-beta.1" />
   </ItemGroup>
 
   <!-- Knowledge Base markdown dosyalarını build çıktısına kopyala — KnowledgeBaseIngestor okur. -->
