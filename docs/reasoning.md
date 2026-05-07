@@ -715,9 +715,9 @@ Böylece UI:
 
 | Senaryo | LLM çağrısı |
 |---|---|
-| Normal (tek görev) | 5 (reasoning + planning + specialist + critique + optional revision) |
-| 2 subtask compound | ~9 (1 reasoning + 2×planning + 2×specialist + 2×critique + optional 2×revision) |
-| N subtask | ~1 + 4N |
+| Normal (tek görev) | 4 (reasoning + planning + specialist + response) |
+| 2 subtask compound | ~7 (1 reasoning + 2×planning + 2×specialist + 2×response) |
+| N subtask | ~1 + 3N |
 
 Üst düzey reasoning (compound algılayan) yalnızca **bir kere** çalışır. Sonraki her subtask kendi planning+specialist+response döngüsünü yapar. Bu, bir kerelik reasoning maliyetini amortize eder.
 
