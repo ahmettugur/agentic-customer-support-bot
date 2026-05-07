@@ -175,6 +175,39 @@ services:
       retries: 3
       start_period: 40s
 
+  # Python Code Sandbox — Agent'ın ürettiği kodu izole ortamda çalıştırır
+  sandbox:
+    image: python:3.12-slim
+    container_name: aibot_sandbox
+    restart: unless-stopped
+    working_dir: /sandbox
+    # pandas, numpy, scipy, matplotlib, openpyxl kurulu; HTTP API olarak bekler
+    command: >
+      sh -c "pip install --quiet fastapi uvicorn pandas numpy scipy matplotlib openpyxl seaborn scikit-learn &&
+             uvicorn sandbox_api:app --host 0.0.0.0 --port 8100"
+    ports:
+      - "8100:8100"
+    volumes:
+      # Sandbox API kodu ve geçici dosya yükleme dizini
+      - ./sandbox:/sandbox
+    environment:
+      # CPU/bellek limitlerini uygulama seviyesinde bildir
+      - MAX_EXECUTION_SECONDS=30
+      - MAX_UPLOAD_MB=50
+    # Ağ erişimini kısıtla — sadece iç ağ (diğer servislerle konuşamaz)
+    networks:
+      - sandbox_net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+networks:
+  sandbox_net:
+    driver: bridge
+    internal: true
+
 volumes:
   postgres_data:
   redis_data:
