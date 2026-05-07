@@ -54,6 +54,9 @@ public static class ApplicationServicesExtensions
         services.AddScoped<ChatStreamOrchestrator>();
         services.AddScoped<ChatEventOrchestrator>();
 
+        // Realtime köprüsü — her WS bağlantısı için ayrı instance
+        services.AddScoped<Services.Realtime.RealtimeBridge>();
+
         // Context provider'lar
         services.AddSingleton<IContextProvider, CustomerContextProvider>();
         services.AddSingleton<IContextProvider, ConversationSummaryProvider>();

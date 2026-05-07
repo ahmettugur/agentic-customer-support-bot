@@ -25,6 +25,36 @@ public sealed class AiOptions
     public OpenAiOptions OpenAI { get; set; } = new();
     public AzureOpenAiOptions AzureOpenAI { get; set; } = new();
     public AnthropicOptions Anthropic { get; set; } = new();
+    public RealtimeOptions Realtime { get; set; } = new();
+}
+
+/// <summary>
+/// OpenAI Realtime API (sesli konuşma) ayarları.
+/// `wss://api.openai.com/v1/realtime?model={Model}` endpoint'i için kullanılır.
+/// API key boşsa <see cref="OpenAiOptions.ApiKey"/> kullanılır.
+/// </summary>
+public sealed class RealtimeOptions
+{
+    /// <summary>Realtime özelliğini aç/kapa.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Realtime model adı (ör. "gpt-realtime-1.5").</summary>
+    public string Model { get; set; } = "gpt-realtime-1.5";
+
+    /// <summary>Override API key — boşsa <see cref="OpenAiOptions.ApiKey"/> kullanılır.</summary>
+    public string? ApiKey { get; set; }
+
+    /// <summary>TTS sesi (alloy, ash, ballad, coral, echo, sage, shimmer, verse).</summary>
+    public string Voice { get; set; } = "alloy";
+
+    /// <summary>Server-side VAD susturma süresi (ms) — kullanıcının konuşmayı bitirdiğine karar verme eşiği.</summary>
+    public int VadSilenceMs { get; set; } = 600;
+
+    /// <summary>Server-side VAD eşiği (0..1). Yüksek = daha az hassas (gürültülü ortamda artır).</summary>
+    public double VadThreshold { get; set; } = 0.5;
+
+    /// <summary>Asistan yanıtının en çok kaç token söylenebileceği (TTS sırasında).</summary>
+    public int MaxResponseTokens { get; set; } = 4096;
 }
 
 /// <summary>OpenAI public API ayarları.</summary>

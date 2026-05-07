@@ -20,6 +20,7 @@ app.UseCors();
 app.UseRateLimiter();
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseWebSockets();
 
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
@@ -30,6 +31,7 @@ app.UseAuthorization();
 
 app.MapAuthEndpoints();
 app.MapChatEndpoints();
+app.MapRealtimeEndpoints();
 app.MapSessionEndpoints();
 
 var adminScope = app.MapGroup("").RequireAuthorization("Admin");

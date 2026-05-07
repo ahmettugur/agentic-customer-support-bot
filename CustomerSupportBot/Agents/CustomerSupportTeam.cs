@@ -30,14 +30,15 @@ namespace CustomerSupportBot.Agents;
 /// </summary>
 public class CustomerSupportTeam : ICustomerSupportTeam
 {
-    // Ajanlar bir kez oluşturulur (stateless) — workflow ise her istek için taze üretilir
-    private readonly ChatClientAgent _planningAgent;
-    private readonly ChatClientAgent _productInquiryAgent;
-    private readonly ChatClientAgent _orderPlacementAgent;
-    private readonly ChatClientAgent _orderInquiryAgent;
-    private readonly ChatClientAgent _complaintAgent;
-    private readonly ChatClientAgent _humanHandoffAgent;
-    private readonly ChatClientAgent _responseAgent;
+    // Ajanlar bir kez oluşturulur (stateless) — workflow ise her istek için taze üretilir.
+    // Tip AIAgent: her agent OpenTelemetry middleware ile sarıldığı için concrete tip ChatClientAgent değildir.
+    private readonly AIAgent _planningAgent;
+    private readonly AIAgent _productInquiryAgent;
+    private readonly AIAgent _orderPlacementAgent;
+    private readonly AIAgent _orderInquiryAgent;
+    private readonly AIAgent _complaintAgent;
+    private readonly AIAgent _humanHandoffAgent;
+    private readonly AIAgent _responseAgent;
     private readonly ContextPipeline _contextPipeline;
     private readonly IChatClient _chatClient;
     private readonly WorkflowGuardOptions _guards;
@@ -79,27 +80,32 @@ public class CustomerSupportTeam : ICustomerSupportTeam
 
         // ─── AJANLARI OLUŞTUR ───
 
-        _planningAgent = new ChatClientAgent(
+        // Her agent OpenTelemetry middleware ile sarılarak otomatik agent.run / tool.invoke
+        // span'ları üretir; CustomerSupportTelemetry.ActivitySource ile aynı source adı üzerinde
+        // toplanır ve yapılandırılan exporter'a (OTLP/Console) akar.
+        var sourceName = Services.Telemetry.CustomerSupportTelemetry.ActivitySourceName;
+
+        _planningAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
             instructions: _prompts.Get("agents/planning-agent"),
             name: WellKnown.AgentNames.Planning,
-            description: "Müşteri destek görevlerini planlayan ve uygun ajanlara yönlendiren bir ajandır.");
+            description: "Müşteri destek görevlerini planlayan ve uygun ajanlara yönlendiren bir ajandır."), sourceName);
 
-        _productInquiryAgent = new ChatClientAgent(
+        _productInquiryAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
             instructions: _prompts.Get("agents/product-inquiry-agent"),
             name: WellKnown.AgentNames.ProductInquiry,
             description: "Ürün sorgularını yanıtlar.",
-            tools: [AIFunctionFactory.Create(CustomerSupportTools.ProductInquiryTool)]);
+            tools: [AIFunctionFactory.Create(CustomerSupportTools.ProductInquiryTool)]), sourceName);
 
-        _orderPlacementAgent = new ChatClientAgent(
+        _orderPlacementAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
             instructions: _prompts.Get("agents/order-placement-agent"),
             name: WellKnown.AgentNames.OrderPlacement,
             description: "Handles order placement.",
-            tools: [_approvalGate.BuildOrderPlacementTool()]);
+            tools: [_approvalGate.BuildOrderPlacementTool()]), sourceName);
 
-        _orderInquiryAgent = new ChatClientAgent(
+        _orderInquiryAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
             instructions: _prompts.Get("agents/order-inquiry-agent"),
             name: WellKnown.AgentNames.OrderInquiry,
@@ -108,28 +114,35 @@ public class CustomerSupportTeam : ICustomerSupportTeam
                 AIFunctionFactory.Create(CustomerSupportTools.OrderStatusTool),
                 AIFunctionFactory.Create(CustomerSupportTools.GetLastOrderTool),
                 AIFunctionFactory.Create(CustomerSupportTools.GetAllOrdersTool)
-            ]);
+            ]), sourceName);
 
-        _complaintAgent = new ChatClientAgent(
+        _complaintAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
             instructions: _prompts.Get("agents/complaint-agent"),
             name: WellKnown.AgentNames.Complaint,
             description: "Müşteri şikayetlerini işler.",
-            tools: [_approvalGate.BuildComplaintRegistrationTool()]);
+            tools: [_approvalGate.BuildComplaintRegistrationTool()]), sourceName);
 
-        _humanHandoffAgent = new ChatClientAgent(
+        _humanHandoffAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
             instructions: _prompts.Get("agents/human-handoff-agent"),
             name: WellKnown.AgentNames.HumanHandoff,
             description: "Kullanıcının açıkça insan temsilcisiyle görüşme talebini karşılar.",
-            tools: [AIFunctionFactory.Create(CustomerSupportTools.HumanHandoffTool)]);
+            tools: [AIFunctionFactory.Create(CustomerSupportTools.HumanHandoffTool)]), sourceName);
 
-        _responseAgent = new ChatClientAgent(
+        _responseAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
             instructions: _prompts.Get("agents/response-agent"),
             name: WellKnown.AgentNames.Response,
-            description: "Yanıtları biçimlendirir ve kullanıcıya iletir.");
+            description: "Yanıtları biçimlendirir ve kullanıcıya iletir."), sourceName);
     }
+
+    /// <summary>
+    /// Bir <see cref="ChatClientAgent"/>'ı OpenTelemetry middleware ile sarmalar.
+    /// Her agent.run ve tool çağrısı, verilen ActivitySource adı altında otomatik span üretir.
+    /// </summary>
+    private static AIAgent WrapWithTelemetry(ChatClientAgent agent, string sourceName)
+        => agent.AsBuilder().UseOpenTelemetry(sourceName).Build();
 
     /// <summary>
     /// Her istek için yeni bir Workflow instance'ı oluşturur.
