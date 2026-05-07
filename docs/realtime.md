@@ -1,8 +1,20 @@
 # Sesli Konuşma Modu (Realtime)
 
-OpenAI **Realtime API** (`gpt-realtime-1.5`) üzerinden kurulan full-duplex ses köprüsü. Kullanıcının sesi tarayıcıdan WebSocket ile backend'e, oradan da OpenAI Realtime'a akar; transcript çıkar çıkmaz **text chat ile aynı agent pipeline'ı** (reasoning → 7 ajanlı MAF workflow → response) tetiklenir, nihai metin tekrar Realtime API'ye gönderilip TTS olarak çalınır.
+OpenAI **Realtime API** (`gpt-realtime-1.5`) üzerinden kurulan full-duplex ses kanalları. Sistem **iki ayrı sesli mod** sunar:
 
-**Kritik tasarım kararı**: Realtime API **"köprü"** olarak kullanılır, beyin olarak değil. Modelin kendi konuşma yanıt verme yeteneği (`create_response: false`) kapatılmıştır; cevabı **her zaman** bizim agent takımımız üretir. Böylece sesli ve yazılı modda **aynı** HITL, reasoning, tool routing, semantic memory ve admin takeover davranışları çalışır.
+## İki Mod Özeti
+
+| Mod | Buton | Endpoint | gpt-realtime-1.5 rolü | Agent pipeline | Tool seti |
+|---|---|---|---|---|---|
+| **🎤 Sesli Asistan (köprü)** | Mikrofon | `/chat/realtime` | Yalnızca STT + TTS köprüsü (`create_response: false`) | **Tam akış** — reasoning + 7 ajan + HITL | Tüm tool'lar (sipariş aç, şikayet, vb.) |
+| **⚡ Hızlı Sesli (native)** | Şimşek | `/chat/realtime-native` | Modelin kendisi konuşur ve tool çağırır (`create_response: true`) | **YOK** — model tek başına yanıtlar | Yalnızca okuma-only (4 tool) |
+
+**Hangisini ne zaman?**
+
+- **Sipariş oluşturma**, **şikayet kaydı**, **iade**, **karmaşık akış** → köprü modu (HITL korunur)
+- **"ORD-1 nerede?"**, **"iPhone fiyatı?"**, **"son siparişim ne?"** → native mod (3-4× daha hızlı, ~70% daha ucuz)
+
+Kullanıcı yan-etkili bir işlem isterse native modda model **tool çağırmaz**, kibarca yazılı sohbete yönlendirir.
 
 ---
 
@@ -259,10 +271,11 @@ Yani sesli bir konuşmanın her ajan adımını admin panelden **adım-adım** i
 
 ---
 
-## Endpoint
+## Endpoint'ler
 
 ```
-WebSocket: /chat/realtime?sessionId={optional-existing-session}
+WebSocket: /chat/realtime/{sessionId?}         ← Köprü modu (RealtimeBridge + agent pipeline)
+WebSocket: /chat/realtime-native/{sessionId?}  ← Native modu (RealtimeNativeBridge + tool calling)
 ```
 
 - `sessionId` verilmezse yeni session oluşturulur; `connected` event'iyle ID döner
@@ -289,19 +302,118 @@ Handler: `@Services/Realtime/RealtimeBridge.cs:HandleAsync`. DI: `@Extensions/Ai
 
 ## İlgili dosyalar
 
-- `@Services/Realtime/RealtimeBridge.cs` — backend WS bridge + pump'lar + agent dispatcher
+**Backend**
+- `@Services/Realtime/RealtimeBridge.cs` — köprü modu WS bridge + pump'lar + agent dispatcher
+- `@Services/Realtime/RealtimeNativeBridge.cs` — native modu WS bridge + function call dispatch + TTS
+- `@Services/Realtime/RealtimeFunctionTools.cs` — native modun okuma-only tool subset'i (4 fonksiyon)
 - `@Models/AiProviderOptions.cs` — `RealtimeOptions` POCO
-- `@Extensions/AiExtensions.cs` — DI kayıtları
-- `@Endpoints/RealtimeEndpoints.cs` — `/chat/realtime` handler
-- `@wwwroot/js/realtime-client.js` — browser WS client + AudioWorklet capture + PCM playback
-- `@wwwroot/js/realtime-ui.js` — text chat UI'sine köprü + durdurma kontrolleri
+- `@Extensions/ApplicationServicesExtensions.cs` — DI kayıtları (`RealtimeBridge`, `RealtimeNativeBridge`, `RealtimeFunctionTools`)
+- `@Endpoints/RealtimeEndpoints.cs` — `/chat/realtime` ve `/chat/realtime-native` handler'ları
+
+**Frontend**
+- `@wwwroot/js/realtime-client.js` — WS client + AudioWorklet capture + PCM playback (her iki mod için ortak)
+- `@wwwroot/js/realtime-ui.js` — iki mod arasında geçiş + tool call chip'leri (native) + ortak UI (köprü)
 - `@wwwroot/js/pcm-processor.js` — AudioWorklet processor (24kHz capture)
+- `@wwwroot/index.html` — 🎤 ve ⚡ butonları
+- `@wwwroot/css/styles.css` — `.btn-voice` (kırmızı pulse) + `.btn-voice-native` (mor pulse)
+
+---
+
+## ⚡ Hızlı Sesli (native mod)
+
+### Mimari farkı
+
+Köprü modunda backend **transcript çıkar çıkmaz** agent pipeline'ını tetikler ve nihai metni Realtime'a TTS olarak gönderir. Native modda ise:
+
+- `create_response: true` — model **kendisi** sesli yanıt üretir, beklemez
+- `tools` listesi modele expose edilir — model **kendisi** function calling yapar
+- Tool sonuçları `function_call_output` ile modele döndürülür → model devam eder ve sesli okur
+- **Reasoning yok, ajan zinciri yok, HITL yok** — saf model + tool çağrısı
+
+```
+[Ses] → gpt-realtime-1.5 → kendisi anlar/karar verir
+          ↓ (tool gerekirse)
+        function_call event
+          ↓
+        backend: RealtimeFunctionTools.DispatchAsync(name, args)
+          ↓
+        ToolResult JSON → conversation.item.create (function_call_output)
+          ↓
+        response.create → model devam eder ve **sesli yanıt** üretir
+```
+
+Latency tipik: **800ms-1.5sn** (köprüde 3-5sn). Token maliyeti **~70% daha düşük** (tek model, zincirleme yok).
+
+### Tool subset — yalnızca okuma-only
+
+`@Services/Realtime/RealtimeFunctionTools.cs` modele **sadece** şu tool'ları tanıtır:
+
+| Tool | Wrapper | Yan etki |
+|---|---|---|
+| `product_inquiry_tool` | `CustomerSupportTools.ProductInquiryTool(productName)` | Yok |
+| `order_status_tool` | `CustomerSupportTools.OrderStatusTool(orderId)` | Yok |
+| `get_last_order_tool` | `CustomerSupportTools.GetLastOrderTool(customerId)` | Yok |
+| `get_all_orders_tool` | `CustomerSupportTools.GetAllOrdersTool(customerId)` | Yok |
+
+**Bilinçli olarak YOK** (model bu tanımları görmez):
+- `order_placement_tool` — sipariş oluşturma yan etkili, HITL gerek
+- `complaint_registration_tool` — şikayet kaydı yan etkili, HITL gerek
+- `human_handoff_tool` — eskalasyon zinciri yan etkili
+
+**Defense-in-depth**: model yine de bu isimlerden birini çağırırsa `RealtimeFunctionTools.DispatchAsync` `FORBIDDEN_IN_VOICE` hatası döner — ama pratikte sistem prompt'u modelin bu yola gitmesini engeller.
+
+### Sistem prompt'u (model talimatı)
+
+`@Services/Realtime/RealtimeNativeBridge.cs:BuildSystemInstructions` modele şu kuralları verir:
+
+- **YAPABİLDİKLERİN**: ürün katalog sorgusu, sipariş durumu, son sipariş, müşterinin tüm siparişleri
+- **YAPAMADIKLARIN** (tool ÇAĞIRMA, kullanıcıyı yazılı sohbete yönlendir):
+  - YENİ SİPARİŞ OLUŞTURMA
+  - ŞİKAYET KAYDI OLUŞTURMA
+  - İADE / İPTAL / ÖDEME / HESAP işlemleri
+- Tool sonuçlarını **yorumla**, ham JSON okuma (`status:"shipped"` → "kargoya verildi")
+- Türkçe, kısa, sesli okumaya uygun (1-2 cümle)
+
+Kullanıcı yan-etkili bir şey isterse model şu kalıbı kullanır:
+> "Bu işlemler güvenlik adımları gerektirdiği için yazılı sohbet üzerinden ilerletmeniz gerekiyor. Lütfen sohbet penceresine geçin, ben oradan da yardımcı olmaya devam edebilirim."
+
+### Frontend UX farkı
+
+| Öğe | Köprü modu | Native modu |
+|---|---|---|
+| Buton | 🎤 Mikrofon (kırmızı pulse) | ⚡ Şimşek (mor pulse) |
+| Reasoning paneli | ✅ Var (intent, steps, entities, sentiment) | ❌ Yok |
+| Agent chip | ✅ Birden fazla ("Planlama Ajanı" → "Sipariş Ajanı" → "Yanıt Ajanı") | ✅ Tek (`Ürün sorgulanıyor` gibi friendly tool adı) |
+| Token-by-token altyazı | ✅ `appendResponseChunk` | ✅ `appendResponseChunk` (TTS ile eşzamanlı) |
+| Markdown render | ✅ Final | ✅ Final |
+
+`@wwwroot/js/realtime-ui.js` iki butonu **mutually exclusive** yönetir; biri aktifse diğerine basınca otomatik durdurup yeni mod başlatılır.
+
+### Native mod event kontratı (browser ↔ backend)
+
+Köprünün event sözleşmesinden **fark** olan event'ler:
+
+| Event | Yön | Anlam |
+|---|---|---|
+| `connected` | ← | `{sessionId, mode:"native", model, voice, tools:[]}` — açılan tool'lar listesi |
+| `tool_call` | ← | Model bir tool çağırdı: `{name, arguments}` (UI: chip göster) |
+| `tool_result` | ← | Tool sonucu modele iletildi: `{name, output}` (UI: chip ✓) |
+| `assistant_text_delta` | ← | TTS ile **eşzamanlı** altyazı delta'sı (köprüden farklı kullanım) |
+| `response_done` | ← | Model turunu bitirdi, yeni tura hazır |
+
+Köprüye özgü `workflow_start`/`reasoning_*`/`agent`/`workflow_done` event'leri native modda **gönderilmez**.
+
+### Persistence ve audit
+
+Native modda **DB session geçmişine** asistan yanıtı yazılır (`@Services/Realtime/RealtimeNativeBridge.cs:HandleOpenAiEventAsync` → `_chatBridge.RecordBotExchange`), kullanıcı transcript'i ise `"(sesli)"` etiketiyle kaydedilir. Reasoning trace **yoktur** — bu modun ayırt edici farkı.
+
+Bu trade-off bilinçlidir: hız ve maliyet için audit trail kısalır. Production'da audit kritikse bu kanal yalnızca okuma-only kalmalıdır (zaten kalır).
 
 ---
 
 ## İlişkili dokümanlar
 
 - [agents.md](agents.md) — Ajan takımı ve agent-level OpenTelemetry
-- [workflow.md](workflow.md) — MAF workflow akışı (sesli modda da aynı)
+- [workflow.md](workflow.md) — MAF workflow akışı (köprü modunda aynı)
 - [patterns.md](patterns.md) — Streaming, HITL, admin takeover pattern'leri
 - [runtime.md](runtime.md) — Servis yaşam döngüleri ve DI

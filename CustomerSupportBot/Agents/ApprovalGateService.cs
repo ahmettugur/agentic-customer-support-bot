@@ -139,17 +139,37 @@ public class ApprovalGateService
         }
 
         var ctx = _contextAccessor.Context;
-        var req = new ApprovalRequest
+
+        // ─── Idempotency: aynı session + tool + parametreler için zaten Pending bir
+        // approval varsa onu reuse et. ChatManager'ın bir specialist'i aynı turda iki
+        // kez seçmesi veya MAF function calling retry'ı, kuyrukta çift kayıt üretmesin.
+        var paramSig = BuildParamSignature(parameters);
+        var existing = ctx?.SessionId is { Length: > 0 } sid
+            ? _approvalQueue.GetPending().FirstOrDefault(p =>
+                  string.Equals(p.SessionId, sid, StringComparison.Ordinal)
+               && string.Equals(p.ToolName, toolName, StringComparison.Ordinal)
+               && string.Equals(BuildParamSignature(p.Parameters), paramSig, StringComparison.Ordinal))
+            : null;
+
+        ApprovalRequest req;
+        if (existing != null)
         {
-            SessionId = ctx?.SessionId,
-            TraceId = ctx?.TraceId,
-            UserQuery = ctx?.UserQuery,
-            ToolName = toolName,
-            AgentName = agentName,
-            Parameters = parameters,
-            Justification = string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName)
-        };
-        _approvalQueue.Create(req);
+            req = existing;
+        }
+        else
+        {
+            req = new ApprovalRequest
+            {
+                SessionId = ctx?.SessionId,
+                TraceId = ctx?.TraceId,
+                UserQuery = ctx?.UserQuery,
+                ToolName = toolName,
+                AgentName = agentName,
+                Parameters = parameters,
+                Justification = string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName)
+            };
+            _approvalQueue.Create(req);
+        }
 
         try
         {
@@ -187,6 +207,20 @@ public class ApprovalGateService
             .ToList();
 
         if (candidates.Count == 0) return;
+
+        // ─── Katman 1.5: Session başına tek eskalasyon kuralı ───
+        // Birden fazla ajan aynı turda needs_escalation dönerse (ör. Complaint +
+        // HumanHandoff) admin paneli session bazında tek kayıt bekler. Complaint en
+        // yüksek önceliği alır; yoksa son gelen kullanılır.
+        if (candidates.Count > 1)
+        {
+            candidates = new List<SpecialistReasoning>
+            {
+                candidates.FirstOrDefault(c =>
+                    string.Equals(c.AgentName, WellKnown.AgentNames.Complaint, StringComparison.OrdinalIgnoreCase))
+                ?? candidates[^1]
+            };
+        }
 
         // ─── Katman 2: Session içi dedup ───
         // Bu session için zaten açık eskalasyon varsa skip — duplicate önler.
@@ -240,6 +274,18 @@ public class ApprovalGateService
                     $"[HITL] Escalation sink failed: {ex.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// (session, tool) tuple'ı altında parametre sözlüğünü deterministik bir imzaya çevirir.
+    /// Approval queue'de çift kayıt önlemek için mevcut Pending request'lerle kıyaslanır.
+    /// </summary>
+    private static string BuildParamSignature(IReadOnlyDictionary<string, object?> parameters)
+    {
+        if (parameters.Count == 0) return string.Empty;
+        return string.Join("|", parameters
+            .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => $"{kv.Key}={kv.Value?.ToString() ?? string.Empty}"));
     }
 
     /// <summary>

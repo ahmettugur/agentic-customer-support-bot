@@ -18,10 +18,12 @@
     const SAMPLE_RATE = 24000;
 
     class RealtimeClient {
-        constructor({ baseUrl, sessionId, callbacks }) {
+        constructor({ baseUrl, sessionId, callbacks, endpoint }) {
             this.baseUrl = baseUrl || ''; // boş ise aynı origin
             this.sessionId = sessionId || null;
             this.callbacks = callbacks || {};
+            // Köprü modu: '/chat/realtime', native (gpt-realtime-1.5 doğrudan): '/chat/realtime-native'
+            this.endpoint = endpoint || '/chat/realtime';
 
             this.ws = null;
             this.mediaStream = null;
@@ -34,6 +36,8 @@
             this._playCursor = 0; // sıralı playback için zaman damgası
 
             this.state = 'idle'; // idle | connecting | listening | speaking | error
+            this._disposed = false;
+            this._micTrack = null;
         }
 
         // ─── Public ───
@@ -64,6 +68,12 @@
         }
 
         stop() {
+            // Dispose flag — stop() sonrası gelen geç WS mesajları (önceki turun
+            // response.audio.delta'ları veya geciken transcript'leri) ignore edilir.
+            // Mod geçişlerinde (köprü → native veya tersi) hayalet baloncukları önler.
+            this._disposed = true;
+            this._micTrack = null;
+
             try { this._sendControl({ type: 'stop' }); } catch { /* ignore */ }
 
             if (this.workletNode) {
@@ -107,6 +117,10 @@
                     autoGainControl: true
                 }
             });
+            // Mikrofon track referansı — bot konuşurken `enabled=false` ile sessize
+            // alıp hoparlör→mikrofon echo loop'unu kaynakında keseriz. Backend
+            // half-duplex gating ile birlikte iki katmanlı koruma.
+            this._micTrack = this.mediaStream.getAudioTracks()[0] || null;
 
             // Capture context — 24kHz
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({
@@ -140,7 +154,7 @@
             const host = this.baseUrl
                 ? this.baseUrl.replace(/^https?:/i, proto)
                 : proto + '//' + location.host;
-            const url = host + '/chat/realtime/' + (this.sessionId || '');
+            const url = host + this.endpoint + '/' + (this.sessionId || '');
 
             this.ws = new WebSocket(url);
             this.ws.binaryType = 'arraybuffer';
@@ -161,6 +175,9 @@
         }
 
         _onWsMessage(e) {
+            // stop() çağrılmışsa kalan tampon mesajları işleme — hayalet event'leri önler.
+            if (this._disposed) return;
+
             if (typeof e.data === 'string') {
                 let msg;
                 try { msg = JSON.parse(e.data); } catch { return; }
@@ -168,7 +185,7 @@
             } else if (e.data instanceof ArrayBuffer) {
                 this._enqueueAudio(e.data);
             } else if (e.data instanceof Blob) {
-                e.data.arrayBuffer().then(buf => this._enqueueAudio(buf));
+                e.data.arrayBuffer().then(buf => { if (!this._disposed) this._enqueueAudio(buf); });
             }
         }
 
@@ -206,6 +223,14 @@
                     this._setState('listening');
                     this._emit('response_done', msg);
                     break;
+                case 'tool_call':
+                    // Native modda model bir tool çağırdı (UI ipucu)
+                    this._emit('tool_call', msg);
+                    break;
+                case 'tool_result':
+                    // Native modda tool sonucu modele iletildi (UI ipucu)
+                    this._emit('tool_result', msg);
+                    break;
                 case 'error':
                     // İki kaynak: (a) RealtimeBridge bağlantı/sistem hatası ({type:"error", message:"..."}),
                     // (b) agent pipeline'dan forward edilen StreamEvent ({type:"error", data:{message:"..."}}).
@@ -235,6 +260,13 @@
 
         _enqueueAudio(arrayBuffer) {
             if (!this.playCtx || arrayBuffer.byteLength === 0) return;
+
+            // İlk ses chunk'ı geldiğinde state'i speaking'e geçir → mic track gating
+            // tetiklensin. Native modda backend ayrı bir 'speaking_started' eventi
+            // göndermediği için bu otomatik geçiş zorunlu.
+            if (this.state !== 'speaking') {
+                this._setState('speaking');
+            }
 
             // PCM16 LE -> Float32 [-1,1]
             const view = new DataView(arrayBuffer);
@@ -267,6 +299,15 @@
 
         _setState(s) {
             this.state = s;
+            // Mikrofon gating: bot konuşurken track'i kapatıp echo'yu kaynaktan kes.
+            // listening/idle dönersek tekrar aç. error durumunda da kapatılı kalsın.
+            if (this._micTrack) {
+                if (s === 'speaking') {
+                    try { this._micTrack.enabled = false; } catch { }
+                } else if (s === 'listening' || s === 'idle') {
+                    try { this._micTrack.enabled = true; } catch { }
+                }
+            }
             this._emit('state', { state: s });
         }
 

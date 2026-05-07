@@ -17,7 +17,10 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 - **Low-Code Workflow Designer** — Admin'in JSON tabanlı mini iş akışları (trigger keywords, regex extractor, respond/lookup/branch/setVariable adımları) tanımlayıp çalıştırabildiği deterministik (LLM-siz) "fast path" motoru. `wwwroot/workflow-designer.html` küçük UI.
 - **Parallel SubTask Execution** — Compound query'lerde (ör. "ORD-1 ve ORD-2 durumu") yan-etkisiz alt görevler (Product/OrderInquiry) `Task.WhenAll` ile paralel çalışır; yan-etkili olanlar (OrderPlacement/Complaint) HITL gate'i nedeniyle sıralı kalır. p50 latency düşer.
 - **SLA / Response Time Guardian** — Bekleyen onay ve açık eskalasyonları periyodik tarayan `BackgroundService`. Eşik aşılan onaylar `AutoReject`, eskalasyonların önceliği otomatik **bir kademe yükseltilir** (Low→Normal→High→Critical). Admin `/sla/status` ve `/sla/events` endpoint'lerinden görür.
-- **Sesli Konuşma Modu (Realtime)** — OpenAI Realtime API (`gpt-realtime-1.5`) üzerinden full-duplex ses köprüsü. Kullanıcı sesi `gpt-4o-transcribe` ile transcribe edilir, **text chat ile aynı** 7-ajanlı MAF pipeline'ı (reasoning, HITL, tool routing) çalıştırılır, yanıt TTS olarak okunur. Frontend reasoning paneli + agent chip + token-by-token akışı yazılı modla **birebir aynı** şekilde gösterir. Detay → [`docs/realtime.md`](docs/realtime.md).
+- **Sesli Konuşma Modu (Realtime) — çift kanal** — OpenAI Realtime API (`gpt-realtime-1.5`) üzerinden iki ayrı sesli mod:
+  - **🎤 Sesli Asistan (köprü)** — model sadece STT/TTS köprüsü; **text chat ile aynı** 7-ajanlı MAF pipeline'ı (reasoning, HITL, tool routing) çalışır. Tüm tool'lar (sipariş aç, şikayet, vb.) destekli.
+  - **⚡ Hızlı Sesli (native)** — model **kendisi** function calling yapar; sadece okuma-only tool'lar (ürün/sipariş sorgu) açıktır. ~3-5× daha hızlı, ~70% daha ucuz. Yan-etkili istek gelirse model kullanıcıyı yazılı sohbete yönlendirir (HITL korunur).
+  Detay → [`docs/realtime.md`](docs/realtime.md).
 
 ---
 
@@ -380,6 +383,6 @@ CustomerSupportBot/
 | [`docs/intelligence.md`](docs/intelligence.md) | **Yeni** — Semantic memory (Qdrant), Self-Improving Loop, Replay UI |
 | [`docs/developer-guide.md`](docs/developer-guide.md) | Ajan, tool ve prompt ekleme için geliştirici rehberi |
 | [`docs/reference.md`](docs/reference.md) | Sınıf/arayüz kontratları (C# API referansı) |
-| [`docs/realtime.md`](docs/realtime.md) | **Yeni** — Sesli konuşma modu: Realtime API köprüsü, event kontratı, VAD/transcription yapılandırması, text chat ile ortak UI |
+| [`docs/realtime.md`](docs/realtime.md) | **Yeni** — Sesli konuşma modu (çift kanal: köprü + native), event kontratları, function calling tool subset, VAD/transcription yapılandırması, ortak UI |
 
 ---

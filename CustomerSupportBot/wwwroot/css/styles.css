@@ -479,6 +479,13 @@ body {
     border-bottom-right-radius: var(--space-1);
 }
 
+/* Sesli modda transcript beklenirken gösterilen placeholder kullanıcı baloncuğu */
+.message.user.placeholder .message-bubble {
+    opacity: 0.55;
+    font-style: italic;
+    animation: voicePulse 1.4s ease-in-out infinite;
+}
+
 .message.bot .message-bubble {
     border-bottom-left-radius: var(--space-1);
 }
@@ -1355,6 +1362,22 @@ body {
 
 .input-wrapper button.btn-voice.active:hover {
     background: #dc2626;
+}
+
+/* ⚡ Hızlı Sesli (native mod) — köprü modundan ayırt etmek için mor/amber tonu.
+   Yan-etkili tool yok; ürün/sipariş sorgu hızlı yolu. */
+.input-wrapper button.btn-voice-native:hover:not(:disabled) {
+    color: #f59e0b;
+}
+
+.input-wrapper button.btn-voice-native.active {
+    background: #8b5cf6;
+    color: #fff;
+    animation: voicePulse 1.6s ease-in-out infinite;
+}
+
+.input-wrapper button.btn-voice-native.active:hover {
+    background: #7c3aed;
 }
 
 @keyframes voicePulse {

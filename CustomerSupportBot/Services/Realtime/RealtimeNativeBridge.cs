@@ -1,77 +1,72 @@
-// Services/Realtime/RealtimeBridge.cs
-// OpenAI Realtime API ile browser arasında ses köprüsü.
+// Services/Realtime/RealtimeNativeBridge.cs
 //
-// Akış:
-//   Browser (PCM16 24kHz mic) ──WS binary──> Backend ──WS base64──> OpenAI Realtime
-//   OpenAI ──transcript──> Backend ──invoke ChatStreamOrchestrator pipeline──>
-//   final text ──response.create("speak verbatim")──> OpenAI ──audio delta──>
-//   Backend ──WS binary──> Browser (PCM16 → AudioContext)
+// "Hızlı Sesli" mod — gpt-realtime-1.5 modelinin kendi çok-kipli yetenekleri kullanılır.
+// Model sesi kendisi anlar, kararı kendisi verir, gerekirse function calling ile
+// **sadece okuma-only** tool'ları çağırır, cevabı kendisi sesli okur.
 //
-// Realtime modelin LLM yanıtı kapatılır (turn_detection.create_response=false);
-// gerçek "düşünme" mevcut agent sisteminde olur. Realtime sadece STT + TTS köprüsü.
+// Köprü modundan (RealtimeBridge) farkı:
+//   • create_response=true (model konuşur)
+//   • tools listesi var → model function call yapabilir
+//   • Reasoning + 7-agent pipeline ÇALIŞMAZ
+//   • Sipariş oluşturma / şikayet kaydı tool'ları **bilinçli olarak yok** — bunlar
+//     HITL gerektirdiği için sadece text chat veya köprü-sesli modunda yapılabilir.
+//     Sistem prompt'u kullanıcıyı yazılı sohbete yönlendirir.
+//
+// Trade-off:
+//   ✓ ~3-5× daha düşük latency, ~70% daha düşük token maliyeti
+//   ✗ HITL/audit/reasoning trace yok — bu yüzden tool subset kısıtlı.
 
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using CustomerSupportBot.Agents;
 using CustomerSupportBot.Models;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Services.Realtime;
 
 /// <summary>
-/// Tek bir browser realtime bağlantısı için scoped servis.
-/// <see cref="RunAsync"/> bağlantı yaşam süresi boyunca bloklayıcıdır.
+/// Tek bir browser realtime-native bağlantısı için scoped servis.
+/// Model kendisi konuşur ve okuma-only tool'ları doğrudan çağırır.
 /// </summary>
-public sealed class RealtimeBridge : IAsyncDisposable
+public sealed class RealtimeNativeBridge : IAsyncDisposable
 {
     private const string OpenAiRealtimeUrl = "wss://api.openai.com/v1/realtime?model=";
 
     private readonly RealtimeOptions _options;
     private readonly string _apiKey;
-    private readonly ICustomerSupportTeam _team;
     private readonly ISessionManager _sessionManager;
-    private readonly ReasoningService _reasoningService;
-    private readonly IApprovalContextAccessor _approvalContext;
-    private readonly IChatBridge _chatBridge;
+    private readonly RealtimeFunctionTools _toolDispatcher;
     private readonly InputGuard _inputGuard;
-    private readonly ILogger<RealtimeBridge> _logger;
+    private readonly IChatBridge _chatBridge;
+    private readonly ILogger<RealtimeNativeBridge> _logger;
 
     private ClientWebSocket? _openAiWs;
 
-    // Half-duplex gating: bot konuşurken browser'dan gelen audio chunk'ları
-    // OpenAI'a forward edilmez. Hoparlör → mikrofon echo loop'unu kırar.
-    // Volatile, tek thread set / diğeri read — lock gerekmez.
+    // Half-duplex gating — bkz. RealtimeBridge açıklaması. Bot konuşurken mikrofon
+    // sesi OpenAI'a forward edilmez; aksi halde TTS hoparlörden mikrofona dolar ve
+    // OpenAI VAD echo'yu yeni kullanıcı turu sanarak sahte yanıt üretir.
     private volatile bool _assistantSpeaking;
 
-    public RealtimeBridge(
+    public RealtimeNativeBridge(
         IOptions<AiOptions> aiOptions,
-        ICustomerSupportTeam team,
         ISessionManager sessionManager,
-        ReasoningService reasoningService,
-        IApprovalContextAccessor approvalContext,
-        IChatBridge chatBridge,
+        RealtimeFunctionTools toolDispatcher,
         InputGuard inputGuard,
-        ILogger<RealtimeBridge> logger)
+        IChatBridge chatBridge,
+        ILogger<RealtimeNativeBridge> logger)
     {
         _options = aiOptions.Value.Realtime;
-        // Realtime API anahtarı önce override, sonra OpenAI bölümü.
         _apiKey = !string.IsNullOrWhiteSpace(_options.ApiKey)
             ? _options.ApiKey!
             : aiOptions.Value.OpenAI.ApiKey ?? string.Empty;
-        _team = team;
         _sessionManager = sessionManager;
-        _reasoningService = reasoningService;
-        _approvalContext = approvalContext;
-        _chatBridge = chatBridge;
+        _toolDispatcher = toolDispatcher;
         _inputGuard = inputGuard;
+        _chatBridge = chatBridge;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Bridge'i çalıştırır — bağlantı kapanana veya iptal olana kadar bloke eder.
-    /// </summary>
     public async Task RunAsync(WebSocket browserWs, string sessionId, CancellationToken ct)
     {
         if (!_options.Enabled)
@@ -79,7 +74,6 @@ public sealed class RealtimeBridge : IAsyncDisposable
             await SendBrowserJsonAsync(browserWs, new { type = "error", message = "Realtime özelliği kapalı." }, ct);
             return;
         }
-
         if (string.IsNullOrWhiteSpace(_apiKey))
         {
             await SendBrowserJsonAsync(browserWs, new { type = "error", message = "Realtime API key yapılandırılmamış." }, ct);
@@ -98,19 +92,18 @@ public sealed class RealtimeBridge : IAsyncDisposable
 
             var url = OpenAiRealtimeUrl + Uri.EscapeDataString(_options.Model);
             await _openAiWs.ConnectAsync(new Uri(url), ct);
-            _logger.LogInformation("Realtime: OpenAI bağlantısı açıldı session={Sid} model={Model}",
+            _logger.LogInformation("RealtimeNative: OpenAI bağlantısı açıldı session={Sid} model={Model}",
                 actualSessionId, _options.Model);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Realtime: OpenAI bağlantısı açılamadı");
+            _logger.LogError(ex, "RealtimeNative: OpenAI bağlantısı açılamadı");
             await SendBrowserJsonAsync(browserWs,
                 new { type = "error", message = "OpenAI Realtime bağlantısı kurulamadı: " + ex.Message }, ct);
             return;
         }
 
-        // 2) Session config — model otomatik yanıt vermesin, sadece transcribe etsin.
-        // Transcription: Türkçe için gpt-4o-transcribe + dil ipucu + domain prompt.
+        // 2) Session config — model kendisi konuşur ve okuma-only tool'ları çağırabilir
         var transcriptionConfig = new Dictionary<string, object?>
         {
             ["model"] = _options.TranscriptionModel
@@ -136,10 +129,11 @@ public sealed class RealtimeBridge : IAsyncDisposable
                     threshold = _options.VadThreshold,
                     prefix_padding_ms = 300,
                     silence_duration_ms = _options.VadSilenceMs,
-                    create_response = false  // ← Kritik: model otomatik yanıt vermesin
+                    create_response = true   // ← Köprü modundan farkı: model kendisi cevaplar
                 },
-                instructions = "Sen sadece bir ses-metin köprüsüsün. Kullanıcı konuşmasını kendin yorumlama. " +
-                               "Yanıt verirken yalnızca sana verilen metni Türkçe olarak doğal bir tonla harfiyen oku.",
+                tools = _toolDispatcher.GetToolDefinitions(),
+                tool_choice = "auto",
+                instructions = BuildSystemInstructions(),
                 max_response_output_tokens = _options.MaxResponseTokens
             }
         }, ct);
@@ -147,9 +141,11 @@ public sealed class RealtimeBridge : IAsyncDisposable
         await SendBrowserJsonAsync(browserWs, new
         {
             type = "connected",
+            mode = "native",
             sessionId = actualSessionId,
             model = _options.Model,
-            voice = _options.Voice
+            voice = _options.Voice,
+            tools = _toolDispatcher.GetToolNames()
         }, ct);
 
         // 3) İki paralel pump
@@ -159,23 +155,51 @@ public sealed class RealtimeBridge : IAsyncDisposable
 
         try
         {
-            // İlki bitince diğerini de iptal et
-            var done = await Task.WhenAny(browserPump, openAiPump);
+            await Task.WhenAny(browserPump, openAiPump);
             linked.Cancel();
             await Task.WhenAll(browserPump, openAiPump).ContinueWith(_ => { }, TaskScheduler.Default);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Realtime: pump hatası session={Sid}", actualSessionId);
+            _logger.LogError(ex, "RealtimeNative: pump hatası session={Sid}", actualSessionId);
         }
     }
 
+    /// <summary>
+    /// Modele rolünü, kapsamını ve hangi konularda kullanıcıyı yazılı sohbete
+    /// yönlendireceğini bildiren sistem talimatı.
+    /// </summary>
+    private static string BuildSystemInstructions() =>
+        """
+        Sen bir müşteri destek asistanısın. Türkçe konuş ve yanıtların KISA, doğal, samimi olsun (1-2 cümle, sesli okumaya uygun).
+
+        YAPABİLDİKLERİN (function calling ile):
+        - Ürün katalog sorgusu (fiyat/stok)
+        - Sipariş durumu sorgulama (ORD-X numarasıyla)
+        - Bir müşterinin son siparişi
+        - Bir müşterinin tüm siparişlerinin listesi
+
+        YAPAMADIKLARIN (bunları İSTEDİĞİNDE TOOL ÇAĞIRMA, kullanıcıyı yazılı sohbete yönlendir):
+        - YENİ SİPARİŞ OLUŞTURMA
+        - ŞİKAYET KAYDI OLUŞTURMA
+        - İADE / İPTAL TALEBİ
+        - ÖDEME / FATURA değişiklikleri
+        - HESAP / ŞİFRE / KİŞİSEL BİLGİ değişiklikleri
+
+        Bu istekler için kibarca şöyle de:
+        "Bu işlemler güvenlik adımları gerektirdiği için yazılı sohbet üzerinden ilerletmeniz gerekiyor.
+        Lütfen sohbet penceresine geçin, ben oradan da yardımcı olmaya devam edebilirim."
+
+        KURALLAR:
+        - Tool sonuçlarını YORUMLA, ham JSON OKUMA. Örneğin status:"shipped" → "kargoya verildi" de.
+        - Tool başarısızsa kullanıcıya nazikçe açıkla, kendi uydurma cevap üretme.
+        - Müşteri kimliği veya sipariş numarası eksikse iste; varsay-ma.
+        - Asla başka dilde cevap verme.
+        """;
+
     // ─── Browser → OpenAI ───
 
-    /// <summary>
-    /// Browser'dan gelen ses (binary) ve kontrol mesajlarını (text) OpenAI'ye iletir.
-    /// </summary>
     private async Task PumpBrowserToOpenAiAsync(WebSocket browserWs, ClientWebSocket openAiWs, CancellationToken ct)
     {
         var buffer = new byte[16 * 1024];
@@ -188,11 +212,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
             do
             {
                 result = await browserWs.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
-                if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    _logger.LogInformation("Realtime: browser kapatıldı");
-                    return;
-                }
+                if (result.MessageType == WebSocketMessageType.Close) return;
                 ms.Write(buffer, 0, result.Count);
             }
             while (!result.EndOfMessage);
@@ -202,12 +222,9 @@ public sealed class RealtimeBridge : IAsyncDisposable
 
             if (result.MessageType == WebSocketMessageType.Binary)
             {
-                // Half-duplex: bot konuşurken mikrofondan gelen sesi forward etme.
-                // Hoparlörden çıkan TTS sesi mikrofona dolarsa OpenAI VAD onu yeni
-                // kullanıcı turu sanar ve sahte transcript üretir (echo loop).
+                // Half-duplex: bot konuşurken mikrofon sesini forward etme (echo loop kırıcı)
                 if (_assistantSpeaking) continue;
 
-                // PCM16 audio chunk → base64 → input_audio_buffer.append
                 var b64 = Convert.ToBase64String(payload);
                 await SendOpenAiJsonAsync(openAiWs, new
                 {
@@ -222,7 +239,6 @@ public sealed class RealtimeBridge : IAsyncDisposable
         }
     }
 
-    /// <summary>Browser'dan gelen JSON kontrol mesajlarını işler (interrupt, stop, vb.).</summary>
     private async Task HandleBrowserControlAsync(ClientWebSocket openAiWs, string json, CancellationToken ct)
     {
         string? type = null;
@@ -231,48 +247,33 @@ public sealed class RealtimeBridge : IAsyncDisposable
             var node = JsonNode.Parse(json);
             type = node?["type"]?.GetValue<string>();
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Realtime: browser control mesajı parse edilemedi");
-            return;
-        }
+        catch { return; }
 
         try
         {
             switch (type)
             {
                 case "interrupt":
-                    // Kullanıcı asistanı kesti — devam eden response'u iptal et.
-                    // Aktif response yoksa OpenAI uyarı döner; client tarafında zaten
-                    // sadece "speaking" state'inde gönderiliyor.
                     await SendOpenAiJsonAsync(openAiWs, new { type = "response.cancel" }, ct);
                     break;
                 case "stop":
-                    // Bağlantıyı kapat — browser zaten WS'i kapatmış olabileceği için
-                    // RequestAborted token'ı tetiklenmiş olur. Close handshake'inde
-                    // CancellationToken.None kullanıp 1sn timeout uygula.
                     using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1)))
                     {
                         await openAiWs.CloseAsync(WebSocketCloseStatus.NormalClosure, "client_stop", cts.Token);
                     }
                     break;
-                // diğer kontrol mesajları gerekirse buraya
             }
         }
-        catch (OperationCanceledException) { /* shutdown sırasında normal */ }
-        catch (WebSocketException) { /* zaten kapalı; sessizce yut */ }
+        catch (OperationCanceledException) { }
+        catch (WebSocketException) { }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Realtime: browser control mesajı işlenirken hata type={Type}", type);
+            _logger.LogWarning(ex, "RealtimeNative: control mesajı işlenirken hata type={Type}", type);
         }
     }
 
-    // ─── OpenAI → Browser + agent invoke ───
+    // ─── OpenAI → Browser + tool dispatch ───
 
-    /// <summary>
-    /// OpenAI'den gelen event'leri parse eder, transcript geldiğinde agent workflow'unu tetikler,
-    /// ses delta'larını browser'a iletir.
-    /// </summary>
     private async Task PumpOpenAiToBrowserAsync(
         WebSocket browserWs,
         ClientWebSocket openAiWs,
@@ -281,6 +282,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
     {
         var buffer = new byte[32 * 1024];
         var ms = new MemoryStream();
+        var assistantTextBuilder = new StringBuilder();
 
         while (!ct.IsCancellationRequested && openAiWs.State == WebSocketState.Open)
         {
@@ -289,11 +291,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
             do
             {
                 result = await openAiWs.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
-                if (result.MessageType == WebSocketMessageType.Close)
-                {
-                    _logger.LogInformation("Realtime: OpenAI bağlantısı kapatıldı");
-                    return;
-                }
+                if (result.MessageType == WebSocketMessageType.Close) return;
                 ms.Write(buffer, 0, result.Count);
             }
             while (!result.EndOfMessage);
@@ -301,7 +299,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
             var json = Encoding.UTF8.GetString(ms.ToArray());
-            await HandleOpenAiEventAsync(browserWs, openAiWs, session, json, ct);
+            await HandleOpenAiEventAsync(browserWs, openAiWs, session, json, assistantTextBuilder, ct);
         }
     }
 
@@ -310,6 +308,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
         ClientWebSocket openAiWs,
         AgentSession session,
         string json,
+        StringBuilder assistantTextBuilder,
         CancellationToken ct)
     {
         JsonNode? node;
@@ -323,11 +322,11 @@ public sealed class RealtimeBridge : IAsyncDisposable
         {
             case "session.created":
             case "session.updated":
-                // sessizce yut
                 break;
 
             case "response.created":
                 // Model yanıt üretmeye başladı — ilk audio.delta gelmeden mic gating'i aç.
+                // audio.delta ile arasındaki kısa pencerede de echo'yu önler.
                 _assistantSpeaking = true;
                 break;
 
@@ -344,21 +343,35 @@ public sealed class RealtimeBridge : IAsyncDisposable
                 var transcript = node["transcript"]?.GetValue<string>() ?? "";
                 if (string.IsNullOrWhiteSpace(transcript)) break;
 
-                // Echo'yu kaynağında kesen iki katman var (binary gating + mic mute);
-                // burada "speaking ise drop" yapmayız, aksi halde asenkron tamamlanan
-                // gerçek kullanıcı transcribe'ı da silinir.
+                // NOT: Burada "_assistantSpeaking ise drop et" gibi bir echo-guard YOK.
+                // OpenAI'da kullanıcı transcribe'ı asenkrondur ve sıklıkla model yanıtı
+                // üretmeye başladıktan sonra tamamlanır; o noktada drop edersek gerçek
+                // kullanıcı baloncuğu kaybolur. Echo'yu kaynağında kesen iki katman var:
+                //  1) PumpBrowserToOpenAi: _assistantSpeaking iken binary audio drop
+                //  2) Frontend: micTrack.enabled = false (bot konuşurken)
+                // Yani buraya gelen transcript gerçek bir kullanıcı turudur.
+
+                // Input guard — prompt injection vb.
+                var guard = _inputGuard.Inspect(transcript);
+                if (guard.Verdict == InputGuardVerdict.Reject)
+                {
+                    _logger.LogInformation("RealtimeNative: input guard reject session={Sid}", session.SessionId);
+                    await SendOpenAiJsonAsync(openAiWs, new { type = "response.cancel" }, ct);
+                    await SendBrowserJsonAsync(browserWs,
+                        new { type = "user_transcript", text = transcript }, ct);
+                    await SendBrowserJsonAsync(browserWs,
+                        new { type = "error", message = guard.RejectionReason ?? "Mesaj işlenemedi." }, ct);
+                    break;
+                }
 
                 await SendBrowserJsonAsync(browserWs, new { type = "user_transcript", text = transcript }, ct);
-                _ = HandleUserTranscriptAsync(browserWs, openAiWs, session, transcript, ct);
+                assistantTextBuilder.Clear();  // yeni tur başlıyor
                 break;
             }
 
             case "response.audio.delta":
             {
-                // Asistan konuşmaya başladı — echo gating'i aç.
                 _assistantSpeaking = true;
-
-                // PCM16 audio chunk'ı browser'a binary olarak forward et
                 var b64 = node["delta"]?.GetValue<string>();
                 if (!string.IsNullOrEmpty(b64))
                 {
@@ -370,31 +383,66 @@ public sealed class RealtimeBridge : IAsyncDisposable
 
             case "response.audio_transcript.delta":
             {
-                // Asistanın söylediği metnin delta'sı — browser bunu altyazı gibi gösterebilir
                 var delta = node["delta"]?.GetValue<string>();
                 if (!string.IsNullOrEmpty(delta))
                 {
+                    assistantTextBuilder.Append(delta);
                     await SendBrowserJsonAsync(browserWs,
                         new { type = "assistant_text_delta", text = delta }, ct);
                 }
                 break;
             }
 
-            case "response.done":
+            case "response.audio_transcript.done":
+            {
+                // Tek seferde tam transcript — bazen delta'lar atlanırsa burada toparlanır
+                var fullText = node["transcript"]?.GetValue<string>();
+                if (!string.IsNullOrEmpty(fullText) && assistantTextBuilder.Length == 0)
+                {
+                    assistantTextBuilder.Append(fullText);
+                }
+                break;
+            }
+
+            case "response.function_call_arguments.done":
+            {
+                // Model bir tool çağırmaya karar verdi — argümanlar tamamlandı
+                await HandleFunctionCallAsync(browserWs, openAiWs, node, ct);
+                break;
+            }
+
             case "response.cancelled":
                 _assistantSpeaking = false;
-                // Bot konuşma süresince mikrofon kapatılmış olsa bile OpenAI tarafında
-                // birikmiş olabilecek input audio'yu temizle ki hayalet bir transcript
-                // tetiklenmesin.
                 try { await SendOpenAiJsonAsync(openAiWs, new { type = "input_audio_buffer.clear" }, ct); }
                 catch { /* best effort */ }
-                await SendBrowserJsonAsync(browserWs, new { type = "response_done" }, ct);
+                assistantTextBuilder.Clear();
                 break;
+
+            case "response.done":
+            {
+                _assistantSpeaking = false;
+                try { await SendOpenAiJsonAsync(openAiWs, new { type = "input_audio_buffer.clear" }, ct); }
+                catch { /* best effort */ }
+                var finalText = assistantTextBuilder.ToString().Trim();
+                // Persist: kullanıcı transcript'i + asistan yanıtı (opsiyonel — idempotent olabilir)
+                if (!string.IsNullOrEmpty(finalText))
+                {
+                    // En son user transcript'i bilmiyoruz burada — onun yerine session manager
+                    // history'sinde son user mesajı zaten eklenmiş olmaz çünkü bu modda
+                    // pipeline atlanıyor. Basit olarak sadece chat bridge'e yansıt.
+                    _chatBridge.RecordBotExchange(session.SessionId, "(sesli)", finalText);
+                }
+                await SendBrowserJsonAsync(browserWs,
+                    new { type = "assistant_text", text = finalText }, ct);
+                await SendBrowserJsonAsync(browserWs, new { type = "response_done" }, ct);
+                assistantTextBuilder.Clear();
+                break;
+            }
 
             case "error":
             {
                 var msg = node["error"]?["message"]?.GetValue<string>() ?? "OpenAI realtime error";
-                _logger.LogWarning("Realtime: OpenAI error {Msg}", msg);
+                _logger.LogWarning("RealtimeNative: OpenAI error {Msg}", msg);
                 await SendBrowserJsonAsync(browserWs, new { type = "error", message = msg }, ct);
                 break;
             }
@@ -402,128 +450,76 @@ public sealed class RealtimeBridge : IAsyncDisposable
     }
 
     /// <summary>
-    /// Kullanıcı transcript'i geldiğinde mevcut agent pipeline'ını <b>streaming</b> olarak
-    /// tetikler. Çıkan SSE-stili event'leri (reasoning_start/delta/complete, agent,
-    /// response_start/delta/complete) browser'a JSON olarak yansıtır — text chat ile
-    /// birebir aynı event sözleşmesi. Akış sonunda biriken metni Realtime'a TTS olarak gönderir.
+    /// <c>response.function_call_arguments.done</c> olayını işler:
+    /// <list type="number">
+    /// <item>argümanları parse eder</item>
+    /// <item><see cref="RealtimeFunctionTools"/> üzerinden senkron dispatch eder</item>
+    /// <item>sonucu <c>conversation.item.create</c> (function_call_output) ile gönderir</item>
+    /// <item><c>response.create</c> ile modeli devam ettirir → modelin sesli yanıtı oluşur</item>
+    /// </list>
     /// </summary>
-    private async Task HandleUserTranscriptAsync(
+    private async Task HandleFunctionCallAsync(
         WebSocket browserWs,
         ClientWebSocket openAiWs,
-        AgentSession session,
-        string transcript,
+        JsonNode node,
         CancellationToken ct)
     {
-        var sessionId = session.SessionId;
+        var callId = node["call_id"]?.GetValue<string>();
+        var name = node["name"]?.GetValue<string>();
+        var argumentsJson = node["arguments"]?.GetValue<string>() ?? "{}";
+
+        if (string.IsNullOrWhiteSpace(callId) || string.IsNullOrWhiteSpace(name))
+        {
+            _logger.LogWarning("RealtimeNative: function_call event'inde call_id/name eksik");
+            return;
+        }
+
+        // Browser'a görsel ipucu (UI: "🛠 ürün sorgulanıyor...")
+        await SendBrowserJsonAsync(browserWs, new
+        {
+            type = "tool_call",
+            name,
+            arguments = argumentsJson
+        }, ct);
+
+        string outputJson;
         try
         {
-            // Input guard
-            var guard = _inputGuard.Inspect(transcript);
-            if (guard.Verdict == InputGuardVerdict.Reject)
-            {
-                await SendBrowserJsonAsync(browserWs,
-                    new { type = "error", message = guard.RejectionReason ?? "Mesaj işlenemedi." }, ct);
-                await SpeakAsync(openAiWs, guard.RejectionReason ?? "Üzgünüm, bu mesajı işleyemiyorum.", ct);
-                return;
-            }
-            var safeQuery = guard.SanitizedInput;
-
-            await SendBrowserJsonAsync(browserWs, new { type = "workflow_start" }, ct);
-
-            var history = _sessionManager.GetHistory(sessionId);
-
-            // Faz 1: Streaming reasoning — text chat ile aynı event'leri yansıt
-            ReasoningResult? finalReasoning = null;
-            await foreach (var evt in _reasoningService.ReasonStreamingAsync(safeQuery, session, history, ct))
-            {
-                await ForwardStreamEventAsync(browserWs, evt, ct);
-                if (evt.Type == StreamEventTypes.ReasoningComplete && evt.Data is ReasoningResult rr)
-                {
-                    finalReasoning = rr;
-                    if (!string.IsNullOrWhiteSpace(rr.Intent) && rr.Intent != WellKnown.Intents.Unknown)
-                    {
-                        session.State.CurrentIntent = rr.Intent;
-                        _sessionManager.UpdateSession(session);
-                    }
-                }
-            }
-
-            // Faz 2: Streaming workflow — agent chip + response delta event'leri
-            using var approvalScope = _approvalContext.SetScope(sessionId, null, safeQuery);
-            var responseBuilder = new StringBuilder();
-            await foreach (var evt in _team.RunStreamingAsync(safeQuery, history, session, finalReasoning, ct))
-            {
-                await ForwardStreamEventAsync(browserWs, evt, ct);
-
-                if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is not null)
-                {
-                    var text = Endpoints.SseWriter.GetTextFromAnon(evt.Data);
-                    if (!string.IsNullOrEmpty(text)) responseBuilder.Append(text);
-                }
-            }
-
-            var responseText = responseBuilder.ToString().TrimEnd();
-
-            if (!string.IsNullOrWhiteSpace(responseText))
-            {
-                _sessionManager.AddExchange(sessionId, safeQuery, responseText);
-                _chatBridge.RecordBotExchange(sessionId, safeQuery, responseText);
-            }
-
-            await SendBrowserJsonAsync(browserWs, new { type = "workflow_done" }, ct);
-
-            // TTS sırası
-            await SpeakAsync(openAiWs, responseText ?? "", ct);
+            outputJson = await _toolDispatcher.DispatchAsync(name!, argumentsJson, ct);
         }
-        catch (OperationCanceledException) { /* shutdown */ }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Realtime: transcript handler hatası session={Sid}", sessionId);
-            await SendBrowserJsonAsync(browserWs,
-                new { type = "error", message = "İşlem sırasında hata oluştu." }, ct);
+            _logger.LogError(ex, "RealtimeNative: tool dispatch hatası tool={Tool}", name);
+            outputJson = JsonSerializer.Serialize(new
+            {
+                success = false,
+                error = new { code = "TOOL_DISPATCH_ERROR", message = ex.Message }
+            });
         }
-    }
 
-    /// <summary>
-    /// Bir <see cref="StreamEvent"/>'i browser WS'ine <c>{type, data}</c> JSON olarak iletir.
-    /// Text chat'in SSE event sözleşmesiyle birebir uyumludur — frontend aynı handler'ı kullanır.
-    /// </summary>
-    private static Task ForwardStreamEventAsync(WebSocket browserWs, StreamEvent evt, CancellationToken ct)
-        => SendBrowserJsonAsync(browserWs, new { type = evt.Type, data = evt.Data }, ct);
+        await SendBrowserJsonAsync(browserWs, new
+        {
+            type = "tool_result",
+            name,
+            output = outputJson
+        }, ct);
 
-    /// <summary>
-    /// Hazır metni Realtime API'ye TTS olarak söyletir.
-    /// conversation.item.create + response.create ile assistant role mesajı enjekte eder.
-    /// </summary>
-    private async Task SpeakAsync(ClientWebSocket openAiWs, string text, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return;
-
-        // Önce assistant mesajını conversation'a ekle (sonradan model bunu hatırlasın)
+        // Tool çıktısını conversation'a ekle
         await SendOpenAiJsonAsync(openAiWs, new
         {
             type = "conversation.item.create",
             item = new
             {
-                type = "message",
-                role = "assistant",
-                content = new[]
-                {
-                    new { type = "text", text }
-                }
+                type = "function_call_output",
+                call_id = callId,
+                output = outputJson
             }
         }, ct);
 
-        // Sonra response.create ile sadece audio modalitesinde "yukarıdaki metni oku" talimatı
+        // Modeli devam ettir → sesli yanıt üretsin
         await SendOpenAiJsonAsync(openAiWs, new
         {
-            type = "response.create",
-            response = new
-            {
-                modalities = new[] { "audio", "text" },
-                instructions = "Yukarıda sana verilen son asistan metnini Türkçe olarak doğal, " +
-                               "samimi bir tonla harfiyen oku. Hiçbir kelime ekleme veya çıkarma."
-            }
+            type = "response.create"
         }, ct);
     }
 
@@ -531,8 +527,6 @@ public sealed class RealtimeBridge : IAsyncDisposable
 
     private static async Task SendOpenAiJsonAsync(ClientWebSocket ws, object payload, CancellationToken ct)
     {
-        // OpenAI snake_case bekliyor; anonymous type property adları zaten input_audio_format gibi
-        // yazılmıştır — naming policy uygulanmadan birebir gönderilir.
         var bytes = JsonSerializer.SerializeToUtf8Bytes(payload, OpenAiJsonOpts);
         await ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
     }

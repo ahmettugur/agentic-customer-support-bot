@@ -117,12 +117,21 @@
             <footer class="input-area">
                 <div class="input-wrapper">
                     <input type="text" id="userInput" placeholder="Bir mesaj yazın..." autocomplete="off" />
-                    <button id="voiceBtn" title="Sesli konuşma" aria-label="Sesli konuşmayı başlat" class="btn-voice">
+                    <button id="voiceBtn" title="Sesli Asistan (tam pipeline — sipariş/şikayet desteği)"
+                        aria-label="Sesli konuşmayı başlat" class="btn-voice">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <rect x="9" y="2" width="6" height="12" rx="3" />
                             <path d="M5 10v2a7 7 0 0 0 14 0v-2" />
                             <line x1="12" y1="19" x2="12" y2="22" />
+                        </svg>
+                    </button>
+                    <button id="voiceNativeBtn"
+                        title="Hızlı Sesli (yalnızca ürün/sipariş sorgusu — sipariş oluşturma/şikayet için yazılı sohbeti kullanın)"
+                        aria-label="Hızlı sesli modu başlat" class="btn-voice btn-voice-native">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                         </svg>
                     </button>
                     <button id="sendBtn" title="Gönder" aria-label="Mesaj gönder">

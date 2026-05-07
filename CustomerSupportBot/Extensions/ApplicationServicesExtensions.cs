@@ -57,6 +57,11 @@ public static class ApplicationServicesExtensions
         // Realtime köprüsü — her WS bağlantısı için ayrı instance
         services.AddScoped<Services.Realtime.RealtimeBridge>();
 
+        // Realtime "native" modu — gpt-realtime-1.5 kendisi konuşur ve okuma-only
+        // tool'ları çağırır. Sipariş/şikayet gibi HITL gerektiren işlemler bu kanalda yok.
+        services.AddSingleton<Services.Realtime.RealtimeFunctionTools>();
+        services.AddScoped<Services.Realtime.RealtimeNativeBridge>();
+
         // Context provider'lar
         services.AddSingleton<IContextProvider, CustomerContextProvider>();
         services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
