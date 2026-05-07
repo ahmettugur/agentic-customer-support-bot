@@ -55,6 +55,26 @@ public sealed class RealtimeOptions
 
     /// <summary>Asistan yanıtının en çok kaç token söylenebileceği (TTS sırasında).</summary>
     public int MaxResponseTokens { get; set; } = 4096;
+
+    /// <summary>
+    /// STT (transcription) modeli. Türkçe için <c>gpt-4o-transcribe</c> (en doğru) veya
+    /// <c>gpt-4o-mini-transcribe</c> (hızlı/ucuz); <c>whisper-1</c> eski fallback.
+    /// </summary>
+    public string TranscriptionModel { get; set; } = "gpt-4o-transcribe";
+
+    /// <summary>
+    /// Transcription dil ipucu (ISO-639-1). "tr" Türkçeyi zorlar; null/boş = otomatik tespit.
+    /// </summary>
+    public string? TranscriptionLanguage { get; set; } = "tr";
+
+    /// <summary>
+    /// Domain-spesifik transcription prompt'u. Sık geçen kelimeleri (ürün adları,
+    /// sipariş kodları) ASR'a önceden tanıtır → daha doğru metin çıkar.
+    /// </summary>
+    public string TranscriptionPrompt { get; set; } =
+        "Müşteri destek görüşmesi. Sipariş numarası (ORD-1, ORD-2 gibi), müşteri kodu " +
+        "(CUST-1990 gibi), ürün adları (Apple iPhone, Sony WH-1000XM5, Dell XPS), " +
+        "kargo, iade, şikayet, sipariş durumu konuları geçer. Türkçe konuşulur.";
 }
 
 /// <summary>OpenAI public API ayarları.</summary>

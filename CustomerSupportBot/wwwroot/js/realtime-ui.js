@@ -37,6 +37,19 @@
             const app = window.chatApp;
             const sessionId = app?.api?.sessionId || null;
 
+            // Streaming bot mesaj iskeletini (reasoning panel + agent chip + bubble)
+            // text chat ile birebir aynı şekilde yöneten state.
+            let streamCtx = null;
+            let reasoningState = { buffer: '' };
+
+            const finalizeBubbleIfAny = () => {
+                if (streamCtx && app?.ui) {
+                    try { app.ui.finalizeStreamingMessage(streamCtx); } catch { }
+                }
+                streamCtx = null;
+                reasoningState = { buffer: '' };
+            };
+
             client = new RealtimeClient({
                 baseUrl: app?.api?.baseUrl || '',
                 sessionId,
@@ -49,18 +62,43 @@
                             try { app.refreshSessionList?.(); } catch { }
                         }
                     },
+
+                    // Kullanıcı konuşmasının transcript'i: user balonunu ekle ve
+                    // ardından boş bot iskeletini aç — text chat'in send akışıyla aynı.
                     user_transcript: ({ text }) => {
-                        if (text && app?.ui) app.ui.addMessage('user', text);
+                        if (!text || !app?.ui) return;
+                        finalizeBubbleIfAny(); // önceki tur bittiyse temizle
+                        app.ui.addMessage('user', text);
+                        streamCtx = app.ui.startStreamingMessage();
+                        reasoningState = { buffer: '' };
                     },
-                    assistant_text: ({ text }) => {
-                        if (text && app?.ui) app.ui.addMessage('bot', text);
+
+                    // Backend'den ham agent pipeline event'i — text chat handler'ını yeniden kullan
+                    chat_event: (evt) => {
+                        if (!streamCtx || !app?._handleStreamEvent) return;
+                        try {
+                            app._handleStreamEvent(streamCtx, reasoningState, evt);
+                        } catch (err) {
+                            console.warn('Realtime chat_event handler hatası:', err);
+                        }
                     },
+
+                    // Tüm agent akışı bitti — bubble'ı finalize et (markdown render + cursor kaldır)
+                    workflow_done: () => finalizeBubbleIfAny(),
+
+                    // Asistan TTS akışı tamamlandı (response_done OpenAI'dan)
+                    response_done: () => { /* bubble zaten workflow_done'da finalize oldu */ },
+
                     error: ({ message }) => {
                         console.warn('Realtime error:', message);
                         setStatus('error', '⚠ ' + (message || 'Hata'));
                         setTimeout(() => setStatus('idle'), 3000);
+                        finalizeBubbleIfAny();
                     },
-                    close: () => setStatus('idle')
+                    close: () => {
+                        finalizeBubbleIfAny();
+                        setStatus('idle');
+                    }
                 }
             });
 

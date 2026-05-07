@@ -349,4 +349,6 @@ class ChatApp {
 document.addEventListener("DOMContentLoaded", () => {
     const app = new ChatApp("http://localhost:5021");
     app.init();
+    // Diğer modüller (realtime-ui.js vb.) chat pipeline'a tutunabilsin diye global expose
+    window.chatApp = app;
 });

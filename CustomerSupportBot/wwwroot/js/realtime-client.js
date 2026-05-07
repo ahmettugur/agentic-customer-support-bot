@@ -207,8 +207,20 @@
                     this._emit('response_done', msg);
                     break;
                 case 'error':
-                    this._setState('error');
-                    this._emit('error', msg);
+                    // İki kaynak: (a) RealtimeBridge bağlantı/sistem hatası ({type:"error", message:"..."}),
+                    // (b) agent pipeline'dan forward edilen StreamEvent ({type:"error", data:{message:"..."}}).
+                    // İkincisi sadece o turun bubble'ına uyarı eklenmeli; bağlantı durumu değişmemeli.
+                    if (msg.data) {
+                        this._emit('chat_event', { type: 'error', data: msg.data });
+                    } else {
+                        this._setState('error');
+                        this._emit('error', msg);
+                    }
+                    break;
+                default:
+                    // Agent pipeline event'leri (reasoning_*, agent, response_*, done...)
+                    // text chat SSE sözleşmesiyle aynı; UI tarafına ham olarak yansıtırız.
+                    this._emit('chat_event', { type: msg.type, data: msg.data });
                     break;
             }
         }

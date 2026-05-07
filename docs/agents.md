@@ -471,3 +471,58 @@ Dinamik handoff mekaniği ve ping-pong guard için → [workflow.md](workflow.md
 ## Prompt kaynakları
 
 Tüm ajan instruction'ları `Prompts/agents/` altında versiyonlanır. Kod içi inline prompt **yasaktır** — `PromptService.Get("agents/<name>")` çağrısı kullanılır. Detay → [developer-guide.md#yeni-ajan-ekleme](developer-guide.md#yeni-ajan-ekleme).
+
+---
+
+## Agent-level OpenTelemetry
+
+Tüm ajanlar MAF'ın `.UseOpenTelemetry()` middleware'i ile sarılarak **otomatik agent/tool/LLM span'ları** üretir. Bu, `CustomerSupportTelemetry` içindeki manuel `StartAgentActivity`/`StartToolActivity` helper'larına **ek** olarak çalışır — çakışmaz, span isimleri farklıdır.
+
+### Kurulum
+
+`@Agents/CustomerSupportTeam.cs` ajanları tek bir helper'dan geçirir:
+
+```csharp
+var sourceName = CustomerSupportTelemetry.ActivitySourceName; // "CustomerSupportBot"
+
+_planningAgent = WrapWithTelemetry(new ChatClientAgent(
+    chatClient, instructions: ..., name: WellKnown.AgentNames.Planning, ...), sourceName);
+
+// ... diğer 6 agent aynı pattern'de ...
+
+private static AIAgent WrapWithTelemetry(ChatClientAgent agent, string sourceName)
+    => agent.AsBuilder().UseOpenTelemetry(sourceName).Build();
+```
+
+Önemli detay: alan tipleri `ChatClientAgent` → **`AIAgent`**'a yükseltildi, çünkü middleware sarmalanmış agent concrete tipi korumaz. `AddParticipants(params AIAgent[])` çağrısı etkilenmez.
+
+### Span ağacı
+
+Her kullanıcı turunun trace'i aşağıdaki gibi görünür (OTLP collector → Jaeger/Tempo/Aspire Dashboard):
+
+```
+http POST /chat/stream                               (ASP.NET instrumentation)
+ └─ ai.reasoning                                     (manual: ReasoningService)
+ └─ workflow.run                                     (manual: CustomerSupportTeam)
+    ├─ agent.run PlanningAgent                       ← MAF middleware
+    │   └─ chat.completions                          ← inner IChatClient span
+    ├─ agent.run OrderInquiryAgent                   ← MAF middleware
+    │   ├─ chat.completions
+    │   └─ tool.invoke order_status_tool             ← MAF middleware
+    │       └─ DB query (EF Core instrumentation)
+    └─ agent.run ResponseAgent
+        └─ chat.completions
+```
+
+Manuel span (`agent.PlanningAgent`) ve middleware span (`agent.run PlanningAgent`) yan yana görünür — ilki **domain-level** (session tag'leri, trace ID), ikincisi **protocol-level** (token sayısı, model, latency, finish reason).
+
+### Aynı source, aynı exporter
+
+`AddSource("CustomerSupportBot")` `TracerProviderBuilder`'da zaten kayıtlı olduğu için middleware span'ları **otomatik** toplanır — ek konfigürasyon yoktur. Bkz. `@Extensions/TelemetryExtensions.cs`.
+
+### Neden böyle?
+
+- **Sıfır manuel enstrümantasyon**: Her yeni ajan `WrapWithTelemetry` çağrısıyla ücretsiz trace/metric kazanır
+- **Standart semantic convention'lar**: MAF span isimleri OpenAI/GenAI semantic conventions'a uygun — Jaeger/Tempo'da filtrelenebilir
+- **Sesli mod ile tutarlılık**: Sesli konuşmalar aynı ajanlardan geçer → [realtime.md](realtime.md)
+

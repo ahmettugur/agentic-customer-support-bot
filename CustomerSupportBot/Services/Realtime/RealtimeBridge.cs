@@ -104,7 +104,17 @@ public sealed class RealtimeBridge : IAsyncDisposable
             return;
         }
 
-        // 2) Session config — model otomatik yanıt vermesin, sadece transcribe etsin
+        // 2) Session config — model otomatik yanıt vermesin, sadece transcribe etsin.
+        // Transcription: Türkçe için gpt-4o-transcribe + dil ipucu + domain prompt.
+        var transcriptionConfig = new Dictionary<string, object?>
+        {
+            ["model"] = _options.TranscriptionModel
+        };
+        if (!string.IsNullOrWhiteSpace(_options.TranscriptionLanguage))
+            transcriptionConfig["language"] = _options.TranscriptionLanguage;
+        if (!string.IsNullOrWhiteSpace(_options.TranscriptionPrompt))
+            transcriptionConfig["prompt"] = _options.TranscriptionPrompt;
+
         await SendOpenAiJsonAsync(_openAiWs, new
         {
             type = "session.update",
@@ -114,7 +124,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
                 voice = _options.Voice,
                 input_audio_format = "pcm16",
                 output_audio_format = "pcm16",
-                input_audio_transcription = new { model = "whisper-1" },
+                input_audio_transcription = transcriptionConfig,
                 turn_detection = new
                 {
                     type = "server_vad",
@@ -363,8 +373,10 @@ public sealed class RealtimeBridge : IAsyncDisposable
     }
 
     /// <summary>
-    /// Kullanıcı transcript'i geldiğinde mevcut agent pipeline'ını tetikler ve
-    /// final text'i Realtime'a TTS olarak gönderir.
+    /// Kullanıcı transcript'i geldiğinde mevcut agent pipeline'ını <b>streaming</b> olarak
+    /// tetikler. Çıkan SSE-stili event'leri (reasoning_start/delta/complete, agent,
+    /// response_start/delta/complete) browser'a JSON olarak yansıtır — text chat ile
+    /// birebir aynı event sözleşmesi. Akış sonunda biriken metni Realtime'a TTS olarak gönderir.
     /// </summary>
     private async Task HandleUserTranscriptAsync(
         WebSocket browserWs,
@@ -380,6 +392,8 @@ public sealed class RealtimeBridge : IAsyncDisposable
             var guard = _inputGuard.Inspect(transcript);
             if (guard.Verdict == InputGuardVerdict.Reject)
             {
+                await SendBrowserJsonAsync(browserWs,
+                    new { type = "error", message = guard.RejectionReason ?? "Mesaj işlenemedi." }, ct);
                 await SpeakAsync(openAiWs, guard.RejectionReason ?? "Üzgünüm, bu mesajı işleyemiyorum.", ct);
                 return;
             }
@@ -387,18 +401,39 @@ public sealed class RealtimeBridge : IAsyncDisposable
 
             await SendBrowserJsonAsync(browserWs, new { type = "workflow_start" }, ct);
 
-            // Mevcut pipeline: reasoning + workflow
             var history = _sessionManager.GetHistory(sessionId);
-            var reasoning = await _reasoningService.ReasonAsync(safeQuery, session, history);
 
-            using var approvalScope = _approvalContext.SetScope(sessionId, null, safeQuery);
-            var responseText = await _team.RunAsync(safeQuery, history, session, reasoning);
-
-            if (!string.IsNullOrWhiteSpace(reasoning?.Intent) && reasoning!.Intent != WellKnown.Intents.Unknown)
+            // Faz 1: Streaming reasoning — text chat ile aynı event'leri yansıt
+            ReasoningResult? finalReasoning = null;
+            await foreach (var evt in _reasoningService.ReasonStreamingAsync(safeQuery, session, history, ct))
             {
-                session.State.CurrentIntent = reasoning.Intent;
-                _sessionManager.UpdateSession(session);
+                await ForwardStreamEventAsync(browserWs, evt, ct);
+                if (evt.Type == StreamEventTypes.ReasoningComplete && evt.Data is ReasoningResult rr)
+                {
+                    finalReasoning = rr;
+                    if (!string.IsNullOrWhiteSpace(rr.Intent) && rr.Intent != WellKnown.Intents.Unknown)
+                    {
+                        session.State.CurrentIntent = rr.Intent;
+                        _sessionManager.UpdateSession(session);
+                    }
+                }
             }
+
+            // Faz 2: Streaming workflow — agent chip + response delta event'leri
+            using var approvalScope = _approvalContext.SetScope(sessionId, null, safeQuery);
+            var responseBuilder = new StringBuilder();
+            await foreach (var evt in _team.RunStreamingAsync(safeQuery, history, session, finalReasoning, ct))
+            {
+                await ForwardStreamEventAsync(browserWs, evt, ct);
+
+                if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is not null)
+                {
+                    var text = Endpoints.SseWriter.GetTextFromAnon(evt.Data);
+                    if (!string.IsNullOrEmpty(text)) responseBuilder.Append(text);
+                }
+            }
+
+            var responseText = responseBuilder.ToString().TrimEnd();
 
             if (!string.IsNullOrWhiteSpace(responseText))
             {
@@ -406,12 +441,12 @@ public sealed class RealtimeBridge : IAsyncDisposable
                 _chatBridge.RecordBotExchange(sessionId, safeQuery, responseText);
             }
 
-            await SendBrowserJsonAsync(browserWs,
-                new { type = "assistant_text", text = responseText }, ct);
             await SendBrowserJsonAsync(browserWs, new { type = "workflow_done" }, ct);
 
+            // TTS sırası
             await SpeakAsync(openAiWs, responseText ?? "", ct);
         }
+        catch (OperationCanceledException) { /* shutdown */ }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Realtime: transcript handler hatası session={Sid}", sessionId);
@@ -419,6 +454,13 @@ public sealed class RealtimeBridge : IAsyncDisposable
                 new { type = "error", message = "İşlem sırasında hata oluştu." }, ct);
         }
     }
+
+    /// <summary>
+    /// Bir <see cref="StreamEvent"/>'i browser WS'ine <c>{type, data}</c> JSON olarak iletir.
+    /// Text chat'in SSE event sözleşmesiyle birebir uyumludur — frontend aynı handler'ı kullanır.
+    /// </summary>
+    private static Task ForwardStreamEventAsync(WebSocket browserWs, StreamEvent evt, CancellationToken ct)
+        => SendBrowserJsonAsync(browserWs, new { type = evt.Type, data = evt.Data }, ct);
 
     /// <summary>
     /// Hazır metni Realtime API'ye TTS olarak söyletir.
