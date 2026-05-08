@@ -25,7 +25,7 @@ Bu doküman öncelikle **alt seviye**yi (ChatManager'ı) anlatır; sonda "**Comp
 
 ## Microsoft Agent Framework entegrasyonu
 
-Sistem MAF 1.1.0'ın `AgentWorkflowBuilder.CreateGroupChatBuilderWith(…)` API'sini kullanır. AutoGen'deki `SelectorGroupChat`'in MAF karşılığıdır:
+Sistem MAF 1.4.0'ın `AgentWorkflowBuilder.CreateGroupChatBuilderWith(…)` API'sini kullanır. AutoGen'deki `SelectorGroupChat`'in MAF karşılığıdır:
 
 ```csharp
 @Agents/CustomerSupportTeam.cs:120-140
@@ -436,7 +436,7 @@ Her workflow koşusu için `IReasoningTraceStore.StartTrace` çağrılır ve her
 
 ## Özet
 
-- **Workflow** = 6 ajan + `CustomerSupportChatManager` (MAF `GroupChatManager` türevi)
+- **Workflow** = 7 ajan + `CustomerSupportChatManager` (MAF `GroupChatManager` türevi)
 - **Ajan seçim** 3 katmanlı: PlanningAgent JSON → specialist reflection → varsayılan (ResponseAgent)
 - **Terminasyon** 3 koşul: TERMINATE marker | max iteration | repeated tool call
 - **Guard'lar** appsettings'den konfigüre edilir; timeout, max iteration, duplicate tool protection

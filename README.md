@@ -51,7 +51,7 @@ https://github.com/user-attachments/assets/9cf6ba41-7fa1-49da-ad9b-251ea4b3ae65
 
 ## Genel Bakış
 
-Bu proje, müşteri desteği için **çok ajanlı orkestrasyon** desenini gösterir. Tek bir monolitik LLM çağrısı yerine, sistem yapılandırılmış bir iş akışı içinde işbirliği yapan 6 uzman ajan kullanır:
+Bu proje, müşteri desteği için **çok ajanlı orkestrasyon** desenini gösterir. Tek bir monolitik LLM çağrısı yerine, sistem yapılandırılmış bir iş akışı içinde işbirliği yapan 7 uzman ajan kullanır:
 
 1. **PlanningAgent** — Kullanıcı sorgusunu doğru uzmana yönlendirir.
 2. **Uzman Ajanlar** (Product, Order, Complaint) — Alan görevlerini tool çağrıları ile gerçekleştirir.
@@ -87,8 +87,8 @@ Temel yetenekler:
         ▼                   ▼                  ▼           ▼
 ┌───────────────┐  ┌────────────────┐  ┌─────────────┐  ┌────────┐
 │ ReasoningSvc  │  │ CustomerSupp.  │  │ TraceStore  │  │ Admin  │
-│  (o-series)   │─▶│ Team           │  │ (in-memory) │  │ (HITL) │
-└───┬───────────┘  │ (6 agents +    │  └─────────────┘  └────────┘
+│  (reasoning)  │─▶│ Team           │  │ (Postgres/  │  │ (HITL) │
+└───┬───────────┘  │ (7 agents +    │  │  InMemory)  │  └────────┘
     │              │  ChatManager   │
     │              │  + Phase 4b     │
     │              │  orchestration) │
@@ -115,8 +115,8 @@ Temel yetenekler:
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      ALTYAPI                                    │
-│  OpenAI Chat Client (gpt-4o)  │  ReasoningChatClient (o4-mini)  │
-│  FakeDatabase (Product/Order/Complaint)  │  IdExtractor (regex) │
+│  OpenAI Chat Client (gpt-5.4) │ ReasoningChatClient (gpt-5.4-nano)│
+│  PostgreSQL + Qdrant + FakeDatabase      │  IdExtractor (regex) │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -131,6 +131,7 @@ Temel yetenekler:
 | **OrderPlacementAgent** | Sipariş oluşturma (yan etkili) | `order_placement_tool` | `SpecialistReasoning` |
 | **OrderInquiryAgent** | Sipariş durumu sorgusu | `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool` | `SpecialistReasoning` |
 | **ComplaintAgent** | Şikayet kaydı | `complaint_registration_tool` | `SpecialistReasoning` |
+| **HumanHandoffAgent** | İnsan temsilciye aktarım | `human_handoff_tool` | `SpecialistReasoning` |
 | **ResponseAgent** | Nihai yanıt + self-critique | — | `ResponseCritique` |
 
 Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
@@ -147,10 +148,10 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 | Katman | Teknoloji |
 |--------|-----------|
 | Framework | .NET 10 (ASP.NET Core Minimal API) |
-| Ajan Framework | Microsoft Agents Framework (MAF) 1.1.0 |
+| Ajan Framework | Microsoft Agents Framework (MAF) 1.4.0 |
 | AI Soyutlamaları | `Microsoft.Extensions.AI` |
-| LLM Sağlayıcı | OpenAI (`gpt-5.4`, `o4-mini`) / Azure OpenAI / Anthropic |
-| Embedding | OpenAI `text-embedding-3-small` (1536-dim) |
+| LLM Sağlayıcı | OpenAI (`gpt-5.4`, `gpt-5.4-nano`) / Azure OpenAI / Anthropic (`claude-haiku-4-5`) |
+| Embedding | OpenAI `text-embedding-3-large` (3072-dim) |
 | Vector Store | **Qdrant** (gRPC, Cosine distance) |
 | Kalıcı Veri | PostgreSQL 16 (EF Core 10) + Redis (opsiyonel) |
 | OpenAPI | `Microsoft.AspNetCore.OpenApi` 10.0.5 |
@@ -177,7 +178,7 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
   "OpenAI": {
     "ApiKey": "sk-...",
     "Model": "gpt-5.4",
-    "ReasoningModel": "o4-mini",
+    "ReasoningModel": "gpt-5.4-nano",
     "ReasoningEffort": "medium"
   }
 }
@@ -273,7 +274,7 @@ Bot üç ek "akıllı" katman içerir:
 - `KnowledgeBase/*.md` dosyaları (iade politikası, kargo, SSS) startup'ta chunk'lara bölünür, embedding'lenir ve **Qdrant**'a yazılır.
 - Her workflow tamamlandığında **episodik bellek** (soru + yanıt + intent) yazılır.
 - `SemanticMemoryContextProvider` her sorguda Knowledge + Lessons aramasını context pipeline'a enjekte eder (citation'lı).
-- Embedding sağlayıcı: OpenAI / Azure OpenAI (`text-embedding-3-small`, 1536-dim).
+- Embedding sağlayıcı: OpenAI / Azure OpenAI (`text-embedding-3-large`, 3072-dim).
 - Yapılandırma: `appsettings.json > SemanticMemory` (`Enabled`, `TopK`, `MinScore`, `ChunkSize`).
 - Endpoints (admin): `/memory/stats`, `/memory/search`, `/memory/ingest`.
 
@@ -303,7 +304,7 @@ CustomerSupportBot/
 ├── appsettings.json              # OpenAI, WorkflowGuards, HITL config
 │
 ├── Agents/
-│   ├── CustomerSupportTeam.cs    # 6 MAF ajanı + workflow builder
+│   ├── CustomerSupportTeam.cs    # 7 MAF ajanı + workflow builder
 │   └── CustomerSupportChatManager.cs  # GroupChatManager (seçim + sonlandırma)
 │
 ├── Endpoints/
@@ -373,16 +374,23 @@ CustomerSupportBot/
 
 | Doküman | İçerik |
 |---------|--------|
-| [`docs/architecture.md`](docs/architecture.md) | Üst seviye mimari, bileşen haritası, istek yaşam döngüsü |
+| [`docs/architecture.md`](docs/architecture.md) | Üst seviye mimari, bileşen haritası, DI, istek yaşam döngüsü |
 | [`docs/runtime.md`](docs/runtime.md) | Uygulama nasıl çalışır? Kurulum, başlangıç sırası, SSE kanalları, admin paneli, sorun giderme |
 | [`docs/agents.md`](docs/agents.md) | Ajan sorumlulukları, alt-bileşen zinciri, iç anatomi |
 | [`docs/api.md`](docs/api.md) | Tam HTTP + SSE event referansı |
 | [`docs/workflow.md`](docs/workflow.md) | İş akışı fazları, compound query orkestrasyonu |
 | [`docs/patterns.md`](docs/patterns.md) | Tasarım desenleri: ReAct, Self-Reflection, Chain-of-Thought, sub-agent vs sub-component |
 | [`docs/reasoning.md`](docs/reasoning.md) | Reasoning servisi, sanity check'ler, entity doğrulama, yapılandırılmış çıktı |
-| [`docs/intelligence.md`](docs/intelligence.md) | **Yeni** — Semantic memory (Qdrant), Self-Improving Loop, Replay UI |
+| [`docs/intelligence.md`](docs/intelligence.md) | Semantic memory (Qdrant), Self-Improving Loop, Replay UI, Personalization |
+| [`docs/security.md`](docs/security.md) | JWT kimlik doğrulama, InputGuard, HITL güvenlik, workflow guard'lar |
+| [`docs/telemetry.md`](docs/telemetry.md) | OpenTelemetry trace/metric, maliyet takibi, Jaeger entegrasyonu |
+| [`docs/persistence.md`](docs/persistence.md) | EF Core + PostgreSQL, InMemory/Postgres switch, migration stratejisi |
+| [`docs/deployment.md`](docs/deployment.md) | Docker Compose servis haritası, port yapılandırması, production hazırlık |
+| [`docs/routing.md`](docs/routing.md) | Smart Routing, skills-based eskalasyon, yük yönetimi |
+| [`docs/evaluation.md`](docs/evaluation.md) | Senaryo tabanlı test sistemi, YAML format, CriteriaEvaluator |
+| [`docs/realtime.md`](docs/realtime.md) | Sesli konuşma modu (çift kanal: köprü + native), WebSocket API |
+| [`docs/workflow-designer.md`](docs/workflow-designer.md) | Low-code deterministik workflow designer |
 | [`docs/developer-guide.md`](docs/developer-guide.md) | Ajan, tool ve prompt ekleme için geliştirici rehberi |
 | [`docs/reference.md`](docs/reference.md) | Sınıf/arayüz kontratları (C# API referansı) |
-| [`docs/realtime.md`](docs/realtime.md) | **Yeni** — Sesli konuşma modu (çift kanal: köprü + native), event kontratları, function calling tool subset, VAD/transcription yapılandırması, ortak UI |
 
 ---

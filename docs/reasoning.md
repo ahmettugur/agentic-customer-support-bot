@@ -2,6 +2,20 @@
 
 Bu dokümanda sistemdeki **reasoning (düşünme)** mekanizmaları ayrıntılı anlatılır. Bu sistem "tek bir LLM çağrısı sorar-yanıtlar" yapmak yerine, **3 farklı katmanda explicit structured reasoning** üretir. Her katman kendi JSON şemasını kullanır, trace'e kaydedilir ve downstream kararlarını etkiler.
 
+**Bölümler**:
+
+- [Neden birden fazla reasoning katmanı?](#neden-birden-fazla-reasoning-katmanı)
+- [3 katmanlı reasoning](#3-katmanlı-reasoning)
+- [Katman 0 — EntityVerifier](#katman-0--entityverifier)
+- [Katman 1 — Global Reasoning (ReasoningService)](#katman-1--global-reasoning-reasoningservice)
+- [Katman 1.5 — Sanity Checker](#katman-15--sanity-checker)
+- [Katman 2 — Planning Reasoning (PlanningAgent)](#katman-2--planning-reasoning-planningagent)
+- [Katman 3 — Specialist Reasoning](#katman-3--specialist-reasoning)
+- [Compound Query + Tam Orkestrasyon](#compound-query--tam-orkestrasyon-tamamlandı)
+- [Trace'te Reasoning Gösterimi](#tracete-reasoning-gösterimi)
+
+---
+
 ## Neden birden fazla reasoning katmanı?
 
 Naif yaklaşım: "Ajanın kendisi düşünsün, yanıt versin." Bu yaklaşımın sorunları:
@@ -18,7 +32,7 @@ Naif yaklaşım: "Ajanın kendisi düşünsün, yanıt versin." Bu yaklaşımın
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │  Katman 1 — Global Reasoning (ReasoningService)                │
-│  Model: o4-mini (reasoning_effort: medium)                     │
+│  Model: gpt-5.4-nano (reasoning_effort: medium)                │
 │  Çıktı: ReasoningResult JSON                                   │
 │  Amaç: Ön-analiz — intent, requiredInfo, nextAction, rationale │
 └────────────────────┬───────────────────────────────────────────┘
@@ -26,7 +40,7 @@ Naif yaklaşım: "Ajanın kendisi düşünsün, yanıt versin." Bu yaklaşımın
                      ▼
 ┌────────────────────────────────────────────────────────────────┐
 │  Katman 2 — Planning Reasoning (PlanningAgent)                 │
-│  Model: gpt-4o                                                 │
+│  Model: gpt-5.4                                                │
 │  Çıktı: PlanningResult JSON                                    │
 │  Amaç: Routing — hangi ajan + clarification gerek mi?          │
 └────────────────────┬───────────────────────────────────────────┘
@@ -34,7 +48,7 @@ Naif yaklaşım: "Ajanın kendisi düşünsün, yanıt versin." Bu yaklaşımın
                      ▼
 ┌────────────────────────────────────────────────────────────────┐
 │  Katman 3 — Specialist Reasoning (pre/post-tool)               │
-│  Model: gpt-4o                                                 │
+│  Model: gpt-5.4                                                │
 │  Çıktı: SpecialistReasoning JSON (preToolCheck + post…)        │
 │  Amaç: Parametre doğrulama + tool sonrası değerlendirme        │
 └────────────────────────────────────────────────────────────────┘

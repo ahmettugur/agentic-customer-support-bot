@@ -1,13 +1,13 @@
 # Semantic Memory, Self-Improving Loop ve Replay UI
 
-Bu doküman, bot'un üç "akıllı" katmanını detaylı anlatır:
+Bu doküman, bot'un dört "akıllı" katmanını detaylı anlatır:
 
 1. **Semantic Memory + RAG** — Qdrant tabanlı bilgi tabanı + episodik bellek
 2. **Self-Improving Loop** — Düşük puanlı trace'lerden ders çıkarıp Qdrant'a geri besleme
 3. **Replay UI** — Bir trace'i adım adım yeniden oynatma
 4. **Per-Customer Personalization Memory** — Müşteri profili (intent freq, ürün ilgi, dil/ton, rating) + admin LLM consolidate
 
-> Bu üç özellik **birlikte** çalışır: Replay → debug → düşük puan → LessonMiner → Approve → Qdrant Lessons → sonraki konuşmalarda context.
+> Bu dört özellik **birlikte** çalışır: Replay → debug → düşük puan → LessonMiner → Approve → Qdrant Lessons → sonraki konuşmalarda context. Personalization ise her müşterinin profilini takip eder.
 
 ---
 
@@ -71,7 +71,7 @@ Bu doküman, bot'un üç "akıllı" katmanını detaylı anlatır:
 "SemanticMemory": {
   "Enabled": true,
   "Qdrant": { "Host": "localhost", "Port": 6334, "UseHttps": false, "ApiKey": "" },
-  "Embedding": { "Model": "text-embedding-3-small", "Dimension": 1536 },
+  "Embedding": { "Model": "text-embedding-3-large", "Dimension": 3072 },
   "Collections": {
     "Episodic":  "cs_episodic",
     "Lessons":   "cs_lessons",
@@ -303,7 +303,7 @@ Bu ayrım önemli: heuristik tarafı **her turda** (ücretsiz) çalışır; LLM 
 
 ## 5. Operasyonel Notlar
 
-### 4.1 Docker
+### 5.1 Docker
 
 ```yaml
 # docker-compose.yml
@@ -318,7 +318,7 @@ qdrant:
 docker compose up -d postgres qdrant
 ```
 
-### 4.2 İlk Çalıştırma
+### 5.2 İlk Çalıştırma
 
 1. Container'lar yukarı çık
 2. `appsettings.json > AI:OpenAI:ApiKey` doldur (embedding için zorunlu)
@@ -327,7 +327,7 @@ docker compose up -d postgres qdrant
 5. Sohbet et → her trace tamamlanışta episodic memory'e yazım
 6. `/admin.html` → Improvements → "Yeni Tarama Çalıştır" → öneriler
 
-### 4.3 Sorun Giderme
+### 5.3 Sorun Giderme
 
 | Belirti | Sebep | Çözüm |
 |---|---|---|

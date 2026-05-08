@@ -109,17 +109,19 @@ services:
       start_period: 40s
 
 
-  # OpenTelemetry Collector
+  # OpenTelemetry Collector (opsiyonel — Jaeger v2 zaten OTLP alabilir)
+  # Jaeger ile aynı anda çalıştırılacaksa farklı host portları kullanılmalı.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: aibot_otel-collector
     restart: unless-stopped
+    profiles: ["otel"]
     command: ["--config=/etc/otel-collector-config.yaml"]
     ports:
-      # OTLP gRPC receiver
-      - "4317:4317"
-      # OTLP HTTP receiver
-      - "4318:4318"
+      # OTLP gRPC receiver (host 4327 → container 4317)
+      - "4327:4317"
+      # OTLP HTTP receiver (host 4328 → container 4318)
+      - "4328:4318"
       # Health check endpoint
       - "13133:13133"
     volumes:
@@ -134,42 +136,24 @@ services:
       start_period: 40s
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/jaeger:2.17.0
     container_name: aibot_jaeger
     restart: unless-stopped
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-      - SPAN_STORAGE_TYPE=elasticsearch
-      - ES_SERVER_URLS=http://elasticsearch:9200
-      - LOG_LEVEL=info
+    command: ["--config", "/jaeger/config.yaml"]
+    volumes:
+      - ./jaeger-v2-config.yaml:/jaeger/config.yaml:ro
     ports:
-      # Jaeger agent accept zipkin.thrift
-      - "5775:5775/udp"
-      # Jaeger agent accept compact thrift protocol
-      - "6831:6831/udp"
-      # Jaeger agent accept jaeger thrift protocol
-      - "6832:6832/udp"
-      # Jaeger agent accept HTTP
-      - "5778:5778"
-      # Serve frontend
+      # Jaeger UI
       - "16686:16686"
-      # OTLP gRPC receiver — uygulamanın OpenTelemetry exporter'ı bu porta yazar
+      # OTLP gRPC receiver
       - "4317:4317"
       # OTLP HTTP receiver
       - "4318:4318"
-      # Collect jaeger.thrift
-      - "14250:14250"
-      # Collect jaeger.thrift over HTTP
-      - "14268:14268"
-      # Collect zipkin.thrift over HTTP
-      - "9411:9411"
-      # Admin/health check port
-      - "14269:14269"
     depends_on:
       elasticsearch:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:16686/"]
+      test: ["CMD", "curl", "-f", "http://localhost:13133/status"]
       interval: 30s
       timeout: 10s
       retries: 3

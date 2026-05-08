@@ -20,7 +20,8 @@ Bu doküman uygulamayı **kuran**, **çalıştıran**, **gözlemleyen** ve **kon
 
 ### Gereksinimler
 
-- **.NET 10 SDK** (preview)
+- **.NET 10 SDK**
+- **Docker** — PostgreSQL, Qdrant ve opsiyonel altyapı container'ları için (`docker compose up -d`)
 - **Bir LLM sağlayıcısı**: OpenAI / Azure OpenAI / Anthropic — birinin API anahtarı yeterli
 - Modern bir tarayıcı (frontend ES2022 + EventSource kullanır)
 
@@ -38,6 +39,9 @@ dotnet user-secrets set "AI:AzureOpenAI:ApiKey" "..."
 # veya
 dotnet user-secrets set "AI:Anthropic:ApiKey" "sk-ant-..."
 
+# Altyapı container'ları (PostgreSQL, Qdrant, vb.)
+docker compose up -d postgres qdrant
+
 dotnet run
 # → http://localhost:5021
 ```
@@ -47,8 +51,12 @@ dotnet run
 | URL | Ne için? |
 |---|---|
 | `http://localhost:5021/` | Müşteri chat arayüzü |
-| `http://localhost:5021/admin.html` | Admin paneli (HITL, eskalasyon, replan, traces, evaluation) |
-| `http://localhost:5021/swagger` | (yoksa) Yok — endpoint listesi → [api.md](api.md) |
+| `http://localhost:5021/login.html` | JWT giriş sayfası (dev default: `admin` / `Admin123!`) |
+| `http://localhost:5021/admin.html` | Admin paneli (HITL, eskalasyon, replan, traces, evaluation, improvements) |
+| `http://localhost:5021/traces.html` | Trace dashboard |
+| `http://localhost:5021/replay.html` | Trace step-by-step replay |
+| `http://localhost:5021/sla.html` | SLA durumu monitör |
+| `http://localhost:5021/workflow-designer.html` | Low-code workflow editör |
 
 ### İlk akış denemesi
 
@@ -71,7 +79,7 @@ Tüm konfigürasyon `CustomerSupportBot/appsettings.json` üzerinden okunur. Ove
     "OpenAI": {
       "ApiKey": "",
       "Model": "gpt-5.4",                  // standart chat — ajanlar, ChatManager
-      "ReasoningModel": "o4-mini",         // ön-analiz reasoning service
+      "ReasoningModel": "gpt-5.4-nano",    // ön-analiz reasoning service
       "ReasoningEffort": "medium"          // low | medium | high
     },
     "AzureOpenAI": {
@@ -236,21 +244,30 @@ Tüm `Telemetry` ayarı kapatılmak istenirse `Telemetry.Enabled = false` — tr
 `Program.cs` aşağıdaki sırayla çalışır:
 
 ```
-1. Config oku             → AI:Provider seçilir
-2. AddTelemetryServices   → ActivitySource + Meter + (opsiyonel) OTLP exporter
-3. AiClientFactory        → IChatClient + ReasoningChatClient (TelemetryChatClient ile sarılı)
-4. PromptService          → Prompts/**/*.md eager load (eksikse fail-fast)
-5. Domain servisler       → EntityVerifier, ReasoningSanityChecker, ReasoningService,
-                            ContextPipeline + IContextProvider'lar
-6. HITL altyapısı         → IApprovalQueue, IEscalationSink, IChatModeRegistry, IChatBridge
-7. Persistence            → InMemorySessionManager (ISessionManager + IConversationStore aynı instance),
-                            InMemoryReasoningTraceStore (ring buffer, max 500)
-8. CustomerSupportTeam    → Agent worker'lar (lazy — ilk istekte construct edilir)
-9. Endpoint mapping       → MapChatEndpoints, MapSessionEndpoints, MapTraceEndpoints,
-                            MapEvaluationEndpoints, MapAdminEndpoints, MapAnalyticsEndpoints,
-                            MapTelemetryEndpoints
-10. Static files          → wwwroot/ (chat + admin UI)
-11. app.Run()             → Kestrel dinler (default :5021)
+1. Config oku                → AI:Provider seçilir
+2. AddTelemetryServices      → ActivitySource + Meter + (opsiyonel) OTLP exporter
+3. AddAiServices             → IChatClient + ReasoningChatClient (TelemetryChatClient ile sarılı)
+                               + SemanticMemory stack (Qdrant + embedding, Enabled ise)
+4. AddPersistenceServices    → Persistence:Provider'a göre:
+                               ├─ "Postgres" → PostgresSessionManager, PostgresReasoningTraceStore,
+                               │               PostgresApprovalQueue, PostgresRatingStore, ...
+                               │               + EF Core DbContext factory + PersistenceHydrator
+                               └─ "InMemory" → InMemory* fallback implementasyonları
+5. AddApplicationServices    → PromptService, EntityVerifier, ReasoningSanityChecker,
+                               ReasoningService, ContextPipeline + 4 IContextProvider,
+                               ApprovalGateService, InputGuard, CustomerSupportTeam (lazy),
+                               SlaGuardianService (BackgroundService), CustomerProfileService,
+                               SkillsBasedRouter, WorkflowExecutor, AnalyticsService
+6. AddAuthenticationServices → JWT Bearer + Admin authorization policy
+7. MigrateIfDevelopmentAsync → Development ortamında PostgreSQL migration'ları otomatik çalışır
+8. WireRoutingLoadTracking   → Eskalasyon çözümlendiğinde temsilci yükü auto-decrement
+9. Middleware pipeline       → CORS → RateLimiter → StaticFiles → WebSockets → Auth
+10. Endpoint mapping         → Public: Chat, Realtime (WS), Session, Auth
+                               Admin: Trace, Eval, Memory, Improvements, Telemetry,
+                                      Personalization, Agents, Workflows, SLA
+                               + Analytics (kısmi public)
+11. IHostedService'ler başlar→ KnowledgeBaseIngestor, SlaGuardianService, PersistenceHydrator
+12. app.Run()                → Kestrel dinler (default :5021)
 ```
 
 DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](architecture.md#dependency-injection-haritası).
@@ -497,19 +514,35 @@ Tam SSE event sözleşmeleri → [api.md#5-sse-event-şemaları](api.md#5-sse-ev
 
 ## 8. Veri yaşam döngüsü ve bellek davranışı
 
+Varsayılan persistence provider **Postgres**'dur (`appsettings.json > Persistence > Provider`).
+
+**Postgres modunda** (varsayılan):
+
+| Veri | Yer | Restart |
+|---|---|---|
+| Session + LLM history | `PostgresSessionManager` (DB) | **Kalıcı** |
+| Reasoning traces | `PostgresReasoningTraceStore` (DB) | **Kalıcı** |
+| Approval requests | `PostgresApprovalQueue` (DB) | **Kalıcı** |
+| Escalation tickets | DB | **Kalıcı** |
+| Ratings | `PostgresRatingStore` (DB) | **Kalıcı** |
+| Auth (users + tokens) | DB (her zaman Postgres) | **Kalıcı** |
+| Semantic memory | Qdrant (vektör DB) | **Kalıcı** |
+| Bridge history (admin transcript) | `InMemoryChatBridge` | Kayıp |
+| Chat mode | `InMemoryChatModeRegistry` | Kayıp |
+| Workflow definitions | `InMemoryWorkflowDefinitionStore` | Kayıp |
+| Customer profiles | `InMemoryCustomerProfileStore` | Kayıp |
+| FakeDatabase (demo) | Static seed | Yeni instance |
+
+**InMemory modunda** (geliştirme/test):
+
 | Veri | Yer | Sınır | Restart |
 |---|---|---|---|
 | Session + LLM history | `InMemorySessionManager` | Sınırsız (RAM) | Kayıp |
-| Bridge history (admin transcript) | `InMemoryChatBridge` | Ring buffer 200 msg/session | Kayıp |
-| Reasoning traces | `InMemoryReasoningTraceStore` | Ring buffer 500 trace global | Kayıp |
-| Approval requests | `InMemoryApprovalQueue` | Ring buffer 200 (recent) + active dict | Kayıp |
-| Escalation tickets | `InMemoryEscalationSink` | Sınırsız (RAM) | Kayıp |
-| Chat mode | `InMemoryChatModeRegistry` | Sınırsız (RAM) | Kayıp |
-| Conversation summary | `SessionState.ConversationSummary` (string) | 1 LLM özeti, 8+ mesajda yenilenir | Kayıp |
-| Ratings | `AnalyticsService` (memory) | Sınırsız | Kayıp |
-| FakeDatabase (siparişler/ürünler/müşteriler) | Static seed | Sabit (kod) | Yeni instance |
+| Reasoning traces | `InMemoryReasoningTraceStore` | Ring buffer 500 | Kayıp |
+| Approval requests | `InMemoryApprovalQueue` | Ring buffer 200 | Kayıp |
+| Tüm diğerleri | In-memory | RAM | Kayıp |
 
-**Production'a hazırlama**: tüm in-memory store'lar Redis / SQL / event store ile değiştirilebilir; interface'ler temizdir (bkz. [reference.md](reference.md)).
+Detay → [persistence.md](persistence.md).
 
 ---
 
@@ -605,3 +638,9 @@ Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 - **Reasoning pipeline ve sanity rule'lar** → [reasoning.md](reasoning.md)
 - **Class/interface sözleşmeleri** → [reference.md](reference.md)
 - **Yeni feature/agent/tool ekleme** → [developer-guide.md](developer-guide.md)
+- **Semantic memory, Self-Improving Loop, Personalization** → [intelligence.md](intelligence.md)
+- **Sesli konuşma (Realtime)** → [realtime.md](realtime.md)
+- **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
+- **Veritabanı ve kalıcılık** → [persistence.md](persistence.md)
+- **Telemetri ve maliyet takibi** → [telemetry.md](telemetry.md)
+- **Kurulum ve dağıtım** → [deployment.md](deployment.md)

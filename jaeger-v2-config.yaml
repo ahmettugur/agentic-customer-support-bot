@@ -1,0 +1,62 @@
+# Jaeger v2 Configuration
+# OpenTelemetry Collector uyumlu YAML formatı.
+# Elasticsearch backend ile trace depolama + Jaeger UI.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: es_store
+
+extensions:
+  healthcheckv2:
+    http:
+      endpoint: 0.0.0.0:13133
+
+  jaeger_storage:
+    backends:
+      es_store:
+        elasticsearch:
+          server_urls:
+            - http://elasticsearch:9200
+          indices:
+            index_prefix: "jaeger"
+            spans:
+              date_layout: "2006-01-02"
+              rollover_frequency: "day"
+              shards: 3
+              replicas: 0
+            services:
+              date_layout: "2006-01-02"
+              rollover_frequency: "day"
+              shards: 3
+              replicas: 0
+
+  jaeger_query:
+    storage:
+      traces: es_store
+    ui:
+      log_access: true
+    http:
+      endpoint: 0.0.0.0:16686
+    grpc:
+      endpoint: 0.0.0.0:16685
+
+service:
+  extensions: [healthcheckv2, jaeger_storage, jaeger_query]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]

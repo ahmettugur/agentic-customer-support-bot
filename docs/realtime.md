@@ -142,8 +142,8 @@ Kullanıcı yan-etkili bir işlem isterse native modda model **tool çağırmaz*
     "Model": "gpt-realtime-1.5",
     "ApiKey": "",
     "Voice": "alloy",
-    "VadSilenceMs": 600,
-    "VadThreshold": 0.5,
+    "VadSilenceMs": 800,
+    "VadThreshold": 0.65,
     "MaxResponseTokens": 4096,
     "TranscriptionModel": "gpt-4o-transcribe",
     "TranscriptionLanguage": "tr",
@@ -160,8 +160,8 @@ Kullanıcı yan-etkili bir işlem isterse native modda model **tool çağırmaz*
 | `Model` | `gpt-realtime-1.5` | Realtime session modeli (STT+TTS session'ını yöneten ana model) |
 | `ApiKey` | boş → `AI:OpenAI:ApiKey` fallback | Realtime-spesifik key opsiyonel; default OpenAI key'i kullanılır |
 | `Voice` | `alloy` | TTS sesi: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer` |
-| `VadSilenceMs` | 600 | Kullanıcı konuşmayı bitirdi kabul etme eşiği. 800-1000 ms Türkçe uzun cümleler için daha rahat |
-| `VadThreshold` | 0.5 | Ses algılama eşiği (0..1). Gürültülü ortamda 0.55-0.6'ya çıkar |
+| `VadSilenceMs` | 800 | Kullanıcı konuşmayı bitirdi kabul etme eşiği (ms). Türkçe uzun cümleler için 800-1000 ms uygun |
+| `VadThreshold` | 0.65 | Ses algılama eşiği (0..1). Gürültülü ortamda 0.7'ye çıkarılabilir |
 | `MaxResponseTokens` | 4096 | TTS sırasında aşılmaz |
 | `TranscriptionModel` | `gpt-4o-transcribe` | STT modeli. Alt seçenekler: `gpt-4o-mini-transcribe` (hızlı/ucuz), `whisper-1` (eski) |
 | `TranscriptionLanguage` | `tr` | ISO-639-1 dil ipucu (null = otomatik) |
@@ -289,7 +289,7 @@ Handler: `@Services/Realtime/RealtimeBridge.cs:HandleAsync`. DI: `@Extensions/Ai
 
 | Belirti | Muhtemel sebep | Çözüm |
 |---|---|---|
-| Mikrofon izni isteniyor ama ses gitmiyor | AudioWorklet load hatası | Console'a bak, `pcm-processor.js` 404 mu? |
+| Mikrofon izni isteniyor ama ses gitmiyor | AudioWorklet load hatası | Console'a bak, `realtime-pcm-worklet.js` 404 mu? |
 | Transcript boş veya saçma | Whisper-1 fallback, dil ipucu yok | `TranscriptionModel: gpt-4o-transcribe`, `TranscriptionLanguage: tr` |
 | Konuşma erken kesiliyor | VAD çok agresif | `VadSilenceMs: 800-1000`, `VadThreshold: 0.55` |
 | Gürültü "konuşma" sanılıyor | VAD threshold düşük | `VadThreshold: 0.6` |
@@ -313,7 +313,7 @@ Handler: `@Services/Realtime/RealtimeBridge.cs:HandleAsync`. DI: `@Extensions/Ai
 **Frontend**
 - `@wwwroot/js/realtime-client.js` — WS client + AudioWorklet capture + PCM playback (her iki mod için ortak)
 - `@wwwroot/js/realtime-ui.js` — iki mod arasında geçiş + tool call chip'leri (native) + ortak UI (köprü)
-- `@wwwroot/js/pcm-processor.js` — AudioWorklet processor (24kHz capture)
+- `@wwwroot/js/realtime-pcm-worklet.js` — AudioWorklet processor (24kHz capture)
 - `@wwwroot/index.html` — 🎤 ve ⚡ butonları
 - `@wwwroot/css/styles.css` — `.btn-voice` (kırmızı pulse) + `.btn-voice-native` (mor pulse)
 

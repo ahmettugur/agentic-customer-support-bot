@@ -20,7 +20,7 @@ MAF (`Microsoft.Agents.AI` framework) üzerine kurulu **2 orkestrasyon sınıfı
 
 ### `CustomerSupportTeam` — `Agents/CustomerSupportTeam.cs`
 
-Sistemin merkezi orkestratörü. **6 MAF `ChatClientAgent`**'ı (Planning + 4 specialist + Response) ctor'da yaratır, tüm tool'ları kaydeder ve `AgentWorkflowBuilder.CreateGroupChatBuilderWith(...)` ile workflow derler. İki genel metod:
+Sistemin merkezi orkestratörü. **7 MAF `ChatClientAgent`**'ı (Planning + 5 specialist + Response) ctor'da yaratır, tüm tool'ları kaydeder ve `AgentWorkflowBuilder.CreateGroupChatBuilderWith(...)` ile workflow derler. İki genel metod:
 
 - **`RunAsync(query, history?, session?, reasoning?)`** — non-streaming. Compound query algılayıp `RunDecomposedAsync`'a ayrılabilir. Final string response döner, ResponseAgent TERMINATE marker'ı temizlenmiş.
 - **`RunStreamingAsync(...)`** — SSE için event stream üretir (`agent`, `response_start`, `response_delta`, `response_complete`). Compound query'de `RunDecomposedStreamingAsync`'a düşer.
@@ -203,9 +203,75 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
 ---
 
+### `InputGuard` — `Services/InputGuard.cs`
+
+Kullanıcı girdi güvenlik filtresi. `Inspect(query)` → `Pass | Flagged | Reject`. Prompt injection, zararlı içerik ve aşırı uzun girdi kontrolü yapar. Chat endpoint'lerinde ilk adımda çalışır.
+
+---
+
+### `SemanticMemoryContextProvider` — `Services/Providers/SemanticMemoryContextProvider.cs`
+
+`Order=20`. Qdrant'tan Knowledge Base + Lessons araması yapıp context pipeline'a RAG sonuçları enjekte eder. `SemanticMemory:Enabled = false` ise atlanır.
+
+---
+
+### `CustomerProfileContextProvider` — `Services/Providers/CustomerProfileContextProvider.cs`
+
+`Order=15`. `state.CustomerId` set'liyse müşteri profilini context'e enjekte eder (tüm ajanlar görür).
+
+---
+
+### `ApprovalGateService` — `Agents/ApprovalGateService.cs`
+
+HITL approval gate. Yan etkili tool lambda'larını sararak `HumanInTheLoop.Enabled = true` ise admin onayı bekletir. Timeout ve auto-approve politikaları destekler.
+
+---
+
+### `SlaGuardianService` — `Services/Sla/SlaGuardianService.cs`
+
+`BackgroundService`. Periyodik olarak bekleyen onay ve açık eskalasyonları tarar. Breach durumunda onayları reddeder, eskalasyon önceliğini yükseltir.
+
+---
+
+### `CustomerProfileService` — `Services/Personalization/CustomerProfileService.cs`
+
+Per-customer profil yönetimi. `RecordInteraction` (LLM-siz heuristik, her turda) + `ConsolidateAsync` (admin tetikli LLM özet + ton çıkarımı).
+
+---
+
+### `SkillsBasedRouter` — `Services/Routing/SkillsBasedRouter.cs`
+
+Deterministik skills-based eşleştirme. Reasoning trace + müşteri profili → required skill çıkarımı → aday seçimi (skill match + dil + load balance). LLM kullanmaz.
+
+---
+
+### `WorkflowExecutor` — `Services/Workflow/WorkflowExecutor.cs`
+
+Low-code workflow designer motoru. Admin tanımlı JSON workflow'larını LLM-siz deterministik olarak çalıştırır. Step tipleri: Respond, Lookup, Branch, SetVariable.
+
+---
+
+### `TelemetryChatClient` — `Services/Telemetry/TelemetryChatClient.cs`
+
+`IChatClient` `DelegatingChatClient` wrapper'ı. Her LLM çağrısında span açar, token + USD maliyet + latency kaydeder. Streaming dahil.
+
+---
+
+### `CostUsageStore` — `Services/Telemetry/CostUsageStore.cs`
+
+In-memory model bazlı agregat maliyet deposu. Admin `/telemetry/cost` endpoint'i bu store'dan okur.
+
+---
+
+### `AnalyticsService` — `Services/AnalyticsService.cs`
+
+Oturum, intent dağılımı, ortalama puan ve son rating bilgilerini toplar. Admin analytics dashboard verisi sağlar.
+
+---
+
 ### `ReasoningChatClient` — `Services/ReasoningChatClient.cs`
 
-O-series reasoning modeli (varsayılan `o4-mini`) için `IChatClient` wrapper. `ReasoningEffort` ("low", "medium", "high") + `ModelName` ile konfigüre edilir. `ReasoningService` tarafından DI'dan alınır; chat client'tan ayrışmak için sarmalayıcı sınıf kullanılır.
+Reasoning modeli (varsayılan `gpt-5.4-nano`) için `IChatClient` wrapper. `ReasoningEffort` ("low", "medium", "high") + `ModelName` ile konfigüre edilir. `ReasoningService` tarafından DI'dan alınır; chat client'tan ayrışmak için sarmalayıcı sınıf kullanılır.
 
 ---
 
@@ -438,7 +504,7 @@ ChatManager `ShouldTerminateAsync` bu ayarları kullanır.
 
 ### `CustomerSupportTools` — `Tools/CustomerSupportTools.cs`
 
-Statik sınıf. **6 tool fonksiyonu**, hepsi `[Description]` attribute'u ile LLM'e açıklanır ve `AIFunctionFactory.Create()` ile MAF agent'larına bağlanır. Tümü `ToolResult` döner.
+Statik sınıf. **7 tool fonksiyonu**, hepsi `[Description]` attribute'u ile LLM'e açıklanır ve `AIFunctionFactory.Create()` ile MAF agent'larına bağlanır. Tümü `ToolResult` döner.
 
 | Tool | İmza | Hangi agent | Side effect |
 |---|---|---|---|
@@ -448,6 +514,7 @@ Statik sınıf. **6 tool fonksiyonu**, hepsi `[Description]` attribute'u ile LLM
 | `ComplaintRegistrationTool` | `(orderId, complaintText, customerId?)` | ComplaintAgent | ✅ `ComplaintsDb` |
 | `GetLastOrderTool` | `(customerId)` | OrderInquiryAgent | ❌ |
 | `GetAllOrdersTool` | `(customerId)` | OrderInquiryAgent | ❌ |
+| `HumanHandoffTool` | `(reason, sessionId)` | HumanHandoffAgent | ✅ eskalasyon |
 
 **Özel davranışlar**:
 
@@ -656,7 +723,11 @@ app.MapEvaluationEndpoints();
 - **Agent davranışı detayı** → [agents.md](agents.md)
 - **Workflow akışı / compound query** → [workflow.md](workflow.md)
 - **Reasoning pipeline katmanları** → [reasoning.md](reasoning.md)
-- **Tasarım örüntüleri (19 pattern)** → [patterns.md](patterns.md)
+- **Tasarım örüntüleri** → [patterns.md](patterns.md)
 - **Mimari + DI + sequence diagram** → [architecture.md](architecture.md)
 - **Endpoint + event şemaları** → [api.md](api.md)
+- **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
+- **Veritabanı ve kalıcılık** → [persistence.md](persistence.md)
+- **Telemetri ve maliyet takibi** → [telemetry.md](telemetry.md)
+- **Routing ve eskalasyon** → [routing.md](routing.md)
 - **Yeni sınıf/tool/agent nasıl eklenir** → [developer-guide.md](developer-guide.md)
