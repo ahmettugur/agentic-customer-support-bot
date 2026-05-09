@@ -104,7 +104,17 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
 
         // 2) Session config — model kendisi konuşur ve okuma-only tool'ları çağırabilir
         // gpt-realtime-2 API: audio config nested under session.audio.input / session.audio.output
-        // Not: transcription conversation modunda otomatik yapılır (transcription-only mode için ayrı)
+        // Transcription explicit: conversation.item.input_audio_transcription.completed event'inin
+        // tetiklenmesi için gerekli — kullanıcı baloncuğunu UI'da göstermek ve buffer flush etmek için.
+        var transcriptionConfig = new Dictionary<string, object?>
+        {
+            ["model"] = _options.TranscriptionModel
+        };
+        if (!string.IsNullOrWhiteSpace(_options.TranscriptionLanguage))
+            transcriptionConfig["language"] = _options.TranscriptionLanguage;
+        if (!string.IsNullOrWhiteSpace(_options.TranscriptionPrompt))
+            transcriptionConfig["prompt"] = _options.TranscriptionPrompt;
+
         await SendOpenAiJsonAsync(_openAiWs, new
         {
             type = "session.update",
@@ -117,6 +127,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                     input = new
                     {
                         format = new { type = "audio/pcm", rate = 24000 },
+                        transcription = transcriptionConfig,
                         turn_detection = new
                         {
                             type = "semantic_vad",
@@ -285,6 +296,12 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         // Parallel tool calls: bir response içinde birden fazla function call biriktirilir,
         // response.done'da toplu dispatch edilir.
         var pendingToolCalls = new List<(string CallId, string Name, string ArgsJson)>();
+        // Native modda model, kullanıcı transcript'i tamamlanmadan yanıt üretmeye başlar.
+        // UI'da kullanıcı baloncuğu asistan baloncuğundan önce görünmesi için,
+        // user_transcript gelene kadar assistant_text_delta'ları tamponlarız.
+        // (Audio gercek-zamanlı akışa devam eder; sadece metin alt yazı sırası düzeltilir.)
+        var userTranscriptSent = false;
+        var bufferedAssistantDeltas = new List<string>();
 
         while (!ct.IsCancellationRequested && openAiWs.State == WebSocketState.Open)
         {
@@ -301,23 +318,28 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
             var json = Encoding.UTF8.GetString(ms.ToArray());
-            await HandleOpenAiEventAsync(browserWs, openAiWs, session, json, assistantTextBuilder, pendingToolCalls, ct);
+            (userTranscriptSent, _) = await HandleOpenAiEventAsync(
+                browserWs, openAiWs, session, json,
+                assistantTextBuilder, pendingToolCalls,
+                userTranscriptSent, bufferedAssistantDeltas, ct);
         }
     }
 
-    private async Task HandleOpenAiEventAsync(
+    private async Task<(bool UserTranscriptSent, bool _)> HandleOpenAiEventAsync(
         WebSocket browserWs,
         ClientWebSocket openAiWs,
         AgentSession session,
         string json,
         StringBuilder assistantTextBuilder,
         List<(string CallId, string Name, string ArgsJson)> pendingToolCalls,
+        bool userTranscriptSent,
+        List<string> bufferedAssistantDeltas,
         CancellationToken ct)
     {
         JsonNode? node;
         try { node = JsonNode.Parse(json); }
-        catch { return; }
-        if (node == null) return;
+        catch { return (userTranscriptSent, false); }
+        if (node == null) return (userTranscriptSent, false);
 
         var type = node["type"]?.GetValue<string>() ?? "";
 
@@ -331,6 +353,9 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 // Model yanıt üretmeye başladı — ilk audio.delta gelmeden mic gating'i aç.
                 // audio.delta ile arasındaki kısa pencerede de echo'yu önler.
                 _assistantSpeaking = true;
+                // Yeni tur başlıyor: user_transcript bayrağını ve buffer'ı sıfırla.
+                userTranscriptSent = false;
+                bufferedAssistantDeltas.Clear();
                 break;
 
             case "input_audio_buffer.speech_started":
@@ -368,6 +393,17 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 }
 
                 await SendBrowserJsonAsync(browserWs, new { type = "user_transcript", text = transcript }, ct);
+                userTranscriptSent = true;
+                // user_transcript gelmeden önce biriken assistant_text_delta'ları şimdi flush et
+                if (bufferedAssistantDeltas.Count > 0)
+                {
+                    foreach (var delta in bufferedAssistantDeltas)
+                    {
+                        await SendBrowserJsonAsync(browserWs,
+                            new { type = "assistant_text_delta", text = delta }, ct);
+                    }
+                    bufferedAssistantDeltas.Clear();
+                }
                 assistantTextBuilder.Clear();  // yeni tur başlıyor
                 break;
             }
@@ -390,8 +426,16 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 if (!string.IsNullOrEmpty(delta))
                 {
                     assistantTextBuilder.Append(delta);
-                    await SendBrowserJsonAsync(browserWs,
-                        new { type = "assistant_text_delta", text = delta }, ct);
+                    if (userTranscriptSent)
+                    {
+                        await SendBrowserJsonAsync(browserWs,
+                            new { type = "assistant_text_delta", text = delta }, ct);
+                    }
+                    else
+                    {
+                        // Kullanıcı transcript'i henüz gelmedi — UI'da sıra bozulmasın diye buffer'la
+                        bufferedAssistantDeltas.Add(delta!);
+                    }
                 }
                 break;
             }
@@ -456,6 +500,16 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 _assistantSpeaking = false;
                 try { await SendOpenAiJsonAsync(openAiWs, new { type = "input_audio_buffer.clear" }, ct); }
                 catch { /* best effort */ }
+                // Safety fallback: user transcript hiç gelmediyse, biriken delta'ları yine de göster
+                if (bufferedAssistantDeltas.Count > 0)
+                {
+                    foreach (var delta in bufferedAssistantDeltas)
+                    {
+                        await SendBrowserJsonAsync(browserWs,
+                            new { type = "assistant_text_delta", text = delta }, ct);
+                    }
+                    bufferedAssistantDeltas.Clear();
+                }
                 var finalText = assistantTextBuilder.ToString().Trim();
                 if (!string.IsNullOrEmpty(finalText))
                 {
@@ -479,6 +533,8 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 break;
             }
         }
+
+        return (userTranscriptSent, false);
     }
 
     /// <summary>
