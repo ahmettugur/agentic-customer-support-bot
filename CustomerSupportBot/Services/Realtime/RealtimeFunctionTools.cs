@@ -38,12 +38,19 @@ public sealed class RealtimeFunctionTools
     /// <summary>UI tarafına bilgi vermek için: hangi tool'lar açıldı?</summary>
     public IReadOnlyList<string> GetToolNames() => ToolNames;
 
+    /// <summary>
+    /// Görüşmeyi sonlandırma niyetini işaretleyen özel tool adı. Bridge bu ismi yakaladığında
+    /// modelin veda audio'su bittikten sonra WebSocket'i kapatır.
+    /// </summary>
+    public const string EndConversationToolName = "end_conversation";
+
     private static readonly string[] ToolNames =
     [
         "product_inquiry_tool",
         "order_status_tool",
         "get_last_order_tool",
-        "get_all_orders_tool"
+        "get_all_orders_tool",
+        EndConversationToolName
     ];
 
     private static readonly object[] ToolDefs =
@@ -107,6 +114,29 @@ public sealed class RealtimeFunctionTools
                 },
                 required = new[] { "customer_id" }
             }
+        },
+        new
+        {
+            type = "function",
+            name = EndConversationToolName,
+            description =
+                "Kullanıcı görüşmeyi bitirmek istediğini ifade ettiğinde çağır. " +
+                "Örnekler: 'görüşürüz', 'teşekkürler kapatabilirsin', 'başka soru yok', 'hoşçakal'. " +
+                "ÖNEMLİ: Önce kısa bir veda cümlesi söyle (örn. 'Tabii, iyi günler dilerim'), " +
+                "ARDINDAN bu tool'u çağır. Kullanıcı açıkça vedalaşmadıkça çağırma.",
+            parameters = new
+            {
+                type = "object",
+                properties = new
+                {
+                    reason = new
+                    {
+                        type = "string",
+                        description = "Kısa neden (örn. 'user_farewell', 'task_completed')."
+                    }
+                },
+                required = Array.Empty<string>()
+            }
         }
     ];
 
@@ -139,6 +169,13 @@ public sealed class RealtimeFunctionTools
 
                 "get_all_orders_tool"
                     => CustomerSupportTools.GetAllOrdersTool(GetString(args, "customer_id") ?? ""),
+
+                EndConversationToolName
+                    => ToolResult.Ok("Görüşme sonlandırılıyor.", new
+                    {
+                        ended = true,
+                        reason = GetString(args, "reason") ?? "user_farewell"
+                    }),
 
                 // HITL gerektiren tool'lar — model bunları görmemeli ama yine de
                 // savunma katmanı: çağrılırsa açıkça reddet.

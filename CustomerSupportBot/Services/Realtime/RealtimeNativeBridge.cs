@@ -48,6 +48,16 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
     // OpenAI VAD echo'yu yeni kullanıcı turu sanarak sahte yanıt üretir.
     private volatile bool _assistantSpeaking;
 
+    // Model end_conversation tool'unu çağırdığında set edilir; veda audio'su
+    // bittikten sonra (response.done) WebSocket nazikçe kapatılır.
+    private volatile bool _endRequested;
+    private string _endReason = "user_farewell";
+
+    // Inactivity tracking — son kullanıcı ses/transcript zaman damgası. Background
+    // timer bunu izler; eşik aşılırsa görüşme zaman aşımıyla biter.
+    private long _lastUserActivityTicks = DateTime.UtcNow.Ticks;
+    private static readonly TimeSpan InactivityTimeout = TimeSpan.FromSeconds(60);
+
     public RealtimeNativeBridge(
         IOptions<AiOptions> aiOptions,
         ISessionManager sessionManager,
@@ -158,22 +168,71 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
             tools = _toolDispatcher.GetToolNames()
         }, ct);
 
-        // 3) İki paralel pump
+        // 3) Üç paralel pump: browser↔openai çift yönlü + inactivity watcher
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var browserPump = PumpBrowserToOpenAiAsync(browserWs, _openAiWs, linked.Token);
         var openAiPump = PumpOpenAiToBrowserAsync(browserWs, _openAiWs, session, linked.Token);
+        var inactivityWatcher = WatchInactivityAsync(browserWs, _openAiWs, linked.Token);
 
         try
         {
-            await Task.WhenAny(browserPump, openAiPump);
+            await Task.WhenAny(browserPump, openAiPump, inactivityWatcher);
             linked.Cancel();
-            await Task.WhenAll(browserPump, openAiPump).ContinueWith(_ => { }, TaskScheduler.Default);
+            await Task.WhenAll(browserPump, openAiPump, inactivityWatcher)
+                .ContinueWith(_ => { }, TaskScheduler.Default);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             _logger.LogError(ex, "RealtimeNative: pump hatası session={Sid}", actualSessionId);
         }
+    }
+
+    /// <summary>
+    /// Inactivity watcher: kullanıcı uzun süre konuşmazsa görüşmeyi nazikçe sonlandırır.
+    /// Son ses/transcript zaman damgasını izler; <see cref="InactivityTimeout"/> aşılırsa
+    /// browser'a <c>conversation_ended</c> bildirir ve WS'leri kapatır.
+    /// </summary>
+    private async Task WatchInactivityAsync(WebSocket browserWs, ClientWebSocket openAiWs, CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                if (_endRequested) return; // tool ile zaten kapanıyor
+
+                var lastTicks = Interlocked.Read(ref _lastUserActivityTicks);
+                var elapsed = DateTime.UtcNow - new DateTime(lastTicks, DateTimeKind.Utc);
+                if (elapsed < InactivityTimeout) continue;
+
+                _logger.LogInformation("RealtimeNative: inactivity timeout ({Sec}s) — görüşme sonlandırılıyor",
+                    (int)elapsed.TotalSeconds);
+                _endRequested = true;
+                _endReason = "idle_timeout";
+
+                try
+                {
+                    await SendBrowserJsonAsync(browserWs,
+                        new { type = "conversation_ended", reason = _endReason }, ct);
+                }
+                catch { /* best effort */ }
+                try
+                {
+                    if (openAiWs.State == WebSocketState.Open)
+                        await openAiWs.CloseAsync(WebSocketCloseStatus.NormalClosure, "idle_timeout", CancellationToken.None);
+                }
+                catch { /* best effort */ }
+                try
+                {
+                    if (browserWs.State == WebSocketState.Open)
+                        await browserWs.CloseAsync(WebSocketCloseStatus.NormalClosure, "idle_timeout", CancellationToken.None);
+                }
+                catch { /* best effort */ }
+                return;
+            }
+        }
+        catch (OperationCanceledException) { /* normal cancel */ }
     }
 
     /// <summary>
@@ -206,6 +265,12 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         - Tool başarısızsa kullanıcıya nazikçe açıkla, kendi uydurma cevap üretme.
         - Müşteri kimliği veya sipariş numarası eksikse iste; varsay-ma.
         - Asla başka dilde cevap verme.
+
+        GÖRÜŞMEYİ SONLANDIRMA:
+        - Kullanıcı açıkça vedalaştığında ("görüşürüz", "teşekkürler kapat", "hoşçakal",
+          "başka soru yok", "yeterli" gibi) ÖNCE kısa bir veda cümlesi söyle
+          (örn. "Tabii, iyi günler dilerim."), ARDINDAN end_conversation tool'unu çağır.
+        - Kullanıcı açıkça vedalaşmadıkça end_conversation çağırma.
         """;
 
     // ─── Browser → OpenAI ───
@@ -234,6 +299,9 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
             {
                 // Half-duplex: bot konuşurken mikrofon sesini forward etme (echo loop kırıcı)
                 if (_assistantSpeaking) continue;
+
+                // Inactivity tracking: kullanıcı audio gönderdi (gercek mikrofon)
+                Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
 
                 var b64 = Convert.ToBase64String(payload);
                 await SendOpenAiJsonAsync(openAiWs, new
@@ -392,6 +460,9 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                     break;
                 }
 
+                // Inactivity tracking: kullanıcı transcribe olabilen bir şey söyledi
+                Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
+
                 await SendBrowserJsonAsync(browserWs, new { type = "user_transcript", text = transcript }, ct);
                 userTranscriptSent = true;
                 // user_transcript gelmeden önce biriken assistant_text_delta'ları şimdi flush et
@@ -462,6 +533,20 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 if (!string.IsNullOrWhiteSpace(callId) && !string.IsNullOrWhiteSpace(name))
                 {
                     pendingToolCalls.Add((callId!, name!, args));
+
+                    // end_conversation özel: görüşme sonlandırma niyeti işaretle
+                    if (name == RealtimeFunctionTools.EndConversationToolName)
+                    {
+                        _endRequested = true;
+                        try
+                        {
+                            var argNode = JsonNode.Parse(args) as JsonObject;
+                            var reason = argNode?["reason"]?.GetValue<string>();
+                            if (!string.IsNullOrWhiteSpace(reason)) _endReason = reason!;
+                        }
+                        catch { /* args parse edilemezse default reason kalır */ }
+                    }
+
                     // Browser'a görsel ipucu
                     await SendBrowserJsonAsync(browserWs, new
                     {
@@ -522,6 +607,28 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                     new { type = "assistant_text", text = finalText }, ct);
                 await SendBrowserJsonAsync(browserWs, new { type = "response_done" }, ct);
                 assistantTextBuilder.Clear();
+
+                // end_conversation flag'i set'liyse: nazikçe kapat
+                if (_endRequested)
+                {
+                    await SendBrowserJsonAsync(browserWs,
+                        new { type = "conversation_ended", reason = _endReason }, ct);
+                    try
+                    {
+                        await openAiWs.CloseAsync(WebSocketCloseStatus.NormalClosure,
+                            "end_conversation", CancellationToken.None);
+                    }
+                    catch { /* best effort */ }
+                    try
+                    {
+                        if (browserWs.State == WebSocketState.Open)
+                        {
+                            await browserWs.CloseAsync(WebSocketCloseStatus.NormalClosure,
+                                "end_conversation", CancellationToken.None);
+                        }
+                    }
+                    catch { /* best effort */ }
+                }
                 break;
             }
 
@@ -591,6 +698,10 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 }
             }, ct);
         }
+
+        // Eğer end_conversation çağrıldıysa: yeni response.create gerekmez — model zaten
+        // bu turda veda cümlesini söyleyip tool'u çağırdı. response.done'da WS kapatılacak.
+        if (_endRequested) return;
 
         // Tüm output'lar eklendikten sonra tek bir response.create → sesli yanıt
         await SendOpenAiJsonAsync(openAiWs, new { type = "response.create" }, ct);

@@ -231,6 +231,13 @@
                     // Native modda tool sonucu modele iletildi (UI ipucu)
                     this._emit('tool_result', msg);
                     break;
+                case 'conversation_ended':
+                    // Backend görüşmeyi nazikçe sonlandırdı (end_conversation tool veya idle timeout)
+                    this._emit('conversation_ended', msg);
+                    this._setState('idle');
+                    // stop() WS'i kapatır + mic track'leri durdurur
+                    try { this.stop(); } catch (_) { /* best effort */ }
+                    break;
                 case 'error':
                     // İki kaynak: (a) RealtimeBridge bağlantı/sistem hatası ({type:"error", message:"..."}),
                     // (b) agent pipeline'dan forward edilen StreamEvent ({type:"error", data:{message:"..."}}).

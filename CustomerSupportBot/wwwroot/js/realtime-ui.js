@@ -256,6 +256,20 @@
                         finalizeAssistantBubble();
                     },
 
+                    // ── Görüşme nazikçe sonlandırıldı (end_conversation tool veya idle timeout) ──
+                    conversation_ended: ({ reason }) => {
+                        removePendingUserBubble();
+                        finalizeAssistantBubble();
+                        const label = reason === 'idle_timeout'
+                            ? 'Görüşme sessizlik nedeniyle sonlandırıldı.'
+                            : 'Görüşme sonlandırıldı.';
+                        setStatus('idle', label);
+                        setTimeout(() => setStatus('idle'), 3000);
+                        // client.stop() zaten realtime-client.js tarafında çağrılıyor
+                        client = null;
+                        activeMode = null;
+                    },
+
                     error: ({ message }) => {
                         console.warn('RealtimeNative error:', message);
                         setStatus('error', '⚠ ' + (message || 'Hata'));
