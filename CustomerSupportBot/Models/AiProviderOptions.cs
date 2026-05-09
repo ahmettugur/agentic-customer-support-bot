@@ -38,20 +38,23 @@ public sealed class RealtimeOptions
     /// <summary>Realtime özelliğini aç/kapa.</summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Realtime model adı (ör. "gpt-realtime-1.5").</summary>
-    public string Model { get; set; } = "gpt-realtime-1.5";
+    /// <summary>Realtime model adı (ör. "gpt-realtime-2").</summary>
+    public string Model { get; set; } = "gpt-realtime-2";
 
     /// <summary>Override API key — boşsa <see cref="OpenAiOptions.ApiKey"/> kullanılır.</summary>
     public string? ApiKey { get; set; }
 
-    /// <summary>TTS sesi (alloy, ash, ballad, coral, echo, sage, shimmer, verse).</summary>
+    /// <summary>TTS sesi (alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar).</summary>
     public string Voice { get; set; } = "alloy";
 
-    /// <summary>Server-side VAD susturma süresi (ms) — kullanıcının konuşmayı bitirdiğine karar verme eşiği.</summary>
+    /// <summary>Semantic VAD susturma süresi (ms) — kullanıcının konuşmayı bitirdiğine karar verme eşiği.</summary>
     public int VadSilenceMs { get; set; } = 600;
 
-    /// <summary>Server-side VAD eşiği (0..1). Yüksek = daha az hassas (gürültülü ortamda artır).</summary>
-    public double VadThreshold { get; set; } = 0.5;
+    /// <summary>
+    /// gpt-realtime-2 reasoning effort (native mod). "low" voice agent'lar için önerilir;
+    /// daha karmaşık iş akışlarında "medium" veya "high" kullanılabilir.
+    /// </summary>
+    public string ReasoningEffort { get; set; } = "low";
 
     /// <summary>Asistan yanıtının en çok kaç token söylenebileceği (TTS sırasında).</summary>
     public int MaxResponseTokens { get; set; } = 4096;

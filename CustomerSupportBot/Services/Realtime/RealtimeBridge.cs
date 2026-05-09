@@ -94,7 +94,6 @@ public sealed class RealtimeBridge : IAsyncDisposable
         {
             _openAiWs = new ClientWebSocket();
             _openAiWs.Options.SetRequestHeader("Authorization", $"Bearer {_apiKey}");
-            _openAiWs.Options.SetRequestHeader("OpenAI-Beta", "realtime=v1");
 
             var url = OpenAiRealtimeUrl + Uri.EscapeDataString(_options.Model);
             await _openAiWs.ConnectAsync(new Uri(url), ct);
@@ -110,7 +109,8 @@ public sealed class RealtimeBridge : IAsyncDisposable
         }
 
         // 2) Session config — model otomatik yanıt vermesin, sadece transcribe etsin.
-        // Transcription: Türkçe için gpt-4o-transcribe + dil ipucu + domain prompt.
+        // gpt-realtime-2 API: audio config nested under session.audio.input / session.audio.output
+        // Bridge mode: transcription explicit, çünkü kullanıcı transcript'ini biz işleyeceğiz
         var transcriptionConfig = new Dictionary<string, object?>
         {
             ["model"] = _options.TranscriptionModel
@@ -125,22 +125,30 @@ public sealed class RealtimeBridge : IAsyncDisposable
             type = "session.update",
             session = new
             {
-                modalities = new[] { "audio", "text" },
-                voice = _options.Voice,
-                input_audio_format = "pcm16",
-                output_audio_format = "pcm16",
-                input_audio_transcription = transcriptionConfig,
-                turn_detection = new
+                type = "realtime",
+                output_modalities = new[] { "audio" },
+                audio = new
                 {
-                    type = "server_vad",
-                    threshold = _options.VadThreshold,
-                    prefix_padding_ms = 300,
-                    silence_duration_ms = _options.VadSilenceMs,
-                    create_response = false  // ← Kritik: model otomatik yanıt vermesin
+                    input = new
+                    {
+                        format = new { type = "audio/pcm", rate = 24000 },
+                        transcription = transcriptionConfig,
+                        turn_detection = new
+                        {
+                            type = "semantic_vad",
+                            eagerness = "medium",
+                            create_response = false,  // ← Kritik: model otomatik yanıt vermesin
+                            interrupt_response = true
+                        }
+                    },
+                    output = new
+                    {
+                        format = new { type = "audio/pcm", rate = 24000 },
+                        voice = _options.Voice
+                    }
                 },
                 instructions = "Sen sadece bir ses-metin köprüsüsün. Kullanıcı konuşmasını kendin yorumlama. " +
-                               "Yanıt verirken yalnızca sana verilen metni Türkçe olarak doğal bir tonla harfiyen oku.",
-                max_response_output_tokens = _options.MaxResponseTokens
+                               "Yanıt verirken yalnızca sana verilen metni Türkçe olarak doğal bir tonla harfiyen oku."
             }
         }, ct);
 
@@ -353,7 +361,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
                 break;
             }
 
-            case "response.audio.delta":
+            case "response.output_audio.delta":
             {
                 // Asistan konuşmaya başladı — echo gating'i aç.
                 _assistantSpeaking = true;
@@ -368,7 +376,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
                 break;
             }
 
-            case "response.audio_transcript.delta":
+            case "response.output_audio_transcript.delta":
             {
                 // Asistanın söylediği metnin delta'sı — browser bunu altyazı gibi gösterebilir
                 var delta = node["delta"]?.GetValue<string>();
@@ -509,7 +517,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
                 role = "assistant",
                 content = new[]
                 {
-                    new { type = "text", text }
+                    new { type = "output_text", text }
                 }
             }
         }, ct);
@@ -520,7 +528,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
             type = "response.create",
             response = new
             {
-                modalities = new[] { "audio", "text" },
+                output_modalities = new[] { "audio" },
                 instructions = "Yukarıda sana verilen son asistan metnini Türkçe olarak doğal, " +
                                "samimi bir tonla harfiyen oku. Hiçbir kelime ekleme veya çıkarma."
             }

@@ -1,6 +1,6 @@
 // Services/Realtime/RealtimeNativeBridge.cs
 //
-// "Hızlı Sesli" mod — gpt-realtime-1.5 modelinin kendi çok-kipli yetenekleri kullanılır.
+// "Hızlı Sesli" mod — gpt-realtime-2 modelinin kendi çok-kipli yetenekleri kullanılır.
 // Model sesi kendisi anlar, kararı kendisi verir, gerekirse function calling ile
 // **sadece okuma-only** tool'ları çağırır, cevabı kendisi sesli okur.
 //
@@ -88,7 +88,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         {
             _openAiWs = new ClientWebSocket();
             _openAiWs.Options.SetRequestHeader("Authorization", $"Bearer {_apiKey}");
-            _openAiWs.Options.SetRequestHeader("OpenAI-Beta", "realtime=v1");
 
             var url = OpenAiRealtimeUrl + Uri.EscapeDataString(_options.Model);
             await _openAiWs.ConnectAsync(new Uri(url), ct);
@@ -104,37 +103,37 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         }
 
         // 2) Session config — model kendisi konuşur ve okuma-only tool'ları çağırabilir
-        var transcriptionConfig = new Dictionary<string, object?>
-        {
-            ["model"] = _options.TranscriptionModel
-        };
-        if (!string.IsNullOrWhiteSpace(_options.TranscriptionLanguage))
-            transcriptionConfig["language"] = _options.TranscriptionLanguage;
-        if (!string.IsNullOrWhiteSpace(_options.TranscriptionPrompt))
-            transcriptionConfig["prompt"] = _options.TranscriptionPrompt;
-
+        // gpt-realtime-2 API: audio config nested under session.audio.input / session.audio.output
+        // Not: transcription conversation modunda otomatik yapılır (transcription-only mode için ayrı)
         await SendOpenAiJsonAsync(_openAiWs, new
         {
             type = "session.update",
             session = new
             {
-                modalities = new[] { "audio", "text" },
-                voice = _options.Voice,
-                input_audio_format = "pcm16",
-                output_audio_format = "pcm16",
-                input_audio_transcription = transcriptionConfig,
-                turn_detection = new
+                type = "realtime",
+                output_modalities = new[] { "audio" },
+                audio = new
                 {
-                    type = "server_vad",
-                    threshold = _options.VadThreshold,
-                    prefix_padding_ms = 300,
-                    silence_duration_ms = _options.VadSilenceMs,
-                    create_response = true   // ← Köprü modundan farkı: model kendisi cevaplar
+                    input = new
+                    {
+                        format = new { type = "audio/pcm", rate = 24000 },
+                        turn_detection = new
+                        {
+                            type = "semantic_vad",
+                            eagerness = "medium",
+                            create_response = true,   // ← Köprü modundan farkı: model kendisi cevaplar
+                            interrupt_response = true
+                        }
+                    },
+                    output = new
+                    {
+                        format = new { type = "audio/pcm", rate = 24000 },
+                        voice = _options.Voice
+                    }
                 },
                 tools = _toolDispatcher.GetToolDefinitions(),
                 tool_choice = "auto",
-                instructions = BuildSystemInstructions(),
-                max_response_output_tokens = _options.MaxResponseTokens
+                instructions = BuildSystemInstructions()
             }
         }, ct);
 
@@ -283,6 +282,9 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         var buffer = new byte[32 * 1024];
         var ms = new MemoryStream();
         var assistantTextBuilder = new StringBuilder();
+        // Parallel tool calls: bir response içinde birden fazla function call biriktirilir,
+        // response.done'da toplu dispatch edilir.
+        var pendingToolCalls = new List<(string CallId, string Name, string ArgsJson)>();
 
         while (!ct.IsCancellationRequested && openAiWs.State == WebSocketState.Open)
         {
@@ -299,7 +301,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
             if (result.MessageType != WebSocketMessageType.Text) continue;
 
             var json = Encoding.UTF8.GetString(ms.ToArray());
-            await HandleOpenAiEventAsync(browserWs, openAiWs, session, json, assistantTextBuilder, ct);
+            await HandleOpenAiEventAsync(browserWs, openAiWs, session, json, assistantTextBuilder, pendingToolCalls, ct);
         }
     }
 
@@ -309,6 +311,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         AgentSession session,
         string json,
         StringBuilder assistantTextBuilder,
+        List<(string CallId, string Name, string ArgsJson)> pendingToolCalls,
         CancellationToken ct)
     {
         JsonNode? node;
@@ -369,7 +372,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 break;
             }
 
-            case "response.audio.delta":
+            case "response.output_audio.delta":
             {
                 _assistantSpeaking = true;
                 var b64 = node["delta"]?.GetValue<string>();
@@ -381,7 +384,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 break;
             }
 
-            case "response.audio_transcript.delta":
+            case "response.output_audio_transcript.delta":
             {
                 var delta = node["delta"]?.GetValue<string>();
                 if (!string.IsNullOrEmpty(delta))
@@ -393,7 +396,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 break;
             }
 
-            case "response.audio_transcript.done":
+            case "response.output_audio_transcript.done":
             {
                 // Tek seferde tam transcript — bazen delta'lar atlanırsa burada toparlanır
                 var fullText = node["transcript"]?.GetValue<string>();
@@ -406,13 +409,33 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
 
             case "response.function_call_arguments.done":
             {
-                // Model bir tool çağırmaya karar verdi — argümanlar tamamlandı
-                await HandleFunctionCallAsync(browserWs, openAiWs, node, ct);
+                // Parallel tool calls: argümanları listeye ekle, henüz dispatch etme.
+                // Tüm tool call'lar response.done'da toplu işlenir.
+                var callId = node["call_id"]?.GetValue<string>();
+                var name   = node["name"]?.GetValue<string>();
+                var args   = node["arguments"]?.GetValue<string>() ?? "{}";
+
+                if (!string.IsNullOrWhiteSpace(callId) && !string.IsNullOrWhiteSpace(name))
+                {
+                    pendingToolCalls.Add((callId!, name!, args));
+                    // Browser'a görsel ipucu
+                    await SendBrowserJsonAsync(browserWs, new
+                    {
+                        type = "tool_call",
+                        name,
+                        arguments = args
+                    }, ct);
+                }
+                else
+                {
+                    _logger.LogWarning("RealtimeNative: function_call event'inde call_id/name eksik");
+                }
                 break;
             }
 
             case "response.cancelled":
                 _assistantSpeaking = false;
+                pendingToolCalls.Clear();
                 try { await SendOpenAiJsonAsync(openAiWs, new { type = "input_audio_buffer.clear" }, ct); }
                 catch { /* best effort */ }
                 assistantTextBuilder.Clear();
@@ -420,11 +443,20 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
 
             case "response.done":
             {
+                // Parallel tool calls: bekleyen call varsa toplu dispatch et, ardından
+                // tek bir response.create ile modeli devam ettir.
+                if (pendingToolCalls.Count > 0)
+                {
+                    await DispatchPendingToolCallsAsync(browserWs, openAiWs, pendingToolCalls, ct);
+                    pendingToolCalls.Clear();
+                    // _assistantSpeaking'i sıfırlama — model hemen yeni bir response başlatacak.
+                    break;
+                }
+
                 _assistantSpeaking = false;
                 try { await SendOpenAiJsonAsync(openAiWs, new { type = "input_audio_buffer.clear" }, ct); }
                 catch { /* best effort */ }
                 var finalText = assistantTextBuilder.ToString().Trim();
-                // Persist: kullanıcı transcript'i + asistan yanıtı (opsiyonel — idempotent olabilir)
                 if (!string.IsNullOrEmpty(finalText))
                 {
                     // En son user transcript'i bilmiyoruz burada — onun yerine session manager
@@ -450,77 +482,62 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
     }
 
     /// <summary>
-    /// <c>response.function_call_arguments.done</c> olayını işler:
-    /// <list type="number">
-    /// <item>argümanları parse eder</item>
-    /// <item><see cref="RealtimeFunctionTools"/> üzerinden senkron dispatch eder</item>
-    /// <item>sonucu <c>conversation.item.create</c> (function_call_output) ile gönderir</item>
-    /// <item><c>response.create</c> ile modeli devam ettirir → modelin sesli yanıtı oluşur</item>
-    /// </list>
+    /// Bir response içinde biriken tüm tool call'ları toplu olarak dispatch eder.
+    /// Tüm <c>function_call_output</c>'ları conversation'a ekledikten sonra tek bir
+    /// <c>response.create</c> ile modeli devam ettirir — parallel tool calls desteği.
     /// </summary>
-    private async Task HandleFunctionCallAsync(
+    private async Task DispatchPendingToolCallsAsync(
         WebSocket browserWs,
         ClientWebSocket openAiWs,
-        JsonNode node,
+        List<(string CallId, string Name, string ArgsJson)> calls,
         CancellationToken ct)
     {
-        var callId = node["call_id"]?.GetValue<string>();
-        var name = node["name"]?.GetValue<string>();
-        var argumentsJson = node["arguments"]?.GetValue<string>() ?? "{}";
-
-        if (string.IsNullOrWhiteSpace(callId) || string.IsNullOrWhiteSpace(name))
+        // Tüm tool'ları paralel çalıştır
+        var tasks = calls.Select(async c =>
         {
-            _logger.LogWarning("RealtimeNative: function_call event'inde call_id/name eksik");
-            return;
-        }
-
-        // Browser'a görsel ipucu (UI: "🛠 ürün sorgulanıyor...")
-        await SendBrowserJsonAsync(browserWs, new
-        {
-            type = "tool_call",
-            name,
-            arguments = argumentsJson
-        }, ct);
-
-        string outputJson;
-        try
-        {
-            outputJson = await _toolDispatcher.DispatchAsync(name!, argumentsJson, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "RealtimeNative: tool dispatch hatası tool={Tool}", name);
-            outputJson = JsonSerializer.Serialize(new
+            string outputJson;
+            try
             {
-                success = false,
-                error = new { code = "TOOL_DISPATCH_ERROR", message = ex.Message }
-            });
-        }
-
-        await SendBrowserJsonAsync(browserWs, new
-        {
-            type = "tool_result",
-            name,
-            output = outputJson
-        }, ct);
-
-        // Tool çıktısını conversation'a ekle
-        await SendOpenAiJsonAsync(openAiWs, new
-        {
-            type = "conversation.item.create",
-            item = new
-            {
-                type = "function_call_output",
-                call_id = callId,
-                output = outputJson
+                outputJson = await _toolDispatcher.DispatchAsync(c.Name, c.ArgsJson, ct);
             }
-        }, ct);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "RealtimeNative: tool dispatch hatası tool={Tool}", c.Name);
+                outputJson = JsonSerializer.Serialize(new
+                {
+                    success = false,
+                    error = new { code = "TOOL_DISPATCH_ERROR", message = ex.Message }
+                });
+            }
+            return (c.CallId, c.Name, outputJson);
+        });
 
-        // Modeli devam ettir → sesli yanıt üretsin
-        await SendOpenAiJsonAsync(openAiWs, new
+        var results = await Task.WhenAll(tasks);
+
+        // Her sonucu browser'a bildir ve conversation'a ekle
+        foreach (var (callId, name, outputJson) in results)
         {
-            type = "response.create"
-        }, ct);
+            await SendBrowserJsonAsync(browserWs, new
+            {
+                type = "tool_result",
+                name,
+                output = outputJson
+            }, ct);
+
+            await SendOpenAiJsonAsync(openAiWs, new
+            {
+                type = "conversation.item.create",
+                item = new
+                {
+                    type = "function_call_output",
+                    call_id = callId,
+                    output = outputJson
+                }
+            }, ct);
+        }
+
+        // Tüm output'lar eklendikten sonra tek bir response.create → sesli yanıt
+        await SendOpenAiJsonAsync(openAiWs, new { type = "response.create" }, ct);
     }
 
     // ─── WS yardımcıları ───
