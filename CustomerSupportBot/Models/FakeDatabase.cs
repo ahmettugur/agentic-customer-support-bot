@@ -36,7 +36,7 @@ public static class FakeDatabase
             Product = "Apple iPhone 15 Pro",
             Quantity = 2,
             CustomerId = "CUST-1990",
-            Status = WellKnown.OrderStatuses.Processing,
+            Status = WellKnown.OrderStatuses.Delivered,
             OrderDate = new DateTime(2024, 2, 20, 14, 45, 0)
         }
     };

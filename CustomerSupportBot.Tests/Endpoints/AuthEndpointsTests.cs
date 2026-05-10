@@ -43,11 +43,10 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
         await SeedAdminAsync("login-ok", "Pass#1234");
         var client = _factory.CreateClient();
 
-        var resp = await client.PostAsJsonAsync("/auth/login",
-            new { Username = "login-ok", Password = "Pass#1234" });
+        var resp = await client.PostAsJsonAsync("/auth/login", new { Username = "login-ok", Password = "Pass#1234" }, cancellationToken: TestContext.Current.CancellationToken);
 
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = await resp.Content.ReadFromJsonAsync<AuthResponse>();
+        var body = await resp.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken: TestContext.Current.CancellationToken);
         body.Should().NotBeNull();
         body!.AccessToken.Should().NotBeNullOrEmpty();
         body.RefreshToken.Should().NotBeNullOrEmpty();
@@ -61,8 +60,7 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
         await SeedAdminAsync("login-bad", "Pass#1234");
         var client = _factory.CreateClient();
 
-        var resp = await client.PostAsJsonAsync("/auth/login",
-            new { Username = "login-bad", Password = "WrongPass" });
+        var resp = await client.PostAsJsonAsync("/auth/login", new { Username = "login-bad", Password = "WrongPass" }, cancellationToken: TestContext.Current.CancellationToken);
 
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -71,8 +69,7 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
     public async Task Login_UnknownUser_Returns401()
     {
         var client = _factory.CreateClient();
-        var resp = await client.PostAsJsonAsync("/auth/login",
-            new { Username = "ghost-user", Password = "x" });
+        var resp = await client.PostAsJsonAsync("/auth/login", new { Username = "ghost-user", Password = "x" }, cancellationToken: TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -82,15 +79,13 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
         await SeedAdminAsync("refresh-ok", "Pass#1234");
         var client = _factory.CreateClient();
 
-        var login = await client.PostAsJsonAsync("/auth/login",
-            new { Username = "refresh-ok", Password = "Pass#1234" });
-        var loginBody = await login.Content.ReadFromJsonAsync<AuthResponse>();
+        var login = await client.PostAsJsonAsync("/auth/login", new { Username = "refresh-ok", Password = "Pass#1234" }, cancellationToken: TestContext.Current.CancellationToken);
+        var loginBody = await login.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken: TestContext.Current.CancellationToken);
 
-        var resp = await client.PostAsJsonAsync("/auth/refresh",
-            new { RefreshToken = loginBody!.RefreshToken });
+        var resp = await client.PostAsJsonAsync("/auth/refresh", new { RefreshToken = loginBody!.RefreshToken }, cancellationToken: TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var newBody = await resp.Content.ReadFromJsonAsync<AuthResponse>();
+        var newBody = await resp.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken: TestContext.Current.CancellationToken);
         newBody!.RefreshToken.Should().NotBe(loginBody.RefreshToken);
     }
 
@@ -98,8 +93,7 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
     public async Task Refresh_UnknownToken_Returns401()
     {
         var client = _factory.CreateClient();
-        var resp = await client.PostAsJsonAsync("/auth/refresh",
-            new { RefreshToken = "unknown-refresh" });
+        var resp = await client.PostAsJsonAsync("/auth/refresh", new { RefreshToken = "unknown-refresh" }, cancellationToken: TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -107,8 +101,7 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
     public async Task Logout_WithoutBearer_Returns401()
     {
         var client = _factory.CreateClient();
-        var resp = await client.PostAsJsonAsync("/auth/logout",
-            new { RefreshToken = "any" });
+        var resp = await client.PostAsJsonAsync("/auth/logout", new { RefreshToken = "any" }, cancellationToken: TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -118,15 +111,13 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
         await SeedAdminAsync("logout-ok", "Pass#1234");
         var client = _factory.CreateClient();
 
-        var login = await client.PostAsJsonAsync("/auth/login",
-            new { Username = "logout-ok", Password = "Pass#1234" });
-        var body = await login.Content.ReadFromJsonAsync<AuthResponse>();
+        var login = await client.PostAsJsonAsync("/auth/login", new { Username = "logout-ok", Password = "Pass#1234" }, cancellationToken: TestContext.Current.CancellationToken);
+        var body = await login.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken: TestContext.Current.CancellationToken);
 
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", body!.AccessToken);
 
-        var resp = await client.PostAsJsonAsync("/auth/logout",
-            new { RefreshToken = body.RefreshToken });
+        var resp = await client.PostAsJsonAsync("/auth/logout", new { RefreshToken = body.RefreshToken }, cancellationToken: TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
@@ -136,14 +127,13 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
         await SeedAdminAsync("admin-flow", "Pass#1234");
         var client = _factory.CreateClient();
 
-        var login = await client.PostAsJsonAsync("/auth/login",
-            new { Username = "admin-flow", Password = "Pass#1234" });
-        var body = await login.Content.ReadFromJsonAsync<AuthResponse>();
+        var login = await client.PostAsJsonAsync("/auth/login", new { Username = "admin-flow", Password = "Pass#1234" }, cancellationToken: TestContext.Current.CancellationToken);
+        var body = await login.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken: TestContext.Current.CancellationToken);
 
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", body!.AccessToken);
 
-        var resp = await client.GetAsync("/traces/recent");
+        var resp = await client.GetAsync("/traces/recent", TestContext.Current.CancellationToken);
         ((int)resp.StatusCode).Should().BeLessThan(400, "Admin role bearer ile yetkili olmalı");
     }
 }

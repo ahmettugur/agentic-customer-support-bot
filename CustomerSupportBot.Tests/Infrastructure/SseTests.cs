@@ -31,7 +31,7 @@ public class SseWriterTests
     public async Task WriteEvent_WritesSseFormattedPayload()
     {
         var (ctx, body) = BuildResponse();
-        await SseWriter.WriteEventAsync(ctx.Response, "test", new { foo = "bar" }, default);
+        await SseWriter.WriteEventAsync(ctx.Response, "test", new { foo = "bar" }, TestContext.Current.CancellationToken);
         var text = Encoding.UTF8.GetString(body.ToArray());
         text.Should().StartWith("event: test\n");
         text.Should().Contain("\"foo\":\"bar\"");
@@ -42,7 +42,7 @@ public class SseWriterTests
     public async Task WriteEvent_NullData_WritesEmptyJson()
     {
         var (ctx, body) = BuildResponse();
-        await SseWriter.WriteEventAsync(ctx.Response, "ping", null, default);
+        await SseWriter.WriteEventAsync(ctx.Response, "ping", null, TestContext.Current.CancellationToken);
         var text = Encoding.UTF8.GetString(body.ToArray());
         text.Should().Contain("data: {}");
     }

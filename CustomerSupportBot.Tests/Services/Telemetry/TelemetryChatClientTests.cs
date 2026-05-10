@@ -27,7 +27,7 @@ public class TelemetryChatClientTests
             Usage = new UsageDetails { InputTokenCount = 1234, OutputTokenCount = 567 }
         };
 
-        var resp = await client.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "hi") });
+        var resp = await client.GetResponseAsync([new ChatMessage(ChatRole.User, "hi")], cancellationToken: TestContext.Current.CancellationToken);
 
         resp.Text.Should().Be("ok");
         var snap = store.GetSnapshot();
@@ -47,7 +47,7 @@ public class TelemetryChatClientTests
             Usage = new UsageDetails { InputTokenCount = 10, OutputTokenCount = 5 }
         };
 
-        await client.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "hi") });
+        await client.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "hi") }, cancellationToken: TestContext.Current.CancellationToken);
 
         store.GetSnapshot().ByModel.Single().Model.Should().Be("gpt-x");
     }
@@ -79,7 +79,7 @@ public class TelemetryChatClientTests
         };
 
         var collected = new List<ChatResponseUpdate>();
-        await foreach (var u in client.GetStreamingResponseAsync(new[] { new ChatMessage(ChatRole.User, "hi") }))
+        await foreach (var u in client.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "hi")], cancellationToken: TestContext.Current.CancellationToken))
             collected.Add(u);
 
         collected.Should().HaveCount(3);

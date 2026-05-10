@@ -117,7 +117,7 @@ public class CustomerSupportTeamTests
         if (method == null) return;
 
         var task = (Task)method.Invoke(team, new object?[] { "merhaba", null, null, null })!;
-        await task.ConfigureAwait(false);
+        await task;
         var resultProp = task.GetType().GetProperty("Result")!;
         var messages = resultProp.GetValue(task) as List<ChatMessage>;
         messages.Should().NotBeNull();
@@ -139,8 +139,8 @@ public class CustomerSupportTeamTests
             new(ChatRole.User, "önceki mesaj"),
             new(ChatRole.Assistant, "önceki yanıt"),
         };
-        var task = (Task)method.Invoke(team, new object?[] { "şimdiki", history, null, null })!;
-        await task.ConfigureAwait(false);
+        var task = (Task)method.Invoke(team, ["şimdiki", history, null, null])!;
+        await task.ConfigureAwait(true);
         var messages = (task.GetType().GetProperty("Result")!.GetValue(task) as List<ChatMessage>)!;
 
         messages.Should().Contain(m => m.Text == "önceki mesaj");
@@ -156,7 +156,7 @@ public class CustomerSupportTeamTests
         if (method == null) return;
 
         var task = (Task)method.Invoke(team, new object?[] { "Siparişim ORD-12345 nerede?", null, null, null })!;
-        await task.ConfigureAwait(false);
+        await task.ConfigureAwait(true);
         var messages = (task.GetType().GetProperty("Result")!.GetValue(task) as List<ChatMessage>)!;
 
         // Entity hint genelde System rolünde eklenir

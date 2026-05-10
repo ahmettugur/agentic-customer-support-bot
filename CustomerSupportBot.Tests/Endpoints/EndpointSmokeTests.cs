@@ -24,23 +24,23 @@ public class EndpointSmokeTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task Get_Sessions_ReturnsOkAndArray()
     {
-        var resp = await NewClient().GetAsync("/sessions/");
+        var resp = await NewClient().GetAsync("/sessions/", TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
-        var arr = await resp.Content.ReadFromJsonAsync<object[]>();
+        var arr = await resp.Content.ReadFromJsonAsync<object[]>(cancellationToken: TestContext.Current.CancellationToken);
         arr.Should().NotBeNull();
     }
 
     [Fact]
     public async Task Get_SessionMessages_ReturnsOk()
     {
-        var resp = await NewClient().GetAsync("/sessions/unknown-session/messages");
+        var resp = await NewClient().GetAsync("/sessions/unknown-session/messages", TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
     public async Task Get_SessionState_Unknown_NotFound()
     {
-        var resp = await NewClient().GetAsync("/sessions/unknown-xyz/state");
+        var resp = await NewClient().GetAsync("/sessions/unknown-xyz/state", TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -61,7 +61,7 @@ public class EndpointSmokeTests : IClassFixture<TestWebApplicationFactory>
     [InlineData("/analytics/ratings/recent")]
     public async Task AdminEndpoints_WithoutToken_Unauthorized(string path)
     {
-        var resp = await NewClient().GetAsync(path);
+        var resp = await NewClient().GetAsync(path, TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -69,24 +69,21 @@ public class EndpointSmokeTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task Post_AuthLogin_InvalidCreds_Unauthorized()
     {
-        var resp = await NewClient().PostAsJsonAsync(
-            "/auth/login", new { Username = "no-such-user", Password = "wrong" });
+        var resp = await NewClient().PostAsJsonAsync("/auth/login", new { Username = "no-such-user", Password = "wrong" }, cancellationToken: TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task Post_AuthRefresh_InvalidToken_Unauthorized()
     {
-        var resp = await NewClient().PostAsJsonAsync(
-            "/auth/refresh", new { RefreshToken = "not-a-real-token" });
+        var resp = await NewClient().PostAsJsonAsync("/auth/refresh", new { RefreshToken = "not-a-real-token" }, cancellationToken: TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
     public async Task Post_AuthLogout_WithoutToken_Unauthorized()
     {
-        var resp = await NewClient().PostAsJsonAsync(
-            "/auth/logout", new { RefreshToken = "x" });
+        var resp = await NewClient().PostAsJsonAsync("/auth/logout", new { RefreshToken = "x" }, cancellationToken: TestContext.Current.CancellationToken);
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }

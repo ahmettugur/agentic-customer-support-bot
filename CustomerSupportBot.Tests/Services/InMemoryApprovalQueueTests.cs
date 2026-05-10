@@ -87,7 +87,7 @@ public class InMemoryApprovalQueueTests
     {
         var q = NewQueue();
         q.Create(NewReq());
-        var task = q.AwaitDecisionAsync("a1");
+        var task = q.AwaitDecisionAsync("a1", TestContext.Current.CancellationToken);
         q.Decide("a1", true);
         var result = await task;
         result.Status.Should().Be(ApprovalStatus.Approved);
@@ -99,7 +99,7 @@ public class InMemoryApprovalQueueTests
         var q = NewQueue(timeout: 1, autoApprove: false);
         var req = NewReq();
         q.Create(req);
-        var result = await q.AwaitDecisionAsync("a1");
+        var result = await q.AwaitDecisionAsync("a1", TestContext.Current.CancellationToken);
         // AutoApprove off → reject + Expired
         result.Status.Should().Be(ApprovalStatus.Expired);
     }
@@ -109,7 +109,7 @@ public class InMemoryApprovalQueueTests
     {
         var q = NewQueue(timeout: 1, autoApprove: true);
         q.Create(NewReq());
-        var result = await q.AwaitDecisionAsync("a1");
+        var result = await q.AwaitDecisionAsync("a1", TestContext.Current.CancellationToken);
         result.Status.Should().Be(ApprovalStatus.Approved);
     }
 }

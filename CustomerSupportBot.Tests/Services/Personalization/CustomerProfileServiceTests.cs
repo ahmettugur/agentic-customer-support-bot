@@ -98,7 +98,7 @@ public class CustomerProfileServiceTests
     public async Task ConsolidateAsync_NoProfile_ReturnsNull()
     {
         var (svc, _, _) = Build();
-        var p = await svc.ConsolidateAsync("CUST-NOPE");
+        var p = await svc.ConsolidateAsync("CUST-NOPE", TestContext.Current.CancellationToken);
         p.Should().BeNull();
     }
 
@@ -109,7 +109,7 @@ public class CustomerProfileServiceTests
         svc.RecordInteraction("CUST-1", "ORD-1 nerede?", "Yolda.", "order_inquiry");
         chat.Reply = "{\"summary\":\"Sık sipariş takibi yapan müşteri.\",\"preferredTone\":\"concise\"}";
 
-        var p = await svc.ConsolidateAsync("CUST-1");
+        var p = await svc.ConsolidateAsync("CUST-1", TestContext.Current.CancellationToken);
 
         p!.Summary.Should().Be("Sık sipariş takibi yapan müşteri.");
         p.PreferredTone.Should().Be("concise");
@@ -124,7 +124,7 @@ public class CustomerProfileServiceTests
         existing.Summary = "ÖNCEKİ";
         chat.Reply = "no json here at all";
 
-        var p = await svc.ConsolidateAsync("CUST-1");
+        var p = await svc.ConsolidateAsync("CUST-1", TestContext.Current.CancellationToken);
 
         p!.Summary.Should().Be("ÖNCEKİ");
     }

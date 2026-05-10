@@ -39,7 +39,7 @@ public class UserServiceTests
         var (svc, dbf, hasher) = Build();
         SeedUser(dbf, hasher, "alice", "MyPass123!");
 
-        var result = await svc.AuthenticateAsync("alice", "MyPass123!");
+        var result = await svc.AuthenticateAsync("alice", "MyPass123!", TestContext.Current.CancellationToken);
 
         result.Should().NotBeNull();
         result!.Username.Should().Be("alice");
@@ -51,7 +51,7 @@ public class UserServiceTests
         var (svc, dbf, hasher) = Build();
         SeedUser(dbf, hasher, "alice", "MyPass123!");
 
-        var result = await svc.AuthenticateAsync("alice", "WrongPassword");
+        var result = await svc.AuthenticateAsync("alice", "WrongPassword", TestContext.Current.CancellationToken);
         result.Should().BeNull();
     }
 
@@ -59,7 +59,7 @@ public class UserServiceTests
     public async Task AuthenticateAsync_UnknownUser_ReturnsNull()
     {
         var (svc, _, _) = Build();
-        var result = await svc.AuthenticateAsync("ghost", "anything");
+        var result = await svc.AuthenticateAsync("ghost", "anything", TestContext.Current.CancellationToken);
         result.Should().BeNull();
     }
 
@@ -69,7 +69,7 @@ public class UserServiceTests
         var (svc, dbf, hasher) = Build();
         SeedUser(dbf, hasher, "alice", "MyPass123!", active: false);
 
-        var result = await svc.AuthenticateAsync("alice", "MyPass123!");
+        var result = await svc.AuthenticateAsync("alice", "MyPass123!", TestContext.Current.CancellationToken);
         result.Should().BeNull();
     }
 
@@ -83,7 +83,7 @@ public class UserServiceTests
     public async Task AuthenticateAsync_NullOrWhitespace_ReturnsNull(string? user, string? pass)
     {
         var (svc, _, _) = Build();
-        var result = await svc.AuthenticateAsync(user!, pass!);
+        var result = await svc.AuthenticateAsync(user!, pass!, TestContext.Current.CancellationToken);
         result.Should().BeNull();
     }
 }

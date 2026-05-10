@@ -34,7 +34,7 @@ public class HitlStreamSubscriptionTests
 
         queue.Create(new ApprovalRequest { SessionId = "s1", ToolName = "x", AgentName = "a" });
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         var text = Encoding.UTF8.GetString(body.ToArray());
         text.Should().Contain(StreamEventTypes.ApprovalRequired);
     }
@@ -53,7 +53,7 @@ public class HitlStreamSubscriptionTests
 
         queue.Create(new ApprovalRequest { SessionId = "OTHER", ToolName = "x", AgentName = "a" });
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         body.Length.Should().Be(0);
     }
 
@@ -73,7 +73,7 @@ public class HitlStreamSubscriptionTests
         queue.Create(req);
         queue.Decide(req.Id, approved: true, decidedBy: "admin", reason: "ok");
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         var text = Encoding.UTF8.GetString(body.ToArray());
         text.Should().Contain(StreamEventTypes.ApprovalResolved);
     }
@@ -92,7 +92,7 @@ public class HitlStreamSubscriptionTests
 
         sink.Create(new EscalationRequest { SessionId = "s1", AgentName = "a", Reason = "r" });
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         var text = Encoding.UTF8.GetString(body.ToArray());
         text.Should().Contain(StreamEventTypes.EscalationCreated);
     }
@@ -112,7 +112,7 @@ public class HitlStreamSubscriptionTests
 
         queue.Create(new ApprovalRequest { SessionId = "s1", ToolName = "x", AgentName = "a" });
 
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
         body.Length.Should().Be(0);
     }
 

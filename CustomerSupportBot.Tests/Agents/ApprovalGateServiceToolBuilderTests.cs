@@ -53,7 +53,7 @@ public class ApprovalGateServiceToolBuilderTests
             ["productName"] = product,
             ["quantity"] = 1,
             ["customerId"] = $"CUST-AGS-{Guid.NewGuid():N}"
-        }));
+        }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
     }
@@ -75,7 +75,7 @@ public class ApprovalGateServiceToolBuilderTests
             ["productName"] = product,
             ["quantity"] = 1,
             ["customerId"] = $"CUST-BYPASS-{Guid.NewGuid():N}"
-        }));
+        }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
     }
@@ -107,7 +107,7 @@ public class ApprovalGateServiceToolBuilderTests
             ["productName"] = product,
             ["quantity"] = 1,
             ["customerId"] = $"CUST-REJ-{Guid.NewGuid():N}"
-        }));
+        }), TestContext.Current.CancellationToken);
         var (success, message) = ParseResult(result);
         success.Should().BeFalse();
         message.Should().Contain("test_reject");
@@ -139,7 +139,7 @@ public class ApprovalGateServiceToolBuilderTests
             ["productName"] = product,
             ["quantity"] = 1,
             ["customerId"] = $"CUST-APR-{Guid.NewGuid():N}"
-        }));
+        }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
     }
@@ -167,7 +167,7 @@ public class ApprovalGateServiceToolBuilderTests
             ["orderId"] = "ORD-1",
             ["complaintText"] = "yeterli uzunlukta bir şikayet metni var burada",
             ["customerId"] = "CUST-1990"
-        }));
+        }), TestContext.Current.CancellationToken);
         var (success, message) = ParseResult(result);
         success.Should().BeFalse();
         message.Should().Contain("no_complaint");
@@ -185,7 +185,7 @@ public class ApprovalGateServiceToolBuilderTests
             ["orderId"] = "ORD-1",
             ["complaintText"] = $"şikayet metni unique {Guid.NewGuid()} buraya yazıldı",
             ["customerId"] = "CUST-1990"
-        }));
+        }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
     }

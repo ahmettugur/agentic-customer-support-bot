@@ -51,7 +51,7 @@ public class TokenServiceTests
         var (tokens, _, _, dbf) = AuthTestFactory.Build();
         var user = Seed(dbf);
 
-        var resp = await tokens.IssueAsync(user);
+        var resp = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
         resp.AccessToken.Should().NotBeNullOrEmpty();
         resp.RefreshToken.Should().NotBeNullOrEmpty();
@@ -60,9 +60,9 @@ public class TokenServiceTests
         resp.Username.Should().Be(user.Username);
         resp.Role.Should().Be("Admin");
 
-        using var ctx = dbf.CreateDbContext();
-        (await ctx.RefreshTokens.CountAsync(t => t.UserId == user.Id)).Should().Be(1);
-        var reloaded = await ctx.Users.FirstAsync(u => u.Id == user.Id);
+        await using var ctx = dbf.CreateDbContext();
+        (await ctx.RefreshTokens.CountAsync(t => t.UserId == user.Id, cancellationToken: TestContext.Current.CancellationToken)).Should().Be(1);
+        var reloaded = await ctx.Users.FirstAsync(u => u.Id == user.Id, cancellationToken: TestContext.Current.CancellationToken);
         reloaded.LastLoginAt.Should().NotBeNull();
     }
 
@@ -71,16 +71,16 @@ public class TokenServiceTests
     {
         var (tokens, _, _, dbf) = AuthTestFactory.Build();
         var user = Seed(dbf);
-        var first = await tokens.IssueAsync(user);
+        var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
-        var second = await tokens.RefreshAsync(first.RefreshToken);
+        var second = await tokens.RefreshAsync(first.RefreshToken, TestContext.Current.CancellationToken);
 
         second.Should().NotBeNull();
         second!.RefreshToken.Should().NotBe(first.RefreshToken);
         second.AccessToken.Should().NotBeNullOrEmpty();
 
-        using var ctx = dbf.CreateDbContext();
-        var all = await ctx.RefreshTokens.Where(t => t.UserId == user.Id).ToListAsync();
+        using var ctx = await dbf.CreateDbContextAsync(TestContext.Current.CancellationToken);
+        var all = await ctx.RefreshTokens.Where(t => t.UserId == user.Id).ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
         all.Should().HaveCount(2);
         var oldOne = all.Single(t => t.RevokedAt is not null);
         oldOne.ReplacedByTokenHash.Should().NotBeNullOrEmpty();
@@ -90,7 +90,7 @@ public class TokenServiceTests
     public async Task RefreshAsync_UnknownToken_ReturnsNull()
     {
         var (tokens, _, _, _) = AuthTestFactory.Build();
-        var resp = await tokens.RefreshAsync("does-not-exist");
+        var resp = await tokens.RefreshAsync("does-not-exist", TestContext.Current.CancellationToken);
         resp.Should().BeNull();
     }
 
@@ -101,7 +101,7 @@ public class TokenServiceTests
     public async Task RefreshAsync_NullOrWhitespace_ReturnsNull(string? token)
     {
         var (tokens, _, _, _) = AuthTestFactory.Build();
-        var resp = await tokens.RefreshAsync(token!);
+        var resp = await tokens.RefreshAsync(token!, TestContext.Current.CancellationToken);
         resp.Should().BeNull();
     }
 
@@ -110,11 +110,11 @@ public class TokenServiceTests
     {
         var (tokens, _, _, dbf) = AuthTestFactory.Build();
         var user = Seed(dbf);
-        var first = await tokens.IssueAsync(user);
+        var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
-        (await tokens.RevokeAsync(first.RefreshToken)).Should().BeTrue();
+        (await tokens.RevokeAsync(first.RefreshToken, TestContext.Current.CancellationToken)).Should().BeTrue();
 
-        var resp = await tokens.RefreshAsync(first.RefreshToken);
+        var resp = await tokens.RefreshAsync(first.RefreshToken, TestContext.Current.CancellationToken);
         resp.Should().BeNull();
     }
 
@@ -123,17 +123,17 @@ public class TokenServiceTests
     {
         var (tokens, _, _, dbf) = AuthTestFactory.Build();
         var user = Seed(dbf);
-        var first = await tokens.IssueAsync(user);
+        var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
         // User'ı pasifleştir
-        using (var ctx = dbf.CreateDbContext())
+        await using (var ctx = await dbf.CreateDbContextAsync(TestContext.Current.CancellationToken))
         {
-            var u = await ctx.Users.FirstAsync(x => x.Id == user.Id);
+            var u = await ctx.Users.FirstAsync(x => x.Id == user.Id, cancellationToken: TestContext.Current.CancellationToken);
             u.IsActive = false;
-            await ctx.SaveChangesAsync();
+            await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        var resp = await tokens.RefreshAsync(first.RefreshToken);
+        var resp = await tokens.RefreshAsync(first.RefreshToken, TestContext.Current.CancellationToken);
         resp.Should().BeNull();
     }
 
@@ -142,16 +142,16 @@ public class TokenServiceTests
     {
         var (tokens, _, _, dbf) = AuthTestFactory.Build();
         var user = Seed(dbf);
-        var first = await tokens.IssueAsync(user);
+        var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
-        using (var ctx = dbf.CreateDbContext())
+        await using (var ctx = await dbf.CreateDbContextAsync(TestContext.Current.CancellationToken))
         {
-            var t = await ctx.RefreshTokens.FirstAsync(x => x.UserId == user.Id);
+            var t = await ctx.RefreshTokens.FirstAsync(x => x.UserId == user.Id, cancellationToken: TestContext.Current.CancellationToken);
             t.ExpiresAt = DateTime.UtcNow.AddDays(-1);
-            await ctx.SaveChangesAsync();
+            await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        var resp = await tokens.RefreshAsync(first.RefreshToken);
+        var resp = await tokens.RefreshAsync(first.RefreshToken, TestContext.Current.CancellationToken);
         resp.Should().BeNull();
     }
 
@@ -159,7 +159,7 @@ public class TokenServiceTests
     public async Task RevokeAsync_UnknownToken_ReturnsFalse()
     {
         var (tokens, _, _, _) = AuthTestFactory.Build();
-        (await tokens.RevokeAsync("nope")).Should().BeFalse();
+        (await tokens.RevokeAsync("nope", TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Theory]
@@ -169,7 +169,7 @@ public class TokenServiceTests
     public async Task RevokeAsync_NullOrWhitespace_ReturnsFalse(string? token)
     {
         var (tokens, _, _, _) = AuthTestFactory.Build();
-        (await tokens.RevokeAsync(token!)).Should().BeFalse();
+        (await tokens.RevokeAsync(token!, TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
@@ -177,9 +177,9 @@ public class TokenServiceTests
     {
         var (tokens, _, _, dbf) = AuthTestFactory.Build();
         var user = Seed(dbf);
-        var first = await tokens.IssueAsync(user);
+        var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
-        (await tokens.RevokeAsync(first.RefreshToken)).Should().BeTrue();
-        (await tokens.RevokeAsync(first.RefreshToken)).Should().BeFalse();
+        (await tokens.RevokeAsync(first.RefreshToken, TestContext.Current.CancellationToken)).Should().BeTrue();
+        (await tokens.RevokeAsync(first.RefreshToken, TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 }
