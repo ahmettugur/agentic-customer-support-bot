@@ -1,13 +1,13 @@
 # Sesli Konuşma Modu (Realtime)
 
-OpenAI **Realtime API** (`gpt-realtime-1.5`) üzerinden kurulan full-duplex ses kanalları. Sistem **iki ayrı sesli mod** sunar:
+OpenAI **Realtime API** (`gpt-realtime-2`) üzerinden kurulan full-duplex ses kanalları. Sistem **iki ayrı sesli mod** sunar:
 
 ## İki Mod Özeti
 
-| Mod | Buton | Endpoint | gpt-realtime-1.5 rolü | Agent pipeline | Tool seti |
+| Mod | Buton | Endpoint | gpt-realtime-2 rolü | Agent pipeline | Tool seti |
 |---|---|---|---|---|---|
 | **🎤 Sesli Asistan (köprü)** | Mikrofon | `/chat/realtime` | Yalnızca STT + TTS köprüsü (`create_response: false`) | **Tam akış** — reasoning + 7 ajan + HITL | Tüm tool'lar (sipariş aç, şikayet, vb.) |
-| **⚡ Hızlı Sesli (native)** | Şimşek | `/chat/realtime-native` | Modelin kendisi konuşur ve tool çağırır (`create_response: true`) | **YOK** — model tek başına yanıtlar | Yalnızca okuma-only (4 tool) |
+| **⚡ Hızlı Sesli (native)** | Şimşek | `/chat/realtime-native` | Modelin kendisi konuşur ve tool çağırır (`create_response: true`) | **YOK** — model tek başına yanıtlar | Yalnızca okuma-only (5 tool — veda dahil) |
 
 **Hangisini ne zaman?**
 
@@ -72,7 +72,7 @@ Kullanıcı yan-etkili bir işlem isterse native modda model **tool çağırmaz*
 2. Tarayıcı getUserMedia + AudioWorkletNode ile 24kHz PCM16 stream başlatır
 3. Backend WebSocket kurulur → /chat/realtime
    - RealtimeBridge OpenAI Realtime'a paralel WS açar
-   - session.update ile: voice, VAD, transcription config, create_response=false
+   - session.update ile: nested audio.input/output, VAD (semantic_vad + eagerness), transcription config, create_response=false
    - { type:"connected", sessionId:"..." } → browser
 4. Kullanıcı konuşur
    - Her audio chunk browser → backend → OpenAI forward edilir
@@ -118,6 +118,7 @@ Kullanıcı yan-etkili bir işlem isterse native modda model **tool çağırmaz*
 | `Binary frame` | PCM16 24kHz | TTS output chunk'ı (AudioContext'e yolla) |
 | `workflow_start` | — | Agent pipeline tetiklendi |
 | `user_transcript` | `{text}` | ASR transcript'i hazır (UI'da user bubble) |
+| `conversation_ended` | `{reason}` | Görüşme sonlandırıldı (tool veya idle timeout) |
 | `reasoning_start` | — | Reasoning fazı başladı (💭 Düşünüyor) |
 | `reasoning_delta` | `{text}` | Reasoning token chunk'ı |
 | `reasoning_complete` | `ReasoningResult` | Panel final (intent, steps, entities…) |
@@ -139,12 +140,11 @@ Kullanıcı yan-etkili bir işlem isterse native modda model **tool çağırmaz*
 "AI": {
   "Realtime": {
     "Enabled": true,
-    "Model": "gpt-realtime-1.5",
+    "Model": "gpt-realtime-2",
     "ApiKey": "",
     "Voice": "alloy",
-    "VadSilenceMs": 800,
-    "VadThreshold": 0.65,
-    "MaxResponseTokens": 4096,
+    "VadType": "semantic_vad",
+    "VadEagerness": "medium",
     "TranscriptionModel": "gpt-4o-transcribe",
     "TranscriptionLanguage": "tr",
     "TranscriptionPrompt": "Müşteri destek görüşmesi. Sipariş numarası (ORD-1...), müşteri kodu (CUST-1990...), ürün adları..."
@@ -157,22 +157,27 @@ Kullanıcı yan-etkili bir işlem isterse native modda model **tool çağırmaz*
 | Alan | Varsayılan | Açıklama |
 |---|---|---|
 | `Enabled` | `true` | Mod kapalıysa `/chat/realtime` endpoint 404 döner |
-| `Model` | `gpt-realtime-1.5` | Realtime session modeli (STT+TTS session'ını yöneten ana model) |
+| `Model` | `gpt-realtime-2` | Realtime session modeli (STT+TTS session'ını yöneten ana model) |
 | `ApiKey` | boş → `AI:OpenAI:ApiKey` fallback | Realtime-spesifik key opsiyonel; default OpenAI key'i kullanılır |
 | `Voice` | `alloy` | TTS sesi: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer` |
-| `VadSilenceMs` | 800 | Kullanıcı konuşmayı bitirdi kabul etme eşiği (ms). Türkçe uzun cümleler için 800-1000 ms uygun |
-| `VadThreshold` | 0.65 | Ses algılama eşiği (0..1). Gürültülü ortamda 0.7'ye çıkarılabilir |
-| `MaxResponseTokens` | 4096 | TTS sırasında aşılmaz |
+| `VadType` | `semantic_vad` | VAD tipi: `semantic_vad` (önerilen) veya `server_vad` (eski) |
+| `VadEagerness` | `medium` | `semantic_vad` için konuşma sonu algılama: `low`, `medium`, `high` |
 | `TranscriptionModel` | `gpt-4o-transcribe` | STT modeli. Alt seçenekler: `gpt-4o-mini-transcribe` (hızlı/ucuz), `whisper-1` (eski) |
 | `TranscriptionLanguage` | `tr` | ISO-639-1 dil ipucu (null = otomatik) |
 | `TranscriptionPrompt` | (domain örnekleri) | Sık geçen özel isim/kod formatlarını ASR'a önceden tanıtır → doğruluk artar |
+
+**Not:** `gpt-realtime-2` API şeması `gpt-realtime-1.5`'ten farklıdır:
+- `voice`, `input_audio_format`, `output_audio_format` artık **flat** değil; `session.audio.input/output` içinde **nested**.
+- `max_response_output_tokens` parametresi kaldırıldı.
+- `silence_duration_ms` yerine `semantic_vad` ile `eagerness` kullanılır.
+- Event isimleri değişti: `audio.delta` → `response.output_audio.delta`, `transcript.delta` → `response.output_audio_transcript.delta`. |
 
 ### Transcription modeli neden Realtime modeliyle aynı değil?
 
 OpenAI Realtime API'da iki ayrı model alanı vardır:
 
 1. **Session modeli** (`Model`) — WebSocket oturumunu yöneten ana multimodal model (ses TTS'i bu model yapar).
-2. **Transcription modeli** (`TranscriptionModel`) — `session.input_audio_transcription.model`. Kullanıcının sesini metne çeviren **ayrı** STT modeli. Buraya sadece STT-spesifik modeller konulabilir (`whisper-1`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`). `gpt-realtime-1.5` buraya konulamaz.
+2. **Transcription modeli** (`TranscriptionModel`) — `session.audio.input.transcription.model`. Kullanıcının sesini metne çeviren **ayrı** STT modeli. Buraya sadece STT-spesifik modeller konulabilir (`whisper-1`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`). `gpt-realtime-2` buraya konulamaz.
 
 Bu ayrım sayesinde TTS kalitesini korurken STT'yi ayrıca ayarlayabilirsin (ör. maliyet için `gpt-4o-mini-transcribe`, maksimum doğruluk için `gpt-4o-transcribe`).
 
@@ -291,12 +296,19 @@ Handler: `@Services/Realtime/RealtimeBridge.cs:HandleAsync`. DI: `@Extensions/Ai
 |---|---|---|
 | Mikrofon izni isteniyor ama ses gitmiyor | AudioWorklet load hatası | Console'a bak, `realtime-pcm-worklet.js` 404 mu? |
 | Transcript boş veya saçma | Whisper-1 fallback, dil ipucu yok | `TranscriptionModel: gpt-4o-transcribe`, `TranscriptionLanguage: tr` |
-| Konuşma erken kesiliyor | VAD çok agresif | `VadSilenceMs: 800-1000`, `VadThreshold: 0.55` |
-| Gürültü "konuşma" sanılıyor | VAD threshold düşük | `VadThreshold: 0.6` |
+| Konuşma erken kesiliyor | VAD çok agresif | `VadEagerness: low` veya `server_vad` kullan |
+| Gürültü "konuşma" sanılıyor | VAD algılaması hassas | `semantic_vad` ile `eagerness: high` veya `server_vad` ile `threshold: 0.7` |
 | Chip / reasoning panel görünmüyor | `window.chatApp` undefined | `app.js` init sonunda `window.chatApp = app` satırı olmalı; hard refresh gerek |
 | `Cancellation failed: no active response` log'u | Interrupt boşa tetikleniyor | Frontend `state !== 'speaking'` koruması aktif mi? |
 | `TaskCanceledException` stop sırasında | `CloseAsync` iptal edilmiş CT kullanıyor | `HandleBrowserControlAsync` 1 sn timeout'lu yeni CTS kullanır, güncel mi? |
 | Asistan yanıt vermiyor | `create_response: true` kalmış | `session.update`'te kesin `false` olmalı — model bize cevap yetkisini devretmiş |
+| `Unknown parameter: 'session.voice'` | Flat şema kullanılıyor | `session.audio.output.voice` içine alınmalı (nested audio şeması) |
+| `Unknown parameter: 'session.max_response_output_tokens'` | gpt-realtime-2'de desteklenmiyor | Bu alanı `session.update` payload'undan kaldır |
+| `Missing required parameter: 'session.audio.output.format.rate'` | PCM rate eksik | `session.audio.output.format` içine `rate: 24000` ekle |
+| `Invalid modalities: ['audio', 'text']` | Birleşik modalite desteklenmiyor | `output_modalities: ["audio"]` yap (sadece tek mod) |
+| `Invalid value: 'text'` | Assistant content type eski | `type: "output_text"` kullan ("text" yerine) |
+| UI'da AI cevabı user sorusunun üstünde | gpt-realtime-2 hızlı başlıyor | Backend `assistant_text_delta` tamponlama yapıyor — bu normal, `user_transcript` geldikten sonra flush edilir |
+| `model=gpt-realtime-1.5` loglanıyor | `appsettings.Development.json` override ediyor | `AI:Realtime:Model` değerini `gpt-realtime-2` yap veya kaldır (default'a düşsün) |
 
 ---
 
@@ -305,7 +317,7 @@ Handler: `@Services/Realtime/RealtimeBridge.cs:HandleAsync`. DI: `@Extensions/Ai
 **Backend**
 - `@Services/Realtime/RealtimeBridge.cs` — köprü modu WS bridge + pump'lar + agent dispatcher
 - `@Services/Realtime/RealtimeNativeBridge.cs` — native modu WS bridge + function call dispatch + TTS
-- `@Services/Realtime/RealtimeFunctionTools.cs` — native modun okuma-only tool subset'i (4 fonksiyon)
+- `@Services/Realtime/RealtimeFunctionTools.cs` — native modun okuma-only tool subset'i (5 fonksiyon — end_conversation dahil)
 - `@Models/AiProviderOptions.cs` — `RealtimeOptions` POCO
 - `@Extensions/ApplicationServicesExtensions.cs` — DI kayıtları (`RealtimeBridge`, `RealtimeNativeBridge`, `RealtimeFunctionTools`)
 - `@Endpoints/RealtimeEndpoints.cs` — `/chat/realtime` ve `/chat/realtime-native` handler'ları
@@ -331,16 +343,27 @@ Köprü modunda backend **transcript çıkar çıkmaz** agent pipeline'ını tet
 - **Reasoning yok, ajan zinciri yok, HITL yok** — saf model + tool çağrısı
 
 ```
-[Ses] → gpt-realtime-1.5 → kendisi anlar/karar verir
+[Ses] → gpt-realtime-2 → kendisi anlar/karar verir
           ↓ (tool gerekirse)
-        function_call event
+        response.function_call_arguments.done
           ↓
         backend: RealtimeFunctionTools.DispatchAsync(name, args)
           ↓
         ToolResult JSON → conversation.item.create (function_call_output)
           ↓
         response.create → model devam eder ve **sesli yanıt** üretir
+          ↓
+        response.output_audio.delta + response.output_audio_transcript.delta
 ```
+
+**Event İsimleri (gpt-realtime-2):**
+| Eski (1.5) | Yeni (2) |
+|---|---|
+| `audio.delta` | `response.output_audio.delta` |
+| `transcript.delta` | `response.output_audio_transcript.delta` |
+| `input_audio_buffer.speech_started` | `input_audio_buffer.speech_started` (değişmedi) |
+| `conversation.item.input_audio_transcription.completed` | `conversation.item.input_audio_transcription.completed` (değişmedi) |
+| `response.done` | `response.done` (değişmedi) |
 
 Latency tipik: **800ms-1.5sn** (köprüde 3-5sn). Token maliyeti **~70% daha düşük** (tek model, zincirleme yok).
 
@@ -354,11 +377,20 @@ Latency tipik: **800ms-1.5sn** (köprüde 3-5sn). Token maliyeti **~70% daha dü
 | `order_status_tool` | `CustomerSupportTools.OrderStatusTool(orderId)` | Yok |
 | `get_last_order_tool` | `CustomerSupportTools.GetLastOrderTool(customerId)` | Yok |
 | `get_all_orders_tool` | `CustomerSupportTools.GetAllOrdersTool(customerId)` | Yok |
+| `end_conversation` | Native mod özel — görüşmeyi sonlandırma | Yok |
 
 **Bilinçli olarak YOK** (model bu tanımları görmez):
 - `order_placement_tool` — sipariş oluşturma yan etkili, HITL gerek
 - `complaint_registration_tool` — şikayet kaydı yan etkili, HITL gerek
 - `human_handoff_tool` — eskalasyon zinciri yan etkili
+
+**end_conversation tool'u:**
+Kullanıcı açıkça vedalaştığında (`"görüşürüz"`, `"hoşçakal"`, `"teşekkürler kapat"` vb.) model önce kısa bir veda cümlesi söyler, ardından bu tool'u çağırır. Backend:
+1. Tool çağrısını algılar (`_endRequested = true`, `_endReason` alır)
+2. `response.done` sonrası `{ type:"conversation_ended", reason }` browser'a gönderir
+3. OpenAI ve browser WebSocket'lerini nazikçe kapatır (NormalClosure)
+
+UI: `conversation_ended` callback'i ile "Görüşme sonlandırıldı" mesajı gösterilir, buton `idle`'a döner.
 
 **Defense-in-depth**: model yine de bu isimlerden birini çağırırsa `RealtimeFunctionTools.DispatchAsync` `FORBIDDEN_IN_VOICE` hatası döner — ama pratikte sistem prompt'u modelin bu yola gitmesini engeller.
 
@@ -373,6 +405,7 @@ Latency tipik: **800ms-1.5sn** (köprüde 3-5sn). Token maliyeti **~70% daha dü
   - İADE / İPTAL / ÖDEME / HESAP işlemleri
 - Tool sonuçlarını **yorumla**, ham JSON okuma (`status:"shipped"` → "kargoya verildi")
 - Türkçe, kısa, sesli okumaya uygun (1-2 cümle)
+- **GÖRÜŞMEYİ SONLANDIRMA**: Kullanıcı vedalaştığında (`"görüşürüz"`, `"hoşçakal"` vb.) önce veda cümlesi söyle, **ardından** `end_conversation` tool'unu çağır. Kullanıcı açıkça vedalaşmadıkça çağırma.
 
 Kullanıcı yan-etkili bir şey isterse model şu kalıbı kullanır:
 > "Bu işlemler güvenlik adımları gerektirdiği için yazılı sohbet üzerinden ilerletmeniz gerekiyor. Lütfen sohbet penceresine geçin, ben oradan da yardımcı olmaya devam edebilirim."
@@ -398,8 +431,13 @@ Köprünün event sözleşmesinden **fark** olan event'ler:
 | `connected` | ← | `{sessionId, mode:"native", model, voice, tools:[]}` — açılan tool'lar listesi |
 | `tool_call` | ← | Model bir tool çağırdı: `{name, arguments}` (UI: chip göster) |
 | `tool_result` | ← | Tool sonucu modele iletildi: `{name, output}` (UI: chip ✓) |
-| `assistant_text_delta` | ← | TTS ile **eşzamanlı** altyazı delta'sı (köprüden farklı kullanım) |
+| `user_transcript` | ← | Kullanıcı transcript'i hazır (UI'da user bubble) |
+| `assistant_text_delta` | ← | TTS ile **eşzamanlı** altyazı delta'sı (user_transcript'ten sonra) |
 | `response_done` | ← | Model turunu bitirdi, yeni tura hazır |
+| `conversation_ended` | ← | `{reason}` — görüşme sonlandırıldı (tool veya 60sn idle timeout) |
+
+**UI Mesaj Sırası Düzeltmesi (Buffering):**
+`gpt-realtime-2`'de `semantic_vad` kullanıldığında, model kullanıcı transcript'i tamamlanmadan **önce** yanıt üretmeye başlar. Bu nedenle backend `user_transcript` gelene kadar `assistant_text_delta`'ları **tamponlar** (buffer). `user_transcript` geldikten sonra biriken delta'lar UI'a flush edilir. Bu sayede UI'da kullanıcı mesajı → asistan mesajı sırası korunur. Audio akışı gerçek-zamanlı devam eder (tamponlanmaz).
 
 Köprüye özgü `workflow_start`/`reasoning_*`/`agent`/`workflow_done` event'leri native modda **gönderilmez**.
 
@@ -408,6 +446,15 @@ Köprüye özgü `workflow_start`/`reasoning_*`/`agent`/`workflow_done` event'le
 Native modda **DB session geçmişine** asistan yanıtı yazılır (`@Services/Realtime/RealtimeNativeBridge.cs:HandleOpenAiEventAsync` → `_chatBridge.RecordBotExchange`), kullanıcı transcript'i ise `"(sesli)"` etiketiyle kaydedilir. Reasoning trace **yoktur** — bu modun ayırt edici farkı.
 
 Bu trade-off bilinçlidir: hız ve maliyet için audit trail kısalır. Production'da audit kritikse bu kanal yalnızca okuma-only kalmalıdır (zaten kalır).
+
+### Inactivity Timeout (Otomatik Sonlandırma)
+
+Backend, son kullanıcı aktivitesini (audio chunk veya transcript) izler. **60 saniye** boyunca aktivite yoksa:
+1. `{ type:"conversation_ended", reason:"idle_timeout" }` browser'a gönderilir
+2. WebSocket'ler nazikçe kapatılır
+3. UI'da "Görüşme sessizlik nedeniyle sonlandırıldı" mesajı gösterilir
+
+Bu özellik açık unutulmuş mikrofonları önler. Aktivite zaman damgası `_lastUserActivityTicks` alanında atomik olarak tutulur (`Interlocked` operations).
 
 ---
 
