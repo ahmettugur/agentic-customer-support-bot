@@ -45,7 +45,7 @@ public sealed class RealtimeOptions
     public string? ApiKey { get; set; }
 
     /// <summary>TTS sesi (alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar).</summary>
-    public string Voice { get; set; } = "alloy";
+    public string Voice { get; set; } =  null!;
 
     /// <summary>Semantic VAD susturma süresi (ms) — kullanıcının konuşmayı bitirdiğine karar verme eşiği.</summary>
     public int VadSilenceMs { get; set; } = 600;
