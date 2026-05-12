@@ -2,7 +2,6 @@
 
 using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
 using CustomerSupportBot.Api.Services.Auth;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services.Auth;

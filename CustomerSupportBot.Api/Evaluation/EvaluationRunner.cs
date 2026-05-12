@@ -4,8 +4,6 @@
 
 using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Models;
-using Microsoft.Extensions.AI;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 

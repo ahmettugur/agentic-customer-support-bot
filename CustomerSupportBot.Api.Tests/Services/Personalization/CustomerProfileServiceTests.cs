@@ -3,7 +3,6 @@ using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using CustomerSupportBot.Api.Services.Personalization;
 
 namespace CustomerSupportBot.Api.Tests.Services.Personalization;
 

@@ -1,6 +1,5 @@
 // Tests/Evaluation/CriteriaEvaluatorTests.cs
 using CustomerSupportBot.Api.Evaluation;
-using FluentAssertions;
 
 namespace CustomerSupportBot.Api.Tests.Evaluation;
 

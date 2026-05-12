@@ -12,7 +12,6 @@ using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Api.Agents.Routing;
 

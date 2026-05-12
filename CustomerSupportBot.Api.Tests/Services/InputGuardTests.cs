@@ -1,7 +1,6 @@
 // Tests/Services/InputGuardTests.cs
 
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 

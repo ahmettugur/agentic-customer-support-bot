@@ -5,9 +5,6 @@
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services.Locking;
-using CustomerSupportBot.Api.Infrastructure.Persistence;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services.Locking;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -16,7 +13,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using Microsoft.VisualStudio.TestPlatform.TestHost;
 using StackExchange.Redis;
 
 namespace CustomerSupportBot.Api.Tests.Endpoints;

@@ -1,5 +1,4 @@
 using CustomerSupportBot.Api.Services.Telemetry;
-using CustomerSupportBot.Api.Services.Telemetry;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 

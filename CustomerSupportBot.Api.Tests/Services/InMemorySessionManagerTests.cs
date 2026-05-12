@@ -3,7 +3,6 @@
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Locking;
 using CustomerSupportBot.Api.Tests.Helpers;
-using CustomerSupportBot.Api.Tests.Services;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Services;

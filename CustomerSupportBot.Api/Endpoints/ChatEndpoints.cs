@@ -6,7 +6,6 @@ using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
-using Microsoft.AspNetCore.Http;
 
 namespace CustomerSupportBot.Api.Endpoints;
 

@@ -3,7 +3,6 @@
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Api.Models.Auth;
 using CustomerSupportBot.Api.Services.Auth;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

@@ -4,7 +4,7 @@ using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Evaluation;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Providers;
-using Microsoft.AspNetCore.RateLimiting;
+
 namespace CustomerSupportBot.Api.Extensions;
 
 public static class ApplicationServicesExtensions

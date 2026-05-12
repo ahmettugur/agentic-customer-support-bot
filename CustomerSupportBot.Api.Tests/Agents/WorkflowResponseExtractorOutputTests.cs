@@ -1,8 +1,6 @@
 // Tests/Agents/WorkflowResponseExtractorOutputTests.cs
 // WorkflowOutputEvent ile çalışan extractor metodları.
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Models;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;

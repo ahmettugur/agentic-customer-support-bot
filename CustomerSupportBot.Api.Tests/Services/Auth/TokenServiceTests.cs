@@ -3,9 +3,6 @@
 using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
 using CustomerSupportBot.Api.Models.Auth;
 using CustomerSupportBot.Api.Services.Auth;
-using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
-using CustomerSupportBot.Api.Models.Auth;
-using CustomerSupportBot.Api.Services.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

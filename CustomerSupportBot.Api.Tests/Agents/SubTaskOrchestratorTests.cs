@@ -1,6 +1,4 @@
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Models;
 
 namespace CustomerSupportBot.Api.Tests.Agents;

@@ -3,9 +3,6 @@
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Models.Workflow;
 using CustomerSupportBot.Api.Services.Workflow;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models.Workflow;
-using CustomerSupportBot.Api.Services.Workflow;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services.Workflow;

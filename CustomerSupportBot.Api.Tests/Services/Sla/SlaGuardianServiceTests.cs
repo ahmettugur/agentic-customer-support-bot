@@ -6,9 +6,6 @@
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Sla;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Sla;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

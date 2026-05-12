@@ -1,8 +1,6 @@
 // Tests/Services/IdExtractorTests.cs
 
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services;
-using FluentAssertions;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 

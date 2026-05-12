@@ -2,8 +2,6 @@
 
 using CustomerSupportBot.Api.Models.Workflow;
 using CustomerSupportBot.Api.Services.Workflow;
-using CustomerSupportBot.Api.Models.Workflow;
-using CustomerSupportBot.Api.Services.Workflow;
 
 namespace CustomerSupportBot.Api.Tests.Services.Workflow;
 

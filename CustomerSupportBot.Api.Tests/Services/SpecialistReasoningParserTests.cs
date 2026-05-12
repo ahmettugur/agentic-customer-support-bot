@@ -2,9 +2,6 @@
 
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services;
-using FluentAssertions;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 

@@ -1,7 +1,5 @@
 // Tests/Agents/WorkflowResponseExtractorTests.cs
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Agents;
-using FluentAssertions;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 

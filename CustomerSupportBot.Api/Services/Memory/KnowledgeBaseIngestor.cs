@@ -5,7 +5,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using CustomerSupportBot.Api.Models.Memory;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Services.Memory;

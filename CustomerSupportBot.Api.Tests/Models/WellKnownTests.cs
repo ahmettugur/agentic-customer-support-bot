@@ -1,8 +1,6 @@
 // Tests/Models/WellKnownTests.cs
 
 using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models;
-using FluentAssertions;
 
 namespace CustomerSupportBot.Api.Tests.Models;
 

@@ -1,0 +1,144 @@
+@page "/login"
+@layout EmptyLayout
+@inject IJSRuntime JS
+
+<style>
+    body.login-body, :root {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        font-family: 'Inter', sans-serif;
+        margin: 0;
+        padding: 20px;
+    }
+
+    .login-card {
+        width: 100%;
+        max-width: 380px;
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        padding: 32px 28px;
+    }
+
+    .login-card h1 {
+        font-size: 22px;
+        font-weight: 700;
+        margin: 0 0 4px;
+        color: #0f172a;
+    }
+
+    .login-card .subtitle {
+        color: #64748b;
+        font-size: 14px;
+        margin: 0 0 24px;
+    }
+
+    .login-form label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: #334155;
+        margin-bottom: 6px;
+    }
+
+    .login-form input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        margin-bottom: 14px;
+    }
+
+    .login-form input:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    .login-form button {
+        width: 100%;
+        padding: 11px;
+        background: #4f46e5;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+        font-family: inherit;
+    }
+
+    .login-form button:hover:not(:disabled) { background: #4338ca; }
+    .login-form button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .login-error {
+        background: #fef2f2;
+        color: #b91c1c;
+        border: 1px solid #fecaca;
+        padding: 9px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        margin-bottom: 14px;
+        display: none;
+    }
+
+    .login-error.visible { display: block; }
+
+    .login-footer {
+        margin-top: 18px;
+        font-size: 12px;
+        color: #94a3b8;
+        text-align: center;
+    }
+
+    .login-page-wrap {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        padding: 20px;
+        box-sizing: border-box;
+    }
+</style>
+
+<div class="login-page-wrap">
+    <div class="login-card">
+        <h1>Yönetici Girişi</h1>
+        <p class="subtitle">Customer Support Bot — Admin Panel</p>
+
+        <div class="login-error" id="loginError"></div>
+
+        <form class="login-form" id="loginForm" autocomplete="off">
+            <label for="username">Kullanıcı Adı</label>
+            <input type="text" id="username" name="username" required autofocus autocomplete="username" value="admin" />
+
+            <label for="password">Parola</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password" value="Admin123!" />
+
+            <button type="submit" id="loginBtn">Giriş Yap</button>
+        </form>
+
+        <p class="login-footer">JWT Bearer auth · Access 60dk · Refresh 14g</p>
+    </div>
+</div>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("loadScript", "/js/auth.js", "js-auth");
+            await JS.InvokeVoidAsync("loadScript", "/js/login-page.js", "js-login-page");
+            await JS.InvokeVoidAsync("initLoginPage");
+        }
+    }
+}

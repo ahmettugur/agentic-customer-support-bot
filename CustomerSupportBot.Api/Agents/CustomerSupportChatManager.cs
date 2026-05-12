@@ -15,11 +15,9 @@
 using System.Text.Json;
 using CustomerSupportBot.Api.Agents.Routing;
 using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Api.Agents;
 

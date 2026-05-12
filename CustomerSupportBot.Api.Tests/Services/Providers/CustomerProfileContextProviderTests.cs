@@ -2,7 +2,6 @@ using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Models.Memory;
 using CustomerSupportBot.Api.Services.Personalization;
 using CustomerSupportBot.Api.Services.Providers;
-using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.Extensions.Logging.Abstractions;
 using SessionState = CustomerSupportBot.Api.Models.SessionState;
 

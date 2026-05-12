@@ -4,8 +4,6 @@
 
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services.Sla;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services.Sla;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services.Sla;

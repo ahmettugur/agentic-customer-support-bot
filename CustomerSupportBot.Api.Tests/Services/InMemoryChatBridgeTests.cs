@@ -1,7 +1,5 @@
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services;

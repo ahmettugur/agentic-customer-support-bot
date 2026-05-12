@@ -1,7 +1,6 @@
 // Tests/Services/InMemoryRatingStoreTests.cs
 
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services;

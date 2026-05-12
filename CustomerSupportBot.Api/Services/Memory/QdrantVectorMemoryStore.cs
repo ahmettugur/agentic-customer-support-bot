@@ -4,7 +4,6 @@
 
 using System.Globalization;
 using CustomerSupportBot.Api.Models.Memory;
-using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.Options;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;

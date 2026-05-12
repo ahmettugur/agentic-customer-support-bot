@@ -2,7 +2,6 @@
 // Per-customer profil yönetim API'si — admin scope.
 
 using CustomerSupportBot.Api.Services.Personalization;
-using CustomerSupportBot.Api.Models.Memory;
 
 namespace CustomerSupportBot.Api.Endpoints;
 

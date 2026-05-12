@@ -6,8 +6,6 @@
 using System.Collections.Concurrent;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services.Locking;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services.Locking;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Helpers;

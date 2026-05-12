@@ -1,7 +1,6 @@
 // Tests/Infrastructure/Persistence/PersistenceOptionsTests.cs
 
 using CustomerSupportBot.Api.Infrastructure.Persistence;
-using CustomerSupportBot.Api.Infrastructure.Persistence;
 
 namespace CustomerSupportBot.Api.Tests.Infrastructure.Persistence;
 

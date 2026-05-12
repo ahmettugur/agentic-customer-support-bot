@@ -1,8 +1,6 @@
 // Tests/Services/ReasoningResultParserTests.cs
 
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services;
-using FluentAssertions;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 

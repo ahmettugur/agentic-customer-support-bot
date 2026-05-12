@@ -1,7 +1,6 @@
 // Tests/Evaluation/EvaluationModelsTests.cs
 
 using CustomerSupportBot.Api.Evaluation;
-using CustomerSupportBot.Api.Evaluation;
 
 namespace CustomerSupportBot.Api.Tests.Evaluation;
 

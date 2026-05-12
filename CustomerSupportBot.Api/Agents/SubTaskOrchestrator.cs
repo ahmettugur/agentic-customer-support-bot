@@ -3,10 +3,8 @@
 // Reasoning modelinin 2+ farklı specialist'e yönelen alt görev üretmesi durumunda,
 // her biri sırayla ayrı bir workflow run olarak yürütülür ve sonuçlar birleştirilir.
 
-using System.Runtime.CompilerServices;
 using System.Text;
 using CustomerSupportBot.Api.Models;
-using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Api.Agents;
 
