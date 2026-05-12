@@ -5,10 +5,10 @@
 
 using System.Runtime.CompilerServices;
 using System.Text;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.AI;
-using CustomerSupportBot.Models;
 
-namespace CustomerSupportBot.Agents;
+namespace CustomerSupportBot.Api.Agents;
 
 /// <summary>
 /// Compound query (bileşik sorgu) ayrıştırma orkestratörü.

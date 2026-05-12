@@ -8,13 +8,13 @@
 //
 // Manager bu listede ilk null-olmayan sonucu alır; hiçbiri seçim yapmazsa PlanningAgent'a düşer (no-op fallback).
 
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace CustomerSupportBot.Agents.Routing;
+namespace CustomerSupportBot.Api.Agents.Routing;
 
 /// <summary>Routing kararının çıktısı.</summary>
 internal readonly record struct RoutingResult(AIAgent Agent, string Branch);

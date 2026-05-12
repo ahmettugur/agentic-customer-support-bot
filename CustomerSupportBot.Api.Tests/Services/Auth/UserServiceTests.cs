@@ -5,7 +5,7 @@ using CustomerSupportBot.Api.Services.Auth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace CustomerSupportBot.Tests.Services.Auth;
+namespace CustomerSupportBot.Api.Tests.Services.Auth;
 
 public class UserServiceTests
 {

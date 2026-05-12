@@ -4,10 +4,10 @@
 // - POST /eval/run                : Tüm senaryoları koşturur
 // - POST /eval/run/{id}           : Tek senaryoyu koşturur
 
-using CustomerSupportBot.Evaluation;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Evaluation;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class EvaluationEndpoints
 {
@@ -91,7 +91,7 @@ public static class EvaluationEndpoints
 
     /// <summary>
     /// Evaluation-scenarios.yaml konumunu bulur.
-    /// Önce CustomerSupportBot/docs/, sonra CustomerSupport/docs/ denenir.
+    /// Önce CustomerSupportBot.Api/docs/, sonra CustomerSupport/docs/ denenir.
     /// </summary>
     private static string? ResolveScenarioPath(IWebHostEnvironment env)
     {

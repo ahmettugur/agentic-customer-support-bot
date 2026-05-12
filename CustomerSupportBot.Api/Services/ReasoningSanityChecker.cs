@@ -6,9 +6,9 @@
 // Mimari: Strategy pattern — her kural ayrı bir IReasoningSanityRule.
 // Yeni kural eklemek için sadece sınıf yaz ve _rules listesine ekle.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Tek bir sanity kuralının arayüzü. Reasoning + verified entities üzerinde çalışır,

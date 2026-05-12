@@ -5,11 +5,11 @@
 using System.ClientModel;
 using Anthropic;
 using Azure.AI.OpenAI;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.AI;
 using OpenAI;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// AiOptions'a göre standart ve reasoning chat client'larını üretir.

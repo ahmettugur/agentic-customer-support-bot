@@ -5,14 +5,14 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using CustomerSupportBot.Infrastructure.Persistence;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Auth;
-using CustomerSupportBot.Models.Auth;
+using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
+using CustomerSupportBot.Api.Models.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
-namespace CustomerSupportBot.Services.Auth;
+namespace CustomerSupportBot.Api.Services.Auth;
 
 public interface ITokenService
 {

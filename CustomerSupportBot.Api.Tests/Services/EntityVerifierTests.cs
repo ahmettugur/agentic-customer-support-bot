@@ -6,7 +6,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using SessionState = CustomerSupportBot.Api.Models.SessionState;
 
-namespace CustomerSupportBot.Tests.Services;
+namespace CustomerSupportBot.Api.Tests.Services;
 
 public class EntityVerifierTests
 {

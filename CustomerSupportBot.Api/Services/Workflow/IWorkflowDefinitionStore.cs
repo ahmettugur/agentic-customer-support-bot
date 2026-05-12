@@ -1,7 +1,8 @@
 // Services/Workflow/IWorkflowDefinitionStore.cs
-using CustomerSupportBot.Models.Workflow;
 
-namespace CustomerSupportBot.Services.Workflow;
+using CustomerSupportBot.Api.Models.Workflow;
+
+namespace CustomerSupportBot.Api.Services.Workflow;
 
 /// <summary>Persisted (in-memory veya Postgres) workflow definition store.</summary>
 public interface IWorkflowDefinitionStore

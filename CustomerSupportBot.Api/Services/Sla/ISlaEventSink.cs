@@ -2,9 +2,9 @@
 // SLA Guardian'ın ürettiği warn/breach olaylarını saklayan in-memory store.
 // Admin UI bu sink üzerinden son N olayı görüntüler.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services.Sla;
+namespace CustomerSupportBot.Api.Services.Sla;
 
 public interface ISlaEventSink
 {

@@ -3,7 +3,7 @@
 // HITL onay kuyruğunda veya açık eskalasyonlarda uzun süre bekleyen kayıtlar
 // için uyarı + ihlal eşikleri. Guardian periyodik tarayıp aksiyon alır.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Bekleyen onay/eskalasyon kayıtları için SLA politikası.

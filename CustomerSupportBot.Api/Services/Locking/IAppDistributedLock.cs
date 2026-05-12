@@ -5,7 +5,7 @@
 // otomatik release olur. Bu pattern, exception veya CancellationToken senaryolarında
 // lock'un sızmamasını garanti eder.
 
-namespace CustomerSupportBot.Services.Locking;
+namespace CustomerSupportBot.Api.Services.Locking;
 
 /// <summary>
 /// Distributed lock soyutlaması.

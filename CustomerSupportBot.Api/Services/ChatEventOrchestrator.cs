@@ -2,10 +2,13 @@
 // Manages the persistent SSE connection for real-time chat events including
 // Human-in-the-Loop mode changes, escalation lifecycle, and admin messages.
 
-namespace CustomerSupportBot.Services;
+using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Api.Models;
 
-using CustomerSupportBot.Infrastructure;
-using CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Services;
+
+using Api.Infrastructure;
+using Api.Models;
 
 /// <summary>
 /// Orchestrates persistent SSE events for chat sessions. Handles HITL mode transitions,

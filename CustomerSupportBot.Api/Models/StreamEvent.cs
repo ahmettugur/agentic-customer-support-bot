@@ -1,7 +1,7 @@
 // Models/StreamEvent.cs
 // SSE üzerinden frontend'e gönderilen event tipleri.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Streaming event modelI. SSE formatında frontend'e gönderilir.

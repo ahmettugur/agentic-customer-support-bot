@@ -13,14 +13,14 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Models.Improvement;
-using CustomerSupportBot.Models.Memory;
-using CustomerSupportBot.Services.Memory;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Models.Improvement;
+using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Api.Services.Memory;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Services.Improvement;
+namespace CustomerSupportBot.Api.Services.Improvement;
 
 public sealed class LessonMiner
 {

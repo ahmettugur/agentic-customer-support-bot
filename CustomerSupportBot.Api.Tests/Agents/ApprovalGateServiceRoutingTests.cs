@@ -5,14 +5,13 @@
 using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Tests.Helpers;
 using CustomerSupportBot.Api.Services.Personalization;
 using CustomerSupportBot.Api.Services.Routing;
-using CustomerSupportBot.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Tests.Agents;
+namespace CustomerSupportBot.Api.Tests.Agents;
 
 public class ApprovalGateServiceRoutingTests
 {

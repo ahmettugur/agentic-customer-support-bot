@@ -2,12 +2,16 @@
 // Orchestrates the SSE streaming chat flow including reasoning, workflow execution,
 // and HITL (Human-in-the-Loop) event forwarding. Separates streaming concerns from HTTP layer.
 
-namespace CustomerSupportBot.Services;
+using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Api.Models;
+
+namespace CustomerSupportBot.Api.Services;
 
 using System.Text;
-using CustomerSupportBot.Agents;
-using CustomerSupportBot.Infrastructure;
-using CustomerSupportBot.Models;
+using Api.Agents;
+using Api.Infrastructure;
+using Api.Models;
 using Microsoft.Extensions.AI;
 
 /// <summary>

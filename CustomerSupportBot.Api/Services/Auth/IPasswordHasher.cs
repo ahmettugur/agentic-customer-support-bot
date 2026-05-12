@@ -1,6 +1,6 @@
 // Services/Auth/IPasswordHasher.cs
 
-namespace CustomerSupportBot.Services.Auth;
+namespace CustomerSupportBot.Api.Services.Auth;
 
 public interface IPasswordHasher
 {

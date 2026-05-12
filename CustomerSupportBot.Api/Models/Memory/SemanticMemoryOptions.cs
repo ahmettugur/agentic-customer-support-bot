@@ -1,7 +1,7 @@
 // Models/Memory/SemanticMemoryOptions.cs
 // appsettings.json > "SemanticMemory" bölümüne bind edilen opsiyonlar.
 
-namespace CustomerSupportBot.Models.Memory;
+namespace CustomerSupportBot.Api.Models.Memory;
 
 public sealed class SemanticMemoryOptions
 {

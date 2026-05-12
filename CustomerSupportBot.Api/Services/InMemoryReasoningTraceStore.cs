@@ -3,9 +3,9 @@
 // ConcurrentDictionary + capped list kullanılır; lock'suz read, hafif write.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public class InMemoryReasoningTraceStore : IReasoningTraceStore
 {

@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Migrations
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
     public partial class AddLinkedAgentIdToUsers : Migration

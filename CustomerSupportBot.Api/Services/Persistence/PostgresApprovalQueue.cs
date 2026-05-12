@@ -16,13 +16,13 @@
 //      Burada cache'e sadece "sahipsiz" kayıt olarak okuma için ekleriz.)
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Infrastructure.Persistence;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
+using CustomerSupportBot.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Services.Persistence;
+namespace CustomerSupportBot.Api.Services.Persistence;
 
 public sealed class PostgresApprovalQueue : IApprovalQueue
 {

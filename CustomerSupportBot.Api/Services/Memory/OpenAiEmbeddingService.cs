@@ -4,13 +4,13 @@
 
 using System.ClientModel;
 using Azure.AI.OpenAI;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Models.Memory;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Models.Memory;
 using Microsoft.Extensions.Options;
 using OpenAI;
 using OpenAI.Embeddings;
 
-namespace CustomerSupportBot.Services.Memory;
+namespace CustomerSupportBot.Api.Services.Memory;
 
 public sealed class OpenAiEmbeddingService : IEmbeddingService
 {

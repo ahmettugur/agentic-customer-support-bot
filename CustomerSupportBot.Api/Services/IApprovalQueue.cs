@@ -3,9 +3,9 @@
 // Yazar, AwaitDecisionAsync ile karar bekler. Admin endpoint'leri Decide
 // Çağırır. GetPending/Get sadece UI için.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public interface IApprovalQueue
 {

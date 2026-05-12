@@ -2,7 +2,7 @@
 // `analytics.ratings` tablosu — Konuşma değerlendirmeleri.
 // Session başına tek rating (PK = session_id) — domain Id audit için ayrıca tutulur.
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Analytics;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Analytics;
 
 public sealed class RatingEntity
 {

@@ -13,15 +13,15 @@
 // Per-request instance — mutable state izolasyonu için her workflow run yeni manager kullanır.
 
 using System.Text.Json;
-using CustomerSupportBot.Agents.Routing;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
+using CustomerSupportBot.Api.Agents.Routing;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
-namespace CustomerSupportBot.Agents;
+namespace CustomerSupportBot.Api.Agents;
 
 /// <summary>
 /// Müşteri destek sohbeti için LLM tabanlı grup sohbet yöneticisi.

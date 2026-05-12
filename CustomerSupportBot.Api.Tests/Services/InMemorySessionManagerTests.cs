@@ -2,11 +2,11 @@
 
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Locking;
-using CustomerSupportBot.Tests.Services;
-using CustomerSupportBot.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Services;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Tests.Services;
+namespace CustomerSupportBot.Api.Tests.Services;
 
 public class InMemorySessionManagerTests
 {

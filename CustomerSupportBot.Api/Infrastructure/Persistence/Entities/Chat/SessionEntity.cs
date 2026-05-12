@@ -2,7 +2,7 @@
 // `chat.sessions` tablosu — AgentSession domain modelinin DB karşılığı.
 // State alanı JSONB (string) olarak tutulur; mapper SessionState'e çevirir.
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 
 public sealed class SessionEntity
 {

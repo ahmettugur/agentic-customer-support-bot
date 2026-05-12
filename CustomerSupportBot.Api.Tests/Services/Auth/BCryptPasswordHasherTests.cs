@@ -1,7 +1,7 @@
 // Tests/Services/Auth/BCryptPasswordHasherTests.cs
 using CustomerSupportBot.Api.Services.Auth;
 
-namespace CustomerSupportBot.Tests.Services.Auth;
+namespace CustomerSupportBot.Api.Tests.Services.Auth;
 
 public class BCryptPasswordHasherTests
 {

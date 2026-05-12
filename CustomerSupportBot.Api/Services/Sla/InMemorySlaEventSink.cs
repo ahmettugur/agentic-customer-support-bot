@@ -3,9 +3,9 @@
 // LastEmittedAt sayesinde aynı target+severity tekrar tekrar emit edilmez.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services.Sla;
+namespace CustomerSupportBot.Api.Services.Sla;
 
 public class InMemorySlaEventSink : ISlaEventSink
 {

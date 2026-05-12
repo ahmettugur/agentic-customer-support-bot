@@ -9,13 +9,13 @@
 //   - IAsyncDisposable handle (otomatik release, exception-safe)
 //   - Fallback: Redis bağlantı hatası loglanır, null döner (graceful degradation)
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 using Medallion.Threading;
 using Medallion.Threading.Redis;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
-namespace CustomerSupportBot.Services.Locking;
+namespace CustomerSupportBot.Api.Services.Locking;
 
 public sealed class RedisDistributedLock : IAppDistributedLock
 {

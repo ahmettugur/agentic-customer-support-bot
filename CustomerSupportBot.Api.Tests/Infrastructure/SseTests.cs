@@ -4,7 +4,7 @@ using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Api.Models;
 using Microsoft.AspNetCore.Http;
 
-namespace CustomerSupportBot.Tests.Infrastructure;
+namespace CustomerSupportBot.Api.Tests.Infrastructure;
 
 public class SseWriterTests
 {

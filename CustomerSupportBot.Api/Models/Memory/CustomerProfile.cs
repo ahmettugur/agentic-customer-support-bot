@@ -8,7 +8,7 @@
 // davranmasını sağlamak (ör. "Bu müşteri kısa ve teknik dil tercih ediyor",
 // "Geçmişte iki kez Dell XPS 15 sipariş etti", "Son ortalama puan: 2/5").
 
-namespace CustomerSupportBot.Models.Memory;
+namespace CustomerSupportBot.Api.Models.Memory;
 
 public sealed class CustomerProfile
 {

@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Tests.Services;
+namespace CustomerSupportBot.Api.Tests.Services;
 
 public class HitlStreamSubscriptionTests
 {

@@ -5,11 +5,11 @@
 // Order = 7 (CustomerContext=düşük, ConversationSummary=5, biz son sırada).
 
 using System.Text;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Models.Memory;
-using CustomerSupportBot.Services.Memory;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Api.Services.Memory;
 
-namespace CustomerSupportBot.Services.Providers;
+namespace CustomerSupportBot.Api.Services.Providers;
 
 public sealed class SemanticMemoryContextProvider : IContextProvider
 {

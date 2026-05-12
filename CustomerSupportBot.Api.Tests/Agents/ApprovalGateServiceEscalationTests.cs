@@ -4,7 +4,7 @@ using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Tests.Agents;
+namespace CustomerSupportBot.Api.Tests.Agents;
 
 public class ApprovalGateServiceEscalationTests
 {

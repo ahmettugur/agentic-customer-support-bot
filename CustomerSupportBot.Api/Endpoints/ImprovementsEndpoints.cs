@@ -7,11 +7,11 @@
 //   POST /improvements/{id}/reject  — reddet
 //   GET  /improvements/{id}         — tek lesson detayı
 
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Models.Improvement;
-using CustomerSupportBot.Services.Improvement;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Models.Improvement;
+using CustomerSupportBot.Api.Services.Improvement;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class ImprovementsEndpoints
 {

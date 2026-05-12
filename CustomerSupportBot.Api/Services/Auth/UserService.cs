@@ -1,10 +1,10 @@
 // Services/Auth/IUserService.cs
 
-using CustomerSupportBot.Infrastructure.Persistence;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Auth;
+using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
 using Microsoft.EntityFrameworkCore;
 
-namespace CustomerSupportBot.Services.Auth;
+namespace CustomerSupportBot.Api.Services.Auth;
 
 public interface IUserService
 {

@@ -1,9 +1,9 @@
 // Services/Improvement/InMemoryLessonStore.cs
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Models.Improvement;
+using CustomerSupportBot.Api.Models.Improvement;
 
-namespace CustomerSupportBot.Services.Improvement;
+namespace CustomerSupportBot.Api.Services.Improvement;
 
 public sealed class InMemoryLessonStore : ILessonStore
 {

@@ -13,9 +13,9 @@
 // Diğer pattern'lar → "manual_review" olarak işaretlenir.
 
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Evaluation;
+namespace CustomerSupportBot.Api.Evaluation;
 
 public static class CriteriaEvaluator
 {

@@ -2,7 +2,7 @@
 
 using CustomerSupportBot.Api.Models.Auth;
 
-namespace CustomerSupportBot.Tests.Models.Auth;
+namespace CustomerSupportBot.Api.Tests.Models.Auth;
 
 public class JwtOptionsTests
 {

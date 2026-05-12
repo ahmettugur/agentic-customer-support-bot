@@ -6,7 +6,7 @@ using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
 using CustomerSupportBot.Api.Models.Auth;
 using CustomerSupportBot.Api.Services.Auth;
 
-namespace CustomerSupportBot.Tests.Endpoints;
+namespace CustomerSupportBot.Api.Tests.Endpoints;
 
 public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
 {

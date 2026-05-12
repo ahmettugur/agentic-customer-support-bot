@@ -1,11 +1,11 @@
 // Infrastructure/Persistence/Configurations/Chat/MessageConfiguration.cs
 // chat.messages tablosu — sıralı user/assistant mesaj geçmişi.
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Configurations.Chat;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Configurations.Chat;
 
 internal sealed class MessageConfiguration : IEntityTypeConfiguration<MessageEntity>
 {

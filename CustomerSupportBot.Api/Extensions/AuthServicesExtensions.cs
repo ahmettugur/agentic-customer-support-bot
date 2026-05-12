@@ -1,10 +1,10 @@
 using System.Text;
-using CustomerSupportBot.Models.Auth;
-using CustomerSupportBot.Services.Auth;
+using CustomerSupportBot.Api.Models.Auth;
+using CustomerSupportBot.Api.Services.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
-namespace CustomerSupportBot.Extensions;
+namespace CustomerSupportBot.Api.Extensions;
 
 public static class AuthServicesExtensions
 {

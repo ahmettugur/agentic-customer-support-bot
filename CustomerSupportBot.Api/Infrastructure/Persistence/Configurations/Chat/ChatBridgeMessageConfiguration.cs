@@ -2,11 +2,11 @@
 // chat.bridge_messages tablosu — Live Takeover history (User/Bot/Admin/System).
 // BotTyping persist edilmez (transient).
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Configurations.Chat;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Configurations.Chat;
 
 internal sealed class ChatBridgeMessageConfiguration : IEntityTypeConfiguration<ChatBridgeMessageEntity>
 {

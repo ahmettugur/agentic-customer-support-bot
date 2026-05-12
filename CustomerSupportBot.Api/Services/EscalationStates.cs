@@ -8,9 +8,9 @@
 //        └──→ Resolved        └──→ Dismissed
 //        └──→ Dismissed
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Eskalasyon durumunun davranış arayüzü.

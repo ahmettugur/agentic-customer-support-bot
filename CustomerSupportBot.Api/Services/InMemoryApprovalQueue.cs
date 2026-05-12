@@ -7,10 +7,10 @@
 // Database-backed bir impl yazılmalı. Şu an için in-memory yeterli.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public class InMemoryApprovalQueue : IApprovalQueue
 {

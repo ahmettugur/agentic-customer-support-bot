@@ -3,9 +3,9 @@
 // OpenTelemetry olmadığı için bu store + endpoint kombinasyonu basit
 // Bir dashboard kaynağı işlevi görür.
 
-using CustomerSupportBot.Services;
+using CustomerSupportBot.Api.Services;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class TraceEndpoints
 {

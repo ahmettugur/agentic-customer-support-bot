@@ -4,11 +4,11 @@
 
 using System.Security.Cryptography;
 using System.Text;
-using CustomerSupportBot.Models.Memory;
+using CustomerSupportBot.Api.Models.Memory;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Services.Memory;
+namespace CustomerSupportBot.Api.Services.Memory;
 
 /// <summary>
 /// Startup hosted service — KnowledgeBase dizinini Qdrant'a senkronize eder.

@@ -1,10 +1,10 @@
 // Endpoints/MemoryEndpoints.cs
 // Semantic memory dashboard / debug endpoint'leri (admin-only).
 
-using CustomerSupportBot.Models.Memory;
-using CustomerSupportBot.Services.Memory;
+using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Api.Services.Memory;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class MemoryEndpoints
 {

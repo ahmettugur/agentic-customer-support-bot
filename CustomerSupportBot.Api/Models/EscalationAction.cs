@@ -2,7 +2,7 @@
 // Eskalasyon karar aksiyonları — InMemoryEscalationSink.Decide parametresi.
 // String karşılaştırma yerine type-safe enum.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Eskalasyon kaydına uygulanabilecek aksiyonlar.

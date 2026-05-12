@@ -4,7 +4,7 @@ using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services.Routing;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Tests.Services.Routing;
+namespace CustomerSupportBot.Api.Tests.Services.Routing;
 
 public class InMemoryHumanAgentRegistryTests
 {

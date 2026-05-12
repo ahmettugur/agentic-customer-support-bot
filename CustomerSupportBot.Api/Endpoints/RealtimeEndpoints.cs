@@ -2,9 +2,9 @@
 // Sesli sohbet için WebSocket endpoint'i.
 // Browser bu endpoint'e bağlanır; backend RealtimeBridge ile OpenAI Realtime API'ye köprü kurar.
 
-using CustomerSupportBot.Services.Realtime;
+using CustomerSupportBot.Api.Services.Realtime;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class RealtimeEndpoints
 {

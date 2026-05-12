@@ -14,12 +14,12 @@
 
 using System.Collections.Concurrent;
 using System.Text.Json;
-using CustomerSupportBot.Infrastructure.Persistence;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Observability;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Observability;
+using CustomerSupportBot.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace CustomerSupportBot.Services.Persistence;
+namespace CustomerSupportBot.Api.Services.Persistence;
 
 public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
 {

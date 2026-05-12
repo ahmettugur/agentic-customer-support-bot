@@ -2,7 +2,7 @@
 using CustomerSupportBot.Api.Evaluation;
 using FluentAssertions;
 
-namespace CustomerSupportBot.Tests.Evaluation;
+namespace CustomerSupportBot.Api.Tests.Evaluation;
 
 public class CriteriaEvaluatorTests
 {

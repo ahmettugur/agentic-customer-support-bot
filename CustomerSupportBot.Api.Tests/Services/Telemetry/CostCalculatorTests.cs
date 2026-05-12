@@ -2,7 +2,7 @@ using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services.Telemetry;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Tests.Services.Telemetry;
+namespace CustomerSupportBot.Api.Tests.Services.Telemetry;
 
 public class CostCalculatorTests
 {

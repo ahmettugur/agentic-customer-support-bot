@@ -10,7 +10,7 @@ using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services.Locking;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Tests.Helpers;
+namespace CustomerSupportBot.Api.Tests.Helpers;
 
 public sealed class InMemoryDistributedLock : IAppDistributedLock
 {

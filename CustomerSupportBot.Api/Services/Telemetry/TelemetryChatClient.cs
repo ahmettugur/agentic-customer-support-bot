@@ -15,7 +15,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Services.Telemetry;
+namespace CustomerSupportBot.Api.Services.Telemetry;
 
 public sealed class TelemetryChatClient : DelegatingChatClient
 {

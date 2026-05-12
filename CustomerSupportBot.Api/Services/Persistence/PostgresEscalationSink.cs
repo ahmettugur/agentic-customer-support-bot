@@ -10,12 +10,12 @@
 //     son N kayıt yüklenir; admin UI sadece açık + son 50 görüyor).
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Infrastructure.Persistence;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
+using CustomerSupportBot.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace CustomerSupportBot.Services.Persistence;
+namespace CustomerSupportBot.Api.Services.Persistence;
 
 public sealed class PostgresEscalationSink : IEscalationSink
 {

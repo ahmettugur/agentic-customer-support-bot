@@ -4,14 +4,14 @@
 // instrumentation'ı dahil eder. OTLP endpoint configure edildiyse exporter'ı bağlar;
 // development'ta console exporter opsiyonel olarak açılabilir.
 
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services.Telemetry;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services.Telemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
-namespace CustomerSupportBot.Extensions;
+namespace CustomerSupportBot.Api.Extensions;
 
 public static class TelemetryExtensions
 {

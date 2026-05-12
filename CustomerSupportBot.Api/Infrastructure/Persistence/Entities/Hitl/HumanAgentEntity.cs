@@ -1,7 +1,7 @@
 // Infrastructure/Persistence/Entities/Hitl/HumanAgentEntity.cs
 // hitl.human_agents tablosu — skills-based routing için insan temsilci kayıtları.
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
 
 public sealed class HumanAgentEntity
 {

@@ -2,7 +2,7 @@
 // PostgreSQL şema isimlerinin tek noktadan yönetimi.
 // Yeni tablo eklenirken hangi şemaya gideceği buradan seçilir.
 
-namespace CustomerSupportBot.Infrastructure.Persistence;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence;
 
 internal static class Schemas
 {

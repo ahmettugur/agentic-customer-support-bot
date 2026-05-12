@@ -10,7 +10,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public enum InputGuardVerdict
 {

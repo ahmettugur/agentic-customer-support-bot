@@ -3,14 +3,13 @@ using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Evaluation;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Tests.Helpers;
-using CustomerSupportBot.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Tests.Evaluation;
+namespace CustomerSupportBot.Api.Tests.Evaluation;
 
 public class EvaluationRunnerTests
 {

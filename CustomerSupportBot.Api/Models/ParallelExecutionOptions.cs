@@ -4,7 +4,7 @@
 // ProductInquiryAgent, OrderInquiryAgent. OrderPlacementAgent ve ComplaintAgent
 // HITL gate'i ve sıralı state etkisi nedeniyle her zaman serial kalır.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Bileşik (compound) sorgudaki alt görevlerin paralel yürütme politikası.

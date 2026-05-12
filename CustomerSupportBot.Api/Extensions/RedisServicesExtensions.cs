@@ -7,11 +7,11 @@
 //   2) ConnectionStrings:Redis
 //   3) Yoksa → InvalidOperationException
 
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services.Locking;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services.Locking;
 using StackExchange.Redis;
 
-namespace CustomerSupportBot.Extensions;
+namespace CustomerSupportBot.Api.Extensions;
 
 public static class RedisServicesExtensions
 {

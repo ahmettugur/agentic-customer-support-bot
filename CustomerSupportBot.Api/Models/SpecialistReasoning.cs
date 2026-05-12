@@ -4,7 +4,7 @@
 // Pre-tool check: parametre validasyonu ve karar gerekçesi.
 // Post-tool result: sonucun güven skoru ve notları.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Bir specialist agent'ın tool çağrısı etrafındaki reasoning'i.

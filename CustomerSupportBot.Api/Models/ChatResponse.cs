@@ -3,7 +3,7 @@
 
 using System.Text.Json.Serialization;
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Non-streaming chat yanıtı. Reasoning alanı opsiyoneldir.

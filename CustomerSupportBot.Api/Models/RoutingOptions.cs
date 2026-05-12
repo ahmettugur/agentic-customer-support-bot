@@ -2,7 +2,7 @@
 // Smart Routing & Skills-Based Escalation — appsettings.json "Routing" section
 // üzerinden okunan konfigürasyon. Intent → skill tag mapping ve routing davranışı.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>SkillsBasedRouter için konfigürasyon.</summary>
 public class RoutingOptions

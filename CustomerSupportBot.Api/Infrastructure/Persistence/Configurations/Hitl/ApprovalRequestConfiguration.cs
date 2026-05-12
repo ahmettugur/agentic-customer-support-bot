@@ -2,11 +2,11 @@
 // hitl.approval_requests tablosu — HITL onay kayıtları.
 // TaskCompletionSource persist EDİLMEZ — sadece in-memory.
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Configurations.Hitl;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Configurations.Hitl;
 
 internal sealed class ApprovalRequestConfiguration : IEntityTypeConfiguration<ApprovalRequestEntity>
 {

@@ -3,7 +3,7 @@ using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Tests.Services;
+namespace CustomerSupportBot.Api.Tests.Services;
 
 public class InMemoryConversationStoreTests
 {

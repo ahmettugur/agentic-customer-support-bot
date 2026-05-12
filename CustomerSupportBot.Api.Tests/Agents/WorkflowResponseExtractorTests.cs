@@ -3,7 +3,7 @@ using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Agents;
 using FluentAssertions;
 
-namespace CustomerSupportBot.Tests.Agents;
+namespace CustomerSupportBot.Api.Tests.Agents;
 
 public class WorkflowResponseExtractorTests
 {

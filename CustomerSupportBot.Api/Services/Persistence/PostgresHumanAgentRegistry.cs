@@ -9,13 +9,13 @@
 
 using System.Collections.Concurrent;
 using System.Text.Json;
-using CustomerSupportBot.Infrastructure.Persistence;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services.Routing;
+using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services.Routing;
 using Microsoft.EntityFrameworkCore;
 
-namespace CustomerSupportBot.Services.Persistence;
+namespace CustomerSupportBot.Api.Services.Persistence;
 
 public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
 {

@@ -4,7 +4,7 @@ using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace CustomerSupportBot.Tests.Services;
+namespace CustomerSupportBot.Api.Tests.Services;
 
 public class InMemoryRatingStoreTests
 {

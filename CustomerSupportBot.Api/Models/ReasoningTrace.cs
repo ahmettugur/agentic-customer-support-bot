@@ -3,7 +3,7 @@
 // Çağrılarını kaydeden trace modeli. OpenTelemetry yerine lightweight
 // In-memory store kullanılır; dashboard ve debug amaçlıdır.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Bir workflow çalışmasının tam trace'i — reasoning, agent transitions,

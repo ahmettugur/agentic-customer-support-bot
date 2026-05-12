@@ -3,7 +3,7 @@
 // AppendAssistantMessage davranışı için son satır UPDATE/INSERT mantığı
 // PostgresSessionManager'da uygulanır; entity sadece veriyi taşır.
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 
 public sealed class MessageEntity
 {

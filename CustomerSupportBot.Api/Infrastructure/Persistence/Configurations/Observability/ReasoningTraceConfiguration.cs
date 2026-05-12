@@ -2,11 +2,11 @@
 // observability.reasoning_traces tablosu — Workflow trace'leri.
 // İç içe nesneler JSONB string olarak; mapper SerDe yapar.
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Observability;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Observability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Configurations.Observability;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Configurations.Observability;
 
 internal sealed class ReasoningTraceConfiguration : IEntityTypeConfiguration<ReasoningTraceEntity>
 {

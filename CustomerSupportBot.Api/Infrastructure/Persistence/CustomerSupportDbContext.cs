@@ -2,14 +2,14 @@
 // EF Core 10 + Npgsql DbContext.
 // Tüm IEntityTypeConfiguration sınıfları assembly'den otomatik uygulanır.
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Analytics;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Auth;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Observability;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Analytics;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Observability;
 using Microsoft.EntityFrameworkCore;
 
-namespace CustomerSupportBot.Infrastructure.Persistence;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence;
 
 public sealed class CustomerSupportDbContext : DbContext
 {

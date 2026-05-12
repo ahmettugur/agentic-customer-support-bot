@@ -1,10 +1,10 @@
 // Infrastructure/Persistence/Configurations/Auth/UserConfiguration.cs
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Auth;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Configurations.Auth;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Configurations.Auth;
 
 internal sealed class UserConfiguration : IEntityTypeConfiguration<UserEntity>
 {

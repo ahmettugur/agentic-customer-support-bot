@@ -1,9 +1,9 @@
 // Services/NoopContextProvider.cs
 // Semantic memory disabled olduğunda DI'a koyulan no-op fallback.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 internal sealed class NoopContextProvider : IContextProvider
 {

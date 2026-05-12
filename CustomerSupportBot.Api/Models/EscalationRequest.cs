@@ -3,7 +3,7 @@
 // Geldiğinde bu talep IEscalationSink'e yazılır. Admin panelden bir insan
 // Destek temsilcisi çözüme kavuşturur.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>Eskalasyon talebinin yaşam döngüsü.</summary>
 public enum EscalationStatus

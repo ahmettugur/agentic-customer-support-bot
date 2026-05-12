@@ -3,13 +3,13 @@
 // Her MemoryKind ayrı koleksiyona yazılır → SearchAsync filter'a ihtiyaç duymaz.
 
 using System.Globalization;
-using CustomerSupportBot.Models.Memory;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.Options;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
 
-namespace CustomerSupportBot.Services.Memory;
+namespace CustomerSupportBot.Api.Services.Memory;
 
 public sealed class QdrantVectorMemoryStore : IVectorMemoryStore
 {

@@ -5,10 +5,10 @@
 // kişiselleştirilmiş yanıt üretir.
 
 using System.Text;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services.Personalization;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services.Personalization;
 
-namespace CustomerSupportBot.Services.Providers;
+namespace CustomerSupportBot.Api.Services.Providers;
 
 public sealed class CustomerProfileContextProvider : IContextProvider
 {

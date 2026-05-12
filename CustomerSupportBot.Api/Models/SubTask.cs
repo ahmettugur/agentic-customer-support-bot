@@ -8,7 +8,7 @@
 // Planning prompt'u subTasks'ı görür ve çoklu agent yönlendirmesi yapabilir.
 // İleride (Phase 4b) workflow iteration eklenebilir — her subtask için ayrı run.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Compound query'nin parçası olan bir alt görev.

@@ -2,9 +2,9 @@
 // Oturum yönetim arayüzü — IConversationStore'u genişletir.
 // Mesaj geçmişi + oturum durumu (state) birlikte yönetilir.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// IConversationStore'u genişleten oturum yöneticisi.

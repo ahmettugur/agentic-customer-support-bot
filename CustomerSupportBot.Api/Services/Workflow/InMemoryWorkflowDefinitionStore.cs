@@ -2,9 +2,9 @@
 
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Models.Workflow;
+using CustomerSupportBot.Api.Models.Workflow;
 
-namespace CustomerSupportBot.Services.Workflow;
+namespace CustomerSupportBot.Api.Services.Workflow;
 
 public partial class InMemoryWorkflowDefinitionStore : IWorkflowDefinitionStore
 {

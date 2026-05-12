@@ -2,9 +2,9 @@
 // HITL — Specialist reasoning'de "needs_escalation" status'u için gerçek
 // Kuyruk sözleşmesi. Workflow sonrası hook bu interface'e yazar.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public interface IEscalationSink
 {

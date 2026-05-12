@@ -3,9 +3,9 @@
 // Production'da Redis pub/sub + persistence ile değiştirilebilir.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public class InMemoryChatModeRegistry : IChatModeRegistry
 {

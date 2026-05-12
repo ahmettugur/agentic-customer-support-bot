@@ -1,10 +1,10 @@
 // Endpoints/SessionEndpoints.cs
 // Oturum yönetimi endpoint'leri — sidebar/debug kullanımı için.
 
-using CustomerSupportBot.Services;
+using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class SessionEndpoints
 {

@@ -6,9 +6,9 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Text;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Tools;
+namespace CustomerSupportBot.Api.Tools;
 
 /// <summary>
 /// Müşteri destek araçları. Tüm metotlar statik olarak tanımlanmıştır çünkü

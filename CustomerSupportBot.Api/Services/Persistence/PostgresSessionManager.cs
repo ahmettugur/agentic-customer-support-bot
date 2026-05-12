@@ -17,14 +17,14 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Infrastructure.Persistence;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services.Locking;
+using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services.Locking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Services.Persistence;
+namespace CustomerSupportBot.Api.Services.Persistence;
 
 public sealed partial class PostgresSessionManager : ISessionManager
 {

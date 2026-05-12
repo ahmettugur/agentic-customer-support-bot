@@ -1,11 +1,11 @@
 // Infrastructure/Persistence/Configurations/Analytics/RatingConfiguration.cs
 // analytics.ratings tablosu — Konuşma değerlendirmeleri (session başına tek rating).
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Analytics;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Analytics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Configurations.Analytics;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Configurations.Analytics;
 
 internal sealed class RatingConfiguration : IEntityTypeConfiguration<RatingEntity>
 {

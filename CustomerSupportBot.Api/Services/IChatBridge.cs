@@ -11,9 +11,9 @@
 //     History buffer'ına yazılır → admin Üstlen'e tıkladığında bağlam görür
 //   - GetHistory(): admin panel için son N mesaj (her sender dahil)
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public interface IChatBridge
 {

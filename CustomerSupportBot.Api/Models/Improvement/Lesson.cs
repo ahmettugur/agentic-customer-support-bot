@@ -4,7 +4,7 @@
 // Admin Approve/Reject ile karara bağlar; Approved olanlar Qdrant Lessons collection'ına yazılır
 // ve sonraki konuşmalarda SemanticMemoryContextProvider üzerinden context'e dönerler.
 
-namespace CustomerSupportBot.Models.Improvement;
+namespace CustomerSupportBot.Api.Models.Improvement;
 
 public enum LessonStatus
 {

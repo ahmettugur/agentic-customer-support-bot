@@ -2,9 +2,11 @@
 // Thread-safe SSE event forwarding with automatic lock management.
 // Encapsulates the SemaphoreSlim pattern used across chat endpoints.
 
-namespace CustomerSupportBot.Infrastructure;
+using CustomerSupportBot.Api.Models;
 
-using CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Infrastructure;
+
+using Api.Models;
 using Microsoft.AspNetCore.Http;
 
 /// <summary>

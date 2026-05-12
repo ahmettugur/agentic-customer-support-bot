@@ -5,7 +5,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Konuşma geçmişi yönetim arayüzü.

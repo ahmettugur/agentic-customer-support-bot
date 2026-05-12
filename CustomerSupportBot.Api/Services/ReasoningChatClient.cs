@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Reasoning model (o-series) için ayrılmış IChatClient wrapper.

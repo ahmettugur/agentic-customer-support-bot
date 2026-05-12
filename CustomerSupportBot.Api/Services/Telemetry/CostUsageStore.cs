@@ -7,7 +7,7 @@
 
 using System.Collections.Concurrent;
 
-namespace CustomerSupportBot.Services.Telemetry;
+namespace CustomerSupportBot.Api.Services.Telemetry;
 
 public sealed class CostUsageStore
 {

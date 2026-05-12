@@ -4,12 +4,12 @@
 
 using System.Text;
 using System.Text.RegularExpressions;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
 
-namespace CustomerSupportBot.Agents;
+namespace CustomerSupportBot.Api.Agents;
 
 /// <summary>
 /// MAF WorkflowOutputEvent'ten yapılandırılmış veri çıkaran yardımcı sınıf.

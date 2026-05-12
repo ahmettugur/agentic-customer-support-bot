@@ -4,15 +4,15 @@
 // admin onayı bekler. Workflow sonunda needs_escalation status'u olan
 // specialist reasoning'leri escalation sink'e yazar.
 
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Services.Personalization;
+using CustomerSupportBot.Api.Services.Routing;
+using CustomerSupportBot.Api.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
-using CustomerSupportBot.Services.Personalization;
-using CustomerSupportBot.Services.Routing;
-using CustomerSupportBot.Tools;
 
-namespace CustomerSupportBot.Agents;
+namespace CustomerSupportBot.Api.Agents;
 
 /// <summary>
 /// HITL approval gate ve escalation servislerini yönetir.

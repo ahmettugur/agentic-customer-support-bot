@@ -2,14 +2,14 @@
 // Evaluation-scenarios.yaml'daki senaryoları sistem üzerinde otomatik çalıştırır.
 // Her senaryo için reasoning + workflow + critique akışını koşturur, trace üzerinden doğrular.
 
-using CustomerSupportBot.Agents;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
+using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.AI;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
-namespace CustomerSupportBot.Evaluation;
+namespace CustomerSupportBot.Api.Evaluation;
 
 public class EvaluationRunner
 {

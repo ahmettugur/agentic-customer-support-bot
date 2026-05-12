@@ -1,8 +1,8 @@
 // Services/Personalization/ICustomerProfileStore.cs
 
-using CustomerSupportBot.Models.Memory;
+using CustomerSupportBot.Api.Models.Memory;
 
-namespace CustomerSupportBot.Services.Personalization;
+namespace CustomerSupportBot.Api.Services.Personalization;
 
 public interface ICustomerProfileStore
 {

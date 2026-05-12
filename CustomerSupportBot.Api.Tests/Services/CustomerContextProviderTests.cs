@@ -1,7 +1,7 @@
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services.Providers;
 
-namespace CustomerSupportBot.Tests.Services;
+namespace CustomerSupportBot.Api.Tests.Services;
 
 public class CustomerContextProviderTests
 {

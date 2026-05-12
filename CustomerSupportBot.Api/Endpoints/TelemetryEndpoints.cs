@@ -2,9 +2,9 @@
 // /admin/telemetry/cost — model bazlı toplam token + USD maliyet özetini döner.
 // Admin panelinde dashboard kartı olarak gösterilebilir.
 
-using CustomerSupportBot.Services.Telemetry;
+using CustomerSupportBot.Api.Services.Telemetry;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class TelemetryEndpoints
 {

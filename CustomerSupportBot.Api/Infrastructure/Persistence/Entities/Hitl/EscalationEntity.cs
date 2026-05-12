@@ -2,7 +2,7 @@
 // `hitl.escalations` tablosu — needs_escalation status'lu reflection'lardan
 // türetilen eskalasyon kayıtları. Status: Open|Acknowledged|Resolved|Dismissed.
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
 
 public sealed class EscalationEntity
 {

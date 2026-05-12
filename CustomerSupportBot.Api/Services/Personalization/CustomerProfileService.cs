@@ -19,12 +19,12 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Models.Memory;
-using CustomerSupportBot.Services.Locking;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Api.Services.Locking;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Services.Personalization;
+namespace CustomerSupportBot.Api.Services.Personalization;
 
 public sealed partial class CustomerProfileService
 {

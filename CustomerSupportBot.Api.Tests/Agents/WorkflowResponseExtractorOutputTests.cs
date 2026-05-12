@@ -7,7 +7,7 @@ using CustomerSupportBot.Api.Models;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Tests.Agents;
+namespace CustomerSupportBot.Api.Tests.Agents;
 
 public class WorkflowResponseExtractorOutputTests
 {

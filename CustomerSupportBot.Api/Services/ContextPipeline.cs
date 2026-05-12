@@ -1,9 +1,9 @@
 // Services/ContextPipeline.cs
 // Birden fazla IContextProvider'ı zincirleyerek birleşik bağlam üretir.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Kayıtlı tüm IContextProvider'ları sıralı çalıştırır ve

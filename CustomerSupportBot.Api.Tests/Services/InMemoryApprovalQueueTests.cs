@@ -7,7 +7,7 @@ using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Tests.Services;
+namespace CustomerSupportBot.Api.Tests.Services;
 
 public class InMemoryApprovalQueueTests
 {

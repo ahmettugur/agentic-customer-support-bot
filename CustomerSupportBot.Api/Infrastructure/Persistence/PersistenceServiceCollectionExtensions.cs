@@ -1,11 +1,10 @@
 // Infrastructure/Persistence/PersistenceServiceCollectionExtensions.cs
 // DbContext + DbContextFactory + migration helper kayıtlarını gruplayan extension.
 
-using CustomerSupportBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
-namespace Microsoft.Extensions.DependencyInjection;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence;
 
 public static class PersistenceServiceCollectionExtensions
 {

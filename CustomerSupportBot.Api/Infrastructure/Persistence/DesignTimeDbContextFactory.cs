@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
 
-namespace CustomerSupportBot.Infrastructure.Persistence;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence;
 
 public sealed class DesignTimeDbContextFactory
     : IDesignTimeDbContextFactory<CustomerSupportDbContext>

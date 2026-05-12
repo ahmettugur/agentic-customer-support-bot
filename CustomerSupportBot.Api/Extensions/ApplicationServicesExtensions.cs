@@ -1,11 +1,11 @@
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
-using CustomerSupportBot.Agents;
-using CustomerSupportBot.Evaluation;
-using CustomerSupportBot.Services;
-using CustomerSupportBot.Services.Providers;
+using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Api.Evaluation;
+using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Services.Providers;
 using Microsoft.AspNetCore.RateLimiting;
-namespace CustomerSupportBot.Extensions;
+namespace CustomerSupportBot.Api.Extensions;
 
 public static class ApplicationServicesExtensions
 {

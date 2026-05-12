@@ -4,7 +4,7 @@
 //   Postgres  → EF Core + Npgsql tabanlı store'lar
 // İleride Redis eklendiğinde bu enum genişletilir.
 
-namespace CustomerSupportBot.Infrastructure.Persistence;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence;
 
 public sealed class PersistenceOptions
 {

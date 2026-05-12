@@ -1,5 +1,5 @@
 <Solution>
-  <Project Path="CustomerSupportBot/CustomerSupportBot.csproj" />
-  <Project Path="CustomerSupportBot.Tests/CustomerSupportBot.Tests.csproj" />
+  <Project Path="CustomerSupportBot.Api.Tests\CustomerSupportBot.Api.Tests.csproj" />
+  <Project Path="CustomerSupportBot.Api\CustomerSupportBot.Api.csproj" />
 </Solution>
 

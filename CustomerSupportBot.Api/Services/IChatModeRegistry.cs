@@ -2,9 +2,9 @@
 // HITL Live Takeover — session başına (Bot|Human) kipini tutan registry sözleşmesi.
 // ChatEndpoints her istekte GetMode() okur; AdminEndpoints TakeOver/Release yazar.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public interface IChatModeRegistry
 {

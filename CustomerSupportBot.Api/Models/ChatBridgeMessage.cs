@@ -2,7 +2,7 @@
 // HITL Live Takeover — user <-> admin arası tek mesajlık paket.
 // Hem history buffer'ında saklanır hem SSE event payload'ı olarak iletilir.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 public enum ChatBridgeSender
 {

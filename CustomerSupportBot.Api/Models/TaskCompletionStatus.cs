@@ -2,7 +2,7 @@
 // PostToolReflection.Status ve SpecialistReasoningParser.NormalizeStatus
 // İçin type-safe enum. String karşılaştırma yerine bu kullanılır.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Specialist agent'ın tool sonrası görev tamamlanma durumu.

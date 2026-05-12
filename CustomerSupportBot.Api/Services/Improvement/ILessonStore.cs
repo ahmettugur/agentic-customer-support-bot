@@ -2,9 +2,9 @@
 // Lesson'ları saklayan store soyutlaması. Default: in-memory.
 // Production'da PostgresLessonStore eklenebilir (migration gerekir).
 
-using CustomerSupportBot.Models.Improvement;
+using CustomerSupportBot.Api.Models.Improvement;
 
-namespace CustomerSupportBot.Services.Improvement;
+namespace CustomerSupportBot.Api.Services.Improvement;
 
 public interface ILessonStore
 {

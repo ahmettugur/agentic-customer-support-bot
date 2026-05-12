@@ -11,7 +11,7 @@
 // - error             : Hata detayları (taksonomi)
 // - suggestedAction   : LLM/specialist için kısa öneri ("retry", "ask_user", "escalate")
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Tool çağrısının standart dönüş zarfı.

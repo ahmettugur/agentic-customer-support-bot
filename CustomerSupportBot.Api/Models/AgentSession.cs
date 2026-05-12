@@ -2,7 +2,7 @@
 // Oturum durumu (state) yönetimi modeli.
 // Her kullanıcı oturumunun yaşam döngüsünü, toplanan bilgileri ve fazını takip eder.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Ajan oturumunu temsil eder.

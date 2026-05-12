@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 internal static class SseWriter
 {

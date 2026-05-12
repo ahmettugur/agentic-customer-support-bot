@@ -6,7 +6,7 @@ using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.Extensions.Logging.Abstractions;
 using SessionState = CustomerSupportBot.Api.Models.SessionState;
 
-namespace CustomerSupportBot.Tests.Services.Providers;
+namespace CustomerSupportBot.Api.Tests.Services.Providers;
 
 public class CustomerProfileContextProviderTests
 {

@@ -12,10 +12,10 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Tools;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Tools;
 
-namespace CustomerSupportBot.Services.Realtime;
+namespace CustomerSupportBot.Api.Services.Realtime;
 
 /// <summary>
 /// Realtime native moduna özel okuma-only tool seti ve OpenAI function calling sözleşmesi.

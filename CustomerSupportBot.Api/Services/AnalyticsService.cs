@@ -1,9 +1,9 @@
 // Services/AnalyticsService.cs
 // Tüm in-memory depolardan veri toplayarak analytics dashboard özeti üretir.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public class AnalyticsService(
     ISessionManager sessions,

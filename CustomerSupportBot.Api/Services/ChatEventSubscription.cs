@@ -2,10 +2,10 @@
 // Persistent SSE — chat session için mode change ve escalation lifecycle event'lerini
 // ChatEventOrchestrator tarafından kullanılan SSE forwarder'a iletir.
 
-using CustomerSupportBot.Infrastructure;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Chat session başına kalıcı SSE bağlantısı için event abonelikleri.

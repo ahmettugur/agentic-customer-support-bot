@@ -2,9 +2,9 @@
 // Konuşma değerlendirme deposu arayüzü.
 // Persistence geçişinde sadece bu arayüzün yeni implementasyonu yazılacak.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Müşteri geri bildirimi (1-5 yıldız + yorum) depolama arayüzü.

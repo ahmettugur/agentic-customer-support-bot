@@ -1,11 +1,11 @@
 // Infrastructure/Persistence/Configurations/Chat/SessionConfiguration.cs
 // chat.sessions tablosu — AgentSession + SessionState (JSONB).
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Configurations.Chat;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Configurations.Chat;
 
 internal sealed class SessionConfiguration : IEntityTypeConfiguration<SessionEntity>
 {

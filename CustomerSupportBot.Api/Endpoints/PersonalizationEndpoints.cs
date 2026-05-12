@@ -1,10 +1,10 @@
 // Endpoints/PersonalizationEndpoints.cs
 // Per-customer profil yönetim API'si — admin scope.
 
-using CustomerSupportBot.Models.Memory;
-using CustomerSupportBot.Services.Personalization;
+using CustomerSupportBot.Api.Services.Personalization;
+using CustomerSupportBot.Api.Models.Memory;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class PersonalizationEndpoints
 {

@@ -2,9 +2,9 @@
 // Müşteri verilerini FakeDatabase'den çekerek ajanlara bağlam sağlar.
 
 using System.Text;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services.Providers;
+namespace CustomerSupportBot.Api.Services.Providers;
 
 /// <summary>
 /// Oturumdaki CustomerId bilgisine göre müşterinin sipariş ve şikayet

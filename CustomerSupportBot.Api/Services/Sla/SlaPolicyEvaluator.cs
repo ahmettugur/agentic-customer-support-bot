@@ -3,9 +3,9 @@
 // olarak alır, üretilmesi gereken SlaEvent'leri ve uygulanacak aksiyonları
 // döndürür. BackgroundService ve unit testler ortak olarak bunu kullanır.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services.Sla;
+namespace CustomerSupportBot.Api.Services.Sla;
 
 public static class SlaPolicyEvaluator
 {

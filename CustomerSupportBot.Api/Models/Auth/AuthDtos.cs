@@ -1,7 +1,7 @@
 // Models/Auth/AuthDtos.cs
 // Login + refresh için DTO'lar.
 
-namespace CustomerSupportBot.Models.Auth;
+namespace CustomerSupportBot.Api.Models.Auth;
 
 public sealed record LoginRequest(string Username, string Password);
 

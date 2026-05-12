@@ -2,10 +2,10 @@
 // HITL (approval + escalation) event'lerini SSE forwarder'a yönlendiren subscription.
 // ChatStreamOrchestrator tarafından kullanılır — workflow süresince aktif kalır.
 
-using CustomerSupportBot.Infrastructure;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// HITL event'lerini (approval required/resolved, escalation created) belirli bir

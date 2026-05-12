@@ -8,7 +8,7 @@ using CustomerSupportBot.Api.Models.Workflow;
 using CustomerSupportBot.Api.Services.Workflow;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace CustomerSupportBot.Tests.Services.Workflow;
+namespace CustomerSupportBot.Api.Tests.Services.Workflow;
 
 public class WorkflowExecutorTests
 {

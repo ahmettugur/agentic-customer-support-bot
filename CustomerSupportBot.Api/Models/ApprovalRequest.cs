@@ -4,7 +4,7 @@
 // Kullanıcı/admin onayı bekler. TaskCompletionSource ile async wait tarafı
 // IApprovalQueue implementasyonunda tutulur; bu model sadece veri taşır.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>Approval isteğinin yaşam döngüsü.</summary>
 public enum ApprovalStatus

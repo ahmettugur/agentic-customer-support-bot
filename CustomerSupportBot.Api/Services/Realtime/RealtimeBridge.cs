@@ -14,11 +14,11 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using CustomerSupportBot.Agents;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Services.Realtime;
+namespace CustomerSupportBot.Api.Services.Realtime;
 
 /// <summary>
 /// Tek bir browser realtime bağlantısı için scoped servis.

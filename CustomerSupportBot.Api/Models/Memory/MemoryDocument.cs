@@ -3,7 +3,7 @@
 // Üç tip kullanılıyor: Episodic (geçmiş konuşmalar), Lesson (kapalı-döngü iyileştirme),
 // Knowledge (statik dokümantasyon — politika, SSS).
 
-namespace CustomerSupportBot.Models.Memory;
+namespace CustomerSupportBot.Api.Models.Memory;
 
 /// <summary>Memory dokümanının türü — collection seçimi ve filtreleme için.</summary>
 public enum MemoryKind

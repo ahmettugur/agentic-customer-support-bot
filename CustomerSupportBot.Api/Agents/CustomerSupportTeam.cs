@@ -14,15 +14,15 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Services.Memory;
+using CustomerSupportBot.Api.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
-using CustomerSupportBot.Services.Memory;
-using CustomerSupportBot.Tools;
 
-namespace CustomerSupportBot.Agents;
+namespace CustomerSupportBot.Api.Agents;
 
 /// <summary>
 /// Müşteri destek ajan takımını yönetir.

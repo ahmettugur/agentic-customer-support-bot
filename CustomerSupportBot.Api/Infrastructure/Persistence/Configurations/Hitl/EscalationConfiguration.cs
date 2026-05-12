@@ -1,11 +1,11 @@
 // Infrastructure/Persistence/Configurations/Hitl/EscalationConfiguration.cs
 // hitl.escalations tablosu — needs_escalation status'tan türeyen eskalasyonlar.
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Configurations.Hitl;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Configurations.Hitl;
 
 internal sealed class EscalationConfiguration : IEntityTypeConfiguration<EscalationEntity>
 {

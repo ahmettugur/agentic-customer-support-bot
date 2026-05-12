@@ -2,7 +2,7 @@
 // `chat.session_modes` tablosu — Live Takeover kip kayıtları.
 // ChatMode enum'unun string karşılığı: "Bot" | "Human".
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 
 public sealed class ChatSessionModeEntity
 {

@@ -6,7 +6,7 @@
 // Amaç: hallucination'ı düşürmek ve requiredInfo'nun zaten bilinen alanları istememesini
 // Garanti altına almak.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Mevcut turda (query + history + session state) tespit edilmiş ve doğrulanmış

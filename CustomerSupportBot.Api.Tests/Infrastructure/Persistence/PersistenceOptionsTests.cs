@@ -3,7 +3,7 @@
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 
-namespace CustomerSupportBot.Tests.Infrastructure.Persistence;
+namespace CustomerSupportBot.Api.Tests.Infrastructure.Persistence;
 
 public class PersistenceOptionsTests
 {

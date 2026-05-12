@@ -9,7 +9,7 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Markdown dosyalarından prompt yükler, {{PLACEHOLDER}} ikame eden servis.
@@ -79,7 +79,7 @@ public class PromptService
             _logger.LogError("Prompts dizini bulunamadı: {Path}", _rootDirectory);
             throw new DirectoryNotFoundException(
                 $"Prompts dizini bulunamadı: {_rootDirectory}. " +
-                "CustomerSupportBot.csproj'da <None Update=\"Prompts\\**\\*.md\"> kuralı var mı?");
+                "CustomerSupportBot.Api.csproj'da <None Update=\"Prompts\\**\\*.md\"> kuralı var mı?");
         }
 
         var mdFiles = Directory.EnumerateFiles(_rootDirectory, "*.md", SearchOption.AllDirectories).ToList();

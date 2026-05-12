@@ -1,11 +1,11 @@
-using CustomerSupportBot.Tests.Helpers;
 using CustomerSupportBot.Api.Services.Personalization;
-using CustomerSupportBot.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using CustomerSupportBot.Api.Services.Personalization;
 
-namespace CustomerSupportBot.Tests.Services.Personalization;
+namespace CustomerSupportBot.Api.Tests.Services.Personalization;
 
 public class CustomerProfileServiceTests
 {

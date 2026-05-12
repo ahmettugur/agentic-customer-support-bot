@@ -8,7 +8,7 @@
 // Bulunan her tutarsızlık ReasoningIssue olarak kaydedilir; ReasoningResult'a
 // Ve trace'e yansır. Frontend debug panel'inde görüntülenir.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Sanity checker'ın bulduğu tutarsızlık kaydı.

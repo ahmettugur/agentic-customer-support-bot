@@ -3,7 +3,7 @@
 // Mini iş akışları. Mevcut multi-agent sistem dokunulmaz; bu workflow'lar admin
 // Tarafından tetiklenir veya intent eşleşmesiyle "fast path" olarak çalışır.
 
-namespace CustomerSupportBot.Models.Workflow;
+namespace CustomerSupportBot.Api.Models.Workflow;
 
 /// <summary>
 /// Bir low-code workflow tanımı. JSON olarak persist edilir, runtime'da

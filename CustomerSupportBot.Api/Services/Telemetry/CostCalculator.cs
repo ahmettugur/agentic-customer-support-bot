@@ -1,10 +1,10 @@
 // Services/Telemetry/CostCalculator.cs
 // TelemetryOptions.Pricing tablosunu okuyup, model adına göre USD maliyeti hesaplar.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Services.Telemetry;
+namespace CustomerSupportBot.Api.Services.Telemetry;
 
 public sealed class CostCalculator : ICostCalculator
 {

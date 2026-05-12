@@ -6,7 +6,7 @@ using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Tests.Agents;
+namespace CustomerSupportBot.Api.Tests.Agents;
 
 public class SubTaskOrchestratorPartitionTests
 {

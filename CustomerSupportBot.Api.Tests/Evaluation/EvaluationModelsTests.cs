@@ -3,7 +3,7 @@
 using CustomerSupportBot.Api.Evaluation;
 using CustomerSupportBot.Api.Evaluation;
 
-namespace CustomerSupportBot.Tests.Evaluation;
+namespace CustomerSupportBot.Api.Tests.Evaluation;
 
 public class EvaluationModelsTests
 {

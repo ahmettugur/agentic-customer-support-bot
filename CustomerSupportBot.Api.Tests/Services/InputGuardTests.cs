@@ -3,7 +3,7 @@
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services;
 
-namespace CustomerSupportBot.Tests.Services;
+namespace CustomerSupportBot.Api.Tests.Services;
 
 public class InputGuardTests
 {

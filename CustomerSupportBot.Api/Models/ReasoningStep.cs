@@ -5,7 +5,7 @@
 // Böylece trace okuyan bir geliştirici modelin kararını (sadece metnini değil)
 // Inceleyebilir ve downstream sanity check kurallarını buradan besleyebilir.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Reasoning sürecindeki tek bir yapılandırılmış adım.

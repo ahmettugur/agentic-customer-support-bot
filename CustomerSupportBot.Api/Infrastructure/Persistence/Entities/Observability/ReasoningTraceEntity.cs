@@ -4,7 +4,7 @@
 // AgentVisit[], ToolInvocation[], ResponseCritique) JSONB string olarak
 // saklanır. Update hot-path: in-memory mutate, DB sadece Complete()'te yazılır.
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Observability;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Observability;
 
 public sealed class ReasoningTraceEntity
 {

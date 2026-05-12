@@ -8,14 +8,14 @@
 //   4. HumanAgents: Default temsilcileri seed et (tablo boşsa).
 // İşlemler idempotent. Hata olursa uygulama durmaz, sadece loglanır.
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Auth;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
-using CustomerSupportBot.Services;
-using CustomerSupportBot.Services.Auth;
-using CustomerSupportBot.Services.Persistence;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
+using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Services.Auth;
+using CustomerSupportBot.Api.Services.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace CustomerSupportBot.Infrastructure.Persistence;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence;
 
 public sealed class PersistenceHydrator : IHostedService
 {

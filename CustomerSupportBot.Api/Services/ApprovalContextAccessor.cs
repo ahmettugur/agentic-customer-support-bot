@@ -3,7 +3,7 @@
 // IDisposable ile scope sonunda otomatik temizlik sağlar.
 // Her async akış kendi bağlamını taşır — paralel workflow'lar izoledir.
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Workflow çalıştırma sırasında approval bağlamını (session, trace, query)

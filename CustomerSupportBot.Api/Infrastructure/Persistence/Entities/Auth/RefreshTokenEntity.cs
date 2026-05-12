@@ -1,7 +1,7 @@
 // Infrastructure/Persistence/Entities/Auth/RefreshTokenEntity.cs
 // auth.refresh_tokens — her oturum için opaque refresh token kaydı (hash'lenmiş).
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Auth;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
 
 public sealed class RefreshTokenEntity
 {

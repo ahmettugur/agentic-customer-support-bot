@@ -3,9 +3,9 @@
 // Production için Redis/DB/Slack/Zendesk adapter ile değiştirilebilir.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public class InMemoryEscalationSink : IEscalationSink
 {

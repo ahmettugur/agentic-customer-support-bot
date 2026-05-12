@@ -4,11 +4,11 @@
 
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services.Locking;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services.Locking;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Bellek içi oturum yöneticisi.

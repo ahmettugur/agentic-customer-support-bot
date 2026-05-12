@@ -2,7 +2,7 @@
 // SessionState.Phase için type-safe enum.
 // Eski string tabanlı "greeting"/"inquiry"/"action"/"resolution" yerine.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Konuşmanın mevcut fazı.

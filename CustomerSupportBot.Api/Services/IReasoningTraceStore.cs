@@ -2,9 +2,9 @@
 // Reasoning trace'lerini saklayan store arayüzü.
 // In-memory implementasyonu default. İstenirse Elasticsearch/SQL versiyonu eklenebilir.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public interface IReasoningTraceStore
 {

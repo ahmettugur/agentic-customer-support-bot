@@ -3,7 +3,7 @@
 // Skill tag'leri, dil yetkinliği ve mevcut yük (capacity) ile temsil eder.
 // SkillsBasedRouter eskalasyon talebi için en uygun temsilciyi seçer.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>İnsan müşteri temsilcisi profili (skills-based routing için).</summary>
 public class HumanAgent

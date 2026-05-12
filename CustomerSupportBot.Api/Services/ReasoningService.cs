@@ -5,10 +5,10 @@
 
 using System.Runtime.CompilerServices;
 using System.Text;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Reasoning adımlarını üretir ve yapılandırılmış formatta döner.

@@ -3,9 +3,9 @@
 // Production'da Postgres / Redis ile değiştirilebilir — interface aynı kalır.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Models.Memory;
+using CustomerSupportBot.Api.Models.Memory;
 
-namespace CustomerSupportBot.Services.Personalization;
+namespace CustomerSupportBot.Api.Services.Personalization;
 
 public sealed class InMemoryCustomerProfileStore : ICustomerProfileStore
 {

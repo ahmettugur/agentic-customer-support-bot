@@ -3,7 +3,7 @@
 
 using YamlDotNet.Serialization;
 
-namespace CustomerSupportBot.Evaluation;
+namespace CustomerSupportBot.Api.Evaluation;
 
 /// <summary>YAML kökü: version + scenarios listesi.</summary>
 public class ScenarioFile

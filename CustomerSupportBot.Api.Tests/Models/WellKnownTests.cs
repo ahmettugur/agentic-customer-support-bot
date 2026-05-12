@@ -4,7 +4,7 @@ using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Models;
 using FluentAssertions;
 
-namespace CustomerSupportBot.Tests.Models;
+namespace CustomerSupportBot.Api.Tests.Models;
 
 public class WellKnownTests
 {

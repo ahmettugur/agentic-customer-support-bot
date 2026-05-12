@@ -1,7 +1,8 @@
 // Services/Routing/ISkillsBasedRouter.cs
-using CustomerSupportBot.Models;
 
-namespace CustomerSupportBot.Services.Routing;
+using CustomerSupportBot.Api.Models;
+
+namespace CustomerSupportBot.Api.Services.Routing;
 
 /// <summary>
 /// Eskalasyon için en uygun insan müşteri temsilcisini öneren router.

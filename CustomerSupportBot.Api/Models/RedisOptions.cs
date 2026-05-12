@@ -3,7 +3,7 @@
 // appsettings.json → "Redis" bölümünden bind edilir.
 // Redis zorunludur — uygulama başlatılırken connection string olmalıdır.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 public sealed class RedisOptions
 {

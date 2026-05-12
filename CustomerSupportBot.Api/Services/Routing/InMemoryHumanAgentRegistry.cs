@@ -3,10 +3,10 @@
 // Restart'ta seed config'den yeniden yüklenir. Production: PostgresHumanAgentRegistry.
 
 using System.Collections.Concurrent;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.Options;
-using CustomerSupportBot.Models;
 
-namespace CustomerSupportBot.Services.Routing;
+namespace CustomerSupportBot.Api.Services.Routing;
 
 public class InMemoryHumanAgentRegistry : IHumanAgentRegistry
 {

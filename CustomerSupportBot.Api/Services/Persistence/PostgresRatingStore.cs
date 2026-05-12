@@ -11,12 +11,12 @@
 // PersistenceHydrator (Faz 2 sonu) önceden hydrate eder.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Infrastructure.Persistence;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Analytics;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Analytics;
+using CustomerSupportBot.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace CustomerSupportBot.Services.Persistence;
+namespace CustomerSupportBot.Api.Services.Persistence;
 
 public sealed class PostgresRatingStore : IRatingStore
 {

@@ -1,9 +1,9 @@
 // Services/Memory/IVectorMemoryStore.cs
 // Qdrant gibi vector veritabanlarına soyutlanmış erişim.
 
-using CustomerSupportBot.Models.Memory;
+using CustomerSupportBot.Api.Models.Memory;
 
-namespace CustomerSupportBot.Services.Memory;
+namespace CustomerSupportBot.Api.Services.Memory;
 
 public interface IVectorMemoryStore
 {

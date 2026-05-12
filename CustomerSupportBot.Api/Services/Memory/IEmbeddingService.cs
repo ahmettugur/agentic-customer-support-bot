@@ -1,7 +1,7 @@
 // Services/Memory/IEmbeddingService.cs
 // Metin → embedding (float[]) üreten servis.
 
-namespace CustomerSupportBot.Services.Memory;
+namespace CustomerSupportBot.Api.Services.Memory;
 
 public interface IEmbeddingService
 {

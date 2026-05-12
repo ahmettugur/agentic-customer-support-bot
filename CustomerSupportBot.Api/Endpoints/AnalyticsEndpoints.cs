@@ -5,10 +5,10 @@
 //   - GET  /sessions/{sid}/rating     : Konuşmanın mevcut rating'ini getir
 //   - GET  /analytics/ratings/recent  : Son N rating
 
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class AnalyticsEndpoints
 {

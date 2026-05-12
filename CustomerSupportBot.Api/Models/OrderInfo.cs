@@ -1,4 +1,4 @@
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Sipariş bilgisini temsil eder.

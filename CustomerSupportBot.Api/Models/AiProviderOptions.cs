@@ -2,7 +2,7 @@
 // AI sağlayıcı yapılandırmaları için strongly-typed options sınıfları.
 // `appsettings.json` > "AI" bölümünden IOptions<T> ile bind edilir.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>Aktif AI sağlayıcısı.</summary>
 public enum AiProvider

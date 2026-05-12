@@ -1,10 +1,10 @@
-using CustomerSupportBot.Infrastructure.Persistence;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
-using CustomerSupportBot.Services.Persistence;
-using CustomerSupportBot.Services.Routing;
+using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Services.Persistence;
+using CustomerSupportBot.Api.Services.Routing;
 
-namespace CustomerSupportBot.Extensions;
+namespace CustomerSupportBot.Api.Extensions;
 
 public static class PersistenceServicesExtensions
 {

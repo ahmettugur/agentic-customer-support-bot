@@ -2,7 +2,7 @@
 // , 1.3, 1.4 — PlanningAgent'ın yapılandırılmış çıktı modeli.
 // JSON olarak parse edilip routing kararlarında kullanılır.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// PlanningAgent'ın yapılandırılmış çıktısı — niyet analizi, seçilen ajan,

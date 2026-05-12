@@ -2,7 +2,7 @@
 // Konuşma sonu müşteri geri bildirimi modeli.
 // Kullanıcı 1-5 yıldız + opsiyonel yorum bırakabilir.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Bir oturum için kullanıcının bıraktığı değerlendirme.

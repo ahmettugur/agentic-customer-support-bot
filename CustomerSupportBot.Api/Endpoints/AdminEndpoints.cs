@@ -23,12 +23,12 @@
 //
 // Production'da bu endpoint'lerin önüne auth (admin role) gelmelidir.
 
-using CustomerSupportBot.Agents;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
+using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class AdminEndpoints
 {

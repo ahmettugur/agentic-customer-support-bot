@@ -2,7 +2,7 @@
 // HITL Live Takeover — bir session'ın mevcut kip durumunun snapshot'ı.
 // Admin UI "Aktif Sohbetler" listesinde bu data render edilir.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 public class ChatSessionState
 {

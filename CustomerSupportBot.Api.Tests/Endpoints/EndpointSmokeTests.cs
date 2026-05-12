@@ -2,7 +2,7 @@
 using System.Net;
 using System.Net.Http.Json;
 
-namespace CustomerSupportBot.Tests.Endpoints;
+namespace CustomerSupportBot.Api.Tests.Endpoints;
 
 /// <summary>
 /// In-process integration tests using <see cref="TestWebApplicationFactory"/>.

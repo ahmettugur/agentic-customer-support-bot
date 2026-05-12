@@ -1,9 +1,9 @@
 // Services/IContextProvider.cs
 // Context Provider arayüzü — ajanlara bağlam bilgisi sağlar.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Ajan bağlam sağlayıcısı arayüzü.

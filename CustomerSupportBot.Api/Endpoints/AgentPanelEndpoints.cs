@@ -26,11 +26,11 @@
 //   GET  /agent/profile                           → Kendi agent profilim
 
 using System.Security.Claims;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
-using CustomerSupportBot.Services.Routing;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Services.Routing;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class AgentPanelEndpoints
 {

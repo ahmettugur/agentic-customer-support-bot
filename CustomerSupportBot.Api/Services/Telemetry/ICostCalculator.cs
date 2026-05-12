@@ -2,7 +2,7 @@
 // Token kullanımını USD tahmini maliyete çevirir. Gerçek faturalama için değil,
 // trend ve uyarı için kullanılır. Fiyat tablosu appsettings'ten yüklenir.
 
-namespace CustomerSupportBot.Services.Telemetry;
+namespace CustomerSupportBot.Api.Services.Telemetry;
 
 public interface ICostCalculator
 {

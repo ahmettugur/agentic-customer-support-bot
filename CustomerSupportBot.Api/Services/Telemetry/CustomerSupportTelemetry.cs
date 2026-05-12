@@ -7,7 +7,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
-namespace CustomerSupportBot.Services.Telemetry;
+namespace CustomerSupportBot.Api.Services.Telemetry;
 
 /// <summary>
 /// Uygulama genelinde paylaşılan telemetri primitifleri.
@@ -15,8 +15,8 @@ namespace CustomerSupportBot.Services.Telemetry;
 /// </summary>
 public static class CustomerSupportTelemetry
 {
-    public const string ActivitySourceName = "CustomerSupportBot";
-    public const string MeterName = "CustomerSupportBot";
+    public const string ActivitySourceName = "CustomerSupportBot.Api";
+    public const string MeterName = "CustomerSupportBot.Api";
 
     /// <summary>Tüm domain span'lerinin ortak kaynağı.</summary>
     public static readonly ActivitySource ActivitySource = new(ActivitySourceName, "1.0.0");

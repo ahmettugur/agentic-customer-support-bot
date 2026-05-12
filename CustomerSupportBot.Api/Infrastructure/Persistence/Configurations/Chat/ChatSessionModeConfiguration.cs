@@ -1,11 +1,11 @@
 // Infrastructure/Persistence/Configurations/Chat/ChatSessionModeConfiguration.cs
 // chat.session_modes tablosu — Live Takeover Bot/Human kip kayıtları.
 
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Configurations.Chat;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Configurations.Chat;
 
 internal sealed class ChatSessionModeConfiguration : IEntityTypeConfiguration<ChatSessionModeEntity>
 {

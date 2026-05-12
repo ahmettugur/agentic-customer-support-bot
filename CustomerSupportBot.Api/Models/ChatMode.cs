@@ -2,7 +2,7 @@
 // HITL Live Takeover — bir session'ın işlenme kipi.
 // Bot = workflow çalışır; Human = workflow atlanır, mesajlar admin ile köprüden.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 public enum ChatMode
 {

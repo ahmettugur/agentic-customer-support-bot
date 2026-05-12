@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Thread-safe erişim için ConcurrentDictionary kullanılır.

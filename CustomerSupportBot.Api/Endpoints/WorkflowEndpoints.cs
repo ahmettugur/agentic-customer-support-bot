@@ -3,10 +3,10 @@
 // /workflows altında map edilir, RequireAuthorization("Admin") scope altında.
 
 using System.Security.Claims;
-using CustomerSupportBot.Models.Workflow;
-using CustomerSupportBot.Services.Workflow;
+using CustomerSupportBot.Api.Models.Workflow;
+using CustomerSupportBot.Api.Services.Workflow;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class WorkflowEndpoints
 {

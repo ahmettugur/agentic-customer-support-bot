@@ -8,7 +8,7 @@ using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services.Sla;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace CustomerSupportBot.Tests.Services.Sla;
+namespace CustomerSupportBot.Api.Tests.Services.Sla;
 
 public class SlaPolicyEvaluatorTests
 {

@@ -1,6 +1,6 @@
 using CustomerSupportBot.Api.Services.Telemetry;
 
-namespace CustomerSupportBot.Tests.Services.Telemetry;
+namespace CustomerSupportBot.Api.Tests.Services.Telemetry;
 
 public class CostUsageStoreTests
 {

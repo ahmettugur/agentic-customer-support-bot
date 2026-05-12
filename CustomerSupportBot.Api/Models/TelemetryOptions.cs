@@ -3,7 +3,7 @@
 // OpenTelemetry trace + metric pipeline'ı, OTLP exporter ve model bazlı
 // USD maliyet tablosu burada yapılandırılır.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 public sealed class TelemetryOptions
 {
@@ -13,7 +13,7 @@ public sealed class TelemetryOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>OpenTelemetry resource service.name attribute değeri.</summary>
-    public string ServiceName { get; set; } = "CustomerSupportBot";
+    public string ServiceName { get; set; } = "CustomerSupportBot.Api";
 
     /// <summary>OpenTelemetry resource service.version attribute değeri.</summary>
     public string ServiceVersion { get; set; } = "1.0.0";

@@ -3,7 +3,7 @@
 // Status: ApprovalStatus enum'unun string karşılığı (Pending|Approved|Rejected|Expired).
 // TaskCompletionSource persist edilmez — in-memory kalır.
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
 
 public sealed class ApprovalRequestEntity
 {

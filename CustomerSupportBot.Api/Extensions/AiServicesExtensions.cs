@@ -1,12 +1,12 @@
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Models.Memory;
-using CustomerSupportBot.Services;
-using CustomerSupportBot.Services.Memory;
-using CustomerSupportBot.Services.Telemetry;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Services.Memory;
+using CustomerSupportBot.Api.Services.Telemetry;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Extensions;
+namespace CustomerSupportBot.Api.Extensions;
 
 public static class AiServicesExtensions
 {

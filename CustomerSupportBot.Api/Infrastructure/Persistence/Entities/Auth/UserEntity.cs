@@ -1,7 +1,7 @@
 // Infrastructure/Persistence/Entities/Auth/UserEntity.cs
 // auth.users — admin kullanıcı tablosu.
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Auth;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
 
 public sealed class UserEntity
 {

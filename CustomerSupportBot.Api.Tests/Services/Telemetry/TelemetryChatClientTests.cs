@@ -3,7 +3,7 @@ using CustomerSupportBot.Api.Services.Telemetry;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace CustomerSupportBot.Tests.Services.Telemetry;
+namespace CustomerSupportBot.Api.Tests.Services.Telemetry;
 
 public class TelemetryChatClientTests
 {

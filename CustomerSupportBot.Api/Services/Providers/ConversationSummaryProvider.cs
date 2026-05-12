@@ -2,10 +2,10 @@
 // Uzun konuşma geçmişini LLM ile özetleyerek token tasarrufu sağlar.
 
 using System.Text;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Services.Providers;
+namespace CustomerSupportBot.Api.Services.Providers;
 
 /// <summary>
 /// Konuşma geçmişi belirli bir eşiği aştığında, eski mesajları

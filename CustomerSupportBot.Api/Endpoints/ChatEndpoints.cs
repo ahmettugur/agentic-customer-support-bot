@@ -2,13 +2,13 @@
 // Chat endpoint registration — delegates all logic to orchestrator services.
 // Routes: POST /chat/ (non-streaming), POST /chat/stream (SSE), GET /chat/events/{id} (persistent SSE)
 
-using CustomerSupportBot.Agents;
-using CustomerSupportBot.Infrastructure;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Services;
+using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services;
 using Microsoft.AspNetCore.Http;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class ChatEndpoints
 {

@@ -3,9 +3,9 @@
 // Thread-safe erişim için ConcurrentDictionary kullanılır.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public class InMemoryRatingStore : IRatingStore
 {

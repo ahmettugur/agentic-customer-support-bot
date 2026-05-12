@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Tests.Services.Auth;
+namespace CustomerSupportBot.Api.Tests.Services.Auth;
 
 internal sealed class TestDbContextFactory : IDbContextFactory<CustomerSupportDbContext>
 {

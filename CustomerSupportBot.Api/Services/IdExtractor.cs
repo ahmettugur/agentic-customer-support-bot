@@ -11,7 +11,7 @@
 
 using System.Text.RegularExpressions;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Kullanıcı mesajından entity ID'lerini regex ile çıkarır.

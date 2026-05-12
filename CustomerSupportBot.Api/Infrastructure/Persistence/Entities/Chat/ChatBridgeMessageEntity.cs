@@ -3,7 +3,7 @@
 // BotTyping (transient) DB'ye yazılmaz; sadece in-memory broadcast olur.
 // Sender alanı: ChatBridgeSender enum'unun string karşılığı.
 
-namespace CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
+namespace CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 
 public sealed class ChatBridgeMessageEntity
 {

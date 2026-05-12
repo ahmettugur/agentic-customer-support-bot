@@ -3,7 +3,7 @@
 // Eski alanlar (Analysis, Steps, Intent, RequiredInfo, Confidence) korundu.
 // Yeni alanlar: Rationale, Assumptions, NextAction, DecisionReason, ConfidenceScore.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Reasoning çıktısı — yapılandırılmış düşünce süreci.

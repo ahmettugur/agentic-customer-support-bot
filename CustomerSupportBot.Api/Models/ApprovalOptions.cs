@@ -2,7 +2,7 @@
 // HITL config — appsettings.json > "HumanInTheLoop" bölümünden bind edilir.
 // Hangi tool'ların onay gerektirdiği ve timeout değeri burada tanımlıdır.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// HITL ayarları. Approval gate feature'ı Enabled=false ise bypass edilir —

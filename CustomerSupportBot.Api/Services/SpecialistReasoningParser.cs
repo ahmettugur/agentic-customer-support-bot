@@ -6,9 +6,9 @@
 // ```
 
 using System.Text.Json;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public static class SpecialistReasoningParser
 {

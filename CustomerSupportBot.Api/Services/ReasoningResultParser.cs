@@ -4,9 +4,9 @@
 
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Reasoning LLM çıktısını yapılandırılmış <see cref="ReasoningResult"/>'a dönüştürür.

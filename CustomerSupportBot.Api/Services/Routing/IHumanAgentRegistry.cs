@@ -2,9 +2,9 @@
 // Smart Routing — İnsan müşteri temsilcisi kayıt arayüzü (InMemoryHumanAgentRegistry
 // production'da Postgres ile değiştirilebilir).
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services.Routing;
+namespace CustomerSupportBot.Api.Services.Routing;
 
 public interface IHumanAgentRegistry
 {

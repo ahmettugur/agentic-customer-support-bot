@@ -3,7 +3,7 @@ using CustomerSupportBot.Api.Tools;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Tools;
 
-namespace CustomerSupportBot.Tests.Tools;
+namespace CustomerSupportBot.Api.Tests.Tools;
 
 public class CustomerSupportToolsTests
 {

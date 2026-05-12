@@ -9,12 +9,12 @@
 //   - Singleton servis ⇒ DbContext IDbContextFactory ile açılır.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Infrastructure.Persistence;
-using CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
+using CustomerSupportBot.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace CustomerSupportBot.Services.Persistence;
+namespace CustomerSupportBot.Api.Services.Persistence;
 
 public sealed class PostgresChatModeRegistry : IChatModeRegistry
 {

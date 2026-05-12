@@ -1,13 +1,13 @@
 // Models/Auth/AuthOptions.cs
 
-namespace CustomerSupportBot.Models.Auth;
+namespace CustomerSupportBot.Api.Models.Auth;
 
 public sealed class JwtOptions
 {
     public const string SectionName = "Jwt";
 
-    public string Issuer { get; set; } = "CustomerSupportBot";
-    public string Audience { get; set; } = "CustomerSupportBot";
+    public string Issuer { get; set; } = "CustomerSupportBot.Api";
+    public string Audience { get; set; } = "CustomerSupportBot.Api";
 
     /// <summary>HMAC-SHA256 signing key (UTF-8). Üretimde rotate edilmeli.</summary>
     public string SigningKey { get; set; } = "";

@@ -1,5 +1,5 @@
-using CustomerSupportBot.Endpoints;
-using CustomerSupportBot.Extensions;
+using CustomerSupportBot.Api.Endpoints;
+using CustomerSupportBot.Api.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,4 +54,7 @@ app.MapAnalyticsEndpoints();
 
 app.Run();
 
-public partial class Program { }
+namespace CustomerSupportBot.Api
+{
+    public partial class Program { }
+}

@@ -1,10 +1,10 @@
 // Endpoints/AuthEndpoints.cs
 // /auth/login + /auth/refresh + /auth/logout endpoint'leri.
 
-using CustomerSupportBot.Models.Auth;
-using CustomerSupportBot.Services.Auth;
+using CustomerSupportBot.Api.Models.Auth;
+using CustomerSupportBot.Api.Services.Auth;
 
-namespace CustomerSupportBot.Endpoints;
+namespace CustomerSupportBot.Api.Endpoints;
 
 public static class AuthEndpoints
 {

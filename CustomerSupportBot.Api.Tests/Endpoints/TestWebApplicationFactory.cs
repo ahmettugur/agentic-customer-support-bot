@@ -8,7 +8,7 @@ using CustomerSupportBot.Api.Services.Locking;
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services.Locking;
-using CustomerSupportBot.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -19,9 +19,9 @@ using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestPlatform.TestHost;
 using StackExchange.Redis;
 
-namespace CustomerSupportBot.Tests.Endpoints;
+namespace CustomerSupportBot.Api.Tests.Endpoints;
 
-public class TestWebApplicationFactory : WebApplicationFactory<Program>
+public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
 {
     // Aynı factory boyunca aynı db-name kullanılsın ki seed edilen kullanıcılar
     // HTTP request'lerde de görünsün.

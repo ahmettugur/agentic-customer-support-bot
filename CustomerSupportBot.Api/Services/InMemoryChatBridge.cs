@@ -11,9 +11,9 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 public class InMemoryChatBridge : IChatBridge
 {

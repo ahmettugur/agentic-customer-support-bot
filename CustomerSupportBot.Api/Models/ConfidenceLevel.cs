@@ -2,7 +2,7 @@
 // ReasoningResult.Confidence string yerine type-safe enum.
 // "yüksek"/"orta"/"düşük" karşılaştırmaları artık enum tabanlı.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>
 /// Reasoning güven seviyesi.

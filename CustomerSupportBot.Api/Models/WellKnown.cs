@@ -2,7 +2,7 @@
 // Uygulama genelinde kullanılan magic string'lerin merkezi sabit sınıfı.
 // Her alt sınıf farklı bir domain kavramını gruplar.
 
-namespace CustomerSupportBot.Models;
+namespace CustomerSupportBot.Api.Models;
 
 /// <summary>Tüm magic string sabitlerinin tek adresi.</summary>
 public static class WellKnown

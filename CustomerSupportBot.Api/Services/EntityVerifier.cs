@@ -11,10 +11,10 @@
 // Böylece reasoning modeli "zaten bilinen bilgi için clarification isteme" kararını
 // Tahmin üzerinden değil, grounded doğrulama üzerinden verir.
 
-using CustomerSupportBot.Models;
+using CustomerSupportBot.Api.Models;
 using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Services;
+namespace CustomerSupportBot.Api.Services;
 
 /// <summary>
 /// Query + history + session state üzerinde deterministic entity çıkarımı yapar

@@ -7,11 +7,11 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Models;
-using CustomerSupportBot.Models.Workflow;
-using CustomerSupportBot.Tools;
+using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Models.Workflow;
+using CustomerSupportBot.Api.Tools;
 
-namespace CustomerSupportBot.Services.Workflow;
+namespace CustomerSupportBot.Api.Services.Workflow;
 
 public partial class WorkflowExecutor
 {
