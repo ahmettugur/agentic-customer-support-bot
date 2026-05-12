@@ -21,6 +21,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Models;
 using CustomerSupportBot.Models.Memory;
+using CustomerSupportBot.Services.Locking;
 using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Services.Personalization;
@@ -33,32 +34,52 @@ public sealed partial class CustomerProfileService
 
     private readonly ICustomerProfileStore _store;
     private readonly IChatClient _chatClient;
+    private readonly IAppDistributedLock _distributedLock;
     private readonly ILogger<CustomerProfileService> _logger;
 
     public CustomerProfileService(
         ICustomerProfileStore store,
         IChatClient chatClient,
+        IAppDistributedLock distributedLock,
         ILogger<CustomerProfileService> logger)
     {
         _store = store;
         _chatClient = chatClient;
+        _distributedLock = distributedLock;
         _logger = logger;
     }
 
     /// <summary>
     /// Bir oturum turunun bitiminde çağrılır. Heuristik (LLM-siz) profil güncellemesi yapar.
+    /// Distributed lock ile per-customer serialize edilir.
     /// </summary>
-    public CustomerProfile? RecordInteraction(
+    public async Task<CustomerProfile?> RecordInteractionAsync(
         string? customerId,
         string userQuery,
         string botResponse,
         string? intent,
         int? rating = null,
-        bool isNewSession = false)
+        bool isNewSession = false,
+        CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(customerId) || string.IsNullOrWhiteSpace(userQuery))
             return null;
 
+        await using var handle = await _distributedLock
+            .AcquireAsync($"profile:{customerId}", ct: ct)
+            .ConfigureAwait(false);
+
+        return RecordInteractionCore(customerId, userQuery, botResponse, intent, rating, isNewSession);
+    }
+
+    private CustomerProfile? RecordInteractionCore(
+        string customerId,
+        string userQuery,
+        string botResponse,
+        string? intent,
+        int? rating,
+        bool isNewSession)
+    {
         var profile = _store.GetOrCreate(customerId);
 
         profile.TotalTurns++;

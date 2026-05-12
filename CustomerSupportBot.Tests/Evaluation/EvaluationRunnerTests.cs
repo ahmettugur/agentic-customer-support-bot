@@ -3,6 +3,7 @@ using CustomerSupportBot.Agents;
 using CustomerSupportBot.Evaluation;
 using CustomerSupportBot.Models;
 using CustomerSupportBot.Services;
+using CustomerSupportBot.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -41,7 +42,8 @@ public class EvaluationRunnerTests
             entityVerifier,
             sanityChecker);
 
-        var sessionManager = new InMemorySessionManager();
+        var distributedLock = new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 }));
+        var sessionManager = new InMemorySessionManager(distributedLock);
 
         return new EvaluationRunner(team, reasoningService, sessionManager, traceStore);
     }

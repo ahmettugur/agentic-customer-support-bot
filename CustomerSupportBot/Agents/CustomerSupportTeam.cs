@@ -379,7 +379,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         WriteEpisodicMemorySafe(trace, query, result);
 
         // Per-customer profile — heuristic update (LLM-siz, ucuz)
-        UpdateCustomerProfileSafe(session, trace, query, result);
+        await UpdateCustomerProfileSafeAsync(session, trace, query, result);
 
         _traceStore.Complete(trace.TraceId,
             terminationReason: terminationReason,
@@ -481,7 +481,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         });
     }
 
-    private void UpdateCustomerProfileSafe(Models.AgentSession? session, ReasoningTrace trace, string query, string response)
+    private async Task UpdateCustomerProfileSafeAsync(Models.AgentSession? session, ReasoningTrace trace, string query, string response)
     {
         if (_profileService is null) return;
         var customerId = session?.State.CustomerId;
@@ -492,9 +492,9 @@ public class CustomerSupportTeam : ICustomerSupportTeam
 
         try
         {
-            // Senkron ve ucuz (LLM çağırmaz) — fire & forget gerekmez ama
+            // Distributed lock ile per-customer serialize — ucuz (LLM çağırmaz).
             // exception bile olsa response stream'i bloklamasın diye try/catch.
-            _profileService.RecordInteraction(
+            await _profileService.RecordInteractionAsync(
                 customerId: customerId,
                 userQuery: query,
                 botResponse: response,

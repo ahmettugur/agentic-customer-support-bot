@@ -3,7 +3,8 @@
 // Polling bazlı auto-refresh (3sn) + tab navigasyonu + approve/reject/resolve aksiyonları.
 
 class AdminPanel {
-    static API = {
+    // Admin endpoint'leri
+    static ADMIN_API = {
         pendingApprovals: '/approvals/pending',
         recentApprovals: '/approvals/recent?count=50',
         approve: id => `/approvals/${id}/approve`,
@@ -30,7 +31,42 @@ class AdminPanel {
         subscribeChat: sid => `/chat-sessions/${sid}/subscribe`
     };
 
+    // Agent endpoint'leri — /agent/* prefix kullanır
+    static AGENT_API = {
+        pendingApprovals: '/agent/approvals/pending',
+        recentApprovals: '/agent/approvals/pending',
+        approve: id => `/agent/approvals/${id}/approve`,
+        reject: id => `/agent/approvals/${id}/reject`,
+        openEscalations: '/agent/escalations/open',
+        myEscalations: '/agent/escalations/my',
+        recentEscalations: '/agent/escalations/open',
+        acknowledge: id => `/agent/escalations/${id}/acknowledge`,
+        resolve: id => `/agent/escalations/${id}/resolve`,
+        dismiss: id => `/agent/escalations/${id}/dismiss`,
+        replanEscalation: id => `/agent/escalations/${id}/replan`,
+        replanChat: sid => `/agent/chat-sessions/${sid}/replan`,
+        // HITL Live Takeover
+        activeChats: '/agent/chat-sessions/active',
+        // Analytics — agent erişemez, boş döner
+        analyticsDashboard: null,
+        sessionAnalytics: sid => null,
+        sessionsList: null,
+        // Sentiment
+        sessionSentiment: sid => `/agent/chat-sessions/${sid}/sentiment`,
+        chatHistory: sid => `/agent/chat-sessions/${sid}/history?take=200`,
+        takeover: sid => `/agent/chat-sessions/${sid}/takeover`,
+        release: sid => `/agent/chat-sessions/${sid}/release`,
+        sendChat: sid => `/agent/chat-sessions/${sid}/messages`,
+        subscribeChat: sid => `/agent/chat-sessions/${sid}/subscribe`
+    };
+
+    // Aktif API — role'e göre init()'te belirlenir
+    static API = AdminPanel.ADMIN_API;
+
     static REFRESH_INTERVAL_MS = 3000;
+
+    // Agent listesi cache — "Atama Yap" dropdown için
+    _agentList = null;
 
     // Onaylanırken gerekçe (audit trail) zorunlu olan yan etkili tool'lar.
     // Diğer tool'larda gerekçe opsiyoneldir; admin akışını yavaşlatmamak için.
@@ -55,16 +91,77 @@ class AdminPanel {
     // Analytics session state
     analyticsSelectedSessionId = null;
 
+    // Kullanıcı rolü: 'Admin' | 'Agent'
+    userRole = 'Admin';
+    linkedAgentId = null;
+
     constructor() {
+        this._detectRole();
         this._bindTabs();
         this._bindControls();
         this._bindPromptModal();
     }
 
+    // ─── Role Detection ───
+    _detectRole() {
+        try {
+            const raw = localStorage.getItem('cs.auth');
+            if (raw) {
+                const auth = JSON.parse(raw);
+                this.userRole = auth.role || 'Admin';
+                this.linkedAgentId = auth.linkedAgentId || null;
+            }
+        } catch {}
+
+        // API endpoint'lerini role'e göre seç
+        if (this.userRole === 'Agent') {
+            AdminPanel.API = AdminPanel.AGENT_API;
+        } else {
+            AdminPanel.API = AdminPanel.ADMIN_API;
+        }
+    }
+
+    get isAgent() { return this.userRole === 'Agent'; }
+
     // ─── Init ───
     init() {
+        this._applyRoleUI();
         this.loadAll();
         this.startRefresh();
+    }
+
+    // Agent rolü için sadece ilgili tab'ları göster
+    _applyRoleUI() {
+        if (!this.isAgent) return;
+
+        // Başlığı güncelle
+        const title = document.querySelector('.admin-header-info h1');
+        if (title) title.textContent = 'Temsilci Paneli';
+        const subtitle = document.querySelector('.admin-header-info .muted');
+        if (subtitle) subtitle.textContent = 'Atanmış eskalasyonlar & canlı sohbetler';
+
+        // Agent'a gösterilmeyecek tab'lar
+        const hiddenTabs = ['approvals', 'history', 'analytics', 'improvements'];
+        hiddenTabs.forEach(tab => {
+            const btn = document.querySelector(`.tab-btn[data-tab="${tab}"]`);
+            if (btn) btn.style.display = 'none';
+            const content = document.getElementById(`tab-${tab}`);
+            if (content) content.style.display = 'none';
+        });
+
+        // Replay ve Traces linklerini gizle
+        document.querySelectorAll('.tab-btn--link').forEach(el => el.style.display = 'none');
+
+        // Replan butonlarını agent için gizle (sadece admin kullanır)
+        document.querySelectorAll('[data-replan]').forEach(el => el.style.display = 'none');
+
+        // Eskalasyonlar tab'ını aktif yap
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        const escTab = document.querySelector('.tab-btn[data-tab="escalations"]');
+        const escContent = document.getElementById('tab-escalations');
+        if (escTab) escTab.classList.add('active');
+        if (escContent) escContent.classList.add('active');
     }
 
     // ─── Helpers ───
@@ -188,6 +285,43 @@ class AdminPanel {
         if (!document.getElementById('promptModal')) {
             console.warn('promptModal not found in DOM');
         }
+    }
+
+    // ─── Select Modal — dropdown ile değer seçme ───
+    // options: { title, subtitle, label, options (HTML string), hint, confirmText }
+    // Promise<string|null> döner. null = iptal
+    _showSelectModal({ title, subtitle, label, options, hint, confirmText }) {
+        return new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:10000';
+            overlay.innerHTML = `
+                <div style="background:#fff;border-radius:8px;padding:24px;width:360px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+                    <h3 style="margin:0 0 4px;font-size:16px">${title || 'Seçim'}</h3>
+                    ${subtitle ? `<p style="margin:0 0 16px;font-size:13px;color:#6b7280">${subtitle}</p>` : '<div style="margin-bottom:16px"></div>'}
+                    <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px">${label || 'Seçin'}</label>
+                    <select id="_selModalSelect" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;margin-bottom:8px">
+                        ${options}
+                    </select>
+                    ${hint ? `<p style="font-size:12px;color:#6b7280;margin:0 0 16px">${hint}</p>` : '<div style="margin-bottom:16px"></div>'}
+                    <div style="display:flex;gap:8px;justify-content:flex-end">
+                        <button id="_selModalCancel" style="padding:8px 16px;border:1px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer">İptal</button>
+                        <button id="_selModalConfirm" style="padding:8px 16px;border:none;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer">${confirmText || 'Seç'}</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            const sel = overlay.querySelector('#_selModalSelect');
+            overlay.querySelector('#_selModalConfirm').addEventListener('click', () => {
+                document.body.removeChild(overlay);
+                resolve(sel.value || null);
+            });
+            overlay.querySelector('#_selModalCancel').addEventListener('click', () => {
+                document.body.removeChild(overlay);
+                resolve(null);
+            });
+            overlay.addEventListener('click', e => {
+                if (e.target === overlay) { document.body.removeChild(overlay); resolve(null); }
+            });
+        });
     }
 
     // Confirm-only modal (window.confirm yerine).
@@ -381,6 +515,7 @@ class AdminPanel {
     }
 
     async loadApprovals() {
+        if (this.isAgent) return; // Agent onay kuyruğuna erişemez
         try {
             const pending = await this.fetchJson(AdminPanel.API.pendingApprovals);
             const list = this.$('#approvalsList');
@@ -418,6 +553,7 @@ class AdminPanel {
         node.querySelector('[data-id]').textContent = req.id;
         node.querySelector('[data-time]').textContent = this.formatTime(req.createdAt);
         node.querySelector('[data-agent]').textContent = req.agentName || '—';
+        node.querySelector('[data-assigned]').textContent = req.assignedTo || '—';
         node.querySelector('[data-reason]').textContent = req.reason || '—';
         node.querySelector('[data-query]').textContent = req.userQuery || '—';
 
@@ -439,6 +575,11 @@ class AdminPanel {
         const resolveBtn = node.querySelector('[data-resolve]');
         const dismissBtn = node.querySelector('[data-dismiss]');
 
+        // Agent "Atama Yap" butonunu görmemeli — sadece admin atama yapabilir
+        if (this.isAgent) {
+            ackBtn.style.display = 'none';
+        }
+
         // Sohbet zaten devralınmışsa devral/üstlen butonları anlamsız
         const alreadyTakenOver = req.sessionId
             && this.takenOverSessionIds?.has(req.sessionId);
@@ -446,7 +587,7 @@ class AdminPanel {
         // Acknowledged olmuşsa ack butonu disabled
         if (req.status === 'acknowledged' || alreadyTakenOver) {
             ackBtn.disabled = true;
-            ackBtn.textContent = alreadyTakenOver ? '✓ Devralındı' : '✓ Üstlenildi';
+            ackBtn.textContent = alreadyTakenOver ? '✓ Devralındı' : '✓ Atandı';
             if (alreadyTakenOver) ackBtn.title = 'Sohbet zaten bir temsilci tarafından devralındı';
         }
 
@@ -461,18 +602,23 @@ class AdminPanel {
         }
 
         takeoverBtn.addEventListener('click', async () => {
-            const agent = await this.showPromptModal({
-                title: 'Sohbeti devral',
-                subtitle: `Eskalasyon ${req.id} · oturum ${(req.sessionId || '').slice(0, 12)}…`,
-                label: 'Temsilci adı',
-                placeholder: 'Ör. ayşe.yılmaz',
-                hint: 'Bu isim müşteriye “temsilciniz X sizinle iletişime geçti” olarak gösterilir.',
-                confirmText: 'Devral',
-                defaultValue: 'admin',
-                required: true,
-                requiredMessage: 'Devralabilmek için temsilci adı gerekli.'
-            });
-            if (!agent) return;
+            let agent;
+            if (this.isAgent) {
+                agent = this.linkedAgentId || this.userRole;
+            } else {
+                agent = await this.showPromptModal({
+                    title: 'Sohbeti devral',
+                    subtitle: `Eskalasyon ${req.id} · oturum ${(req.sessionId || '').slice(0, 12)}…`,
+                    label: 'Temsilci adı',
+                    placeholder: 'Ör. ayşe.yılmaz',
+                    hint: 'Bu isim müşteriye "temsilciniz X sizinle iletişime geçti" olarak gösterilir.',
+                    confirmText: 'Devral',
+                    defaultValue: 'admin',
+                    required: true,
+                    requiredMessage: 'Devralabilmek için temsilci adı gerekli.'
+                });
+                if (!agent) return;
+            }
             takeoverBtn.disabled = true;
             try {
                 await this.fetchJson(AdminPanel.API.takeover(req.sessionId), {
@@ -491,17 +637,51 @@ class AdminPanel {
         });
 
         ackBtn.addEventListener('click', async () => {
-            const assignedTo = await this.showPromptModal({
-                title: 'Eskalasyonu üstlen',
-                subtitle: `${req.id} · ${req.agentName || '—'}`,
-                label: 'Atanacak temsilci',
-                placeholder: 'Ör. mehmet.demir',
-                hint: 'Müşteri “temsilcimiz [isim] talebinizi üstlendi” bilgilendirmesi alır.',
-                confirmText: 'Üstlen',
-                required: true,
-                requiredMessage: 'Atama yapmak için temsilci adı gerekli.'
-            });
-            if (!assignedTo) return;
+            let assignedTo;
+            if (this.isAgent) {
+                // Agent kendi üzerine alır — modal sorma
+                assignedTo = this.linkedAgentId;
+                if (!assignedTo) {
+                    alert('Agent ID bulunamadı. Lütfen yeniden giriş yapın.');
+                    return;
+                }
+            } else {
+                // Admin başka agent'a atar — önce agent listesini çek
+                if (!this._agentList || this._agentList.length === 0) {
+                    try {
+                        const resp = await this.fetchJson('/agents');
+                        // GET /agents → { count, items } döner
+                        this._agentList = Array.isArray(resp) ? resp : (resp.items ?? []);
+                    } catch { this._agentList = []; }
+                }
+                const agents = this._agentList;
+                if (agents.length > 0) {
+                    // Seçenek listesi: "DisplayName (id)"
+                    const options = agents.map(a =>
+                        `<option value="${a.id}"${!a.isActive ? ' style="color:#9ca3af"' : ''}>${a.displayName} — ${a.id}${a.isActive ? '' : ' (pasif)'}</option>`
+                    ).join('');
+                    assignedTo = await this._showSelectModal({
+                        title: 'Temsilci Ata',
+                        subtitle: `${req.id} · ${req.agentName || '—'}`,
+                        label: 'Temsilci seç',
+                        options,
+                        hint: 'Müşteri "temsilcimiz [isim] talebinizi üstlendi" bilgilendirmesi alır.',
+                        confirmText: 'Atama Yap'
+                    });
+                } else {
+                    assignedTo = await this.showPromptModal({
+                        title: 'Temsilci Ata',
+                        subtitle: `${req.id} · ${req.agentName || '—'}`,
+                        label: 'Atanacak temsilci (agent ID)',
+                        placeholder: 'Ör. agent-jdoe',
+                        hint: 'Müşteri "temsilcimiz [isim] talebinizi üstlendi" bilgilendirmesi alır.',
+                        confirmText: 'Atama Yap',
+                        required: true,
+                        requiredMessage: 'Atama yapmak için temsilci ID gerekli.'
+                    });
+                }
+                if (!assignedTo) return;
+            }
             try {
                 await this.fetchJson(AdminPanel.API.acknowledge(req.id), {
                     method: 'POST',
@@ -676,20 +856,57 @@ class AdminPanel {
         if (messagesEl) messagesEl.innerHTML = '';
     }
 
+    // API yanıtını düz diziye normalize et ({ items } veya array olabilir)
+    _normalizeList(resp) {
+        if (Array.isArray(resp)) return resp;
+        if (resp && Array.isArray(resp.items)) return resp.items;
+        return [];
+    }
+
     async loadEscalations() {
         try {
-            const open = await this.fetchJson(AdminPanel.API.openEscalations);
+            const open = this._normalizeList(await this.fetchJson(AdminPanel.API.openEscalations));
             const list = this.$('#escalationsList');
             list.innerHTML = '';
+
             if (open.length === 0) {
                 list.innerHTML = '<div class="empty-state">Açık eskalasyon yok.</div>';
+            } else if (this.isAgent && this.linkedAgentId) {
+                // Agent görünümü: "Benim" ve "Diğer" bölümleri
+                const mine = open.filter(r =>
+                    r.assignedTo === this.linkedAgentId);
+                // Başka agente atananları gizle — sadece atanmamışları göster
+                const others = open.filter(r =>
+                    !r.assignedTo || r.assignedTo === '');
+
+                if (mine.length > 0) {
+                    const sec = document.createElement('div');
+                    sec.className = 'escalation-section';
+                    sec.innerHTML = `<div class="escalation-section-title mine">
+                        <span>📌 Bana Atanan (${mine.length})</span>
+                    </div>`;
+                    mine.forEach(r => sec.appendChild(this.renderEscalationCard(r)));
+                    list.appendChild(sec);
+                }
+                if (others.length > 0) {
+                    const sec = document.createElement('div');
+                    sec.className = 'escalation-section';
+                    sec.innerHTML = `<div class="escalation-section-title others">
+                        <span>📋 Diğer Eskalasyonlar (${others.length})</span>
+                    </div>`;
+                    others.forEach(r => sec.appendChild(this.renderEscalationCard(r)));
+                    list.appendChild(sec);
+                }
+                if (mine.length === 0 && others.length === 0) {
+                    list.innerHTML = '<div class="empty-state">Açık eskalasyon yok.</div>';
+                }
             } else {
                 open.forEach(req => list.appendChild(this.renderEscalationCard(req)));
             }
             this.$('#openEscalationsBadge').textContent = open.length;
 
             // Kapanmış eskalasyonlar — Eskalasyonlar tab'ı sol sidebar + Geçmiş tab'ı
-            const recent = await this.fetchJson(AdminPanel.API.recentEscalations);
+            const recent = this._normalizeList(await this.fetchJson(AdminPanel.API.recentEscalations));
             const closed = recent.filter(r =>
                 r.status === 'resolved' || r.status === 'dismissed');
 
@@ -978,6 +1195,7 @@ class AdminPanel {
 
     // ─── Analytics Dashboard ───
     async loadAnalytics() {
+        if (this.isAgent) return; // Agent analytics'e erişemez
         try {
             // Session listesini yükle (sidebar)
             this.loadAnalyticsSessionList();

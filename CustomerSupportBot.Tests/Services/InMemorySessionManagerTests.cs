@@ -1,11 +1,16 @@
 // Tests/Services/InMemorySessionManagerTests.cs
 using CustomerSupportBot.Services;
+using CustomerSupportBot.Services.Locking;
+using CustomerSupportBot.Tests.Helpers;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Tests.Services;
 
 public class InMemorySessionManagerTests
 {
-    private readonly InMemorySessionManager _mgr = new();
+    private static readonly IAppDistributedLock _lock =
+        new InMemoryDistributedLock(Options.Create(new CustomerSupportBot.Models.RedisOptions { DefaultLockTimeoutSeconds = 10 }));
+    private readonly InMemorySessionManager _mgr = new(_lock);
 
     [Fact]
     public void GetOrCreateSession_NewId_CreatesSession()

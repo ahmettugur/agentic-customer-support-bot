@@ -5,9 +5,11 @@
 //   2. ReasoningTraceStore: CompletedAt=null olan in-flight trace'leri
 //      Error="terminated_by_restart" olarak kapat.
 //   3. Auth: Default admin kullanıcısını seed et (yoksa).
+//   4. HumanAgents: Default temsilcileri seed et (tablo boşsa).
 // İşlemler idempotent. Hata olursa uygulama durmaz, sadece loglanır.
 
 using CustomerSupportBot.Infrastructure.Persistence.Entities.Auth;
+using CustomerSupportBot.Infrastructure.Persistence.Entities.Hitl;
 using CustomerSupportBot.Services;
 using CustomerSupportBot.Services.Auth;
 using CustomerSupportBot.Services.Persistence;
@@ -70,6 +72,13 @@ public sealed class PersistenceHydrator : IHostedService
             _logger.LogError(ex, "[Hydrator] Default admin seed başarısız.");
         }
 
+        // HumanAgents — tablo boşsa default temsilcileri seed et.
+        try { await SeedDefaultAgentsAsync(cancellationToken); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Hydrator] Default agent seed başarısız.");
+        }
+
         _logger.LogInformation("[Hydrator] Startup recovery tamam.");
     }
 
@@ -103,5 +112,77 @@ public sealed class PersistenceHydrator : IHostedService
             "[Hydrator] Default admin oluşturuldu (username='{Username}'). " +
             "ÜRETIMDE Auth:DefaultAdminPassword'u rotate edin.",
             username);
+    }
+
+    private async Task SeedDefaultAgentsAsync(CancellationToken ct)
+    {
+        var dbFactory = _services.GetService<IDbContextFactory<CustomerSupportDbContext>>();
+        var hasher = _services.GetService<IPasswordHasher>();
+        if (dbFactory is null || hasher is null) return;
+
+        await using var ctx = await dbFactory.CreateDbContextAsync(ct);
+        var hasAny = await ctx.HumanAgents.AnyAsync(ct);
+        if (hasAny) return;
+
+        var now = DateTime.UtcNow;
+        var defaultPassword = _configuration["Auth:DefaultAgentPassword"] ?? "Agent123!";
+
+        var agents = new[]
+        {
+            new HumanAgentEntity
+            {
+                Id = "agent-jdoe",
+                DisplayName = "John Doe",
+                Email = "john.doe@example.com",
+                SkillsJson = "[\"complaint\",\"refund\",\"vip\"]",
+                LanguagesJson = "[\"en\",\"tr\"]",
+                IsActive = true,
+                MaxConcurrentLoad = 5,
+                CurrentLoad = 0,
+                Priority = 1,
+                CreatedAt = now
+            },
+            new HumanAgentEntity
+            {
+                Id = "agent-jsmith",
+                DisplayName = "Jane Smith",
+                Email = "jane.smith@example.com",
+                SkillsJson = "[\"order\",\"product\",\"enterprise\"]",
+                LanguagesJson = "[\"en\"]",
+                IsActive = true,
+                MaxConcurrentLoad = 8,
+                CurrentLoad = 0,
+                Priority = 0,
+                CreatedAt = now
+            }
+        };
+
+        ctx.HumanAgents.AddRange(agents);
+
+        // Her agent için "Agent" rolünde login hesabı oluştur
+        foreach (var agent in agents)
+        {
+            var username = agent.Email!.Split('@')[0]; // john.doe, jane.smith
+            var exists = await ctx.Users.AnyAsync(u => u.Username == username, ct);
+            if (!exists)
+            {
+                ctx.Users.Add(new UserEntity
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Username = username,
+                    PasswordHash = hasher.Hash(defaultPassword),
+                    Role = "Agent",
+                    LinkedAgentId = agent.Id,
+                    IsActive = true,
+                    CreatedAt = now
+                });
+            }
+        }
+
+        await ctx.SaveChangesAsync(ct);
+
+        _logger.LogWarning(
+            "[Hydrator] 2 default human agent + kullanıcı hesabı seed edildi " +
+            "(john.doe / jane.smith). ÜRETİMDE Auth:DefaultAgentPassword'u rotate edin.");
     }
 }

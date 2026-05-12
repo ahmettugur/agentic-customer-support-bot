@@ -3,6 +3,7 @@ using System;
 using CustomerSupportBot.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CustomerSupportBot.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(CustomerSupportDbContext))]
-    partial class CustomerSupportDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260510150420_AddHumanAgentsTable")]
+    partial class AddHumanAgentsTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -127,11 +130,6 @@ namespace CustomerSupportBot.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("last_login_at");
-
-                    b.Property<string>("LinkedAgentId")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("linked_agent_id");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()

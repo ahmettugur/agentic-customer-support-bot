@@ -27,6 +27,7 @@ public sealed class CustomerSupportDbContext : DbContext
     // ─── hitl schema ───
     public DbSet<ApprovalRequestEntity> Approvals => Set<ApprovalRequestEntity>();
     public DbSet<EscalationEntity> Escalations => Set<EscalationEntity>();
+    public DbSet<HumanAgentEntity> HumanAgents => Set<HumanAgentEntity>();
 
     // ─── observability schema ───
     public DbSet<ReasoningTraceEntity> ReasoningTraces => Set<ReasoningTraceEntity>();

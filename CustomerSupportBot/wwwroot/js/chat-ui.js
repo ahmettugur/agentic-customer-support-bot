@@ -7,9 +7,6 @@ class ChatUI {
     inputEl;
     sendBtn;
     newChatBtn;
-    sidebarEl;
-    sidebarToggleBtn;
-    sessionListEl;
 
     // SVG ikon sabitleri
     static USER_ICON = '<img src="images/user.png" alt="Kullanıcı" class="avatar-img" />';
@@ -25,14 +22,6 @@ class ChatUI {
         this.inputEl = document.getElementById("userInput");
         this.sendBtn = document.getElementById("sendBtn");
         this.newChatBtn = document.getElementById("newChatBtn");
-        this.sidebarEl = document.getElementById("sidebar");
-        this.sidebarToggleBtn = document.getElementById("sidebarToggle");
-        this.sessionListEl = document.getElementById("sessionList");
-
-        // Sidebar toggle
-        if (this.sidebarToggleBtn) {
-            this.sidebarToggleBtn.addEventListener("click", () => this.toggleSidebar());
-        }
     }
 
     get inputText() {
@@ -752,53 +741,6 @@ class ChatUI {
         if (typing) typing.remove();
     }
 
-    // ─── SIDEBAR ───
-
-    toggleSidebar() {
-        if (this.sidebarEl) {
-            this.sidebarEl.classList.toggle("collapsed");
-        }
-    }
-
-    renderSessionList(sessions, activeSessionId, onSelect) {
-        if (!this.sessionListEl) return;
-
-        if (!sessions || sessions.length === 0) {
-            this.sessionListEl.innerHTML = '<div class="sidebar-empty">Henüz konuşma yok</div>';
-            return;
-        }
-
-        this.sessionListEl.innerHTML = "";
-
-        sessions.forEach(session => {
-            const btn = document.createElement("button");
-            btn.className = "session-item" + (session.sessionId === activeSessionId ? " active" : "");
-
-            const icon = document.createElement("div");
-            icon.className = "session-item-icon";
-            icon.innerHTML = ChatUI.CHAT_ICON;
-
-            const content = document.createElement("div");
-            content.className = "session-item-content";
-
-            const title = document.createElement("div");
-            title.className = "session-item-title";
-            title.textContent = session.title;
-
-            const meta = document.createElement("div");
-            meta.className = "session-item-meta";
-            meta.textContent = `${session.messageCount} mesaj`;
-
-            content.appendChild(title);
-            content.appendChild(meta);
-            btn.appendChild(icon);
-            btn.appendChild(content);
-
-            btn.addEventListener("click", () => onSelect(session.sessionId));
-
-            this.sessionListEl.appendChild(btn);
-        });
-    }
 
     // ─── EVENT BINDING ───
 

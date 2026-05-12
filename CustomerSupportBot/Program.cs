@@ -7,6 +7,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddLogging();
 builder.Services.AddTelemetryServices(builder.Configuration);
 builder.Services.AddAiServices(builder.Configuration);
+builder.Services.AddRedisServices(builder.Configuration);
 builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddApplicationServices();
 builder.Services.AddAuthenticationServices(builder.Configuration);
@@ -45,6 +46,9 @@ adminScope.MapPersonalizationEndpoints();
 adminScope.MapAgentsEndpoints();
 adminScope.MapWorkflowEndpoints();
 adminScope.MapSlaEndpoints();
+
+var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent");
+agentScope.MapAgentPanelEndpoints();
 
 app.MapAnalyticsEndpoints();
 

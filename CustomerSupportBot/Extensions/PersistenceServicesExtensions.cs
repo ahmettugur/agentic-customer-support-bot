@@ -2,6 +2,7 @@ using CustomerSupportBot.Infrastructure.Persistence;
 using CustomerSupportBot.Models;
 using CustomerSupportBot.Services;
 using CustomerSupportBot.Services.Persistence;
+using CustomerSupportBot.Services.Routing;
 
 namespace CustomerSupportBot.Extensions;
 
@@ -48,6 +49,7 @@ public static class PersistenceServicesExtensions
             services.AddSingleton<ISessionManager>(sp => sp.GetRequiredService<PostgresSessionManager>());
             services.AddSingleton<IConversationStore>(sp => sp.GetRequiredService<PostgresSessionManager>());
             services.AddSingleton<IRatingStore, PostgresRatingStore>();
+            services.AddSingleton<IHumanAgentRegistry, PostgresHumanAgentRegistry>();
         }
         else
         {
@@ -59,6 +61,7 @@ public static class PersistenceServicesExtensions
             services.AddSingleton<ISessionManager>(sp => sp.GetRequiredService<InMemorySessionManager>());
             services.AddSingleton<IConversationStore>(sp => sp.GetRequiredService<InMemorySessionManager>());
             services.AddSingleton<IRatingStore, InMemoryRatingStore>();
+            services.AddSingleton<IHumanAgentRegistry, InMemoryHumanAgentRegistry>();
         }
 
         return services;

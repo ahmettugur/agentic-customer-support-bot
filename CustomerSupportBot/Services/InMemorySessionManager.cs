@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Models;
+using CustomerSupportBot.Services.Locking;
 using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Services;
@@ -18,6 +19,12 @@ public partial class InMemorySessionManager : ISessionManager
 {
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
     private readonly ConcurrentDictionary<string, List<ChatMessage>> _messageHistory = new();
+    private readonly IAppDistributedLock _distributedLock;
+
+    public InMemorySessionManager(IAppDistributedLock distributedLock)
+    {
+        _distributedLock = distributedLock;
+    }
 
     // ─── ISessionManager ───
 
@@ -50,6 +57,37 @@ public partial class InMemorySessionManager : ISessionManager
         var session = GetSession(sessionId);
         if (session == null) return;
 
+        // Synchronous path — distributed lock'u blocking-acquire ile al.
+        // AddExchange → ExtractAndUpdateState zinciri sync olduğu için.
+        var handle = _distributedLock
+            .AcquireAsync($"session:{sessionId}")
+            .GetAwaiter().GetResult();
+        try
+        {
+            ExtractAndUpdateStateCore(session, userMessage, botResponse);
+        }
+        finally
+        {
+            handle.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
+
+    public async Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default)
+    {
+        if (mutator == null) throw new ArgumentNullException(nameof(mutator));
+        var session = GetSession(sessionId);
+        if (session == null) return;
+
+        await using var handle = await _distributedLock
+            .AcquireAsync($"session:{sessionId}", ct: ct)
+            .ConfigureAwait(false);
+
+        mutator(session.State);
+        UpdateSession(session);
+    }
+
+    private void ExtractAndUpdateStateCore(AgentSession session, string userMessage, string botResponse)
+    {
         var state = session.State;
         state.TurnCount++;
 

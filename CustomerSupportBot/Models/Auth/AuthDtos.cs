@@ -15,4 +15,5 @@ public sealed record AuthResponse(
     DateTime AccessTokenExpiresAt,
     DateTime RefreshTokenExpiresAt,
     string Username,
-    string Role);
+    string Role,
+    string? LinkedAgentId = null);

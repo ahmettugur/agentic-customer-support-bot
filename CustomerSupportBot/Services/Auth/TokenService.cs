@@ -72,7 +72,8 @@ public sealed class TokenService : ITokenService
             AccessTokenExpiresAt: accessExpiry,
             RefreshTokenExpiresAt: refreshExpiry,
             Username: user.Username,
-            Role: user.Role);
+            Role: user.Role,
+            LinkedAgentId: user.LinkedAgentId);
     }
 
     public async Task<AuthResponse?> RefreshAsync(string refreshToken, CancellationToken ct = default)
@@ -110,7 +111,7 @@ public sealed class TokenService : ITokenService
         await ctx.SaveChangesAsync(ct);
 
         var (access, accessExpiry) = GenerateAccessToken(user, now);
-        return new AuthResponse(access, newPlain, accessExpiry, newExpiry, user.Username, user.Role);
+        return new AuthResponse(access, newPlain, accessExpiry, newExpiry, user.Username, user.Role, user.LinkedAgentId);
     }
 
     public async Task<bool> RevokeAsync(string refreshToken, CancellationToken ct = default)
@@ -144,6 +145,8 @@ public sealed class TokenService : ITokenService
             new(ClaimTypes.Role, user.Role),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N"))
         };
+        if (!string.IsNullOrWhiteSpace(user.LinkedAgentId))
+            claims.Add(new Claim("linked_agent_id", user.LinkedAgentId));
 
         var token = new JwtSecurityToken(
             issuer: _options.Issuer,

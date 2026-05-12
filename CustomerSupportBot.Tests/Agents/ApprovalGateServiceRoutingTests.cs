@@ -5,6 +5,7 @@
 using CustomerSupportBot.Agents;
 using CustomerSupportBot.Models;
 using CustomerSupportBot.Services;
+using CustomerSupportBot.Tests.Helpers;
 using CustomerSupportBot.Services.Personalization;
 using CustomerSupportBot.Services.Routing;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -43,7 +44,8 @@ public class ApprovalGateServiceRoutingTests
         var registry = new InMemoryHumanAgentRegistry(routingWrapper);
         var router = new SkillsBasedRouter(registry, routingWrapper);
         var profiles = new InMemoryCustomerProfileStore();
-        var sessions = new InMemorySessionManager();
+        var distributedLock = new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 }));
+        var sessions = new InMemorySessionManager(distributedLock);
 
         var svc = new ApprovalGateService(
             queue,

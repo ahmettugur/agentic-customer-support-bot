@@ -55,6 +55,8 @@ public static class AuthServicesExtensions
         services.AddAuthorization(options =>
         {
             options.AddPolicy("Admin", p => p.RequireRole("Admin"));
+            options.AddPolicy("Agent", p => p.RequireRole("Agent"));
+            options.AddPolicy("AdminOrAgent", p => p.RequireRole("Admin", "Agent"));
         });
 
         return services;

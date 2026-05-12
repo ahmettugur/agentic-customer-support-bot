@@ -1,6 +1,8 @@
+using CustomerSupportBot.Tests.Helpers;
 using CustomerSupportBot.Services.Personalization;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Tests.Services.Personalization;
 
@@ -10,33 +12,35 @@ public class CustomerProfileServiceTests
     {
         var store = new InMemoryCustomerProfileStore();
         var chat = new FakeChat();
-        var svc = new CustomerProfileService(store, chat, NullLogger<CustomerProfileService>.Instance);
+        var lockOptions = Options.Create(new CustomerSupportBot.Models.RedisOptions { DefaultLockTimeoutSeconds = 10 });
+        var distributedLock = new InMemoryDistributedLock(lockOptions);
+        var svc = new CustomerProfileService(store, chat, distributedLock, NullLogger<CustomerProfileService>.Instance);
         return (svc, store, chat);
     }
 
     [Fact]
-    public void RecordInteraction_BlankCustomerId_NoOp()
+    public async Task RecordInteraction_BlankCustomerId_NoOp()
     {
         var (svc, store, _) = Build();
-        var p = svc.RecordInteraction(null, "merhaba", "ok", "greeting");
+        var p = await svc.RecordInteractionAsync(null, "merhaba", "ok", "greeting");
         p.Should().BeNull();
         store.Count.Should().Be(0);
     }
 
     [Fact]
-    public void RecordInteraction_BlankQuery_NoOp()
+    public async Task RecordInteraction_BlankQuery_NoOp()
     {
         var (svc, store, _) = Build();
-        var p = svc.RecordInteraction("CUST-1", "", "ok", "x");
+        var p = await svc.RecordInteractionAsync("CUST-1", "", "ok", "x");
         p.Should().BeNull();
         store.Count.Should().Be(0);
     }
 
     [Fact]
-    public void RecordInteraction_FirstCall_CreatesProfileAndCounts()
+    public async Task RecordInteraction_FirstCall_CreatesProfileAndCounts()
     {
         var (svc, store, _) = Build();
-        var p = svc.RecordInteraction("CUST-1", "Dell XPS 15 stokta var mı?", "Evet 10 adet.", "product_inquiry", isNewSession: true);
+        var p = await svc.RecordInteractionAsync("CUST-1", "Dell XPS 15 stokta var mı?", "Evet 10 adet.", "product_inquiry", isNewSession: true);
 
         p.Should().NotBeNull();
         p!.TotalSessions.Should().Be(1);
@@ -48,12 +52,12 @@ public class CustomerProfileServiceTests
     }
 
     [Fact]
-    public void RecordInteraction_AccumulatesIntentFrequency()
+    public async Task RecordInteraction_AccumulatesIntentFrequency()
     {
         var (svc, _, _) = Build();
-        svc.RecordInteraction("CUST-1", "ORD-1 nerede?", "Yolda.", "order_inquiry");
-        svc.RecordInteraction("CUST-1", "ORD-1 nerede?", "Yolda.", "order_inquiry");
-        var p = svc.RecordInteraction("CUST-1", "şikayet etmek istiyorum", "Tamam.", "complaint");
+        await svc.RecordInteractionAsync("CUST-1", "ORD-1 nerede?", "Yolda.", "order_inquiry");
+        await svc.RecordInteractionAsync("CUST-1", "ORD-1 nerede?", "Yolda.", "order_inquiry");
+        var p = await svc.RecordInteractionAsync("CUST-1", "şikayet etmek istiyorum", "Tamam.", "complaint");
 
         p!.IntentFrequency["order_inquiry"].Should().Be(2);
         p.IntentFrequency["complaint"].Should().Be(1);
@@ -62,12 +66,12 @@ public class CustomerProfileServiceTests
     }
 
     [Fact]
-    public void RecordInteraction_DedupesProductsAndKeepsNewestFirst()
+    public async Task RecordInteraction_DedupesProductsAndKeepsNewestFirst()
     {
         var (svc, _, _) = Build();
-        svc.RecordInteraction("CUST-1", "Dell XPS 15 sorgula", "ok", "product_inquiry");
-        svc.RecordInteraction("CUST-1", "Apple iPhone 15 Pro fiyat", "ok", "product_inquiry");
-        var p = svc.RecordInteraction("CUST-1", "Dell XPS 15 yeniden sor", "ok", "product_inquiry");
+        await svc.RecordInteractionAsync("CUST-1", "Dell XPS 15 sorgula", "ok", "product_inquiry");
+        await svc.RecordInteractionAsync("CUST-1", "Apple iPhone 15 Pro fiyat", "ok", "product_inquiry");
+        var p = await svc.RecordInteractionAsync("CUST-1", "Dell XPS 15 yeniden sor", "ok", "product_inquiry");
 
         // En son söz edilen Dell başa gelmeli
         p!.ProductInterests.Should().StartWith(new[] { "Dell XPS 15", "Apple iPhone 15 Pro" });
@@ -75,10 +79,10 @@ public class CustomerProfileServiceTests
     }
 
     [Fact]
-    public void RecordInteraction_DetectsEnglishLanguage()
+    public async Task RecordInteraction_DetectsEnglishLanguage()
     {
         var (svc, _, _) = Build();
-        var p = svc.RecordInteraction("CUST-1", "Hello, where is my order?", "On the way.", "order_inquiry");
+        var p = await svc.RecordInteractionAsync("CUST-1", "Hello, where is my order?", "On the way.", "order_inquiry");
         p!.PreferredLanguage.Should().Be("en");
     }
 
@@ -86,10 +90,10 @@ public class CustomerProfileServiceTests
     [InlineData(0, false)]
     [InlineData(3, true)]
     [InlineData(6, false)]
-    public void RecordInteraction_AppendsValidRatings(int rating, bool shouldAppend)
+    public async Task RecordInteraction_AppendsValidRatings(int rating, bool shouldAppend)
     {
         var (svc, _, _) = Build();
-        var p = svc.RecordInteraction("CUST-1", "test", "ok", "x", rating: rating);
+        var p = await svc.RecordInteractionAsync("CUST-1", "test", "ok", "x", rating: rating);
         if (shouldAppend) p!.RecentRatings.Should().Equal(new[] { rating });
         else p!.RecentRatings.Should().BeEmpty();
     }
@@ -106,7 +110,7 @@ public class CustomerProfileServiceTests
     public async Task ConsolidateAsync_LlmReturnsJson_UpdatesSummaryAndTone()
     {
         var (svc, _, chat) = Build();
-        svc.RecordInteraction("CUST-1", "ORD-1 nerede?", "Yolda.", "order_inquiry");
+        await svc.RecordInteractionAsync("CUST-1", "ORD-1 nerede?", "Yolda.", "order_inquiry");
         chat.Reply = "{\"summary\":\"Sık sipariş takibi yapan müşteri.\",\"preferredTone\":\"concise\"}";
 
         var p = await svc.ConsolidateAsync("CUST-1", TestContext.Current.CancellationToken);
@@ -120,7 +124,7 @@ public class CustomerProfileServiceTests
     public async Task ConsolidateAsync_LlmGarbage_KeepsExistingProfile()
     {
         var (svc, _, chat) = Build();
-        var existing = svc.RecordInteraction("CUST-1", "test", "ok", "x")!;
+        var existing = (await svc.RecordInteractionAsync("CUST-1", "test", "ok", "x"))!;
         existing.Summary = "ÖNCEKİ";
         chat.Reply = "no json here at all";
 
@@ -133,7 +137,7 @@ public class CustomerProfileServiceTests
     public async Task ConsolidateAsync_LlmThrows_DoesNotPropagate()
     {
         var (svc, _, chat) = Build();
-        svc.RecordInteraction("CUST-1", "test", "ok", "x");
+        await svc.RecordInteractionAsync("CUST-1", "test", "ok", "x");
         chat.ThrowOnCall = new InvalidOperationException("boom");
 
         var act = async () => await svc.ConsolidateAsync("CUST-1");

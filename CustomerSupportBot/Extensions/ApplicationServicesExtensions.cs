@@ -57,7 +57,7 @@ public static class ApplicationServicesExtensions
         // Realtime köprüsü — her WS bağlantısı için ayrı instance
         services.AddScoped<Services.Realtime.RealtimeBridge>();
 
-        // Realtime "native" modu — gpt-realtime-1.5 kendisi konuşur ve okuma-only
+        // Realtime "native" modu — gpt-realtime-2 kendisi konuşur ve okuma-only
         // tool'ları çağırır. Sipariş/şikayet gibi HITL gerektiren işlemler bu kanalda yok.
         services.AddSingleton<Services.Realtime.RealtimeFunctionTools>();
         services.AddScoped<Services.Realtime.RealtimeNativeBridge>();
@@ -94,8 +94,7 @@ public static class ApplicationServicesExtensions
         services.AddSingleton<Services.Personalization.CustomerProfileService>();
 
         // ─── Smart Routing & Skills-Based Escalation (#11) ───
-        services.AddSingleton<Services.Routing.IHumanAgentRegistry,
-            Services.Routing.InMemoryHumanAgentRegistry>();
+        // IHumanAgentRegistry → PersistenceServicesExtensions'da provider'a göre kaydedilir.
         services.AddSingleton<Services.Routing.ISkillsBasedRouter,
             Services.Routing.SkillsBasedRouter>();
 

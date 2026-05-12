@@ -125,6 +125,7 @@ public sealed class ChatStreamOrchestrator
         using var approvalScope = _approvalContext.SetScope(sessionId, null, request.Query);
 
         // Phase 2: LLM sentiment → session state override (kural tabanlı üzerine yazar)
+        // Not: Ayrı lock almaz — hemen ardından AddExchange lock altında persist eder.
         if (finalReasoning != null)
         {
             UpdateSessionSentiment(session, finalReasoning);
@@ -223,6 +224,8 @@ public sealed class ChatStreamOrchestrator
     /// <summary>
     /// LLM reasoning sonucundaki sentiment'i session state'e yazar.
     /// Kural tabanlı sonucu override eder (LLM daha doğru).
+    /// Not: Ayrı distributed lock almaz — AddExchange hemen ardından zaten lock altında
+    /// state persist eder. Burada sadece in-memory session objesini güncelliyoruz.
     /// </summary>
     private void UpdateSessionSentiment(AgentSession session, ReasoningResult reasoning)
     {
@@ -241,8 +244,6 @@ public sealed class ChatStreamOrchestrator
             state.ConsecutiveNegativeTurns++;
         else
             state.ConsecutiveNegativeTurns = 0;
-
-        _sessionManager.UpdateSession(session);
     }
 
     /// <summary>

@@ -33,4 +33,14 @@ public interface ISessionManager : IConversationStore
     /// Ör: Müşteri kimlik numarası, niyet, sipariş numarası vb.
     /// </summary>
     void ExtractAndUpdateState(string sessionId, string userMessage, string botResponse);
+
+    /// <summary>
+    /// Session state üzerinde distributed-lock korumalı mutasyon uygular.
+    /// Redis etkinse RedisDistributedLock, değilse InMemory SemaphoreSlim kullanılır.
+    /// Lock altında <paramref name="mutator"/> çağrılır, ardından
+    /// <see cref="UpdateSession"/> tetiklenir. Aynı session için concurrent çağrılar
+    /// serialize olur (counter increment, koleksiyon mutasyonu vb. non-atomic
+    /// operasyonlar için zorunlu). Session bulunamazsa no-op.
+    /// </summary>
+    Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default);
 }

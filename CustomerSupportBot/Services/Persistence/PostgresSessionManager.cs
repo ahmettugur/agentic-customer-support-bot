@@ -20,6 +20,7 @@ using System.Text.RegularExpressions;
 using CustomerSupportBot.Infrastructure.Persistence;
 using CustomerSupportBot.Infrastructure.Persistence.Entities.Chat;
 using CustomerSupportBot.Models;
+using CustomerSupportBot.Services.Locking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 
@@ -29,6 +30,7 @@ public sealed partial class PostgresSessionManager : ISessionManager
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresSessionManager> _logger;
+    private readonly IAppDistributedLock _distributedLock;
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
     private readonly ConcurrentDictionary<string, List<ChatMessage>> _messageHistory = new();
     private readonly ConcurrentDictionary<string, byte> _hydratedSessions = new();
@@ -37,9 +39,11 @@ public sealed partial class PostgresSessionManager : ISessionManager
 
     public PostgresSessionManager(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
+        IAppDistributedLock distributedLock,
         ILogger<PostgresSessionManager> logger)
     {
         _dbFactory = dbFactory;
+        _distributedLock = distributedLock;
         _logger = logger;
     }
 
@@ -92,6 +96,28 @@ public sealed partial class PostgresSessionManager : ISessionManager
         var session = GetSession(sessionId);
         if (session is null) return;
 
+        // Lock gerekmez — aynı session için aynı anda tek bot pipeline çalışır
+        // (ConcurrentDictionary + in-memory cache). Sync-over-async lock pattern
+        // thread pool starvation'a neden oluyordu.
+        ExtractAndUpdateStateCore(session, userMessage, botResponse);
+    }
+
+    public async Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default)
+    {
+        if (mutator == null) throw new ArgumentNullException(nameof(mutator));
+        var session = GetSession(sessionId);
+        if (session is null) return;
+
+        await using var handle = await _distributedLock
+            .AcquireAsync($"session:{sessionId}", ct: ct)
+            .ConfigureAwait(false);
+
+        mutator(session.State);
+        UpdateSession(session);
+    }
+
+    private void ExtractAndUpdateStateCore(AgentSession session, string userMessage, string botResponse)
+    {
         var state = session.State;
         state.TurnCount++;
 

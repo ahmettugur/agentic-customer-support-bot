@@ -23,7 +23,6 @@ class ChatApp {
         this.ui.onExampleChipClick((text) => this.send(text));
         this.ui.onNewChat(() => this.newChat());
         this.ui.focusInput();
-        this.refreshSidebar();
 
         // Sayfa kapanırken persistent bağlantıyı temiz kapat
         window.addEventListener("beforeunload", () => this._closePersistentEvents());
@@ -35,41 +34,6 @@ class ChatApp {
         this.ui.clearMessages();
         // Welcome ekranını yeniden yükle
         location.reload();
-    }
-
-    async switchSession(sessionId) {
-        this.api.setSession(sessionId);
-
-        // Mesaj alanını temizle + banner'ları sıfırla
-        this.ui.clearMessages();
-        this.ui.setHumanMode(false);
-        this.ui.setPendingHandoff(false);
-        this._clearPendingHandoffTimer();
-        this.messageCount = 0;
-        this.ratingShown = false;
-        this.humanModeActive = false;
-
-        // Yeni session için persistent bağlantıyı aç (ya da yeniden aç)
-        this._ensurePersistentEvents(sessionId);
-
-        // Seçilen oturumun mesajlarını yükle
-        const messages = await this.api.getSessionMessages(sessionId);
-        messages.forEach(msg => {
-            this.ui.addMessage(msg.role, msg.text);
-        });
-        this.messageCount = messages.length;
-
-        // Mevcut rating varsa göster
-        try {
-            const rating = await this.api.getRating(sessionId);
-            if (rating) {
-                this.ui.showExistingRating(rating);
-                this.ratingShown = true;
-            }
-        } catch {}
-
-        // Sidebar'ı güncelle
-        this.refreshSidebar();
     }
 
     /**
@@ -189,15 +153,6 @@ class ChatApp {
         }
     }
 
-    async refreshSidebar() {
-        const sessions = await this.api.getSessions();
-        this.ui.renderSessionList(
-            sessions,
-            this.api.sessionId,
-            (sessionId) => this.switchSession(sessionId)
-        );
-    }
-
     handleSend() {
         const text = this.ui.inputText;
         if (!text) return;
@@ -227,7 +182,6 @@ class ChatApp {
 
             this.ui.finalizeStreamingMessage(streamCtx);
             this.messageCount++;
-            this.refreshSidebar();
 
             // 2+ mesaj çifti sonra rating widget'ını göster (henüz gösterilmemişse)
             this._maybeShowRating();

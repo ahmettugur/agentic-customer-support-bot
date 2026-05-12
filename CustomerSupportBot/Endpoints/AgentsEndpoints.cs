@@ -3,9 +3,11 @@
 // /agents (GET, POST, PUT/{id}, DELETE/{id}) ve /escalations/{id}/reroute.
 // Hepsi RequireAuthorization("Admin") scope altında map edilir.
 
+using CustomerSupportBot.Infrastructure.Persistence;
 using CustomerSupportBot.Models;
 using CustomerSupportBot.Services;
 using CustomerSupportBot.Services.Routing;
+using Microsoft.EntityFrameworkCore;
 
 namespace CustomerSupportBot.Endpoints;
 
@@ -16,10 +18,25 @@ public static class AgentsEndpoints
         var group = app.MapGroup("/agents");
 
         // ─── List ───
-        group.MapGet("", (IHumanAgentRegistry registry) =>
+        group.MapGet("", async (IHumanAgentRegistry registry, CustomerSupportDbContext db) =>
         {
             var all = registry.GetAll();
-            return Results.Ok(new { count = all.Count, items = all });
+
+            // DB'deki Agent rolü kullanıcılarını registry'ye ekle (linked_agent_id olanlar)
+            var dbLinked = await db.Users
+                .Where(u => u.Role == "Agent" && u.LinkedAgentId != null && u.IsActive)
+                .OrderBy(u => u.Username)
+                .Select(u => new { id = u.LinkedAgentId!, displayName = u.Username, isActive = u.IsActive })
+                .ToListAsync();
+
+            // Registry + DB birleştir (ID'ye göre deduplikasyon)
+            var registryIds = all.Select(a => a.Id).ToHashSet();
+            var merged = all.Select(a => new { id = a.Id, displayName = a.DisplayName, isActive = a.IsActive })
+                .Concat(dbLinked.Where(d => !registryIds.Contains(d.id)))
+                .OrderBy(a => a.displayName)
+                .ToList();
+
+            return Results.Ok(new { count = merged.Count, items = merged });
         });
 
         // ─── Create ───
