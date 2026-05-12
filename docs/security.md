@@ -60,6 +60,28 @@ Parolalar **BCrypt** (`BCrypt.Net-Next`) ile hash'lenir. `IPasswordHasher` aray�
 
 ## 2. Yetkilendirme (Authorization)
 
+### Roller ve Policy'ler
+
+Sistem iki kullanıcı rolü tanır:
+
+| Rol | Açıklama | JWT `role` claim |
+|-----|----------|-----------------|
+| `Admin` | Tüm admin panel ve yönetim endpoint'lerine erişir | `"Admin"` |
+| `Agent` | Yalnızca `/agent/*` endpoint grubuna erişir; kendi eskalasyonlarını ve onaylarını yönetir | `"Agent"` |
+
+**`Agent` kullanıcılarında ek claim**: `linked_agent_id` — bu agent'ın `HumanAgent` registry'sindeki ID'si (ör. `"agent-jdoe"`). Eskalasyon atama ve filtreleme bu ID üzerinden yapılır.
+
+```json
+// Agent JWT payload örneği
+{
+  "sub": "42",
+  "unique_name": "john.doe",
+  "role": "Agent",
+  "linked_agent_id": "agent-jdoe",
+  "exp": 1747000000
+}
+```
+
 ### Admin Policy
 
 ```csharp
@@ -67,13 +89,24 @@ Parolalar **BCrypt** (`BCrypt.Net-Next`) ile hash'lenir. `IPasswordHasher` aray�
 var adminScope = app.MapGroup("").RequireAuthorization("Admin");
 ```
 
-`"Admin"` policy'si `RequireRole("Admin")` olarak tanımlanmıştır. Admin scope altındaki tüm endpoint'ler JWT ile korumalıdır:
+`"Admin"` policy'si `RequireRole("Admin")` olarak tanımlanmıştır.
+
+### AdminOrAgent Policy
+
+```csharp
+var agentScope = app.MapGroup("/agent").RequireAuthorization("AdminOrAgent");
+```
+
+`"AdminOrAgent"` policy'si `RequireRole("Admin", "Agent")` olarak tanımlanmıştır. `/agent/*` endpoint'leri hem admin hem agent tarafından kullanılabilir.
+
+### Endpoint Erişim Tablosu
 
 | Scope | Endpoint'ler |
 |-------|-------------|
 | **Public** (auth gerektirmez) | `POST /chat/`, `POST /chat/stream`, `GET /chat/events/{sid}`, `GET /sessions/`, `POST/GET .../rating` |
 | **Auth gerektirir** | `POST /auth/logout` |
 | **Admin** | Trace, Evaluation, Memory, Improvements, Telemetry, Personalization, Agents, Workflows, SLA, Admin (HITL) |
+| **AdminOrAgent** | `/agent/escalations/*`, `/agent/approvals/*`, `/agent/chat-sessions/*`, `/agent/profile` |
 
 ### Rate Limiting
 

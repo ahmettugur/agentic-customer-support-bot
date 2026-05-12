@@ -95,7 +95,8 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │   ├── RealtimeEndpoints.cs         # WS /chat/realtime + /chat/realtime-native
 │   ├── SessionEndpoints.cs          # GET /sessions/... (debug + sidebar)
 │   ├── TraceEndpoints.cs            # GET /traces/... (dashboard + replay)
-│   ├── AdminEndpoints.cs            # HITL approvals + escalations + chat takeover
+│   ├── AdminEndpoints.cs            # HITL approvals + escalations + chat takeover (Admin)
+│   ├── AgentPanelEndpoints.cs       # /agent/* — agent eskalasyon/onay/sohbet (AdminOrAgent)
 │   ├── EvaluationEndpoints.cs       # POST /evaluation/run
 │   ├── MemoryEndpoints.cs           # /memory/stats|search|ingest (admin)
 │   ├── ImprovementsEndpoints.cs     # /improvements/* (admin self-improve loop)

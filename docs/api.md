@@ -16,6 +16,7 @@ Backend `CustomerSupportBot` üzerinde tanımlı **tüm HTTP endpoint'leri** + *
 - [10. Smart Routing endpoints](#10-smart-routing-endpoints)
 - [11. Workflow Designer endpoints](#11-workflow-designer-endpoints)
 - [12. SLA Guardian endpoints](#12-sla-guardian-endpoints)
+- [14. Agent Panel endpoints](#14-agent-panel-endpoints)
 
 Sınıf/interface sözleşmeleri → [reference.md](reference.md).
 
@@ -736,7 +737,7 @@ Human-in-the-Loop mekanizması için **2 alt grup** endpoint:
 
 Tam pattern açıklaması → [patterns.md#20-human-in-the-loop](patterns.md#20-human-in-the-loop-approval-gate--escalation-sink).
 
-> ⚠️ **Güvenlik**: Bu endpoint'lerde şu an **auth yok**. Production için JWT/role-based middleware eklenmesi gerekir.
+> 🔒 Bu endpoint'ler `RequireAuthorization("Admin")` ile korunmaktadır. Erişim için `Authorization: Bearer <token>` header'ı gerekmektedir. Detay → [security.md](security.md).
 
 ### 7.1 Approvals
 
@@ -1282,7 +1283,9 @@ Profil kaydını tamamen siler.
 
 ### `GET /agents`
 
-Tüm kayıtlı temsilciler — aktif olanlar üstte, sonra ada göre alfabetik.
+Tüm kayıtlı temsilciler — **in-memory registry** ile **DB'deki `Agent` rolündeki kullanıcılar** (`linked_agent_id` dolu olanlar) birleştirilir. ID çakışmalarında registry kaydı önceliklidir. Sonuç ada göre alfabetik sıralıdır.
+
+Admin paneli "Atama Yap" dropdown'u bu endpoint'ten beslenir.
 
 ```json
 {
@@ -1551,6 +1554,96 @@ Son `count` adet warn / breach kaydı. Default 100, max 500.
 > ⚠️ Tek bir kayda ait aynı `severity` event'i sadece **bir kez** yayınlanır (`ISlaEventSink.LastEmittedAt` ile dedupe). Idempotent tarama.
 
 > ⚠️ Tüm endpoint'ler `RequireAuthorization("Admin")` scope altındadır.
+
+---
+
+## 14. Agent Panel endpoints
+
+**Dosya**: `@Endpoints/AgentPanelEndpoints.cs` — `AdminOrAgent` policy.
+
+`Agent` rolündeki kullanıcıların kendi eskalasyonlarını yönetmesi, tool onayı vermesi ve müşterilerle canlı sohbet etmesi için endpoint grubu. **Admin kullanıcılar da bu endpoint'lere erişebilir.**
+
+**Temel kural**: her endpoint JWT'deki `linked_agent_id` claim'ini okur ve işlemleri bu ID üzerinden yürütür.
+
+### Endpoint özeti
+
+| Method | Path | Açıklama |
+|--------|------|----------|
+| GET | `/agent/escalations/my` | `assignedTo` veya `suggestedAgentId` == kendi ID'si olan açık eskalasyonlar |
+| GET | `/agent/escalations/open` | Atanmamış + kendi üzerine atanmış açık eskalasyonlar (başka agente atananlar gizlenir) |
+| POST | `/agent/escalations/{id}/acknowledge` | Eskalasyonu kendi üzerine al — `assignedTo` otomatik set edilir |
+| POST | `/agent/escalations/{id}/resolve` | Eskalasyonu çöz |
+| POST | `/agent/escalations/{id}/dismiss` | Eskalasyonu reddet |
+| GET | `/agent/approvals/pending` | Onay bekleyen tool çağrıları |
+| POST | `/agent/approvals/{id}/approve` | Onayla |
+| POST | `/agent/approvals/{id}/reject` | Reddet |
+| GET | `/agent/chat-sessions/active` | Human modda aktif session'lar |
+| POST | `/agent/chat-sessions/{sid}/takeover` | Session'a katıl (Human moda geç) |
+| POST | `/agent/chat-sessions/{sid}/release` | Session'ı bırak (Bot moda dön, açık eskalasyonları resolve eder) |
+| POST | `/agent/chat-sessions/{sid}/messages` | Müşteriye mesaj gönder |
+| GET | `/agent/chat-sessions/{sid}/history` | Sohbet geçmişi |
+| GET | `/agent/chat-sessions/{sid}/subscribe` | SSE — müşteri mesajlarını dinle |
+| GET | `/agent/profile` | Kendi `HumanAgent` profilini getir |
+
+### `GET /agent/escalations/my`
+
+Bu agent'a atanmış (`assignedTo` veya `suggestedAgentId` eşleşen) açık eskalasyonlar.
+
+**Response**:
+```json
+{ "agentId": "agent-jdoe", "count": 2, "items": [ /* EscalationRequest[] */ ] }
+```
+
+### `GET /agent/escalations/open`
+
+Atanmamış (`assignedTo` boş) **veya** bu agent'a atanmış eskalasyonlar. Başka agente atananlar yanıtta **yer almaz**.
+
+**Response**: `EscalationRequest[]` (düz dizi)
+
+### `POST /agent/escalations/{id}/acknowledge`
+
+Eskalasyonu kendi üzerine alır. `assignedTo` JWT'deki `linked_agent_id` ile otomatik doldurulur — body gerekmez.
+
+**Response**:
+```json
+{ "id": "esc-abc", "status": "acknowledged", "assignedTo": "agent-jdoe" }
+```
+
+Yan etkiler: `HumanAgent.CurrentLoad` +1, müşteriye bridge mesajı gönderilir.
+
+### `POST /agent/escalations/{id}/resolve`
+
+**Request body** (opsiyonel):
+```json
+{ "resolution": "Sorun giderildi." }
+```
+
+`CurrentLoad` -1, `Status` → `resolved`.
+
+### `POST /agent/chat-sessions/{sid}/takeover`
+
+Session'ı `Human` moduna alır. Bu session'a bağlı açık (`open`) eskalasyonlar otomatik `acknowledged` yapılır.
+
+**Response**:
+```json
+{
+  "sessionId": "...",
+  "mode": "human",
+  "humanAgent": "John Doe",
+  "escalationsAcknowledged": 1
+}
+```
+
+### `POST /agent/chat-sessions/{sid}/release`
+
+Session'ı `Bot` moduna geri alır. Bu session'a bağlı tüm açık eskalasyonlar otomatik `resolved` yapılır.
+
+**Response**:
+```json
+{ "sessionId": "...", "mode": "bot", "escalationsResolved": 1 }
+```
+
+> ⚠️ Tüm endpoint'ler `RequireAuthorization("AdminOrAgent")` scope altındadır.
 
 ---
 

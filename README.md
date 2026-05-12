@@ -232,9 +232,17 @@ curl -X POST http://localhost:<port>/chat/ \
 | `/customers/{id}/profile/refresh` | `POST` | LLM ile profil özetini ve ton tercihini yeniler (admin) |
 | `/customers/{id}/profile/note` | `PUT` | Profile admin notu ekler/günceller (admin) |
 | `/customers/{id}/profile` | `DELETE` | Profil kaydını siler (admin) |
-| `/agents` | `GET`/`POST` | İnsan müşteri temsilcisi listesi / yeni temsilci oluştur (admin) |
+| `/agents` | `GET`/`POST` | İnsan müşteri temsilcisi listesi (registry+DB merge) / yeni temsilci oluştur (admin) |
 | `/agents/{id}` | `GET`/`PUT`/`DELETE` | Temsilci detay / kısmi güncelle / sil (admin) |
 | `/escalations/{id}/reroute` | `POST` | Eskalasyonu manuel olarak başka temsilciye atar (admin) |
+| `/agent/escalations/my` | `GET` | Bana atanmış eskalasyonlar (agent) |
+| `/agent/escalations/open` | `GET` | Atanmamış + bana atanmış eskalasyonlar — başkasına atananlar gizlenir (agent) |
+| `/agent/escalations/{id}/acknowledge` | `POST` | Eskalasyonu üstlen — `assignedTo` otomatik set edilir (agent) |
+| `/agent/escalations/{id}/resolve` | `POST` | Eskalasyonu çöz (agent) |
+| `/agent/chat-sessions/{sid}/takeover` | `POST` | Session'ı Human moduna al (agent) |
+| `/agent/chat-sessions/{sid}/release` | `POST` | Session'ı Bot moduna bırak (agent) |
+| `/agent/chat-sessions/{sid}/messages` | `POST` | Müşteriye mesaj gönder (agent) |
+| `/agent/profile` | `GET` | Kendi HumanAgent profilini getir (agent) |
 | `/workflows` | `GET`/`POST` | Low-code workflow tanımları listele / oluştur (admin) |
 | `/workflows/{id}` | `GET`/`PUT`/`DELETE` | Tanım detay / upsert / sil (admin) |
 | `/workflows/{id}/test` | `POST` | Verilen input ile workflow'u dry-run çalıştırır ve trace döner (admin) |
@@ -250,9 +258,12 @@ Tam API referansı için [`docs/api.md`](docs/api.md) dosyasına bakın.
 Bot iki HITL modunu destekler:
 
 1. **Onay Kuyruğu** — Yan etkili tool'lar (sipariş oluşturma, şikayet kaydı) çalıştırılmadan önce açık admin onayı gerektirir. Zaman aşımı ve otomatik onay politikaları `appsettings.json` üzerinden yapılandırılabilir.
-2. **Canlı Devralma** — Admin, herhangi bir aktif oturumu gerçek zamanlı olarak **Bot** modundan **İnsan** moduna geçirebilir, son kullanıcıyla doğrudan konuşabilir ve tekrar bot'a devredebilir.
+2. **Canlı Devralma** — Admin veya agent, herhangi bir aktif oturumu gerçek zamanlı olarak **Bot** modundan **İnsan** moduna geçirebilir, son kullanıcıyla doğrudan konuşabilir ve tekrar bot'a devredebilir.
+3. **Eskalasyon Yönetimi** — Skill-based routing ile eskalasyonlar uygun temsilciye otomatik önerilir veya admin dropdown'dan manuel atama yapar.
 
-Admin paneline `/admin.html` adresinden erişilebilir.
+**Erişim noktaları**:
+- Admin paneli: `/admin.html` — eskalasyon atama, onay, live takeover, analytics
+- Agent paneli: `/admin.html` (Agent JWT ile giriş) — yalnızca atanmış ve atanmamış eskalasyonlar görünür; "Atama Yap" butonu gizlenir
 
 ---
 

@@ -34,10 +34,10 @@ Uygulama iki persistence modunu destekler. Seçim `appsettings.json` üzerinden 
 | `IApprovalQueue` | `PostgresApprovalQueue` | `InMemoryApprovalQueue` |
 | `IEscalationSink` | DB-backed | `InMemoryEscalationSink` |
 | `IRatingStore` | `PostgresRatingStore` | `InMemoryRatingStore` |
-| `IChatModeRegistry` | — | `InMemoryChatModeRegistry` |
+| `IChatModeRegistry` | `PostgresChatModeRegistry` | `InMemoryChatModeRegistry` |
 | `IChatBridge` | — | `InMemoryChatBridge` |
 
-**Not**: `IChatModeRegistry` ve `IChatBridge` her iki modda da in-memory'dir (gerçek zamanlı, geçici veri).
+**Not**: `IChatBridge` her iki modda da in-memory'dir (gerçek zamanlı, geçici veri). `IChatModeRegistry` Postgres modunda kalıcı olarak `chat.session_modes` tablosuna yazar; uygulama restart'ında sohbet modları korunur.
 
 ---
 
