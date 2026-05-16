@@ -1,6 +1,8 @@
 @page "/traces"
-@layout EmptyLayout
-@inject IJSRuntime JS
+@attribute [Authorize]
+@layout AdminLayout
+@inject TracesApiService TracesApi
+@implements IAsyncDisposable
 
 <link rel="stylesheet" href="css/traces.css" />
 
@@ -21,10 +23,10 @@
         </div>
         <div class="traces-header-right">
             <label class="auto-refresh-toggle" title="Aktif iken liste 5 saniyede bir yenilenir">
-                <input type="checkbox" id="autoRefreshToggle" checked />
+                <input type="checkbox" @bind="_autoRefresh" @bind:after="OnAutoRefreshChanged" />
                 <span>Auto-refresh (5sn)</span>
             </label>
-            <button class="btn-secondary" id="refreshBtn" title="Yenile">
+            <button class="btn-secondary" @onclick="RefreshAsync" title="Yenile">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
                     <path d="M21 3v5h-5"/>
@@ -38,61 +40,195 @@
 
     <div class="traces-main">
         <!-- LEFT — SESSION LIST -->
-        <aside class="traces-sessions-pane" id="sessionsPane">
+        <aside class="traces-sessions-pane">
             <div class="traces-sessions-header">
                 <div class="traces-sessions-title">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/>
                     </svg>
                     <span>Oturumlar</span>
-                    <span class="traces-session-count" id="sessionCount">0</span>
+                    <span class="traces-session-count">@_sessions.Count</span>
                 </div>
-                <button class="btn-all-traces" id="showAllTracesBtn" title="Tüm trace'leri göster">
+                <button class="btn-all-traces" @onclick="ShowAllTracesAsync" title="Tüm trace'leri göster">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
                     </svg>
                     Tümü
                 </button>
             </div>
-            <div class="traces-sessions-list" id="sessionsList">
-                <div class="traces-empty">Henüz oturum yok</div>
+            <div class="traces-sessions-list">
+                @if (_loading)
+                {
+                    <div class="traces-empty">Yükleniyor…</div>
+                }
+                else if (_sessions.Count == 0)
+                {
+                    <div class="traces-empty">Henüz oturum yok. Sohbette bir mesaj gönderin.</div>
+                }
+                else
+                {
+                    @foreach (var session in _sessions)
+                    {
+                        <TraceSessionItem Session="session"
+                                          IsActive="_selectedSessionId == session.SessionId"
+                                          OnSessionSelected="SelectSessionAsync" />
+                    }
+                }
             </div>
         </aside>
 
         <!-- CENTER — TRACE LIST -->
         <aside class="traces-list-pane">
             <div class="traces-list-header">
-                <span id="tracesCount" class="traces-count">—</span>
-                <span class="muted" id="tracesLabel">trace</span>
+                <span class="traces-count">@_traces.Count</span>
+                <span class="muted">@_traceLabel</span>
             </div>
-            <div class="traces-list" id="tracesList">
-                <div class="traces-empty">Bir oturum seçin veya Tümü butonuna tıklayın</div>
+            <div class="traces-list">
+                @if (_loadingTraces)
+                {
+                    <div class="traces-empty">Yükleniyor…</div>
+                }
+                else if (_traces.Count == 0)
+                {
+                    <div class="traces-empty">
+                        @(_viewMode == "session" ? "Bu oturumda henüz trace yok." : "Bir oturum seçin veya Tümü butonuna tıklayın")
+                    </div>
+                }
+                else
+                {
+                    @foreach (var t in _traces)
+                    {
+                        <div class="trace-item @(_selectedTraceId == t.TraceId ? "active" : "")"
+                             @onclick="() => SelectTrace(t)">
+                            <p class="trace-item-query">@(t.UserQuery ?? "(boş sorgu)")</p>
+                            <div class="trace-item-meta">
+                                @if (_viewMode == "all" && t.SessionId is not null)
+                                {
+                                    <code class="trace-session-tag">@t.SessionId[..Math.Min(6, t.SessionId.Length)]…</code>
+                                }
+                                <span>@FmtRelative(t.StartedAt)</span>
+                                <span>•</span>
+                                <span>@(t.DurationMs is not null ? $"{t.DurationMs}ms" : "—")</span>
+                                <span class="badge badge-@(t.TerminationReason ?? "")">@(t.TerminationReason ?? "—")</span>
+                            </div>
+                        </div>
+                    }
+                }
             </div>
         </aside>
 
         <!-- RIGHT — TRACE DETAIL -->
-        <main class="trace-detail-pane" id="traceDetailPane">
-            <div class="trace-detail-empty">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.3">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                    <path d="M12 17h.01"/>
-                </svg>
-                <p class="muted">Bir trace seçin</p>
-            </div>
+        <main class="trace-detail-pane">
+            <TraceDetailPanel Trace="_selectedTrace" />
         </main>
     </div>
 
 </div>
 
 @code {
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private List<TraceSession> _sessions      = [];
+    private List<TraceDetail>  _traces        = [];
+    private TraceDetail?       _selectedTrace;
+    private string?            _selectedSessionId;
+    private string?            _selectedTraceId;
+    private string             _viewMode      = "session";
+    private string             _traceLabel    = "trace";
+    private bool               _autoRefresh   = true;
+    private bool               _loading       = true;
+    private bool               _loadingTraces;
+    private Timer?             _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
     {
-        if (firstRender)
+        await LoadSessionsAsync();
+        if (_autoRefresh) StartAutoRefresh();
+    }
+
+    private async Task LoadSessionsAsync()
+    {
+        _loading  = true;
+        _sessions = await TracesApi.GetSessionsAsync();
+        _loading  = false;
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadSessionsAsync();
+        if (_viewMode == "session" && _selectedSessionId is not null)
+            await LoadTracesForSessionAsync(_selectedSessionId);
+        else if (_viewMode == "all")
+            await LoadAllTracesAsync();
+    }
+
+    private async Task SelectSessionAsync(string sessionId)
+    {
+        _selectedSessionId = sessionId;
+        _viewMode          = "session";
+        _selectedTrace     = null;
+        _selectedTraceId   = null;
+        await LoadTracesForSessionAsync(sessionId);
+    }
+
+    private async Task ShowAllTracesAsync()
+    {
+        _viewMode          = "all";
+        _selectedSessionId = null;
+        _selectedTrace     = null;
+        _selectedTraceId   = null;
+        await LoadAllTracesAsync();
+    }
+
+    private async Task LoadTracesForSessionAsync(string sessionId)
+    {
+        _loadingTraces = true;
+        _traceLabel    = "trace (oturum)";
+        StateHasChanged();
+        _traces        = await TracesApi.GetBySessionAsync(sessionId);
+        _loadingTraces = false;
+    }
+
+    private async Task LoadAllTracesAsync()
+    {
+        _loadingTraces = true;
+        _traceLabel    = "trace (tümü)";
+        StateHasChanged();
+        _traces        = await TracesApi.GetRecentAsync(50);
+        _loadingTraces = false;
+    }
+
+    private void SelectTrace(TraceDetail t)
+    {
+        _selectedTraceId = t.TraceId;
+        _selectedTrace   = t;
+    }
+
+    private void StartAutoRefresh()
+    {
+        _refreshTimer?.Dispose();
+        _refreshTimer = new Timer(async _ => await InvokeAsync(async () =>
         {
-            await JS.InvokeVoidAsync("loadScript", "/js/auth.js", "js-auth");
-            await JS.InvokeVoidAsync("eval", "window.Auth.requireAuth()");
-            await JS.InvokeVoidAsync("loadScript", "/js/traces.js", "js-traces");
-        }
+            await LoadSessionsAsync();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private void OnAutoRefreshChanged()
+    {
+        if (_autoRefresh) StartAutoRefresh();
+        else { _refreshTimer?.Dispose(); _refreshTimer = null; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_refreshTimer is not null) await _refreshTimer.DisposeAsync();
+    }
+
+    private static string FmtRelative(DateTimeOffset dt)
+    {
+        var diff = DateTimeOffset.UtcNow - dt;
+        if (diff.TotalSeconds < 60)  return $"{(int)diff.TotalSeconds}s önce";
+        if (diff.TotalMinutes < 60)  return $"{(int)diff.TotalMinutes}dk önce";
+        if (diff.TotalHours   < 24)  return $"{(int)diff.TotalHours}sa önce";
+        return dt.LocalDateTime.ToShortDateString();
     }
 }

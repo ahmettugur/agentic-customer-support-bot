@@ -1,0 +1,41 @@
+@using CustomerSupportBot.Web.Services
+
+<div class="session-item @(IsActive ? "active" : "")"
+     @onclick="OnClick"
+     role="button"
+     tabindex="0"
+     @onkeydown="HandleKeyDown">
+    <div class="session-item-title">@(Session.Title ?? "(boş)")</div>
+    <div class="session-item-meta">
+        <span class="session-trace-count">@Session.TraceCount trace</span>
+        <span>•</span>
+        <span>@Session.MessageCount mesaj</span>
+        <span>•</span>
+        <span>@FormatTime(Session.LastTraceAt)</span>
+    </div>
+    <code class="session-item-id">@Session.SessionId[..Math.Min(8, Session.SessionId.Length)]…</code>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TraceSession Session { get; set; } = default!;
+    [Parameter] public bool IsActive { get; set; }
+    [Parameter] public EventCallback<string> OnSessionSelected { get; set; }
+
+    private async Task OnClick()
+        => await OnSessionSelected.InvokeAsync(Session.SessionId);
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or " ")
+            await OnSessionSelected.InvokeAsync(Session.SessionId);
+    }
+
+    private static string FormatTime(DateTimeOffset dt)
+    {
+        var diff = DateTimeOffset.UtcNow - dt;
+        if (diff.TotalSeconds < 60)  return $"{(int)diff.TotalSeconds}s önce";
+        if (diff.TotalMinutes < 60)  return $"{(int)diff.TotalMinutes}dk önce";
+        if (diff.TotalHours < 24)    return $"{(int)diff.TotalHours}sa önce";
+        return dt.LocalDateTime.ToShortDateString();
+    }
+}

@@ -1,8 +1,9 @@
 @page "/admin"
-@layout EmptyLayout
-@inject IJSRuntime JS
-
-<link rel="stylesheet" href="css/admin.css" />
+@attribute [Authorize]
+@layout AdminLayout
+@inject AdminApiService AdminApi
+@inject AnalyticsApiService AnalyticsApi
+@implements IAsyncDisposable
 
 <div class="admin-layout">
     <!-- HEADER -->
@@ -20,10 +21,10 @@
         </div>
         <div class="admin-header-right">
             <label class="auto-refresh-toggle">
-                <input type="checkbox" id="autoRefreshToggle" checked />
+                <input type="checkbox" @bind="_autoRefresh" @bind:after="OnAutoRefreshChanged" />
                 <span>Auto-refresh (3sn)</span>
             </label>
-            <button class="btn-secondary" id="refreshBtn" title="Yenile">
+            <button class="btn-secondary" @onclick="RefreshActiveTabAsync" title="Yenile">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
                     <path d="M21 3v5h-5"/>
@@ -37,475 +38,627 @@
 
     <!-- TABS -->
     <nav class="admin-tabs">
-        <button class="tab-btn active" data-tab="approvals">
-            Onay Kuyruğu <span class="badge" id="pendingApprovalsBadge">0</span>
+        <button class="tab-btn @ActiveCls("approvals")" @onclick='() => SwitchTabAsync("approvals")'>
+            Onay Kuyruğu <span class="badge">@_pendingApprovals.Count</span>
         </button>
-        <button class="tab-btn" data-tab="escalations">
-            Eskalasyonlar <span class="badge badge-warn" id="openEscalationsBadge">0</span>
+        <button class="tab-btn @ActiveCls("escalations")" @onclick='() => SwitchTabAsync("escalations")'>
+            Eskalasyonlar <span class="badge badge-warn">@_openEscalations.Count</span>
         </button>
-        <button class="tab-btn" data-tab="chats">
-            Aktif Sohbetler <span class="badge badge-live" id="activeChatsBadge">0</span>
+        <button class="tab-btn @ActiveCls("chats")" @onclick='() => SwitchTabAsync("chats")'>
+            Aktif Sohbetler <span class="badge badge-live">@_activeChats.Count</span>
         </button>
-        <button class="tab-btn" data-tab="history">
+        <button class="tab-btn @ActiveCls("history")" @onclick='() => SwitchTabAsync("history")'>
             Geçmiş
         </button>
-        <button class="tab-btn" data-tab="analytics">
+        <button class="tab-btn @ActiveCls("analytics")" @onclick='() => SwitchTabAsync("analytics")'>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
             </svg>
             Analytics
         </button>
-        <button class="tab-btn" data-tab="improvements">
+        <button class="tab-btn @ActiveCls("improvements")" @onclick='() => SwitchTabAsync("improvements")'>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
             </svg>
-            Improvements <span class="badge" id="proposedLessonsBadge">0</span>
+            Improvements <span class="badge">@_proposedLessons.Count</span>
         </button>
-        <a class="tab-btn tab-btn--link" href="/replay" target="_blank">
-            ▶ Replay
-        </a>
-        <a class="tab-btn tab-btn--link" href="/traces" target="_blank">
-            🧭 Traces
-        </a>
+        <a class="tab-btn tab-btn--link" href="/replay" target="_blank">▶ Replay</a>
+        <a class="tab-btn tab-btn--link" href="/traces" target="_blank">🧭 Traces</a>
     </nav>
 
     <!-- TAB CONTENT -->
     <main class="admin-main">
+
         <!-- TAB: APPROVALS -->
-        <section class="tab-content active" id="tab-approvals">
+        <section class="tab-content @ActiveCls("approvals")">
             <div class="tab-header">
                 <h2>Onay Bekleyen Tool Çağrıları</h2>
-                <p class="muted">
-                    LLM bir yan etkili tool (order_placement_tool, complaint_registration_tool) çağırmak istiyor.
-                    Onay verilmezse <strong>60 saniye</strong> sonra otomatik reddedilir.
-                </p>
+                <p class="muted">LLM bir yan etkili tool çağırmak istiyor. Onay verilmezse <strong>60 saniye</strong> sonra otomatik reddedilir.</p>
             </div>
-            <div class="cards-list" id="approvalsList">
-                <div class="empty-state">Onay bekleyen istek yok.</div>
+            <div class="cards-list">
+                @if (_pendingApprovals.Count == 0) { <div class="empty-state">Onay bekleyen istek yok.</div> }
+                else
+                {
+                    @foreach (var a in _pendingApprovals)
+                    {
+                        <article class="card card-approval">
+                            <header class="card-header">
+                                <div class="card-title"><span class="tool-tag">@a.ToolName</span><code class="card-id">@ShortId(a.Id)</code></div>
+                                <time class="muted">@FmtRelative(a.RequestedAt)</time>
+                            </header>
+                            <div class="card-body">
+                                <div class="card-row"><span class="label">Agent:</span> <span>@a.AgentName</span></div>
+                                <div class="card-row"><span class="label">Kullanıcı:</span> <span class="user-query">@a.UserQuery</span></div>
+                                <div class="card-row"><span class="label">Session:</span> <code class="session-id">@ShortId(a.SessionId)</code></div>
+                            </div>
+                            <footer class="card-actions">
+                                <button class="btn-primary" @onclick='() => ShowPrompt(PromptKind.ApproveApproval, a.Id, "Onayla", "Onay notu (isteğe bağlı)")'>✓ Onayla</button>
+                                <button class="btn-danger"  @onclick='() => ShowPrompt(PromptKind.RejectApproval,  a.Id, "Reddet",  "Red sebebi (isteğe bağlı)")'>✗ Reddet</button>
+                            </footer>
+                        </article>
+                    }
+                }
             </div>
         </section>
 
         <!-- TAB: ESCALATIONS -->
-        <section class="tab-content" id="tab-escalations">
+        <section class="tab-content @ActiveCls("escalations")">
             <div class="escalations-layout">
                 <aside class="escalations-sidebar">
-                    <h3>Kapanmış Eskalasyonlar <span class="badge badge-muted" id="closedEscalationsBadge">0</span></h3>
-                    <p class="muted small">Çözüldü veya dismiss edildi.</p>
-                    <div class="cards-list compact" id="closedEscalationsList">
-                        <div class="empty-state">Henüz kapanmış eskalasyon yok.</div>
+                    <h3>Kapanmış <span class="badge badge-muted">@_closedEscalations.Count</span></h3>
+                    <div class="cards-list compact">
+                        @if (_closedEscalations.Count == 0) { <div class="empty-state">Henüz kapanmış eskalasyon yok.</div> }
+                        else
+                        {
+                            @foreach (var e in _closedEscalations)
+                            {
+                                <article class="card card-history compact-card">
+                                    <header class="card-header">
+                                        <div class="card-title"><span class="status-tag">@e.Status</span><code class="card-id">@ShortId(e.Id)</code></div>
+                                        <time class="muted">@FmtRelative(e.CreatedAt)</time>
+                                    </header>
+                                    <div class="card-body">
+                                        <div class="card-row"><span class="label">Sebep:</span> <span class="user-query">@e.Reason</span></div>
+                                    </div>
+                                    <footer class="card-actions compact-actions">
+                                        <button class="btn-secondary" @onclick="() => ShowTranscriptAsync(e.SessionId)">💬 Konuşmayı Gör</button>
+                                    </footer>
+                                </article>
+                            }
+                        }
                     </div>
                 </aside>
                 <div class="escalations-main">
                     <div class="tab-header">
                         <h2>Açık Eskalasyonlar</h2>
-                        <p class="muted">
-                            Specialist ajan <code>needs_escalation</code> status'u döndürdü — bir insan temsilcisi bakmalı.
-                        </p>
+                        <p class="muted">Specialist ajan <code>needs_escalation</code> döndürdü — bir insan temsilcisi bakmalı.</p>
                     </div>
-                    <div class="cards-list" id="escalationsList">
-                        <div class="empty-state">Açık eskalasyon yok.</div>
+                    <div class="cards-list">
+                        @if (_openEscalations.Count == 0) { <div class="empty-state">Açık eskalasyon yok.</div> }
+                        else
+                        {
+                            @foreach (var e in _openEscalations)
+                            {
+                                <article class="card card-escalation">
+                                    <header class="card-header">
+                                        <div class="card-title"><span class="status-tag">@e.Status</span><code class="card-id">@ShortId(e.Id)</code></div>
+                                        <time class="muted">@FmtRelative(e.CreatedAt)</time>
+                                    </header>
+                                    <div class="card-body">
+                                        <div class="card-row"><span class="label">Agent:</span> <span>@e.AgentName</span></div>
+                                        <div class="card-row"><span class="label">Atanan:</span> <span>@(e.AssignedTo ?? "—")</span></div>
+                                        <div class="card-row"><span class="label">Sebep:</span> <span>@e.Reason</span></div>
+                                        <div class="card-row"><span class="label">Kullanıcı:</span> <span class="user-query">@e.UserQuery</span></div>
+                                    </div>
+                                    <footer class="card-actions">
+                                        <button class="btn-secondary" @onclick='() => ShowPrompt(PromptKind.AckEscalation,     e.Id, "Atama Yap",       "Temsilci adı")'>📋 Atama Yap</button>
+                                        <button class="btn-primary"   @onclick="() => TakeoverAndChatAsync(e)">💬 Devral &amp; Sohbet</button>
+                                        <button class="btn-secondary" @onclick='() => ShowPrompt(PromptKind.ReplanEscalation,  e.Id, "Yeniden Planla",   "Not (isteğe bağlı)")'>🔄 Yeniden Planla</button>
+                                        <button class="btn-primary"   @onclick='() => ShowPrompt(PromptKind.ResolveEscalation, e.Id, "Çöz",              "Çözüm açıklaması")'>✓ Çöz</button>
+                                        <button class="btn-danger"    @onclick='() => ShowPrompt(PromptKind.DismissEscalation, e.Id, "Dismiss",           "Dismiss sebebi")'>✗ Dismiss</button>
+                                    </footer>
+                                </article>
+                            }
+                        }
                     </div>
                 </div>
             </div>
         </section>
 
         <!-- TAB: ACTIVE CHATS -->
-        <section class="tab-content" id="tab-chats">
+        <section class="tab-content @ActiveCls("chats")">
             <div class="tab-header">
                 <h2>Aktif Canlı Sohbetler</h2>
-                <p class="muted">
-                    Bir session'ı eskalasyon kartından <strong>Devral &amp; Sohbet</strong> ile alabilirsin —
-                    veya aşağıdaki listeden zaten Human modda olan bir session'ın sohbetine bağlanabilirsin.
-                </p>
+                <p class="muted">Eskalasyon kartından <strong>Devral &amp; Sohbet</strong> ile session alabilirsiniz.</p>
             </div>
             <div class="chats-layout">
                 <aside class="chats-sidebar">
                     <h3>Aktif Session'lar</h3>
-                    <div class="cards-list" id="activeChatsList">
-                        <div class="empty-state">Aktif sohbet yok.</div>
+                    <div class="cards-list">
+                        @if (_activeChats.Count == 0) { <div class="empty-state">Aktif sohbet yok.</div> }
+                        else
+                        {
+                            @foreach (var c in _activeChats)
+                            {
+                                <article class="card card-active-chat">
+                                    <header class="card-header">
+                                        <div class="card-title"><span class="status-tag human">LIVE</span><code class="card-id">@ShortId(c.SessionId)</code></div>
+                                        <time class="muted">@FmtRelative(c.EnteredHumanModeAt)</time>
+                                    </header>
+                                    <div class="card-body">
+                                        <div class="card-row"><span class="label">Temsilci:</span> <span>@(c.HumanAgent ?? "—")</span></div>
+                                        <div class="card-row"><span class="label">Mesaj:</span> <span>@c.MessageCount</span></div>
+                                    </div>
+                                    <footer class="card-actions">
+                                        <button class="btn-primary" @onclick="() => OpenChatPanelAsync(c)">Sohbeti Aç</button>
+                                    </footer>
+                                </article>
+                            }
+                        }
                     </div>
                 </aside>
-                <div class="chat-panel-host" id="chatPanelHost">
-                    <div class="empty-state">Sol taraftan bir session seç ya da bir eskalasyondan devral.</div>
+                <div class="chat-panel-host">
+                    @if (_openChatSession is null)
+                    {
+                        <div class="empty-state">Sol taraftan bir session seç ya da bir eskalasyondan devral.</div>
+                    }
+                    else
+                    {
+                        <div class="chat-panel">
+                            <header class="chat-panel-header">
+                                <div class="chat-panel-title">
+                                    <span class="status-tag human">LIVE</span>
+                                    <div>
+                                        <div class="chat-panel-session">@ShortId(_openChatSession.SessionId)…</div>
+                                        <div class="chat-panel-subtitle">Temsilci: @_openChatSession.HumanAgent · Giriş: @FmtTs(_openChatSession.EnteredHumanModeAt)</div>
+                                    </div>
+                                </div>
+                                <button class="btn-secondary" @onclick='() => ShowPrompt(PromptKind.ReplanChat, _openChatSession.SessionId, "Yeniden Planla", "Not (isteğe bağlı)")'>🔄 Yeniden Planla</button>
+                                <button class="btn-danger" @onclick="ReleaseChatAsync">Sohbeti Bitir</button>
+                            </header>
+                            <div class="chat-panel-messages">
+                                @if (_chatMessages.Count == 0) { <div class="empty-state">Henüz mesaj yok.</div> }
+                                @foreach (var m in _chatMessages)
+                                {
+                                    <div class="message-@(m.Role)" style="margin:6px 0">
+                                        <div class="message-bubble">@m.Content</div>
+                                        <div class="muted" style="font-size:10px">@FmtTs(m.Timestamp)</div>
+                                    </div>
+                                }
+                            </div>
+                            <form class="chat-panel-composer" @onsubmit="SendChatMessageAsync" @onsubmit:preventDefault>
+                                <textarea rows="2" placeholder="Kullanıcıya yazın…" @bind="_chatInput"></textarea>
+                                <button type="submit" class="btn-primary">Gönder</button>
+                            </form>
+                        </div>
+                    }
                 </div>
             </div>
         </section>
 
         <!-- TAB: ANALYTICS -->
-        <section class="tab-content" id="tab-analytics">
+        <section class="tab-content @ActiveCls("analytics")">
             <div class="tab-header">
                 <h2>Conversation Analytics</h2>
-                <p class="muted">Oturum seçerek detaylı analiz görüntüleyin veya genel istatistikleri izleyin.</p>
+                <p class="muted">Genel istatistikler ve dağılımlar.</p>
             </div>
-            <div class="analytics-layout">
-                <aside class="analytics-session-sidebar">
-                    <div class="analytics-sidebar-header">
-                        <h3>Oturumlar</h3>
-                        <button class="btn-all-analytics" id="showAggregateBtn" title="Genel istatistikleri göster">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
-                            </svg>
-                            Genel
-                        </button>
-                    </div>
-                    <div class="analytics-session-list" id="analyticsSessionList">
-                        <div class="empty-state small-empty">Yükleniyor…</div>
-                    </div>
-                </aside>
-                <div class="analytics-content" id="analyticsContent">
-                    <div id="analyticsAggregateView">
-                        <div class="analytics-summary" id="analyticsSummary">
-                            <div class="analytics-card">
-                                <div class="analytics-card-icon sessions">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg>
-                                </div>
-                                <div class="analytics-card-data">
-                                    <div class="analytics-card-value" id="statTotalSessions">0</div>
-                                    <div class="analytics-card-label">Toplam Oturum</div>
-                                </div>
-                            </div>
-                            <div class="analytics-card">
-                                <div class="analytics-card-icon messages">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                                </div>
-                                <div class="analytics-card-data">
-                                    <div class="analytics-card-value" id="statTotalMessages">0</div>
-                                    <div class="analytics-card-label">Toplam Mesaj</div>
-                                </div>
-                            </div>
-                            <div class="analytics-card">
-                                <div class="analytics-card-icon rating">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                                </div>
-                                <div class="analytics-card-data">
-                                    <div class="analytics-card-value" id="statAverageRating">0</div>
-                                    <div class="analytics-card-label">Ortalama Puan (<span id="statTotalRatings">0</span> değerlendirme)</div>
-                                </div>
-                            </div>
-                            <div class="analytics-card">
-                                <div class="analytics-card-icon avg">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-                                </div>
-                                <div class="analytics-card-data">
-                                    <div class="analytics-card-value" id="statAvgMessages">0</div>
-                                    <div class="analytics-card-label">Ort. Mesaj/Oturum</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="analytics-charts">
-                            <div class="analytics-chart-card">
-                                <h3>Puan Dağılımı</h3>
-                                <div class="rating-distribution" id="ratingDistribution"></div>
-                            </div>
-                            <div class="analytics-chart-card">
-                                <h3>Onay İstatistikleri</h3>
-                                <div class="approval-stats" id="approvalStats"></div>
-                            </div>
-                            <div class="analytics-chart-card">
-                                <h3>Eskalasyon İstatistikleri</h3>
-                                <div class="escalation-stats" id="escalationStats"></div>
-                            </div>
-                        </div>
-                        <div class="analytics-summary analytics-summary-tight">
-                            <div class="analytics-card">
-                                <div class="analytics-card-icon sentiment-icon">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>
-                                </div>
-                                <div class="analytics-card-data">
-                                    <div class="analytics-card-value" id="statAvgSentiment">0.5</div>
-                                    <div class="analytics-card-label">Ort. Duygu Skoru</div>
-                                </div>
-                            </div>
-                            <div class="analytics-card">
-                                <div class="analytics-card-icon negative-icon">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>
-                                </div>
-                                <div class="analytics-card-data">
-                                    <div class="analytics-card-value" id="statNegativeSessions">0</div>
-                                    <div class="analytics-card-label">Olumsuz Oturum</div>
-                                </div>
-                            </div>
-                            <div class="analytics-card">
-                                <div class="analytics-card-icon alert-icon">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
-                                </div>
-                                <div class="analytics-card-data">
-                                    <div class="analytics-card-value" id="statSentimentAlerts">0</div>
-                                    <div class="analytics-card-label">Duygu Uyarısı</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="analytics-charts">
-                            <div class="analytics-chart-card">
-                                <h3>Duygu Dağılımı</h3>
-                                <div class="distribution-list" id="sentimentDistribution">
-                                    <div class="empty-state">Veri yok.</div>
-                                </div>
-                            </div>
-                            <div class="analytics-chart-card">
-                                <h3>Niyet (Intent) Dağılımı</h3>
-                                <div class="distribution-list" id="intentDistribution">
-                                    <div class="empty-state">Veri yok.</div>
-                                </div>
-                            </div>
-                            <div class="analytics-chart-card">
-                                <h3>Faz Dağılımı</h3>
-                                <div class="distribution-list" id="phaseDistribution">
-                                    <div class="empty-state">Veri yok.</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="analytics-charts">
-                            <div class="analytics-chart-card">
-                                <h3>Son Değerlendirmeler</h3>
-                                <div class="recent-ratings-list" id="recentRatingsList">
-                                    <div class="empty-state">Henüz değerlendirme yok.</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="analyticsSessionView" class="hidden">
-                        <div class="session-analytics-header" id="sessionAnalyticsHeader"></div>
-                        <div class="session-analytics-body" id="sessionAnalyticsBody"></div>
-                    </div>
+            @if (_analytics is null)
+            {
+                <div class="empty-state">Yükleniyor…</div>
+            }
+            else
+            {
+                <div class="analytics-summary">
+                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.TotalSessions</div><div class="analytics-card-label">Toplam Oturum</div></div></div>
+                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.TotalMessages</div><div class="analytics-card-label">Toplam Mesaj</div></div></div>
+                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.AverageRating.ToString("F1")</div><div class="analytics-card-label">Ort. Puan (@_analytics.TotalRatings değ.)</div></div></div>
+                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.AverageMessagesPerSession.ToString("F1")</div><div class="analytics-card-label">Ort. Mesaj/Oturum</div></div></div>
+                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.AverageSentimentScore.ToString("F2")</div><div class="analytics-card-label">Ort. Duygu Skoru</div></div></div>
+                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.NegativeSessions</div><div class="analytics-card-label">Olumsuz Oturum</div></div></div>
+                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.SentimentAlerts</div><div class="analytics-card-label">Duygu Uyarısı</div></div></div>
                 </div>
-            </div>
+                <div class="analytics-charts" style="margin-top:16px">
+                    @RenderDist("Puan Dağılımı", _analytics.RatingDistribution)
+                    @RenderDist("Duygu Dağılımı", _analytics.SentimentDistribution)
+                    @RenderDist("Intent Dağılımı", _analytics.IntentDistribution)
+                    @RenderDist("Faz Dağılımı", _analytics.PhaseDistribution)
+                </div>
+                @if (_analytics.RecentRatings?.Length > 0)
+                {
+                    <div class="analytics-chart-card" style="margin-top:16px">
+                        <h3>Son Değerlendirmeler</h3>
+                        @foreach (var r in _analytics.RecentRatings)
+                        {
+                            <div class="card-row" style="font-size:12px">
+                                <code class="session-id">@ShortId(r.SessionId)</code>
+                                <span>@(new string('★', r.Stars).PadRight(5, '☆'))</span>
+                                <span class="muted">@r.Feedback</span>
+                            </div>
+                        }
+                    </div>
+                }
+            }
         </section>
 
         <!-- TAB: HISTORY -->
-        <section class="tab-content" id="tab-history">
-            <div class="tab-header">
-                <h2>Geçmiş</h2>
-                <p class="muted">Son 50 onay kararı + son 50 eskalasyon.</p>
-            </div>
+        <section class="tab-content @ActiveCls("history")">
+            <div class="tab-header"><h2>Geçmiş</h2><p class="muted">Son 50 onay kararı + son 50 eskalasyon.</p></div>
             <h3>Onay Geçmişi</h3>
-            <div class="cards-list" id="historyApprovalsList">
-                <div class="empty-state">Henüz karar kaydı yok.</div>
+            <div class="cards-list">
+                @if (_historyApprovals.Count == 0) { <div class="empty-state">Henüz karar kaydı yok.</div> }
+                else
+                {
+                    @foreach (var a in _historyApprovals)
+                    {
+                        <article class="card card-history">
+                            <header class="card-header">
+                                <div class="card-title"><span class="tool-tag">@a.ToolName</span><span class="status-tag">@a.Status</span><code class="card-id">@ShortId(a.Id)</code></div>
+                                <time class="muted">@FmtRelative(a.RequestedAt)</time>
+                            </header>
+                            @if (a.DecidedBy is not null)
+                            {
+                                <div class="card-body"><div class="card-row"><span class="label">Karar:</span> <span>@a.DecidedBy · @a.DecisionReason</span></div></div>
+                            }
+                        </article>
+                    }
+                }
             </div>
             <h3 class="section-spaced">Eskalasyon Geçmişi</h3>
-            <div class="cards-list" id="historyEscalationsList">
-                <div class="empty-state">Henüz eskalasyon yok.</div>
+            <div class="cards-list">
+                @if (_historyEscalations.Count == 0) { <div class="empty-state">Henüz eskalasyon yok.</div> }
+                else
+                {
+                    @foreach (var e in _historyEscalations)
+                    {
+                        <article class="card card-history">
+                            <header class="card-header">
+                                <div class="card-title"><span class="status-tag">@e.Status</span><code class="card-id">@ShortId(e.Id)</code></div>
+                                <time class="muted">@FmtRelative(e.CreatedAt)</time>
+                            </header>
+                            <div class="card-body">
+                                <div class="card-row"><span class="label">Agent:</span> <span>@e.AgentName</span></div>
+                                @if (e.Resolution is not null) { <div class="card-row"><span class="label">Çözüm:</span> <span>@e.Resolution</span></div> }
+                            </div>
+                        </article>
+                    }
+                }
             </div>
         </section>
 
         <!-- TAB: IMPROVEMENTS -->
-        <section class="tab-content" id="tab-improvements">
+        <section class="tab-content @ActiveCls("improvements")">
             <div class="tab-header tab-header--row">
                 <div>
                     <h2>Self-Improving Loop</h2>
-                    <p class="muted">Düşük puanlı / hatalı trace'lerden LLM tarafından çıkarılan ders önerileri. Onaylananlar Qdrant Lessons collection'ına yazılır ve sonraki konuşmalarda context'e dönerler.</p>
+                    <p class="muted">Düşük puanlı / hatalı trace'lerden LLM tarafından çıkarılan ders önerileri.</p>
                 </div>
-                <button class="btn-primary" id="mineLessonsBtn">⚙️ Yeni Tarama Çalıştır</button>
+                <button class="btn-primary" @onclick="MineImprovementsAsync" disabled="@_miningInProgress">
+                    @(_miningInProgress ? "⏳ Taranıyor…" : "⚙️ Yeni Tarama Çalıştır")
+                </button>
             </div>
-            <div class="improvements-stats" id="improvementsStats"></div>
             <h3>Önerilen (Onay Bekleyen)</h3>
-            <div class="cards-list" id="proposedLessonsList">
-                <div class="empty-state">Henüz öneri yok. "Yeni Tarama Çalıştır" deyin.</div>
+            <div class="cards-list">
+                @if (_proposedLessons.Count == 0) { <div class="empty-state">Henüz öneri yok. "Yeni Tarama Çalıştır" deyin.</div> }
+                else
+                {
+                    @foreach (var l in _proposedLessons)
+                    {
+                        <article class="card">
+                            <header class="card-header">
+                                <div class="card-title"><strong>@(l.Title ?? "(başlıksız)")</strong>@if (l.SuggestedAgent is not null) { <span class="badge">@l.SuggestedAgent</span> }</div>
+                                <code class="card-id">@ShortId(l.Id)</code>
+                            </header>
+                            <div class="card-body">
+                                <p style="margin:8px 0">@l.LessonText</p>
+                                @if (l.Observation is not null) { <p class="muted small"><em>Gözlem:</em> @l.Observation</p> }
+                            </div>
+                            <footer class="card-footer">
+                                <button class="btn-primary" @onclick='() => ShowPrompt(PromptKind.ApproveLesson, l.Id, "Onayla", "Not (isteğe bağlı)")'>✅ Onayla</button>
+                                <button class="btn-danger"  @onclick='() => ShowPrompt(PromptKind.RejectLesson,  l.Id, "Reddet", "Red sebebi (isteğe bağlı)")'>❌ Reddet</button>
+                            </footer>
+                        </article>
+                    }
+                }
             </div>
             <h3 class="section-spaced">Onaylanmış Dersler</h3>
-            <div class="cards-list" id="approvedLessonsList">
-                <div class="empty-state">Henüz onaylanmış ders yok.</div>
+            <div class="cards-list">
+                @if (_approvedLessons.Count == 0) { <div class="empty-state">Henüz onaylanmış ders yok.</div> }
+                else
+                {
+                    @foreach (var l in _approvedLessons)
+                    {
+                        <article class="card">
+                            <header class="card-header">
+                                <div class="card-title"><strong>@(l.Title ?? "(başlıksız)")</strong>@if (l.SuggestedAgent is not null) { <span class="badge">@l.SuggestedAgent</span> }</div>
+                                <code class="card-id">@ShortId(l.Id)</code>
+                            </header>
+                            <div class="card-body">
+                                <p style="margin:8px 0">@l.LessonText</p>
+                                @if (l.DecidedBy is not null) { <p class="muted small">@l.Status · @l.DecidedBy</p> }
+                            </div>
+                        </article>
+                    }
+                }
             </div>
         </section>
+
     </main>
 </div>
 
-<!-- TEMPLATES -->
-<template id="approval-card-template">
-    <article class="card card-approval">
-        <header class="card-header">
-            <div class="card-title">
-                <span class="tool-tag" data-tool></span>
-                <code class="card-id" data-id></code>
+<!-- PROMPT MODAL -->
+@if (_showPromptModal)
+{
+    <div class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal modal-prompt">
+            <header class="modal-header">
+                <h3>@_promptTitle</h3>
+                <button type="button" class="btn-icon" @onclick="CancelPrompt">✕</button>
+            </header>
+            <div class="modal-body modal-prompt-body">
+                <label class="form-label">@_promptLabel</label>
+                <textarea class="form-control" rows="3" maxlength="500" @bind="_promptInput"></textarea>
             </div>
-            <time class="muted" data-time></time>
-        </header>
-        <div class="card-body">
-            <div class="card-row"><span class="label">Agent:</span> <span data-agent></span></div>
-            <div class="card-row"><span class="label">Kullanıcı:</span> <span class="user-query" data-query></span></div>
-            <div class="card-row"><span class="label">Session:</span> <code class="session-id" data-session></code></div>
-            <details class="card-params"><summary>Parametreler</summary><pre data-params></pre></details>
+            <footer class="modal-footer">
+                <button type="button" class="btn-secondary" @onclick="CancelPrompt">İptal</button>
+                <button type="button" class="btn-primary"   @onclick="ConfirmPromptAsync">Onayla</button>
+            </footer>
         </div>
-        <footer class="card-actions">
-            <button class="btn-primary btn-approve" data-approve>✓ Onayla</button>
-            <button class="btn-danger btn-reject" data-reject>✗ Reddet</button>
-        </footer>
-    </article>
-</template>
+    </div>
+}
 
-<template id="escalation-card-template">
-    <article class="card card-escalation">
-        <header class="card-header">
-            <div class="card-title">
-                <span class="status-tag" data-status></span>
-                <code class="card-id" data-id></code>
-            </div>
-            <time class="muted" data-time></time>
-        </header>
-        <div class="card-body">
-            <div class="card-row"><span class="label">Agent:</span> <span data-agent></span></div>
-            <div class="card-row"><span class="label">Atanan Temsilci:</span> <span data-assigned></span></div>
-            <div class="card-row"><span class="label">Sebep:</span> <span data-reason></span></div>
-            <div class="card-row"><span class="label">Kullanıcı:</span> <span class="user-query" data-query></span></div>
-            <details class="card-params"><summary>Eksik bağlam + yanıt özeti</summary><pre data-context></pre></details>
-        </div>
-        <footer class="card-actions">
-            <button class="btn-secondary btn-ack" data-ack>📋 Atama Yap</button>
-            <button class="btn-primary btn-takeover" data-takeover title="Session'ı Human moda al ve canlı sohbet başlat">💬 Devral &amp; Sohbet</button>
-            <button class="btn-secondary btn-replan" data-replan title="Bot'un mevcut planı sıfırlansın">🔄 Yeniden Planla</button>
-            <button class="btn-primary btn-resolve" data-resolve>✓ Çöz</button>
-            <button class="btn-danger btn-dismiss" data-dismiss>✗ Dismiss</button>
-        </footer>
-    </article>
-</template>
-
-<template id="active-chat-card-template">
-    <article class="card card-active-chat" data-session>
-        <header class="card-header">
-            <div class="card-title">
-                <span class="status-tag human">LIVE</span>
-                <code class="card-id" data-sid></code>
-            </div>
-            <time class="muted" data-time></time>
-        </header>
-        <div class="card-body">
-            <div class="card-row"><span class="label">Temsilci:</span> <span data-agent></span></div>
-            <div class="card-row"><span class="label">Mesaj:</span> <span data-count></span></div>
-            <div class="card-row"><span class="label">Duygu:</span> <span class="sentiment-badge" data-sentiment>😐 Nötr</span></div>
-        </div>
-        <footer class="card-actions">
-            <button class="btn-primary btn-open-chat" data-open>Sohbeti Aç</button>
-        </footer>
-    </article>
-</template>
-
-<template id="chat-panel-template">
-    <div class="chat-panel">
-        <header class="chat-panel-header">
-            <div class="chat-panel-title">
-                <span class="status-tag human">LIVE</span>
-                <div>
-                    <div class="chat-panel-session" data-sid></div>
-                    <div class="chat-panel-subtitle">Temsilci: <span data-agent></span> · Giriş: <span data-entered></span></div>
+<!-- TRANSCRIPT MODAL -->
+@if (_showTranscriptModal)
+{
+    <div class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal">
+            <header class="modal-header">
+                <div><h3>Konuşma Geçmişi</h3><p class="muted small">@_transcriptSubtitle</p></div>
+                <button class="btn-icon" @onclick="() => _showTranscriptModal = false">✕</button>
+            </header>
+            <div class="modal-body">
+                <div class="chat-panel-messages">
+                    @if (_transcriptMessages.Count == 0) { <div class="empty-state">Yükleniyor…</div> }
+                    @foreach (var m in _transcriptMessages)
+                    {
+                        <div class="message-@(m.Role)" style="margin:6px 0">
+                            <div class="message-bubble">@m.Content</div>
+                            <div class="muted" style="font-size:10px">@FmtTs(m.Timestamp)</div>
+                        </div>
+                    }
                 </div>
             </div>
-            <span class="sentiment-badge" data-sentiment>😐 Nötr</span>
-            <button class="btn-secondary btn-replan" data-replan-chat title="Bot'un mevcut planını sıfırla">🔄 Yeniden Planla</button>
-            <button class="btn-danger btn-release" data-release>Sohbeti Bitir</button>
-        </header>
-        <div class="chat-panel-messages" data-messages></div>
-        <form class="chat-panel-composer" data-composer>
-            <textarea data-textarea rows="2" placeholder="Kullanıcıya yazın… (Enter: gönder, Shift+Enter: yeni satır)"></textarea>
-            <button type="submit" class="btn-primary">Gönder</button>
-        </form>
-    </div>
-</template>
-
-<template id="history-approval-template">
-    <article class="card card-history">
-        <header class="card-header">
-            <div class="card-title">
-                <span class="tool-tag" data-tool></span>
-                <span class="status-tag" data-status></span>
-                <code class="card-id" data-id></code>
-            </div>
-            <time class="muted" data-time></time>
-        </header>
-        <div class="card-body">
-            <div class="card-row" data-decided-row>
-                <span class="label">Karar:</span> <span data-decided-by></span> · <span data-decision-reason></span>
-            </div>
-        </div>
-    </article>
-</template>
-
-<template id="closed-escalation-compact-template">
-    <article class="card card-history compact-card">
-        <header class="card-header">
-            <div class="card-title">
-                <span class="status-tag" data-status></span>
-                <code class="card-id" data-id></code>
-            </div>
-            <time class="muted" data-time></time>
-        </header>
-        <div class="card-body">
-            <div class="card-row"><span class="label">Agent:</span> <span data-agent></span></div>
-            <div class="card-row"><span class="label">Sebep:</span> <span class="user-query" data-reason></span></div>
-            <details class="card-params"><summary>Çözüm</summary><pre data-resolution></pre></details>
-        </div>
-        <footer class="card-actions compact-actions">
-            <button class="btn-secondary btn-view-transcript" data-view-transcript title="Bu eskalasyona ait konuşma geçmişini göster">💬 Konuşmayı Gör</button>
-        </footer>
-    </article>
-</template>
-
-<template id="history-escalation-template">
-    <article class="card card-history">
-        <header class="card-header">
-            <div class="card-title">
-                <span class="status-tag" data-status></span>
-                <code class="card-id" data-id></code>
-            </div>
-            <time class="muted" data-time></time>
-        </header>
-        <div class="card-body">
-            <div class="card-row"><span class="label">Agent:</span> <span data-agent></span></div>
-            <div class="card-row" data-resolution-row><span class="label">Çözüm:</span> <span data-resolution></span></div>
-        </div>
-    </article>
-</template>
-
-<!-- Transcript Modal -->
-<div class="modal-overlay hidden" id="transcriptModal" role="dialog" aria-modal="true" aria-labelledby="transcriptModalTitle">
-    <div class="modal">
-        <header class="modal-header">
-            <div>
-                <h3 id="transcriptModalTitle">Konuşma Geçmişi</h3>
-                <p class="muted small" id="transcriptModalSubtitle"></p>
-            </div>
-            <button class="btn-icon" id="transcriptModalClose" title="Kapat" aria-label="Kapat">✕</button>
-        </header>
-        <div class="modal-body">
-            <div class="chat-panel-messages" id="transcriptMessages">
-                <div class="empty-state">Yükleniyor…</div>
-            </div>
         </div>
     </div>
-</div>
-
-<!-- Prompt Modal -->
-<div class="modal-overlay hidden" id="promptModal" role="dialog" aria-modal="true" aria-labelledby="promptModalTitle">
-    <form class="modal modal-prompt" id="promptModalForm" autocomplete="off">
-        <header class="modal-header">
-            <div>
-                <h3 id="promptModalTitle">Bilgi gerekiyor</h3>
-                <p class="muted small" id="promptModalSubtitle"></p>
-            </div>
-            <button type="button" class="btn-icon" id="promptModalClose" title="İptal" aria-label="İptal">✕</button>
-        </header>
-        <div class="modal-body modal-prompt-body">
-            <label class="form-label" id="promptModalLabel" for="promptModalInput">Yanıtınız</label>
-            <textarea id="promptModalInput" class="form-control" rows="3" maxlength="500" placeholder="" aria-describedby="promptModalHint"></textarea>
-            <p class="form-hint" id="promptModalHint"></p>
-            <p class="form-error hidden" id="promptModalError"></p>
-        </div>
-        <footer class="modal-footer">
-            <button type="button" class="btn-secondary" id="promptModalCancel">İptal</button>
-            <button type="submit" class="btn-primary" id="promptModalSubmit">Onayla</button>
-        </footer>
-    </form>
-</div>
+}
 
 @code {
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    // ── State ──────────────────────────────────────────────────────────────────
+    private string _activeTab  = "approvals";
+    private bool   _autoRefresh = true;
+    private Timer? _refreshTimer;
+
+    private List<ApprovalRequest>    _pendingApprovals   = [];
+    private List<ApprovalRequest>    _historyApprovals   = [];
+    private List<EscalationRequest>  _openEscalations    = [];
+    private List<EscalationRequest>  _closedEscalations  = [];
+    private List<EscalationRequest>  _historyEscalations = [];
+    private List<ActiveChatSession>  _activeChats        = [];
+    private ActiveChatSession?       _openChatSession;
+    private List<ChatHistoryMessage> _chatMessages       = [];
+    private string                   _chatInput          = string.Empty;
+    private AnalyticsDashboard?      _analytics;
+    private List<LessonProposal>     _proposedLessons    = [];
+    private List<LessonProposal>     _approvedLessons    = [];
+    private bool                     _miningInProgress;
+
+    // ── Prompt modal ───────────────────────────────────────────────────────────
+    private enum PromptKind { None, ApproveApproval, RejectApproval, AckEscalation, ResolveEscalation, DismissEscalation, ReplanEscalation, ReplanChat, ApproveLesson, RejectLesson }
+    private PromptKind _promptKind;
+    private string     _promptId    = string.Empty;
+    private string     _promptTitle = string.Empty;
+    private string     _promptLabel = string.Empty;
+    private string     _promptInput = string.Empty;
+    private bool       _showPromptModal;
+
+    // ── Transcript modal ───────────────────────────────────────────────────────
+    private bool                     _showTranscriptModal;
+    private string                   _transcriptSubtitle = string.Empty;
+    private List<ChatHistoryMessage>  _transcriptMessages = [];
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
     {
-        if (firstRender)
+        await RefreshActiveTabAsync();
+        if (_autoRefresh) StartAutoRefresh();
+    }
+
+    // ── Tabs ──────────────────────────────────────────────────────────────────
+    private string ActiveCls(string tab) => _activeTab == tab ? "active" : string.Empty;
+
+    private async Task SwitchTabAsync(string tab)
+    {
+        _activeTab = tab;
+        await RefreshActiveTabAsync();
+    }
+
+    // ── Refresh ───────────────────────────────────────────────────────────────
+    private async Task RefreshActiveTabAsync()
+    {
+        switch (_activeTab)
         {
-            await JS.InvokeVoidAsync("loadScript", "/js/auth.js", "js-auth");
-            await JS.InvokeVoidAsync("eval", "window.Auth.requireAuth()");
-            await JS.InvokeVoidAsync("loadScript", "/js/admin-nav.js", "js-admin-nav");
-            await JS.InvokeVoidAsync("loadScript", "/js/admin.js", "js-admin");
-            await JS.InvokeVoidAsync("loadScript", "/js/improvements.js", "js-improvements");
+            case "approvals":
+                _pendingApprovals = await AdminApi.GetPendingApprovalsAsync();
+                break;
+            case "escalations":
+                _openEscalations   = await AdminApi.GetOpenEscalationsAsync();
+                var recent         = await AdminApi.GetRecentEscalationsAsync(30);
+                _closedEscalations = recent.Where(e => e.Status is "resolved" or "dismissed").ToList();
+                break;
+            case "chats":
+                _activeChats = await AdminApi.GetActiveChatsAsync();
+                if (_openChatSession is not null)
+                    _chatMessages = await AdminApi.GetChatHistoryAsync(_openChatSession.SessionId);
+                break;
+            case "analytics":
+                _analytics = await AnalyticsApi.GetDashboardAsync();
+                break;
+            case "history":
+                _historyApprovals   = await AdminApi.GetRecentApprovalsAsync(50);
+                _historyEscalations = await AdminApi.GetRecentEscalationsAsync(50);
+                break;
+            case "improvements":
+                _proposedLessons = await AdminApi.GetLessonsAsync("Proposed");
+                _approvedLessons = await AdminApi.GetLessonsAsync("Approved");
+                break;
         }
     }
+
+    // ── Prompt modal ──────────────────────────────────────────────────────────
+    private void ShowPrompt(PromptKind kind, string id, string title, string label)
+    {
+        _promptKind  = kind;
+        _promptId    = id;
+        _promptTitle = title;
+        _promptLabel = label;
+        _promptInput = string.Empty;
+        _showPromptModal = true;
+    }
+
+    private void CancelPrompt() { _showPromptModal = false; }
+
+    private async Task ConfirmPromptAsync()
+    {
+        _showPromptModal = false;
+        var v = _promptInput;
+        _promptInput = string.Empty;
+        switch (_promptKind)
+        {
+            case PromptKind.ApproveApproval:    await AdminApi.ApproveAsync(_promptId, v); break;
+            case PromptKind.RejectApproval:     await AdminApi.RejectAsync(_promptId, v); break;
+            case PromptKind.AckEscalation:      await AdminApi.AcknowledgeAsync(_promptId, v); break;
+            case PromptKind.ResolveEscalation:  await AdminApi.ResolveEscalationAsync(_promptId, v); break;
+            case PromptKind.DismissEscalation:  await AdminApi.DismissAsync(_promptId, v); break;
+            case PromptKind.ReplanEscalation:   await AdminApi.ReplanEscalationAsync(_promptId, v); break;
+            case PromptKind.ReplanChat:         await AdminApi.ReplanChatAsync(_promptId, v); break;
+            case PromptKind.ApproveLesson:      await AdminApi.ApproveLessonAsync(_promptId, v); break;
+            case PromptKind.RejectLesson:       await AdminApi.RejectLessonAsync(_promptId, v); break;
+        }
+        await RefreshActiveTabAsync();
+    }
+
+    // ── Escalation takeover ────────────────────────────────────────────────────
+    private async Task TakeoverAndChatAsync(EscalationRequest e)
+    {
+        if (e.SessionId is null) return;
+        await AdminApi.TakeoverAsync(e.SessionId, "admin");
+        _activeChats = await AdminApi.GetActiveChatsAsync();
+        var session  = _activeChats.FirstOrDefault(s => s.SessionId == e.SessionId)
+                       ?? new ActiveChatSession(e.SessionId, "admin", 0, null, null, DateTimeOffset.UtcNow);
+        await OpenChatPanelAsync(session);
+        await SwitchTabAsync("chats");
+    }
+
+    // ── Chat panel ─────────────────────────────────────────────────────────────
+    private async Task OpenChatPanelAsync(ActiveChatSession s)
+    {
+        _openChatSession = s;
+        _chatMessages    = await AdminApi.GetChatHistoryAsync(s.SessionId);
+    }
+
+    private async Task SendChatMessageAsync()
+    {
+        if (_openChatSession is null || string.IsNullOrWhiteSpace(_chatInput)) return;
+        var text = _chatInput.Trim();
+        _chatInput = string.Empty;
+        await AdminApi.SendChatMessageAsync(_openChatSession.SessionId, text);
+        _chatMessages = await AdminApi.GetChatHistoryAsync(_openChatSession.SessionId);
+    }
+
+    private async Task ReleaseChatAsync()
+    {
+        if (_openChatSession is null) return;
+        await AdminApi.ReleaseAsync(_openChatSession.SessionId);
+        _openChatSession = null;
+        _chatMessages    = [];
+        _activeChats     = await AdminApi.GetActiveChatsAsync();
+    }
+
+    // ── Transcript modal ───────────────────────────────────────────────────────
+    private async Task ShowTranscriptAsync(string? sessionId)
+    {
+        if (sessionId is null) return;
+        _transcriptSubtitle  = $"Session: {sessionId[..Math.Min(8, sessionId.Length)]}…";
+        _transcriptMessages  = await AdminApi.GetChatHistoryAsync(sessionId);
+        _showTranscriptModal = true;
+    }
+
+    // ── Improvements ──────────────────────────────────────────────────────────
+    private async Task MineImprovementsAsync()
+    {
+        _miningInProgress = true;
+        await AdminApi.MineImprovementsAsync();
+        _miningInProgress = false;
+        _proposedLessons  = await AdminApi.GetLessonsAsync("Proposed");
+    }
+
+    // ── Analytics helper ───────────────────────────────────────────────────────
+    private RenderFragment RenderDist(string title, Dictionary<string, int>? dist)
+    {
+        if (dist is null || dist.Count == 0)
+            return @<div class="analytics-chart-card"><h3>@title</h3><div class="empty-state" style="padding:12px">Veri yok.</div></div>;
+
+        var total  = dist.Values.Sum();
+        var sorted = dist.OrderByDescending(x => x.Value).ToList();
+        return @<div class="analytics-chart-card">
+            <h3>@title</h3>
+            @foreach (var kvp in sorted)
+            {
+                var pct = total > 0 ? (int)Math.Round(kvp.Value * 100.0 / total) : 0;
+                <div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px">
+                    <div style="min-width:110px;color:var(--color-text-secondary)">@kvp.Key</div>
+                    <div style="flex:1;height:6px;background:var(--color-surface-alt);border-radius:3px">
+                        <div style="width:@(pct)%;height:100%;background:var(--color-primary);border-radius:3px"></div>
+                    </div>
+                    <div style="min-width:60px;text-align:right">@kvp.Value (@(pct)%)</div>
+                </div>
+            }
+        </div>;
+    }
+
+    // ── Timer ─────────────────────────────────────────────────────────────────
+    private void StartAutoRefresh()
+    {
+        _refreshTimer?.Dispose();
+        _refreshTimer = new Timer(async _ => await InvokeAsync(async () =>
+        {
+            await RefreshActiveTabAsync();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+    }
+
+    private void OnAutoRefreshChanged()
+    {
+        if (_autoRefresh) StartAutoRefresh();
+        else { _refreshTimer?.Dispose(); _refreshTimer = null; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_refreshTimer is not null) await _refreshTimer.DisposeAsync();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static string ShortId(string? id) =>
+        id is null ? "—" : id[..Math.Min(8, id.Length)] + "…";
+
+    private static string FmtRelative(DateTimeOffset dt)
+    {
+        var d = DateTimeOffset.UtcNow - dt;
+        if (d.TotalSeconds < 60)  return $"{(int)d.TotalSeconds}s önce";
+        if (d.TotalMinutes < 60)  return $"{(int)d.TotalMinutes}dk önce";
+        if (d.TotalHours   < 24)  return $"{(int)d.TotalHours}sa önce";
+        return dt.LocalDateTime.ToShortDateString();
+    }
+
+    private static string FmtTs(DateTimeOffset dt) => dt.LocalDateTime.ToString("HH:mm:ss");
 }

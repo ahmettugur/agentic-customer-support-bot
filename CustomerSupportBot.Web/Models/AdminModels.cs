@@ -1,0 +1,135 @@
+namespace CustomerSupportBot.Web.Models;
+
+// ─── Approvals ────────────────────────────────────────────────────────────────
+
+public sealed record ApprovalRequest(
+    string Id,
+    string ToolName,
+    string? AgentName,
+    string? UserQuery,
+    string? SessionId,
+    object? Parameters,
+    string Status,
+    DateTimeOffset RequestedAt,
+    DateTimeOffset? DecidedAt,
+    string? DecidedBy,
+    string? DecisionReason
+);
+
+// ─── Escalations ─────────────────────────────────────────────────────────────
+
+public sealed record EscalationRequest(
+    string Id,
+    string? AgentName,
+    string? AssignedTo,
+    string? Reason,
+    string? UserQuery,
+    string? SessionId,
+    string Status,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ResolvedAt,
+    string? Resolution,
+    string[]? MissingContext,
+    string? ResponseSummary
+);
+
+// ─── Chat Sessions ────────────────────────────────────────────────────────────
+
+public sealed record ActiveChatSession(
+    string SessionId,
+    string? HumanAgent,
+    int MessageCount,
+    string? SentimentLabel,
+    double? SentimentScore,
+    DateTimeOffset EnteredHumanModeAt
+);
+
+public sealed record ChatHistoryMessage(
+    string Role,
+    string Content,
+    DateTimeOffset Timestamp
+);
+
+// ─── Analytics ───────────────────────────────────────────────────────────────
+
+public sealed record AnalyticsDashboard(
+    int TotalSessions,
+    int TotalMessages,
+    double AverageRating,
+    int TotalRatings,
+    double AverageMessagesPerSession,
+    double AverageSentimentScore,
+    int NegativeSessions,
+    int SentimentAlerts,
+    Dictionary<string, int>? RatingDistribution,
+    Dictionary<string, int>? SentimentDistribution,
+    Dictionary<string, int>? IntentDistribution,
+    Dictionary<string, int>? PhaseDistribution,
+    ApprovalStats? ApprovalStats,
+    EscalationStats? EscalationStats,
+    RecentRating[]? RecentRatings
+);
+
+public sealed record ApprovalStats(int Total, int Approved, int Rejected, int TimedOut);
+public sealed record EscalationStats(int Total, int Resolved, int Dismissed);
+public sealed record RecentRating(string SessionId, int Stars, string? Feedback, DateTimeOffset RatedAt);
+
+public sealed record SessionSummary(string SessionId, DateTimeOffset LastActivity, int MessageCount);
+
+// ─── Agents ──────────────────────────────────────────────────────────────────
+
+public sealed record AgentInfo(string Id, string DisplayName, bool IsActive);
+
+// ─── SLA ─────────────────────────────────────────────────────────────────────
+
+public sealed record SlaStatus(
+    bool Enabled,
+    int PollIntervalSeconds,
+    SlaApprovalStats? Approvals,
+    SlaEscalationStats? Escalations
+);
+
+public sealed record SlaApprovalStats(
+    int PendingCount,
+    double? OldestSeconds,
+    double WarnAfter,
+    double BreachAfter,
+    string? OnBreach,
+    int BreachCountRecent
+);
+
+public sealed record SlaEscalationStats(
+    int OpenCount,
+    double? OldestSeconds,
+    double WarnAfter,
+    double BreachAfter,
+    bool BoostPriorityOnBreach,
+    int BreachCountRecent
+);
+
+public sealed record SlaEvent(
+    DateTimeOffset Timestamp,
+    string Kind,
+    string Severity,
+    string TargetId,
+    string? Action,
+    double? AgeSeconds,
+    string? Note
+);
+
+public sealed record SlaEventsResponse(int TotalCount, List<SlaEvent> Items);
+
+// ─── Improvements ──────────────────────────────────────────────────────────────
+
+public sealed record LessonProposal(
+    string Id,
+    string? Title,
+    string? LessonText,
+    string? Observation,
+    string? SuggestedAgent,
+    string[]? SourceTraceIds,
+    string Status,
+    string? DecidedBy,
+    DateTimeOffset? DecidedAt,
+    string? DecisionReason
+);

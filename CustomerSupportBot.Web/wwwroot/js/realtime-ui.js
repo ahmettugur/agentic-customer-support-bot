@@ -311,6 +311,9 @@
             setStatus('idle');
         };
 
+        // Blazor tarafından çağrılabilir (ör. human_joined → sesli kanalı kapat)
+        window.__stopVoice = stop;
+
         // Sesli butonu — modlar mutually exclusive: aktif farklı modu durdur, istenen modu başlat
         voiceBtn.addEventListener('click', () => {
             if (activeMode === 'bridge') stop();

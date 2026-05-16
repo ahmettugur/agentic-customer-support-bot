@@ -1,43 +1,46 @@
 @page "/workflow-designer"
-@layout EmptyLayout
-@inject IJSRuntime JS
+@attribute [Authorize]
+@layout AdminLayout
+@inject WorkflowApiService WorkflowApi
 
-<link rel="stylesheet" href="css/admin.css" />
-<style>
-    body { font-family: system-ui, sans-serif; margin: 0; background: #f9fafb; }
-    .wf-container { padding: 20px; max-width: 1200px; margin: 0 auto; }
-    .layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; margin-top: 16px; }
-    .row--mt12 { margin-top: 12px; }
-    .input--flex { flex: 1; padding: 6px; }
-    .panel { border: 1px solid #ddd; border-radius: 6px; padding: 12px; background: #fafafa; }
-    textarea { width: 100%; font-family: 'Consolas', monospace; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; padding: 8px; }
-    .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
-    .row > label { min-width: 100px; }
-    button { padding: 6px 14px; cursor: pointer; border: 1px solid #888; background: #fff; border-radius: 4px; }
-    button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-    button.danger { background: #dc2626; color: #fff; border-color: #dc2626; }
-    .list-item { padding: 8px; border: 1px solid #ddd; margin: 4px 0; border-radius: 4px; cursor: pointer; }
-    .list-item:hover { background: #eef; }
-    .list-item.active { background: #dbeafe; border-color: #2563eb; }
-    .badge { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 11px; background: #e5e7eb; }
-    .badge.active { background: #d1fae5; color: #065f46; }
-    .badge.inactive { background: #fee2e2; color: #991b1b; }
-    pre { background: #f3f4f6; padding: 8px; border-radius: 4px; max-height: 320px; overflow: auto; font-size: 12px; }
-    h2, h3 { margin: 8px 0; }
-    .muted { color: #666; font-size: 12px; }
-</style>
+<link rel="stylesheet" href="css/workflow.css" />
 
 <div class="wf-container">
     <h1>🔧 Workflow Designer</h1>
     <p class="muted">Low-code workflow tanımları (admin). LLM-siz, deterministik, mevcut tool'ları (yan etkisiz olanlar) zincirler.</p>
 
+    @if (!string.IsNullOrEmpty(_errorMsg))
+    {
+        <div style="color:#dc2626;margin-bottom:8px;">⚠ @_errorMsg</div>
+    }
+
     <div class="layout">
         <!-- LEFT: list + actions -->
         <div class="panel">
             <h3>Workflow'lar</h3>
-            <button id="newBtn" class="primary">+ Yeni</button>
-            <button id="reloadBtn">Yenile</button>
-            <div id="list" class="row--mt12"></div>
+            <button class="primary" @onclick="NewWorkflow">+ Yeni</button>
+            <button @onclick="LoadListAsync">Yenile</button>
+            <div class="row--mt12">
+                @if (_list.Count == 0)
+                {
+                    <p class="muted">Henüz workflow yok.</p>
+                }
+                else
+                {
+                    @foreach (var item in _list)
+                    {
+                        <div class="list-item @(_currentId == item.Id ? "active" : "")"
+                             @onclick="() => LoadDefAsync(item.Id)"
+                             role="button" tabindex="0">
+                            <strong>@item.Name</strong>
+                            <span class="badge @(item.IsActive ? "active" : "inactive")">
+                                @(item.IsActive ? "aktif" : "pasif")
+                            </span>
+                            <div class="muted">@item.Id · v@item.Version · @item.StepCount adım</div>
+                        </div>
+                    }
+                }
+            </div>
         </div>
 
         <!-- RIGHT: editor + tester -->
@@ -45,14 +48,17 @@
             <h3>Tanım (JSON)</h3>
             <p class="muted">
                 Adım tipleri: <code>Respond</code> (template), <code>Lookup</code> (tool çağrı),
-                <code>Branch</code> (koşul), <code>SetVariable</code>. Yan etkili tool'lar (sipariş/şikayet) izin verilmez.
+                <code>Branch</code> (koşul), <code>SetVariable</code>. Yan etkili tool'lar izin verilmez.
             </p>
-            <textarea id="editor" rows="22" aria-label="Workflow JSON tanımı" placeholder="Workflow JSON tanımı…"></textarea>
+            <textarea rows="22" aria-label="Workflow JSON tanımı" placeholder="Workflow JSON tanımı…"
+                      @bind="_editorJson" @bind:event="oninput"></textarea>
 
             <div class="row row--mt12">
-                <button id="saveBtn" class="primary">💾 Kaydet</button>
-                <button id="deleteBtn" class="danger">🗑️ Sil</button>
-                <span class="muted" id="meta"></span>
+                <button class="primary" @onclick="SaveAsync" disabled="@_saving">
+                    @(_saving ? "Kaydediliyor…" : "💾 Kaydet")
+                </button>
+                <button class="danger" @onclick="DeleteAsync" disabled="@(_currentId is null)">🗑️ Sil</button>
+                <span class="muted">@_meta</span>
             </div>
 
             <hr />
@@ -60,23 +66,80 @@
             <h3>Test Çalıştır</h3>
             <div class="row">
                 <label>User input:</label>
-                <input id="testInput" type="text" class="input--flex" placeholder="ör. ORD-1 durumu nedir" />
-                <button id="testBtn">▶ Test</button>
+                <input type="text" class="input--flex" placeholder="ör. ORD-1 durumu nedir"
+                       @bind="_testInput" @bind:event="oninput" />
+                <button @onclick="RunTestAsync" disabled="@(_currentId is null)">▶ Test</button>
             </div>
-            <pre id="testResult">// sonuçlar burada</pre>
+            <pre>@_testResult</pre>
         </div>
     </div>
 </div>
 
 @code {
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private List<WorkflowListEntry> _list = [];
+    private string?  _currentId;
+    private string   _editorJson = string.Empty;
+    private string   _meta       = string.Empty;
+    private string   _testInput  = string.Empty;
+    private string   _testResult = "// sonuçlar burada";
+    private bool     _saving;
+    private string?  _errorMsg;
+
+
+    protected override async Task OnInitializedAsync() => await LoadListAsync();
+
+    private async Task LoadListAsync()
     {
-        if (firstRender)
-        {
-            await JS.InvokeVoidAsync("loadScript", "/js/auth.js", "js-auth");
-            await JS.InvokeVoidAsync("eval", "window.Auth.requireAuth()");
-            await JS.InvokeVoidAsync("loadScript", "/js/admin-nav.js", "js-admin-nav");
-            await JS.InvokeVoidAsync("loadScript", "/js/workflow-designer.js", "js-workflow-designer");
-        }
+        _errorMsg = null;
+        _list = await WorkflowApi.GetListAsync();
+    }
+
+    private async Task LoadDefAsync(string id)
+    {
+        var raw = await WorkflowApi.GetRawAsync(id);
+        if (raw is null) { _errorMsg = $"Workflow yüklenemedi: {id}"; return; }
+        _currentId  = id;
+        _editorJson = raw;
+        _meta       = $"id: {id}";
+        _errorMsg   = null;
+    }
+
+    private void NewWorkflow()
+    {
+        _currentId  = null;
+        _editorJson = WorkflowDefaults.SampleJson;
+        _meta       = string.Empty;
+        _errorMsg   = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _errorMsg = null;
+        _saving   = true;
+        var (ok, err, savedId) = await WorkflowApi.SaveAsync(_currentId, _editorJson);
+        _saving = false;
+        if (!ok) { _errorMsg = err; return; }
+        _currentId = savedId;
+        _meta      = $"id: {savedId}";
+        await LoadListAsync();
+        if (savedId is not null) await LoadDefAsync(savedId);
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_currentId is null) return;
+        var (ok, err) = await WorkflowApi.DeleteAsync(_currentId);
+        if (!ok) { _errorMsg = err; return; }
+        _currentId  = null;
+        _editorJson = string.Empty;
+        _meta       = string.Empty;
+        await LoadListAsync();
+    }
+
+    private async Task RunTestAsync()
+    {
+        if (_currentId is null) return;
+        _testResult = "Çalıştırılıyor…";
+        _testResult = await WorkflowApi.TestAsync(_currentId, _testInput);
     }
 }

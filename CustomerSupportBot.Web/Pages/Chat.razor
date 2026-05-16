@@ -1,10 +1,13 @@
 @page "/"
 @layout EmptyLayout
 @inject IJSRuntime JS
+@inject ChatApiService ChatApi
+@inject HttpClient Http
+@implements IAsyncDisposable
+@using System.Text.Json
+@using Markdig
 
 <div class="app-layout">
-
-    <!-- CHAT PANEL -->
     <div class="chat-panel">
 
         <!-- HEADER -->
@@ -16,94 +19,225 @@
                 <div class="header-info">
                     <h1>Müşteri Destek Asistanı</h1>
                     <div class="header-status">
-                        <span class="status-dot"></span>
-                        <span>Çevrimiçi</span>
+                        <span class="status-dot @(_humanMode ? "human" : "")"></span>
+                        <span>@(_humanMode ? $"Temsilci: {_humanAgent}" : "Çevrimiçi")</span>
                     </div>
                 </div>
             </div>
+            @if (_messages.Count > 0)
+            {
+                <button class="btn-new-chat" @onclick="NewChatAsync" title="Yeni sohbet">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                    Yeni Sohbet
+                </button>
+            }
         </header>
 
         <!-- MESAJLAR -->
         <main class="messages" id="messages">
-            <div class="welcome" id="welcome">
-                <div class="welcome-icon">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z" />
-                    </svg>
+            @if (_messages.Count == 0)
+            {
+                <div class="welcome" id="welcome">
+                    <div class="welcome-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z" />
+                        </svg>
+                    </div>
+                    <h2>Merhaba, hoş geldiniz!</h2>
+                    <p>Size nasıl yardımcı olabilirim? Aşağıdaki konulardan birini seçebilir veya doğrudan sorunuzu yazabilirsiniz.</p>
+                    <div class="examples">
+                        <button class="example-chip" @onclick='() => SendChipMessage("Dell XPS 15 hakkında bilgi verir misiniz?")'>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                            Ürün bilgisi
+                        </button>
+                        <button class="example-chip" @onclick='() => SendChipMessage("2 adet Apple iPhone 15 Pro sipariş vermek istiyorum")'>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+                            Sipariş ver
+                        </button>
+                        <button class="example-chip" @onclick='() => SendChipMessage("ORD-1 numaralı siparişimin durumu nedir?")'>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><path d="m7.5 4.27 9 5.15"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" x2="12" y1="22" y2="12"/><path d="m17 13 5 5m-5 0 5-5"/></svg>
+                            Sipariş durumu
+                        </button>
+                        <button class="example-chip" @onclick='() => SendChipMessage("ORD-2 siparişim çok geç geldi, şikayet etmek istiyorum")'>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            Şikayet bildirimi
+                        </button>
+                    </div>
                 </div>
-                <h2>Merhaba, hoş geldiniz!</h2>
-                <p>Size nasıl yardımcı olabilirim? Aşağıdaki konulardan birini seçebilir veya doğrudan sorunuzu
-                    yazabilirsiniz.</p>
-                <div class="examples">
-                    <button class="example-chip" data-text="Dell XPS 15 hakkında bilgi verir misiniz?">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="11" cy="11" r="8" />
-                            <path d="m21 21-4.3-4.3" />
-                        </svg>
-                        Ürün bilgisi
-                    </button>
-                    <button class="example-chip" data-text="2 adet Apple iPhone 15 Pro sipariş vermek istiyorum">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="8" cy="21" r="1" />
-                            <circle cx="19" cy="21" r="1" />
-                            <path
-                                d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
-                        </svg>
-                        Sipariş ver
-                    </button>
-                    <button class="example-chip" data-text="ORD-1 numaralı siparişimin durumu nedir?">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path
-                                d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14" />
-                            <path d="m7.5 4.27 9 5.15" />
-                            <polyline points="3.29 7 12 12 20.71 7" />
-                            <line x1="12" x2="12" y1="22" y2="12" />
-                            <path d="m17 13 5 5m-5 0 5-5" />
-                        </svg>
-                        Sipariş durumu
-                    </button>
-                    <button class="example-chip" data-text="ORD-2 siparişim çok geç geldi, şikayet etmek istiyorum">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                        </svg>
-                        Şikayet bildirimi
-                    </button>
+            }
+            else
+            {
+                @foreach (var msg in _messages)
+                {
+                    @if (msg.Role == "user")
+                    {
+                        <div class="message user">
+                            <div class="message-avatar">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            </div>
+                            <div class="message-content">
+                                <div class="message-bubble">@msg.Content</div>
+                            </div>
+                        </div>
+                    }
+                    else if (msg.Role is "assistant" or "agent")
+                    {
+                        <div class="message bot @(msg.IsStreaming ? "streaming" : "")">
+                            <div class="message-avatar">
+                                <img class="avatar-img" src="images/chatbot.png" alt="Bot" />
+                            </div>
+                            <div class="message-content">
+                                @if (!string.IsNullOrEmpty(msg.ReasoningText) || msg.ReasoningData.HasValue)
+                                {
+                                    <details class="reasoning-panel @(msg.IsStreaming ? "streaming" : "")" open>
+                                        <summary class="reasoning-summary">
+                                            <span class="reasoning-icon">🧠</span>
+                                            <span class="reasoning-label">Düşünce süreci</span>
+                                            @if (msg.IsStreaming)
+                                            {
+                                                <span class="reasoning-dots inline"><span></span><span></span><span></span></span>
+                                            }
+                                            else if (msg.ReasoningData.HasValue)
+                                            {
+                                                <span class="reasoning-badge">@(GetJsonString(msg.ReasoningData.Value, "confidence") ?? "orta")</span>
+                                            }
+                                            <span class="reasoning-chevron">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                                            </span>
+                                        </summary>
+                                        <div class="reasoning-body">
+                                            @if (msg.ReasoningData.HasValue)
+                                            {
+                                                @RenderReasoningBody(msg.ReasoningData.Value)
+                                            }
+                                            else if (msg.IsStreaming)
+                                            {
+                                                <div class="reasoning-section-text">@ExtractAnalysisFromPartialJson(msg.ReasoningText)</div>
+                                            }
+                                            else
+                                            {
+                                                <div class="reasoning-section-text">@msg.ReasoningText</div>
+                                            }
+                                        </div>
+                                    </details>
+                                }
+                                else if (msg.IsStreaming && string.IsNullOrEmpty(msg.Content))
+                                {
+                                    <div class="reasoning-pending">
+                                        <span>🧠 Düşünüyor</span>
+                                        <span class="reasoning-dots"><span></span><span></span><span></span></span>
+                                    </div>
+                                }
+                                <div class="message-bubble @(msg.IsStreaming ? "streaming-bubble" : "md")">
+                                    @if (msg.IsStreaming)
+                                    {
+                                        <span class="streaming-text">@msg.Content</span><span class="streaming-cursor"></span>
+                                    }
+                                    else
+                                    {
+                                        @RenderMd(msg.Content)
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else if (msg.Role == "human")
+                    {
+                        <div class="message human">
+                            <div class="message-avatar">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                            </div>
+                            <div class="message-content">
+                                @if (!string.IsNullOrEmpty(_humanAgent))
+                                {
+                                    <div class="human-agent-label">@_humanAgent</div>
+                                }
+                                <div class="message-bubble human-bubble">@msg.Content</div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="system-notice">@msg.Content</div>
+                    }
+                }
+                @if (_showTypingIndicator)
+                {
+                    <div class="message bot">
+                        <div class="message-avatar">
+                            <img class="avatar-img" src="images/chatbot.png" alt="Bot" />
+                        </div>
+                        <div class="message-bubble">
+                            <div class="typing-indicator"><span></span><span></span><span></span></div>
+                        </div>
+                    </div>
+                }
+            }
+        </main>
+
+        <!-- RATING -->
+        @if (_showRating && !_ratingSubmitted)
+        {
+            <div class="rating-widget">
+                <div class="rating-widget-inner">
+                    <div class="rating-widget-header">
+                        <span class="rating-widget-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        </span>
+                        <span>Bu sohbeti nasıl buldunuz?</span>
+                    </div>
+                    <div class="rating-stars">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            var star = i;
+                            <button class="rating-star @(_selectedRating.HasValue && _selectedRating.Value >= star ? "active" : "")"
+                                    @onclick="() => _selectedRating = star">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="@(_selectedRating.HasValue && _selectedRating.Value >= star ? "currentColor" : "none")" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                            </button>
+                        }
+                    </div>
+                    <div class="rating-label">@(_selectedRating switch { 1 => "Çok kötü", 2 => "Kötü", 3 => "Orta", 4 => "İyi", 5 => "Harika!", _ => "" })</div>
+                    @if (_selectedRating.HasValue)
+                    {
+                        <textarea class="rating-feedback" rows="2" placeholder="Yorumunuz (isteğe bağlı)" @bind="_ratingFeedback"></textarea>
+                        <div class="rating-actions">
+                            <button class="rating-submit" @onclick="SubmitRatingAsync">Gönder</button>
+                            <button class="rating-skip" @onclick="() => _showRating = false">Daha sonra</button>
+                        </div>
+                    }
                 </div>
             </div>
-        </main>
+        }
 
         <!-- INPUT ALANI -->
         <footer class="input-area">
             <div class="input-wrapper">
-                <input type="text" id="userInput" placeholder="Bir mesaj yazın..." autocomplete="off" />
-                <button id="voiceBtn" title="Sesli Asistan (tam pipeline — sipariş/şikayet desteği)"
-                    aria-label="Sesli konuşmayı başlat" class="btn-voice">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="9" y="2" width="6" height="12" rx="3" />
-                        <path d="M5 10v2a7 7 0 0 0 14 0v-2" />
-                        <line x1="12" y1="19" x2="12" y2="22" />
+                <input type="text"
+                       id="userInput"
+                       placeholder="Bir mesaj yazın..."
+                       autocomplete="off"
+                       @bind="_input"
+                       @bind:event="oninput"
+                       @onkeydown="HandleKeyDown"
+                       disabled="@_isStreaming" />
+                <button id="voiceBtn" title="Sesli Asistan (tam pipeline)" aria-label="Sesli konuşmayı başlat" class="btn-voice">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="2" width="6" height="12" rx="3"/>
+                        <path d="M5 10v2a7 7 0 0 0 14 0v-2"/>
+                        <line x1="12" y1="19" x2="12" y2="22"/>
                     </svg>
                 </button>
-                <button id="voiceNativeBtn"
-                    title="Hızlı Sesli (yalnızca ürün/sipariş sorgusu — sipariş oluşturma/şikayet için yazılı sohbeti kullanın)"
-                    aria-label="Hızlı sesli modu başlat" class="btn-voice btn-voice-native">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                <button id="voiceNativeBtn" title="Hızlı Sesli" aria-label="Hızlı sesli modu başlat" class="btn-voice btn-voice-native">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                     </svg>
                 </button>
-                <button id="sendBtn" title="Gönder" aria-label="Mesaj gönder">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path
-                            d="M3.714 3.048a.498.498 0 0 0-.683.627l2.843 7.627a2 2 0 0 1 0 1.396l-2.842 7.627a.498.498 0 0 0 .682.627l18.168-8.215a.5.5 0 0 0 0-.904z" />
-                        <path d="M6 12h16" />
+                <button id="sendBtn" title="Gönder" aria-label="Mesaj gönder" @onclick="HandleSendAsync" disabled="@_isStreaming">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3.714 3.048a.498.498 0 0 0-.683.627l2.843 7.627a2 2 0 0 1 0 1.396l-2.842 7.627a.498.498 0 0 0 .682.627l18.168-8.215a.5.5 0 0 0 0-.904z"/>
+                        <path d="M6 12h16"/>
                     </svg>
                 </button>
             </div>
@@ -119,17 +253,387 @@
 </div>
 
 @code {
+    // ── Message model ─────────────────────────────────────────────────────────
+    private sealed class ChatMsg
+    {
+        public string Role          { get; set; } = "user";
+        public string Content       { get; set; } = "";
+        public string ReasoningText { get; set; } = "";
+        public JsonElement? ReasoningData { get; set; }
+        public bool   IsStreaming   { get; set; }
+    }
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    private readonly List<ChatMsg> _messages = [];
+    private string?  _sessionId;
+    private string   _input             = string.Empty;
+    private bool     _isStreaming;
+    private bool     _humanMode;
+    private string?  _humanAgent;
+    private bool     _showTypingIndicator;
+    private bool     _showRating;
+    private int?     _selectedRating;
+    private string   _ratingFeedback    = string.Empty;
+    private bool     _ratingSubmitted;
+    private ChatMsg? _currentBot;
+    private string   _apiBase           = string.Empty;
+    private DotNetObjectReference<Chat>? _dotNetRef;
+
+    // ── Markdown ──────────────────────────────────────────────────────────────
+    private static readonly Markdig.MarkdownPipeline _mdPipeline =
+        new Markdig.MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+
+    private static MarkupString RenderMd(string text) =>
+        new(Markdig.Markdown.ToHtml(text ?? "", _mdPipeline));
+
+    // ── Reasoning helpers ───────────────────────────────────────────────────
+    private static string ExtractAnalysisFromPartialJson(string raw)
+    {
+        const string marker = "\"analysis\"";
+        var idx = raw.IndexOf(marker, StringComparison.Ordinal);
+        if (idx < 0) return "";
+        // Find the opening quote of the value
+        var afterKey = idx + marker.Length;
+        var colonIdx = raw.IndexOf(':', afterKey);
+        if (colonIdx < 0) return "";
+        var quoteStart = raw.IndexOf('"', colonIdx + 1);
+        if (quoteStart < 0) return "";
+        // Extract until closing quote or end of string
+        var valueStart = quoteStart + 1;
+        var quoteEnd = -1;
+        for (int i = valueStart; i < raw.Length; i++)
+        {
+            if (raw[i] == '\\') { i++; continue; }
+            if (raw[i] == '"') { quoteEnd = i; break; }
+        }
+        return quoteEnd > valueStart
+            ? raw[valueStart..quoteEnd]
+            : raw[valueStart..];
+    }
+
+    private static string? GetJsonString(JsonElement el, string prop)
+    {
+        if (el.TryGetProperty(prop, out var v))
+        {
+            if (v.ValueKind == JsonValueKind.String) return v.GetString();
+            if (v.ValueKind == JsonValueKind.Number) return v.ToString();
+        }
+        return null;
+    }
+
+    private static string GetStepDescription(JsonElement step)
+    {
+        if (step.ValueKind == JsonValueKind.String) return step.GetString() ?? "";
+        if (step.ValueKind == JsonValueKind.Object)
+        {
+            return GetJsonString(step, "description")
+                ?? GetJsonString(step, "step")
+                ?? GetJsonString(step, "label")
+                ?? step.ToString();
+        }
+        return step.ToString();
+    }
+
+    private static List<(string Css, string Label)> GetStepChips(JsonElement step)
+    {
+        var chips = new List<(string, string)>();
+        if (step.ValueKind != JsonValueKind.Object) return chips;
+        var grounding = GetJsonString(step, "grounding");
+        if (!string.IsNullOrEmpty(grounding))
+            chips.Add((grounding == "assumption" ? "step-chip warn" : "step-chip", grounding));
+        if (step.TryGetProperty("confidence", out var c) && c.ValueKind == JsonValueKind.Number)
+            chips.Add(("step-chip conf", $"{(int)(c.GetDouble() * 100)}%"));
+        var action = GetJsonString(step, "action");
+        if (!string.IsNullOrEmpty(action))
+            chips.Add(("step-chip action", action));
+        return chips;
+    }
+
+    private static MarkupString RenderReasoningBody(JsonElement rd)
+    {
+        var sb = new System.Text.StringBuilder();
+        // Analiz
+        var analysis = GetJsonString(rd, "analysis");
+        if (!string.IsNullOrEmpty(analysis))
+        {
+            sb.Append("<div class=\"reasoning-section\"><div class=\"reasoning-section-title\">Analiz</div>");
+            sb.Append("<div class=\"reasoning-section-text\">").Append(System.Net.WebUtility.HtmlEncode(analysis)).Append("</div></div>");
+        }
+        // Adımlar
+        if (rd.TryGetProperty("steps", out var stepsEl) && stepsEl.ValueKind == JsonValueKind.Array && stepsEl.GetArrayLength() > 0)
+        {
+            sb.Append("<div class=\"reasoning-section\"><div class=\"reasoning-section-title\">Adımlar</div><ol class=\"reasoning-steps\">");
+            foreach (var step in stepsEl.EnumerateArray())
+            {
+                sb.Append("<li><span class=\"step-text\">").Append(System.Net.WebUtility.HtmlEncode(GetStepDescription(step))).Append("</span>");
+                var chips = GetStepChips(step);
+                if (chips.Count > 0)
+                {
+                    sb.Append("<span class=\"step-chips\">");
+                    foreach (var (css, label) in chips)
+                        sb.Append("<span class=\"").Append(css).Append("\">").Append(System.Net.WebUtility.HtmlEncode(label)).Append("</span>");
+                    sb.Append("</span>");
+                }
+                sb.Append("</li>");
+            }
+            sb.Append("</ol></div>");
+        }
+        // Meta
+        var intent = GetJsonString(rd, "intent");
+        string? reqInfo = null;
+        if (rd.TryGetProperty("requiredInfo", out var ri) && ri.ValueKind == JsonValueKind.Array)
+            reqInfo = string.Join(", ", ri.EnumerateArray().Select(x => x.GetString() ?? ""));
+        if ((!string.IsNullOrEmpty(intent) && intent != "bilinmiyor") || !string.IsNullOrEmpty(reqInfo))
+        {
+            sb.Append("<div class=\"reasoning-meta\">");
+            if (!string.IsNullOrEmpty(intent) && intent != "bilinmiyor")
+                sb.Append("<span class=\"reasoning-tag\">Niyet: ").Append(System.Net.WebUtility.HtmlEncode(intent)).Append("</span>");
+            if (!string.IsNullOrEmpty(reqInfo))
+                sb.Append("<span class=\"reasoning-tag\">Gerekli: ").Append(System.Net.WebUtility.HtmlEncode(reqInfo)).Append("</span>");
+            sb.Append("</div>");
+        }
+        // Alt görevler
+        if (rd.TryGetProperty("subTasks", out var subTasks) && subTasks.ValueKind == JsonValueKind.Array && subTasks.GetArrayLength() >= 2)
+        {
+            sb.Append("<div class=\"reasoning-section reasoning-subtasks\">");
+            sb.Append("<div class=\"reasoning-section-title\">Alt görevler <span class=\"subtask-count\">").Append(subTasks.GetArrayLength()).Append("</span></div>");
+            sb.Append("<ul class=\"subtask-list\">");
+            foreach (var st in subTasks.EnumerateArray())
+            {
+                sb.Append("<li class=\"subtask-item\">");
+                sb.Append("<span class=\"subtask-order\">#").Append(System.Net.WebUtility.HtmlEncode(GetJsonString(st, "order") ?? "?")).Append("</span>");
+                sb.Append("<span class=\"subtask-agent\">").Append(System.Net.WebUtility.HtmlEncode(GetJsonString(st, "targetAgent") ?? "?")).Append("</span>");
+                sb.Append("<span class=\"subtask-desc\">").Append(System.Net.WebUtility.HtmlEncode(GetJsonString(st, "description") ?? "")).Append("</span>");
+                sb.Append("</li>");
+            }
+            sb.Append("</ul></div>");
+        }
+        return new MarkupString(sb.ToString());
+    }
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!firstRender) return;
+
+        _dotNetRef = DotNetObjectReference.Create(this);
+        _apiBase   = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        await JS.InvokeVoidAsync("eval", ChatBridgeScript.Setup);
+        await JS.InvokeVoidAsync("__chatSetup", _dotNetRef, _apiBase);
+
+        await JS.InvokeVoidAsync("loadScript", "/js/realtime-client.js", "js-realtime-client");
+        await JS.InvokeVoidAsync("loadScript", "/js/realtime-ui.js", "js-realtime-ui");
+    }
+
+    // ── Send ──────────────────────────────────────────────────────────────────
+    private async Task HandleSendAsync()
+    {
+        var text = _input.Trim();
+        if (string.IsNullOrEmpty(text) || _isStreaming) return;
+        _input = string.Empty;
+        await SendAsync(text);
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+            await HandleSendAsync();
+    }
+
+    private async Task SendChipMessage(string text) => await SendAsync(text);
+
+    [JSInvokable]
+    public async Task VoiceSendMessage(string text) =>
+        await InvokeAsync(async () => await SendAsync(text));
+
+    [JSInvokable]
+    public void VoiceSetSession(string id)
+    {
+        if (!string.IsNullOrEmpty(id) && _sessionId != id)
+            _sessionId = id;
+    }
+
+    [JSInvokable]
+    public async Task NewChatFromVoice() =>
+        await InvokeAsync(NewChatAsync);
+
+    private async Task SendAsync(string text)
+    {
+        _messages.Add(new ChatMsg { Role = "user", Content = text });
+        _currentBot = new ChatMsg { Role = "assistant", IsStreaming = true };
+        _messages.Add(_currentBot);
+        _isStreaming = true;
+        StateHasChanged();
+        await ScrollBottomAsync();
+        // Streaming is handled by JS fetch → OnStreamEvent / OnStreamComplete / OnStreamError callbacks
+        await JS.InvokeVoidAsync("__streamChat", _dotNetRef, _apiBase, text, _sessionId);
+    }
+
+    [JSInvokable]
+    public void OnStreamEvent(string type, string data)
+    {
+        if (_currentBot is null) return;
+        JsonElement jd;
+        try { jd = JsonSerializer.Deserialize<JsonElement>(data.Length > 0 ? data : "{}"); }
+        catch { jd = default; }
+
+        switch (type)
         {
-            await JS.InvokeVoidAsync("loadScript", "https://cdn.jsdelivr.net/npm/marked@14.1.3/marked.min.js", "lib-marked");
-            await JS.InvokeVoidAsync("loadScript", "https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js", "lib-dompurify");
-            await JS.InvokeVoidAsync("loadScript", "/js/chat-api-client.js", "js-chat-api-client");
-            await JS.InvokeVoidAsync("loadScript", "/js/chat-ui.js", "js-chat-ui");
-            await JS.InvokeVoidAsync("loadScript", "/js/realtime-client.js", "js-realtime-client");
-            await JS.InvokeVoidAsync("loadScript", "/js/app.js", "js-app");
-            await JS.InvokeVoidAsync("loadScript", "/js/realtime-ui.js", "js-realtime-ui");
+            case "session":
+                if (jd.TryGetProperty("sessionId", out var sid))
+                {
+                    var s = sid.GetString();
+                    if (s is not null && s != _sessionId)
+                    {
+                        _sessionId = s;
+                        _ = JS.InvokeVoidAsync("_startPersistentEvents", s).AsTask();
+                    }
+                }
+                break;
+            case "done":
+                if (_sessionId is null && jd.TryGetProperty("sessionId", out var sid2))
+                {
+                    var s2 = sid2.GetString();
+                    if (s2 is not null) { _sessionId = s2; _ = JS.InvokeVoidAsync("_startPersistentEvents", s2).AsTask(); }
+                }
+                break;
+            case "reasoning_delta":
+                if (jd.TryGetProperty("text", out var rd)) _currentBot.ReasoningText += rd.GetString() ?? "";
+                break;
+            case "reasoning_complete":
+                _currentBot.ReasoningData = jd;
+                if (jd.TryGetProperty("analysis", out var rc)) _currentBot.ReasoningText = rc.GetString() ?? _currentBot.ReasoningText;
+                break;
+            case "response_delta":
+                if (jd.TryGetProperty("text", out var delta)) _currentBot.Content += delta.GetString() ?? "";
+                break;
+            case "response_complete":
+                if (jd.TryGetProperty("text", out var full)) _currentBot.Content = full.GetString() ?? _currentBot.Content;
+                _currentBot.IsStreaming = false;
+                break;
+            case "error":
+                _currentBot.Content    = jd.TryGetProperty("message", out var err) ? err.GetString() ?? "Hata oluştu." : "Hata oluştu.";
+                _currentBot.IsStreaming = false;
+                break;
+        }
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnStreamComplete()
+    {
+        if (_currentBot is not null) _currentBot.IsStreaming = false;
+        _isStreaming = false;
+        _currentBot  = null;
+        var userMsgCount = _messages.Count(m => m.Role == "user");
+        if (userMsgCount >= 2 && !_showRating && !_ratingSubmitted && !_humanMode)
+            _showRating = true;
+        StateHasChanged();
+        _ = ScrollBottomAsync();
+    }
+
+    [JSInvokable]
+    public void OnStreamError(string msg)
+    {
+        if (_currentBot is not null)
+        {
+            if (string.IsNullOrEmpty(_currentBot.Content))
+                _currentBot.Content = $"Bağlantı hatası: {msg}";
+            _currentBot.IsStreaming = false;
+        }
+        _isStreaming = false;
+        _currentBot  = null;
+        StateHasChanged();
+        _ = ScrollBottomAsync();
+    }
+
+    private async Task SetSessionAsync(string? id)
+    {
+        if (id is null || id == _sessionId) return;
+        _sessionId = id;
+        try { await JS.InvokeVoidAsync("_startPersistentEvents", id); } catch { }
+    }
+
+    // ── Persistent events (admin live takeover) ───────────────────────────────
+    [JSInvokable]
+    public async Task OnPersistentEvent(string type, string data)
+    {
+        JsonElement jd;
+        try { jd = JsonSerializer.Deserialize<JsonElement>(data); }
+        catch { jd = default; }
+
+        switch (type)
+        {
+            case "human_joined":
+                _humanMode  = true;
+                _humanAgent = jd.TryGetProperty("humanAgent", out var ha) ? ha.GetString() : "temsilci";
+                _messages.Add(new ChatMsg { Role = "system", Content = $"💬 Temsilci {_humanAgent} sohbete katıldı." });
+                try { await JS.InvokeVoidAsync("__stopVoice"); } catch { }
+                break;
+            case "human_left":
+                _humanMode  = false;
+                _humanAgent = null;
+                _messages.Add(new ChatMsg { Role = "system", Content = "ℹ️ Sohbet bot moduna döndü." });
+                if (_messages.Count(m => m.Role == "user") >= 2 && !_ratingSubmitted)
+                    _showRating = true;
+                break;
+            case "bot_typing":
+                _showTypingIndicator = jd.TryGetProperty("on", out var on) && on.GetBoolean();
+                break;
+            case "human_message":
+                _showTypingIndicator = false;
+                var msgText = jd.TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
+                _messages.Add(new ChatMsg { Role = "agent", Content = msgText });
+                break;
+        }
+
+        await InvokeAsync(StateHasChanged);
+        if (type is "human_joined" or "human_left" or "human_message")
+            await InvokeAsync(ScrollBottomAsync);
+    }
+
+    // ── New chat ──────────────────────────────────────────────────────────────
+    private async Task NewChatAsync()
+    {
+        try { await JS.InvokeVoidAsync("__stopStream"); } catch { }
+        try { await JS.InvokeVoidAsync("_stopPersistentEvents"); } catch { }
+        _messages.Clear();
+        _sessionId           = null;
+        _input               = string.Empty;
+        _isStreaming         = false;
+        _humanMode           = false;
+        _humanAgent          = null;
+        _showTypingIndicator = false;
+        _showRating          = false;
+        _selectedRating      = null;
+        _ratingFeedback      = string.Empty;
+        _ratingSubmitted     = false;
+    }
+
+    // ── Rating ────────────────────────────────────────────────────────────────
+    private async Task SubmitRatingAsync()
+    {
+        if (_sessionId is null || !_selectedRating.HasValue) return;
+        _showRating      = false;
+        _ratingSubmitted = true;
+        await ChatApi.SubmitRatingAsync(_sessionId, _selectedRating.Value, _ratingFeedback);
+        _messages.Add(new ChatMsg { Role = "system", Content = "⭐ Değerlendirmeniz alındı. Teşekkürler!" });
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    private async Task ScrollBottomAsync()
+    {
+        try { await JS.InvokeVoidAsync("eval", "var el=document.getElementById('messages');if(el)el.scrollTop=el.scrollHeight;"); }
+        catch { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("__stopStream"); } catch { }
+        if (_dotNetRef is not null)
+        {
+            try { await JS.InvokeVoidAsync("_stopPersistentEvents"); } catch { }
+            _dotNetRef.Dispose();
         }
     }
 }

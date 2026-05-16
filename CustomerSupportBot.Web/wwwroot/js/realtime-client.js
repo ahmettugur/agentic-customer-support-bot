@@ -59,11 +59,12 @@
         }
 
         interrupt() {
-            // Sadece asistan konuşurken anlamlı; aksi halde OpenAI
-            // "no active response" uyarısı verir. Local playback'i her durumda durdur.
+            // Mikrofon gecikmeli açma timer'ını iptal et — kullanıcı müdahale etti.
+            clearTimeout(this._micReopenTimer);
             this._stopPlayback();
             if (this.state === 'speaking') {
                 this._sendControl({ type: 'interrupt' });
+                this._setState('listening'); // interrupt'ta hemen aç
             }
         }
 
@@ -97,6 +98,7 @@
                 try { this.playCtx.close(); } catch { }
                 this.playCtx = null;
             }
+            clearTimeout(this._micReopenTimer);
             if (this.ws) {
                 try { this.ws.close(); } catch { }
                 this.ws = null;
@@ -150,7 +152,10 @@
         // ─── WS ───
 
         async _connectWs() {
-            const proto = (location.protocol === 'https:') ? 'wss:' : 'ws:';
+            const baseProto = this.baseUrl
+                ? (/^https:/i.test(this.baseUrl) ? 'wss:' : 'ws:')
+                : (location.protocol === 'https:' ? 'wss:' : 'ws:');
+            const proto = baseProto;
             const host = this.baseUrl
                 ? this.baseUrl.replace(/^https?:/i, proto)
                 : proto + '//' + location.host;
@@ -220,7 +225,11 @@
                     this._emit('assistant_text_delta', msg);
                     break;
                 case 'response_done':
-                    this._setState('listening');
+                    // TTS ses chunk'ları AudioContext kuyruğunda henüz çalınmamış
+                    // olabilir. Mikrofonu hemen açmak hoparlör→mikrofon echo'ya yol
+                    // açar ve OpenAI bunu kullanıcı sesi sanır (sahte user_transcript).
+                    // Kuyruktaki sesin bitmesini bekleyip sonra açıyoruz.
+                    this._scheduleListeningTransition();
                     this._emit('response_done', msg);
                     break;
                 case 'tool_call':
@@ -300,6 +309,22 @@
             // Mevcut tüm planlanmış ses node'larını durdurmak için context'i suspend+resume
             try { this.playCtx.suspend().then(() => this.playCtx.resume()); } catch { }
             this._playCursor = this.playCtx.currentTime;
+        }
+
+        _scheduleListeningTransition() {
+            clearTimeout(this._micReopenTimer);
+            if (!this.playCtx) {
+                this._setState('listening');
+                return;
+            }
+            // Kalan ses süresi (ms) + 350ms emniyet payı
+            const remaining = (this._playCursor - this.playCtx.currentTime) * 1000;
+            const delay = Math.max(0, remaining) + 350;
+            this._micReopenTimer = setTimeout(() => {
+                if (!this._disposed && this.state === 'speaking') {
+                    this._setState('listening');
+                }
+            }, delay);
         }
 
         // ─── Helpers ───

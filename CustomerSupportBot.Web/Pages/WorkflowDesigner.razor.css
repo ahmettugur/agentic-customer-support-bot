@@ -1,0 +1,130 @@
+/* WorkflowDesigner.razor.css — Scoped styles for Workflow Designer page */
+/* Previously defined as an inline <style> block inside WorkflowDesigner.razor */
+
+body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    background: #f9fafb;
+}
+
+.wf-container {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.row--mt12 {
+    margin-top: 12px;
+}
+
+.input--flex {
+    flex: 1;
+    padding: 6px;
+}
+
+.panel {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 12px;
+    background: #fafafa;
+}
+
+textarea {
+    width: 100%;
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px;
+}
+
+.row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 6px 0;
+}
+
+.row > label {
+    min-width: 100px;
+}
+
+button {
+    padding: 6px 14px;
+    cursor: pointer;
+    border: 1px solid #888;
+    background: #fff;
+    border-radius: 4px;
+}
+
+button.primary {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+}
+
+button.danger {
+    background: #dc2626;
+    color: #fff;
+    border-color: #dc2626;
+}
+
+.list-item {
+    padding: 8px;
+    border: 1px solid #ddd;
+    margin: 4px 0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.list-item:hover {
+    background: #eef;
+}
+
+.list-item.active {
+    background: #dbeafe;
+    border-color: #2563eb;
+}
+
+.badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    background: #e5e7eb;
+}
+
+.badge.active {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.badge.inactive {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+pre {
+    background: #f3f4f6;
+    padding: 8px;
+    border-radius: 4px;
+    max-height: 320px;
+    overflow: auto;
+    font-size: 12px;
+}
+
+h2, h3 {
+    margin: 8px 0;
+}
+
+.muted {
+    color: #666;
+    font-size: 12px;
+}

@@ -1,6 +1,9 @@
 @page "/replay"
-@layout EmptyLayout
-@inject IJSRuntime JS
+@attribute [Authorize]
+@layout AdminLayout
+@inject TracesApiService TracesApi
+@implements IAsyncDisposable
+@using System.Text.Json
 
 <link rel="stylesheet" href="css/replay.css" />
 
@@ -15,67 +18,305 @@
             </a>
             <div class="replay-header-info">
                 <h1>Trace Replay</h1>
-                <p class="muted" id="replayMeta">Bir trace ID girin veya seçin…</p>
+                <p class="muted">@(_metaText ?? "Bir trace ID girin veya seçin…")</p>
             </div>
         </div>
         <div class="replay-header-right">
-            <input id="traceIdInput" type="text" placeholder="trace ID" class="replay-input" />
-            <button id="loadTraceBtn" class="btn-secondary">Yükle</button>
+            <input type="text" placeholder="trace ID" class="replay-input"
+                   @bind="_inputId" @bind:event="oninput"
+                   @onkeydown="@(async e => { if (e.Key == "Enter") await LoadTraceAsync(_inputId); })" />
+            <button class="btn-secondary" @onclick="() => LoadTraceAsync(_inputId)" disabled="@_loading">
+                @(_loading ? "Yükleniyor…" : "Yükle")
+            </button>
         </div>
     </header>
 
-    <!-- TRANSPORT -->
-    <section class="replay-controls" id="replayControls" hidden="">
-        <button class="btn-icon" id="btnFirst" title="Başa">⏮</button>
-        <button class="btn-icon" id="btnPrev" title="Önceki adım">◀</button>
-        <button class="btn-primary" id="btnPlay" title="Oynat">▶ Oynat</button>
-        <button class="btn-icon" id="btnNext" title="Sonraki adım">▶</button>
-        <button class="btn-icon" id="btnLast" title="Sona">⏭</button>
-        <span class="replay-step-label" id="stepLabel">0 / 0</span>
-        <label class="replay-speed">
-            Hız:
-            <select id="speedSelect">
-                <option value="2000">0.5×</option>
-                <option value="1000" selected="">1×</option>
-                <option value="500">2×</option>
-                <option value="200">5×</option>
-            </select>
-        </label>
-    </section>
-
-    <!-- BODY -->
-    <main class="replay-main" id="replayMain" hidden="">
-        <aside class="replay-timeline-pane">
-            <h3>Zaman Çizelgesi</h3>
-            <ol class="replay-timeline" id="timelineList"></ol>
-        </aside>
-        <section class="replay-detail-pane">
-            <header class="replay-detail-header" id="detailHeader">
-                <span class="replay-step-num" id="detailStepNum">—</span>
-                <span class="replay-step-kind" id="detailStepKind">step</span>
-                <span class="replay-step-time" id="detailStepTime"></span>
-            </header>
-            <div class="replay-detail-body" id="detailBody">
-                <p class="muted">Bir adım seç ya da Oynat'a bas.</p>
-            </div>
+    <!-- TRANSPORT (only when trace loaded) -->
+    @if (_steps.Count > 0)
+    {
+        <section class="replay-controls">
+            <button class="btn-icon" title="Başa"           @onclick="() => GoTo(0)">⏮</button>
+            <button class="btn-icon" title="Önceki adım"   @onclick="() => GoTo(_stepIndex - 1)">◀</button>
+            <button class="btn-primary" title="Oynat/Duraklat" @onclick="TogglePlay">
+                @(_playing ? "⏸ Duraklat" : "▶ Oynat")
+            </button>
+            <button class="btn-icon" title="Sonraki adım"  @onclick="() => GoTo(_stepIndex + 1)">▶</button>
+            <button class="btn-icon" title="Sona"          @onclick="() => GoTo(_steps.Count - 1)">⏭</button>
+            <span class="replay-step-label">@(_stepIndex + 1) / @_steps.Count</span>
+            <label class="replay-speed">
+                Hız:
+                <select @bind="_speedMs" @bind:after="OnSpeedChanged">
+                    <option value="2000">0.5×</option>
+                    <option value="1000">1×</option>
+                    <option value="500">2×</option>
+                    <option value="200">5×</option>
+                </select>
+            </label>
         </section>
-    </main>
 
-    <div class="replay-empty" id="replayEmpty">
-        <p class="muted">Yüklenmiş trace yok. Üst sağdaki kutuya bir <code>traceId</code> yapıştırıp <strong>Yükle</strong> deyin.</p>
-        <p class="muted">İpucu: <a href="/traces">Trace Dashboard</a>'tan bir trace seç → "Replay" butonu.</p>
-    </div>
+        <main class="replay-main">
+            <!-- TIMELINE (left) -->
+            <aside class="replay-timeline-pane">
+                <h3>Zaman Çizelgesi</h3>
+                <ol class="replay-timeline">
+                    @for (var i = 0; i < _steps.Count; i++)
+                    {
+                        var idx = i;
+                        var step = _steps[i];
+                        var liClass = idx == _stepIndex ? "active" : (idx < _stepIndex ? "passed" : "");
+                        <li class="@liClass" @onclick="() => GoTo(idx)">
+                            <span class="step-num">#@(idx + 1)</span>
+                            <div class="step-content">
+                                <div class="step-title">
+                                    <span class="step-kind-pill kind-@step.Kind">@step.Kind</span>
+                                    @step.Title
+                                </div>
+                                <div class="step-meta">@FmtTime(step.Time)</div>
+                            </div>
+                        </li>
+                    }
+                </ol>
+            </aside>
+
+            <!-- DETAIL (right) -->
+            <section class="replay-detail-pane">
+                @if (_selected is not null)
+                {
+                    <header class="replay-detail-header">
+                        <span class="replay-step-num">#@(_stepIndex + 1)</span>
+                        <span class="replay-step-kind">@_selected.Kind</span>
+                        <span class="replay-step-time">@FmtTime(_selected.Time)</span>
+                    </header>
+                    <div class="replay-detail-body">
+                        @RenderDetail(_selected)
+                    </div>
+                }
+                else
+                {
+                    <p class="muted" style="padding:24px;">Bir adım seç ya da Oynat'a bas.</p>
+                }
+            </section>
+        </main>
+    }
+    else if (!_loading)
+    {
+        <div class="replay-empty">
+            <p class="muted">Yüklenmiş trace yok. Üst sağdaki kutuya bir <code>traceId</code> yapıştırıp <strong>Yükle</strong> deyin.</p>
+            <p class="muted">İpucu: <a href="/traces">Trace Dashboard</a>'tan bir trace seç → "Replay" butonu.</p>
+            @if (_errorMsg is not null) { <p style="color:#dc2626;">⚠ @_errorMsg</p> }
+        </div>
+    }
 </div>
 
 @code {
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    [SupplyParameterFromQuery(Name = "traceId")]
+    private string? TraceIdParam { get; set; }
+
+    private string        _inputId    = string.Empty;
+    private string?       _metaText;
+    private string?       _errorMsg;
+    private bool          _loading;
+    private List<ReplayStep> _steps   = [];
+    private int           _stepIndex;
+    private ReplayStep?   _selected;
+    private bool          _playing;
+    private int           _speedMs    = 1000;
+    private Timer?        _playTimer;
+    private string?       _lastLoaded;
+
+    private static readonly JsonSerializerOptions _pretty = new()
     {
-        if (firstRender)
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(TraceIdParam) && TraceIdParam != _lastLoaded)
         {
-            await JS.InvokeVoidAsync("loadScript", "/js/auth.js", "js-auth");
-            await JS.InvokeVoidAsync("eval", "window.Auth.requireAuth()");
-            await JS.InvokeVoidAsync("loadScript", "/js/admin-nav.js", "js-admin-nav");
-            await JS.InvokeVoidAsync("loadScript", "/js/replay.js", "js-replay");
+            _inputId = TraceIdParam;
+            await LoadTraceAsync(TraceIdParam);
         }
+    }
+
+    private async Task LoadTraceAsync(string id)
+    {
+        id = id?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(id)) return;
+        _loading   = true;
+        _errorMsg  = null;
+        _steps     = [];
+        _selected  = null;
+        StateHasChanged();
+
+        var trace = await TracesApi.GetTraceAsync(id);
+        _loading   = false;
+
+        if (trace is null)
+        {
+            _errorMsg = $"Trace bulunamadı: {id}";
+            StateHasChanged();
+            return;
+        }
+
+        _lastLoaded = id;
+        _metaText   = (trace.UserQuery?.Length ?? 0) > 70
+            ? trace.UserQuery![..70] + "…"
+            : trace.UserQuery ?? "(soru yok)";
+
+        _steps     = BuildSteps(trace);
+        _stepIndex = 0;
+        _selected  = _steps.Count > 0 ? _steps[0] : null;
+        StateHasChanged();
+    }
+
+    private void GoTo(int idx)
+    {
+        if (_steps.Count == 0) return;
+        idx = Math.Clamp(idx, 0, _steps.Count - 1);
+        if (idx == _steps.Count - 1) StopPlay();
+        _stepIndex = idx;
+        _selected  = _steps[idx];
+        StateHasChanged();
+    }
+
+    private void TogglePlay() { if (_playing) StopPlay(); else StartPlay(); }
+
+    private void StartPlay()
+    {
+        _playing   = true;
+        _playTimer?.Dispose();
+        _playTimer = new Timer(_ => InvokeAsync(() =>
+        {
+            if (_stepIndex >= _steps.Count - 1) { StopPlay(); return; }
+            GoTo(_stepIndex + 1);
+        }), null, _speedMs, _speedMs);
+    }
+
+    private void StopPlay()
+    {
+        _playing = false;
+        _playTimer?.Dispose();
+        _playTimer = null;
+        StateHasChanged();
+    }
+
+    private void OnSpeedChanged() { if (_playing) { StopPlay(); StartPlay(); } }
+
+    public async ValueTask DisposeAsync()
+    {
+        StopPlay();
+        if (_playTimer is not null) await _playTimer.DisposeAsync();
+    }
+
+    private static string FmtTime(DateTimeOffset? dt) => dt is null ? "" :
+        dt.Value.LocalDateTime.ToString("HH:mm:ss") + "." + dt.Value.Millisecond.ToString("D3");
+
+    // ── Detail panel renderer ─────────────────────────────────────────────────
+
+    private RenderFragment RenderDetail(ReplayStep step) => step.Payload switch
+    {
+        ReplayInitPayload p  => RenderInit(p),
+        ReplayFinalPayload p => RenderFinal(p),
+        ReplayToolPayload p  => RenderTool(p),
+        ReplayAgentPayload p => RenderAgent(p),
+        ReplayJsonPayload p  => @<pre>@p.Json</pre>,
+        _                    => @<pre>@JsonSerializer.Serialize(step.Payload, _pretty)</pre>
+    };
+
+    private RenderFragment RenderInit(ReplayInitPayload p) =>
+        @<div>
+            <div class="field-row"><div class="field-key">Trace ID</div><div class="field-val">@p.TraceId</div></div>
+            <div class="field-row"><div class="field-key">Session</div><div class="field-val">@p.SessionId</div></div>
+            <h4>Soru</h4>
+            <pre>@(p.UserQuery ?? "")</pre>
+        </div>;
+
+    private RenderFragment RenderFinal(ReplayFinalPayload p) =>
+        @<div>
+            <div class="field-row"><div class="field-key">Termination</div><div class="field-val">@(p.TerminationReason ?? "?")</div></div>
+            <div class="field-row"><div class="field-key">Iterasyon</div><div class="field-val">@(p.IterationCount?.ToString() ?? "?")</div></div>
+            <div class="field-row"><div class="field-key">Süre</div><div class="field-val">@(p.DurationMs is not null ? $"{p.DurationMs} ms" : "?")</div></div>
+            @if (p.Error is not null)
+            {
+                <div class="field-row"><div class="field-key">Hata</div><div class="field-val" style="color:#c00">@p.Error</div></div>
+            }
+            <h4>Yanıt</h4>
+            <pre>@(p.Response ?? "(boş)")</pre>
+        </div>;
+
+    private RenderFragment RenderTool(ReplayToolPayload p) =>
+        @<div>
+            <div class="field-row"><div class="field-key">Tool</div><div class="field-val">@p.ToolName</div></div>
+            <div class="field-row"><div class="field-key">Agent</div><div class="field-val">@(p.AgentName ?? "?")</div></div>
+            <div class="field-row"><div class="field-key">Success</div><div class="field-val">@(p.Success ? "✅" : "❌")</div></div>
+            <h4>Parametreler</h4><pre>@(p.Parameters ?? "(yok)")</pre>
+            <h4>Sonuç</h4><pre>@(p.Result ?? "(yok)")</pre>
+        </div>;
+
+    private RenderFragment RenderAgent(ReplayAgentPayload p) =>
+        @<div>
+            <div class="field-row"><div class="field-key">Agent</div><div class="field-val">@p.AgentName</div></div>
+            <div class="field-row"><div class="field-key">Süre</div><div class="field-val">@(p.DurationMs is not null ? $"{p.DurationMs} ms" : "devam ediyor")</div></div>
+            @if (p.Output is not null) { <h4>Çıktı</h4><pre>@p.Output</pre> }
+            else { <p class="muted">Çıktı kaydedilmemiş.</p> }
+        </div>;
+
+    // ── BuildSteps (mirrors replay.js buildSteps) ─────────────────────────────
+
+    private static List<ReplayStep> BuildSteps(TraceDetail trace)
+    {
+        var steps = new List<ReplayStep>();
+
+        steps.Add(new ReplayStep("init", trace.StartedAt, "Kullanıcı Sorusu",
+            new ReplayInitPayload(trace.TraceId, trace.SessionId, trace.UserQuery)));
+
+        if (trace.Reasoning.HasValue)
+            steps.Add(new ReplayStep("reasoning", trace.StartedAt, "Pre-analysis Reasoning",
+                new ReplayJsonPayload(JsonSerializer.Serialize(trace.Reasoning, _pretty))));
+
+        if (trace.Planning.HasValue)
+        {
+            var plan      = trace.Planning.Value;
+            string title  = "Planning";
+            if (plan.TryGetProperty("selectedAgent", out var sa) && sa.ValueKind is not JsonValueKind.Null)
+                title = $"Planning → {sa.GetString()}";
+            else if (plan.TryGetProperty("detectedIntent", out var di) && di.ValueKind is not JsonValueKind.Null)
+                title = $"Planning → {di.GetString()}";
+            steps.Add(new ReplayStep("planning", trace.StartedAt, title,
+                new ReplayJsonPayload(JsonSerializer.Serialize(plan, _pretty))));
+        }
+
+        var events = new List<(DateTimeOffset T, string Kind, string Title, ReplayStepPayload Payload)>();
+
+        foreach (var v in trace.AgentVisits)
+            events.Add((v.StartedAt, "agent", $"Agent: {v.AgentName ?? "?"}",
+                new ReplayAgentPayload(v.AgentName, v.DurationMs, v.Output)));
+
+        foreach (var sr in trace.SpecialistReasonings)
+        {
+            var t          = trace.StartedAt;
+            var agentName  = "?";
+            if (sr.TryGetProperty("recordedAt", out var ra) && ra.ValueKind is not JsonValueKind.Null
+                && DateTimeOffset.TryParse(ra.GetString(), out var parsed)) t = parsed;
+            if (sr.TryGetProperty("agentName", out var an) && an.ValueKind is not JsonValueKind.Null)
+                agentName = an.GetString() ?? "?";
+            events.Add((t, "reasoning", $"Specialist Reasoning: {agentName}",
+                new ReplayJsonPayload(JsonSerializer.Serialize(sr, _pretty))));
+        }
+
+        foreach (var tc in trace.ToolCalls)
+            events.Add((tc.InvokedAt ?? trace.StartedAt, "tool", $"Tool: {tc.ToolName ?? "?"}",
+                new ReplayToolPayload(tc.ToolName, tc.AgentName, tc.Success, tc.ParametersSummary, tc.ResultSummary)));
+
+        events.Sort((a, b) => a.T.CompareTo(b.T));
+        foreach (var (t, kind, title, payload) in events)
+            steps.Add(new ReplayStep(kind, t, title, payload));
+
+        steps.Add(new ReplayStep("final", trace.CompletedAt ?? trace.StartedAt,
+            $"Final Yanıt ({trace.TerminationReason ?? "?"})",
+            new ReplayFinalPayload(trace.TerminationReason, trace.DurationMs, trace.IterationCount, trace.Error, trace.FinalResponse)));
+
+        return steps;
     }
 }

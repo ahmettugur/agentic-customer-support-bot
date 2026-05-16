@@ -1,0 +1,179 @@
+/* ════════════════════════════════════════════════════════════════
+   workflow.css — Workflow Designer page
+   Uses design tokens from styles.css
+   ════════════════════════════════════════════════════════════════ */
+
+.wf-container {
+    padding: var(--space-6);
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.wf-container h1 {
+    margin: 0 0 var(--space-2);
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    color: var(--color-text);
+}
+
+.wf-container .layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+}
+
+.wf-container .panel {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    background: var(--color-surface);
+}
+
+.wf-container h2,
+.wf-container h3 {
+    margin: 0 0 var(--space-3);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.wf-container textarea {
+    width: 100%;
+    font-family: 'Consolas', ui-monospace, monospace;
+    font-size: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    resize: vertical;
+    outline: none;
+    transition: border-color var(--transition);
+    box-sizing: border-box;
+}
+
+.wf-container textarea:focus {
+    border-color: var(--color-primary);
+}
+
+.wf-container .row {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    margin: 6px 0;
+}
+
+.wf-container .row > label {
+    min-width: 100px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.wf-container .row--mt12 { margin-top: 12px; }
+
+.wf-container .input--flex {
+    flex: 1;
+    padding: 6px var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-family);
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    background: var(--color-surface-alt);
+    outline: none;
+    transition: border-color var(--transition);
+}
+
+.wf-container .input--flex:focus {
+    border-color: var(--color-primary);
+}
+
+.wf-container button {
+    padding: 6px 14px;
+    cursor: pointer;
+    border: 1px solid var(--color-border-strong);
+    background: var(--color-surface);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-family);
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    transition: background var(--transition), border-color var(--transition);
+}
+
+.wf-container button:hover {
+    background: var(--color-surface-alt);
+}
+
+.wf-container button.primary {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: var(--color-primary);
+}
+
+.wf-container button.primary:hover {
+    background: var(--color-primary-hover);
+}
+
+.wf-container button.danger {
+    background: #dc2626;
+    color: #fff;
+    border-color: #dc2626;
+}
+
+.wf-container button.danger:hover {
+    background: #b91c1c;
+}
+
+.wf-container .list-item {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    margin: 4px 0;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    transition: background var(--transition), border-color var(--transition);
+}
+
+.wf-container .list-item:hover {
+    background: var(--color-primary-subtle);
+}
+
+.wf-container .list-item.active {
+    background: var(--color-primary-subtle);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    font-weight: 500;
+}
+
+.wf-container .badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 11px;
+    background: var(--color-surface-alt);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+}
+
+.wf-container .badge.active   { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+.wf-container .badge.inactive { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+.wf-container pre {
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    max-height: 320px;
+    overflow: auto;
+    font-size: 12px;
+    font-family: 'Consolas', ui-monospace, monospace;
+    color: var(--color-text);
+}
+
+.wf-container hr {
+    border: none;
+    border-top: 1px solid var(--color-border);
+    margin: var(--space-4) 0;
+}

@@ -1,0 +1,83 @@
+/* AdminNavBar.razor.css — scoped styles for the admin top navigation bar */
+/* Replaces the inline CSS previously injected by admin-nav.js */
+
+.csb-topnav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #1f2937;
+    color: #e5e7eb;
+    padding: 6px 14px;
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .1);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.csb-topnav-brand {
+    font-weight: 600;
+    margin-right: 12px;
+    color: #fff;
+    letter-spacing: .3px;
+}
+
+::deep .csb-topnav-link,
+::deep .csb-topnav-link:link,
+::deep .csb-topnav-link:visited {
+    color: #d1d5db;
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    transition: background-color .15s, color .15s;
+    white-space: nowrap;
+}
+
+::deep .csb-topnav-link:hover {
+    background: #374151;
+    color: #fff;
+    text-decoration: none;
+}
+
+/* Blazor NavLink adds .active automatically */
+::deep .csb-topnav-link.active,
+::deep .csb-topnav-link.active:visited {
+    background: #2563eb;
+    color: #fff;
+}
+
+.csb-topnav-spacer {
+    flex: 1;
+}
+
+.csb-topnav-user {
+    color: #9ca3af;
+    font-size: 12px;
+    margin-right: 8px;
+}
+
+.csb-topnav-logout {
+    background: transparent;
+    border: 1px solid #4b5563;
+    color: #d1d5db;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.csb-topnav-logout:hover {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+}
+
+@media (max-width: 720px) {
+    .csb-topnav {
+        flex-wrap: wrap;
+    }
+
+    .csb-topnav-brand {
+        width: 100%;
+    }
+}

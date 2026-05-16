@@ -1,0 +1,176 @@
+@using System.Text.Json
+@using CustomerSupportBot.Web.Models
+
+@if (Trace is null)
+{
+    <div class="trace-detail-empty">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"
+             stroke-linecap="round" stroke-linejoin="round" opacity="0.3">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <path d="M12 17h.01"/>
+        </svg>
+        <p class="muted">Bir trace seçin</p>
+    </div>
+}
+else
+{
+    @* ── Header ── *@
+    <div class="trace-detail-header">
+        <h2 class="trace-detail-query">@(Trace.UserQuery ?? "(boş sorgu)")</h2>
+        <div class="trace-detail-meta">
+            <span>🕐 @Trace.StartedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm:ss")</span>
+            <span>⏱ @(Trace.DurationMs is not null ? $"{Trace.DurationMs}ms" : "—")</span>
+            <span>🔄 @(Trace.IterationCount ?? 0) iter</span>
+            <span class="badge badge-@(Trace.TerminationReason ?? "")">@(Trace.TerminationReason ?? "—")</span>
+            <code>@Trace.TraceId</code>
+            <code>session: @ShortId(Trace.SessionId)…</code>
+            <a class="btn-secondary"
+               href="/replay?traceId=@Uri.EscapeDataString(Trace.TraceId ?? "")"
+               style="margin-left:auto;text-decoration:none;font-size:12px;padding:4px 10px">▶ Replay</a>
+        </div>
+    </div>
+
+    @* ── Reasoning ── *@
+    @if (Trace.Reasoning.HasValue)
+    {
+        <div class="trace-section @(IsCollapsed("reasoning") ? "collapsed" : "")">
+            <div class="trace-section-header" @onclick='() => Toggle("reasoning")'>
+                @Chev <span>🧠 Global Reasoning</span>
+            </div>
+            <div class="trace-section-body">
+                <pre style="max-height:400px;overflow:auto;font-size:11px;">@ToJson(Trace.Reasoning)</pre>
+            </div>
+        </div>
+    }
+
+    @* ── Planning ── *@
+    @if (Trace.Planning.HasValue)
+    {
+        <div class="trace-section @(IsCollapsed("planning") ? "collapsed" : "")">
+            <div class="trace-section-header" @onclick='() => Toggle("planning")'>
+                @Chev <span>📋 Planning</span>
+                <span class="trace-section-tag" style="margin-left:auto">1.4</span>
+            </div>
+            <div class="trace-section-body">
+                <pre style="max-height:400px;overflow:auto;font-size:11px;">@ToJson(Trace.Planning)</pre>
+            </div>
+        </div>
+    }
+
+    @* ── Specialist Reasonings ── *@
+    @if (Trace.SpecialistReasonings.Count > 0)
+    {
+        <div class="trace-section @(IsCollapsed("specialists") ? "collapsed" : "")">
+            <div class="trace-section-header" @onclick='() => Toggle("specialists")'>
+                @Chev <span>🔧 Specialist Reasonings</span>
+                <span class="trace-section-tag" style="margin-left:auto">@Trace.SpecialistReasonings.Count</span>
+            </div>
+            <div class="trace-section-body">
+                @foreach (var sr in Trace.SpecialistReasonings)
+                {
+                    <div class="specialist-card">
+                        <h4>🛠 @(sr.TryGetProperty("agentName", out var an) && an.ValueKind != System.Text.Json.JsonValueKind.Null ? an.GetString() : "—")</h4>
+                        <pre style="max-height:300px;overflow:auto;font-size:11px;">@ToJson(sr)</pre>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @* ── Agent Visits ── *@
+    @if (Trace.AgentVisits.Count > 0)
+    {
+        <div class="trace-section @(IsCollapsed("agents") ? "collapsed" : "")">
+            <div class="trace-section-header" @onclick='() => Toggle("agents")'>
+                @Chev <span>👥 Agent Visits</span>
+            </div>
+            <div class="trace-section-body">
+                @foreach (var v in Trace.AgentVisits)
+                {
+                    <div class="agent-visit">
+                        <code>@SimplifyAgent(v.AgentName)</code>
+                        <span style="margin-left:auto">@(v.DurationMs is not null ? $"{v.DurationMs}ms" : "")</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    @* ── Final Critique ── *@
+    @if (Trace.FinalCritique.HasValue)
+    {
+        <div class="trace-section @(IsCollapsed("critique") ? "collapsed" : "")">
+            <div class="trace-section-header" @onclick='() => Toggle("critique")'>
+                @Chev <span>🎯 Final Critique</span>
+            </div>
+            <div class="trace-section-body">
+                <pre style="max-height:300px;overflow:auto;font-size:11px;">@ToJson(Trace.FinalCritique)</pre>
+            </div>
+        </div>
+    }
+
+    @* ── Revision ── *@
+    @if (Trace.WasRevised)
+    {
+        <div class="trace-section @(IsCollapsed("revision") ? "collapsed" : "")">
+            <div class="trace-section-header" @onclick='() => Toggle("revision")'>
+                @Chev <span>♻️ Revizyon</span>
+                <span class="trace-section-tag" style="margin-left:auto">REVISE</span>
+            </div>
+            <div class="trace-section-body">
+                <div class="kv-row">
+                    <div class="kv-key">İlk taslak</div>
+                    <div class="kv-val"><div class="response-box draft">@(Trace.FirstDraftResponse ?? "")</div></div>
+                </div>
+                <div class="kv-row">
+                    <div class="kv-key">Revize edilmiş</div>
+                    <div class="kv-val"><div class="response-box revised">@(Trace.FinalResponse ?? "")</div></div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (Trace.FinalResponse is not null)
+    {
+        <div class="trace-section @(IsCollapsed("response") ? "collapsed" : "")">
+            <div class="trace-section-header" @onclick='() => Toggle("response")'>
+                @Chev <span>💬 Final Response</span>
+            </div>
+            <div class="trace-section-body">
+                <div class="response-box">@Trace.FinalResponse</div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public TraceDetail? Trace { get; set; }
+
+    private readonly HashSet<string> _collapsed = [];
+    private bool IsCollapsed(string k) => _collapsed.Contains(k);
+    private void Toggle(string k) { if (!_collapsed.Remove(k)) _collapsed.Add(k); }
+
+    private static readonly JsonSerializerOptions _pretty = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    private static string ToJson(JsonElement? el) =>
+        el is null ? "(boş)" : JsonSerializer.Serialize(el.Value, _pretty);
+
+    private static string ToJson(JsonElement el) =>
+        JsonSerializer.Serialize(el, _pretty);
+
+    private static string ShortId(string? id) =>
+        id is null ? "?" : id[..Math.Min(8, id.Length)];
+
+    private static string SimplifyAgent(string? name) =>
+        name is null ? "—" : name.Split('_')[0];
+
+    private RenderFragment Chev =>
+        @<svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m6 9 6 6 6-6"/>
+        </svg>;
+}

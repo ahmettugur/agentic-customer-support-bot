@@ -1,0 +1,36 @@
+@inject NavigationManager Nav
+@inject AuthService AuthSvc
+@inject AppAuthStateProvider AuthState
+
+<nav class="csb-topnav">
+    <span class="csb-topnav-brand">CSB Admin</span>
+
+    <NavLink class="csb-topnav-link" href="/" Match="NavLinkMatch.All">💬 Sohbet</NavLink>
+    <NavLink class="csb-topnav-link" href="/admin">🛡️ HITL Panel</NavLink>
+    <NavLink class="csb-topnav-link" href="/traces">🧠 Trace Dashboard</NavLink>
+    <NavLink class="csb-topnav-link" href="/replay">🎬 Replay</NavLink>
+    <NavLink class="csb-topnav-link" href="/workflow-designer">🔧 Workflow Designer</NavLink>
+    <NavLink class="csb-topnav-link" href="/sla">⏱️ SLA</NavLink>
+
+    <span class="csb-topnav-spacer"></span>
+
+    <AuthorizeView>
+        <Authorized>
+            <span class="csb-topnav-user" title="Aktif kullanıcı">
+                👤 @context.User.Identity?.Name
+            </span>
+            <button type="button" class="csb-topnav-logout" @onclick="LogoutAsync">
+                Çıkış
+            </button>
+        </Authorized>
+    </AuthorizeView>
+</nav>
+
+@code {
+    private async Task LogoutAsync()
+    {
+        await AuthSvc.LogoutAsync();
+        AuthState.NotifyStateChanged();
+        Nav.NavigateTo("/login", forceLoad: false);
+    }
+}
