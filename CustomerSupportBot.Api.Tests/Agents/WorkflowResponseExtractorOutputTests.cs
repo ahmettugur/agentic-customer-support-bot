@@ -59,8 +59,8 @@ public class WorkflowResponseExtractorOutputTests
         var messages = new List<ChatMessage>
         {
             Msg(ChatRole.User, "soru"),
-            Msg(ChatRole.Assistant, "OrderInquiryAgent: lütfen sipariş id verin", WellKnown.AgentNames.Planning),
-            Msg(ChatRole.Assistant, "sipariş işleniyor durumdadır", WellKnown.AgentNames.OrderInquiry),
+            Msg(ChatRole.Assistant, "OrderAgent: lütfen sipariş id verin", WellKnown.AgentNames.Planning),
+            Msg(ChatRole.Assistant, "sipariş işleniyor durumdadır", WellKnown.AgentNames.Order),
         };
         WorkflowResponseExtractor.ExtractResultFromOutput(Out(messages))
             .Should().Be("sipariş işleniyor durumdadır");
@@ -71,10 +71,10 @@ public class WorkflowResponseExtractorOutputTests
     {
         var messages = new List<ChatMessage>
         {
-            Msg(ChatRole.Assistant, "OrderInquiryAgent: yardım", WellKnown.AgentNames.Planning),
+            Msg(ChatRole.Assistant, "OrderAgent: yardım", WellKnown.AgentNames.Planning),
         };
         WorkflowResponseExtractor.ExtractResultFromOutput(Out(messages))
-            .Should().Contain("OrderInquiryAgent");
+            .Should().Contain("OrderAgent");
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class WorkflowResponseExtractorOutputTests
         {
           "detectedIntent": "order_inquiry",
           "intentConfidence": 0.9,
-          "selectedAgent": "OrderInquiryAgent",
+          "selectedAgent": "OrderAgent",
           "needsClarification": false
         }
         ```
@@ -123,7 +123,7 @@ public class WorkflowResponseExtractorOutputTests
         };
         var result = WorkflowResponseExtractor.ExtractPlanningFromOutput(Out(messages));
         result.Should().NotBeNull();
-        result!.SelectedAgent.Should().Be("OrderInquiryAgent");
+        result!.SelectedAgent.Should().Be("OrderAgent");
     }
 
     // ─── ExtractSpecialistReasoningsFromOutput ───
@@ -140,7 +140,7 @@ public class WorkflowResponseExtractorOutputTests
     {
         var messages = new List<ChatMessage>
         {
-            Msg(ChatRole.Assistant, "düz yanıt", WellKnown.AgentNames.OrderInquiry),
+            Msg(ChatRole.Assistant, "düz yanıt", WellKnown.AgentNames.Order),
         };
         WorkflowResponseExtractor.ExtractSpecialistReasoningsFromOutput(Out(messages))
             .Should().BeEmpty();
@@ -170,7 +170,7 @@ public class WorkflowResponseExtractorOutputTests
     [Fact]
     public void ContainsAgentRoutingMessage_CaseInsensitive_True()
     {
-        WorkflowResponseExtractor.ContainsAgentRoutingMessage("orderinquiryagent içerik")
+        WorkflowResponseExtractor.ContainsAgentRoutingMessage("orderagent içerik")
             .Should().BeTrue();
     }
 
@@ -189,7 +189,7 @@ public class WorkflowResponseExtractorOutputTests
 
     [Theory]
     [InlineData("PlanningAgent")]
-    [InlineData("OrderInquiryAgent")]
+    [InlineData("OrderAgent")]
     [InlineData("CustomAgent")]
     public void IsInternalWorkflowExecutor_UserAgent_False(string id)
     {

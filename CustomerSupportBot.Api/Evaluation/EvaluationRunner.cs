@@ -178,8 +178,7 @@ public class EvaluationRunner
         return simple switch
         {
             "ProductInquiryAgent" => "product_inquiry_tool",
-            "OrderPlacementAgent" => "order_placement_tool",
-            "OrderInquiryAgent" => "order_status_tool", // Birden fazla tool var, ilkini say
+            "OrderAgent" => "order_status_tool", // Birden fazla tool var; inquiry default
             "ComplaintAgent" => "complaint_registration_tool",
             _ => simple.ToLowerInvariant()
         };

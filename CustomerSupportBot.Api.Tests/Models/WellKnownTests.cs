@@ -12,8 +12,7 @@ public class WellKnownTests
         WellKnown.AgentNames.Specialists.Should().Contain(new[]
         {
             WellKnown.AgentNames.ProductInquiry,
-            WellKnown.AgentNames.OrderPlacement,
-            WellKnown.AgentNames.OrderInquiry,
+            WellKnown.AgentNames.Order,
             WellKnown.AgentNames.Complaint,
         });
     }

@@ -46,23 +46,27 @@ public static class WellKnown
     {
         public const string Planning = "PlanningAgent";
         public const string ProductInquiry = "ProductInquiryAgent";
-        public const string OrderPlacement = "OrderPlacementAgent";
-        public const string OrderInquiry = "OrderInquiryAgent";
+        public const string Order = "OrderAgent";
         public const string Complaint = "ComplaintAgent";
         public const string HumanHandoff = "HumanHandoffAgent";
         public const string Response = "ResponseAgent";
 
+        /// <summary>Yan-etkisiz (read-only) specialist ajanlar — paralel sub-task çalıştırması için.</summary>
+        public static readonly IReadOnlySet<string> ReadOnly = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ProductInquiry
+        };
+
         /// <summary>Specialist ajanlar (Planning ve Response hariç).</summary>
         public static readonly string[] Specialists =
         [
-            ProductInquiry, OrderPlacement, OrderInquiry, Complaint, HumanHandoff
+            ProductInquiry, Order, Complaint, HumanHandoff
         ];
 
         /// <summary>Tüm ajanlar.</summary>
         public static readonly string[] All =
         [
-            Planning, ProductInquiry, OrderPlacement, OrderInquiry,
-            Complaint, HumanHandoff, Response
+            Planning, ProductInquiry, Order, Complaint, HumanHandoff, Response
         ];
     }
 

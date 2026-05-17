@@ -5,11 +5,10 @@
 // Mimari:
 // 1. PlanningAgent       → Yönlendirme (araç yok)
 // 2. ProductInquiryAgent → product_inquiry_tool
-// 3. OrderPlacementAgent → order_placement_tool (HITL approval gate)
-// 4. OrderInquiryAgent   → order_status_tool
-// 5. ComplaintAgent      → complaint_registration_tool (HITL approval gate)
-// 6. HumanHandoffAgent   → human_handoff_tool
-// 7. ResponseAgent       → Son yanıt biçimlendirme, "TERMINATE" ile sonlandırma
+// 3. OrderAgent          → order_placement_tool (HITL) + order_status_tool + get_last_order_tool + get_all_orders_tool
+// 4. ComplaintAgent      → complaint_registration_tool (HITL approval gate)
+// 5. HumanHandoffAgent   → human_handoff_tool
+// 6. ResponseAgent       → Son yanıt biçimlendirme, "TERMINATE" ile sonlandırma
 
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -34,8 +33,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     // Tip AIAgent: her agent OpenTelemetry middleware ile sarıldığı için concrete tip ChatClientAgent değildir.
     private readonly AIAgent _planningAgent;
     private readonly AIAgent _productInquiryAgent;
-    private readonly AIAgent _orderPlacementAgent;
-    private readonly AIAgent _orderInquiryAgent;
+    private readonly AIAgent _orderAgent;
     private readonly AIAgent _complaintAgent;
     private readonly AIAgent _humanHandoffAgent;
     private readonly AIAgent _responseAgent;
@@ -98,19 +96,13 @@ public class CustomerSupportTeam : ICustomerSupportTeam
             description: "Ürün sorgularını yanıtlar.",
             tools: [AIFunctionFactory.Create(CustomerSupportTools.ProductInquiryTool)]), sourceName);
 
-        _orderPlacementAgent = WrapWithTelemetry(new ChatClientAgent(
+        _orderAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
-            instructions: _prompts.Get("agents/order-placement-agent"),
-            name: WellKnown.AgentNames.OrderPlacement,
-            description: "Handles order placement.",
-            tools: [_approvalGate.BuildOrderPlacementTool()]), sourceName);
-
-        _orderInquiryAgent = WrapWithTelemetry(new ChatClientAgent(
-            chatClient,
-            instructions: _prompts.Get("agents/order-inquiry-agent"),
-            name: WellKnown.AgentNames.OrderInquiry,
-            description: "Sipariş durumu sorgularını yanıtlar.",
+            instructions: _prompts.Get("agents/order-agent"),
+            name: WellKnown.AgentNames.Order,
+            description: "Sipariş oluşturma ve sorgulama işlemlerini yürütür.",
             tools: [
+                _approvalGate.BuildOrderPlacementTool(),
                 AIFunctionFactory.Create(CustomerSupportTools.OrderStatusTool),
                 AIFunctionFactory.Create(CustomerSupportTools.GetLastOrderTool),
                 AIFunctionFactory.Create(CustomerSupportTools.GetAllOrdersTool)
@@ -163,8 +155,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
             .AddParticipants(
                 _planningAgent,
                 _productInquiryAgent,
-                _orderPlacementAgent,
-                _orderInquiryAgent,
+                _orderAgent,
                 _complaintAgent,
                 _humanHandoffAgent,
                 _responseAgent)

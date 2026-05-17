@@ -69,7 +69,7 @@ public class WorkflowResponseExtractorTests
     public void ContainsAgentRoutingMessage_AgentName_True()
     {
         WorkflowResponseExtractor.ContainsAgentRoutingMessage(
-            "OrderInquiryAgent: lütfen sipariş numaranızı verin").Should().BeTrue();
+            "OrderAgent: lütfen sipariş numaranızı verin").Should().BeTrue();
     }
 
     [Fact]

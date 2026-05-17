@@ -67,7 +67,7 @@ public class ApprovalGateService
             {
                 var decision = await RequestApprovalAsync(
                     toolName: WellKnown.ToolNames.OrderPlacement,
-                    agentName: WellKnown.AgentNames.OrderPlacement,
+                    agentName: WellKnown.AgentNames.Order,
                     parameters: new Dictionary<string, object?>
                     {
                         ["productName"] = productName,

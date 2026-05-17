@@ -35,7 +35,7 @@ public class ApprovalGateServiceEscalationTests
             {
                 new()
                 {
-                    AgentName = WellKnown.AgentNames.OrderInquiry,
+                    AgentName = WellKnown.AgentNames.Order,
                     PostToolReflection = new PostToolReflection
                     {
                         Status = WellKnown.TaskStatuses.NeedsEscalation,
@@ -60,7 +60,7 @@ public class ApprovalGateServiceEscalationTests
             {
                 new()
                 {
-                    AgentName = WellKnown.AgentNames.OrderInquiry,
+                    AgentName = WellKnown.AgentNames.Order,
                     PostToolReflection = new PostToolReflection { Status = WellKnown.TaskStatuses.Completed }
                 }
             }
@@ -128,7 +128,7 @@ public class ApprovalGateServiceEscalationTests
             {
                 new()
                 {
-                    AgentName = WellKnown.AgentNames.OrderInquiry,
+                    AgentName = WellKnown.AgentNames.Order,
                     PostToolReflection = new PostToolReflection
                     {
                         Status = WellKnown.TaskStatuses.NeedsEscalation,

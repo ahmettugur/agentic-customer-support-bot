@@ -24,7 +24,7 @@ public class CustomerSupportChatManagerTests
     {
         var planning = MakeAgent(WellKnown.AgentNames.Planning);
         var response = MakeAgent(WellKnown.AgentNames.Response);
-        var orderInquiry = MakeAgent(WellKnown.AgentNames.OrderInquiry);
+        var orderInquiry = MakeAgent(WellKnown.AgentNames.Order);
         var complaint = MakeAgent(WellKnown.AgentNames.Complaint);
         var agents = new List<AIAgent> { planning, response, orderInquiry, complaint };
         agents.AddRange(extra);
@@ -88,7 +88,7 @@ public class CustomerSupportChatManagerTests
     {
         var mgr = BuildManager();
         var planJson = "{\"intent\":\"order_inquiry\",\"selectedAgent\":\"" +
-                       WellKnown.AgentNames.OrderInquiry +
+                       WellKnown.AgentNames.Order +
                        "\",\"intentConfidence\":0.95,\"needsClarification\":false}";
         var history = new List<ChatMessage>
         {
@@ -96,7 +96,7 @@ public class CustomerSupportChatManagerTests
             new(ChatRole.Assistant, planJson) { AuthorName = WellKnown.AgentNames.Planning }
         };
         var picked = await InvokeSelectAsync(mgr, history);
-        picked.Name.Should().Be(WellKnown.AgentNames.OrderInquiry);
+        picked.Name.Should().Be(WellKnown.AgentNames.Order);
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public class CustomerSupportChatManagerTests
     {
         var mgr = BuildManager(new WorkflowGuardOptions { MaxHandoffsPerAgent = 1 });
         var planJson = "{\"intent\":\"order_inquiry\",\"selectedAgent\":\"" +
-                       WellKnown.AgentNames.OrderInquiry +
+                       WellKnown.AgentNames.Order +
                        "\",\"intentConfidence\":0.95,\"needsClarification\":false}";
         var history = new List<ChatMessage>
         {
@@ -113,7 +113,7 @@ public class CustomerSupportChatManagerTests
         };
         // İlk seçim limit içinde, ikinci seçim limit dışı kalmalı → ResponseAgent'a düşer
         var first = await InvokeSelectAsync(mgr, history);
-        first.Name.Should().Be(WellKnown.AgentNames.OrderInquiry);
+        first.Name.Should().Be(WellKnown.AgentNames.Order);
 
         var second = await InvokeSelectAsync(mgr, history);
         second.Name.Should().Be(WellKnown.AgentNames.Response);

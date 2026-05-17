@@ -212,11 +212,11 @@ public sealed class IntentActionMismatchRule : IReasoningSanityRule
 
         if (intent.Contains(WellKnown.Intents.OrderCreation) &&
             (action.Contains("orderinquiry") || action.Contains("complaintagent")))
-            return (true, WellKnown.AgentNames.OrderPlacement);
+            return (true, WellKnown.AgentNames.Order);
 
         if (intent.Contains(WellKnown.Intents.OrderInquiry) &&
             (action.Contains("orderplacement") || action.Contains("complaintagent")))
-            return (true, WellKnown.AgentNames.OrderInquiry);
+            return (true, WellKnown.AgentNames.Order);
 
         if (intent.Contains(WellKnown.Intents.ProductInfo) &&
             (action.Contains("complaintagent") || action.Contains("orderinquiry")))
