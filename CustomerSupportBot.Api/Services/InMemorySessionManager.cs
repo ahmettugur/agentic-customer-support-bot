@@ -57,19 +57,10 @@ public partial class InMemorySessionManager : ISessionManager
         var session = GetSession(sessionId);
         if (session == null) return;
 
-        // Synchronous path — distributed lock'u blocking-acquire ile al.
-        // AddExchange → ExtractAndUpdateState zinciri sync olduğu için.
-        var handle = _distributedLock
-            .AcquireAsync($"session:{sessionId}")
-            .GetAwaiter().GetResult();
-        try
-        {
-            ExtractAndUpdateStateCore(session, userMessage, botResponse);
-        }
-        finally
-        {
-            handle.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        }
+        // Lock gerekmez — aynı session için aynı anda tek bot pipeline çalışır.
+        // ConcurrentDictionary bireysel okuma/yazma için thread-safe'dir.
+        // Non-atomic read-modify-write işlemleri MutateStateAsync üzerinden yapılmalıdır.
+        ExtractAndUpdateStateCore(session, userMessage, botResponse);
     }
 
     public async Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default)

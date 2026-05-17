@@ -32,12 +32,18 @@ Uygulama iki persistence modunu destekler. Seçim `appsettings.json` üzerinden 
 | `ISessionManager` | `PostgresSessionManager` | `InMemorySessionManager` |
 | `IReasoningTraceStore` | `PostgresReasoningTraceStore` | `InMemoryReasoningTraceStore` |
 | `IApprovalQueue` | `PostgresApprovalQueue` | `InMemoryApprovalQueue` |
-| `IEscalationSink` | DB-backed | `InMemoryEscalationSink` |
+| `IEscalationSink` | `PostgresEscalationSink` | `InMemoryEscalationSink` |
 | `IRatingStore` | `PostgresRatingStore` | `InMemoryRatingStore` |
 | `IChatModeRegistry` | `PostgresChatModeRegistry` | `InMemoryChatModeRegistry` |
 | `IChatBridge` | — | `InMemoryChatBridge` |
+| `ICustomerProfileStore` | `PostgresCustomerProfileStore` | `InMemoryCustomerProfileStore` |
+| `ILessonStore` | `PostgresLessonStore` | `InMemoryLessonStore` |
+| `IWorkflowDefinitionStore` | `PostgresWorkflowDefinitionStore` | `InMemoryWorkflowDefinitionStore` |
+| `ISlaEventSink` | `PostgresSlaEventSink` | `InMemorySlaEventSink` |
 
 **Not**: `IChatBridge` her iki modda da in-memory'dir (gerçek zamanlı, geçici veri). `IChatModeRegistry` Postgres modunda kalıcı olarak `chat.session_modes` tablosuna yazar; uygulama restart'ında sohbet modları korunur.
+
+Tüm store kayıtları `PersistenceServicesExtensions.AddPersistenceServices()` içindeki `Provider` koşuluna göre yapılır. `ApplicationServicesExtensions` artık hiçbir store kaydı içermez.
 
 ---
 
@@ -50,16 +56,28 @@ Uygulama iki persistence modunu destekler. Seçim `appsettings.json` üzerinden 
 ```csharp
 public class CustomerSupportDbContext : DbContext
 {
+    // chat schema
     DbSet<SessionEntity>
     DbSet<MessageEntity>
     DbSet<ChatSessionModeEntity>
     DbSet<ChatBridgeMessageEntity>
+    // hitl schema
     DbSet<ApprovalRequestEntity>
     DbSet<EscalationEntity>
+    // observability schema
     DbSet<ReasoningTraceEntity>
+    // analytics schema
     DbSet<RatingEntity>
+    DbSet<SlaEventEntity>
+    // auth schema
     DbSet<UserEntity>
     DbSet<RefreshTokenEntity>
+    // personalization schema
+    DbSet<CustomerProfileEntity>
+    // improvement schema
+    DbSet<LessonEntity>
+    // workflow schema
+    DbSet<WorkflowDefinitionEntity>
 }
 ```
 
@@ -70,19 +88,38 @@ Entity'ler ve konfigürasyonlar alan bazlı organize edilmiştir:
 ```
 Infrastructure/Persistence/
 ├── Entities/
-│   ├── Auth/          → UserEntity, RefreshTokenEntity
-│   ├── Chat/          → SessionEntity, MessageEntity, ChatSessionModeEntity, ChatBridgeMessageEntity
-│   ├── Hitl/          → ApprovalRequestEntity, EscalationEntity
-│   ├── Analytics/     → RatingEntity
-│   └── Observability/ → ReasoningTraceEntity
+│   ├── Auth/            → UserEntity, RefreshTokenEntity
+│   ├── Chat/            → SessionEntity, MessageEntity, ChatSessionModeEntity, ChatBridgeMessageEntity
+│   ├── Hitl/            → ApprovalRequestEntity, EscalationEntity, HumanAgentEntity
+│   ├── Analytics/       → RatingEntity, SlaEventEntity
+│   ├── Observability/   → ReasoningTraceEntity
+│   ├── Personalization/ → CustomerProfileEntity
+│   ├── Improvement/     → LessonEntity
+│   └── Workflow/        → WorkflowDefinitionEntity
 ├── Configurations/
-│   ├── Auth/          → UserConfiguration, RefreshTokenConfiguration
-│   ├── Chat/          → SessionConfiguration, MessageConfiguration, ...
-│   ├── Hitl/          → ApprovalRequestConfiguration, ...
-│   ├── Analytics/     → RatingConfiguration
-│   └── Observability/ → ReasoningTraceConfiguration
-└── Migrations/        → Code-first migration dosyaları
+│   ├── Auth/            → UserConfiguration, RefreshTokenConfiguration
+│   ├── Chat/            → SessionConfiguration, MessageConfiguration, ...
+│   ├── Hitl/            → ApprovalRequestConfiguration, ...
+│   ├── Analytics/       → RatingConfiguration, SlaEventConfiguration
+│   ├── Observability/   → ReasoningTraceConfiguration
+│   ├── Personalization/ → CustomerProfileConfiguration
+│   ├── Improvement/     → LessonConfiguration
+│   └── Workflow/        → WorkflowDefinitionConfiguration
+└── Migrations/          → Code-first migration dosyaları
 ```
+
+### Schema Haritası
+
+| PostgreSQL Şeması | Tablolar |
+|-------------------|----------|
+| `chat` | sessions, messages, session_modes, bridge_messages |
+| `hitl` | approvals, escalations, human_agents |
+| `observability` | reasoning_traces |
+| `analytics` | ratings, sla_events |
+| `auth` | users, refresh_tokens |
+| `personalization` | customer_profiles |
+| `improvement` | lessons |
+| `workflow` | workflow_definitions |
 
 ### JSONB Mapping
 
@@ -164,11 +201,57 @@ dotnet ef database update
 | Bağlantı | Port | Açıklama |
 |----------|------|----------|
 | **PostgreSQL** | 5433 (docker) → 5432 (container) | Ana kalıcı veri deposu |
-| **Redis** | 6379 | Opsiyonel cache (connection string tanımlı, aktif kullanım sınırlı) |
+| **Redis** | 6379 | **Zorunlu** — distributed lock altyapısı (bağlantı string yoksa uygulama başlamaz) |
 
 ---
 
-## 7. InMemory Modu Detayları
+## 7. Distributed Lock
+
+Uygulama, aynı kaynağa eşzamanlı erişimi serialize etmek için Redis tabanlı distributed lock kullanır.
+
+### Implementasyon
+
+| Sınıf | Paket | Kullanım |
+|-------|-------|----------|
+| `RedisDistributedLock` | `DistributedLock.Redis` v1.1.1 (Medallion.Threading) | Production — tüm ortamlar |
+| `InMemoryDistributedLock` | — (test projesi) | Yalnızca birim testleri |
+
+`RedisServicesExtensions.AddRedisServices()` Redis bağlantı string'i yoksa `InvalidOperationException` fırlatır — Redis her zaman zorunludur.
+
+### Lock Key'leri
+
+| Key Şablonu | Kullanan Servis | Amaç |
+|-------------|-----------------|------|
+| `csbot:lock:profile:{customerId}` | `CustomerProfileService` | Per-customer profil güncellemelerini serialize et |
+| `csbot:lock:session:{sessionId}` | `ISessionManager.MutateStateAsync` | Session state atomic mutasyonu |
+
+### Konfigürasyon
+
+```json
+{
+  "Redis": {
+    "KeyPrefix": "csbot",
+    "DefaultLockTimeoutSeconds": 10,
+    "LockExpirySeconds": 30
+  }
+}
+```
+
+| Parametre | Varsayılan | Açıklama |
+|-----------|-----------|----------|
+| `KeyPrefix` | `csbot` | Tüm lock key'lerinin öneki — multi-tenant çakışmasını önler |
+| `DefaultLockTimeoutSeconds` | `10` | Lock alınamazsa bu süre sonunda `TimeoutException` |
+| `LockExpirySeconds` | `30` | Lock TTL — process çöküse otomatik release |
+
+### Multi-Pod Davranışı
+
+Tüm pod'lar aynı Redis'e bağlandığı için lock **gerçekten global**'dir. Redis bağlantısı kesilirse `TryAcquireAsync` null döner, `AcquireAsync` `TimeoutException` fırlatır.
+
+> ⚠️ **Multi-pod deployment için Redis Sentinel veya Cluster** kullanılması önerilir. Tek Redis node, lock altyapısının SPOF'udur.
+
+---
+
+## 9. InMemory Modu Detayları
 
 InMemory modda veriler bellekte tutulur ve uygulama restart'ında kaybolur:
 
@@ -179,12 +262,18 @@ InMemory modda veriler bellekte tutulur ve uygulama restart'ında kaybolur:
 | `InMemoryApprovalQueue` | Ring buffer, max 200 recent |
 | `InMemoryEscalationSink` | Sınırsız (RAM) |
 | `InMemoryRatingStore` | Sınırsız (RAM) |
+| `InMemoryCustomerProfileStore` | Sınırsız (RAM) |
+| `InMemoryLessonStore` | Sınırsız (RAM) |
+| `InMemoryWorkflowDefinitionStore` | Sınırsız (RAM) |
+| `InMemorySlaEventSink` | Ring buffer, max 500 olay |
 
 `InMemorySessionManager` tek bir singleton olarak oluşturulup `ISessionManager` ve `IConversationStore` interface'lerine aynı instance üzerinden bağlanır.
 
+> ⚠️ **Production uyarısı**: InMemory modda `CustomerProfile`, `Lesson`, `WorkflowDefinition` ve `SlaEvent` verileri uygulama restart'ında kaybolur. Production'da her zaman `Persistence:Provider = "Postgres"` kullanın.
+
 ---
 
-## 8. Diğer Veri Depoları
+## 10. Diğer Veri Depoları
 
 ### Qdrant (Vektör Veritabanı)
 
@@ -204,9 +293,32 @@ Demo amaçlı in-memory product/order/complaint deposu. Static seed verilerle ba
 
 ---
 
+## 11. CORS Yapılandırması
+
+CORS policy `appsettings.json` üzerinden kontrol edilir. `Cors:AllowedOrigins` boş bırakılırsa tüm origin'lere izin verilir (development). Production'da belirli origin listesi tanımlanmalıdır:
+
+```json
+{
+  "Cors": {
+    "AllowedOrigins": [
+      "https://your-frontend.example.com",
+      "https://admin.example.com"
+    ]
+  }
+}
+```
+
+| `AllowedOrigins` Değeri | Davranış |
+|-------------------------|----------|
+| Boş dizi `[]` | `AllowAnyOrigin()` — development için |
+| Dolu liste | `WithOrigins(...)` — production için |
+
+---
+
 ## Çapraz Referanslar
 
 - **Mimari + DI haritası** → [architecture.md](architecture.md)
 - **Konfigürasyon** → [runtime.md](runtime.md#2-konfigürasyon)
 - **Docker kurulumu** → [deployment.md](deployment.md)
 - **Semantic memory** → [intelligence.md](intelligence.md)
+- **Blazor frontend** → [frontend.md](frontend.md)

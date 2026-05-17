@@ -6,7 +6,10 @@ using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Analytics;
 using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
 using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Improvement;
 using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Observability;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Personalization;
+using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Workflow;
 using Microsoft.EntityFrameworkCore;
 
 namespace CustomerSupportBot.Api.Infrastructure.Persistence;
@@ -38,6 +41,18 @@ public sealed class CustomerSupportDbContext : DbContext
     // ─── auth schema ───
     public DbSet<UserEntity> Users => Set<UserEntity>();
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
+
+    // ─── personalization schema ───
+    public DbSet<CustomerProfileEntity> CustomerProfiles => Set<CustomerProfileEntity>();
+
+    // ─── improvement schema ───
+    public DbSet<LessonEntity> Lessons => Set<LessonEntity>();
+
+    // ─── workflow schema ───
+    public DbSet<WorkflowDefinitionEntity> WorkflowDefinitions => Set<WorkflowDefinitionEntity>();
+
+    // ─── analytics schema (sla) ───
+    public DbSet<SlaEventEntity> SlaEvents => Set<SlaEventEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

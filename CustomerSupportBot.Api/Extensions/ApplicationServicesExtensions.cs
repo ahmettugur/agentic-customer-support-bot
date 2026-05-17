@@ -9,10 +9,20 @@ namespace CustomerSupportBot.Api.Extensions;
 
 public static class ApplicationServicesExtensions
 {
-    public static IServiceCollection AddApplicationServices(this IServiceCollection services)
+    public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration configuration)
     {
+        var allowedOrigins = configuration
+            .GetSection("Cors:AllowedOrigins")
+            .Get<string[]>();
+
         services.AddCors(options =>
-            options.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+            options.AddDefaultPolicy(p =>
+            {
+                if (allowedOrigins is { Length: > 0 })
+                    p.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader();
+                else
+                    p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+            }));
 
         // Enum'ları camelCase string olarak serialize et (ör. IssueSeverity.Warn → "warn")
         services.ConfigureHttpJsonOptions(o =>
@@ -84,13 +94,11 @@ public static class ApplicationServicesExtensions
         services.AddSingleton<AnalyticsService>();
 
         // ─── Self-Improvement (LessonMiner) ───
-        // SelfImprovementOptions binding burada değil — AiServicesExtensions'ta IConfiguration var.
-        services.AddSingleton<Services.Improvement.ILessonStore, Services.Improvement.InMemoryLessonStore>();
+        // ILessonStore → PersistenceServicesExtensions'da provider'a göre kaydedilir.
         services.AddSingleton<Services.Improvement.LessonMiner>();
 
         // ─── Per-Customer Personalization ───
-        services.AddSingleton<Services.Personalization.ICustomerProfileStore,
-            Services.Personalization.InMemoryCustomerProfileStore>();
+        // ICustomerProfileStore → PersistenceServicesExtensions'da provider'a göre kaydedilir.
         services.AddSingleton<Services.Personalization.CustomerProfileService>();
 
         // ─── Smart Routing & Skills-Based Escalation (#11) ───
@@ -99,13 +107,11 @@ public static class ApplicationServicesExtensions
             Services.Routing.SkillsBasedRouter>();
 
         // ─── Low-Code Workflow Designer (#14) ───
-        services.AddSingleton<Services.Workflow.IWorkflowDefinitionStore,
-            Services.Workflow.InMemoryWorkflowDefinitionStore>();
+        // IWorkflowDefinitionStore → PersistenceServicesExtensions'da provider'a göre kaydedilir.
         services.AddSingleton<Services.Workflow.WorkflowExecutor>();
 
         // ─── SLA / Response Time Guardian (#H) ───
-        services.AddSingleton<Services.Sla.ISlaEventSink,
-            Services.Sla.InMemorySlaEventSink>();
+        // ISlaEventSink → PersistenceServicesExtensions'da provider'a göre kaydedilir.
         services.AddHostedService<Services.Sla.SlaGuardianService>();
 
         return services;

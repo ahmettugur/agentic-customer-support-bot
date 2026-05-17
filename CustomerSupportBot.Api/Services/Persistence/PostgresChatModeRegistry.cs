@@ -51,20 +51,34 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
         if (string.IsNullOrWhiteSpace(sessionId)) return false;
         EnsureHydrated();
 
+        var agent = humanAgent ?? WellKnown.Defaults.Admin;
+
+        // Zaten başka biri Human modtaysa reddet — concurrent takeover önlemi.
+        // Aynı agent yeniden çağırırsa (reconnect vb.) izin ver.
+        if (_states.TryGetValue(sessionId, out var current)
+            && current.Mode == ChatMode.Human
+            && !string.Equals(current.HumanAgent, agent, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "[HITL] TakeOver reddedildi: session={Session} zaten {Existing} tarafından alındı. İstekte bulunan: {Requester}",
+                sessionId, current.HumanAgent, agent);
+            return false;
+        }
+
         var state = _states.AddOrUpdate(
             sessionId,
             _ => new ChatSessionState
             {
                 SessionId = sessionId,
                 Mode = ChatMode.Human,
-                HumanAgent = humanAgent ?? WellKnown.Defaults.Admin,
+                HumanAgent = agent,
                 EnteredAt = DateTime.UtcNow,
                 LastActivityAt = DateTime.UtcNow
             },
             (_, existing) =>
             {
                 existing.Mode = ChatMode.Human;
-                existing.HumanAgent = humanAgent ?? existing.HumanAgent ?? WellKnown.Defaults.Admin;
+                existing.HumanAgent = agent;
                 existing.EnteredAt ??= DateTime.UtcNow;
                 existing.LastActivityAt = DateTime.UtcNow;
                 return existing;

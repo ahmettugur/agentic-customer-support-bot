@@ -9,7 +9,7 @@ builder.Services.AddTelemetryServices(builder.Configuration);
 builder.Services.AddAiServices(builder.Configuration);
 builder.Services.AddRedisServices(builder.Configuration);
 builder.Services.AddPersistenceServices(builder.Configuration);
-builder.Services.AddApplicationServices();
+builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddAuthenticationServices(builder.Configuration);
 
 var app = builder.Build();

@@ -1,8 +1,12 @@
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Services.Improvement;
 using CustomerSupportBot.Api.Services.Persistence;
+using CustomerSupportBot.Api.Services.Personalization;
 using CustomerSupportBot.Api.Services.Routing;
+using CustomerSupportBot.Api.Services.Sla;
+using CustomerSupportBot.Api.Services.Workflow;
 
 namespace CustomerSupportBot.Api.Extensions;
 
@@ -50,6 +54,10 @@ public static class PersistenceServicesExtensions
             services.AddSingleton<IConversationStore>(sp => sp.GetRequiredService<PostgresSessionManager>());
             services.AddSingleton<IRatingStore, PostgresRatingStore>();
             services.AddSingleton<IHumanAgentRegistry, PostgresHumanAgentRegistry>();
+            services.AddSingleton<ICustomerProfileStore, PostgresCustomerProfileStore>();
+            services.AddSingleton<ILessonStore, PostgresLessonStore>();
+            services.AddSingleton<IWorkflowDefinitionStore, PostgresWorkflowDefinitionStore>();
+            services.AddSingleton<ISlaEventSink, PostgresSlaEventSink>();
         }
         else
         {
@@ -62,6 +70,10 @@ public static class PersistenceServicesExtensions
             services.AddSingleton<IConversationStore>(sp => sp.GetRequiredService<InMemorySessionManager>());
             services.AddSingleton<IRatingStore, InMemoryRatingStore>();
             services.AddSingleton<IHumanAgentRegistry, InMemoryHumanAgentRegistry>();
+            services.AddSingleton<ICustomerProfileStore, InMemoryCustomerProfileStore>();
+            services.AddSingleton<ILessonStore, InMemoryLessonStore>();
+            services.AddSingleton<IWorkflowDefinitionStore, InMemoryWorkflowDefinitionStore>();
+            services.AddSingleton<ISlaEventSink, InMemorySlaEventSink>();
         }
 
         return services;

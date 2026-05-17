@@ -11,4 +11,7 @@ internal static class Schemas
     public const string Observability = "observability";
     public const string Analytics = "analytics";
     public const string Auth = "auth";
+    public const string Personalization = "personalization";
+    public const string Improvement = "improvement";
+    public const string Workflow = "workflow";
 }

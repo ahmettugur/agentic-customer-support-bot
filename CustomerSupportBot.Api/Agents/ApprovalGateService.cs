@@ -29,6 +29,7 @@ public class ApprovalGateService
     private readonly IHumanAgentRegistry? _agentRegistry;
     private readonly ICustomerProfileStore? _profileStore;
     private readonly ISessionManager? _sessionManager;
+    private readonly ILogger<ApprovalGateService> _logger;
 
     public ApprovalGateService(
         IApprovalQueue approvalQueue,
@@ -38,7 +39,8 @@ public class ApprovalGateService
         ISkillsBasedRouter? router = null,
         IHumanAgentRegistry? agentRegistry = null,
         ICustomerProfileStore? profileStore = null,
-        ISessionManager? sessionManager = null)
+        ISessionManager? sessionManager = null,
+        ILogger<ApprovalGateService>? logger = null)
     {
         _approvalQueue = approvalQueue;
         _approvalOptions = approvalOptions.Value;
@@ -48,6 +50,7 @@ public class ApprovalGateService
         _agentRegistry = agentRegistry;
         _profileStore = profileStore;
         _sessionManager = sessionManager;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ApprovalGateService>.Instance;
     }
 
     /// <summary>
@@ -231,9 +234,9 @@ public class ApprovalGateService
 
             if (existing != null)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[HITL] Session {trace.SessionId} için zaten açık eskalasyon var " +
-                    $"(id={existing.Id}, status={existing.Status}); yeni kayıt oluşturulmuyor.");
+                _logger.LogDebug(
+                    "[HITL] Session {SessionId} için zaten açık eskalasyon var (id={Id}, status={Status}); yeni kayıt oluşturulmuyor.",
+                    trace.SessionId, existing.Id, existing.Status);
                 return;
             }
         }
@@ -270,8 +273,7 @@ public class ApprovalGateService
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[HITL] Escalation sink failed: {ex.Message}");
+                _logger.LogWarning(ex, "[HITL] Escalation sink kaydı başarısız.");
             }
         }
     }
@@ -329,7 +331,7 @@ public class ApprovalGateService
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Routing] Decision failed: {ex.Message}");
+            _logger.LogWarning(ex, "[Routing] Skills-based routing kararı başarısız.");
         }
     }
 }

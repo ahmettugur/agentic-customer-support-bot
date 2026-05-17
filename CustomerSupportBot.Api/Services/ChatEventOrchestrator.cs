@@ -50,6 +50,35 @@ public sealed class ChatEventOrchestrator
 
         // Main loop: forward admin messages from chat bridge
         await ProcessBridgeMessagesAsync(sessionId, sse, ct);
+
+        // Müşteri bağlantıyı kesti — bu session'a ait açık eskalasyonları otomatik kapat.
+        // Aktif müşteri olmayan bir eskalasyonu admin panelinde tutmanın anlamı yok;
+        // müşteri yeniden bağlanırsa bot ihtiyaç duyulduğunda yeni eskalasyon açabilir.
+        DismissOrphanedEscalations(sessionId);
+    }
+
+    private void DismissOrphanedEscalations(string sessionId)
+    {
+        try
+        {
+            foreach (var esc in _escalationSink.GetOpen())
+            {
+                if (esc.SessionId != sessionId) continue;
+                var dismissed = _escalationSink.Decide(
+                    esc.Id,
+                    WellKnown.EscalationActions.Dismiss,
+                    resolution: "Müşteri bağlantıyı kesti.");
+                if (dismissed)
+                    _logger.LogInformation(
+                        "[Escalation] Müşteri ayrıldı, eskalasyon otomatik kapatıldı: {Id} session={Session}",
+                        esc.Id, sessionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[Escalation] Auto-dismiss başarısız. session={Session}", sessionId);
+        }
     }
 
     /// <summary>

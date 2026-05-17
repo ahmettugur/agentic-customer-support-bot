@@ -26,9 +26,8 @@ public static class RedisServicesExtensions
         // Connection string çözümleme — Redis zorunlu
         var connectionString = opts.ConnectionString;
         if (string.IsNullOrWhiteSpace(connectionString))
-        {
             connectionString = configuration.GetConnectionString("Redis");
-        }
+
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new InvalidOperationException(

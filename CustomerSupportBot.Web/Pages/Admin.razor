@@ -6,6 +6,14 @@
 @implements IAsyncDisposable
 
 <div class="admin-layout">
+    @if (_errorMessage is not null)
+    {
+        <div class="error-banner" role="alert">
+            <span>@_errorMessage</span>
+            <button type="button" class="btn-icon" @onclick="() => _errorMessage = null">✕</button>
+        </div>
+    }
+
     <!-- HEADER -->
     <header class="admin-header">
         <div class="admin-header-left">
@@ -450,6 +458,7 @@
     private List<LessonProposal>     _proposedLessons    = [];
     private List<LessonProposal>     _approvedLessons    = [];
     private bool                     _miningInProgress;
+    private string?                  _errorMessage;
 
     // ── Prompt modal ───────────────────────────────────────────────────────────
     private enum PromptKind { None, ApproveApproval, RejectApproval, AckEscalation, ResolveEscalation, DismissEscalation, ReplanEscalation, ReplanChat, ApproveLesson, RejectLesson }
@@ -550,7 +559,17 @@
     private async Task TakeoverAndChatAsync(EscalationRequest e)
     {
         if (e.SessionId is null) return;
-        await AdminApi.TakeoverAsync(e.SessionId, "admin");
+        _errorMessage = null;
+        try
+        {
+            await AdminApi.TakeoverAsync(e.SessionId, "admin");
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.BadRequest)
+        {
+            _errorMessage = "Bu oturum zaten başka bir temsilci tarafından devralınmış. Listeyi yenileyiniz.";
+            await RefreshActiveTabAsync();
+            return;
+        }
         _activeChats = await AdminApi.GetActiveChatsAsync();
         var session  = _activeChats.FirstOrDefault(s => s.SessionId == e.SessionId)
                        ?? new ActiveChatSession(e.SessionId, "admin", 0, null, null, DateTimeOffset.UtcNow);
