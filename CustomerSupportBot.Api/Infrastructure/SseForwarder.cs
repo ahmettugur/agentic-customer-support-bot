@@ -4,7 +4,7 @@
 
 namespace CustomerSupportBot.Api.Infrastructure;
 
-using Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.AspNetCore.Http;
 
 /// <summary>

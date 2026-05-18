@@ -1,3 +1,4 @@
+using CustomerSupportBot.Domain.Model.Memory;
 // Services/Routing/SkillsBasedRouter.cs
 // SkillsBasedRouter — Reasoning trace + müşteri profilinden skill etiketlerini
 // Çıkarır, IHumanAgentRegistry'deki aday temsilciler arasında en iyi skill +
@@ -11,7 +12,7 @@
 //   score = (1 - LanguageWeight) * skillMatch + LanguageWeight * langMatch
 //   tie-break: yüksek loadFactor + Priority + son atama eskiliği
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Services.Routing;
@@ -30,7 +31,7 @@ public class SkillsBasedRouter : ISkillsBasedRouter
     public RoutingDecision Decide(
         ReasoningTrace trace,
         string? agentName,
-        Models.Memory.CustomerProfile? customerProfile)
+        CustomerProfile? customerProfile)
     {
         if (!_options.Enabled)
         {
@@ -117,7 +118,7 @@ public class SkillsBasedRouter : ISkillsBasedRouter
     public List<string> ExtractRequiredSkills(
         ReasoningTrace trace,
         string? agentName,
-        Models.Memory.CustomerProfile? customerProfile)
+        CustomerProfile? customerProfile)
     {
         var result = new HashSet<string>(StringComparer.Ordinal);
 
@@ -199,3 +200,4 @@ public class SkillsBasedRouter : ISkillsBasedRouter
         set.Add(tag.Trim().ToLowerInvariant());
     }
 }
+

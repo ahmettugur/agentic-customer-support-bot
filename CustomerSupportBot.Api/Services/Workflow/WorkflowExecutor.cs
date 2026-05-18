@@ -7,18 +7,20 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models.Workflow;
-using CustomerSupportBot.Api.Tools;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model.Workflow;
+using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Api.Services.Workflow;
 
 public partial class WorkflowExecutor
 {
     private readonly ILogger<WorkflowExecutor> _logger;
+    private readonly CustomerSupportToolsService _tools;
 
-    public WorkflowExecutor(ILogger<WorkflowExecutor> logger)
+    public WorkflowExecutor(CustomerSupportToolsService tools, ILogger<WorkflowExecutor> logger)
     {
+        _tools = tools;
         _logger = logger;
     }
 
@@ -208,16 +210,16 @@ public partial class WorkflowExecutor
         ToolResult tr = step.Tool.ToLowerInvariant() switch
         {
             WellKnown.ToolNames.ProductInquiry =>
-                CustomerSupportTools.ProductInquiryTool(
+                _tools.ProductInquiryTool(
                     GetStringParam(resolved, "productName") ?? GetStringParam(resolved, "product_name") ?? ""),
             WellKnown.ToolNames.OrderStatus =>
-                CustomerSupportTools.OrderStatusTool(
+                _tools.OrderStatusTool(
                     GetStringParam(resolved, "orderId") ?? GetStringParam(resolved, "order_id") ?? ""),
             WellKnown.ToolNames.GetLastOrder =>
-                CustomerSupportTools.GetLastOrderTool(
+                _tools.GetLastOrderTool(
                     GetStringParam(resolved, "customerId") ?? GetStringParam(resolved, "customer_id") ?? ""),
             WellKnown.ToolNames.GetAllOrders =>
-                CustomerSupportTools.GetAllOrdersTool(
+                _tools.GetAllOrdersTool(
                     GetStringParam(resolved, "customerId") ?? GetStringParam(resolved, "customer_id") ?? ""),
             _ => throw new InvalidOperationException($"Bilinmeyen veya desteklenmeyen tool: {step.Tool}")
         };
@@ -262,3 +264,4 @@ public partial class WorkflowExecutor
     private static string Truncate(string s, int max) =>
         string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max] + "…";
 }
+

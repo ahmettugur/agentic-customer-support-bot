@@ -6,7 +6,7 @@
 // Mimari: Strategy pattern — her kural ayrı bir IReasoningSanityRule.
 // Yeni kural eklemek için sadece sınıf yaz ve _rules listesine ekle.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services;
 
@@ -380,3 +380,4 @@ public sealed class SubTasksIgnoredRule : IReasoningSanityRule
         }
     }
 }
+

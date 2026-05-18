@@ -1,8 +1,10 @@
-using CustomerSupportBot.Api.Infrastructure.Persistence;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Adapters.Persistence.EfCore;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using StackExchange.Redis;
+using PersistenceOptions = CustomerSupportBot.Api.Infrastructure.Persistence.PersistenceOptions;
+using PersistenceProvider = CustomerSupportBot.Api.Infrastructure.Persistence.PersistenceProvider;
 
 namespace CustomerSupportBot.Api.Extensions;
 
@@ -131,3 +133,4 @@ file sealed class RedisHealthCheck(IConnectionMultiplexer redis) : IHealthCheck
         }
     }
 }
+

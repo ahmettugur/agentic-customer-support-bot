@@ -1,6 +1,6 @@
 // Tests/Services/InMemoryEscalationSinkTests.cs
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -16,7 +16,7 @@ public class InMemoryEscalationSinkTests
         SessionId = "s1",
         AgentName = "ComplaintAgent",
         Reason = "needs human",
-        UserQuery = "ÅŸikayet",
+        UserQuery = "þikayet",
         Status = EscalationStatus.Open,
         CreatedAt = DateTime.UtcNow
     };

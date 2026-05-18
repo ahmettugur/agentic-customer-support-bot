@@ -1,17 +1,27 @@
 // Services/Providers/CustomerContextProvider.cs
-// MÃ¼ÅŸteri verilerini FakeDatabase'den Ã§ekerek ajanlara baÄŸlam saÄŸlar.
+// Müþteri verilerini port'lar üzerinden çekerek ajanlara baðlam saðlar.
 
 using System.Text;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Application.Ports.Driven.Persistence;
 
 namespace CustomerSupportBot.Api.Services.Providers;
 
 /// <summary>
-/// Oturumdaki CustomerId bilgisine gÃ¶re mÃ¼ÅŸterinin sipariÅŸ ve ÅŸikayet
-/// GeÃ§miÅŸini FakeDatabase'den Ã§eker ve baÄŸlam olarak sunar.
+/// Oturumdaki CustomerId bilgisine göre müþterinin sipariþ ve þikayet
+/// geçmiþini repository port'larýndan çeker ve baðlam olarak sunar.
 /// </summary>
 public class CustomerContextProvider : IContextProvider
 {
+    private readonly IOrderRepository _orders;
+    private readonly IComplaintRepository _complaints;
+
+    public CustomerContextProvider(IOrderRepository orders, IComplaintRepository complaints)
+    {
+        _orders = orders;
+        _complaints = complaints;
+    }
+
     public string Name => "CustomerContext";
     public int Order => 10;
 
@@ -22,13 +32,12 @@ public class CustomerContextProvider : IContextProvider
             return Task.FromResult<string?>(null);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"[MÃ¼ÅŸteri BaÄŸlamÄ± â€” {customerId}]");
+        sb.AppendLine($"[Müþteri Baðlamý – {customerId}]");
 
-        // SipariÅŸler
-        var orders = FakeDatabase.GetAllOrders(customerId).ToList();
+        var orders = _orders.GetByCustomer(customerId).ToList();
         if (orders.Count > 0)
         {
-            sb.AppendLine($"Toplam sipariÅŸ: {orders.Count}");
+            sb.AppendLine($"Toplam sipariþ: {orders.Count}");
             foreach (var (orderId, order) in orders.Take(5))
             {
                 sb.AppendLine($"  - {orderId}: {order.Product} x{order.Quantity}, " +
@@ -37,20 +46,16 @@ public class CustomerContextProvider : IContextProvider
         }
         else
         {
-            sb.AppendLine("KayÄ±tlÄ± sipariÅŸ bulunamadÄ±.");
+            sb.AppendLine("Kayýtlý sipariþ bulunamadý.");
         }
 
-        // Åžikayetler
-        var complaints = FakeDatabase.ComplaintsDb
-            .Where(c => c.Value.CustomerId.Equals(customerId, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
+        var complaints = _complaints.GetByCustomer(customerId).ToList();
         if (complaints.Count > 0)
         {
-            sb.AppendLine($"Toplam ÅŸikayet: {complaints.Count}");
+            sb.AppendLine($"Toplam þikayet: {complaints.Count}");
             foreach (var (complaintId, complaint) in complaints.Take(3))
             {
-                sb.AppendLine($"  - {complaintId}: SipariÅŸ {complaint.OrderId}, " +
+                sb.AppendLine($"  - {complaintId}: Sipariþ {complaint.OrderId}, " +
                               $"Durum: {complaint.Status}");
             }
         }

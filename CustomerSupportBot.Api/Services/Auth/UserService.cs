@@ -1,7 +1,7 @@
 // Services/Auth/IUserService.cs
 
-using CustomerSupportBot.Api.Infrastructure.Persistence;
-using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
+using CustomerSupportBot.Adapters.Persistence.EfCore;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
 using Microsoft.EntityFrameworkCore;
 
 namespace CustomerSupportBot.Api.Services.Auth;

@@ -1,7 +1,7 @@
 // Services/ContextPipeline.cs
 // Birden fazla IContextProvider'ı zincirleyerek birleşik bağlam üretir.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services;
 
@@ -53,3 +53,4 @@ public class ContextPipeline
             : "";
     }
 }
+

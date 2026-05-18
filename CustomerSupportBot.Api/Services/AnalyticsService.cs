@@ -1,7 +1,7 @@
 // Services/AnalyticsService.cs
 // Tüm in-memory depolardan veri toplayarak analytics dashboard özeti üretir.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services;
 
@@ -286,3 +286,4 @@ public class EscalationSummary
     public DateTime CreatedAt { get; set; }
     public string? Resolution { get; set; }
 }
+

@@ -3,7 +3,7 @@
 // /workflows altında map edilir, RequireAuthorization("Admin") scope altında.
 
 using System.Security.Claims;
-using CustomerSupportBot.Api.Models.Workflow;
+using CustomerSupportBot.Domain.Model.Workflow;
 using CustomerSupportBot.Api.Services.Workflow;
 
 namespace CustomerSupportBot.Api.Endpoints;
@@ -71,3 +71,4 @@ public class TestRunInput
     public string? Input { get; set; }
     public Dictionary<string, string>? Variables { get; set; }
 }
+

@@ -3,7 +3,7 @@
 // planning, specialist reasoning, self-critique ve temizlik işlemleri.
 
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -225,3 +225,4 @@ public static class WorkflowResponseExtractor
         }
     }
 }
+

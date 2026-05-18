@@ -1,7 +1,7 @@
 using System.Text;
 using CustomerSupportBot.Api.Endpoints;
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.AspNetCore.Http;
 
 namespace CustomerSupportBot.Api.Tests.Infrastructure;

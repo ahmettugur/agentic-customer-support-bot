@@ -1,11 +1,12 @@
 // Tests/Agents/CustomerSupportTeamTests.cs
-// CustomerSupportTeam ctor + CreateWorkflow + BuildReasoningSummaryHint kapsamı.
-// Tam workflow execution çok dependency gerektirdiği için sadece yapı testleri.
+// CustomerSupportTeam ctor + CreateWorkflow + BuildReasoningSummaryHint kapsam�.
+// Tam workflow execution �ok dependency gerektirdi�i i�in sadece yap� testleri.
 
 using System.Reflection;
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -40,8 +41,9 @@ public class CustomerSupportTeamTests
             Options.Create(approvalOpts),
             NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
+        var tools = TestFactory.CreateToolsService();
         var approvalGate = new ApprovalGateService(
-            queue, Options.Create(approvalOpts), sink, new ApprovalContextAccessor());
+            queue, Options.Create(approvalOpts), sink, new ApprovalContextAccessor(), tools);
 
         var loggerFactory = NullLoggerFactory.Instance;
 
@@ -52,6 +54,7 @@ public class CustomerSupportTeamTests
             traceStore,
             prompts,
             approvalGate,
+            tools,
             loggerFactory);
     }
 
@@ -91,7 +94,7 @@ public class CustomerSupportTeamTests
         var team = BuildTeam();
         var method = typeof(CustomerSupportTeam).GetMethod(
             "BuildReasoningSummaryHint", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (method == null) return; // Yöntem yoksa atla
+        if (method == null) return; // Y�ntem yoksa atla
 
         var reasoning = new ReasoningResult
         {
@@ -100,7 +103,7 @@ public class CustomerSupportTeamTests
             ConfidenceScore = 0.9,
             Steps = new List<ReasoningStep>
             {
-                new() { Description = "Sipariş ID kontrolü" }
+                new() { Description = "Sipariş ID kontrol" }
             }
         };
         var hint = method.Invoke(team, new object[] { reasoning }) as string;
@@ -135,15 +138,15 @@ public class CustomerSupportTeamTests
 
         var history = new List<ChatMessage>
         {
-            new(ChatRole.User, "önceki mesaj"),
-            new(ChatRole.Assistant, "önceki yanıt"),
+            new(ChatRole.User, "�nceki mesaj"),
+            new(ChatRole.Assistant, "�nceki yan�t"),
         };
-        var task = (Task)method.Invoke(team, ["şimdiki", history, null, null])!;
+        var task = (Task)method.Invoke(team, ["�imdiki", history, null, null])!;
         await task.ConfigureAwait(true);
         var messages = (task.GetType().GetProperty("Result")!.GetValue(task) as List<ChatMessage>)!;
 
-        messages.Should().Contain(m => m.Text == "önceki mesaj");
-        messages.Should().Contain(m => m.Text == "şimdiki");
+        messages.Should().Contain(m => m.Text == "�nceki mesaj");
+        messages.Should().Contain(m => m.Text == "�imdiki");
     }
 
     [Fact]
@@ -154,11 +157,11 @@ public class CustomerSupportTeamTests
             "BuildWorkflowMessagesAsync", BindingFlags.Instance | BindingFlags.NonPublic);
         if (method == null) return;
 
-        var task = (Task)method.Invoke(team, new object?[] { "Siparişim ORD-12345 nerede?", null, null, null })!;
+        var task = (Task)method.Invoke(team, new object?[] { "Sipari�im ORD-12345 nerede?", null, null, null })!;
         await task.ConfigureAwait(true);
         var messages = (task.GetType().GetProperty("Result")!.GetValue(task) as List<ChatMessage>)!;
 
-        // Entity hint genelde System rolünde eklenir
+        // Entity hint genelde System rol�nde eklenir
         messages.Should().Contain(m => m.Role == ChatRole.System);
     }
 }

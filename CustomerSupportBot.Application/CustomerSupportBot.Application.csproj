@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CustomerSupportBot.Application</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Application katmanı sadece Domain'e bağımlı -->
+    <ProjectReference Include="..\CustomerSupportBot.Domain\CustomerSupportBot.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Application servisleri için gerekli paketler -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.6.0" />
+  </ItemGroup>
+
+</Project>

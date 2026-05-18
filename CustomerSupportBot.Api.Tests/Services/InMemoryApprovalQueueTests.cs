@@ -1,6 +1,6 @@
 // Tests/Services/InMemoryApprovalQueueTests.cs
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -101,7 +101,7 @@ public class InMemoryApprovalQueueTests
         var req = NewReq();
         q.Create(req);
         var result = await q.AwaitDecisionAsync("a1", TestContext.Current.CancellationToken);
-        // AutoApprove off â†’ reject + Expired
+        // AutoApprove off › reject + Expired
         result.Status.Should().Be(ApprovalStatus.Expired);
     }
 

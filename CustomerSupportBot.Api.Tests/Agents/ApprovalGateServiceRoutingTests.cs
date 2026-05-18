@@ -1,11 +1,11 @@
-// Tests/Agents/ApprovalGateServiceRoutingTests.cs
-// Smart Routing entegrasyon testleri — ApprovalGateService ProcessPendingEscalations
-// Çağrısı sonrası EscalationRequest'in routing alanlarının doğru doldurulduğunu doğrular.
+﻿// Tests/Agents/ApprovalGateServiceRoutingTests.cs
+// Smart Routing entegrasyon testleri � ApprovalGateService ProcessPendingEscalations
+// �a�r�s� sonras� EscalationRequest'in routing alanlar�n�n do�ru dolduruldu�unu do�rular.
 
 using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Personalization;
 using CustomerSupportBot.Api.Services.Routing;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -26,7 +26,7 @@ public class ApprovalGateServiceRoutingTests
         {
             IntentSkillMap = new(StringComparer.OrdinalIgnoreCase)
             {
-                ["şikayet"] = new() { "complaint" }
+                ["�ikayet"] = new() { "complaint" }
             },
             SeedAgents = new()
             {
@@ -52,6 +52,7 @@ public class ApprovalGateServiceRoutingTests
             Options.Create(_opts),
             _sink,
             new ApprovalContextAccessor(),
+            TestFactory.CreateToolsService(),
             router,
             registry,
             profiles,
@@ -86,8 +87,8 @@ public class ApprovalGateServiceRoutingTests
         var session = sessions.GetOrCreateSession("s1");
         session.State.CustomerId = "CUST-1";
 
-        svc.ProcessPendingEscalations(TraceFor("s1", "şikayet", WellKnown.AgentNames.Complaint),
-            "şikayetim var", "yanıt");
+        svc.ProcessPendingEscalations(TraceFor("s1", "�ikayet", WellKnown.AgentNames.Complaint),
+            "�ikayetim var", "yan�t");
 
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
@@ -95,7 +96,7 @@ public class ApprovalGateServiceRoutingTests
         open[0].SuggestedAgentName.Should().Be("Alice");
         open[0].MatchScore.Should().BeGreaterThan(0);
         open[0].RequiredSkills.Should().Contain("complaint");
-        open[0].Priority.Should().Be(EscalationPriority.High); // ComplaintAgent → High
+        open[0].Priority.Should().Be(EscalationPriority.High); // ComplaintAgent � High
 
         registry.Get("alice")!.CurrentLoad.Should().Be(1);
     }
@@ -105,7 +106,7 @@ public class ApprovalGateServiceRoutingTests
     {
         var routingOpts = new RoutingOptions
         {
-            IntentSkillMap = new(StringComparer.OrdinalIgnoreCase) { ["şikayet"] = new() { "complaint" } },
+            IntentSkillMap = new(StringComparer.OrdinalIgnoreCase) { ["�ikayet"] = new() { "complaint" } },
             ProfileKeywordSkillMap = new(StringComparer.OrdinalIgnoreCase) { ["VIP"] = "vip" },
             SeedAgents = new()
             {
@@ -117,15 +118,15 @@ public class ApprovalGateServiceRoutingTests
         var session = sessions.GetOrCreateSession("s2");
         session.State.CustomerId = "CUST-VIP";
 
-        profiles.Upsert(new Api.Models.Memory.CustomerProfile
+        profiles.Upsert(new CustomerSupportBot.Domain.Model.Memory.CustomerProfile
         {
             CustomerId = "CUST-VIP",
             PreferredLanguage = "tr",
-            AdminNote = "VIP müşteri"
+            AdminNote = "VIP m��teri"
         });
 
-        svc.ProcessPendingEscalations(TraceFor("s2", "şikayet", WellKnown.AgentNames.Complaint),
-            "şikayet", "yanıt");
+        svc.ProcessPendingEscalations(TraceFor("s2", "�ikayet", WellKnown.AgentNames.Complaint),
+            "�ikayet", "yan�t");
 
         var open = _sink.GetOpen();
         open[0].SuggestedAgentId.Should().Be("vip-handler");
@@ -135,12 +136,12 @@ public class ApprovalGateServiceRoutingTests
     [Fact]
     public void Routing_NoActiveAgents_SuggestedAgentIdIsNull()
     {
-        var routingOpts = new RoutingOptions { SeedAgents = new() }; // boş
+        var routingOpts = new RoutingOptions { SeedAgents = new() }; // bo�
         var (svc, _, _, sessions) = BuildWithRouting(routingOpts);
         sessions.GetOrCreateSession("s3").State.CustomerId = "C";
 
-        svc.ProcessPendingEscalations(TraceFor("s3", "şikayet", WellKnown.AgentNames.Complaint),
-            "test", "yanıt");
+        svc.ProcessPendingEscalations(TraceFor("s3", "�ikayet", WellKnown.AgentNames.Complaint),
+            "test", "yan�t");
 
         var open = _sink.GetOpen();
         open.Should().ContainSingle();

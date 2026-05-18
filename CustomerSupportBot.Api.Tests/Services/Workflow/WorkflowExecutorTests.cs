@@ -1,15 +1,18 @@
 // Tests/Services/Workflow/WorkflowExecutorTests.cs
 
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models.Workflow;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model.Workflow;
 using CustomerSupportBot.Api.Services.Workflow;
+using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services.Workflow;
 
 public class WorkflowExecutorTests
 {
-    private readonly WorkflowExecutor _sut = new(NullLogger<WorkflowExecutor>.Instance);
+    private readonly WorkflowExecutor _sut = new(
+        TestFactory.CreateToolsService(),
+        NullLogger<WorkflowExecutor>.Instance);
 
     private static WorkflowDefinition BuildDef(params WorkflowStep[] steps) => new()
     {
@@ -38,14 +41,14 @@ public class WorkflowExecutorTests
         var def = BuildDef(new WorkflowStep
         {
             Type = WorkflowStepType.Respond,
-            Template = "Merhaba {customerName}, hoÅŸgeldin!"
+            Template = "Merhaba {customerName}, hoþgeldin!"
         });
 
         var result = _sut.Execute(def, "selam",
             new Dictionary<string, string> { ["customerName"] = "Ali" });
 
         result.Success.Should().BeTrue();
-        result.FinalResponse.Should().Be("Merhaba Ali, hoÅŸgeldin!");
+        result.FinalResponse.Should().Be("Merhaba Ali, hoþgeldin!");
     }
 
     [Fact]
@@ -54,13 +57,13 @@ public class WorkflowExecutorTests
         var def = BuildDef(new WorkflowStep
         {
             Type = WorkflowStepType.Respond,
-            Template = "SipariÅŸ: {orderId}"
+            Template = "Sipariþ: {orderId}"
         });
         def.InputPatterns["orderId"] = @"(ORD-\d+)";
 
-        var result = _sut.Execute(def, "merhaba ORD-42 hakkÄ±nda bilgi alabilir miyim?");
+        var result = _sut.Execute(def, "merhaba ORD-42 hakkýnda bilgi alabilir miyim?");
 
-        result.FinalResponse.Should().Be("SipariÅŸ: ORD-42");
+        result.FinalResponse.Should().Be("Sipariþ: ORD-42");
         result.FinalVariables.Should().ContainKey("orderId").WhoseValue.Should().Be("ORD-42");
     }
 
@@ -69,7 +72,7 @@ public class WorkflowExecutorTests
     {
         var def = BuildDef(
             new WorkflowStep { Type = WorkflowStepType.Branch, Condition = "orderId exists" },
-            new WorkflowStep { Type = WorkflowStepType.Respond, Template = "yakalandÄ±" }, // skip edilmeli
+            new WorkflowStep { Type = WorkflowStepType.Respond, Template = "yakalandý" }, // skip edilmeli
             new WorkflowStep { Type = WorkflowStepType.Respond, Template = "son" }
         );
 
@@ -87,7 +90,7 @@ public class WorkflowExecutorTests
         );
         def.InputPatterns["orderId"] = @"(ORD-\d+)";
 
-        var result = _sut.Execute(def, "ORD-1 hakkÄ±nda");
+        var result = _sut.Execute(def, "ORD-1 hakkýnda");
 
         result.FinalResponse.Should().Be("var: ORD-1");
     }
@@ -100,14 +103,14 @@ public class WorkflowExecutorTests
             {
                 Type = WorkflowStepType.SetVariable,
                 VariableName = "greeting",
-                VariableValue = "SayÄ±n {input}"
+                VariableValue = "Sayýn {input}"
             },
             new WorkflowStep { Type = WorkflowStepType.Respond, Template = "{greeting}!" }
         );
 
-        var result = _sut.Execute(def, "MÃ¼ÅŸteri");
+        var result = _sut.Execute(def, "Müþteri");
 
-        result.FinalResponse.Should().Be("SayÄ±n MÃ¼ÅŸteri!");
+        result.FinalResponse.Should().Be("Sayýn Müþteri!");
     }
 
     [Fact]

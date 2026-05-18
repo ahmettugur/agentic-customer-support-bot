@@ -1,11 +1,12 @@
+using CustomerSupportBot.Api.Models;
 // Services/Memory/OpenAiEmbeddingService.cs
 // OpenAI / Azure OpenAI embedding API tabanlı IEmbeddingService implementasyonu.
 // AiOptions'tan provider'a göre client seçilir.
 
 using System.ClientModel;
 using Azure.AI.OpenAI;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Options;
 using OpenAI;
 using OpenAI.Embeddings;
@@ -113,3 +114,4 @@ public sealed class OpenAiEmbeddingService : IEmbeddingService
         return output;
     }
 }
+

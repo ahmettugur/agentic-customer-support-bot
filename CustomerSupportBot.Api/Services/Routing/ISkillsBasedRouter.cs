@@ -1,6 +1,7 @@
+using CustomerSupportBot.Domain.Model.Memory;
 // Services/Routing/ISkillsBasedRouter.cs
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services.Routing;
 
@@ -22,5 +23,6 @@ public interface ISkillsBasedRouter
     RoutingDecision Decide(
         ReasoningTrace trace,
         string? agentName,
-        Models.Memory.CustomerProfile? customerProfile);
+        CustomerProfile? customerProfile);
 }
+

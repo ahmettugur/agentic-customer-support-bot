@@ -1,3 +1,4 @@
+using CustomerSupportBot.Api.Models;
 // Services/Locking/RedisDistributedLock.cs
 // Redis + Medallion DistributedLock.Redis tabanlı distributed lock implementasyonu.
 // Multi-instance (horizontal scale) ortamlarda güvenli lock mekanizması sağlar.
@@ -9,7 +10,7 @@
 //   - IAsyncDisposable handle (otomatik release, exception-safe)
 //   - Fallback: Redis bağlantı hatası loglanır, null döner (graceful degradation)
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Medallion.Threading;
 using Medallion.Threading.Redis;
 using Microsoft.Extensions.Options;
@@ -113,3 +114,4 @@ public sealed class RedisDistributedLock : IAppDistributedLock
         }
     }
 }
+

@@ -1,11 +1,14 @@
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services.Providers;
+using CustomerSupportBot.Api.Tests.Helpers;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 
 public class CustomerContextProviderTests
 {
-    private readonly CustomerContextProvider _provider = new();
+    private readonly CustomerContextProvider _provider = new(
+        TestFactory.CreateOrders(),
+        TestFactory.CreateComplaints());
 
     [Fact]
     public void NameAndOrder_AreCorrect()
@@ -30,7 +33,7 @@ public class CustomerContextProviderTests
         var ctx = await _provider.GetContextAsync(session);
         ctx.Should().NotBeNull();
         ctx!.Should().Contain("CUST-1990");
-        ctx.Should().Contain("Toplam sipariÅŸ");
+        ctx.Should().Contain("Toplam sipariþ");
     }
 
     [Fact]
@@ -40,6 +43,6 @@ public class CustomerContextProviderTests
         session.State.CustomerId = "CUST-NOTEXIST";
         var ctx = await _provider.GetContextAsync(session);
         ctx.Should().NotBeNull();
-        ctx!.Should().Contain("KayÄ±tlÄ± sipariÅŸ bulunamadÄ±");
+        ctx!.Should().Contain("Kayýtlý sipariþ bulunamadý");
     }
 }

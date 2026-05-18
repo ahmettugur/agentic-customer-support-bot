@@ -1,6 +1,7 @@
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -20,7 +21,8 @@ public class ApprovalGateServiceEscalationTests
             queue,
             Options.Create(_opts),
             _sink,
-            new ApprovalContextAccessor());
+            new ApprovalContextAccessor(),
+            TestFactory.CreateToolsService());
     }
 
     [Fact]
@@ -65,7 +67,7 @@ public class ApprovalGateServiceEscalationTests
                 }
             }
         };
-        svc.ProcessPendingEscalations(trace, "soru", "yanıt");
+        svc.ProcessPendingEscalations(trace, "soru", "yan�t");
         _sink.GetOpen().Should().BeEmpty();
     }
 
@@ -91,7 +93,7 @@ public class ApprovalGateServiceEscalationTests
             }
         };
 
-        svc.ProcessPendingEscalations(trace, "soru", "yanıt");
+        svc.ProcessPendingEscalations(trace, "soru", "yan�t");
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
         open[0].Reason.Should().Be("manuel inceleme");
@@ -120,7 +122,7 @@ public class ApprovalGateServiceEscalationTests
         };
 
         svc.ProcessPendingEscalations(trace, "q", "r");
-        // İkinci çağrı session zaten açık olduğu için skip etmeli
+        // �kinci �a�r� session zaten a��k oldu�u i�in skip etmeli
         var trace2 = new ReasoningTrace
         {
             SessionId = "s1",
@@ -166,7 +168,7 @@ public class ApprovalGateServiceEscalationTests
         svc.ProcessPendingEscalations(trace, "q", longResponse);
         var esc = _sink.GetOpen()[0];
         esc.ResponseSummary!.Length.Should().BeLessThanOrEqualTo(501);
-        esc.ResponseSummary.Should().EndWith("…");
+        esc.ResponseSummary.Should().EndWith("�");
     }
 
     [Fact]

@@ -1,7 +1,7 @@
 // Tests/Services/Auth/TokenServiceTests.cs
 
-using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
-using CustomerSupportBot.Api.Models.Auth;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
+using CustomerSupportBot.Domain.Model.Auth;
 using CustomerSupportBot.Api.Services.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -126,7 +126,7 @@ public class TokenServiceTests
         var user = Seed(dbf);
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
-        // User'Ä± pasifleÅŸtir
+        // User'ý pasifleþtir
         await using (var ctx = await dbf.CreateDbContextAsync(TestContext.Current.CancellationToken))
         {
             var u = await ctx.Users.FirstAsync(x => x.Id == user.Id, cancellationToken: TestContext.Current.CancellationToken);

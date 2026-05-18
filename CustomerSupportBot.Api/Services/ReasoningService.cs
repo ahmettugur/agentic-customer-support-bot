@@ -5,7 +5,7 @@
 
 using System.Runtime.CompilerServices;
 using System.Text;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Api.Services;
@@ -228,3 +228,4 @@ public class ReasoningService
 
     private record SafeUpdate(string Text, string? Error);
 }
+

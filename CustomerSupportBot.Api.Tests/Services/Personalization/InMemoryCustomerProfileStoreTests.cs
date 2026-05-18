@@ -1,4 +1,4 @@
-using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Domain.Model.Memory;
 using CustomerSupportBot.Api.Services.Personalization;
 
 namespace CustomerSupportBot.Api.Tests.Services.Personalization;

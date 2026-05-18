@@ -1,14 +1,15 @@
+using CustomerSupportBot.Domain.Model.Memory;
 // Agents/ApprovalGateService.cs
 // HITL — Human-in-the-Loop approval gate + escalation sink servisleri.
 // Yan etkili tool çağrıları (OrderPlacement, ComplaintRegistration) öncesi
 // admin onayı bekler. Workflow sonunda needs_escalation status'u olan
 // specialist reasoning'leri escalation sink'e yazar.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Services;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Personalization;
 using CustomerSupportBot.Api.Services.Routing;
-using CustomerSupportBot.Api.Tools;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
@@ -25,6 +26,7 @@ public class ApprovalGateService
     private readonly ApprovalOptions _approvalOptions;
     private readonly IEscalationSink _escalationSink;
     private readonly IApprovalContextAccessor _contextAccessor;
+    private readonly CustomerSupportToolsService _tools;
     private readonly ISkillsBasedRouter? _router;
     private readonly IHumanAgentRegistry? _agentRegistry;
     private readonly ICustomerProfileStore? _profileStore;
@@ -36,6 +38,7 @@ public class ApprovalGateService
         IOptions<ApprovalOptions> approvalOptions,
         IEscalationSink escalationSink,
         IApprovalContextAccessor contextAccessor,
+        CustomerSupportToolsService tools,
         ISkillsBasedRouter? router = null,
         IHumanAgentRegistry? agentRegistry = null,
         ICustomerProfileStore? profileStore = null,
@@ -46,6 +49,7 @@ public class ApprovalGateService
         _approvalOptions = approvalOptions.Value;
         _escalationSink = escalationSink;
         _contextAccessor = contextAccessor;
+        _tools = tools;
         _router = router;
         _agentRegistry = agentRegistry;
         _profileStore = profileStore;
@@ -82,7 +86,7 @@ public class ApprovalGateService
                         $"{WellKnown.FallbackMessages.ApprovalRejected}: {d.Reason ?? WellKnown.ApprovalReasons.AdminRejected}");
                 }
 
-                return CustomerSupportTools.OrderPlacementTool(productName, quantity, customerId);
+                return _tools.OrderPlacementTool(productName, quantity, customerId);
             },
             name: WellKnown.ToolNames.OrderPlacement,
             description:
@@ -117,7 +121,7 @@ public class ApprovalGateService
                         $"{WellKnown.FallbackMessages.ComplaintRejected}: {d.Reason ?? WellKnown.ApprovalReasons.AdminRejected}");
                 }
 
-                return CustomerSupportTools.ComplaintRegistrationTool(orderId, complaintText, customerId);
+                return _tools.ComplaintRegistrationTool(orderId, complaintText, customerId);
             },
             name: WellKnown.ToolNames.ComplaintRegistration,
             description:
@@ -303,7 +307,7 @@ public class ApprovalGateService
         try
         {
             // Müşteri profili — varsa skill çıkarımına dahil edilir.
-            Models.Memory.CustomerProfile? profile = null;
+            CustomerProfile? profile = null;
             string? customerId = null;
             if (!string.IsNullOrWhiteSpace(trace.SessionId) && _sessionManager != null)
             {
@@ -338,3 +342,4 @@ public class ApprovalGateService
 
 /// <summary>Approval karar sonucu.</summary>
 public sealed record ApprovalDecisionResult(bool Approved, string? Reason);
+

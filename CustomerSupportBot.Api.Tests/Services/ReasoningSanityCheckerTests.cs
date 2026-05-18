@@ -1,6 +1,6 @@
 // Tests/Services/ReasoningSanityCheckerTests.cs
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -10,7 +10,7 @@ public class ReasoningSanityCheckerTests
 {
     private readonly ReasoningSanityChecker _checker = new(NullLogger<ReasoningSanityChecker>.Instance);
 
-    // â”€â”€â”€ OverconfidentClarificationRule â”€â”€â”€
+    // ¦¦¦ OverconfidentClarificationRule ¦¦¦
     [Fact]
     public void OverconfidentClarification_HighConfidencePlusClarification_Warns()
     {
@@ -19,7 +19,7 @@ public class ReasoningSanityCheckerTests
         rule.Apply(new ReasoningResult
         {
             ConfidenceScore = 0.9,
-            NextAction = "KullanÄ±cÄ±dan customer_id iste"
+            NextAction = "Kullanýcýdan customer_id iste"
         }, new VerifiedEntities(), issues);
 
         issues.Should().ContainSingle().Which.Code.Should().Be("overconfident_clarification");
@@ -33,13 +33,13 @@ public class ReasoningSanityCheckerTests
         rule.Apply(new ReasoningResult
         {
             ConfidenceScore = 0.4,
-            NextAction = "KullanÄ±cÄ±dan customer_id iste"
+            NextAction = "Kullanýcýdan customer_id iste"
         }, new VerifiedEntities(), issues);
 
         issues.Should().BeEmpty();
     }
 
-    // â”€â”€â”€ RedundantRequiredInfoRule â”€â”€â”€
+    // ¦¦¦ RedundantRequiredInfoRule ¦¦¦
     [Fact]
     public void RedundantRequiredInfo_VerifiedOrderInRequired_Errors()
     {
@@ -74,7 +74,7 @@ public class ReasoningSanityCheckerTests
         issues.Should().BeEmpty();
     }
 
-    // â”€â”€â”€ IntentActionMismatchRule â”€â”€â”€
+    // ¦¦¦ IntentActionMismatchRule ¦¦¦
     [Fact]
     public void IntentActionMismatch_ComplaintIntentVsOrderAction_Warns()
     {
@@ -83,7 +83,7 @@ public class ReasoningSanityCheckerTests
         rule.Apply(new ReasoningResult
         {
             Intent = WellKnown.Intents.Complaint,
-            NextAction = "OrderAgent'e yÃ¶nlendir"
+            NextAction = "OrderAgent'e yönlendir"
         }, new VerifiedEntities(), issues);
 
         issues.Should().ContainSingle().Which.Code.Should().Be("intent_action_mismatch");
@@ -97,13 +97,13 @@ public class ReasoningSanityCheckerTests
         rule.Apply(new ReasoningResult
         {
             Intent = WellKnown.Intents.Complaint,
-            NextAction = "ComplaintAgent'e yÃ¶nlendir"
+            NextAction = "ComplaintAgent'e yönlendir"
         }, new VerifiedEntities(), issues);
 
         issues.Should().BeEmpty();
     }
 
-    // â”€â”€â”€ LowConfidenceNoMissingRule â”€â”€â”€
+    // ¦¦¦ LowConfidenceNoMissingRule ¦¦¦
     [Fact]
     public void LowConfidenceNoMissing_TriggersInfo()
     {
@@ -131,7 +131,7 @@ public class ReasoningSanityCheckerTests
         issues.Should().BeEmpty();
     }
 
-    // â”€â”€â”€ AssumptionHeavyStepsRule â”€â”€â”€
+    // ¦¦¦ AssumptionHeavyStepsRule ¦¦¦
     [Fact]
     public void AssumptionHeavySteps_AssumptionGrounding_Info()
     {
@@ -145,7 +145,7 @@ public class ReasoningSanityCheckerTests
         issues.Should().ContainSingle().Which.Severity.Should().Be(IssueSeverity.Info);
     }
 
-    // â”€â”€â”€ OverconfidentAssumptionsRule â”€â”€â”€
+    // ¦¦¦ OverconfidentAssumptionsRule ¦¦¦
     [Fact]
     public void OverconfidentAssumptions_HighConfMany_Warns()
     {
@@ -173,7 +173,7 @@ public class ReasoningSanityCheckerTests
         issues.Should().BeEmpty();
     }
 
-    // â”€â”€â”€ NotFoundIgnoredRule â”€â”€â”€
+    // ¦¦¦ NotFoundIgnoredRule ¦¦¦
     [Fact]
     public void NotFoundIgnored_NoVerificationIntent_Errors()
     {
@@ -189,7 +189,7 @@ public class ReasoningSanityCheckerTests
         };
         rule.Apply(new ReasoningResult
         {
-            NextAction = "OrderAgent'e yÃ¶nlendir"
+            NextAction = "OrderAgent'e yönlendir"
         }, verified, issues);
 
         issues.Should().ContainSingle().Which.Severity.Should().Be(IssueSeverity.Error);
@@ -210,12 +210,12 @@ public class ReasoningSanityCheckerTests
         };
         rule.Apply(new ReasoningResult
         {
-            NextAction = "KullanÄ±cÄ±ya sipariÅŸ numarasÄ±nÄ± doÄŸrulat"
+            NextAction = "Kullanýcýya sipariþ numarasýný doðrulat"
         }, verified, issues);
         issues.Should().BeEmpty();
     }
 
-    // â”€â”€â”€ SubTasksIgnoredRule â”€â”€â”€
+    // ¦¦¦ SubTasksIgnoredRule ¦¦¦
     [Fact]
     public void SubTasksIgnored_NextActionMissesAgents_Warns()
     {
@@ -228,7 +228,7 @@ public class ReasoningSanityCheckerTests
                 new SubTask { Order = 1, TargetAgent = "OrderAgent" },
                 new SubTask { Order = 2, TargetAgent = "ComplaintAgent" }
             },
-            NextAction = "orderagent'e yÃ¶nlendir"
+            NextAction = "orderagent'e yönlendir"
         }, new VerifiedEntities(), issues);
 
         issues.Should().ContainSingle().Which.Code.Should().Be("subtasks_ignored");
@@ -246,7 +246,7 @@ public class ReasoningSanityCheckerTests
         issues.Should().BeEmpty();
     }
 
-    // â”€â”€â”€ Top-level checker â”€â”€â”€
+    // ¦¦¦ Top-level checker ¦¦¦
     [Fact]
     public void Check_NoIssues_EmptyList()
     {
@@ -261,7 +261,7 @@ public class ReasoningSanityCheckerTests
         var issues = _checker.Check(new ReasoningResult
         {
             ConfidenceScore = 0.9,
-            NextAction = "KullanÄ±cÄ±dan iste",
+            NextAction = "Kullanýcýdan iste",
             Assumptions = new() { "a", "b", "c", "d" }
         }, new VerifiedEntities());
 

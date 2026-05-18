@@ -1,3 +1,4 @@
+using CustomerSupportBot.Api.Models;
 // Services/AiClientFactory.cs
 // OpenAI, Azure OpenAI ve Anthropic sağlayıcıları arasında geçişi yöneten factory.
 // Strongly-typed AiOptions üzerinden çalışır (IOptions<AiOptions> ile DI'dan gelir).
@@ -5,7 +6,7 @@
 using System.ClientModel;
 using Anthropic;
 using Azure.AI.OpenAI;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 using OpenAI;
 
@@ -107,3 +108,4 @@ public static class AiClientFactory
         return client.AsIChatClient(model, options.MaxTokens);
     }
 }
+

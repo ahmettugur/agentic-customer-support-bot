@@ -1,7 +1,9 @@
 // Tests/Evaluation/EvaluationRunnerTests.cs
+
 using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Evaluation;
 using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
@@ -25,15 +27,19 @@ public class EvaluationRunnerTests
         var queue = new InMemoryApprovalQueue(
             Options.Create(approvalOpts), NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
+        var tools = TestFactory.CreateToolsService();
         var approvalGate = new ApprovalGateService(
-            queue, Options.Create(approvalOpts), sink, new ApprovalContextAccessor());
+            queue, Options.Create(approvalOpts), sink, new ApprovalContextAccessor(), tools);
 
         var team = new CustomerSupportTeam(
             chatClient, contextPipeline, configuration, traceStore,
-            prompts, approvalGate, NullLoggerFactory.Instance);
+            prompts, approvalGate, tools, NullLoggerFactory.Instance);
 
         var reasoningClient = new ReasoningChatClient(chatClient, "gpt-test", "low");
-        var entityVerifier = new EntityVerifier(NullLogger<EntityVerifier>.Instance);
+        var entityVerifier = new EntityVerifier(
+            TestFactory.CreateOrders(),
+            TestFactory.CreateComplaints(),
+            NullLogger<EntityVerifier>.Instance);
         var sanityChecker = new ReasoningSanityChecker(NullLogger<ReasoningSanityChecker>.Instance);
         var reasoningService = new ReasoningService(
             reasoningClient,
@@ -48,7 +54,7 @@ public class EvaluationRunnerTests
         return new EvaluationRunner(team, reasoningService, sessionManager, traceStore);
     }
 
-    // â”€â”€â”€ LoadScenarios â”€â”€â”€
+    // ¦¦¦ LoadScenarios ¦¦¦
 
     [Fact]
     public void LoadScenarios_ValidYaml_DeserializesScenarios()
@@ -58,7 +64,7 @@ public class EvaluationRunnerTests
             scenarios:
               - id: order-1
                 category: order
-                query: "sipariÅŸim nerede"
+                query: "sipariþim nerede"
                 expected_intent: order_inquiry
                 expected_agents: [PlanningAgent, OrderAgent]
                 expected_tools: [order_status_tool]
@@ -67,7 +73,7 @@ public class EvaluationRunnerTests
                   - "turn_count <= 5"
               - id: complaint-1
                 category: complaint
-                query: "Ã¼rÃ¼n bozuk geldi"
+                query: "ürün bozuk geldi"
                 expected_tools: []
                 success_criteria: []
             """;
@@ -82,7 +88,7 @@ public class EvaluationRunnerTests
             var s1 = file.Scenarios[0];
             s1.Id.Should().Be("order-1");
             s1.Category.Should().Be("order");
-            s1.Query.Should().Be("sipariÅŸim nerede");
+            s1.Query.Should().Be("sipariþim nerede");
             s1.ExpectedIntent.Should().Be("order_inquiry");
             s1.ExpectedAgents.Should().HaveCount(2);
             s1.ExpectedTools.Should().ContainSingle().Which.Should().Be("order_status_tool");
@@ -138,7 +144,7 @@ public class EvaluationRunnerTests
         act.Should().Throw<FileNotFoundException>();
     }
 
-    // â”€â”€â”€ RunAsync â”€â”€â”€
+    // ¦¦¦ RunAsync ¦¦¦
 
     [Fact]
     public async Task RunAsync_EmptyScenarios_CompletesWithZeroResults()
@@ -168,11 +174,11 @@ public class EvaluationRunnerTests
         var result = await runner.RunAsync(scenarios, cts.Token);
 
         result.TotalScenarios.Should().Be(2);
-        result.Results.Should().BeEmpty(); // hiÃ§ Ã§alÄ±ÅŸtÄ±rmadan break
+        result.Results.Should().BeEmpty(); // hiç çalýþtýrmadan break
     }
 
-    // â”€â”€â”€ RunScenarioAsync â”€â”€â”€
-    // Not: Tam akÄ±ÅŸ reasoning + workflow gerektirdiÄŸinden CancellationToken alsa bile
-    // Mock IChatClient ile workflow baÅŸlangÄ±cÄ± asÄ±lÄ± kalabiliyor; bu yÃ¼zden yalnÄ±zca
-    // RunAsync seviyesinde pre-cancellation kapsamÄ± yeterli.
+    // ¦¦¦ RunScenarioAsync ¦¦¦
+    // Not: Tam akýþ reasoning + workflow gerektirdiðinden CancellationToken alsa bile
+    // Mock IChatClient ile workflow baþlangýcý asýlý kalabiliyor; bu yüzden yalnýzca
+    // RunAsync seviyesinde pre-cancellation kapsamý yeterli.
 }

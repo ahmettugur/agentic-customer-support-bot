@@ -5,9 +5,9 @@
 namespace CustomerSupportBot.Api.Services;
 
 using System.Text;
-using Api.Agents;
-using Api.Infrastructure;
-using Api.Models;
+using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 
 /// <summary>
@@ -104,7 +104,7 @@ public sealed class ChatStreamOrchestrator
     }
 
     /// <summary>
-    /// Executes the normal bot-mode flow: reasoning â†’ workflow â†’ response.
+    /// Executes the normal bot-mode flow: reasoning › workflow › response.
     /// </summary>
     private async Task ExecuteBotModeAsync(
         ChatRequest request,
@@ -121,11 +121,11 @@ public sealed class ChatStreamOrchestrator
         var finalReasoning = await ExecuteReasoningStreamAsync(
             request.Query, session, history, sse, ct);
 
-        // Set approval context for tools â€” IDisposable scope ensures cleanup after workflow
+        // Set approval context for tools — IDisposable scope ensures cleanup after workflow
         using var approvalScope = _approvalContext.SetScope(sessionId, null, request.Query);
 
-        // Phase 2: LLM sentiment â†’ session state override (kural tabanlÄ± Ã¼zerine yazar)
-        // Not: AyrÄ± lock almaz â€” hemen ardÄ±ndan AddExchange lock altÄ±nda persist eder.
+        // Phase 2: LLM sentiment › session state override (kural tabanlý üzerine yazar)
+        // Not: Ayrý lock almaz — hemen ardýndan AddExchange lock altýnda persist eder.
         if (finalReasoning != null)
         {
             UpdateSessionSentiment(session, finalReasoning);
@@ -142,7 +142,7 @@ public sealed class ChatStreamOrchestrator
             _chatBridge.RecordBotExchange(sessionId, request.Query, fullResponse);
         }
 
-        // Phase 5: Sentiment SSE events â€” her tur sonrasÄ± frontend'e gÃ¶nder
+        // Phase 5: Sentiment SSE events — her tur sonrasý frontend'e gönder
         var updatedSession = _sessionManager.GetSession(sessionId);
         if (updatedSession != null)
         {
@@ -223,23 +223,23 @@ public sealed class ChatStreamOrchestrator
 
     /// <summary>
     /// LLM reasoning sonucundaki sentiment'i session state'e yazar.
-    /// Kural tabanlÄ± sonucu override eder (LLM daha doÄŸru).
-    /// Not: AyrÄ± distributed lock almaz â€” AddExchange hemen ardÄ±ndan zaten lock altÄ±nda
-    /// state persist eder. Burada sadece in-memory session objesini gÃ¼ncelliyoruz.
+    /// Kural tabanlý sonucu override eder (LLM daha doðru).
+    /// Not: Ayrý distributed lock almaz — AddExchange hemen ardýndan zaten lock altýnda
+    /// state persist eder. Burada sadece in-memory session objesini güncelliyoruz.
     /// </summary>
     private void UpdateSessionSentiment(AgentSession session, ReasoningResult reasoning)
     {
         if (string.IsNullOrWhiteSpace(reasoning.Sentiment) ||
             reasoning.Sentiment == WellKnown.Sentiments.Neutral && reasoning.SentimentScore == 0.5)
         {
-            return; // LLM sentiment dÃ¶ndÃ¼rmemiÅŸ, kural tabanlÄ± sonucu koru
+            return; // LLM sentiment döndürmemiþ, kural tabanlý sonucu koru
         }
 
         var state = session.State;
         state.Sentiment = reasoning.Sentiment;
         state.SentimentScore = reasoning.SentimentScore;
 
-        // ArdÄ±ÅŸÄ±k negatif sayacÄ±nÄ± gÃ¼ncelle
+        // Ardýþýk negatif sayacýný güncelle
         if (reasoning.SentimentScore < WellKnown.SentimentThresholds.NegativeThreshold)
             state.ConsecutiveNegativeTurns++;
         else
@@ -247,8 +247,8 @@ public sealed class ChatStreamOrchestrator
     }
 
     /// <summary>
-    /// Her tur sonrasÄ± sentiment_update SSE event'i yayÄ±nlar.
-    /// ArdÄ±ÅŸÄ±k negatif sayacÄ± eÅŸiÄŸi aÅŸarsa sentiment_alert de gÃ¶nderir.
+    /// Her tur sonrasý sentiment_update SSE event'i yayýnlar.
+    /// Ardýþýk negatif sayacý eþiði aþarsa sentiment_alert de gönderir.
     /// </summary>
     private async Task EmitSentimentEventsAsync(AgentSession session, SseForwarder sse)
     {
@@ -263,11 +263,11 @@ public sealed class ChatStreamOrchestrator
             sessionId = session.SessionId
         });
 
-        // Otomatik eskalasyon uyarÄ±sÄ± â€” ardÄ±ÅŸÄ±k negatif eÅŸik aÅŸÄ±ldÄ±ysa
+        // Otomatik eskalasyon uyarýsý — ardýþýk negatif eþik aþýldýysa
         if (state.ConsecutiveNegativeTurns >= WellKnown.SentimentThresholds.AutoEscalationConsecutiveNegative)
         {
             _logger.LogWarning(
-                "[Sentiment Alert] Session {SessionId}: {Consecutive} ardÄ±ÅŸÄ±k negatif tur (skor: {Score})",
+                "[Sentiment Alert] Session {SessionId}: {Consecutive} ardýþýk negatif tur (skor: {Score})",
                 session.SessionId, state.ConsecutiveNegativeTurns, state.SentimentScore);
 
             await sse.WriteAsync(StreamEventTypes.SentimentAlert, new
@@ -276,7 +276,7 @@ public sealed class ChatStreamOrchestrator
                 score = state.SentimentScore,
                 consecutive = state.ConsecutiveNegativeTurns,
                 sessionId = session.SessionId,
-                message = $"MÃ¼ÅŸteri {state.ConsecutiveNegativeTurns} tur boyunca olumsuz. Bir temsilci baÄŸlanmalÄ±."
+                message = $"Müþteri {state.ConsecutiveNegativeTurns} tur boyunca olumsuz. Bir temsilci baðlanmalý."
             });
         }
     }

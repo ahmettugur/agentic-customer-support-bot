@@ -4,6 +4,7 @@ using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Evaluation;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Providers;
+using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Api.Extensions;
 
@@ -47,6 +48,10 @@ public static class ApplicationServicesExtensions
 
         // Prompt yükleyici
         services.AddSingleton<PromptService>();
+
+        // AI tool servisi (FakeDatabase statik bağımlılığı kırıldı — port'lar inject edilir)
+        // IProductCatalogRepository, IOrderRepository, IComplaintRepository → PersistenceServicesExtensions'da kayıtlı
+        services.AddSingleton<CustomerSupportToolsService>();
 
         // HITL — approval gate + context accessor
         services.AddSingleton<ApprovalGateService>();

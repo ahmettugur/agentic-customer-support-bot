@@ -5,7 +5,7 @@
 //   - WriteEpisodic / WriteLesson / SearchKnowledge gibi domain operasyonları sunmak
 //   - Tek-noktadan embedding + upsert + search akışı
 
-using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Services.Memory;
@@ -115,3 +115,4 @@ public sealed class SemanticMemoryService
         return line.Length <= max ? line : line[..max] + "…";
     }
 }
+

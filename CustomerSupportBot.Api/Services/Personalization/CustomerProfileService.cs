@@ -1,3 +1,4 @@
+using CustomerSupportBot.Application.Ports.Driven.Persistence;
 // Services/Personalization/CustomerProfileService.cs
 // Per-customer kişiselleştirme servisi.
 //
@@ -19,8 +20,8 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model.Memory;
 using CustomerSupportBot.Api.Services.Locking;
 using Microsoft.Extensions.AI;
 
@@ -35,17 +36,20 @@ public sealed partial class CustomerProfileService
     private readonly ICustomerProfileStore _store;
     private readonly IChatClient _chatClient;
     private readonly IAppDistributedLock _distributedLock;
+    private readonly IProductCatalogRepository _products;
     private readonly ILogger<CustomerProfileService> _logger;
 
     public CustomerProfileService(
         ICustomerProfileStore store,
         IChatClient chatClient,
         IAppDistributedLock distributedLock,
+        IProductCatalogRepository products,
         ILogger<CustomerProfileService> logger)
     {
         _store = store;
         _chatClient = chatClient;
         _distributedLock = distributedLock;
+        _products = products;
         _logger = logger;
     }
 
@@ -213,11 +217,11 @@ public sealed partial class CustomerProfileService
         return null;
     }
 
-    internal static IReadOnlyList<string> ExtractProductMentions(string text)
+    internal IReadOnlyList<string> ExtractProductMentions(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return Array.Empty<string>();
         var found = new List<string>();
-        foreach (var key in FakeDatabase.ProductCatalog.Keys)
+        foreach (var key in _products.GetAll().Select(p => p.Name).Where(n => !string.IsNullOrEmpty(n)))
         {
             if (text.Contains(key, StringComparison.OrdinalIgnoreCase) && !found.Contains(key))
                 found.Add(key);
@@ -253,3 +257,4 @@ public sealed partial class CustomerProfileService
     [GeneratedRegex(@"\b(hello|order|where|how|please|thanks|thank you|return|complaint)\b")]
     private static partial Regex EnglishKeywordRegex();
 }
+

@@ -5,7 +5,7 @@
 // - POST /eval/run/{id}           : Tek senaryoyu koşturur
 
 using CustomerSupportBot.Api.Evaluation;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -103,3 +103,4 @@ public static class EvaluationEndpoints
         return candidates.FirstOrDefault(File.Exists);
     }
 }
+

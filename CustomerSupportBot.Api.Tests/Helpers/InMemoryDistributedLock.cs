@@ -1,10 +1,11 @@
+using CustomerSupportBot.Api.Models;
 // Tests/Helpers/InMemoryDistributedLock.cs
 // Test-only in-process distributed lock implementasyonu.
-// SemaphoreSlim(1,1) per-key kullanÄ±r â€” async-friendly ve reentrant-safe.
-// Production'da bu sÄ±nÄ±f KULLANILMAZ â€” yalnÄ±zca birim testleri Redis'e baÄŸÄ±mlÄ± olmadan Ã§alÄ±ÅŸtÄ±rmak iÃ§indir.
+// SemaphoreSlim(1,1) per-key kullanýr — async-friendly ve reentrant-safe.
+// Production'da bu sýnýf KULLANILMAZ — yalnýzca birim testleri Redis'e baðýmlý olmadan çalýþtýrmak içindir.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services.Locking;
 using Microsoft.Extensions.Options;
 
@@ -44,12 +45,12 @@ public sealed class InMemoryDistributedLock : IAppDistributedLock
         if (handle == null)
         {
             throw new TimeoutException(
-                $"InMemory lock '{resourceKey}' {timeout ?? _defaultTimeout} sÃ¼resi iÃ§inde alÄ±namadÄ±.");
+                $"InMemory lock '{resourceKey}' {timeout ?? _defaultTimeout} süresi içinde alýnamadý.");
         }
         return handle;
     }
 
-    /// <summary>IAsyncDisposable handle â€” dispose edildiÄŸinde SemaphoreSlim release olur.</summary>
+    /// <summary>IAsyncDisposable handle — dispose edildiðinde SemaphoreSlim release olur.</summary>
     private sealed class SemaphoreReleaser : IAsyncDisposable
     {
         private SemaphoreSlim? _semaphore;

@@ -1,5 +1,6 @@
 using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model.Memory;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Memory;
 using CustomerSupportBot.Api.Services.Telemetry;
@@ -76,3 +77,4 @@ public static class AiServicesExtensions
         _ => options.OpenAI.ReasoningModel ?? options.OpenAI.Model ?? "(unknown)"
     };
 }
+

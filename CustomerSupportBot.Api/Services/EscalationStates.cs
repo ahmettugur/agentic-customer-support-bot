@@ -8,7 +8,7 @@
 //        └──→ Resolved        └──→ Dismissed
 //        └──→ Dismissed
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services;
 
@@ -147,3 +147,4 @@ public static class EscalationStateFactory
         _ => OpenEscalationState.Instance
     };
 }
+

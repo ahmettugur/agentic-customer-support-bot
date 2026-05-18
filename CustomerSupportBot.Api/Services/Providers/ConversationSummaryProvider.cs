@@ -2,7 +2,7 @@
 // Uzun konuşma geçmişini LLM ile özetleyerek token tasarrufu sağlar.
 
 using System.Text;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Api.Services.Providers;
@@ -101,3 +101,4 @@ public class ConversationSummaryProvider : IContextProvider
         return $"[Konuşma Özeti]\n{summary}";
     }
 }
+

@@ -1,7 +1,7 @@
 // Services/ReasoningMessageBuilder.cs
 // ReasoningService LLM çağrısı için system prompt + history + user query mesaj listesi kurar.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Api.Services;
@@ -66,3 +66,4 @@ public class ReasoningMessageBuilder
         });
     }
 }
+

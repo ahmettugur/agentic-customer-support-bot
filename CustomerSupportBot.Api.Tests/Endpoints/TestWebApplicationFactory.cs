@@ -1,9 +1,11 @@
 // Tests/Endpoints/TestWebApplicationFactory.cs
-// WebApplicationFactory: InMemory persistence + dummy AI config kullanÄ±r.
-// Redis baÄŸÄ±mlÄ±lÄ±ÄŸÄ± test ortamÄ±nda InMemoryDistributedLock ile override edilir.
+// WebApplicationFactory: InMemory persistence + dummy AI config kullanýr.
+// Redis baðýmlýlýðý test ortamýnda InMemoryDistributedLock ile override edilir.
 
+using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services.Locking;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.AspNetCore.Hosting;
@@ -19,8 +21,8 @@ namespace CustomerSupportBot.Api.Tests.Endpoints;
 
 public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
 {
-    // AynÄ± factory boyunca aynÄ± db-name kullanÄ±lsÄ±n ki seed edilen kullanÄ±cÄ±lar
-    // HTTP request'lerde de gÃ¶rÃ¼nsÃ¼n.
+    // Ayný factory boyunca ayný db-name kullanýlsýn ki seed edilen kullanýcýlar
+    // HTTP request'lerde de görünsün.
     private readonly string _dbName = $"test-db-{Guid.NewGuid():N}";
 
     public IDbContextFactory<CustomerSupportDbContext> GetDbContextFactory()
@@ -35,8 +37,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
         builder.UseSetting(
             "Jwt:SigningKey",
             "TEST_SIGNING_KEY_AT_LEAST_32_CHARS_LONG_FOR_HMAC_SHA256_!");
-        // Redis connection string â€” AddRedisServices zorunlu kÄ±lÄ±yor ama
-        // test ortamÄ±nda gerÃ§ek Redis yok; aÅŸaÄŸÄ±da IAppDistributedLock override ediliyor.
+        // Redis connection string — AddRedisServices zorunlu kýlýyor ama
+        // test ortamýnda gerçek Redis yok; aþaðýda IAppDistributedLock override ediliyor.
         builder.UseSetting("ConnectionStrings:Redis", "localhost:6379,abortConnect=false");
 
         builder.ConfigureAppConfiguration((ctx, cfg) =>
@@ -49,14 +51,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
             });
         });
 
-        // Auth servisleri DbContextFactory ister; testte EF InMemory provider kullanÄ±rÄ±z.
+        // Auth servisleri DbContextFactory ister; testte EF InMemory provider kullanýrýz.
         builder.ConfigureServices(services =>
         {
             services.AddDbContextFactory<CustomerSupportDbContext>(opt =>
                 opt.UseInMemoryDatabase(_dbName));
 
-            // Redis baÄŸlantÄ±sÄ±nÄ± ve distributed lock'u test-only InMemory ile deÄŸiÅŸtir.
-            // Bu sayede integration testleri gerÃ§ek Redis sunucusuna ihtiyaÃ§ duymaz.
+            // Redis baðlantýsýný ve distributed lock'u test-only InMemory ile deðiþtir.
+            // Bu sayede integration testleri gerçek Redis sunucusuna ihtiyaç duymaz.
             services.RemoveAll<IConnectionMultiplexer>();
             services.Replace(ServiceDescriptor.Singleton<IAppDistributedLock>(
                 new InMemoryDistributedLock(

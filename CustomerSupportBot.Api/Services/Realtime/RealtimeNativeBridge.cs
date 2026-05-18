@@ -1,3 +1,4 @@
+using CustomerSupportBot.Api.Models;
 // Services/Realtime/RealtimeNativeBridge.cs
 //
 // "Hızlı Sesli" mod — gpt-realtime-2 modelinin kendi çok-kipli yetenekleri kullanılır.
@@ -20,7 +21,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Services.Realtime;
@@ -746,3 +747,4 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         _openAiWs?.Dispose();
     }
 }
+

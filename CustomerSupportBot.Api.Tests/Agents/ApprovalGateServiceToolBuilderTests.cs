@@ -1,7 +1,8 @@
 using System.Text.Json;
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -10,6 +11,10 @@ namespace CustomerSupportBot.Api.Tests.Agents;
 
 public class ApprovalGateServiceToolBuilderTests
 {
+    private static readonly InMemoryProductCatalogAdapter _products = new();
+    private static readonly InMemoryOrderAdapter _orders = new();
+    private static readonly InMemoryComplaintAdapter _complaints = new();
+
     private static ApprovalGateService Build(ApprovalOptions opts, IApprovalQueue? queue = null)
     {
         queue ??= new InMemoryApprovalQueue(
@@ -20,7 +25,8 @@ public class ApprovalGateServiceToolBuilderTests
             queue,
             Options.Create(opts),
             sink,
-            new ApprovalContextAccessor());
+            new ApprovalContextAccessor(),
+            TestFactory.CreateToolsService(_products, _orders, _complaints));
     }
 
     /// <summary>
@@ -46,7 +52,7 @@ public class ApprovalGateServiceToolBuilderTests
         var svc = Build(opts);
         var fn = svc.BuildOrderPlacementTool();
 
-        var product = FakeDatabase.ProductCatalog.Keys.First();
+        var product = _products.GetAll().First().Name;
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
@@ -68,7 +74,7 @@ public class ApprovalGateServiceToolBuilderTests
         };
         var svc = Build(opts);
         var fn = svc.BuildOrderPlacementTool();
-        var product = FakeDatabase.ProductCatalog.Keys.First();
+        var product = _products.GetAll().First().Name;
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
@@ -100,7 +106,7 @@ public class ApprovalGateServiceToolBuilderTests
 
         var svc = Build(opts, queue);
         var fn = svc.BuildOrderPlacementTool();
-        var product = FakeDatabase.ProductCatalog.Keys.First();
+        var product = _products.GetAll().First().Name;
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
@@ -132,7 +138,7 @@ public class ApprovalGateServiceToolBuilderTests
 
         var svc = Build(opts, queue);
         var fn = svc.BuildOrderPlacementTool();
-        var product = FakeDatabase.ProductCatalog.Keys.First();
+        var product = _products.GetAll().First().Name;
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
@@ -183,7 +189,7 @@ public class ApprovalGateServiceToolBuilderTests
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
             ["orderId"] = "ORD-1",
-            ["complaintText"] = $"şikayet metni unique {Guid.NewGuid()} buraya yazıldı",
+            ["complaintText"] = $"�ikayet metni unique {Guid.NewGuid()} buraya yaz�ld�",
             ["customerId"] = "CUST-1990"
         }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);

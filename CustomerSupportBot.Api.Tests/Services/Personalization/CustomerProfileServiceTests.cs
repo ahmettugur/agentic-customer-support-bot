@@ -14,7 +14,7 @@ public class CustomerProfileServiceTests
         var chat = new FakeChat();
         var lockOptions = Options.Create(new Api.Models.RedisOptions { DefaultLockTimeoutSeconds = 10 });
         var distributedLock = new InMemoryDistributedLock(lockOptions);
-        var svc = new CustomerProfileService(store, chat, distributedLock, NullLogger<CustomerProfileService>.Instance);
+        var svc = new CustomerProfileService(store, chat, distributedLock, new InMemoryProductCatalogAdapter(), NullLogger<CustomerProfileService>.Instance);
         return (svc, store, chat);
     }
 

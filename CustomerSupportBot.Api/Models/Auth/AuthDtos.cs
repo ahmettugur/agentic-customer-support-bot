@@ -17,3 +17,4 @@ public sealed record AuthResponse(
     string Username,
     string Role,
     string? LinkedAgentId = null);
+

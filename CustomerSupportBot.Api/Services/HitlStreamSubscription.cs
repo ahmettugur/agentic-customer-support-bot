@@ -3,7 +3,7 @@
 // ChatStreamOrchestrator tarafından kullanılır — workflow süresince aktif kalır.
 
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services;
 
@@ -82,3 +82,4 @@ public sealed class HitlStreamSubscription : IDisposable
 
     public void Dispose() => Unsubscribe();
 }
+

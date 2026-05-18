@@ -27,7 +27,7 @@
 
 using System.Security.Claims;
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Routing;
 
@@ -483,3 +483,4 @@ public static class AgentPanelEndpoints
     private static string? GetLinkedAgentId(HttpContext ctx) =>
         ctx.User.FindFirstValue("linked_agent_id");
 }
+

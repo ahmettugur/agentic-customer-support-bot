@@ -2,8 +2,9 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
 using CustomerSupportBot.Api.Models.Auth;
+using CustomerSupportBot.Domain.Model.Auth;
 using CustomerSupportBot.Api.Services.Auth;
 
 namespace CustomerSupportBot.Api.Tests.Endpoints;
@@ -18,7 +19,7 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
         var dbf = _factory.GetDbContextFactory();
         await using var ctx = await dbf.CreateDbContextAsync();
 
-        // Aynı username varsa kullan
+        // Ayn� username varsa kullan
         var existing = ctx.Users.FirstOrDefault(u => u.Username == username);
         if (existing is not null) return existing;
 
@@ -134,6 +135,6 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
             new AuthenticationHeaderValue("Bearer", body!.AccessToken);
 
         var resp = await client.GetAsync("/traces/recent", TestContext.Current.CancellationToken);
-        ((int)resp.StatusCode).Should().BeLessThan(400, "Admin role bearer ile yetkili olmalı");
+        ((int)resp.StatusCode).Should().BeLessThan(400, "Admin role bearer ile yetkili olmal�");
     }
 }

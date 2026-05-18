@@ -4,7 +4,7 @@
 
 using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 
 namespace CustomerSupportBot.Api.Endpoints;
@@ -140,3 +140,4 @@ public static class ChatEndpoints
         await orchestrator.ExecuteAsync(sessionId, sse, httpContext.RequestAborted);
     }
 }
+

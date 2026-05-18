@@ -5,9 +5,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using CustomerSupportBot.Api.Infrastructure.Persistence;
-using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
+using CustomerSupportBot.Adapters.Persistence.EfCore;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
 using CustomerSupportBot.Api.Models.Auth;
+using CustomerSupportBot.Domain.Model.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -174,3 +175,4 @@ public sealed class TokenService : ITokenService
         return Convert.ToHexString(hash);
     }
 }
+

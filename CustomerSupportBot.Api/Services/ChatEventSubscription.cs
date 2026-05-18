@@ -3,7 +3,7 @@
 // ChatEventOrchestrator tarafından kullanılan SSE forwarder'a iletir.
 
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services;
 
@@ -115,3 +115,4 @@ public sealed class ChatEventSubscription : IDisposable
             _escalationSink.RequestDecided -= _escDecidedHandler;
     }
 }
+

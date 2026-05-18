@@ -5,7 +5,7 @@
 // kişiselleştirilmiş yanıt üretir.
 
 using System.Text;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services.Personalization;
 
 namespace CustomerSupportBot.Api.Services.Providers;
@@ -69,3 +69,4 @@ public sealed class CustomerProfileContextProvider : IContextProvider
         return Task.FromResult<string?>(sb.ToString());
     }
 }
+

@@ -1,3 +1,4 @@
+using CustomerSupportBot.Api.Models;
 // Extensions/RedisServicesExtensions.cs
 // Redis bağlantısını ve distributed lock altyapısını DI'a kaydeder.
 // Redis zorunludur — connection string yoksa uygulama başlatılmaz.
@@ -7,8 +8,8 @@
 //   2) ConnectionStrings:Redis
 //   3) Yoksa → InvalidOperationException
 
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services.Locking;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Adapters.Redis.Locking;
 using StackExchange.Redis;
 
 namespace CustomerSupportBot.Api.Extensions;
@@ -39,7 +40,7 @@ public static class RedisServicesExtensions
         // StackExchange.Redis — singleton multiplexer (thread-safe, tek bağlantı havuzu)
         services.AddSingleton<IConnectionMultiplexer>(sp =>
         {
-            var logger = sp.GetRequiredService<ILogger<RedisDistributedLock>>();
+            var logger = sp.GetRequiredService<ILogger<RedisDistributedLockAdapter>>();
             var configOptions = ConfigurationOptions.Parse(connectionString);
             configOptions.AbortOnConnectFail = false; // graceful retry
             configOptions.ConnectRetry = 3;
@@ -59,8 +60,9 @@ public static class RedisServicesExtensions
         });
 
         // Distributed lock — Redis-backed (Medallion RedLock)
-        services.AddSingleton<IAppDistributedLock, RedisDistributedLock>();
+        services.AddSingleton<IAppDistributedLock, RedisDistributedLockAdapter>();
 
         return services;
     }
 }
+

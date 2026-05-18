@@ -1,3 +1,4 @@
+using CustomerSupportBot.Application.Ports.Driven.Persistence;
 // Services/EntityVerifier.cs
 // ReAct-lite entity grounding.
 // IdExtractor regex ile formatı doğrular. EntityVerifier aşağıdakileri yapar:
@@ -11,7 +12,7 @@
 // Böylece reasoning modeli "zaten bilinen bilgi için clarification isteme" kararını
 // Tahmin üzerinden değil, grounded doğrulama üzerinden verir.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Api.Services;
@@ -24,9 +25,16 @@ namespace CustomerSupportBot.Api.Services;
 public class EntityVerifier
 {
     private readonly ILogger<EntityVerifier> _logger;
+    private readonly IOrderRepository _orders;
+    private readonly IComplaintRepository _complaints;
 
-    public EntityVerifier(ILogger<EntityVerifier> logger)
+    public EntityVerifier(
+        IOrderRepository orders,
+        IComplaintRepository complaints,
+        ILogger<EntityVerifier> logger)
     {
+        _orders = orders;
+        _complaints = complaints;
         _logger = logger;
     }
 
@@ -78,12 +86,12 @@ public class EntityVerifier
         // 5) Türetilmiş alanlar — sadece verified customer varsa
         if (result.CustomerId?.Verification == EntityVerification.Verified)
         {
-            var lastOrder = FakeDatabase.GetLastOrder(customerIdValue!);
+            var lastOrder = _orders.GetLast(customerIdValue!);
             if (lastOrder.HasValue)
             {
                 result.DerivedLastOrderId = lastOrder.Value.OrderId;
             }
-            result.DerivedOrderCount = FakeDatabase.GetAllOrders(customerIdValue!).Count();
+            result.DerivedOrderCount = _orders.GetByCustomer(customerIdValue!).Count;
         }
 
         _logger.LogDebug(
@@ -175,11 +183,12 @@ public class EntityVerifier
         return line;
     }
 
-    private static VerifiedEntity VerifyOrder(string orderId, EntitySource source)
+    private VerifiedEntity VerifyOrder(string orderId, EntitySource source)
     {
         var entity = new VerifiedEntity { Value = orderId, Source = source };
 
-        if (FakeDatabase.OrdersDb.TryGetValue(orderId, out var order))
+        var order = _orders.Get(orderId);
+        if (order != null)
         {
             entity.Verification = EntityVerification.Verified;
             entity.Attributes = new Dictionary<string, string>
@@ -198,15 +207,13 @@ public class EntityVerifier
         return entity;
     }
 
-    private static VerifiedEntity VerifyCustomer(string customerId, EntitySource source)
+    private VerifiedEntity VerifyCustomer(string customerId, EntitySource source)
     {
         var entity = new VerifiedEntity { Value = customerId, Source = source };
 
         // Customer için explicit DB yok — en az bir sipariş veya şikayet varsa verified sayarız.
-        var hasOrder = FakeDatabase.OrdersDb.Values.Any(o =>
-            o.CustomerId.Equals(customerId, StringComparison.OrdinalIgnoreCase));
-        var hasComplaint = FakeDatabase.ComplaintsDb.Values.Any(c =>
-            c.CustomerId.Equals(customerId, StringComparison.OrdinalIgnoreCase));
+        var hasOrder = _orders.GetByCustomer(customerId).Count > 0;
+        var hasComplaint = _complaints.GetByCustomer(customerId).Count > 0;
 
         if (hasOrder || hasComplaint)
         {
@@ -227,11 +234,12 @@ public class EntityVerifier
         return entity;
     }
 
-    private static VerifiedEntity VerifyComplaint(string complaintId, EntitySource source)
+    private VerifiedEntity VerifyComplaint(string complaintId, EntitySource source)
     {
         var entity = new VerifiedEntity { Value = complaintId, Source = source };
 
-        if (FakeDatabase.ComplaintsDb.TryGetValue(complaintId, out var complaint))
+        var complaint = _complaints.Get(complaintId);
+        if (complaint != null)
         {
             entity.Verification = EntityVerification.Verified;
             entity.Attributes = new Dictionary<string, string>
@@ -276,3 +284,4 @@ public class EntityVerifier
         return result;
     }
 }
+

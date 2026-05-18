@@ -1,3 +1,4 @@
+using CustomerSupportBot.Api.Models;
 // Services/Realtime/RealtimeBridge.cs
 // OpenAI Realtime API ile browser arasında ses köprüsü.
 //
@@ -15,7 +16,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Services.Realtime;
@@ -576,3 +577,4 @@ public sealed class RealtimeBridge : IAsyncDisposable
         _openAiWs?.Dispose();
     }
 }
+

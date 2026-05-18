@@ -1,5 +1,7 @@
 // Tests/Services/InMemorySessionManagerTests.cs
 
+using CustomerSupportBot.Adapters.Persistence.InMemory;
+using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Locking;
 using CustomerSupportBot.Api.Tests.Helpers;
@@ -10,7 +12,7 @@ namespace CustomerSupportBot.Api.Tests.Services;
 public class InMemorySessionManagerTests
 {
     private static readonly IAppDistributedLock _lock =
-        new InMemoryDistributedLock(Options.Create(new CustomerSupportBot.Api.Models.RedisOptions { DefaultLockTimeoutSeconds = 10 }));
+        new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 }));
     private readonly InMemorySessionManager _mgr = new(_lock);
 
     [Fact]
@@ -47,7 +49,7 @@ public class InMemorySessionManagerTests
     public void AddExchange_BuildsHistory()
     {
         _mgr.AddExchange("s1", "merhaba", "selam");
-        _mgr.AddExchange("s1", "yardÄ±m", "tabii");
+        _mgr.AddExchange("s1", "yardým", "tabii");
 
         var history = _mgr.GetHistory("s1");
         history.Should().HaveCount(4);
@@ -64,7 +66,7 @@ public class InMemorySessionManagerTests
     [Fact]
     public void ExtractAndUpdateState_CapturesCustomerId()
     {
-        _mgr.AddExchange("s1", "ben CUST-1990 mÃ¼ÅŸteriyim", "merhaba");
+        _mgr.AddExchange("s1", "ben CUST-1990 müþteriyim", "merhaba");
         var s = _mgr.GetSession("s1");
         s!.State.CustomerId.Should().Be("CUST-1990");
     }
@@ -72,7 +74,7 @@ public class InMemorySessionManagerTests
     [Fact]
     public void ExtractAndUpdateState_CapturesOrderId()
     {
-        _mgr.AddExchange("s1", "ORD-1 nerede?", "sipariÅŸiniz yolda");
+        _mgr.AddExchange("s1", "ORD-1 nerede?", "sipariþiniz yolda");
         var s = _mgr.GetSession("s1");
         s!.State.CollectedInfo.Should().ContainKey("LastMentionedOrderId");
     }
@@ -98,10 +100,10 @@ public class InMemorySessionManagerTests
     public void AppendAssistantMessage_AppendsToHistory()
     {
         _mgr.GetOrCreateSession("s1");
-        _mgr.AppendAssistantMessage("s1", "agent yanÄ±tÄ±");
+        _mgr.AppendAssistantMessage("s1", "agent yanýtý");
         var h = _mgr.GetHistory("s1");
         h.Should().HaveCount(1);
-        h[0].Text.Should().Be("agent yanÄ±tÄ±");
+        h[0].Text.Should().Be("agent yanýtý");
     }
 
     [Fact]

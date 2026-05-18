@@ -4,7 +4,7 @@
 
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services;
 
@@ -335,3 +335,4 @@ public static class ReasoningResultParser
         _ => WellKnown.Sentiments.Neutral
     };
 }
+

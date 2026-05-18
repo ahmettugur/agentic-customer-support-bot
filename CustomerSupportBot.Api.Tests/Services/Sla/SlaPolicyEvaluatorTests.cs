@@ -1,8 +1,8 @@
 // Services/Sla/SlaPolicyEvaluatorTests.cs
-// SLA evaluator iÃ§in saf birim testler â€” kuyruk girdileri + sink + now deÄŸeri
-// â†’ beklenen warn/breach/aksiyon. BackgroundService gerektirmez.
+// SLA evaluator için saf birim testler — kuyruk girdileri + sink + now deðeri
+// › beklenen warn/breach/aksiyon. BackgroundService gerektirmez.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services.Sla;
 using Microsoft.Extensions.Logging.Abstractions;
 

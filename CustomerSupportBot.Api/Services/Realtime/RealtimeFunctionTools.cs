@@ -12,8 +12,8 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Tools;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Api.Services.Realtime;
 
@@ -23,9 +23,11 @@ namespace CustomerSupportBot.Api.Services.Realtime;
 public sealed class RealtimeFunctionTools
 {
     private readonly ILogger<RealtimeFunctionTools> _logger;
+    private readonly CustomerSupportToolsService _tools;
 
-    public RealtimeFunctionTools(ILogger<RealtimeFunctionTools> logger)
+    public RealtimeFunctionTools(CustomerSupportToolsService tools, ILogger<RealtimeFunctionTools> logger)
     {
+        _tools = tools;
         _logger = logger;
     }
 
@@ -159,16 +161,16 @@ public sealed class RealtimeFunctionTools
             result = name switch
             {
                 "product_inquiry_tool"
-                    => CustomerSupportTools.ProductInquiryTool(GetString(args, "product_name") ?? ""),
+                    => _tools.ProductInquiryTool(GetString(args, "product_name") ?? ""),
 
                 "order_status_tool"
-                    => CustomerSupportTools.OrderStatusTool(GetString(args, "order_id") ?? ""),
+                    => _tools.OrderStatusTool(GetString(args, "order_id") ?? ""),
 
                 "get_last_order_tool"
-                    => CustomerSupportTools.GetLastOrderTool(GetString(args, "customer_id") ?? ""),
+                    => _tools.GetLastOrderTool(GetString(args, "customer_id") ?? ""),
 
                 "get_all_orders_tool"
-                    => CustomerSupportTools.GetAllOrdersTool(GetString(args, "customer_id") ?? ""),
+                    => _tools.GetAllOrdersTool(GetString(args, "customer_id") ?? ""),
 
                 EndConversationToolName
                     => ToolResult.Ok("Görüşme sonlandırılıyor.", new
@@ -211,3 +213,4 @@ public sealed class RealtimeFunctionTools
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 }
+

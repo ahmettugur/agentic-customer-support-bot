@@ -1,4 +1,4 @@
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -98,7 +98,7 @@ public class InMemoryChatBridgeTests
             return null;
         }, cts.Token);
 
-        // AboneliÄŸin oluÅŸmasÄ± iÃ§in kÄ±sa bekleme
+        // Aboneliðin oluþmasý için kýsa bekleme
         await Task.Delay(100, cts.Token);
         _bridge.PublishAdminMessage("s1", "Ali", "merhaba");
 

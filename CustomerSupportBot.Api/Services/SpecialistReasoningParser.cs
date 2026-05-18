@@ -6,7 +6,7 @@
 // ```
 
 using System.Text.Json;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services;
 
@@ -199,3 +199,4 @@ public static class SpecialistReasoningParser
         return false;
     }
 }
+

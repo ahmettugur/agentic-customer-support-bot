@@ -1,6 +1,6 @@
 // Tests/Services/Auth/UserServiceTests.cs
 
-using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Auth;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
 using CustomerSupportBot.Api.Services.Auth;
 using Microsoft.Extensions.Logging.Abstractions;
 

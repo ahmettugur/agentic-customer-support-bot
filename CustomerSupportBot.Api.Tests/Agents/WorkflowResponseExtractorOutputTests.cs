@@ -1,7 +1,7 @@
 // Tests/Agents/WorkflowResponseExtractorOutputTests.cs
-// WorkflowOutputEvent ile çalışan extractor metodları.
+// WorkflowOutputEvent ile �al��an extractor metodlar�.
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
@@ -15,7 +15,7 @@ public class WorkflowResponseExtractorOutputTests
     private static ChatMessage Msg(ChatRole role, string text, string? authorName = null)
         => new(role, text) { AuthorName = authorName };
 
-    // ─── ExtractResultFromOutput ───
+    // ��� ExtractResultFromOutput ���
 
     [Fact]
     public void ExtractResultFromOutput_StringData_ReturnsString()
@@ -84,7 +84,7 @@ public class WorkflowResponseExtractorOutputTests
             .Should().Be("");
     }
 
-    // ─── ExtractPlanningFromOutput ───
+    // ExtractPlanningFromOutput
 
     [Fact]
     public void ExtractPlanningFromOutput_NotChatMessages_ReturnsNull()
@@ -126,7 +126,7 @@ public class WorkflowResponseExtractorOutputTests
         result!.SelectedAgent.Should().Be("OrderAgent");
     }
 
-    // ─── ExtractSpecialistReasoningsFromOutput ───
+    // ��� ExtractSpecialistReasoningsFromOutput ���
 
     [Fact]
     public void ExtractSpecialistReasoningsFromOutput_NotChatMessages_ReturnsEmpty()
@@ -158,7 +158,7 @@ public class WorkflowResponseExtractorOutputTests
             .Should().BeEmpty();
     }
 
-    // ─── ContainsAgentRoutingMessage edge cases ───
+    // ContainsAgentRoutingMessage edge cases 
 
     [Fact]
     public void ContainsAgentRoutingMessage_PlanningName_True()
@@ -174,7 +174,7 @@ public class WorkflowResponseExtractorOutputTests
             .Should().BeTrue();
     }
 
-    // ─── IsInternalWorkflowExecutor ───
+    // ��� IsInternalWorkflowExecutor ���
 
     [Theory]
     [InlineData("GroupChatHost-1")]
@@ -196,13 +196,13 @@ public class WorkflowResponseExtractorOutputTests
         WorkflowResponseExtractor.IsInternalWorkflowExecutor(id).Should().BeFalse();
     }
 
-    // ─── RemoveTechnicalJsonBlocks ───
+    // ��� RemoveTechnicalJsonBlocks ���
 
     [Fact]
     public void RemoveTechnicalJsonBlocks_PlainJsonWithSelfCritique_Stripped()
     {
         var input = """
-            Cevap hazır.
+            Cevap haz�r.
             {"selfCritique": {"rating": "good"}}
             """;
         var result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(input);
@@ -213,7 +213,7 @@ public class WorkflowResponseExtractorOutputTests
     [Fact]
     public void RemoveTechnicalJsonBlocks_CollapsesMultipleNewlines()
     {
-        var input = "Bir\n\n\n\n\nİki";
+        var input = "Bir\n\n\n\n\nki";
         var result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(input);
         result.Should().NotContain("\n\n\n");
     }
@@ -224,7 +224,7 @@ public class WorkflowResponseExtractorOutputTests
         WorkflowResponseExtractor.RemoveTechnicalJsonBlocks("").Should().Be("");
     }
 
-    // ─── ExtractDeltaText ───
+    // ExtractDeltaText
 
     [Fact]
     public void ExtractDeltaText_ObjectWithoutTextProperty_ReturnsEmpty()
@@ -240,7 +240,7 @@ public class WorkflowResponseExtractorOutputTests
         WorkflowResponseExtractor.ExtractDeltaText(data).Should().Be("");
     }
 
-    // ─── StreamTextInChunksAsync ───
+    // StreamTextInChunksAsync 
 
     [Fact]
     public async Task StreamTextInChunksAsync_EmptyText_NoChunks()

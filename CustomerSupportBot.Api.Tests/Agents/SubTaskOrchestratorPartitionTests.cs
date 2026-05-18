@@ -2,7 +2,7 @@
 // Paralel sub-task gruplama testleri (#E).
 
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 
@@ -24,7 +24,7 @@ public class SubTaskOrchestratorPartitionTests
     [Fact]
     public void Partition_AllReadOnly_SingleParallelGroup()
     {
-        // Şu an tek read-only agent: ProductInquiry
+        // �u an tek read-only agent: ProductInquiry
         var subs = new[]
         {
             Sub(1, WellKnown.AgentNames.ProductInquiry),
@@ -56,7 +56,7 @@ public class SubTaskOrchestratorPartitionTests
     [Fact]
     public void Partition_MixedSequence_PreservesOrderedGroups()
     {
-        // read, write, read → 3 grup: [P] (parallel-1), [O] (serial), [P] (parallel-1)
+        // read, write, read � 3 grup: [P] (parallel-1), [O] (serial), [P] (parallel-1)
         var subs = new[]
         {
             Sub(1, WellKnown.AgentNames.ProductInquiry),
@@ -104,7 +104,7 @@ public class SubTaskOrchestratorPartitionTests
 
         var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
 
-        // sıralı: 1=P, 2=W, 3=P → 3 grup
+        // sıralı: 1=P, 2=W, 3=P  3 grup
         groups.Should().HaveCount(3);
         groups[0].Items.Single().Order.Should().Be(1);
         groups[1].Items.Single().Order.Should().Be(2);

@@ -1,6 +1,7 @@
 // Tests/Models/Auth/AuthModelsTests.cs
 
 using CustomerSupportBot.Api.Models.Auth;
+using CustomerSupportBot.Domain.Model.Auth;
 
 namespace CustomerSupportBot.Api.Tests.Models.Auth;
 

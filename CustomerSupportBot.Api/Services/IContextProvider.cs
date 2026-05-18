@@ -1,7 +1,7 @@
 // Services/IContextProvider.cs
 // Context Provider arayüzü — ajanlara bağlam bilgisi sağlar.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services;
 
@@ -23,3 +23,4 @@ public interface IContextProvider
     /// </summary>
     Task<string?> GetContextAsync(AgentSession session);
 }
+

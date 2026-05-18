@@ -3,8 +3,9 @@
 // /agents (GET, POST, PUT/{id}, DELETE/{id}) ve /escalations/{id}/reroute.
 // Hepsi RequireAuthorization("Admin") scope altında map edilir.
 
+using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Api.Infrastructure.Persistence;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Routing;
 using Microsoft.EntityFrameworkCore;
@@ -120,3 +121,4 @@ public class RerouteInput
     public string? AgentId { get; set; }
     public string? Reason { get; set; }
 }
+

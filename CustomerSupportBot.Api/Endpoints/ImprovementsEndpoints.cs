@@ -7,8 +7,8 @@
 //   POST /improvements/{id}/reject  — reddet
 //   GET  /improvements/{id}         — tek lesson detayı
 
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models.Improvement;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model.Improvement;
 using CustomerSupportBot.Api.Services.Improvement;
 
 namespace CustomerSupportBot.Api.Endpoints;
@@ -66,3 +66,4 @@ public static class ImprovementsEndpoints
         return app;
     }
 }
+

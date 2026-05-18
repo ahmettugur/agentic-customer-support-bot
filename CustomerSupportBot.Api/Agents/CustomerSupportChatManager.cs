@@ -14,7 +14,7 @@
 
 using System.Text.Json;
 using CustomerSupportBot.Api.Agents.Routing;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -199,3 +199,4 @@ public class CustomerSupportChatManager : GroupChatManager
         }
     }
 }
+

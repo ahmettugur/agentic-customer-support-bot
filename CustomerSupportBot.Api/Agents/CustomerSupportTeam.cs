@@ -13,10 +13,11 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
+using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
+using CustomerSupportBot.Domain.Services;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Memory;
-using CustomerSupportBot.Api.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -43,6 +44,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     private readonly IReasoningTraceStore _traceStore;
     private readonly PromptService _prompts;
     private readonly ApprovalGateService _approvalGate;
+    private readonly CustomerSupportToolsService _tools;
     private readonly ILoggerFactory _loggerFactory;
     private readonly SemanticMemoryService? _semanticMemory;
     private readonly Services.Personalization.CustomerProfileService? _profileService;
@@ -55,6 +57,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         IReasoningTraceStore traceStore,
         PromptService prompts,
         ApprovalGateService approvalGate,
+        CustomerSupportToolsService tools,
         ILoggerFactory loggerFactory,
         SemanticMemoryService? semanticMemory = null,
         Services.Personalization.CustomerProfileService? profileService = null)
@@ -64,6 +67,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         _traceStore = traceStore;
         _prompts = prompts;
         _approvalGate = approvalGate;
+        _tools = tools;
         _loggerFactory = loggerFactory;
         _semanticMemory = semanticMemory;
         _profileService = profileService;
@@ -94,7 +98,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
             instructions: _prompts.Get("agents/product-inquiry-agent"),
             name: WellKnown.AgentNames.ProductInquiry,
             description: "Ürün sorgularını yanıtlar.",
-            tools: [AIFunctionFactory.Create(CustomerSupportTools.ProductInquiryTool)]), sourceName);
+            tools: [AIFunctionFactory.Create(_tools.ProductInquiryTool)]), sourceName);
 
         _orderAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
@@ -103,9 +107,9 @@ public class CustomerSupportTeam : ICustomerSupportTeam
             description: "Sipariş oluşturma ve sorgulama işlemlerini yürütür.",
             tools: [
                 _approvalGate.BuildOrderPlacementTool(),
-                AIFunctionFactory.Create(CustomerSupportTools.OrderStatusTool),
-                AIFunctionFactory.Create(CustomerSupportTools.GetLastOrderTool),
-                AIFunctionFactory.Create(CustomerSupportTools.GetAllOrdersTool)
+                AIFunctionFactory.Create(_tools.OrderStatusTool),
+                AIFunctionFactory.Create(_tools.GetLastOrderTool),
+                AIFunctionFactory.Create(_tools.GetAllOrdersTool)
             ]), sourceName);
 
         _complaintAgent = WrapWithTelemetry(new ChatClientAgent(
@@ -120,7 +124,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
             instructions: _prompts.Get("agents/human-handoff-agent"),
             name: WellKnown.AgentNames.HumanHandoff,
             description: "Kullanıcının açıkça insan temsilcisiyle görüşme talebini karşılar.",
-            tools: [AIFunctionFactory.Create(CustomerSupportTools.HumanHandoffTool)]), sourceName);
+            tools: [AIFunctionFactory.Create(CustomerSupportToolsService.HumanHandoffTool)]), sourceName);
 
         _responseAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
@@ -168,7 +172,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     public async Task<string> RunAsync(
         string query,
         List<ChatMessage>? conversationHistory = null,
-        Models.AgentSession? session = null,
+        AgentSession? session = null,
         ReasoningResult? reasoning = null)
     {
         if (SubTaskOrchestrator.IsCompoundQuery(reasoning))
@@ -215,7 +219,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(
         string query,
         List<ChatMessage>? conversationHistory = null,
-        Models.AgentSession? session = null,
+        AgentSession? session = null,
         ReasoningResult? reasoning = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -472,7 +476,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         });
     }
 
-    private async Task UpdateCustomerProfileSafeAsync(Models.AgentSession? session, ReasoningTrace trace, string query, string response)
+    private async Task UpdateCustomerProfileSafeAsync(AgentSession? session, ReasoningTrace trace, string query, string response)
     {
         if (_profileService is null) return;
         var customerId = session?.State.CustomerId;
@@ -506,7 +510,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     private async Task<List<ChatMessage>> BuildWorkflowMessagesAsync(
         string query,
         List<ChatMessage>? conversationHistory,
-        Models.AgentSession? session,
+        AgentSession? session,
         ReasoningResult? reasoning)
     {
         var messages = new List<ChatMessage>();
@@ -642,7 +646,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     private async Task<string> RunDecomposedAsync(
         string query,
         List<ChatMessage>? conversationHistory,
-        Models.AgentSession? session,
+        AgentSession? session,
         ReasoningResult reasoning)
     {
         var parts = new List<string>();
@@ -710,7 +714,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     private async IAsyncEnumerable<StreamEvent> RunDecomposedStreamingAsync(
         string query,
         List<ChatMessage>? conversationHistory,
-        Models.AgentSession? session,
+        AgentSession? session,
         ReasoningResult reasoning,
         [EnumeratorCancellation] CancellationToken ct)
     {
@@ -917,3 +921,4 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         }
     }
 }
+

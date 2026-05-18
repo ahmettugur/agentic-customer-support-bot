@@ -1,6 +1,6 @@
 // Tests/Services/EscalationStatesTests.cs
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 
 namespace CustomerSupportBot.Api.Tests.Services;

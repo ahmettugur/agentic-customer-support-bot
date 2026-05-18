@@ -1,7 +1,7 @@
 // Agents/ICustomerSupportTeam.cs
 // Müşteri destek ajan takımının dış arayüzü — test/mock için.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Api.Agents;
@@ -31,3 +31,4 @@ public interface ICustomerSupportTeam
         ReasoningResult? reasoning = null,
         CancellationToken ct = default);
 }
+

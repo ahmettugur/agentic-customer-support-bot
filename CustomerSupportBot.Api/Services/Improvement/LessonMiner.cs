@@ -13,9 +13,9 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models.Improvement;
-using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model.Improvement;
+using CustomerSupportBot.Domain.Model.Memory;
 using CustomerSupportBot.Api.Services.Memory;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
@@ -269,3 +269,4 @@ public sealed class MiningRunReport
     public List<string> LessonIds { get; set; } = new();
     public string? Error { get; set; }
 }
+

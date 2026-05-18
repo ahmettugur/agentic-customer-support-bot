@@ -3,7 +3,7 @@
 // LastEmittedAt sayesinde aynı target+severity tekrar tekrar emit edilmez.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services.Sla;
 
@@ -52,3 +52,4 @@ public class InMemorySlaEventSink : ISlaEventSink
     private static string Key(string kind, string targetId, string severity)
         => $"{kind}|{targetId}|{severity}";
 }
+

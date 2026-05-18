@@ -1,4 +1,5 @@
 using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services.Telemetry;
 using Microsoft.Extensions.Options;
 

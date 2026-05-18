@@ -24,7 +24,7 @@
 // Production'da bu endpoint'lerin önüne auth (admin role) gelmelidir.
 
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.AI;
 
@@ -342,7 +342,7 @@ public static class AdminEndpoints
             var acknowledged = 0;
             foreach (var esc in escalationSink.GetOpen())
             {
-                if (esc.SessionId == sid && esc.Status == Models.EscalationStatus.Open)
+                if (esc.SessionId == sid && esc.Status == EscalationStatus.Open)
                 {
                     if (escalationSink.Decide(esc.Id, WellKnown.EscalationActions.Acknowledge, assignedTo: agent))
                         acknowledged++;
@@ -542,3 +542,4 @@ public record ChatReplanInput(string? RequestedBy);
 /// Note PlanningAgent'a one-shot hint olarak gider; müşteriye GÖSTERİLMEZ.
 /// </summary>
 public record ReplanInput(string? RequestedBy, string? Note);
+

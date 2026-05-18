@@ -3,7 +3,7 @@
 // Eşikleri aşan kayıtlar için warn / breach event'leri yayınlar; breach
 // politikasına göre auto-reject yapabilir veya eskalasyon önceliğini yükseltebilir.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Services.Sla;
@@ -120,3 +120,4 @@ public class SlaGuardianService : BackgroundService
         }
     }
 }
+

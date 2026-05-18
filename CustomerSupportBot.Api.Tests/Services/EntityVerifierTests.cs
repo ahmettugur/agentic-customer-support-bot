@@ -1,16 +1,20 @@
 // Tests/Services/EntityVerifierTests.cs
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
-using SessionState = CustomerSupportBot.Api.Models.SessionState;
+using SessionState = CustomerSupportBot.Domain.Model.SessionState;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 
 public class EntityVerifierTests
 {
-    private readonly EntityVerifier _verifier = new(NullLogger<EntityVerifier>.Instance);
+    private readonly EntityVerifier _verifier = new(
+        TestFactory.CreateOrders(),
+        TestFactory.CreateComplaints(),
+        NullLogger<EntityVerifier>.Instance);
 
     private static AgentSession EmptySession() => new()
     {
@@ -45,7 +49,7 @@ public class EntityVerifierTests
     [Fact]
     public void Verify_KnownCustomerWithVerified_DerivesLastOrder()
     {
-        var result = _verifier.Verify("CUST-1990 son siparişim?", EmptySession());
+        var result = _verifier.Verify("CUST-1990 son sipari�im?", EmptySession());
         result.CustomerId.Should().NotBeNull();
         result.CustomerId!.Verification.Should().Be(EntityVerification.Verified);
         result.DerivedLastOrderId.Should().NotBeNullOrEmpty();
@@ -58,7 +62,7 @@ public class EntityVerifierTests
         var session = EmptySession();
         session.State.CustomerId = "CUST-1990";
 
-        var result = _verifier.Verify("siparişlerim?", session);
+        var result = _verifier.Verify("sipari�lerim?", session);
 
         result.CustomerId.Should().NotBeNull();
         result.CustomerId!.Source.Should().Be(EntitySource.SessionState);
@@ -70,10 +74,10 @@ public class EntityVerifierTests
         var session = EmptySession();
         var history = new List<ChatMessage>
         {
-            new(ChatRole.User, "ben CUST-1990 müşteriyim")
+            new(ChatRole.User, "ben CUST-1990 m��teriyim")
         };
 
-        var result = _verifier.Verify("siparişim?", session, history);
+        var result = _verifier.Verify("sipari�im?", session, history);
 
         result.CustomerId.Should().NotBeNull();
         result.CustomerId!.Source.Should().Be(EntitySource.History);
@@ -114,6 +118,6 @@ public class EntityVerifierTests
             }
         };
         var block = EntityVerifier.BuildPromptBlock(verified);
-        block.Should().Contain("DB'de bulunamadı");
+        block.Should().Contain("DB'de bulunamad�");
     }
 }

@@ -1,15 +1,29 @@
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Tools;
+using CustomerSupportBot.Adapters.Persistence.InMemory;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Api.Tests.Tools;
 
+/// <summary>
+/// CustomerSupportToolsService testleri — InMemory adapter'larla izole edilmiþ.
+/// </summary>
 public class CustomerSupportToolsTests
 {
-    // â”€â”€â”€ ProductInquiryTool â”€â”€â”€
+    private readonly InMemoryProductCatalogAdapter _products = new();
+    private readonly InMemoryOrderAdapter _orders = new();
+    private readonly InMemoryComplaintAdapter _complaints = new();
+    private readonly CustomerSupportToolsService _svc;
+
+    public CustomerSupportToolsTests()
+    {
+        _svc = new CustomerSupportToolsService(_products, _orders, _complaints);
+    }
+
+    // ¦¦¦ ProductInquiryTool ¦¦¦
     [Fact]
     public void ProductInquiry_BlankName_ValidationError()
     {
-        var r = CustomerSupportTools.ProductInquiryTool("");
+        var r = _svc.ProductInquiryTool("");
         r.Success.Should().BeFalse();
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
@@ -17,7 +31,7 @@ public class CustomerSupportToolsTests
     [Fact]
     public void ProductInquiry_UnknownProduct_NotFound()
     {
-        var r = CustomerSupportTools.ProductInquiryTool("ZZZ-yokboyle-urun-xyz");
+        var r = _svc.ProductInquiryTool("ZZZ-yokboyle-urun-xyz");
         r.Success.Should().BeFalse();
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.ProductNotFound);
     }
@@ -25,18 +39,18 @@ public class CustomerSupportToolsTests
     [Fact]
     public void ProductInquiry_KnownProduct_Ok()
     {
-        var firstProduct = FakeDatabase.ProductCatalog.Keys.First();
-        var r = CustomerSupportTools.ProductInquiryTool(firstProduct);
+        var firstProduct = _products.GetAll().First().Name;
+        var r = _svc.ProductInquiryTool(firstProduct);
         r.Success.Should().BeTrue();
         r.Confidence.Should().Be(1.0);
         r.Message.Should().Contain(firstProduct);
     }
 
-    // â”€â”€â”€ OrderPlacementTool â”€â”€â”€
+    // ¦¦¦ OrderPlacementTool ¦¦¦
     [Fact]
     public void OrderPlacement_AllMissing_ValidationError()
     {
-        var r = CustomerSupportTools.OrderPlacementTool("", null, "");
+        var r = _svc.OrderPlacementTool("", null, "");
         r.Success.Should().BeFalse();
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
@@ -44,54 +58,53 @@ public class CustomerSupportToolsTests
     [Fact]
     public void OrderPlacement_UnknownProduct_NotFound()
     {
-        var r = CustomerSupportTools.OrderPlacementTool("ZZZ-yokboyle", 1, "CUST-1990");
+        var r = _svc.OrderPlacementTool("ZZZ-yokboyle", 1, "CUST-1990");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.ProductNotFound);
     }
 
     [Fact]
     public void OrderPlacement_Valid_CreatesOrder()
     {
-        var product = FakeDatabase.ProductCatalog.Keys.First();
-        var beforeOrders = FakeDatabase.OrdersDb.Count;
-        var r = CustomerSupportTools.OrderPlacementTool(product, 1, $"CUST-TEST-{Guid.NewGuid():N}");
+        var product = _products.GetAll().First().Name;
+        var customerId = $"CUST-TEST-{Guid.NewGuid():N}";
+        var r = _svc.OrderPlacementTool(product, 1, customerId);
         r.Success.Should().BeTrue();
-        FakeDatabase.OrdersDb.Count.Should().BeGreaterThan(beforeOrders);
+        _orders.GetByCustomer(customerId).Count.Should().Be(1);
     }
 
     [Fact]
     public void OrderPlacement_DuplicateWithinWindow_ReturnsCachedResult()
     {
-        var product = FakeDatabase.ProductCatalog.Keys.First();
+        var product = _products.GetAll().First().Name;
         var customerId = $"CUST-IDEM-{Guid.NewGuid():N}";
-        var r1 = CustomerSupportTools.OrderPlacementTool(product, 1, customerId);
-        var r2 = CustomerSupportTools.OrderPlacementTool(product, 1, customerId);
+        var r1 = _svc.OrderPlacementTool(product, 1, customerId);
+        var r2 = _svc.OrderPlacementTool(product, 1, customerId);
         r1.Success.Should().BeTrue();
         r2.Success.Should().BeTrue();
-        // AynÄ± orderId dÃ¶ner (idempotency)
         r1.Message.Should().Be(r2.Message);
     }
 
     [Fact]
     public void OrderPlacement_StockInsufficient_Conflict()
     {
-        var product = FakeDatabase.ProductCatalog.Keys.First();
-        var r = CustomerSupportTools.OrderPlacementTool(product, 999_999, $"CUST-X-{Guid.NewGuid():N}");
+        var product = _products.GetAll().First().Name;
+        var r = _svc.OrderPlacementTool(product, 999_999, $"CUST-X-{Guid.NewGuid():N}");
         r.Success.Should().BeFalse();
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.StockInsufficient);
     }
 
-    // â”€â”€â”€ OrderStatusTool â”€â”€â”€
+    // ¦¦¦ OrderStatusTool ¦¦¦
     [Fact]
     public void OrderStatus_BlankId_ValidationError()
     {
-        var r = CustomerSupportTools.OrderStatusTool("");
+        var r = _svc.OrderStatusTool("");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
     [Fact]
     public void OrderStatus_KnownOrder_Ok()
     {
-        var r = CustomerSupportTools.OrderStatusTool("ORD-1");
+        var r = _svc.OrderStatusTool("ORD-1");
         r.Success.Should().BeTrue();
         r.Message.Should().Contain("ORD-1");
     }
@@ -99,113 +112,113 @@ public class CustomerSupportToolsTests
     [Fact]
     public void OrderStatus_UnknownOrder_NotFound()
     {
-        var r = CustomerSupportTools.OrderStatusTool("ORD-9999999");
+        var r = _svc.OrderStatusTool("ORD-9999999");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
     }
 
-    // â”€â”€â”€ ComplaintRegistrationTool â”€â”€â”€
+    // ¦¦¦ ComplaintRegistrationTool ¦¦¦
     [Fact]
     public void Complaint_MissingFields_ValidationError()
     {
-        var r = CustomerSupportTools.ComplaintRegistrationTool("", "kÄ±sa", null);
+        var r = _svc.ComplaintRegistrationTool("", "kýsa", null);
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
     [Fact]
     public void Complaint_TooShortDescription_ValidationError()
     {
-        var r = CustomerSupportTools.ComplaintRegistrationTool("ORD-1", "az", "CUST-1990");
+        var r = _svc.ComplaintRegistrationTool("ORD-1", "az", "CUST-1990");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
     [Fact]
     public void Complaint_UnknownOrder_NotFound()
     {
-        var r = CustomerSupportTools.ComplaintRegistrationTool(
-            "ORD-99999", "ÅŸikayet aÃ§Ä±klamasÄ± burada yer alÄ±r", "CUST-X");
+        var r = _svc.ComplaintRegistrationTool(
+            "ORD-99999", "þikayet açýklamasý burada yer alýr", "CUST-X");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
     }
 
     [Fact]
     public void Complaint_CustomerIdMismatch_Conflict()
     {
-        var r = CustomerSupportTools.ComplaintRegistrationTool(
-            "ORD-1", "Ã¼rÃ¼n hatalÄ± geldi paket aÃ§Ä±lmÄ±ÅŸ", "CUST-WRONG-XYZ");
+        var r = _svc.ComplaintRegistrationTool(
+            "ORD-1", "ürün hatalý geldi paket açýlmýþ", "CUST-WRONG-XYZ");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.CustomerIdMismatch);
     }
 
     [Fact]
     public void Complaint_OmitCustomerId_Inferred()
     {
-        var product = FakeDatabase.ProductCatalog.Keys.First();
+        var product = _products.GetAll().First().Name;
         var customerId = $"CUST-COMPL-{Guid.NewGuid():N}";
-        var orderResult = CustomerSupportTools.OrderPlacementTool(product, 1, customerId);
+        var orderResult = _svc.OrderPlacementTool(product, 1, customerId);
         var orderId = orderResult.Data!.GetType().GetProperty("orderId")!.GetValue(orderResult.Data) as string;
-        var r = CustomerSupportTools.ComplaintRegistrationTool(
-            orderId!, $"ÅŸikayet metni unique {Guid.NewGuid()}", null);
+        var r = _svc.ComplaintRegistrationTool(
+            orderId!, $"þikayet metni unique {Guid.NewGuid()}", null);
         r.Success.Should().BeTrue();
         var inferred = (bool)r.Data!.GetType().GetProperty("customerIdInferred")!.GetValue(r.Data)!;
         inferred.Should().BeTrue();
     }
 
-    // â”€â”€â”€ GetLastOrderTool â”€â”€â”€
+    // ¦¦¦ GetLastOrderTool ¦¦¦
     [Fact]
     public void GetLastOrder_BlankCustomer_ValidationError()
     {
-        var r = CustomerSupportTools.GetLastOrderTool("");
+        var r = _svc.GetLastOrderTool("");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
     [Fact]
     public void GetLastOrder_NoOrders_NotFound()
     {
-        var r = CustomerSupportTools.GetLastOrderTool($"CUST-NEW-{Guid.NewGuid():N}");
+        var r = _svc.GetLastOrderTool($"CUST-NEW-{Guid.NewGuid():N}");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.NoOrdersForCustomer);
     }
 
     [Fact]
     public void GetLastOrder_KnownCustomer_Ok()
     {
-        var r = CustomerSupportTools.GetLastOrderTool("CUST-1990");
+        var r = _svc.GetLastOrderTool("CUST-1990");
         r.Success.Should().BeTrue();
     }
 
-    // â”€â”€â”€ GetAllOrdersTool â”€â”€â”€
+    // ¦¦¦ GetAllOrdersTool ¦¦¦
     [Fact]
     public void GetAllOrders_BlankCustomer_ValidationError()
     {
-        var r = CustomerSupportTools.GetAllOrdersTool("");
+        var r = _svc.GetAllOrdersTool("");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
     [Fact]
     public void GetAllOrders_NoOrders_NotFound()
     {
-        var r = CustomerSupportTools.GetAllOrdersTool($"CUST-EMPTY-{Guid.NewGuid():N}");
+        var r = _svc.GetAllOrdersTool($"CUST-EMPTY-{Guid.NewGuid():N}");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.NoOrdersForCustomer);
     }
 
     [Fact]
     public void GetAllOrders_KnownCustomer_Ok()
     {
-        var r = CustomerSupportTools.GetAllOrdersTool("CUST-1990");
+        var r = _svc.GetAllOrdersTool("CUST-1990");
         r.Success.Should().BeTrue();
         var total = (int)r.Data!.GetType().GetProperty("totalCount")!.GetValue(r.Data)!;
         total.Should().BeGreaterThan(0);
     }
 
-    // â”€â”€â”€ HumanHandoffTool â”€â”€â”€
+    // ¦¦¦ HumanHandoffTool ¦¦¦
     [Fact]
     public void HumanHandoff_BlankReason_ValidationError()
     {
-        var r = CustomerSupportTools.HumanHandoffTool("");
+        var r = CustomerSupportToolsService.HumanHandoffTool("");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
     [Fact]
     public void HumanHandoff_WithReason_Ok()
     {
-        var r = CustomerSupportTools.HumanHandoffTool("kullanÄ±cÄ± aÃ§Ä±kÃ§a istedi");
+        var r = CustomerSupportToolsService.HumanHandoffTool("kullanýcý açýkça istedi");
         r.Success.Should().BeTrue();
         var requested = (bool)r.Data!.GetType().GetProperty("handoffRequested")!.GetValue(r.Data)!;
         requested.Should().BeTrue();

@@ -2,7 +2,7 @@
 
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Api.Models.Workflow;
+using CustomerSupportBot.Domain.Model.Workflow;
 
 namespace CustomerSupportBot.Api.Services.Workflow;
 
@@ -53,9 +53,10 @@ public partial class InMemoryWorkflowDefinitionStore : IWorkflowDefinitionStore
     {
         if (string.IsNullOrWhiteSpace(name)) return Guid.NewGuid().ToString("N")[..8];
         var lower = name.Trim().ToLowerInvariant()
-            .Replace('ı', 'i').Replace('ğ', 'g').Replace('ü', 'u')
-            .Replace('ş', 's').Replace('ö', 'o').Replace('ç', 'c');
+            .Replace('\u0131', 'i').Replace('\u011f', 'g').Replace('\u00fc', 'u')
+            .Replace('\u015f', 's').Replace('\u00f6', 'o').Replace('\u00e7', 'c');
         var slug = NonAlnumRegex().Replace(lower, "-").Trim('-');
         return string.IsNullOrWhiteSpace(slug) ? Guid.NewGuid().ToString("N")[..8] : slug;
     }
 }
+

@@ -5,8 +5,8 @@
 // Order = 7 (CustomerContext=düşük, ConversationSummary=5, biz son sırada).
 
 using System.Text;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model.Memory;
 using CustomerSupportBot.Api.Services.Memory;
 
 namespace CustomerSupportBot.Api.Services.Providers;
@@ -91,3 +91,4 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
         }
     }
 }
+

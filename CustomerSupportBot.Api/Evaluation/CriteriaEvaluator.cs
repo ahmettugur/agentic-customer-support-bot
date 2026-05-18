@@ -13,7 +13,7 @@
 // Diğer pattern'lar → "manual_review" olarak işaretlenir.
 
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Evaluation;
 
@@ -243,3 +243,4 @@ public class ScenarioRunContext
     public ReasoningResult? Reasoning { get; set; }
     public PlanningResult? Planning { get; set; }
 }
+

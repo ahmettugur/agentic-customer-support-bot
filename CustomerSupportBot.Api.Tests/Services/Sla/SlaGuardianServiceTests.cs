@@ -1,9 +1,9 @@
 // Services/Sla/SlaGuardianServiceTests.cs
-// Guardian'Ä±n gerÃ§ek InMemoryApprovalQueue + InMemoryEscalationSink Ã¼zerinde
-// ScanOnce davranÄ±ÅŸÄ±nÄ± doÄŸrular: warn/breach kayÄ±tlarÄ±, AutoReject ve
-// Ã¶ncelik yÃ¼kseltmesi.
+// Guardian'ýn gerçek InMemoryApprovalQueue + InMemoryEscalationSink üzerinde
+// ScanOnce davranýþýný doðrular: warn/breach kayýtlarý, AutoReject ve
+// öncelik yükseltmesi.
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Sla;
 using Microsoft.Extensions.DependencyInjection;

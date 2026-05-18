@@ -4,7 +4,7 @@
 
 using System.Security.Cryptography;
 using System.Text;
-using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Services.Memory;
@@ -159,3 +159,4 @@ public sealed class KnowledgeBaseIngestor : IHostedService
 
     private string? ReadStateHash() => File.Exists(_stateFile) ? File.ReadAllText(_stateFile).Trim() : null;
 }
+

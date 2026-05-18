@@ -1,9 +1,9 @@
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model.Memory;
 using CustomerSupportBot.Api.Services.Personalization;
 using CustomerSupportBot.Api.Services.Providers;
 using Microsoft.Extensions.Logging.Abstractions;
-using SessionState = CustomerSupportBot.Api.Models.SessionState;
+using SessionState = CustomerSupportBot.Domain.Model.SessionState;
 
 namespace CustomerSupportBot.Api.Tests.Services.Providers;
 
@@ -53,7 +53,7 @@ public class CustomerProfileContextProviderTests
         store.Upsert(new CustomerProfile
         {
             CustomerId = "CUST-1990",
-            Summary = "Dell XPS 15 müşterisi",
+            Summary = "Dell XPS 15 m��terisi",
             PreferredLanguage = "tr",
             PreferredTone = "concise",
             TotalSessions = 3,
@@ -66,7 +66,7 @@ public class CustomerProfileContextProviderTests
             },
             ProductInterests = new List<string> { "Dell XPS 15", "Apple iPhone 15 Pro" },
             RecentRatings = new List<int> { 4, 5, 3 },
-            AdminNote = "VIP müşteri"
+            AdminNote = "VIP m��teri"
         });
 
         var provider = Build(store);
@@ -74,10 +74,10 @@ public class CustomerProfileContextProviderTests
         var ctx = await provider.GetContextAsync(session);
 
         ctx.Should().NotBeNull();
-        ctx.Should().Contain("👤 Müşteri Profili")
+        ctx.Should().Contain("?? M��teri Profili")
                   .And.Contain("CUST-1990")
-                  .And.Contain("Dell XPS 15 müşterisi")
-                  .And.Contain("VIP müşteri")
+                  .And.Contain("Dell XPS 15 m��terisi")
+                  .And.Contain("VIP m��teri")
                   .And.Contain("order_inquiry")
                   .And.Match("*ortalama puan: 4*5*"); // (4+5+3)/3 = 4.0; culture-agnostic
     }

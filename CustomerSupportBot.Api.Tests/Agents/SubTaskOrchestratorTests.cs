@@ -1,5 +1,5 @@
 using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 
@@ -70,12 +70,12 @@ public class SubTaskOrchestratorTests
             Rationale = "parent_rationale",
             SubTasks = new() { new SubTask { Order = 1 }, new SubTask { Order = 2 } }
         };
-        var sub = new SubTask { Order = 1, Description = "alt iş", TargetAgent = "AgentX" };
+        var sub = new SubTask { Order = 1, Description = "alt is", TargetAgent = "AgentX" };
         var derived = SubTaskOrchestrator.CreateSubTaskReasoning(parent, sub);
         derived.Intent.Should().Be("parent_intent");
         derived.Rationale.Should().Be("parent_rationale");
         derived.NextAction.Should().Contain("AgentX");
-        derived.NextAction.Should().Contain("alt iş");
+        derived.NextAction.Should().Contain("alt is");
         derived.SubTasks.Should().BeEmpty(); // recursion guard
         derived.Confidence.Should().Be(WellKnown.Confidence.High);
         derived.ConfidenceScore.Should().Be(0.85);
@@ -94,15 +94,15 @@ public class SubTaskOrchestratorTests
     public void CreateSubTaskReasoning_BlankTargetAgent_UsesDescriptionAsAction()
     {
         var parent = new ReasoningResult();
-        var sub = new SubTask { Description = "salt iş", TargetAgent = "" };
-        SubTaskOrchestrator.CreateSubTaskReasoning(parent, sub).NextAction.Should().Be("salt iş");
+        var sub = new SubTask { Description = "salt i�", TargetAgent = "" };
+        SubTaskOrchestrator.CreateSubTaskReasoning(parent, sub).NextAction.Should().Be("salt i�");
     }
 
     [Fact]
     public void FormatSubTaskQuery_NoEntities_DescriptionOnly()
     {
-        var sub = new SubTask { Description = "şikayet ver" };
-        SubTaskOrchestrator.FormatSubTaskQuery(sub).Should().Be("şikayet ver");
+        var sub = new SubTask { Description = "�ikayet ver" };
+        SubTaskOrchestrator.FormatSubTaskQuery(sub).Should().Be("�ikayet ver");
     }
 
     [Fact]
@@ -110,11 +110,11 @@ public class SubTaskOrchestratorTests
     {
         var sub = new SubTask
         {
-            Description = "sipariş sor",
+            Description = "sipari� sor",
             Entities = new() { ["order_id"] = "ORD-1" }
         };
         var q = SubTaskOrchestrator.FormatSubTaskQuery(sub);
-        q.Should().Contain("sipariş sor");
+        q.Should().Contain("sipari� sor");
         q.Should().Contain("order_id=ORD-1");
     }
 
@@ -129,9 +129,9 @@ public class SubTaskOrchestratorTests
     public void FormatSubTaskResult_FormatsHeader()
     {
         var sub = new SubTask { Order = 2, Description = "tema" };
-        var formatted = SubTaskOrchestrator.FormatSubTaskResult(sub, "  yanıt  ");
+        var formatted = SubTaskOrchestrator.FormatSubTaskResult(sub, "  yan�t  ");
         formatted.Should().StartWith("**2) tema**");
-        formatted.Should().Contain("yanıt");
+        formatted.Should().Contain("yan�t");
     }
 
     [Fact]

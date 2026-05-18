@@ -1,12 +1,11 @@
+using CustomerSupportBot.Adapters.Persistence.InMemory;
+using CustomerSupportBot.Adapters.Persistence.Postgres;
 using CustomerSupportBot.Api.Infrastructure.Persistence;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Improvement;
-using CustomerSupportBot.Api.Services.Persistence;
-using CustomerSupportBot.Api.Services.Personalization;
-using CustomerSupportBot.Api.Services.Routing;
-using CustomerSupportBot.Api.Services.Sla;
-using CustomerSupportBot.Api.Services.Workflow;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using PersistenceOptions = CustomerSupportBot.Adapters.Persistence.EfCore.PersistenceOptions;
+using PersistenceProvider = CustomerSupportBot.Adapters.Persistence.EfCore.PersistenceProvider;
+using PersistenceServiceCollectionExtensions = CustomerSupportBot.Adapters.Persistence.EfCore.PersistenceServiceCollectionExtensions;
 
 namespace CustomerSupportBot.Api.Extensions;
 
@@ -25,7 +24,7 @@ public static class PersistenceServicesExtensions
             var pgConnection = configuration.GetConnectionString("PostgreSQL")
                 ?? throw new InvalidOperationException(
                     "Persistence:Provider=Postgres ancak ConnectionStrings:PostgreSQL tanımlı değil.");
-            services.AddCustomerSupportPersistence(pgConnection);
+            PersistenceServiceCollectionExtensions.AddCustomerSupportPersistence(services, pgConnection);
             services.AddHostedService<PersistenceHydrator>();
         }
 
@@ -74,8 +73,14 @@ public static class PersistenceServicesExtensions
             services.AddSingleton<ILessonStore, InMemoryLessonStore>();
             services.AddSingleton<IWorkflowDefinitionStore, InMemoryWorkflowDefinitionStore>();
             services.AddSingleton<ISlaEventSink, InMemorySlaEventSink>();
+
+            // Hexagonal: FakeDatabase'in yerini alan InMemory port adapter'lar�
+            services.AddSingleton<IProductCatalogRepository, InMemoryProductCatalogAdapter>();
+            services.AddSingleton<IOrderRepository, InMemoryOrderAdapter>();
+            services.AddSingleton<IComplaintRepository, InMemoryComplaintAdapter>();
         }
 
         return services;
     }
 }
+

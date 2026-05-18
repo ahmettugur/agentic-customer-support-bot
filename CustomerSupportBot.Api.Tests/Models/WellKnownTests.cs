@@ -1,6 +1,6 @@
 // Tests/Models/WellKnownTests.cs
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Tests.Models;
 

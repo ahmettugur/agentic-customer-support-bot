@@ -1,7 +1,7 @@
 // Services/Improvement/InMemoryLessonStore.cs
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Api.Models.Improvement;
+using CustomerSupportBot.Domain.Model.Improvement;
 
 namespace CustomerSupportBot.Api.Services.Improvement;
 
@@ -20,3 +20,4 @@ public sealed class InMemoryLessonStore : ILessonStore
     public IReadOnlyList<Lesson> GetAll(int limit = 200) =>
         _byId.Values.OrderByDescending(l => l.CreatedAt).Take(limit).ToList();
 }
+

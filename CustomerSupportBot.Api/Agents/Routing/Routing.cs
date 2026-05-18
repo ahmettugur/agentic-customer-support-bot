@@ -8,7 +8,7 @@
 //
 // Manager bu listede ilk null-olmayan sonucu alır; hiçbiri seçim yapmazsa PlanningAgent'a düşer (no-op fallback).
 
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -196,4 +196,5 @@ internal sealed class ReflectionRoutingStrategy : IRoutingStrategy
     private static ValueTask<RoutingResult?> Result(AIAgent a, string b) =>
         ValueTask.FromResult<RoutingResult?>(new RoutingResult(a, b));
 }
+
 

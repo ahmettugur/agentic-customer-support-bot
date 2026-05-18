@@ -1,9 +1,11 @@
-using CustomerSupportBot.Api.Infrastructure.Persistence;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Adapters.Persistence.EfCore;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using PersistenceOptions = CustomerSupportBot.Api.Infrastructure.Persistence.PersistenceOptions;
+using PersistenceProvider = CustomerSupportBot.Api.Infrastructure.Persistence.PersistenceProvider;
 
 namespace CustomerSupportBot.Api.Extensions;
 
@@ -49,3 +51,4 @@ public static class WebApplicationExtensions
         return app;
     }
 }
+

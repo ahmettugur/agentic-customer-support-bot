@@ -3,7 +3,7 @@
 // Her MemoryKind ayrı koleksiyona yazılır → SearchAsync filter'a ihtiyaç duymaz.
 
 using System.Globalization;
-using CustomerSupportBot.Api.Models.Memory;
+using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Options;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
@@ -202,3 +202,4 @@ public sealed class QdrantVectorMemoryStore : IVectorMemoryStore
         return doc;
     }
 }
+

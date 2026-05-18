@@ -4,7 +4,7 @@
 // her biri sırayla ayrı bir workflow run olarak yürütülür ve sonuçlar birleştirilir.
 
 using System.Text;
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Agents;
 
@@ -144,4 +144,5 @@ public class SubTaskOrchestrator
 /// ile başlatılabilir; aksi halde sırayla yürütülmelidir.
 /// </summary>
 public record SubTaskGroup(bool Parallel, IReadOnlyList<SubTask> Items);
+
 
