@@ -1,18 +1,24 @@
 // Services/Persistence/PostgresChatModeRegistry.cs
-// HITL Live Takeover — hibrit cache + PostgreSQL kip registry.
+// HITL Live Takeover — hibrit cache + PostgreSQL kip registry + Redis pub/sub.
 //
 // Davranış:
-//   - In-memory ConcurrentDictionary state'i + ModeChanged event aynen korunur
-//     (chat SSE loop'u event'lere bağlı; süreç içi pub/sub).
-//   - TakeOver/Release/MessageCount güncellemeleri DB'ye write-through.
-//   - Cache lazy hydrate: ilk erişimde DB'deki Human ve Bot tüm kayıtları yüklenir.
+//   - In-memory ConcurrentDictionary state'i + ModeChanged event aynen korunur.
+//   - TakeOver/Release güncellemeleri DB'ye write-through.
+//   - Cache lazy hydrate: ilk erişimde DB'deki tüm kayıtlar yüklenir.
 //   - Singleton servis ⇒ DbContext IDbContextFactory ile açılır.
+//
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - TakeOver/Release sonrası csbot:chatmode kanalına yayın yapılır.
+//   - Uzak pod'lar lokal state'lerini günceller ve ModeChanged event'ini tetikler.
 
 using System.Collections.Concurrent;
+using System.Text.Json;
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services.Locking;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 namespace CustomerSupportBot.Api.Services.Persistence;
 
@@ -20,6 +26,9 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresChatModeRegistry> _logger;
+    private readonly ISubscriber _sub;
+    private readonly IAppDistributedLock _distributedLock;
+    private readonly string _nodeId = RedisNodeId.Value;
     private readonly ConcurrentDictionary<string, ChatSessionState> _states = new();
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
@@ -28,10 +37,15 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
 
     public PostgresChatModeRegistry(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
+        IConnectionMultiplexer redis,
+        IAppDistributedLock distributedLock,
         ILogger<PostgresChatModeRegistry> logger)
     {
         _dbFactory = dbFactory;
+        _distributedLock = distributedLock;
         _logger = logger;
+        _sub = redis.GetSubscriber();
+        _sub.Subscribe(RedisChannel.Literal("csbot:chatmode"), OnRemoteModeChanged);
     }
 
     public ChatMode GetMode(string sessionId)
@@ -53,50 +67,68 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
 
         var agent = humanAgent ?? WellKnown.Defaults.Admin;
 
-        // Zaten başka biri Human modtaysa reddet — concurrent takeover önlemi.
-        // Aynı agent yeniden çağırırsa (reconnect vb.) izin ver.
-        if (_states.TryGetValue(sessionId, out var current)
-            && current.Mode == ChatMode.Human
-            && !string.Equals(current.HumanAgent, agent, StringComparison.OrdinalIgnoreCase))
+        // Distributed lock: farklı pod'lardan eş zamanlı TakeOver() çağrılarını serialize eder.
+        // Aynı session için yalnızca bir admin devralabilir.
+        var handle = _distributedLock.TryAcquireAsync($"takeover:{sessionId}").GetAwaiter().GetResult();
+        if (handle is null)
         {
             _logger.LogWarning(
-                "[HITL] TakeOver reddedildi: session={Session} zaten {Existing} tarafından alındı. İstekte bulunan: {Requester}",
-                sessionId, current.HumanAgent, agent);
+                "[HITL] TakeOver distributed lock alınamadı; reddedildi. Session={Session}, Agent={Agent}",
+                sessionId, agent);
             return false;
         }
 
-        var state = _states.AddOrUpdate(
-            sessionId,
-            _ => new ChatSessionState
-            {
-                SessionId = sessionId,
-                Mode = ChatMode.Human,
-                HumanAgent = agent,
-                EnteredAt = DateTime.UtcNow,
-                LastActivityAt = DateTime.UtcNow
-            },
-            (_, existing) =>
-            {
-                existing.Mode = ChatMode.Human;
-                existing.HumanAgent = agent;
-                existing.EnteredAt ??= DateTime.UtcNow;
-                existing.LastActivityAt = DateTime.UtcNow;
-                return existing;
-            });
-
-        try { UpsertAsync(state).GetAwaiter().GetResult(); }
-        catch (Exception ex)
+        try
         {
-            _logger.LogError(ex, "[HITL] TakeOver DB UPSERT başarısız. Session={Session}", sessionId);
-            throw;
+            // Lock altında güncel durumu kontrol et — başka pod çoktan devralmış olabilir.
+            if (_states.TryGetValue(sessionId, out var current)
+                && current.Mode == ChatMode.Human
+                && !string.Equals(current.HumanAgent, agent, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "[HITL] TakeOver reddedildi: session={Session} zaten {Existing} tarafından alındı. İstekte bulunan: {Requester}",
+                    sessionId, current.HumanAgent, agent);
+                return false;
+            }
+
+            var state = _states.AddOrUpdate(
+                sessionId,
+                _ => new ChatSessionState
+                {
+                    SessionId = sessionId,
+                    Mode = ChatMode.Human,
+                    HumanAgent = agent,
+                    EnteredAt = DateTime.UtcNow,
+                    LastActivityAt = DateTime.UtcNow
+                },
+                (_, existing) =>
+                {
+                    existing.Mode = ChatMode.Human;
+                    existing.HumanAgent = agent;
+                    existing.EnteredAt ??= DateTime.UtcNow;
+                    existing.LastActivityAt = DateTime.UtcNow;
+                    return existing;
+                });
+
+            try { UpsertAsync(state).GetAwaiter().GetResult(); }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[HITL] TakeOver DB UPSERT başarısız. Session={Session}", sessionId);
+                throw;
+            }
+
+            _logger.LogInformation(
+                "[HITL] TakeOver: session={Session}, agent={Agent}",
+                sessionId, state.HumanAgent);
+
+            FireChanged(state);
+            PublishRedis(state);
+            return true;
         }
-
-        _logger.LogInformation(
-            "[HITL] TakeOver: session={Session}, agent={Agent}",
-            sessionId, state.HumanAgent);
-
-        FireChanged(state);
-        return true;
+        finally
+        {
+            handle.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
     }
 
     public bool Release(string sessionId)
@@ -119,6 +151,7 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
 
         _logger.LogInformation("[HITL] Release: session={Session}", sessionId);
         FireChanged(state);
+        PublishRedis(state);
         return true;
     }
 
@@ -209,9 +242,68 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
     private void FireChanged(ChatSessionState state)
     {
         try { ModeChanged?.Invoke(this, state); }
+        catch (Exception ex) { _logger.LogWarning(ex, "ModeChanged handler failed"); }
+    }
+
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void OnRemoteModeChanged(RedisChannel _, RedisValue val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val.ToString());
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _nodeId) return;
+
+            var sessionId = root.GetProperty("sessionId").GetString()!;
+            var modeStr = root.GetProperty("mode").GetString() ?? "Bot";
+            var mode = Enum.TryParse<ChatMode>(modeStr, ignoreCase: true, out var m) ? m : ChatMode.Bot;
+
+            var state = _states.AddOrUpdate(
+                sessionId,
+                _ => new ChatSessionState { SessionId = sessionId, Mode = mode },
+                (_, existing) =>
+                {
+                    existing.Mode = mode;
+                    existing.HumanAgent = root.TryGetProperty("humanAgent", out var ha) && ha.ValueKind != JsonValueKind.Null ? ha.GetString() : null;
+                    existing.EnteredAt = root.TryGetProperty("enteredAt", out var ea) && ea.ValueKind != JsonValueKind.Null ? ea.GetDateTime() : null;
+                    existing.LastActivityAt = root.TryGetProperty("lastActivityAt", out var la) && la.ValueKind != JsonValueKind.Null ? la.GetDateTime() : null;
+                    return existing;
+                });
+
+            if (state.HumanAgent is null && root.TryGetProperty("humanAgent", out var haProp) && haProp.ValueKind != JsonValueKind.Null)
+                state.HumanAgent = haProp.GetString();
+            if (root.TryGetProperty("enteredAt", out var eaProp) && eaProp.ValueKind != JsonValueKind.Null)
+                state.EnteredAt = eaProp.GetDateTime();
+            if (root.TryGetProperty("lastActivityAt", out var laProp) && laProp.ValueKind != JsonValueKind.Null)
+                state.LastActivityAt = laProp.GetDateTime();
+
+            FireChanged(state);
+        }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "ModeChanged handler failed");
+            _logger.LogWarning(ex, "[HITL] Redis OnRemoteModeChanged parse hatası");
+        }
+    }
+
+    private void PublishRedis(ChatSessionState state)
+    {
+        try
+        {
+            var payload = new
+            {
+                nodeId = _nodeId,
+                sessionId = state.SessionId,
+                mode = state.Mode.ToString(),
+                humanAgent = state.HumanAgent,
+                enteredAt = state.EnteredAt,
+                lastActivityAt = state.LastActivityAt
+            };
+            _sub.Publish(RedisChannel.Literal("csbot:chatmode"), JsonSerializer.Serialize(payload));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Redis chatmode publish başarısız");
         }
     }
 }

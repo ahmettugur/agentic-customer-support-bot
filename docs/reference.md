@@ -392,7 +392,7 @@ Compound query decomposition parçası:
 - `Order` — 1-indexed yürütme sırası
 - `Intent` — kanonik intent (üst düzey intent'ten farklı olabilir)
 - `Description` — açıklama
-- `TargetAgent` — "OrderInquiryAgent" vb.
+- `TargetAgent` — "OrderAgent" vb.
 - `Entities` — `Dictionary<string, string>` (ör. `{"order_id": "ORD-1"}`)
 - `Dependencies` — `List<int>` — önce bitmesi gereken subtask sıra numaraları (şu an kullanılmıyor)
 
@@ -442,7 +442,7 @@ PlanningAgent JSON çıktısı:
 
 ### `SpecialistReasoning` + `PreToolCheck` + `PostToolReflection` — `Models/SpecialistReasoning.cs`
 
-Specialist ajanların (ProductInquiry, OrderPlacement, OrderInquiry, Complaint) tool çağrısı etrafındaki yapılandırılmış reasoning'i.
+Specialist ajanların (ProductInquiry, Order, Complaint) tool çağrısı etrafındaki yapılandırılmış reasoning'i.
 
 **`PreToolCheck`** (tool çağrısı ÖNCESİ) — `RequiredParams`, `CollectedParams`, `MissingParams`, `CanProceed`, `Reasoning`, `Confidence`.
 
@@ -509,11 +509,11 @@ Statik sınıf. **7 tool fonksiyonu**, hepsi `[Description]` attribute'u ile LLM
 | Tool | İmza | Hangi agent | Side effect |
 |---|---|---|---|
 | `ProductInquiryTool` | `(productName)` | ProductInquiryAgent | ❌ read-only |
-| `OrderPlacementTool` | `(productName, quantity?, customerId)` | OrderPlacementAgent | ✅ `OrdersDb` + stok |
-| `OrderStatusTool` | `(orderId)` | OrderInquiryAgent | ❌ |
+| `OrderPlacementTool` | `(productName, quantity?, customerId)` | OrderAgent | ✅ `OrdersDb` + stok |
+| `OrderStatusTool` | `(orderId)` | OrderAgent | ❌ |
 | `ComplaintRegistrationTool` | `(orderId, complaintText, customerId?)` | ComplaintAgent | ✅ `ComplaintsDb` |
-| `GetLastOrderTool` | `(customerId)` | OrderInquiryAgent | ❌ |
-| `GetAllOrdersTool` | `(customerId)` | OrderInquiryAgent | ❌ |
+| `GetLastOrderTool` | `(customerId)` | OrderAgent | ❌ |
+| `GetAllOrdersTool` | `(customerId)` | OrderAgent | ❌ |
 | `HumanHandoffTool` | `(reason, sessionId)` | HumanHandoffAgent | ✅ eskalasyon |
 
 **Özel davranışlar**:
@@ -536,7 +536,7 @@ Sistemdeki tüm magic string ve sabit değerlerin **tek merkezi kaynağı**. Yen
 | `Intents` | `OrderCreation`, `OrderInquiry`, `OrderListing`, `Complaint`, `ProductInfo`, `General`, `Unknown` | `SessionState.CurrentIntent`, planning routing |
 | `IntentKeywords` | `(Intent, string[] keywords)` tuple listesi | `InMemorySessionManager.DetectUserIntent` tablo tabanlı niyet algılama |
 | `Phases` | `Inquiry`, `Action`, `Resolution` | `SessionState.Phase` |
-| `AgentNames` | `Planning`, `ProductInquiry`, `OrderPlacement`, `OrderInquiry`, `Complaint`, `Response`, + `Specialists[]`, `All[]` | Agent referansları, ChatManager routing |
+| `AgentNames` | `Planning`, `ProductInquiry`, `Order`, `Complaint`, `Response`, + `Specialists[]`, `All[]` | Agent referansları, ChatManager routing |
 | `OrderStatuses` | `Processing`, `Shipped`, `Delivered`, `Cancelled` | `OrderInfo.Status`, `FakeDatabase` seed |
 | `ComplaintStatuses` | `Pending`, `InProgress`, `Resolved` | `ComplaintInfo.Status` |
 | `ToolErrorCodes` | `MissingRequiredField`, `ProductNotFound`, `OrderNotFound`, `StockInsufficient`, `CustomerIdMismatch`, `NoOrdersForCustomer` | `ToolResult.NotFound/Conflict` |

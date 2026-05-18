@@ -60,7 +60,7 @@ public class EvaluationRunnerTests
                 category: order
                 query: "siparişim nerede"
                 expected_intent: order_inquiry
-                expected_agents: [PlanningAgent, OrderInquiryAgent]
+                expected_agents: [PlanningAgent, OrderAgent]
                 expected_tools: [order_status_tool]
                 success_criteria:
                   - "response contains 'durum'"

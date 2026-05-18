@@ -81,11 +81,11 @@ internal static class ChatBridgeScript
         },
         _handleStreamEvent: function(ctx, reasoningState, evt) {
             if (!ctx) return;
-            if (evt.type === 'response_delta' && evt.data && evt.data.delta)
-                this.ui.appendResponseChunk(ctx, evt.data.delta);
-            else if (evt.type === 'response_complete' && evt.data && evt.data.content) {
-                if (ctx.bubble) ctx.bubble.textContent = evt.data.content;
-                ctx._text = evt.data.content;
+            if (evt.type === 'response_delta' && evt.data && evt.data.text)
+                this.ui.appendResponseChunk(ctx, evt.data.text);
+            else if (evt.type === 'response_complete' && evt.data && evt.data.text) {
+                if (ctx.bubble) ctx.bubble.textContent = evt.data.text;
+                ctx._text = evt.data.text;
             }
         }
     };
@@ -155,7 +155,7 @@ internal static class ChatBridgeScript
         if (window._chatEs) window._chatEs.close();
         var es = new EventSource(apiBase + '/chat/events/' + encodeURIComponent(sid));
         window._chatEs = es;
-        ['human_joined','human_left','bot_typing','human_message'].forEach(function(t) {
+        ['human_joined','human_left','bot_typing','human_message','handoff_pending','handoff_cleared'].forEach(function(t) {
             es.addEventListener(t, function(e) {
                 ref.invokeMethodAsync('OnPersistentEvent', t, e.data || '{}');
             });

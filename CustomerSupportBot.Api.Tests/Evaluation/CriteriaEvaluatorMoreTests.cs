@@ -35,7 +35,7 @@ public class CriteriaEvaluatorMoreTests
             {
                 new()
                 {
-                    AgentName = "OrderInquiryAgent",
+                    AgentName = "OrderAgent",
                     ResultConfidence = 0.9,
                     PreToolCheck = new() { CanProceed = true }
                 }
@@ -54,7 +54,7 @@ public class CriteriaEvaluatorMoreTests
             {
                 new()
                 {
-                    AgentName = "OrderInquiryAgent",
+                    AgentName = "OrderAgent",
                     ResultConfidence = 0.0,
                     PreToolCheck = new() { CanProceed = true }
                 }
@@ -114,7 +114,7 @@ public class CriteriaEvaluatorMoreTests
             {
                 new()
                 {
-                    AgentName = "OrderInquiryAgent",
+                    AgentName = "OrderAgent",
                     PreToolCheck = new()
                     {
                         CanProceed = true,
@@ -136,7 +136,7 @@ public class CriteriaEvaluatorMoreTests
             {
                 new()
                 {
-                    AgentName = "OrderInquiryAgent",
+                    AgentName = "OrderAgent",
                     PreToolCheck = new() { CanProceed = true, CollectedParams = new() }
                 }
             }

@@ -207,19 +207,19 @@ public sealed class IntentActionMismatchRule : IReasoningSanityRule
     private static (bool mismatch, string expected) DetectMismatch(string intent, string action)
     {
         if (intent.Contains(WellKnown.Intents.Complaint) &&
-            (action.Contains("orderinquiry") || action.Contains("productinquiry") || action.Contains("orderplacement")))
+            (action.Contains("orderagent") || action.Contains("productinquiry")))
             return (true, WellKnown.AgentNames.Complaint);
 
         if (intent.Contains(WellKnown.Intents.OrderCreation) &&
-            (action.Contains("orderinquiry") || action.Contains("complaintagent")))
+            action.Contains("complaintagent"))
             return (true, WellKnown.AgentNames.Order);
 
         if (intent.Contains(WellKnown.Intents.OrderInquiry) &&
-            (action.Contains("orderplacement") || action.Contains("complaintagent")))
+            action.Contains("complaintagent"))
             return (true, WellKnown.AgentNames.Order);
 
         if (intent.Contains(WellKnown.Intents.ProductInfo) &&
-            (action.Contains("complaintagent") || action.Contains("orderinquiry")))
+            (action.Contains("complaintagent") || action.Contains("orderagent")))
             return (true, WellKnown.AgentNames.ProductInquiry);
 
         return (false, "");
@@ -374,7 +374,7 @@ public sealed class SubTasksIgnoredRule : IReasoningSanityRule
                           "unutuluyor.",
                 Field = "nextAction",
                 SuggestedFix = "nextAction'a tüm alt görevleri sırayla ekle, ya da PlanningAgent'ın " +
-                               "çoklu routing yapmasını sağla (ör. 'OrderInquiryAgent: ... / " +
+                               "çoklu routing yapmasını sağla (ör. 'OrderAgent: ... / " +
                                "ComplaintAgent: ...')."
             });
         }

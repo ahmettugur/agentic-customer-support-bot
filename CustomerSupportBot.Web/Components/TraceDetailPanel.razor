@@ -1,4 +1,6 @@
 @using System.Text.Json
+@using System.Text
+@using System.Net
 @using CustomerSupportBot.Web.Models
 
 @if (Trace is null)
@@ -39,7 +41,7 @@ else
                 @Chev <span>🧠 Global Reasoning</span>
             </div>
             <div class="trace-section-body">
-                <pre style="max-height:400px;overflow:auto;font-size:11px;">@ToJson(Trace.Reasoning)</pre>
+                @RenderReasoning(Trace.Reasoning.Value)
             </div>
         </div>
     }
@@ -53,7 +55,7 @@ else
                 <span class="trace-section-tag" style="margin-left:auto">1.4</span>
             </div>
             <div class="trace-section-body">
-                <pre style="max-height:400px;overflow:auto;font-size:11px;">@ToJson(Trace.Planning)</pre>
+                @RenderPlanning(Trace.Planning.Value)
             </div>
         </div>
     }
@@ -69,10 +71,7 @@ else
             <div class="trace-section-body">
                 @foreach (var sr in Trace.SpecialistReasonings)
                 {
-                    <div class="specialist-card">
-                        <h4>🛠 @(sr.TryGetProperty("agentName", out var an) && an.ValueKind != System.Text.Json.JsonValueKind.Null ? an.GetString() : "—")</h4>
-                        <pre style="max-height:300px;overflow:auto;font-size:11px;">@ToJson(sr)</pre>
-                    </div>
+                    @RenderSpecialistCard(sr)
                 }
             </div>
         </div>
@@ -105,7 +104,7 @@ else
                 @Chev <span>🎯 Final Critique</span>
             </div>
             <div class="trace-section-body">
-                <pre style="max-height:300px;overflow:auto;font-size:11px;">@ToJson(Trace.FinalCritique)</pre>
+                @RenderFinalCritique(Trace.FinalCritique.Value)
             </div>
         </div>
     }
@@ -150,27 +149,243 @@ else
     private bool IsCollapsed(string k) => _collapsed.Contains(k);
     private void Toggle(string k) { if (!_collapsed.Remove(k)) _collapsed.Add(k); }
 
-    private static readonly JsonSerializerOptions _pretty = new()
-    {
-        WriteIndented = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
-
-    private static string ToJson(JsonElement? el) =>
-        el is null ? "(boş)" : JsonSerializer.Serialize(el.Value, _pretty);
-
-    private static string ToJson(JsonElement el) =>
-        JsonSerializer.Serialize(el, _pretty);
-
-    private static string ShortId(string? id) =>
-        id is null ? "?" : id[..Math.Min(8, id.Length)];
-
-    private static string SimplifyAgent(string? name) =>
-        name is null ? "—" : name.Split('_')[0];
+    private static string ShortId(string? id) => id is null ? "?" : id[..Math.Min(8, id.Length)];
+    private static string SimplifyAgent(string? name) => name is null ? "—" : name.Split('_')[0];
 
     private RenderFragment Chev =>
         @<svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="m6 9 6 6 6-6"/>
         </svg>;
+
+    // ── Section renderers ─────────────────────────────────────────────────────
+
+    private MarkupString RenderReasoning(JsonElement r)
+    {
+        var sb = new StringBuilder();
+        KvPill(sb, "Intent", Str(r, "intent") ?? "—");
+        KvBar(sb, "Confidence", Score(r, "confidenceScore", "confidence"));
+        KvText(sb, "Analysis", Str(r, "analysis"));
+        KvText(sb, "Rationale", Str(r, "rationale"));
+        KvText(sb, "Next action", Str(r, "nextAction"));
+        KvText(sb, "Decision reason", Str(r, "decisionReason"));
+        KvSteps(sb, "Steps", r, "steps");
+        KvPillList(sb, "Required info", r, "requiredInfo");
+        KvPillList(sb, "Assumptions", r, "assumptions");
+        return new MarkupString(sb.ToString());
+    }
+
+    private MarkupString RenderPlanning(JsonElement p)
+    {
+        var sb = new StringBuilder();
+        KvPill(sb, "Detected intent", Str(p, "detectedIntent") ?? "—");
+        KvBar(sb, "Intent confidence", ScoreDirect(p, "intentConfidence"));
+        KvCode(sb, "Selected agent", Str(p, "selectedAgent"));
+        KvText(sb, "Rationale", Str(p, "rationale"));
+        var needsClr = Bool(p, "needsClarification");
+        KvPill(sb, "Needs clarification", needsClr ? "yes" : "no", needsClr ? "pill pill-yellow" : "pill");
+        var clrQ = Str(p, "clarificationQuestion");
+        if (!string.IsNullOrEmpty(clrQ)) KvItalic(sb, "Clarification question", clrQ);
+        KvPillList(sb, "Supporting evidence", p, "supportingEvidence");
+        RenderAlternatives(sb, p);
+        KvText(sb, "Task description", Str(p, "taskDescription"));
+        return new MarkupString(sb.ToString());
+    }
+
+    private MarkupString RenderSpecialistCard(JsonElement s)
+    {
+        var sb = new StringBuilder();
+        sb.Append("<div class=\"specialist-card\">");
+        sb.Append($"<h4>🛠 {HtmlEnc(Str(s, "agentName") ?? "—")}</h4>");
+
+        if (s.TryGetProperty("preToolCheck", out var pre) && pre.ValueKind == JsonValueKind.Object)
+        {
+            sb.Append("<div class=\"trace-section-tag\">PRE-TOOL CHECK</div>");
+            var canProceed = Bool(pre, "canProceed");
+            KvPill(sb, "Can proceed", canProceed ? "yes" : "no", canProceed ? "pill pill-green" : "pill pill-red");
+            KvPillList(sb, "Required", pre, "requiredParams");
+            KvPillListColored(sb, "Collected", pre, "collectedParams", "pill-green");
+            KvPillListColored(sb, "Missing", pre, "missingParams", "pill-red");
+            KvText(sb, "Reasoning", Str(pre, "reasoning"));
+            KvBar(sb, "Confidence", ScoreDirect(pre, "confidence"));
+        }
+
+        if (s.TryGetProperty("resultConfidence", out var rc) && rc.ValueKind == JsonValueKind.Number)
+        {
+            sb.Append("<div class=\"trace-section-tag\" style=\"margin-top:10px\">RESULT</div>");
+            KvBar(sb, "Confidence", rc.GetDouble());
+            KvText(sb, "Notes", Str(s, "resultNotes"));
+        }
+
+        if (s.TryGetProperty("postToolReflection", out var refl) && refl.ValueKind == JsonValueKind.Object)
+        {
+            sb.Append("<div class=\"trace-section-tag\" style=\"margin-top:10px\">POST-TOOL REFLECTION</div>");
+            var status = Str(refl, "status") ?? "—";
+            KvPill(sb, "Status", status, StatusPillClass(status));
+            var taskComplete = Bool(refl, "taskComplete");
+            KvPill(sb, "Task complete", taskComplete ? "yes" : "no", taskComplete ? "pill pill-green" : "pill pill-red");
+            KvCode(sb, "Handoff", Str(refl, "handoffSuggestion"));
+            KvText(sb, "Handoff reason", Str(refl, "handoffReason"));
+            KvText(sb, "Summary", Str(refl, "summary"));
+            KvPillList(sb, "Missing context", refl, "missingContext");
+        }
+
+        sb.Append("</div>");
+        return new MarkupString(sb.ToString());
+    }
+
+    private MarkupString RenderFinalCritique(JsonElement c)
+    {
+        var sb = new StringBuilder();
+        var addressesQuery = Bool(c, "addressesUserQuery");
+        KvPill(sb, "Addresses query", addressesQuery ? "yes" : "no", addressesQuery ? "pill pill-green" : "pill pill-red");
+        var tone = Str(c, "tone") ?? "—";
+        var toneClass = tone == "appropriate" ? "pill pill-green" : "pill pill-yellow";
+        KvPill(sb, "Tone", tone, toneClass);
+        KvBar(sb, "Completeness", ScoreDirect(c, "completeness"));
+        var halluRisk = c.TryGetProperty("hallucinationRisk", out var hr) && hr.ValueKind == JsonValueKind.Number ? hr.GetDouble() : 0;
+        KvPill(sb, "Hallucination risk", halluRisk.ToString("F2"), halluRisk > 0.3 ? "pill pill-red" : "pill pill-green");
+        var revisionNeeded = Bool(c, "revisionNeeded");
+        KvPill(sb, "Revision needed", revisionNeeded ? "yes" : "no", revisionNeeded ? "pill pill-yellow" : "pill pill-green");
+        KvPillList(sb, "Sources", c, "sources");
+        KvPillList(sb, "Issues found", c, "issuesFound");
+        KvText(sb, "Revision notes", Str(c, "revisionNotes"));
+        return new MarkupString(sb.ToString());
+    }
+
+    // ── kv helpers ────────────────────────────────────────────────────────────
+
+    private static void KvText(StringBuilder sb, string key, string? val)
+    {
+        if (string.IsNullOrEmpty(val)) return;
+        sb.Append($"<div class=\"kv-row\"><div class=\"kv-key\">{HtmlEnc(key)}</div><div class=\"kv-val\">{HtmlEnc(val)}</div></div>");
+    }
+
+    private static void KvItalic(StringBuilder sb, string key, string? val)
+    {
+        if (string.IsNullOrEmpty(val)) return;
+        sb.Append($"<div class=\"kv-row\"><div class=\"kv-key\">{HtmlEnc(key)}</div><div class=\"kv-val\"><em>{HtmlEnc(val)}</em></div></div>");
+    }
+
+    private static void KvCode(StringBuilder sb, string key, string? val)
+    {
+        if (string.IsNullOrEmpty(val)) return;
+        sb.Append($"<div class=\"kv-row\"><div class=\"kv-key\">{HtmlEnc(key)}</div><div class=\"kv-val\"><code>{HtmlEnc(val)}</code></div></div>");
+    }
+
+    private static void KvPill(StringBuilder sb, string key, string val, string cls = "pill")
+    {
+        sb.Append($"<div class=\"kv-row\"><div class=\"kv-key\">{HtmlEnc(key)}</div><div class=\"kv-val\"><span class=\"{cls}\">{HtmlEnc(val)}</span></div></div>");
+    }
+
+    private static void KvBar(StringBuilder sb, string key, double? score)
+    {
+        if (score is null) return;
+        var pct = (int)Math.Round(score.Value * 100);
+        var bar = $"<span class=\"confidence-bar\"><span class=\"confidence-bar-track\"><span class=\"confidence-bar-fill\" style=\"width:{pct}%\"></span></span><span>{pct}%</span></span>";
+        sb.Append($"<div class=\"kv-row\"><div class=\"kv-key\">{HtmlEnc(key)}</div><div class=\"kv-val\">{bar}</div></div>");
+    }
+
+    private static void KvPillList(StringBuilder sb, string key, JsonElement el, string prop)
+        => KvPillListColored(sb, key, el, prop, "");
+
+    private static void KvPillListColored(StringBuilder sb, string key, JsonElement el, string prop, string extraCls)
+    {
+        if (!el.TryGetProperty(prop, out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0) return;
+        var pills = new StringBuilder();
+        pills.Append("<div class=\"pill-list\">");
+        foreach (var item in arr.EnumerateArray())
+            pills.Append($"<span class=\"pill {extraCls}\">{HtmlEnc(GetItemText(item))}</span>");
+        pills.Append("</div>");
+        sb.Append($"<div class=\"kv-row\"><div class=\"kv-key\">{HtmlEnc(key)}</div><div class=\"kv-val\">{pills}</div></div>");
+    }
+
+    private static void KvSteps(StringBuilder sb, string key, JsonElement el, string prop)
+    {
+        if (!el.TryGetProperty(prop, out var arr) || arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0) return;
+        var pills = new StringBuilder("<div class=\"pill-list\">");
+        foreach (var step in arr.EnumerateArray())
+            pills.Append(RenderStepPill(step));
+        pills.Append("</div>");
+        sb.Append($"<div class=\"kv-row\"><div class=\"kv-key\">{HtmlEnc(key)}</div><div class=\"kv-val\">{pills}</div></div>");
+    }
+
+    private static void RenderAlternatives(StringBuilder sb, JsonElement p)
+    {
+        if (!p.TryGetProperty("alternativesRejected", out var alts) || alts.ValueKind != JsonValueKind.Array || alts.GetArrayLength() == 0) return;
+        var ul = new StringBuilder("<ul style=\"margin:0;padding-left:18px\">");
+        foreach (var a in alts.EnumerateArray())
+        {
+            var agent  = a.TryGetProperty("agent", out var ag) ? ag.GetString() ?? "—" : "—";
+            var reason = a.TryGetProperty("reason", out var re) ? re.GetString() ?? "" : "";
+            ul.Append($"<li><code>{HtmlEnc(agent)}</code>: {HtmlEnc(reason)}</li>");
+        }
+        ul.Append("</ul>");
+        sb.Append($"<div class=\"kv-row\"><div class=\"kv-key\">Rejected alternatives</div><div class=\"kv-val\">{ul}</div></div>");
+    }
+
+    private static string RenderStepPill(JsonElement step)
+    {
+        var text = HtmlEnc(GetItemText(step));
+        if (step.ValueKind == JsonValueKind.String)
+            return $"<span class=\"pill\">{text}</span>";
+
+        var chips = new StringBuilder();
+        if (step.TryGetProperty("grounding", out var gr) && gr.ValueKind == JsonValueKind.String)
+        {
+            var g = gr.GetString() ?? "";
+            var cls = g == "assumption" ? "step-chip warn" : "step-chip";
+            chips.Append($"<span class=\"{cls}\">{HtmlEnc(g)}</span>");
+        }
+        if (step.TryGetProperty("confidence", out var conf) && conf.ValueKind == JsonValueKind.Number)
+            chips.Append($"<span class=\"step-chip conf\">{(int)Math.Round(conf.GetDouble() * 100)}%</span>");
+        if (step.TryGetProperty("action", out var act) && act.ValueKind == JsonValueKind.String)
+            chips.Append($"<span class=\"step-chip action\">{HtmlEnc(act.GetString() ?? "")}</span>");
+
+        var chipsHtml = chips.Length > 0 ? $"<span class=\"step-chips\">{chips}</span>" : "";
+        return $"<span class=\"pill step-pill\"><span class=\"step-text\">{text}</span>{chipsHtml}</span>";
+    }
+
+    // ── Pure helpers ─────────────────────────────────────────────────────────
+
+    private static string HtmlEnc(string? s) => s is null ? "" : WebUtility.HtmlEncode(s);
+
+    private static string? Str(JsonElement el, string prop) =>
+        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    private static bool Bool(JsonElement el, string prop) =>
+        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.True;
+
+    private static double? ScoreDirect(JsonElement el, string prop) =>
+        el.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
+
+    private static double? Score(JsonElement el, string numProp, string strProp)
+    {
+        if (el.TryGetProperty(numProp, out var v) && v.ValueKind == JsonValueKind.Number) return v.GetDouble();
+        if (el.TryGetProperty(strProp, out var s) && s.ValueKind == JsonValueKind.String)
+        {
+            return s.GetString() switch { "yüksek" => 0.9, "orta" => 0.6, "düşük" => 0.3, _ => 0.2 };
+        }
+        return null;
+    }
+
+    private static string GetItemText(JsonElement item) => item.ValueKind switch
+    {
+        JsonValueKind.String => item.GetString() ?? "",
+        JsonValueKind.Object =>
+            (item.TryGetProperty("description", out var d) ? d.GetString() : null) ??
+            (item.TryGetProperty("step",        out var s) ? s.GetString() : null) ??
+            (item.TryGetProperty("label",       out var l) ? l.GetString() : null) ??
+            (item.TryGetProperty("text",        out var t) ? t.GetString() : null) ??
+            item.ToString(),
+        _ => item.ToString()
+    };
+
+    private static string StatusPillClass(string status) => status switch
+    {
+        "done"                          => "pill pill-green",
+        "failed" or "needs_escalation"  => "pill pill-red",
+        "needs_followup" or "partial"   => "pill pill-yellow",
+        _                               => "pill"
+    };
 }

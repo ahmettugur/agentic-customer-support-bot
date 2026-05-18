@@ -44,7 +44,7 @@ Sen bir **müşteri destek analiz ajanısın**. Kullanıcı sorgusunu analiz et 
   "requiredInfo": ["sadece GERÇEKTEN eksik alanlar"],
   "rationale": "Bu niyeti ve planı neden seçtin — 1-2 cümle.",
   "assumptions": ["Yaptığın varsayımlar — ör: 'kullanıcının oturum açmış olduğu'"],
-  "nextAction": "Atılacak somut aksiyon — ör: 'OrderInquiryAgent'e yönlendir', 'sipariş_numarası iste'",
+  "nextAction": "Atılacak somut aksiyon — ör: 'OrderAgent'e yönlendir', 'sipariş_numarası iste'",
   "decisionReason": "Bu aksiyon neden — alternatifler neydi ve neden seçilmedi.",
   "confidenceScore": 0.85,
   "sentiment": "positive | neutral | negative | angry",
@@ -65,7 +65,7 @@ Sen bir **müşteri destek analiz ajanısın**. Kullanıcı sorgusunu analiz et 
     "order": 1,
     "intent": "sipariş_sorgulama",
     "description": "ORD-1 için sipariş durumu sorgula",
-    "targetAgent": "OrderInquiryAgent",
+    "targetAgent": "OrderAgent",
     "entities": { "order_id": "ORD-1" },
     "dependencies": []
   },
@@ -85,7 +85,7 @@ Sen bir **müşteri destek analiz ajanısın**. Kullanıcı sorgusunu analiz et 
 | `order` | ✓ | 1-indexed yürütme sırası |
 | `intent` | ✓ | Alt görevin niyeti |
 | `description` | ✓ | 1 cümle Türkçe açıklama |
-| `targetAgent` | ✓ | `ProductInquiryAgent` / `OrderPlacementAgent` / `OrderInquiryAgent` / `ComplaintAgent` |
+| `targetAgent` | ✓ | `ProductInquiryAgent` / `OrderPlacementAgent` / `OrderAgent` / `ComplaintAgent` |
 | `entities` | opsiyonel | Bu görevin kullanacağı entity'ler (obje) |
 | `dependencies` | opsiyonel | Önce tamamlanması gereken `order` numaraları |
 

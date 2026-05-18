@@ -57,8 +57,8 @@ Tek bir kullanıcı sorgusunu işler ve **JSON yanıt** döner. Reasoning + work
     "confidenceScore": 0.95,
     "steps": [...],
     "requiredInfo": [],
-    "rationale": "order_id mevcut, OrderInquiryAgent çalıştırılabilir",
-    "nextAction": "OrderInquiryAgent ile order_status_tool çağır",
+    "rationale": "order_id mevcut, OrderAgent çalıştırılabilir",
+    "nextAction": "OrderAgent ile order_status_tool çağır",
     "decisionReason": "order_id ORD-1 regex ile çıkarıldı ve DB'de VERIFIED",
     "assumptions": [],
     "sanityIssues": [],
@@ -121,7 +121,7 @@ event: agent
 data: {"name": "PlanningAgent", "status": "running"}
 
 event: agent
-data: {"name": "OrderInquiryAgent", "status": "running"}
+data: {"name": "OrderAgent", "status": "running"}
 
 event: agent
 data: {"name": "ResponseAgent", "status": "running"}
@@ -267,13 +267,13 @@ Son N trace'i döner. Varsayılan `count=20`.
     "specialistReasonings": [...],
     "agentVisits": [
       {"agentName": "PlanningAgent", "startedAt": "...", "completedAt": "...", "durationMs": 580, "output": "..."},
-      {"agentName": "OrderInquiryAgent", ...}
+      {"agentName": "OrderAgent", ...}
     ],
     "toolCalls": [
       {
         "toolName": "order_status_tool",
         "invokedAt": "...",
-        "agentName": "OrderInquiryAgent",
+        "agentName": "OrderAgent",
         "parametersSummary": "{\"orderId\":\"ORD-1\"}",
         "resultSummary": "{\"success\":true,...}",
         "success": true,
@@ -353,7 +353,7 @@ Mevcut senaryoları listeler (koşturmadan).
       "query": "ORD-1 siparişim nerede?",
       "expectedIntent": "sipariş_sorgulama",
       "expectedBehavior": "direct_answer",
-      "expectedAgents": ["PlanningAgent", "OrderInquiryAgent", "ResponseAgent"],
+      "expectedAgents": ["PlanningAgent", "OrderAgent", "ResponseAgent"],
       "expectedTools": ["order_status_tool"],
       "criteriaCount": 3,
       "knownFailureMode": null
@@ -409,7 +409,7 @@ Tek senaryo.
   "response": "Merhaba! ORD-1 numaralı...",
   "terminationReason": "completed",
   "detectedIntent": "sipariş_sorgulama",
-  "agentsVisited": ["PlanningAgent", "OrderInquiryAgent", "ResponseAgent"],
+  "agentsVisited": ["PlanningAgent", "OrderAgent", "ResponseAgent"],
   "toolsCalled": ["order_status_tool"],
   "durationMs": 2140,
   "error": null
@@ -497,7 +497,7 @@ Agent transition. ChatManager bir yeni agent seçtiğinde yayınlanır. **Ortak 
 
 | Alan | Tip | Değerler |
 |---|---|---|
-| `name` | string | `PlanningAgent \| ProductInquiryAgent \| OrderPlacementAgent \| OrderInquiryAgent \| ComplaintAgent \| ResponseAgent` veya compound query'de: `Orchestrator`, `SubTask#N` |
+| `name` | string | `PlanningAgent \| ProductInquiryAgent \| OrderAgent \| ComplaintAgent \| ResponseAgent` veya compound query'de: `Orchestrator`, `SubTask#N` |
 | `status` | string | `running \| done \| decomposing \| aggregating` |
 
 **Compound query ek event'leri** (compound query sırasında):
@@ -507,11 +507,11 @@ Agent transition. ChatManager bir yeni agent seçtiğinde yayınlanır. **Ortak 
 { "name": "Orchestrator", "status": "decomposing", "subTaskCount": 2 }
 
 // Subtask başladı
-{ "name": "SubTask#1", "status": "running", "description": "ORD-1 için durum sorgula", "targetAgent": "OrderInquiryAgent", "order": 1, "total": 2 }
+{ "name": "SubTask#1", "status": "running", "description": "ORD-1 için durum sorgula", "targetAgent": "OrderAgent", "order": 1, "total": 2 }
 
 // Subtask içindeki normal agent event'leri forward edilir
 { "name": "PlanningAgent", "status": "running" }
-{ "name": "OrderInquiryAgent", "status": "running" }
+{ "name": "OrderAgent", "status": "running" }
 { "name": "ResponseAgent", "status": "running" }
 
 // Subtask bitti
@@ -754,14 +754,14 @@ Bekleyen approval request'leri, `requestedAt ASC` sıralı.
     "sessionId": "c8e1...",
     "traceId": null,
     "toolName": "order_placement_tool",
-    "agentName": "OrderPlacementAgent",
+    "agentName": "OrderAgent",
     "parameters": {
       "productName": "Dell XPS 15",
       "quantity": 1,
       "customerId": "CUST-1990"
     },
     "userQuery": "Bir Dell XPS 15 sipariş edebilir miyim?",
-    "justification": "OrderPlacementAgent bu tool'u çağırmak istiyor.",
+    "justification": "OrderAgent bu tool'u çağırmak istiyor.",
     "requestedAt": "2026-04-21T19:30:00Z",
     "decidedAt": null,
     "status": "pending",

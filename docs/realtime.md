@@ -257,7 +257,7 @@ Backend `response.cancel` ile OpenAI'ye iletir. `state !== 'speaking'` ise WS'e 
 Sesli mod **aynı güvenlik katmanlarından** geçer:
 
 - **Input guard** (`IInputGuardrailService`): prompt injection, PII sızdırma, sanitize/reject kararı. Reject durumunda kullanıcıya sesli uyarı söyletilir.
-- **HITL approval gate** (`ApprovalGateService`): `OrderPlacementAgent` veya `ComplaintAgent` yan-etkili tool çağırırsa admin onayı bekler. Sesli modda da tool **onay olmadan çalışmaz**. Admin panelinde onay/red UX'i aynıdır.
+- **HITL approval gate** (`ApprovalGateService`): `OrderAgent` veya `ComplaintAgent` yan-etkili tool çağırırsa admin onayı bekler. Sesli modda da tool **onay olmadan çalışmaz**. Admin panelinde onay/red UX'i aynıdır.
 - **Live takeover**: Admin session'ı devralırsa `human_joined` event'i **hem text hem sesli** modda UI'yi günceller, bot akışı durur. Sesli mod için gelecekte "mikrofon otomatik kapansın" eklenebilir (şu an manuel).
 - **Session persistence**: Transcript + bot yanıtı `chat.messages` ve `chat.bridge_messages` tablolarına yazılır — text chat ile **aynı** geçmiş görünür.
 

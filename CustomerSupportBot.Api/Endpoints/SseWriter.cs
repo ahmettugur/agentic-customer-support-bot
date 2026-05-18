@@ -24,7 +24,6 @@ internal static class SseWriter
         response.Headers["Content-Type"] = "text/event-stream";
         response.Headers["Cache-Control"] = "no-cache, no-transform";
         response.Headers["X-Accel-Buffering"] = "no";
-        response.Headers["Connection"] = "keep-alive";
     }
 
     /// <summary>

@@ -356,7 +356,7 @@ Reasoning `SubTasks.Count >= 2` ve 2+ farklı targetAgent üretirse, `CustomerSu
 RunAsync(query, reasoning)
     └─ ShouldDecompose(reasoning) == true
         └─ RunDecomposedAsync:
-              ├─ subTask #1 (OrderInquiryAgent, ORD-1)
+              ├─ subTask #1 (OrderAgent, ORD-1)
               │   └─ Recursive RunAsync (subReasoning.SubTasks=[])
               │      └─ Tam planning→specialist→response döngüsü
               ├─ subTask #2 (ComplaintAgent, ORD-2)

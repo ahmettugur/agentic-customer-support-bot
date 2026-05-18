@@ -107,7 +107,7 @@ public class SkillsBasedRouterTests
                                  seeds: new[] { trAgent, enAgent });
 
         var profile = new CustomerProfile { CustomerId = "c1", PreferredLanguage = "en" };
-        var decision = router.Decide(TraceWithIntent("sipariş_sorgulama"), "OrderInquiryAgent", profile);
+        var decision = router.Decide(TraceWithIntent("sipariş_sorgulama"), "OrderAgent", profile);
 
         decision.SuggestedAgentId.Should().Be("en-only");
     }

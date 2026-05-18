@@ -89,7 +89,21 @@
                                 <img class="avatar-img" src="images/chatbot.png" alt="Bot" />
                             </div>
                             <div class="message-content">
-                                @if (!string.IsNullOrEmpty(msg.ReasoningText) || msg.ReasoningData.HasValue)
+                                @if (msg.IsStreaming && !string.IsNullOrEmpty(_agentName))
+                                {
+                                    <div class="agent-chip @(_agentStatus == "done" ? "done" : "running")">
+                                        @if (_agentStatus == "done")
+                                        {
+                                            <span class="agent-chip-check">✓</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="agent-chip-dot"></span>
+                                        }
+                                        <span class="agent-chip-text">@FriendlyAgentName(_agentName) @(_agentStatus == "done" ? "tamamlandı" : "çalışıyor…")</span>
+                                    </div>
+                                }
+                        @if (!string.IsNullOrEmpty(msg.ReasoningText) || msg.ReasoningData.HasValue)
                                 {
                                     <details class="reasoning-panel @(msg.IsStreaming ? "streaming" : "")" open>
                                         <summary class="reasoning-summary">
@@ -177,6 +191,28 @@
             }
         </main>
 
+        <!-- PENDING HANDOFF BANNER -->
+        @if (_pendingHandoff && !_humanMode)
+        {
+            <div class="human-mode-banner pending">
+                <span class="dot-pending"></span>
+                <span class="pending-text">
+                    <strong>Bir müşteri temsilcisi bağlanıyor…</strong>
+                    Lütfen yanıt gelene kadar bekleyin.
+                </span>
+            </div>
+        }
+
+        <!-- HUMAN MODE BANNER -->
+        @if (_humanMode)
+        {
+            <div class="human-mode-banner">
+                <span class="dot-live"></span>
+                <strong>@(_humanAgent ?? "Müşteri temsilcisi")</strong> şu an sohbette.
+                Bot yerine size <em>insan</em> bir temsilci yanıt veriyor.
+            </div>
+        }
+
         <!-- RATING -->
         @if (_showRating && !_ratingSubmitted)
         {
@@ -192,13 +228,19 @@
                         @for (int i = 1; i <= 5; i++)
                         {
                             var star = i;
-                            <button class="rating-star @(_selectedRating.HasValue && _selectedRating.Value >= star ? "active" : "")"
-                                    @onclick="() => _selectedRating = star">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="@(_selectedRating.HasValue && _selectedRating.Value >= star ? "currentColor" : "none")" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                            var isLit = (_hoverRating ?? _selectedRating ?? 0) >= star;
+                            <button class="rating-star @(isLit ? "active" : "")"
+                                    @onclick="() => _selectedRating = star"
+                                    @onmouseenter="() => _hoverRating = star"
+                                    @onmouseleave="() => _hoverRating = null">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="@(isLit ? "currentColor" : "none")" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                             </button>
                         }
                     </div>
-                    <div class="rating-label">@(_selectedRating switch { 1 => "Çok kötü", 2 => "Kötü", 3 => "Orta", 4 => "İyi", 5 => "Harika!", _ => "" })</div>
+                    @{
+                        var displayRating = _hoverRating ?? _selectedRating;
+                    }
+                    <div class="rating-label">@(displayRating switch { 1 => "Çok kötü", 2 => "Kötü", 3 => "Orta", 4 => "İyi", 5 => "Harika!", _ => "" })</div>
                     @if (_selectedRating.HasValue)
                     {
                         <textarea class="rating-feedback" rows="2" placeholder="Yorumunuz (isteğe bağlı)" @bind="_ratingFeedback"></textarea>
@@ -216,12 +258,12 @@
             <div class="input-wrapper">
                 <input type="text"
                        id="userInput"
-                       placeholder="Bir mesaj yazın..."
+                       placeholder="@(_pendingHandoff && !_humanMode ? "Temsilci bağlanana kadar lütfen bekleyin…" : "Bir mesaj yazın...")"
                        autocomplete="off"
                        @bind="_input"
                        @bind:event="oninput"
                        @onkeydown="HandleKeyDown"
-                       disabled="@_isStreaming" />
+                       disabled="@(_isStreaming || _botTyping || (_pendingHandoff && !_humanMode))" />
                 <button id="voiceBtn" title="Sesli Asistan (tam pipeline)" aria-label="Sesli konuşmayı başlat" class="btn-voice">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="9" y="2" width="6" height="12" rx="3"/>
@@ -271,11 +313,18 @@
     private bool     _humanMode;
     private string?  _humanAgent;
     private bool     _showTypingIndicator;
+    private bool     _botTyping;
     private bool     _showRating;
     private int?     _selectedRating;
+    private int?     _hoverRating;
     private string   _ratingFeedback    = string.Empty;
     private bool     _ratingSubmitted;
     private ChatMsg? _currentBot;
+    private string?  _agentName;
+    private string?  _agentStatus;
+    private bool     _pendingHandoff;
+    private string?  _pendingHandoffReason;
+    private System.Threading.Timer? _pendingHandoffTimer;
     private string   _apiBase           = string.Empty;
     private DotNetObjectReference<Chat>? _dotNetRef;
 
@@ -460,8 +509,11 @@
     private async Task SendAsync(string text)
     {
         _messages.Add(new ChatMsg { Role = "user", Content = text });
-        _currentBot = new ChatMsg { Role = "assistant", IsStreaming = true };
-        _messages.Add(_currentBot);
+        if (!_humanMode)
+        {
+            _currentBot = new ChatMsg { Role = "assistant", IsStreaming = true };
+            _messages.Add(_currentBot);
+        }
         _isStreaming = true;
         StateHasChanged();
         await ScrollBottomAsync();
@@ -497,6 +549,9 @@
                     if (s2 is not null) { _sessionId = s2; _ = JS.InvokeVoidAsync("_startPersistentEvents", s2).AsTask(); }
                 }
                 break;
+            case "reasoning_start":
+                if (_currentBot is not null) _currentBot.ReasoningText = "";
+                break;
             case "reasoning_delta":
                 if (jd.TryGetProperty("text", out var rd)) _currentBot.ReasoningText += rd.GetString() ?? "";
                 break;
@@ -504,12 +559,34 @@
                 _currentBot.ReasoningData = jd;
                 if (jd.TryGetProperty("analysis", out var rc)) _currentBot.ReasoningText = rc.GetString() ?? _currentBot.ReasoningText;
                 break;
+            case "agent":
+                _agentName   = jd.TryGetProperty("name",   out var an) ? an.GetString() : null;
+                _agentStatus = jd.TryGetProperty("status", out var as_) ? as_.GetString() : null;
+                break;
+            case "response_start":
+                _agentName   = null;
+                _agentStatus = null;
+                break;
             case "response_delta":
                 if (jd.TryGetProperty("text", out var delta)) _currentBot.Content += delta.GetString() ?? "";
                 break;
             case "response_complete":
                 if (jd.TryGetProperty("text", out var full)) _currentBot.Content = full.GetString() ?? _currentBot.Content;
                 _currentBot.IsStreaming = false;
+                _agentName = null;
+                _agentStatus = null;
+                break;
+            case "human_joined":
+                // Bot yanıtı streaming sırasında admin devralırsa bot balonunu kaldır
+                if (_currentBot is not null)
+                {
+                    _messages.Remove(_currentBot);
+                    _currentBot = null;
+                }
+                _humanMode  = true;
+                _humanAgent = jd.TryGetProperty("humanAgent", out var haj) ? haj.GetString() : "temsilci";
+                ClearPendingHandoffTimer();
+                _pendingHandoff = false;
                 break;
             case "error":
                 _currentBot.Content    = jd.TryGetProperty("message", out var err) ? err.GetString() ?? "Hata oluştu." : "Hata oluştu.";
@@ -564,7 +641,24 @@
 
         switch (type)
         {
+            case "handoff_pending":
+                _pendingHandoff = true;
+                _pendingHandoffReason = jd.TryGetProperty("reason", out var pr) ? pr.GetString() : null;
+                StartPendingHandoffTimer();
+                break;
+            case "handoff_cleared":
+                ClearPendingHandoffTimer();
+                _pendingHandoff = false;
+                _pendingHandoffReason = null;
+                _messages.Add(new ChatMsg
+                {
+                    Role    = "system",
+                    Content = "ℹ️ Talebiniz kapatıldı. Şu anda size bağlanabilecek bir temsilci bulunamadı; dilerseniz yeniden yazabilirsiniz."
+                });
+                break;
             case "human_joined":
+                ClearPendingHandoffTimer();
+                _pendingHandoff = false;
                 _humanMode  = true;
                 _humanAgent = jd.TryGetProperty("humanAgent", out var ha) ? ha.GetString() : "temsilci";
                 _messages.Add(new ChatMsg { Role = "system", Content = $"💬 Temsilci {_humanAgent} sohbete katıldı." });
@@ -578,12 +672,20 @@
                     _showRating = true;
                 break;
             case "bot_typing":
-                _showTypingIndicator = jd.TryGetProperty("on", out var on) && on.GetBoolean();
+                var typingOn = jd.TryGetProperty("on", out var on) && on.GetBoolean();
+                _showTypingIndicator = typingOn;
+                _botTyping           = typingOn;
                 break;
             case "human_message":
                 _showTypingIndicator = false;
                 var msgText = jd.TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
-                _messages.Add(new ChatMsg { Role = "agent", Content = msgText });
+                var from    = jd.TryGetProperty("from", out var f) ? f.GetString() : "admin";
+                if (from == "system")
+                    _messages.Add(new ChatMsg { Role = "system", Content = msgText });
+                else if (from == "bot")
+                    _messages.Add(new ChatMsg { Role = "assistant", Content = msgText });
+                else
+                    _messages.Add(new ChatMsg { Role = "human", Content = msgText });
                 break;
         }
 
@@ -601,6 +703,7 @@
         _sessionId           = null;
         _input               = string.Empty;
         _isStreaming         = false;
+        _botTyping           = false;
         _humanMode           = false;
         _humanAgent          = null;
         _showTypingIndicator = false;
@@ -608,6 +711,11 @@
         _selectedRating      = null;
         _ratingFeedback      = string.Empty;
         _ratingSubmitted     = false;
+        _agentName           = null;
+        _agentStatus         = null;
+        ClearPendingHandoffTimer();
+        _pendingHandoff      = false;
+        _pendingHandoffReason = null;
     }
 
     // ── Rating ────────────────────────────────────────────────────────────────
@@ -621,6 +729,47 @@
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+    private void StartPendingHandoffTimer()
+    {
+        ClearPendingHandoffTimer();
+        _pendingHandoffTimer = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                await InvokeAsync(() =>
+                {
+                    if (!_pendingHandoff || _humanMode) return;
+                    _messages.Add(new ChatMsg
+                    {
+                        Role    = "system",
+                        Content = "⏳ Temsilcimiz hâlâ müsait değil. Beklemeye devam edebilir veya daha sonra yeniden yazabilirsiniz."
+                    });
+                    StateHasChanged();
+                });
+            }
+            catch (ObjectDisposedException) { }
+            catch (TaskCanceledException) { }
+        }, null, TimeSpan.FromMinutes(2), System.Threading.Timeout.InfiniteTimeSpan);
+    }
+
+    private void ClearPendingHandoffTimer()
+    {
+        _pendingHandoffTimer?.Dispose();
+        _pendingHandoffTimer = null;
+    }
+
+    private static string FriendlyAgentName(string id) => id switch
+    {
+        "PlanningAgent"      => "Planlama Ajanı",
+        "ProductInquiryAgent"=> "Ürün Ajanı",
+        "OrderAgent"         => "Sipariş Ajanı",
+        "ComplaintAgent"     => "Şikayet Ajanı",
+        "ResponseAgent"      => "Yanıt Ajanı",
+        "Orchestrator"       => "Orkestratör",
+        _ when id.StartsWith("SubTask#") => $"Alt Görev {id[8..]}",
+        _ => id
+    };
+
     private async Task ScrollBottomAsync()
     {
         try { await JS.InvokeVoidAsync("eval", "var el=document.getElementById('messages');if(el)el.scrollTop=el.scrollHeight;"); }
@@ -629,6 +778,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        ClearPendingHandoffTimer();
         try { await JS.InvokeVoidAsync("__stopStream"); } catch { }
         if (_dotNetRef is not null)
         {

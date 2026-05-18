@@ -63,7 +63,7 @@ public class SpecialistReasoningParserTests
             }
             """;
 
-        var result = SpecialistReasoningParser.TryParse(input, "OrderInquiryAgent");
+        var result = SpecialistReasoningParser.TryParse(input, "OrderAgent");
 
         result.Should().NotBeNull();
         result!.ResultConfidence.Should().Be(0.95);

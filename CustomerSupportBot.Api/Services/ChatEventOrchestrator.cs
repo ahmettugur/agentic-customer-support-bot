@@ -6,6 +6,7 @@ namespace CustomerSupportBot.Api.Services;
 
 using Api.Infrastructure;
 using Api.Models;
+using Microsoft.Extensions.Hosting;
 
 /// <summary>
 /// Orchestrates persistent SSE events for chat sessions. Handles HITL mode transitions,
@@ -17,17 +18,20 @@ public sealed class ChatEventOrchestrator
     private readonly IChatModeRegistry _modeRegistry;
     private readonly IChatBridge _chatBridge;
     private readonly IEscalationSink _escalationSink;
+    private readonly IHostApplicationLifetime _appLifetime;
     private readonly ILogger<ChatEventOrchestrator> _logger;
 
     public ChatEventOrchestrator(
         IChatModeRegistry modeRegistry,
         IChatBridge chatBridge,
         IEscalationSink escalationSink,
+        IHostApplicationLifetime appLifetime,
         ILogger<ChatEventOrchestrator> logger)
     {
         _modeRegistry = modeRegistry;
         _chatBridge = chatBridge;
         _escalationSink = escalationSink;
+        _appLifetime = appLifetime;
         _logger = logger;
     }
 
@@ -51,10 +55,11 @@ public sealed class ChatEventOrchestrator
         // Main loop: forward admin messages from chat bridge
         await ProcessBridgeMessagesAsync(sessionId, sse, ct);
 
-        // Müşteri bağlantıyı kesti — bu session'a ait açık eskalasyonları otomatik kapat.
-        // Aktif müşteri olmayan bir eskalasyonu admin panelinde tutmanın anlamı yok;
-        // müşteri yeniden bağlanırsa bot ihtiyaç duyulduğunda yeni eskalasyon açabilir.
-        DismissOrphanedEscalations(sessionId);
+        // Bağlantı kapandı — kaynağı kontrol et:
+        // Server shutdown ise eskalasyonlara dokunma (restart sonrası hayatta kalsın).
+        // Sadece müşteri kendi isteğiyle ayrıldıysa otomatik kapat.
+        if (!_appLifetime.ApplicationStopping.IsCancellationRequested)
+            DismissOrphanedEscalations(sessionId);
     }
 
     private void DismissOrphanedEscalations(string sessionId)

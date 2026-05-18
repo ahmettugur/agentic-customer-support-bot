@@ -39,7 +39,7 @@ public class PlanningResultParserTests
             {
                 "detectedIntent": "order_inquiry",
                 "intentConfidence": 0.85,
-                "selectedAgent": "OrderInquiryAgent",
+                "selectedAgent": "OrderAgent",
                 "rationale": "User asked about order status",
                 "needsClarification": false
             }
@@ -51,7 +51,7 @@ public class PlanningResultParserTests
         plan.Should().NotBeNull();
         plan!.DetectedIntent.Should().Be("order_inquiry");
         plan.IntentConfidence.Should().Be(0.85);
-        plan.SelectedAgent.Should().Be("OrderInquiryAgent");
+        plan.SelectedAgent.Should().Be("OrderAgent");
         plan.NeedsClarification.Should().BeFalse();
     }
 
@@ -115,7 +115,7 @@ public class PlanningResultParserTests
     {
         var input = """
             {
-                "selectedAgent": "OrderInquiryAgent",
+                "selectedAgent": "OrderAgent",
                 "alternativesRejected": [
                     {"agent": "ComplaintAgent", "reason": "no complaint signal"},
                     {"agent": "ProductInquiryAgent", "reason": "no product context"}

@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @layout AdminLayout
 @inject TracesApiService TracesApi
+@inject NavigationManager Nav
 @implements IAsyncDisposable
 @using System.Text.Json
 
@@ -160,6 +161,7 @@
         }
 
         _lastLoaded = id;
+        Nav.NavigateTo($"/replay?traceId={Uri.EscapeDataString(id)}", replace: true);
         _metaText   = (trace.UserQuery?.Length ?? 0) > 70
             ? trace.UserQuery![..70] + "…"
             : trace.UserQuery ?? "(soru yok)";
@@ -186,11 +188,19 @@
     {
         _playing   = true;
         _playTimer?.Dispose();
-        _playTimer = new Timer(_ => InvokeAsync(() =>
+        _playTimer = new Timer(async _ =>
         {
-            if (_stepIndex >= _steps.Count - 1) { StopPlay(); return; }
-            GoTo(_stepIndex + 1);
-        }), null, _speedMs, _speedMs);
+            try
+            {
+                await InvokeAsync(() =>
+                {
+                    if (_stepIndex >= _steps.Count - 1) { StopPlay(); return; }
+                    GoTo(_stepIndex + 1);
+                });
+            }
+            catch (ObjectDisposedException) { }
+            catch (TaskCanceledException) { }
+        }, null, _speedMs, _speedMs);
     }
 
     private void StopPlay()

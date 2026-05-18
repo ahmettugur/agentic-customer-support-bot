@@ -8,8 +8,7 @@ Sistemde **6 ajan** vardır. Hepsi MAF `ChatClientAgent` olarak `@Agents/Custome
 |---|---|---|---|---|
 | **PlanningAgent** | Router — niyet tespiti + ajan seçimi | Yok | ✅ `PlanningResult` JSON | Turun **başı** |
 | **ProductInquiryAgent** | Ürün sorgusu (read-only) | `product_inquiry_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
-| **OrderPlacementAgent** | Sipariş oluşturma (yan etkili) | `order_placement_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
-| **OrderInquiryAgent** | Sipariş sorgusu (read-only) | `order_status_tool` + `get_last_order_tool` + `get_all_orders_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
+| **OrderAgent** | Sipariş oluşturma + sorgulama | `order_placement_tool` + `order_status_tool` + `get_last_order_tool` + `get_all_orders_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
 | **ComplaintAgent** | Şikayet kaydı (yan etkili) | `complaint_registration_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
 | **ResponseAgent** | Son yanıt + TERMINATE | Yok | — | Turun **sonu** |
 
@@ -99,13 +98,13 @@ Bir ajan MAF'ta **monolitik bir LLM çağrısı** değildir. Tek bir agent itera
 | 3. Tool | ❌ Atlandı |
 | 4. Reflection | ChatManager routing kararı (JSON'daki `selectedAgent`) |
 
-**4 Specialist** (ProductInquiry, OrderPlacement, OrderInquiry, Complaint) — **tam 4-aşamalı zincir**:
+**3 Specialist** (ProductInquiry, Order, Complaint) — **tam 4-aşamalı zincir**:
 
 | Sub-component | Davranış |
 |---|---|
 | 1. Input Prep | + tool kataloğu ([Description] attribute'larından) |
 | 2. LLM Reasoning | `preToolCheck` JSON + tool invoke decision |
-| 3. Tool | 1-3 tool çağrısı arka arkaya (OrderInquiry `get_last_order + order_status` gibi) |
+| 3. Tool | 1-3 tool çağrısı arka arkaya (Order `get_last_order + order_status` gibi) |
 | 4. Reflection | `postToolReflection.status + handoffSuggestion` |
 
 **ResponseAgent** — tool yok, farklı bir "reflection" yapısı:
@@ -174,7 +173,7 @@ PlanningAgent'a şu system mesajları workflow tarafından enjekte edilir (sıra
   "detectedIntent": "sipariş_oluşturma | sipariş_sorgulama | ürün_bilgisi | şikayet | genel",
   "intentConfidence": 0.0-1.0,
   "supportingEvidence": ["alıntılar"],
-  "selectedAgent": "OrderInquiryAgent",
+  "selectedAgent": "OrderAgent",
   "rationale": "…",
   "alternativesRejected": [{ "agent": "…", "reason": "…" }],
   "needsClarification": false,
@@ -186,15 +185,15 @@ PlanningAgent'a şu system mesajları workflow tarafından enjekte edilir (sıra
 **Bölüm 2 — Routing satırı**:
 
 ```
-1. OrderInquiryAgent : ORD-1 siparişinin durumunu sorgula
+1. OrderAgent : ORD-1 siparişinin durumunu sorgula
 ```
 
 ### Kritik kurallar (Prompts/agents/planning-agent.md'den)
 
 - **Clarification eşiği**: `intentConfidence < 0.7` → `needsClarification=true`, `selectedAgent=ResponseAgent`.
 - **Sipariş sorgulama öncelik kuralı**:
-  - `order_id` varsa → `OrderInquiryAgent` (customer_id ISTEME)
-  - Sadece `customer_id` varsa → `OrderInquiryAgent` (order_id ISTEME; tool son siparişi getirir)
+  - `order_id` varsa → `OrderAgent` (customer_id ISTEME)
+  - Sadece `customer_id` varsa → `OrderAgent` (order_id ISTEME; tool son siparişi getirir)
   - İkisi de yoksa → `ResponseAgent` (tek mesajda "sipariş no VEYA müşteri kimliği" iste)
 - **Şikayet kuralı**: `order_id` zorunlu; `customer_id` eksikse tool siparişten türetir — kullanıcıya TEKRAR sorma.
 - **Çoklu eksik bilgi**: Sipariş OLUŞTURMA gibi gerçekten birden fazla zorunlu alanda eksiklik varsa **tek clarification mesajında hepsini birlikte iste** (ping-pong yasak).
@@ -256,62 +255,32 @@ PlanningAgent'a şu system mesajları workflow tarafından enjekte edilir (sıra
 |---|---|---|
 | Ürün bulundu | `done` | `ResponseAgent` |
 | `PRODUCT_NOT_FOUND` | `partial` (resultConfidence=0.4) | `ResponseAgent` |
-| Kullanıcı ürünü satın almak istiyor | `done` | `OrderPlacementAgent` |
+| Kullanıcı ürünü satın almak istiyor | `done` | `OrderAgent` |
 
 ---
 
-## 3. OrderPlacementAgent
+## 3. OrderAgent
 
-**Dosya**: `Prompts/agents/order-placement-agent.md`
-**Kod**: `CustomerSupportTeam.cs:76-81`
-**Tool**: `CustomerSupportTools.OrderPlacementTool(productName, quantity, customerId)`
+**Dosya**: `Prompts/agents/order-agent.md`
+**Kod**: `CustomerSupportTeam.cs:76-93`
+**Tool'lar**: `order_placement_tool`, `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`
 
 ### Sorumluluk
 
-Yeni sipariş oluşturur. **Yan etkili** — `FakeDatabase.OrdersDb`'ye yazar, stok düşürür. Yanlış çağrı maliyetli olduğundan pre-tool check **zorunludur**.
+Sipariş oluşturma ve sorgulama işlemlerini tek çatı altında yürütür. Intent'e göre doğru tool'u seçer:
 
-### Gerekli parametreler
+- `sipariş_oluşturma` → `order_placement_tool` (HITL gate — admin onayı gerekir)
+- `sipariş_sorgulama` (belirli sipariş) → `order_status_tool`
+- Son sipariş → `get_last_order_tool`
+- Tüm sipariş geçmişi → `get_all_orders_tool`
+
+### Sipariş oluşturma — gerekli parametreler
 
 - `customer_id` (ör. `CUST-001` veya `CUST-1990`)
 - `product_id` / `product_name`
 - `quantity` (pozitif tamsayı)
 
-### ToolResult davranışları
-
-| Senaryo | Error code | Status | Mesaj |
-|---|---|---|---|
-| 3 alan da var, ürün + stok tamam | - | `Success=true` | "Sipariş oluşturuldu: ORD-N" |
-| Eksik alan | `MISSING_REQUIRED_FIELD` (category=validation) | `Success=false` | Eksik alanları listele |
-| Ürün bulunamadı | `PRODUCT_NOT_FOUND` | `Success=false` | "'X' ürünü yok" |
-| Stok yetersiz | `STOCK_INSUFFICIENT` | `Success=false` | "Sadece N adet stokta" |
-
-> Error code string'leri `WellKnown.ToolErrorCodes` (`MissingRequiredField`, `ProductNotFound`, `StockInsufficient`) sabitleri olarak yaşar; tool kodu hard-coded değer kullanmaz.
-
-Tool `@Tools/CustomerSupportTools.cs:55-115` — stok kontrolü `lock` altında, idempotent değildir (ancak race condition korumalıdır).
-
-### Handoff kuralları
-
-| Sonuç | status | handoffSuggestion |
-|---|---|---|
-| Sipariş oluştu | `done` | `ResponseAgent` |
-| Eksik param | `needs_followup` | `ResponseAgent` (clarification) |
-| `STOCK_INSUFFICIENT` / tool hatası | `failed` | `ResponseAgent` |
-| Ödeme/sistem sorunu | `needs_escalation` | `ResponseAgent` (insan desteği) |
-| Kullanıcı sonrasında fiyat sordu | - | `ProductInquiryAgent` |
-
----
-
-## 4. OrderInquiryAgent
-
-**Dosya**: `Prompts/agents/order-inquiry-agent.md`
-**Kod**: `CustomerSupportTeam.cs:84-93`
-**Tool'lar**: 3 tanesi — `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`
-
-### Sorumluluk
-
-Sipariş durumu/geçmişi sorgular. **Okuma-only**. Tool seçimi LLM'e bırakılır ama entity extraction ile deterministik ipucu verilir.
-
-### Tool seçim öncelik kuralı (kritik)
+### Sipariş sorgulama — tool seçim öncelik kuralı (kritik)
 
 IdExtractor'ın `@Services/IdExtractor.cs:118-157` ürettiği hint mesajı bu kuralı LLM'e dikte eder:
 
@@ -324,26 +293,36 @@ IdExtractor'ın `@Services/IdExtractor.cs:118-157` ürettiği hint mesajı bu ku
 3) İkisi de YOK → tool çağırma, clarification iste
 ```
 
-Bu kural **hem** prompt'ta (`order-inquiry-agent.md`), **hem** entity extraction hint'inde (`IdExtractor.BuildHintMessage`), **hem** reasoning service prompt'unda (`reasoning-system.md`) tekrar ettirilir — üç katmanlı tutarlılık garantisi.
-
 ### ToolResult davranışları
 
-| Tool | Sonuç | Error code |
-|---|---|---|
-| `order_status_tool` | Bulunamadı | `ORDER_NOT_FOUND` |
-| `get_last_order_tool` / `get_all_orders_tool` | Müşterinin siparişi yok | `NO_ORDERS_FOR_CUSTOMER` |
+| Tool | Senaryo | Error code | Status |
+|---|---|---|---|
+| `order_placement_tool` | Ürün + stok tamam | - | `Success=true` |
+| `order_placement_tool` | Eksik alan | `MISSING_REQUIRED_FIELD` | `Success=false` |
+| `order_placement_tool` | Ürün bulunamadı | `PRODUCT_NOT_FOUND` | `Success=false` |
+| `order_placement_tool` | Stok yetersiz | `STOCK_INSUFFICIENT` | `Success=false` |
+| `order_status_tool` | Bulunamadı | `ORDER_NOT_FOUND` | `Success=false` |
+| `get_last_order_tool` / `get_all_orders_tool` | Sipariş yok | `NO_ORDERS_FOR_CUSTOMER` | `Success=false` |
+
+> Error code string'leri `WellKnown.ToolErrorCodes` sabitleri olarak yaşar. `order_placement_tool` stok kontrolü `lock` altındadır.
 
 ### Handoff kuralları
 
-- Sipariş bulundu → `done` / `ResponseAgent`
-- Bulunamadı → `partial` (resultConfidence=0.4) / `ResponseAgent`
-- Hiç ID yok → `needs_followup` / `ResponseAgent` (tek mesajda "HERHANGİ BİRİ" iste)
-- Kullanıcı sonrasında şikayet → `ComplaintAgent`
-- Kullanıcı sonrasında yeni sipariş → `OrderPlacementAgent`
+| Sonuç | status | handoffSuggestion |
+|---|---|---|
+| Sipariş oluştu | `done` | `ResponseAgent` |
+| Eksik param | `needs_followup` | `ResponseAgent` (clarification) |
+| `STOCK_INSUFFICIENT` / tool hatası | `failed` | `ResponseAgent` |
+| Ödeme/sistem sorunu | `needs_escalation` | `ResponseAgent` (insan desteği) |
+| Sipariş sorgusu bulundu | `done` | `ResponseAgent` |
+| Sipariş sorgusu bulunamadı | `partial` (resultConfidence=0.4) | `ResponseAgent` |
+| Hiç ID yok | `needs_followup` | `ResponseAgent` |
+| Kullanıcı sonrasında şikayet | - | `ComplaintAgent` |
+| Kullanıcı sonrasında fiyat sordu | - | `ProductInquiryAgent` |
 
 ---
 
-## 5. ComplaintAgent
+## 4. ComplaintAgent
 
 **Dosya**: `Prompts/agents/complaint-agent.md`
 **Kod**: `CustomerSupportTeam.cs:96-101`
@@ -373,11 +352,11 @@ Bu davranış **ping-pong'u önler** — kullanıcı şikayet için `CUST-001` v
 - Şikayet kaydedildi → `done` / `ResponseAgent`
 - Eksik param → `needs_followup` / `ResponseAgent`
 - İade/değişim → `needs_escalation`
-- Sipariş bulunamazsa → `OrderInquiryAgent`
+- Sipariş bulunamazsa → `OrderAgent`
 
 ---
 
-## 6. ResponseAgent
+## 5. ResponseAgent
 
 **Dosya**: `Prompts/agents/response-agent.md`
 **Kod**: `CustomerSupportTeam.cs:106-110`
@@ -441,8 +420,8 @@ Ancak pratikte `CustomerSupportTeam.RunDecomposedAsync` her subtask için **ayr�
 │       │         │            │         │          │
 ▼       ▼         ▼            ▼         ▼          ▼
 ┌──────────┐  ┌──────────────────┐  ┌─────────────┐  ┌──────────────┐
-│ Product  │  │ OrderPlacement   │  │ OrderInquiry│  │ Complaint    │
-│ Inquiry  │  │ (yan etkili)     │  │ (read-only) │  │ (yan etkili) │
+│ Product  │  │ Order                              │  │ Complaint    │
+│ Inquiry  │  │ (sipariş oluşturma + sorgulama)    │  │ (yan etkili) │
 └─────┬────┘  └─────┬────────────┘  └──────┬──────┘  └──────┬───────┘
       │             │                       │                │
       │             │  dinamik handoff      │                │
@@ -506,7 +485,7 @@ http POST /chat/stream                               (ASP.NET instrumentation)
  └─ workflow.run                                     (manual: CustomerSupportTeam)
     ├─ agent.run PlanningAgent                       ← MAF middleware
     │   └─ chat.completions                          ← inner IChatClient span
-    ├─ agent.run OrderInquiryAgent                   ← MAF middleware
+    ├─ agent.run OrderAgent                   ← MAF middleware
     │   ├─ chat.completions
     │   └─ tool.invoke order_status_tool             ← MAF middleware
     │       └─ DB query (EF Core instrumentation)

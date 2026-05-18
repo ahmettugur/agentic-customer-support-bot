@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @layout AdminLayout
 @inject WorkflowApiService WorkflowApi
+@using System.Text.Json
 
 <link rel="stylesheet" href="css/workflow.css" />
 
@@ -100,8 +101,18 @@
         if (raw is null) { _errorMsg = $"Workflow yüklenemedi: {id}"; return; }
         _currentId  = id;
         _editorJson = raw;
-        _meta       = $"id: {id}";
         _errorMsg   = null;
+        try
+        {
+            var doc       = JsonSerializer.Deserialize<JsonElement>(raw);
+            var updatedAt = doc.TryGetProperty("updatedAt",  out var ua) ? ua.GetString() : null;
+            var version   = doc.TryGetProperty("version",    out var v)  ? v.GetInt32().ToString() : null;
+            var updatedBy = doc.TryGetProperty("updatedBy",  out var ub) ? ub.GetString() : null;
+            _meta = updatedAt is not null
+                ? $"Last update: {updatedAt}{(version is not null ? $" (v{version})" : "")} · by {updatedBy ?? "—"}"
+                : $"id: {id}";
+        }
+        catch { _meta = $"id: {id}"; }
     }
 
     private void NewWorkflow()

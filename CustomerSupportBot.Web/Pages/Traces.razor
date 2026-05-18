@@ -205,11 +205,19 @@
     private void StartAutoRefresh()
     {
         _refreshTimer?.Dispose();
-        _refreshTimer = new Timer(async _ => await InvokeAsync(async () =>
+        _refreshTimer = new Timer(async _ =>
         {
-            await LoadSessionsAsync();
-            StateHasChanged();
-        }), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+            try
+            {
+                await InvokeAsync(async () =>
+                {
+                    await LoadSessionsAsync();
+                    StateHasChanged();
+                });
+            }
+            catch (ObjectDisposedException) { }
+            catch (TaskCanceledException) { }
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
     private void OnAutoRefreshChanged()

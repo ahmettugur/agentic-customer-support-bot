@@ -3,6 +3,7 @@
 @inject AuthService AuthSvc
 @inject AppAuthStateProvider AuthState
 @inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
 
 <link rel="stylesheet" href="css/login.css" />
 
@@ -41,17 +42,21 @@
     private string? _error;
     private bool _loading;
 
-    protected override void OnInitialized()
+    private string _returnUrl = "/admin";
+
+    protected override async Task OnInitializedAsync()
     {
-        // Zaten oturum açık ise yönlendir
         var uri = new Uri(Nav.Uri);
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
         var returnParam = query["return"];
         if (!string.IsNullOrWhiteSpace(returnParam))
             _returnUrl = returnParam;
-    }
 
-    private string _returnUrl = "/admin";
+        // Zaten oturum açık ise hemen yönlendir
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated == true)
+            Nav.NavigateTo(_returnUrl, forceLoad: false);
+    }
 
     private async Task HandleLoginAsync()
     {

@@ -11,16 +11,17 @@ builder.Services.AddRedisServices(builder.Configuration);
 builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddAuthenticationServices(builder.Configuration);
+builder.Services.AddAppHealthChecks(builder.Configuration);
 
 var app = builder.Build();
 
 await app.MigrateIfDevelopmentAsync();
 app.WireRoutingLoadTracking();
 
+app.MapAppHealthChecks();
+
 app.UseCors();
 app.UseRateLimiter();
-app.UseDefaultFiles();
-app.UseStaticFiles();
 app.UseWebSockets();
 
 if (app.Environment.IsDevelopment())

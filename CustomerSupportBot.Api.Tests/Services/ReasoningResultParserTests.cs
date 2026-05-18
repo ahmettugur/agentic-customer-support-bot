@@ -25,7 +25,7 @@ public class ReasoningResultParserTests
                 "intent": "sipariş_sorgulama",
                 "confidenceScore": 0.92,
                 "rationale": "ORD-1 mevcut",
-                "nextAction": "OrderInquiryAgent'e yönlendir",
+                "nextAction": "OrderAgent'e yönlendir",
                 "requiredInfo": []
             }
             ```
@@ -35,7 +35,7 @@ public class ReasoningResultParserTests
         result.Analysis.Should().Be("Kullanıcı sipariş durumu sormuş.");
         result.Intent.Should().Be("sipariş_sorgulama");
         result.ConfidenceScore.Should().Be(0.92);
-        result.NextAction.Should().Contain("OrderInquiry");
+        result.NextAction.Should().Contain("Order");
     }
 
     [Fact]

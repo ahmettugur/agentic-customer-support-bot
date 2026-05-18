@@ -129,7 +129,7 @@ Temel yetenekler:
 | **PlanningAgent** | Niyet tespiti ve yönlendirme | — | `PlanningResult` |
 | **ProductInquiryAgent** | Ürün sorgusu (salt-okunur) | `product_inquiry_tool` | `SpecialistReasoning` |
 | **OrderPlacementAgent** | Sipariş oluşturma (yan etkili) | `order_placement_tool` | `SpecialistReasoning` |
-| **OrderInquiryAgent** | Sipariş durumu sorgusu | `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool` | `SpecialistReasoning` |
+| **OrderAgent** | Sipariş durumu sorgusu | `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool` | `SpecialistReasoning` |
 | **ComplaintAgent** | Şikayet kaydı | `complaint_registration_tool` | `SpecialistReasoning` |
 | **HumanHandoffAgent** | İnsan temsilciye aktarım | `human_handoff_tool` | `SpecialistReasoning` |
 | **ResponseAgent** | Nihai yanıt + self-critique | — | `ResponseCritique` |

@@ -179,6 +179,19 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         }
     }
 
+    // ─── Chat Sentiment ───────────────────────────────────────────────────────
+
+    public async Task<ChatSentiment?> GetSentimentAsync(string sessionId)
+    {
+        try
+        {
+            var prefix = await PrefixAsync();
+            return await http.GetFromJsonAsync<ChatSentiment>(
+                $"{prefix}/chat-sessions/{sessionId}/sentiment");
+        }
+        catch { return null; }
+    }
+
     // ─── Improvements ─────────────────────────────────────────────────────────
 
     public async Task<List<LessonProposal>> GetLessonsAsync(string status)
@@ -191,9 +204,19 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         catch { return []; }
     }
 
-    public async Task MineImprovementsAsync()
+    public async Task<(int Candidates, int Proposed, string? Error)> MineImprovementsAsync()
     {
-        try { await http.PostAsync("/improvements/mine", null); } catch { }
+        try
+        {
+            var resp = await http.PostAsync("/improvements/mine", null);
+            if (!resp.IsSuccessStatusCode) return (0, 0, $"HTTP {(int)resp.StatusCode}");
+            var j = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            var candidates = j.TryGetProperty("candidates",      out var c) ? c.GetInt32() : 0;
+            var proposed   = j.TryGetProperty("proposedLessons", out var p) ? p.GetInt32() : 0;
+            var error      = j.TryGetProperty("error",           out var e) && e.ValueKind != System.Text.Json.JsonValueKind.Null ? e.GetString() : null;
+            return (candidates, proposed, error);
+        }
+        catch (Exception ex) { return (0, 0, ex.Message); }
     }
 
     public async Task ApproveLessonAsync(string id, string? reason = null)
@@ -206,3 +229,5 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         try { await http.PostAsJsonAsync($"/improvements/{Uri.EscapeDataString(id)}/reject", new { reason }); } catch { }
     }
 }
+
+public sealed record ChatSentiment(string? Sentiment, double Score);

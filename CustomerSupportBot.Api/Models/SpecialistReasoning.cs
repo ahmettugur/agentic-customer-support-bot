@@ -1,5 +1,5 @@
 // Models/SpecialistReasoning.cs
-// Specialist ajanların (ProductInquiry, OrderPlacement, OrderInquiry,
+// Specialist ajanların (ProductInquiry, OrderPlacement, Order,
 // Complaint) tool çağrısı öncesi/sonrası ürettiği yapılandırılmış reasoning.
 // Pre-tool check: parametre validasyonu ve karar gerekçesi.
 // Post-tool result: sonucun güven skoru ve notları.
@@ -72,7 +72,7 @@ public class PostToolReflection
     /// Dinamik handoff önerisi — bir başka specialist ajana devredilmeli mi?
     /// Null veya "ResponseAgent" ise akış normal yönde (ResponseAgent'a) devam eder.
     /// Geçerli değerler: "ProductInquiryAgent", "OrderPlacementAgent",
-    /// "OrderInquiryAgent", "ComplaintAgent", "ResponseAgent".
+    /// "OrderAgent", "ComplaintAgent", "ResponseAgent".
     /// </summary>
     public string? HandoffSuggestion { get; set; }
 

@@ -14,13 +14,21 @@
 //     (Hydrate edilen Pending'ler için yeni TCS oluşturulmaz çünkü orijinal
 //      tool lambda'sı zaten ölmüş; hydrator startup'ta bunları Expired'a çeker.
 //      Burada cache'e sadece "sahipsiz" kayıt olarak okuma için ekleriz.)
+//
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - Create: csbot:approval:created kanalına yayın → diğer pod'lar entry'yi cache'e ekler.
+//   - Decide: csbot:approval:decided kanalına yayın → TCS o pod'da hangi pod'da bulunursa
+//     orada tetiklenir.
 
 using System.Collections.Concurrent;
+using System.Text.Json;
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
 using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services.Locking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 
 namespace CustomerSupportBot.Api.Services.Persistence;
 
@@ -29,6 +37,9 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ApprovalOptions _options;
     private readonly ILogger<PostgresApprovalQueue> _logger;
+    private readonly ISubscriber _sub;
+    private readonly IAppDistributedLock _distributedLock;
+    private readonly string _nodeId = RedisNodeId.Value;
     private readonly ConcurrentDictionary<string, QueueEntry> _entries = new();
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
@@ -41,11 +52,17 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
     public PostgresApprovalQueue(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
         IOptions<ApprovalOptions> options,
+        IConnectionMultiplexer redis,
+        IAppDistributedLock distributedLock,
         ILogger<PostgresApprovalQueue> logger)
     {
         _dbFactory = dbFactory;
         _options = options.Value;
+        _distributedLock = distributedLock;
         _logger = logger;
+        _sub = redis.GetSubscriber();
+        _sub.Subscribe(RedisChannel.Literal("csbot:approval:created"), OnRemoteCreated);
+        _sub.Subscribe(RedisChannel.Literal("csbot:approval:decided"), OnRemoteDecided);
     }
 
     public ApprovalRequest Create(ApprovalRequest request)
@@ -73,6 +90,21 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
 
         try { RequestCreated?.Invoke(this, request); }
         catch (Exception ex) { _logger.LogWarning(ex, "RequestCreated handler failed"); }
+
+        PublishRedis("csbot:approval:created", new
+        {
+            nodeId = _nodeId,
+            id = request.Id,
+            sessionId = request.SessionId,
+            traceId = request.TraceId,
+            toolName = request.ToolName,
+            agentName = request.AgentName,
+            parametersJson = JsonSerializer.Serialize(request.Parameters),
+            userQuery = request.UserQuery,
+            justification = request.Justification,
+            requestedAt = request.RequestedAt,
+            timeoutSeconds = request.TimeoutSeconds
+        });
 
         return request;
     }
@@ -121,8 +153,18 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         EnsureHydrated();
         if (!_entries.TryGetValue(id, out var entry)) return false;
 
-        lock (entry.Lock)
+        // Distributed lock: farklı pod'lardan eş zamanlı Decide() çağrılarını serialize eder.
+        // TryAcquireAsync null dönerse (başka pod lock tutuyor) kararı reddet — double-decision önlemi.
+        var handle = _distributedLock.TryAcquireAsync($"approval:{id}").GetAwaiter().GetResult();
+        if (handle is null)
         {
+            _logger.LogWarning("[HITL] Approval distributed lock alınamadı; karar reddedildi. Id={Id}", id);
+            return false;
+        }
+
+        try
+        {
+            // Lock altında güncel durumu kontrol et
             if (entry.Request.Status != ApprovalStatus.Pending) return false;
 
             entry.Request.Status = approved ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
@@ -145,7 +187,22 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             catch (Exception ex) { _logger.LogWarning(ex, "RequestDecided handler failed"); }
 
             entry.Tcs?.TrySetResult(entry.Request);
+
+            PublishRedis("csbot:approval:decided", new
+            {
+                nodeId = _nodeId,
+                id,
+                approved,
+                decidedBy = entry.Request.DecidedBy,
+                reason = entry.Request.DecisionReason,
+                decidedAt = entry.Request.DecidedAt
+            });
+
             return true;
+        }
+        finally
+        {
+            handle.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }
 
@@ -314,11 +371,92 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         _logger.LogInformation("[HITL] Approval cache hydrate: {Count} kayıt", rows.Count);
     }
 
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void OnRemoteCreated(RedisChannel _, RedisValue val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val.ToString());
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _nodeId) return;
+
+            var id = root.GetProperty("id").GetString()!;
+            if (_entries.ContainsKey(id)) return;
+
+            var parametersJson = root.GetProperty("parametersJson").GetString() ?? "{}";
+            var parameters = JsonSerializer.Deserialize<Dictionary<string, object?>>(parametersJson)
+                             ?? new Dictionary<string, object?>();
+
+            var req = new ApprovalRequest
+            {
+                Id = id,
+                SessionId = root.TryGetProperty("sessionId", out var s) ? s.GetString() : null,
+                TraceId = root.TryGetProperty("traceId", out var tr) ? tr.GetString() : null,
+                ToolName = root.GetProperty("toolName").GetString() ?? "",
+                AgentName = root.TryGetProperty("agentName", out var an) ? an.GetString() : null,
+                Parameters = parameters,
+                UserQuery = root.TryGetProperty("userQuery", out var uq) ? uq.GetString() : null,
+                Justification = root.TryGetProperty("justification", out var j) ? j.GetString() : null,
+                RequestedAt = root.GetProperty("requestedAt").GetDateTime(),
+                TimeoutSeconds = root.GetProperty("timeoutSeconds").GetInt32(),
+                Status = ApprovalStatus.Pending
+            };
+
+            _entries.TryAdd(req.Id, new QueueEntry(req, tcs: null));
+
+            try { RequestCreated?.Invoke(this, req); }
+            catch (Exception ex) { _logger.LogWarning(ex, "RequestCreated handler (remote) failed"); }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Redis OnRemoteCreated parse hatası");
+        }
+    }
+
+    private void OnRemoteDecided(RedisChannel _, RedisValue val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val.ToString());
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _nodeId) return;
+
+            var id = root.GetProperty("id").GetString()!;
+            if (!_entries.TryGetValue(id, out var entry)) return;
+            if (entry.Tcs is null || entry.Tcs.Task.IsCompleted) return;
+
+            var approved = root.GetProperty("approved").GetBoolean();
+            entry.Request.Status = approved ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
+            entry.Request.DecidedAt = root.TryGetProperty("decidedAt", out var da) && da.ValueKind != JsonValueKind.Null
+                ? da.GetDateTime() : DateTime.UtcNow;
+            entry.Request.DecidedBy = root.TryGetProperty("decidedBy", out var db) ? db.GetString() : null;
+            entry.Request.DecisionReason = root.TryGetProperty("reason", out var r) && r.ValueKind != JsonValueKind.Null
+                ? r.GetString() : null;
+
+            entry.Tcs.TrySetResult(entry.Request);
+
+            try { RequestDecided?.Invoke(this, entry.Request); }
+            catch (Exception ex) { _logger.LogWarning(ex, "RequestDecided handler (remote) failed"); }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Redis OnRemoteDecided parse hatası");
+        }
+    }
+
+    private void PublishRedis(string channel, object payload)
+    {
+        try { _sub.Publish(RedisChannel.Literal(channel), JsonSerializer.Serialize(payload)); }
+        catch (Exception ex) { _logger.LogWarning(ex, "[HITL] Redis publish başarısız: {Channel}", channel); }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     private sealed class QueueEntry
     {
         public ApprovalRequest Request { get; }
         public TaskCompletionSource<ApprovalRequest>? Tcs { get; }
-        public object Lock { get; } = new();
 
         public QueueEntry(ApprovalRequest req, TaskCompletionSource<ApprovalRequest>? tcs)
         {

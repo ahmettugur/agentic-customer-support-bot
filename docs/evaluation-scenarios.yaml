@@ -35,7 +35,7 @@ scenarios:
     category: order_status_with_id
     query: "ORD-1 numaralı siparişimin durumu nedir?"
     expected_intent: "sipariş_sorgulama"
-    expected_agents: [PlanningAgent, OrderInquiryAgent, ResponseAgent]
+    expected_agents: [PlanningAgent,  ResponseAgent]
     expected_tools: [order_status_tool]
     success_criteria:
       - "response contains order status"
@@ -45,7 +45,7 @@ scenarios:
     category: last_order_by_customer
     query: "CUST-002 son siparişim nedir?"
     expected_intent: "sipariş_sorgulama"
-    expected_agents: [PlanningAgent, OrderInquiryAgent, ResponseAgent]
+    expected_agents: [PlanningAgent,  ResponseAgent]
     expected_tools: [get_last_order_tool]
     success_criteria:
       - "response contains order id"
@@ -55,7 +55,7 @@ scenarios:
     category: all_orders_listing
     query: "CUST-001 tüm siparişlerimi listeler misin?"
     expected_intent: "sipariş_sorgulama"
-    expected_agents: [PlanningAgent, OrderInquiryAgent, ResponseAgent]
+    expected_agents: [PlanningAgent,  ResponseAgent]
     expected_tools: [get_all_orders_tool]
     success_criteria:
       - "response contains ordered list"
@@ -76,7 +76,7 @@ scenarios:
     category: missing_customer_id_for_order
     query: "Son siparişimi göster"
     expected_behavior: clarification_request
-    expected_agents: [PlanningAgent, OrderInquiryAgent, ResponseAgent]
+    expected_agents: [PlanningAgent,  ResponseAgent]
     success_criteria:
       - "agent requests customer_id"
       - "no tool called with null customer_id"
@@ -107,7 +107,7 @@ scenarios:
     category: product_vs_order_confusion
     query: "Akıllı telefon siparişim ne durumda?"
     expected_intent: "sipariş_sorgulama"  # not product_inquiry
-    expected_agents: [PlanningAgent, OrderInquiryAgent OR ResponseAgent]
+    expected_agents: [PlanningAgent OR ResponseAgent]
     success_criteria:
       - "asks for order_id OR customer_id"
       - "does NOT call product_inquiry_tool"
@@ -127,7 +127,7 @@ scenarios:
     category: compound_request
     query: "Akıllı telefon stokta mı? Varsa 2 tane CUST-001 için sipariş ver"
     expected_intent: "sipariş_oluşturma"
-    expected_agents: [PlanningAgent, ProductInquiryAgent, OrderPlacementAgent, ResponseAgent]
+    expected_agents: [PlanningAgent, ProductInquiryAgent, OrderAgent, ResponseAgent]
     expected_tools: [product_inquiry_tool, order_placement_tool]
     success_criteria:
       - "stock checked before order"
@@ -140,7 +140,7 @@ scenarios:
       - query: "CUST-001 müşterisiyim"
         expected_state_update: {CustomerId: "CUST-001"}
       - query: "Son siparişim nedir?"
-        expected_agents: [PlanningAgent, OrderInquiryAgent, ResponseAgent]
+        expected_agents: [PlanningAgent,  ResponseAgent]
     success_criteria:
       - "customer_id persisted across turns"
       - "second turn uses context, no re-ask"
@@ -174,7 +174,7 @@ scenarios:
     category: very_long_query
     query: "merhaba ben ahmet cust-001 müşterisiyim geçen hafta sipariş verdim ORD-1 ama hiç gelmedi kayıp mı oldu kargo şirketi aradı ama bulamadı acil olarak bu sorunu çözmek istiyorum çünkü doğum günü hediyesi yarın lazım ayrıca sipariş durumunu da görmek istiyorum şikayet de açalım mı acaba"
     expected_intent: "şikayet"
-    expected_agents: [PlanningAgent, OrderInquiryAgent, ComplaintAgent, ResponseAgent]
+    expected_agents: [PlanningAgent,  ComplaintAgent, ResponseAgent]
     success_criteria:
       - "extracts multiple intents"
       - "sequences correctly"

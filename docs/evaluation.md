@@ -36,7 +36,7 @@ scenarios:
     input: "ORD-1 siparişimin durumu ne?"
     expected:
       intent: "order_inquiry"
-      agent: "OrderInquiryAgent"
+      agent: "OrderAgent"
       tools: ["order_status_tool"]
       responseContains: ["ORD-1"]
     criteria:

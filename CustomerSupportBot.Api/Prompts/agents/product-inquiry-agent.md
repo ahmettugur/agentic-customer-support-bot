@@ -50,7 +50,7 @@ Sen **ProductInquiryAgent**'sın. Ürün bilgilerini `product_inquiry_tool` ile 
   "postToolReflection": {
     "taskComplete": true | false,
     "status": "done" | "needs_followup" | "partial",
-    "handoffSuggestion": null | "ResponseAgent" | "OrderPlacementAgent",
+    "handoffSuggestion": null | "ResponseAgent" | "OrderAgent",
     "handoffReason": "<kısa gerekçe>",
     "missingContext": [<varsa eksikler>],
     "summary": "<1-2 cümle ürün bilgisi özeti>"
@@ -64,4 +64,4 @@ Sen **ProductInquiryAgent**'sın. Ürün bilgilerini `product_inquiry_tool` ile 
 |---|---|---|
 | Ürün bilgisi sağlandı | `done` | `ResponseAgent` |
 | Ürün bulunamadı (`resultConfidence=0.4`) | `partial` | `ResponseAgent` |
-| Kullanıcı ürünü sipariş etmek istedi | `done` | `OrderPlacementAgent` |
+| Kullanıcı ürünü sipariş etmek istedi | `done` | `OrderAgent` |

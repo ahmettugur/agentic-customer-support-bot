@@ -53,7 +53,7 @@ public class ReasoningResult
     public List<string> Assumptions { get; set; } = new();
 
     /// <summary>
-    /// Bir sonraki atılacak somut aksiyon (ör. "OrderInquiryAgent'e yönlendir",
+    /// Bir sonraki atılacak somut aksiyon (ör. "OrderAgent'e yönlendir",
     /// "kullanıcıdan customer_id iste", "ComplaintAgent'e escalate et").
     /// Ordered_plan'a temel oluşturur.
     /// </summary>

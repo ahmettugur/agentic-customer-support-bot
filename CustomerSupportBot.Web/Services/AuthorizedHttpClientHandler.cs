@@ -11,7 +11,8 @@ namespace CustomerSupportBot.Web.Services;
 public sealed class AuthorizedHttpClientHandler(
     AuthTokenStore store,
     AuthService authService,
-    NavigationManager nav) : DelegatingHandler
+    NavigationManager nav,
+    AppAuthStateProvider authState) : DelegatingHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
@@ -33,6 +34,7 @@ public sealed class AuthorizedHttpClientHandler(
         var refreshed = await authService.TryRefreshAsync();
         if (refreshed is null)
         {
+            authState.NotifyStateChanged();
             var returnTo = Uri.EscapeDataString(nav.Uri);
             nav.NavigateTo($"/login?return={returnTo}", forceLoad: false);
             return response;

@@ -182,7 +182,7 @@ if (lastMessage != null && IsSpecialistMessage(lastMessage))
 }
 ```
 
-**Dinamik handoff örneği**: OrderInquiryAgent sipariş bulamadı, kullanıcı "şikayet etmek istiyorum" dedi → specialist `handoffSuggestion=ComplaintAgent` üretebilir. ChatManager bunu görüp ComplaintAgent'a geçer. Ama **aynı ajana maksimum 2 kez** handoff yapılabilir — sonra zorla ResponseAgent'a düşer (ping-pong koruması).
+**Dinamik handoff örneği**: OrderAgent sipariş bulamadı, kullanıcı "şikayet etmek istiyorum" dedi → specialist `handoffSuggestion=ComplaintAgent` üretebilir. ChatManager bunu görüp ComplaintAgent'a geçer. Ama **aynı ajana maksimum 2 kez** handoff yapılabilir — sonra zorla ResponseAgent'a düşer (ping-pong koruması).
 
 ### 3. Katman: Varsayılan fallback
 
@@ -341,11 +341,11 @@ Tipik bir başarılı turda mesaj sırası:
 [2] (System) [ENTITY EXTRACTION] order_id=ORD-1, ÖNCELİK: order_status_tool kullan
 [3] (User)   "ORD-1 siparişim nerede?"
 ───────────────── Workflow başlar ─────────────────
-[4] (Asst: PlanningAgent)     ```json{"selectedAgent":"OrderInquiryAgent"...}``` 1. OrderInquiryAgent: …
-    ▸ ChatManager: plan.SelectedAgent=OrderInquiryAgent → ORA geç
-[5] (Asst: OrderInquiryAgent) ```json{"preToolCheck":{"canProceed":true}}``` + [ToolCall: order_status_tool(orderId=ORD-1)]
+[4] (Asst: PlanningAgent)     ```json{"selectedAgent":"OrderAgent"...}``` 1. OrderAgent: …
+    ▸ ChatManager: plan.SelectedAgent=OrderAgent → ORA geç
+[5] (Asst: OrderAgent) ```json{"preToolCheck":{"canProceed":true}}``` + [ToolCall: order_status_tool(orderId=ORD-1)]
 [6] (Tool)                    {"Success":true,"Data":{"orderId":"ORD-1","status":"Kargolandı"...}}
-[7] (Asst: OrderInquiryAgent) ```json{"postToolReflection":{"status":"done","handoffSuggestion":"ResponseAgent"}}``` + kısa özet
+[7] (Asst: OrderAgent) ```json{"postToolReflection":{"status":"done","handoffSuggestion":"ResponseAgent"}}``` + kısa özet
     ▸ ChatManager: reflection.status=done → ResponseAgent'a geç
 [8] (Asst: ResponseAgent)     "ORD-1 siparişiniz kargolandı…
                                TERMINATE: reason=completed"
@@ -396,7 +396,7 @@ private string ExtractResultFromOutput(WorkflowOutputEvent output)
 }
 ```
 
-`IsInternalRoutingMessage` — ajan adını içeren dahili mesajları yakalar (ör. "1. OrderInquiryAgent: …"). Bu mesajlar kullanıcıya gösterilmemeli — fallback olarak `RewriteRoutingMessageAsync` ile LLM'e yeniden yazdırılır.
+`IsInternalRoutingMessage` — ajan adını içeren dahili mesajları yakalar (ör. "1. OrderAgent: …"). Bu mesajlar kullanıcıya gösterilmemeli — fallback olarak `RewriteRoutingMessageAsync` ile LLM'e yeniden yazdırılır.
 
 ## Çıktı temizleme pipeline'ı
 

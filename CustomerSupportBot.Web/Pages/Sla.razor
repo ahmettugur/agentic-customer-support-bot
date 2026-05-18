@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @layout AdminLayout
 @inject SlaApiService SlaApi
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <link rel="stylesheet" href="css/sla.css" />
@@ -87,15 +88,35 @@
 </div>
 
 @code {
-    private SlaStatus?   _status;
-    private List<SlaEvent> _events = [];
+    private SlaStatus?     _status;
+    private List<SlaEvent> _events      = [];
     private bool           _autoRefresh = true;
+    private bool           _pageVisible = true;
     private Timer?         _timer;
+    private DotNetObjectReference<Sla>? _dotNetRef;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender) return;
+        _dotNetRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("eval", @"
+            window.__slaSetup = function(ref) {
+                window.__slaRef = ref;
+                document.addEventListener('visibilitychange', function() {
+                    if (window.__slaRef)
+                        window.__slaRef.invokeMethodAsync('OnVisibilityChange', !document.hidden).catch(function(){});
+                });
+            };");
+        await JS.InvokeVoidAsync("__slaSetup", _dotNetRef);
         await RefreshAsync();
         if (_autoRefresh) StartTimer();
+    }
+
+    [JSInvokable]
+    public async Task OnVisibilityChange(bool visible)
+    {
+        _pageVisible = visible;
+        if (visible && _autoRefresh) await RefreshAsync();
     }
 
     private async Task RefreshAsync()
@@ -108,8 +129,13 @@
     private void StartTimer()
     {
         _timer?.Dispose();
-        _timer = new Timer(async _ => await InvokeAsync(RefreshAsync),
-            null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        _timer = new Timer(async _ =>
+        {
+            if (!_pageVisible) return;
+            try { await InvokeAsync(RefreshAsync); }
+            catch (ObjectDisposedException) { }
+            catch (TaskCanceledException) { }
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
     private void OnAutoRefreshChanged()
@@ -120,6 +146,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        _dotNetRef?.Dispose();
         if (_timer is not null) await _timer.DisposeAsync();
     }
 

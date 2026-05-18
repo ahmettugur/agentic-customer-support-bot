@@ -60,7 +60,7 @@ dotnet run
 
 ### İlk akış denemesi
 
-1. Müşteri sayfasında "ORD-1 siparişim nerede?" yaz → `OrderInquiryAgent` çalışır.
+1. Müşteri sayfasında "ORD-1 siparişim nerede?" yaz → `OrderAgent` çalışır.
 2. Yeni sekmede `/admin.html` aç → "Traces" sekmesinden son trace'i gör.
 3. "Bir Dell XPS 15 sipariş edebilir miyim?" yaz → `order_placement_tool` onay bekler → admin "Approvals" sekmesinden onayla.
 
@@ -352,7 +352,7 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
 
 | Servis | Sorumluluk |
 |---|---|
-| `ParallelExecutionOptions` | `Enabled`, `MaxDegreeOfParallelism` (default 4), `ReadOnlyAgents` listesi (default: `ProductInquiryAgent`, `OrderInquiryAgent`) |
+| `ParallelExecutionOptions` | `Enabled`, `MaxDegreeOfParallelism` (default 4), `ReadOnlyAgents` listesi (default: `ProductInquiryAgent`, `OrderAgent`) |
 | `SubTaskOrchestrator.Partition()` | Sıralı `SubTask` listesini gruplara ayırır: aynı türde (read-only / write) ardı ardına gelen alt görevler tek grup. Sıra (1→2→3) korunur |
 | `CustomerSupportTeam.RunDecomposedAsync` | Her grup için `Task.WhenAll` (paralel) veya `foreach` (serial) kullanır. Paralel batch için `SemaphoreSlim` ile throttle. Streaming sürümünde sub-task delta'ları dış stream'e sızmaz; yalnızca status (`running`/`done`) eventleri ve son aggregate response yayınlanır |
 | Sıra korunması | Tüm gruplar arası sırayla yürütülür; aggregate output `SortedDictionary<int, string>` üzerinden `Order`'a göre toplanır — paralel batch'te bile deterministic |
@@ -558,7 +558,7 @@ Tipik bir chat akışının span hiyerarşisi:
 POST /chat/stream                 (ASP.NET Core instrumentation)
 └─ ai.chat.stream                 ← ReasoningChatClient (model=o-series)
 └─ agent.PlanningAgent
-└─ agent.OrderInquiryAgent
+└─ agent.OrderAgent
    └─ ai.chat                     ← standart IChatClient
    └─ tool.order_status_tool
 └─ agent.ResponseAgent

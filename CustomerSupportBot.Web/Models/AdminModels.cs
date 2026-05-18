@@ -45,8 +45,8 @@ public sealed record ActiveChatSession(
 );
 
 public sealed record ChatHistoryMessage(
-    string Role,
-    string Content,
+    string Sender,
+    string Text,
     DateTimeOffset Timestamp
 );
 

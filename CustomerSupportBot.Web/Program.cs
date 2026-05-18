@@ -8,6 +8,15 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
+if (builder.HostEnvironment.IsDevelopment())
+    builder.Logging.SetMinimumLevel(LogLevel.Debug);
+
+TaskScheduler.UnobservedTaskException += (_, args) =>
+{
+    Console.Error.WriteLine($"[UnobservedTaskException] {args.Exception}");
+    args.SetObserved();
+};
+
 // ── Auth ────────────────────────────────────────────────────────────────────
 builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<AuthTokenStore>();

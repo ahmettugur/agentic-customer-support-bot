@@ -1284,7 +1284,31 @@
     .analytics-summary { grid-template-columns: 1fr 1fr; }
 }
 
-/* ��� Utility classes (replaces inline styles) ��� */
+/* ─── Acknowledged escalation ─── */
+.card-acknowledged {
+    opacity: 0.75;
+    border-left: 3px solid var(--color-warning, #f59e0b);
+}
+
+.status-tag--acknowledged {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.assigned-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #92400e;
+    background: #fef3c7;
+    border: 1px solid #fcd34d;
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+/* ─── Utility classes (replaces inline styles) ─── */
 .tab-btn--link { text-decoration: none; }
 .improvements-stats {
     margin: 12px 0;

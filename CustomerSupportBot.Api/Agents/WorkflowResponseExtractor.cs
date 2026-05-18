@@ -144,7 +144,7 @@ public static class WorkflowResponseExtractor
 
     /// <summary>
     /// PlanningAgent'ın dahili yönlendirme mesajlarını tespit eder.
-    /// Örn: "OrderInquiryAgent: sipariş durumunu sorgulayın"
+    /// Örn: "OrderAgent: sipariş durumunu sorgulayın"
     /// </summary>
     public static bool ContainsAgentRoutingMessage(string text)
     {

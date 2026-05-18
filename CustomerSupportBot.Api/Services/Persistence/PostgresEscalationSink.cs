@@ -1,19 +1,24 @@
 // Services/Persistence/PostgresEscalationSink.cs
-// HITL — Hibrit cache + PostgreSQL eskalasyon kuyruğu.
+// HITL — Hibrit cache + PostgreSQL eskalasyon kuyruğu + Redis pub/sub.
 //
 // Davranış:
 //   - In-memory dictionary + RequestCreated/RequestDecided event'leri korunur.
 //   - Create: DB'ye INSERT + cache'e ekle + event fire.
 //   - Decide: state machine (EscalationStateFactory) cache üzerinde çalışır;
 //     başarılıysa DB UPDATE + event fire.
-//   - Cache lazy hydrate: tüm DB tablosu (in-memory'de 500 ring buffer yerine
-//     son N kayıt yüklenir; admin UI sadece açık + son 50 görüyor).
+//   - Cache lazy hydrate: son N kayıt yüklenir.
+//
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - Create/Decide sonrası Redis'e yayın yapılır.
+//   - Uzak pod'lar cache'i günceller ve lokal event'leri tetikler.
 
 using System.Collections.Concurrent;
+using System.Text.Json;
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Hitl;
 using CustomerSupportBot.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 namespace CustomerSupportBot.Api.Services.Persistence;
 
@@ -21,6 +26,8 @@ public sealed class PostgresEscalationSink : IEscalationSink
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresEscalationSink> _logger;
+    private readonly ISubscriber _sub;
+    private readonly string _nodeId = RedisNodeId.Value;
     private readonly ConcurrentDictionary<string, EscalationRequest> _byId = new();
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
@@ -32,10 +39,14 @@ public sealed class PostgresEscalationSink : IEscalationSink
 
     public PostgresEscalationSink(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
+        IConnectionMultiplexer redis,
         ILogger<PostgresEscalationSink> logger)
     {
         _dbFactory = dbFactory;
         _logger = logger;
+        _sub = redis.GetSubscriber();
+        _sub.Subscribe(RedisChannel.Literal("csbot:escalation:created"), OnRemoteCreated);
+        _sub.Subscribe(RedisChannel.Literal("csbot:escalation:decided"), OnRemoteDecided);
     }
 
     public EscalationRequest Create(EscalationRequest request)
@@ -58,6 +69,7 @@ public sealed class PostgresEscalationSink : IEscalationSink
         try { RequestCreated?.Invoke(this, request); }
         catch (Exception ex) { _logger.LogWarning(ex, "RequestCreated handler failed"); }
 
+        PublishRedis("csbot:escalation:created", request);
         return request;
     }
 
@@ -118,6 +130,7 @@ public sealed class PostgresEscalationSink : IEscalationSink
         try { RequestDecided?.Invoke(this, req); }
         catch (Exception ex) { _logger.LogWarning(ex, "RequestDecided handler failed"); }
 
+        PublishRedis("csbot:escalation:decided", req);
         return true;
     }
 
@@ -237,5 +250,66 @@ public sealed class PostgresEscalationSink : IEscalationSink
         _logger.LogInformation(
             "[HITL] Escalation cache hydrate: open={Open}, total={Total}",
             open.Count, _byId.Count);
+    }
+
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void OnRemoteCreated(RedisChannel _, RedisValue val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val.ToString());
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _nodeId) return;
+
+            var req = JsonSerializer.Deserialize<EscalationRequest>(
+                root.GetProperty("payload").GetRawText());
+            if (req is null) return;
+
+            _byId.TryAdd(req.Id, req);
+
+            try { RequestCreated?.Invoke(this, req); }
+            catch (Exception ex) { _logger.LogWarning(ex, "RequestCreated handler (remote) failed"); }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Redis OnRemoteEscalationCreated parse hatası");
+        }
+    }
+
+    private void OnRemoteDecided(RedisChannel _, RedisValue val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val.ToString());
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _nodeId) return;
+
+            var req = JsonSerializer.Deserialize<EscalationRequest>(
+                root.GetProperty("payload").GetRawText());
+            if (req is null) return;
+
+            _byId[req.Id] = req;
+
+            try { RequestDecided?.Invoke(this, req); }
+            catch (Exception ex) { _logger.LogWarning(ex, "RequestDecided handler (remote) failed"); }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Redis OnRemoteEscalationDecided parse hatası");
+        }
+    }
+
+    private void PublishRedis(string channel, EscalationRequest req)
+    {
+        try
+        {
+            var payload = new { nodeId = _nodeId, payload = req };
+            _sub.Publish(RedisChannel.Literal(channel), JsonSerializer.Serialize(payload));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Redis escalation publish başarısız: {Channel}", channel);
+        }
     }
 }

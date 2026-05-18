@@ -320,8 +320,7 @@ _workflow = AgentWorkflowBuilder
 ```md
 MEVCUT AJANLAR:
   - ProductInquiryAgent : Ürün soruları
-  - OrderPlacementAgent : Sipariş oluşturma
-  - OrderInquiryAgent   : Sipariş durumu/geçmişi
+  - OrderAgent          : Sipariş oluşturma + durum/geçmişi
   - ComplaintAgent      : Şikayet kaydı
   - BillingAgent        : Fatura sorguları ← yeni
   - ResponseAgent       : Kullanıcıya final yanıt
@@ -334,8 +333,7 @@ MEVCUT AJANLAR:
 private static readonly string[] SpecialistPrefixes =
 {
     "ProductInquiryAgent",
-    "OrderPlacementAgent",
-    "OrderInquiryAgent",
+    "OrderAgent",
     "ComplaintAgent",
     "BillingAgent"  // ← eklendi
 };
@@ -729,7 +727,7 @@ Compound query orkestrasyonunun 2+ subtask'lı bir sorguda doğru çalıştığ�
   category: "compound"
   query: "ORD-1 siparişim nerede ve ORD-2 için şikayet açmak istiyorum, ürün arızalı geldi"
   expected_intent: "compound"
-  expected_agents: ["PlanningAgent", "OrderInquiryAgent", "ResponseAgent", 
+  expected_agents: ["PlanningAgent", "OrderAgent", "ResponseAgent", 
                     "PlanningAgent", "ComplaintAgent", "ResponseAgent"]
   expected_tools: ["order_status_tool", "complaint_registration_tool"]
   success_criteria:
@@ -763,9 +761,9 @@ Chat UI'dan şu sorguyu deneyin:
 - **Agent indicator sırası**:
   ```
   Orchestrator (decomposing, subTaskCount=2)
-  SubTask#1 (running, targetAgent=OrderInquiryAgent)
+  SubTask#1 (running, targetAgent=OrderAgent)
     ├─ PlanningAgent
-    ├─ OrderInquiryAgent
+    ├─ OrderAgent
     └─ ResponseAgent
   SubTask#1 (done)
   SubTask#2 (running, targetAgent=ComplaintAgent)

@@ -3,7 +3,13 @@
 @layout AdminLayout
 @inject AdminApiService AdminApi
 @inject AnalyticsApiService AnalyticsApi
+@inject AuthTokenStore TokenStore
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthState
+@inject HttpClient Http
 @implements IAsyncDisposable
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
 
 <div class="admin-layout">
     @if (_errorMessage is not null)
@@ -23,8 +29,8 @@
                 </svg>
             </a>
             <div class="admin-header-info">
-                <h1>HITL Admin Panel</h1>
-                <p class="muted">Human-in-the-Loop · Onay bekleyen tool çağrıları &amp; açık eskalasyonlar</p>
+                <h1>@(_isAgent ? "Temsilci Paneli" : "HITL Admin Panel")</h1>
+                <p class="muted">@(_isAgent ? "Atanmış eskalasyonlar &amp; canlı sohbetler" : "Human-in-the-Loop · Onay bekleyen tool çağrıları &amp; açık eskalasyonlar")</p>
             </div>
         </div>
         <div class="admin-header-right">
@@ -46,32 +52,38 @@
 
     <!-- TABS -->
     <nav class="admin-tabs">
-        <button class="tab-btn @ActiveCls("approvals")" @onclick='() => SwitchTabAsync("approvals")'>
-            Onay Kuyruğu <span class="badge">@_pendingApprovals.Count</span>
-        </button>
+        @if (!_isAgent)
+        {
+            <button class="tab-btn @ActiveCls("approvals")" @onclick='() => SwitchTabAsync("approvals")'>
+                Onay Kuyruğu <span class="badge">@_pendingApprovals.Count</span>
+            </button>
+        }
         <button class="tab-btn @ActiveCls("escalations")" @onclick='() => SwitchTabAsync("escalations")'>
             Eskalasyonlar <span class="badge badge-warn">@_openEscalations.Count</span>
         </button>
         <button class="tab-btn @ActiveCls("chats")" @onclick='() => SwitchTabAsync("chats")'>
             Aktif Sohbetler <span class="badge badge-live">@_activeChats.Count</span>
         </button>
-        <button class="tab-btn @ActiveCls("history")" @onclick='() => SwitchTabAsync("history")'>
-            Geçmiş
-        </button>
-        <button class="tab-btn @ActiveCls("analytics")" @onclick='() => SwitchTabAsync("analytics")'>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
-            </svg>
-            Analytics
-        </button>
-        <button class="tab-btn @ActiveCls("improvements")" @onclick='() => SwitchTabAsync("improvements")'>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-            </svg>
-            Improvements <span class="badge">@_proposedLessons.Count</span>
-        </button>
-        <a class="tab-btn tab-btn--link" href="/replay" target="_blank">▶ Replay</a>
-        <a class="tab-btn tab-btn--link" href="/traces" target="_blank">🧭 Traces</a>
+        @if (!_isAgent)
+        {
+            <button class="tab-btn @ActiveCls("history")" @onclick='() => SwitchTabAsync("history")'>
+                Geçmiş
+            </button>
+            <button class="tab-btn @ActiveCls("analytics")" @onclick='() => SwitchTabAsync("analytics")'>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
+                </svg>
+                Analytics
+            </button>
+            <button class="tab-btn @ActiveCls("improvements")" @onclick='() => SwitchTabAsync("improvements")'>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                Improvements <span class="badge">@_proposedLessons.Count</span>
+            </button>
+            <a class="tab-btn tab-btn--link" href="/replay" target="_blank">▶ Replay</a>
+            <a class="tab-btn tab-btn--link" href="/traces" target="_blank">🧭 Traces</a>
+        }
     </nav>
 
     <!-- TAB CONTENT -->
@@ -100,7 +112,7 @@
                                 <div class="card-row"><span class="label">Session:</span> <code class="session-id">@ShortId(a.SessionId)</code></div>
                             </div>
                             <footer class="card-actions">
-                                <button class="btn-primary" @onclick='() => ShowPrompt(PromptKind.ApproveApproval, a.Id, "Onayla", "Onay notu (isteğe bağlı)")'>✓ Onayla</button>
+                                <button class="btn-primary" @onclick='() => ShowApprovePrompt(a)'>✓ Onayla</button>
                                 <button class="btn-danger"  @onclick='() => ShowPrompt(PromptKind.RejectApproval,  a.Id, "Reddet",  "Red sebebi (isteğe bağlı)")'>✗ Reddet</button>
                             </footer>
                         </article>
@@ -147,9 +159,17 @@
                         {
                             @foreach (var e in _openEscalations)
                             {
-                                <article class="card card-escalation">
+                                var isAcknowledged = e.Status is "acknowledged";
+                                <article class="card card-escalation @(isAcknowledged ? "card-acknowledged" : "")">
                                     <header class="card-header">
-                                        <div class="card-title"><span class="status-tag">@e.Status</span><code class="card-id">@ShortId(e.Id)</code></div>
+                                        <div class="card-title">
+                                            <span class="status-tag @(isAcknowledged ? "status-tag--acknowledged" : "")">@e.Status</span>
+                                            <code class="card-id">@ShortId(e.Id)</code>
+                                            @if (isAcknowledged && e.AssignedTo is not null)
+                                            {
+                                                <span class="assigned-badge" title="Bu eskalasyonu @e.AssignedTo üstlendi">👤 @e.AssignedTo</span>
+                                            }
+                                        </div>
                                         <time class="muted">@FmtRelative(e.CreatedAt)</time>
                                     </header>
                                     <div class="card-body">
@@ -159,8 +179,10 @@
                                         <div class="card-row"><span class="label">Kullanıcı:</span> <span class="user-query">@e.UserQuery</span></div>
                                     </div>
                                     <footer class="card-actions">
-                                        <button class="btn-secondary" @onclick='() => ShowPrompt(PromptKind.AckEscalation,     e.Id, "Atama Yap",       "Temsilci adı")'>📋 Atama Yap</button>
-                                        <button class="btn-primary"   @onclick="() => TakeoverAndChatAsync(e)">💬 Devral &amp; Sohbet</button>
+                                        <button class="btn-secondary" @onclick="() => ShowAssignModalAsync(e.Id)"
+                                                disabled="@isAcknowledged" title="@(isAcknowledged ? "Zaten üstlenildi" : null)">📋 Atama Yap</button>
+                                        <button class="btn-primary"   @onclick="() => TakeoverAndChatAsync(e)"
+                                                disabled="@isAcknowledged" title="@(isAcknowledged ? "Zaten üstlenildi" : null)">💬 Devral &amp; Sohbet</button>
                                         <button class="btn-secondary" @onclick='() => ShowPrompt(PromptKind.ReplanEscalation,  e.Id, "Yeniden Planla",   "Not (isteğe bağlı)")'>🔄 Yeniden Planla</button>
                                         <button class="btn-primary"   @onclick='() => ShowPrompt(PromptKind.ResolveEscalation, e.Id, "Çöz",              "Çözüm açıklaması")'>✓ Çöz</button>
                                         <button class="btn-danger"    @onclick='() => ShowPrompt(PromptKind.DismissEscalation, e.Id, "Dismiss",           "Dismiss sebebi")'>✗ Dismiss</button>
@@ -221,16 +243,22 @@
                                         <div class="chat-panel-subtitle">Temsilci: @_openChatSession.HumanAgent · Giriş: @FmtTs(_openChatSession.EnteredHumanModeAt)</div>
                                     </div>
                                 </div>
+                                @if (_sentimentLabel is not null)
+                                {
+                                    <span class="sentiment-badge sentiment-@_sentimentLabel.ToLowerInvariant()" title="Duygu skoru: @_sentimentScore.ToString("F2")">
+                                        @_sentimentLabel (@_sentimentScore.ToString("F1"))
+                                    </span>
+                                }
                                 <button class="btn-secondary" @onclick='() => ShowPrompt(PromptKind.ReplanChat, _openChatSession.SessionId, "Yeniden Planla", "Not (isteğe bağlı)")'>🔄 Yeniden Planla</button>
                                 <button class="btn-danger" @onclick="ReleaseChatAsync">Sohbeti Bitir</button>
                             </header>
-                            <div class="chat-panel-messages">
+                            <div class="chat-panel-messages" id="adminChatMessages">
                                 @if (_chatMessages.Count == 0) { <div class="empty-state">Henüz mesaj yok.</div> }
                                 @foreach (var m in _chatMessages)
                                 {
-                                    <div class="message-@(m.Role)" style="margin:6px 0">
-                                        <div class="message-bubble">@m.Content</div>
-                                        <div class="muted" style="font-size:10px">@FmtTs(m.Timestamp)</div>
+                                    <div class="chat-bubble @(m.Sender.ToLowerInvariant())">
+                                        @m.Text
+                                        <span class="chat-bubble-meta">@FmtTs(m.Timestamp)</span>
                                     </div>
                                 }
                             </div>
@@ -344,6 +372,7 @@
                     @(_miningInProgress ? "⏳ Taranıyor…" : "⚙️ Yeni Tarama Çalıştır")
                 </button>
             </div>
+            @if (_miningStats is not null) { <p class="muted" style="margin-bottom:12px;">@_miningStats</p> }
             <h3>Önerilen (Onay Bekleyen)</h3>
             <div class="cards-list">
                 @if (_proposedLessons.Count == 0) { <div class="empty-state">Henüz öneri yok. "Yeni Tarama Çalıştır" deyin.</div> }
@@ -359,6 +388,16 @@
                             <div class="card-body">
                                 <p style="margin:8px 0">@l.LessonText</p>
                                 @if (l.Observation is not null) { <p class="muted small"><em>Gözlem:</em> @l.Observation</p> }
+                                @if (l.SourceTraceIds is { Length: > 0 } ids)
+                                {
+                                    <p class="muted small">Kaynak trace'ler:
+                                        @foreach (var tid in ids.Take(3))
+                                        {
+                                            <a href="/replay?traceId=@Uri.EscapeDataString(tid)" target="_blank"><code>@tid[..Math.Min(8, tid.Length)]</code></a>@(" ")
+                                        }
+                                        @if (ids.Length > 3) { <span>(+@(ids.Length - 3))</span> }
+                                    </p>
+                                }
                             </div>
                             <footer class="card-footer">
                                 <button class="btn-primary" @onclick='() => ShowPrompt(PromptKind.ApproveLesson, l.Id, "Onayla", "Not (isteğe bağlı)")'>✅ Onayla</button>
@@ -382,7 +421,15 @@
                             </header>
                             <div class="card-body">
                                 <p style="margin:8px 0">@l.LessonText</p>
-                                @if (l.DecidedBy is not null) { <p class="muted small">@l.Status · @l.DecidedBy</p> }
+                                @if (l.Observation is not null) { <p class="muted small"><em>Gözlem:</em> @l.Observation</p> }
+                                @if (l.DecidedBy is not null)
+                                {
+                                    <p class="muted small">
+                                        @l.Status · @l.DecidedBy
+                                        @if (l.DecidedAt is not null) { <span> · @l.DecidedAt.Value.LocalDateTime.ToString("dd.MM.yyyy HH:mm")</span> }
+                                        @if (l.DecisionReason is not null) { <span> · @l.DecisionReason</span> }
+                                    </p>
+                                }
                             </div>
                         </article>
                     }
@@ -408,7 +455,49 @@
             </div>
             <footer class="modal-footer">
                 <button type="button" class="btn-secondary" @onclick="CancelPrompt">İptal</button>
-                <button type="button" class="btn-primary"   @onclick="ConfirmPromptAsync">Onayla</button>
+                <button type="button" class="btn-primary"   @onclick="ConfirmPromptAsync"
+                        disabled="@(_promptRequired && string.IsNullOrWhiteSpace(_promptInput))">Onayla</button>
+            </footer>
+        </div>
+    </div>
+}
+
+<!-- ASSIGN MODAL -->
+@if (_showAssignModal)
+{
+    <div class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal modal-prompt">
+            <header class="modal-header">
+                <h3>Temsilci Ata</h3>
+                <button type="button" class="btn-icon" @onclick="() => _showAssignModal = false">✕</button>
+            </header>
+            <div class="modal-body modal-prompt-body">
+                <label class="form-label">Temsilci seç</label>
+                @if (_assignAgents.Count > 0)
+                {
+                    <select class="form-control" @bind="_assignSelected">
+                        @foreach (var a in _assignAgents)
+                        {
+                            <option value="@a.Id" disabled="@(!a.IsActive)">
+                                @a.DisplayName — @a.Id@(!a.IsActive ? " (pasif)" : "")
+                            </option>
+                        }
+                    </select>
+                    <p class="muted small" style="margin-top:6px">Müşteri, seçilen temsilcinin üstlendiğini bilgilendirilir.</p>
+                }
+                else
+                {
+                    <input type="text" class="form-control" placeholder="Ör. agent-jdoe"
+                           @bind="_assignFallbackText" @bind:event="oninput" />
+                    <p class="muted small" style="margin-top:6px">Kayıtlı temsilci bulunamadı. Temsilci ID'sini elle girin.</p>
+                }
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-secondary" @onclick="() => _showAssignModal = false">İptal</button>
+                <button type="button" class="btn-primary"   @onclick="ConfirmAssignAsync"
+                        disabled="@(_assignAgents.Count == 0 && string.IsNullOrWhiteSpace(_assignFallbackText))">
+                    Atama Yap
+                </button>
             </footer>
         </div>
     </div>
@@ -428,9 +517,9 @@
                     @if (_transcriptMessages.Count == 0) { <div class="empty-state">Yükleniyor…</div> }
                     @foreach (var m in _transcriptMessages)
                     {
-                        <div class="message-@(m.Role)" style="margin:6px 0">
-                            <div class="message-bubble">@m.Content</div>
-                            <div class="muted" style="font-size:10px">@FmtTs(m.Timestamp)</div>
+                        <div class="chat-bubble @(m.Sender.ToLowerInvariant())">
+                            @m.Text
+                            <span class="chat-bubble-meta">@FmtTs(m.Timestamp)</span>
                         </div>
                     }
                 </div>
@@ -441,9 +530,16 @@
 
 @code {
     // ── State ──────────────────────────────────────────────────────────────────
-    private string _activeTab  = "approvals";
+    private string _activeTab   = "approvals";
     private bool   _autoRefresh = true;
     private Timer? _refreshTimer;
+    private bool   _isAgent;
+    private DotNetObjectReference<Admin>? _dotNetRef;
+
+    // ── Sentiment & SSE ───────────────────────────────────────────────────────
+    private string? _sentimentLabel;
+    private double  _sentimentScore;
+    private Timer?  _sentimentTimer;
 
     private List<ApprovalRequest>    _pendingApprovals   = [];
     private List<ApprovalRequest>    _historyApprovals   = [];
@@ -458,16 +554,31 @@
     private List<LessonProposal>     _proposedLessons    = [];
     private List<LessonProposal>     _approvedLessons    = [];
     private bool                     _miningInProgress;
+    private string?                  _miningStats;
     private string?                  _errorMessage;
 
     // ── Prompt modal ───────────────────────────────────────────────────────────
-    private enum PromptKind { None, ApproveApproval, RejectApproval, AckEscalation, ResolveEscalation, DismissEscalation, ReplanEscalation, ReplanChat, ApproveLesson, RejectLesson }
+    private enum PromptKind { None, ApproveApproval, RejectApproval, ResolveEscalation, DismissEscalation, ReplanEscalation, ReplanChat, ApproveLesson, RejectLesson, TakeoverChat }
     private PromptKind _promptKind;
     private string     _promptId    = string.Empty;
     private string     _promptTitle = string.Empty;
     private string     _promptLabel = string.Empty;
     private string     _promptInput = string.Empty;
     private bool       _showPromptModal;
+    private bool       _promptRequired;
+
+    // Yüksek riskli tool'lar — backend ile senkron (WellKnown.HighRiskTools)
+    private static readonly HashSet<string> HighRiskTools = ["order_placement_tool", "complaint_registration_tool"];
+
+    // ── Takeover pending state ──────────────────────────────────────────────────
+    private EscalationRequest? _pendingTakeoverEsc;
+
+    // ── Assign modal ───────────────────────────────────────────────────────────
+    private bool             _showAssignModal;
+    private string           _assignEscalationId = string.Empty;
+    private List<AgentInfo>  _assignAgents       = [];
+    private string           _assignSelected     = string.Empty;
+    private string           _assignFallbackText = string.Empty;
 
     // ── Transcript modal ───────────────────────────────────────────────────────
     private bool                     _showTranscriptModal;
@@ -477,8 +588,22 @@
     // ── Lifecycle ──────────────────────────────────────────────────────────────
     protected override async Task OnInitializedAsync()
     {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        _isAgent = state.User.FindFirst(ClaimTypes.Role)?.Value == "Agent";
+        if (_isAgent) _activeTab = "escalations";
+
+        await RefreshBadgesAsync();
         await RefreshActiveTabAsync();
         if (_autoRefresh) StartAutoRefresh();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _dotNetRef = DotNetObjectReference.Create(this);
+        var token   = await TokenStore.GetAccessTokenAsync() ?? "";
+        var apiBase = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        await JS.InvokeVoidAsync("eval", AdminChatBridgeScript(token, apiBase));
     }
 
     // ── Tabs ──────────────────────────────────────────────────────────────────
@@ -491,46 +616,87 @@
     }
 
     // ── Refresh ───────────────────────────────────────────────────────────────
+
+    // Badge sayaçları: her refresh tick'inde tüm sekmelerin sayaçları güncellenir.
+    private async Task RefreshBadgesAsync()
+    {
+        try
+        {
+            var approvals   = AdminApi.GetPendingApprovalsAsync();
+            var escalations = AdminApi.GetOpenEscalationsAsync();
+            var chats       = AdminApi.GetActiveChatsAsync();
+            await Task.WhenAll(approvals, escalations, chats);
+            _pendingApprovals = approvals.Result;
+            _openEscalations  = escalations.Result;
+            _activeChats      = chats.Result;
+        }
+        catch { /* badge hatalarını sessizce geç */ }
+    }
+
     private async Task RefreshActiveTabAsync()
     {
-        switch (_activeTab)
+        try
         {
-            case "approvals":
-                _pendingApprovals = await AdminApi.GetPendingApprovalsAsync();
-                break;
-            case "escalations":
-                _openEscalations   = await AdminApi.GetOpenEscalationsAsync();
-                var recent         = await AdminApi.GetRecentEscalationsAsync(30);
-                _closedEscalations = recent.Where(e => e.Status is "resolved" or "dismissed").ToList();
-                break;
-            case "chats":
-                _activeChats = await AdminApi.GetActiveChatsAsync();
-                if (_openChatSession is not null)
-                    _chatMessages = await AdminApi.GetChatHistoryAsync(_openChatSession.SessionId);
-                break;
-            case "analytics":
-                _analytics = await AnalyticsApi.GetDashboardAsync();
-                break;
-            case "history":
-                _historyApprovals   = await AdminApi.GetRecentApprovalsAsync(50);
-                _historyEscalations = await AdminApi.GetRecentEscalationsAsync(50);
-                break;
-            case "improvements":
-                _proposedLessons = await AdminApi.GetLessonsAsync("Proposed");
-                _approvedLessons = await AdminApi.GetLessonsAsync("Approved");
-                break;
+            switch (_activeTab)
+            {
+                case "approvals":
+                    _pendingApprovals = await AdminApi.GetPendingApprovalsAsync();
+                    break;
+                case "escalations":
+                    _openEscalations   = await AdminApi.GetOpenEscalationsAsync();
+                    var recent         = await AdminApi.GetRecentEscalationsAsync(30);
+                    _closedEscalations = recent.Where(e => e.Status is "resolved" or "dismissed").ToList();
+                    break;
+                case "chats":
+                    _activeChats = await AdminApi.GetActiveChatsAsync();
+                    if (_openChatSession is not null)
+                        _chatMessages = await AdminApi.GetChatHistoryAsync(_openChatSession.SessionId);
+                    break;
+                case "analytics":
+                    _analytics = await AnalyticsApi.GetDashboardAsync();
+                    break;
+                case "history":
+                    _historyApprovals   = await AdminApi.GetRecentApprovalsAsync(50);
+                    _historyEscalations = await AdminApi.GetRecentEscalationsAsync(50);
+                    break;
+                case "improvements":
+                    _proposedLessons = await AdminApi.GetLessonsAsync("Proposed");
+                    _approvedLessons = await AdminApi.GetLessonsAsync("Approved");
+                    break;
+            }
+            _errorMessage = null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _errorMessage = ex.StatusCode.HasValue
+                ? $"API hatası ({(int)ex.StatusCode.Value}): {ex.Message}"
+                : $"API'ye bağlanılamadı: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Beklenmeyen hata: {ex.Message}";
         }
     }
 
     // ── Prompt modal ──────────────────────────────────────────────────────────
-    private void ShowPrompt(PromptKind kind, string id, string title, string label)
+    private void ShowPrompt(PromptKind kind, string id, string title, string label, bool required = false)
     {
-        _promptKind  = kind;
-        _promptId    = id;
-        _promptTitle = title;
-        _promptLabel = label;
-        _promptInput = string.Empty;
+        _promptKind     = kind;
+        _promptId       = id;
+        _promptTitle    = title;
+        _promptLabel    = label;
+        _promptInput    = string.Empty;
+        _promptRequired = required;
         _showPromptModal = true;
+    }
+
+    private void ShowApprovePrompt(ApprovalRequest a)
+    {
+        var required = HighRiskTools.Contains(a.ToolName);
+        var label = required
+            ? "Onay gerekçesi (zorunlu — yüksek riskli işlem)"
+            : "Onay notu (isteğe bağlı)";
+        ShowPrompt(PromptKind.ApproveApproval, a.Id, "Onayla", label, required);
     }
 
     private void CancelPrompt() { _showPromptModal = false; }
@@ -540,17 +706,43 @@
         _showPromptModal = false;
         var v = _promptInput;
         _promptInput = string.Empty;
-        switch (_promptKind)
+        try
         {
-            case PromptKind.ApproveApproval:    await AdminApi.ApproveAsync(_promptId, v); break;
-            case PromptKind.RejectApproval:     await AdminApi.RejectAsync(_promptId, v); break;
-            case PromptKind.AckEscalation:      await AdminApi.AcknowledgeAsync(_promptId, v); break;
-            case PromptKind.ResolveEscalation:  await AdminApi.ResolveEscalationAsync(_promptId, v); break;
-            case PromptKind.DismissEscalation:  await AdminApi.DismissAsync(_promptId, v); break;
-            case PromptKind.ReplanEscalation:   await AdminApi.ReplanEscalationAsync(_promptId, v); break;
-            case PromptKind.ReplanChat:         await AdminApi.ReplanChatAsync(_promptId, v); break;
-            case PromptKind.ApproveLesson:      await AdminApi.ApproveLessonAsync(_promptId, v); break;
-            case PromptKind.RejectLesson:       await AdminApi.RejectLessonAsync(_promptId, v); break;
+            switch (_promptKind)
+            {
+                case PromptKind.ApproveApproval:    await AdminApi.ApproveAsync(_promptId, v); break;
+                case PromptKind.RejectApproval:     await AdminApi.RejectAsync(_promptId, v); break;
+                case PromptKind.ResolveEscalation:  await AdminApi.ResolveEscalationAsync(_promptId, v); break;
+                case PromptKind.DismissEscalation:  await AdminApi.DismissAsync(_promptId, v); break;
+                case PromptKind.ReplanEscalation:
+                    await AdminApi.ReplanEscalationAsync(_promptId, v);
+                    if (_openChatSession is not null) { StopChatPanel(); _openChatSession = null; _chatMessages = []; _sentimentLabel = null; }
+                    break;
+                case PromptKind.ReplanChat:
+                    await AdminApi.ReplanChatAsync(_promptId, v);
+                    StopChatPanel(); _openChatSession = null; _chatMessages = []; _sentimentLabel = null;
+                    break;
+                case PromptKind.TakeoverChat:
+                    if (_pendingTakeoverEsc is not null)
+                    {
+                        var esc = _pendingTakeoverEsc;
+                        _pendingTakeoverEsc = null;
+                        await DoTakeoverAsync(esc, string.IsNullOrWhiteSpace(v) ? null : v);
+                    }
+                    break;
+                case PromptKind.ApproveLesson:      await AdminApi.ApproveLessonAsync(_promptId, v); break;
+                case PromptKind.RejectLesson:       await AdminApi.RejectLessonAsync(_promptId, v); break;
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _errorMessage = ex.StatusCode.HasValue
+                ? $"İşlem başarısız (HTTP {(int)ex.StatusCode.Value}): {ex.Message}"
+                : $"API'ye bağlanılamadı: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Beklenmeyen hata: {ex.Message}";
         }
         await RefreshActiveTabAsync();
     }
@@ -560,9 +752,26 @@
     {
         if (e.SessionId is null) return;
         _errorMessage = null;
+
+        if (_isAgent)
+        {
+            // Agent: backend JWT claim'den DisplayName alır, doğrudan devral
+            await DoTakeoverAsync(e, agentName: null);
+        }
+        else
+        {
+            // Admin: temsilci adı istemek için prompt göster
+            _pendingTakeoverEsc = e;
+            ShowPrompt(PromptKind.TakeoverChat, e.SessionId, "Sohbeti Devral", "Temsilci adınız");
+        }
+    }
+
+    private async Task DoTakeoverAsync(EscalationRequest e, string? agentName)
+    {
+        if (e.SessionId is null) return;
         try
         {
-            await AdminApi.TakeoverAsync(e.SessionId, "admin");
+            await AdminApi.TakeoverAsync(e.SessionId, agentName ?? "admin");
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.BadRequest)
         {
@@ -572,7 +781,7 @@
         }
         _activeChats = await AdminApi.GetActiveChatsAsync();
         var session  = _activeChats.FirstOrDefault(s => s.SessionId == e.SessionId)
-                       ?? new ActiveChatSession(e.SessionId, "admin", 0, null, null, DateTimeOffset.UtcNow);
+                       ?? new ActiveChatSession(e.SessionId, agentName ?? "admin", 0, null, null, DateTimeOffset.UtcNow);
         await OpenChatPanelAsync(session);
         await SwitchTabAsync("chats");
     }
@@ -580,8 +789,12 @@
     // ── Chat panel ─────────────────────────────────────────────────────────────
     private async Task OpenChatPanelAsync(ActiveChatSession s)
     {
+        StopChatPanel();
         _openChatSession = s;
         _chatMessages    = await AdminApi.GetChatHistoryAsync(s.SessionId);
+        try { await JS.InvokeVoidAsync("__adminSubscribeChat", _dotNetRef, s.SessionId); } catch { }
+        await RefreshSentimentAsync();
+        StartSentimentTimer(s.SessionId);
     }
 
     private async Task SendChatMessageAsync()
@@ -590,16 +803,103 @@
         var text = _chatInput.Trim();
         _chatInput = string.Empty;
         await AdminApi.SendChatMessageAsync(_openChatSession.SessionId, text);
-        _chatMessages = await AdminApi.GetChatHistoryAsync(_openChatSession.SessionId);
+        _chatMessages.Add(new ChatHistoryMessage("Admin", text, DateTimeOffset.UtcNow));
+        await ScrollChatToBottomAsync();
     }
 
     private async Task ReleaseChatAsync()
     {
         if (_openChatSession is null) return;
         await AdminApi.ReleaseAsync(_openChatSession.SessionId);
+        StopChatPanel();
         _openChatSession = null;
         _chatMessages    = [];
+        _sentimentLabel  = null;
         _activeChats     = await AdminApi.GetActiveChatsAsync();
+    }
+
+    private void StopChatPanel()
+    {
+        _sentimentTimer?.Dispose();
+        _sentimentTimer = null;
+        _ = JS.InvokeVoidAsync("__adminStopChat").AsTask()
+              .ContinueWith(t => { if (t.IsFaulted) Console.Error.WriteLine($"[StopChat] {t.Exception}"); },
+                            TaskContinuationOptions.OnlyOnFaulted);
+    }
+
+    // ── SSE bridge_message callback ───────────────────────────────────────────
+    [JSInvokable]
+    public async Task OnChatEvent(string type, string data)
+    {
+        if (type != "bridge_message" || _openChatSession is null) return;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(data);
+            var root = doc.RootElement;
+            var sender  = root.TryGetProperty("sender",    out var s) ? s.GetString() ?? "user" : "user";
+            var text    = root.TryGetProperty("text",      out var t) ? t.GetString() ?? "" : "";
+            var tsRaw   = root.TryGetProperty("timestamp", out var ts) ? ts.GetString() : null;
+            var stamp   = DateTimeOffset.TryParse(tsRaw, out var dt) ? dt : DateTimeOffset.UtcNow;
+            await InvokeAsync(() =>
+            {
+                _chatMessages.Add(new ChatHistoryMessage(sender, text, stamp));  // sender comes from bridge_message JSON
+                StateHasChanged();
+                _ = ScrollChatToBottomAsync().ContinueWith(t =>
+                    { if (t.IsFaulted) Console.Error.WriteLine($"[ScrollChat] {t.Exception}"); },
+                    TaskContinuationOptions.OnlyOnFaulted);
+            });
+        }
+        catch { }
+    }
+
+    // ── Sentiment ─────────────────────────────────────────────────────────────
+    private void StartSentimentTimer(string sessionId)
+    {
+        _sentimentTimer = new Timer(async _ =>
+        {
+            try
+            {
+                await RefreshSentimentAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (ObjectDisposedException) { }
+            catch (TaskCanceledException) { }
+            catch (Exception ex) { Console.Error.WriteLine($"[SentimentTimer] {ex}"); }
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private async Task RefreshSentimentAsync()
+    {
+        if (_openChatSession is null) return;
+        var s = await AdminApi.GetSentimentAsync(_openChatSession.SessionId);
+        if (s is null) return;
+        _sentimentLabel = s.Sentiment;
+        _sentimentScore = s.Score;
+    }
+
+    private async Task ScrollChatToBottomAsync()
+    {
+        try { await JS.InvokeVoidAsync("eval", "var el=document.getElementById('adminChatMessages');if(el)el.scrollTop=el.scrollHeight;"); }
+        catch { }
+    }
+
+    // ── Assign modal ──────────────────────────────────────────────────────────
+    private async Task ShowAssignModalAsync(string escalationId)
+    {
+        _assignEscalationId = escalationId;
+        _assignAgents       = await AdminApi.GetAgentsAsync();
+        _assignSelected     = _assignAgents.FirstOrDefault(a => a.IsActive)?.Id ?? string.Empty;
+        _assignFallbackText = string.Empty;
+        _showAssignModal    = true;
+    }
+
+    private async Task ConfirmAssignAsync()
+    {
+        _showAssignModal = false;
+        var assignedTo = _assignAgents.Count > 0 ? _assignSelected : _assignFallbackText.Trim();
+        if (string.IsNullOrWhiteSpace(assignedTo)) return;
+        await AdminApi.AcknowledgeAsync(_assignEscalationId, assignedTo);
+        await RefreshActiveTabAsync();
     }
 
     // ── Transcript modal ───────────────────────────────────────────────────────
@@ -615,7 +915,9 @@
     private async Task MineImprovementsAsync()
     {
         _miningInProgress = true;
-        await AdminApi.MineImprovementsAsync();
+        _miningStats      = null;
+        var (candidates, proposed, error) = await AdminApi.MineImprovementsAsync();
+        _miningStats      = $"Son tarama: {candidates} aday → {proposed} yeni öneri{(error is not null ? " · HATA: " + error : "")}";
         _miningInProgress = false;
         _proposedLessons  = await AdminApi.GetLessonsAsync("Proposed");
     }
@@ -648,11 +950,21 @@
     private void StartAutoRefresh()
     {
         _refreshTimer?.Dispose();
-        _refreshTimer = new Timer(async _ => await InvokeAsync(async () =>
+        _refreshTimer = new Timer(async _ =>
         {
-            await RefreshActiveTabAsync();
-            StateHasChanged();
-        }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+            try
+            {
+                await InvokeAsync(async () =>
+                {
+                    await RefreshBadgesAsync();
+                    await RefreshActiveTabAsync();
+                    StateHasChanged();
+                });
+            }
+            catch (ObjectDisposedException) { }
+            catch (TaskCanceledException) { }
+            catch (Exception ex) { Console.Error.WriteLine($"[AutoRefresh] {ex}"); }
+        }, null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
     }
 
     private void OnAutoRefreshChanged()
@@ -663,8 +975,28 @@
 
     public async ValueTask DisposeAsync()
     {
+        StopChatPanel();
+        _dotNetRef?.Dispose();
         if (_refreshTimer is not null) await _refreshTimer.DisposeAsync();
     }
+
+    // ── JS Bridge ─────────────────────────────────────────────────────────────
+    private static string AdminChatBridgeScript(string token, string apiBase) => $@"
+window.__adminToken   = {System.Text.Json.JsonSerializer.Serialize(token)};
+window.__adminApiBase = {System.Text.Json.JsonSerializer.Serialize(apiBase)};
+window.__adminSubscribeChat = function(ref, sessionId) {{
+    if (window.__adminChatEs) {{ window.__adminChatEs.close(); window.__adminChatEs = null; }}
+    var url = window.__adminApiBase + '/chat-sessions/' + encodeURIComponent(sessionId) + '/subscribe?access_token=' + encodeURIComponent(window.__adminToken);
+    var es = new EventSource(url);
+    window.__adminChatEs = es;
+    es.addEventListener('bridge_message', function(e) {{
+        ref.invokeMethodAsync('OnChatEvent', 'bridge_message', e.data || '{{}}').catch(function(){{}});
+    }});
+    es.onerror = function() {{}};
+}};
+window.__adminStopChat = function() {{
+    if (window.__adminChatEs) {{ window.__adminChatEs.close(); window.__adminChatEs = null; }}
+}};";
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private static string ShortId(string? id) =>

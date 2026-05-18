@@ -102,7 +102,7 @@ CustomerId: CUST-001, Phase: inquiry, TurnCount: 3
   "requiredInfo": [],
   "rationale": "Kullanıcı net bir sipariş numarası verdi, clarification gerekmiyor.",
   "assumptions": ["Kullanıcının bu siparişin sahibi olduğu"],
-  "nextAction": "OrderInquiryAgent'e yönlendir",
+  "nextAction": "OrderAgent'e yönlendir",
   "decisionReason": "ComplaintAgent alternatif değil çünkü şikayet iması yok.",
   "confidenceScore": 0.92
 }
@@ -138,7 +138,7 @@ Aşağıdaki ön-analiz kullanıcı sorgusu üzerinde yapıldı. …
 - Ön-tahmin edilen niyet: sipariş_sorgulama
 - Önerilen adımlar: order_status_tool çağır → durumu ilet
 - Gerekli olduğu tahmin edilen bilgiler:
-- Önerilen sonraki aksiyon: OrderInquiryAgent'e yönlendir
+- Önerilen sonraki aksiyon: OrderAgent'e yönlendir
 
 ÖNEMLİ KURALLAR:
   - Clarification sorusu üreteceksen …
@@ -190,11 +190,11 @@ Bu sayede reasoning katmanı down olsa bile workflow çalışmaya devam eder —
   "detectedIntent": "sipariş_sorgulama",
   "intentConfidence": 0.95,
   "supportingEvidence": ["siparişim nerede", "ORD-1"],
-  "selectedAgent": "OrderInquiryAgent",
+  "selectedAgent": "OrderAgent",
   "rationale": "Net sipariş numarası + durum sorgusu niyeti.",
   "alternativesRejected": [
     { "agent": "ComplaintAgent", "reason": "Şikayet iması yok." },
-    { "agent": "OrderPlacementAgent", "reason": "Yeni sipariş değil, sorgu." }
+    { "agent": "OrderAgent", "reason": "Yeni sipariş değil, sorgu." }
   ],
   "needsClarification": false,
   "clarificationQuestion": null,
@@ -228,7 +228,7 @@ if (plan.NeedsClarification || plan.IntentConfidence < 0.7)
 **Çıktı modeli**: `Models/SpecialistReasoning.cs`
 **Parser**: `Services/SpecialistReasoningParser.cs`
 
-Her specialist (ProductInquiry, OrderPlacement, OrderInquiry, Complaint) tool çağrısı **etrafında** iki JSON bloğu üretir:
+Her specialist (ProductInquiry, Order, Complaint) tool çağrısı **etrafında** iki JSON bloğu üretir:
 
 ### 3a — Pre-tool check
 
@@ -379,9 +379,9 @@ Ping-pong azaltır, kullanıcı deneyimi iyileşir, token tasarrufu sağlar.
 
 - `IdExtractor` → `order_id=ORD-1` deterministik olarak çıkarır
 - Hint mesajı: "order_id VAR → order_status_tool kullan, customer_id İSTEME"
-- Reasoning (o4-mini): `intent=sipariş_sorgulama, requiredInfo=[], nextAction=OrderInquiryAgent'e yönlendir`
-- Planning (gpt-4o): `selectedAgent=OrderInquiryAgent, needsClarification=false`
-- OrderInquiryAgent: `order_status_tool(ORD-1)` → direkt tool çağırır
+- Reasoning (o4-mini): `intent=sipariş_sorgulama, requiredInfo=[], nextAction=OrderAgent'e yönlendir`
+- Planning (gpt-4o): `selectedAgent=OrderAgent, needsClarification=false`
+- OrderAgent: `order_status_tool(ORD-1)` → direkt tool çağırır
 
 Ajan "hangi aracı seçmeliyim?" diye tereddüt etmez.
 
@@ -503,7 +503,7 @@ Reasoning prompt'u ayrıca buna uygun **grounding kuralları** içerir:
 **Önceki hal**:
 
 ```json
-"steps": ["Adım 1: order_id çıkardım", "Adım 2: OrderInquiryAgent'a yönlendirdim"]
+"steps": ["Adım 1: order_id çıkardım", "Adım 2: OrderAgent'a yönlendirdim"]
 ```
 
 **Yeni hal**:
@@ -521,7 +521,7 @@ Reasoning prompt'u ayrıca buna uygun **grounding kuralları** içerir:
   },
   {
     "order": 2,
-    "description": "ORD-1 için OrderInquiryAgent'a yönlendir",
+    "description": "ORD-1 için OrderAgent'a yönlendir",
     "action": "route",
     "premise": "order_id mevcut ve VERIFIED",
     "grounding": "DB",
@@ -568,7 +568,7 @@ Her kural ayrı bir `IReasoningSanityRule` implementasyonudur (Strategy pattern)
 |---|---|---|---|---|
 | 1 | `OverconfidentClarificationRule` | `overconfident_clarification` | warn | `confidenceScore >= 0.7` AMA `nextAction` clarification istiyor |
 | 2 | `RedundantRequiredInfoRule` | `redundant_required_info` | **error** | `requiredInfo`'da VERIFIED entity var (→ ping-pong) |
-| 3 | `IntentActionMismatchRule` | `intent_action_mismatch` | warn | Intent ile seçilen agent çelişiyor (ör. intent=şikayet + action=OrderInquiry) |
+| 3 | `IntentActionMismatchRule` | `intent_action_mismatch` | warn | Intent ile seçilen agent çelişiyor (ör. intent=şikayet + action=OrderAgent) |
 | 4 | `LowConfidenceNoMissingRule` | `low_confidence_no_missing` | info | `confidenceScore < 0.5` AMA `requiredInfo=[]` (neden düşük güven?) |
 | 5 | `AssumptionHeavyStepsRule` | `assumption_based_step` | info | Bir veya daha fazla step'te `grounding=assumption` |
 | 6 | `OverconfidentAssumptionsRule` | `overconfident_assumptions` | warn | `confidenceScore >= 0.8` AMA `assumptions.Count >= 3` |
@@ -623,7 +623,7 @@ Reasoning modelinin `subTasks[]` alanında query'yi ayrıştırması:
 ```json
 "subTasks": [
   { "order": 1, "intent": "sipariş_sorgulama", "description": "ORD-1 için durum sorgula",
-    "targetAgent": "OrderInquiryAgent", "entities": { "order_id": "ORD-1" }, "dependencies": [] },
+    "targetAgent": "OrderAgent", "entities": { "order_id": "ORD-1" }, "dependencies": [] },
   { "order": 2, "intent": "şikayet", "description": "ORD-2 için şikayet aç",
     "targetAgent": "ComplaintAgent", "entities": { "order_id": "ORD-2" }, "dependencies": [] }
 ]
@@ -642,7 +642,7 @@ Reasoning modelinin `subTasks[]` alanında query'yi ayrıştırması:
 
 ```
 - ⚠️ COMPOUND QUERY: 2 alt göreve ayrıştırıldı. PlanningAgent olarak her birini SIRAYLA aynı yanıtta yönlendir:
-    1. OrderInquiryAgent: ORD-1 için sipariş durumu sorgula [order_id=ORD-1]
+    1. OrderAgent: ORD-1 için sipariş durumu sorgula [order_id=ORD-1]
     2. ComplaintAgent: ORD-2 için şikayet aç [order_id=ORD-2]
 ```
 

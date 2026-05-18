@@ -1,21 +1,26 @@
 // Services/Persistence/PostgresChatBridge.cs
-// HITL Live Takeover — Hibrit Channel<> + PostgreSQL history.
+// HITL Live Takeover — Hibrit Channel<> + PostgreSQL history + Redis pub/sub.
 //
-// Davranış (in-memory ile aynı API):
-//   - Channel<ChatBridgeMessage> per abone — süreç-içi pub/sub aynen.
+// Davranış:
+//   - Channel<ChatBridgeMessage> per abone — süreç-içi pub/sub.
 //   - History kalıcılığı: BotTyping hariç tüm mesajlar DB'ye INSERT edilir.
 //   - In-memory history buffer (ring 200) hâlâ var; restart'ta DB'den yüklenir.
 //   - Reset: DB'deki kayıtları silmiyoruz (audit). Sadece in-memory state'i temizler.
 //
-// Faz 2 sonrası (Redis): Channel yerine Redis Pub/Sub → cross-instance broadcast.
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - Her Broadcast çağrısı Redis'e yayın yapar.
+//   - Uzak pod Redis mesajını alır ve kendi lokal Channel'larına iletir.
+//   - DB yazımı yalnızca orijinal pod tarafından yapılır; uzak işleyici sadece broadcast eder.
 
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Threading.Channels;
 using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Api.Infrastructure.Persistence.Entities.Chat;
 using CustomerSupportBot.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 namespace CustomerSupportBot.Api.Services.Persistence;
 
@@ -25,6 +30,8 @@ public sealed class PostgresChatBridge : IChatBridge
 
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresChatBridge> _logger;
+    private readonly ISubscriber _sub;
+    private readonly string _nodeId = RedisNodeId.Value;
 
     private readonly ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> _toAdmin = new();
     private readonly ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> _toUser = new();
@@ -33,75 +40,60 @@ public sealed class PostgresChatBridge : IChatBridge
 
     public PostgresChatBridge(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
+        IConnectionMultiplexer redis,
         ILogger<PostgresChatBridge> logger)
     {
         _dbFactory = dbFactory;
         _logger = logger;
+        _sub = redis.GetSubscriber();
+        _sub.Subscribe(RedisChannel.Literal("csbot:bridge:touser"), OnRemoteBridgeToUser);
+        _sub.Subscribe(RedisChannel.Literal("csbot:bridge:toadmin"), OnRemoteBridgeToAdmin);
     }
 
     // ─── Publish ───
 
     public void PublishUserMessage(string sessionId, string text)
     {
-        var msg = new ChatBridgeMessage
-        {
-            SessionId = sessionId,
-            Sender = ChatBridgeSender.User,
-            Text = text
-        };
+        var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.User, Text = text };
         Append(sessionId, msg);
         Broadcast(_toAdmin, sessionId, msg);
+        PublishRedis("csbot:bridge:toadmin", msg);
     }
 
     public void PublishAdminMessage(string sessionId, string humanAgent, string text)
     {
-        var msg = new ChatBridgeMessage
-        {
-            SessionId = sessionId,
-            Sender = ChatBridgeSender.Admin,
-            HumanAgent = humanAgent,
-            Text = text
-        };
+        var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.Admin, HumanAgent = humanAgent, Text = text };
         Append(sessionId, msg);
         Broadcast(_toUser, sessionId, msg);
+        PublishRedis("csbot:bridge:touser", msg);
     }
 
     public void PublishSystemMessage(string sessionId, string text)
     {
-        var msg = new ChatBridgeMessage
-        {
-            SessionId = sessionId,
-            Sender = ChatBridgeSender.System,
-            Text = text
-        };
+        var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.System, Text = text };
         Append(sessionId, msg);
         Broadcast(_toAdmin, sessionId, msg);
         Broadcast(_toUser, sessionId, msg);
+        PublishRedis("csbot:bridge:toadmin", msg);
+        PublishRedis("csbot:bridge:touser", msg);
     }
 
     public void PublishBotMessage(string sessionId, string text)
     {
-        var msg = new ChatBridgeMessage
-        {
-            SessionId = sessionId,
-            Sender = ChatBridgeSender.Bot,
-            Text = text
-        };
+        var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.Bot, Text = text };
         Append(sessionId, msg);
         Broadcast(_toUser, sessionId, msg);
         Broadcast(_toAdmin, sessionId, msg);
+        PublishRedis("csbot:bridge:touser", msg);
+        PublishRedis("csbot:bridge:toadmin", msg);
     }
 
     public void PublishBotTyping(string sessionId, bool on)
     {
         // Transient — DB'ye yazılmaz.
-        var msg = new ChatBridgeMessage
-        {
-            SessionId = sessionId,
-            Sender = ChatBridgeSender.BotTyping,
-            Text = on ? "on" : "off"
-        };
+        var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.BotTyping, Text = on ? "on" : "off" };
         Broadcast(_toUser, sessionId, msg);
+        PublishRedis("csbot:bridge:touser", msg);
     }
 
     public void RecordBotExchange(string sessionId, string userQuery, string botResponse)
@@ -300,6 +292,71 @@ public sealed class PostgresChatBridge : IChatBridge
                     Timestamp = e.CreatedAt
                 });
             }
+        }
+    }
+
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void OnRemoteBridgeToUser(RedisChannel _, RedisValue val) =>
+        OnRemoteBridge(_toUser, val);
+
+    private void OnRemoteBridgeToAdmin(RedisChannel _, RedisValue val) =>
+        OnRemoteBridge(_toAdmin, val);
+
+    private void OnRemoteBridge(
+        ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> registry,
+        RedisValue val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val.ToString());
+            var root = doc.RootElement;
+
+            // nodeId field'ı varsa ve bu pod'dan geldiyse atla
+            if (root.TryGetProperty("nodeId", out var nid) && nid.GetString() == _nodeId) return;
+
+            var sessionId = root.GetProperty("SessionId").GetString()!;
+            var senderStr = root.GetProperty("Sender").GetString() ?? "System";
+            var sender = Enum.TryParse<ChatBridgeSender>(senderStr, ignoreCase: true, out var s)
+                ? s : ChatBridgeSender.System;
+
+            var msg = new ChatBridgeMessage
+            {
+                Id = root.TryGetProperty("Id", out var id) ? id.GetString() ?? Guid.NewGuid().ToString("N")[..12] : Guid.NewGuid().ToString("N")[..12],
+                SessionId = sessionId,
+                Sender = sender,
+                Text = root.GetProperty("Text").GetString() ?? "",
+                HumanAgent = root.TryGetProperty("HumanAgent", out var ha) && ha.ValueKind != JsonValueKind.Null ? ha.GetString() : null,
+                Timestamp = root.TryGetProperty("Timestamp", out var ts) ? ts.GetDateTime() : DateTime.UtcNow
+            };
+
+            Broadcast(registry, sessionId, msg);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Bridge] Redis OnRemoteBridge parse hatası");
+        }
+    }
+
+    private void PublishRedis(string channel, ChatBridgeMessage msg)
+    {
+        try
+        {
+            var payload = new
+            {
+                nodeId = _nodeId,
+                msg.Id,
+                msg.SessionId,
+                Sender = msg.Sender.ToString(),
+                msg.Text,
+                msg.HumanAgent,
+                msg.Timestamp
+            };
+            _sub.Publish(RedisChannel.Literal(channel), JsonSerializer.Serialize(payload));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Bridge] Redis publish başarısız: {Channel}", channel);
         }
     }
 }

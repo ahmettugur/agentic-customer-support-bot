@@ -38,7 +38,7 @@ Tüm tool'lar `{ success, confidence, message, data, error }` döner.
 |---|---|---|
 | `success=true` (placement) | `done` | `data.orderId`'yi `resultNotes`'ta kullanıcıya ilet |
 | `success=true` (inquiry) | `done` | `data.orderId/status/quantity` kullan |
-| `error.code=STOCK_INSUFFICIENT` | `failed` | Kullanıcıya stok bilgisi ver |
+| `error.code=STOCK_INSUFFICIENT` | `failed` | Kullanıcıya stok bilgisi ver, alternatif ürün öner |
 | `error.code=PRODUCT_NOT_FOUND` | `partial` | Alternatif ürün öner |
 | `error.code=ORDER_NOT_FOUND` | `partial` | `resultConfidence=0.4` |
 | `error.code=NO_ORDERS_FOR_CUSTOMER` | `partial` | *"kayıt yok"* bilgisi ver |
@@ -86,7 +86,8 @@ Tüm tool'lar `{ success, confidence, message, data, error }` döner.
 | Sipariş bulundu | `done` | `ResponseAgent` |
 | Sipariş bulunamadı | `partial` | `ResponseAgent` |
 | Eksik parametre | `needs_followup` | `ResponseAgent` |
-| Tool hatası | `failed` | `ResponseAgent` |
-| Stok/ödeme sistem sorunu | `needs_escalation` | `ResponseAgent` |
+| Tool hatası (genel, beklenmeyen hata) | `failed` | `ResponseAgent` |
+| `STOCK_INSUFFICIENT` — stok yetersiz | `failed` | `ResponseAgent` |
+| Ödeme/sistem sorunu | `needs_escalation` | `ResponseAgent` |
 | Kullanıcı sipariş sonrası şikayet bildirdi | — | `ComplaintAgent` |
 | Kullanıcı sipariş sonrası ürün bilgisi sordu | — | `ProductInquiryAgent` |

@@ -32,7 +32,7 @@ public class SubTask
 
     /// <summary>
     /// Bu alt görevi yürütecek specialist agent adı
-    /// (ör. "OrderInquiryAgent", "ComplaintAgent").
+    /// (ör. "OrderAgent", "ComplaintAgent").
     /// </summary>
     public string TargetAgent { get; set; } = "";
 

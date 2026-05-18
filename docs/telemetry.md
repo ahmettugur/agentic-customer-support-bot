@@ -71,7 +71,7 @@ POST /chat/stream                          (ASP.NET Core instrumentation)
 │   tags: ai.model, ai.provider, ai.tokens.input/output, ai.cost.usd, ai.duration.ms
 ├─ agent.PlanningAgent
 │   tags: agent.name, session.id, trace.id
-├─ agent.OrderInquiryAgent
+├─ agent.OrderAgent
 │   ├─ ai.chat                             ← standart IChatClient
 │   └─ tool.order_status_tool
 │       tags: tool.name, session.id

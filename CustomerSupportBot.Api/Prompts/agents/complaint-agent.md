@@ -69,7 +69,7 @@ Sen **ComplaintAgent**'sın. Şikayetleri `complaint_registration_tool` ile kayd
 |---|---|---|
 | Şikayet başarıyla kaydedildi | `done` | `ResponseAgent` |
 | Eksik zorunlu alan (`order_id` / `description`) | `needs_followup` | `ResponseAgent` |
-| `error.code=ORDER_NOT_FOUND` | `partial` | `OrderInquiryAgent` (sipariş no'yu doğrulat) |
+| `error.code=ORDER_NOT_FOUND` | `partial` | `OrderAgent` (sipariş no'yu doğrulat) |
 | `error.category=validation` (diğer) | `needs_followup` | `ResponseAgent` |
 | Tool beklenmeyen hata (`error.code=INTERNAL`) | `failed` | `ResponseAgent` |
 | İade/değişim talebi açıkça istendi | `needs_escalation` | `ResponseAgent` (insan desteği) |

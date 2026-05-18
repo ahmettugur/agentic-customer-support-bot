@@ -26,6 +26,7 @@
 //   GET  /agent/profile                           → Kendi agent profilim
 
 using System.Security.Claims;
+using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Routing;
@@ -119,6 +120,58 @@ public static class AgentPanelEndpoints
             registry.DecrementLoad(agentId);
 
             return Results.Ok(new { id, status = "resolved", assignedTo = agentId });
+        });
+
+        // ─── Yeniden Planla ───
+        group.MapPost("/escalations/{id}/replan",
+            (string id,
+             ReplanInput? body,
+             HttpContext ctx,
+             IEscalationSink sink,
+             ISessionManager sessions,
+             IChatModeRegistry registry,
+             IChatBridge bridge,
+             CustomerSupportTeam team,
+             ReasoningService reasoningService,
+             IApprovalContextAccessor approvalContext,
+             ILoggerFactory loggerFactory) =>
+        {
+            var esc = sink.Get(id);
+            if (esc == null) return Results.NotFound(new { error = "Escalation bulunamıyor." });
+            if (string.IsNullOrEmpty(esc.SessionId))
+                return Results.BadRequest(new { error = "Eskalasyona bağlı bir session yok." });
+
+            var session = sessions.GetSession(esc.SessionId);
+            if (session == null)
+                return Results.NotFound(new { error = "Session bulunamadı." });
+
+            var agentId = GetLinkedAgentId(ctx)
+                ?? ctx.User.FindFirstValue(ClaimTypes.Name)
+                ?? WellKnown.Defaults.Admin;
+            var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy) ? agentId : body!.RequestedBy!;
+            var note = string.IsNullOrWhiteSpace(body?.Note) ? null : body!.Note!.Trim();
+
+            session.State.ForceReplanNextTurn = true;
+            session.State.ReplanRequestedBy = requestedBy;
+            session.State.ReplanRequestedAt = DateTime.UtcNow;
+            session.State.ReplanNote = note;
+            sessions.UpdateSession(session);
+
+            sink.Decide(id, WellKnown.EscalationActions.Resolve,
+                assignedTo: requestedBy,
+                resolution: note ?? WellKnown.FallbackMessages.ReplanResolution);
+
+            var releasedFromHuman = false;
+            if (registry.GetMode(esc.SessionId) == ChatMode.Human)
+                releasedFromHuman = registry.Release(esc.SessionId);
+
+            bridge.PublishSystemMessage(esc.SessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
+
+            _ = AdminEndpoints.RunReplanBotTurnAsync(
+                esc.SessionId, sessions, bridge, team, reasoningService,
+                approvalContext, loggerFactory.CreateLogger("ReplanBotRun"));
+
+            return Results.Json(new { id, sessionId = esc.SessionId, status = "replan_queued", requestedBy, releasedFromHuman });
         });
 
         // ─── Reddet ───
@@ -321,6 +374,62 @@ public static class AgentPanelEndpoints
                 score = state.SentimentScore,
                 consecutiveNegative = state.ConsecutiveNegativeTurns
             });
+        });
+
+        // ─── Yeniden Planla (chat-sessions) ───
+        group.MapPost("/chat-sessions/{sid}/replan",
+            (string sid,
+             ReplanInput? body,
+             HttpContext ctx,
+             ISessionManager sessions,
+             IEscalationSink escalationSink,
+             IChatModeRegistry registry,
+             IChatBridge bridge,
+             CustomerSupportTeam team,
+             ReasoningService reasoningService,
+             IApprovalContextAccessor approvalContext,
+             ILoggerFactory loggerFactory) =>
+        {
+            var session = sessions.GetSession(sid);
+            if (session == null)
+                return Results.NotFound(new { error = "Session bulunamadı." });
+
+            var agentId = GetLinkedAgentId(ctx)
+                ?? ctx.User.FindFirstValue(ClaimTypes.Name)
+                ?? WellKnown.Defaults.Admin;
+            var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy) ? agentId : body!.RequestedBy!;
+            var note = string.IsNullOrWhiteSpace(body?.Note) ? null : body!.Note!.Trim();
+
+            session.State.ForceReplanNextTurn = true;
+            session.State.ReplanRequestedBy = requestedBy;
+            session.State.ReplanRequestedAt = DateTime.UtcNow;
+            session.State.ReplanNote = note;
+            sessions.UpdateSession(session);
+
+            var resolved = 0;
+            foreach (var esc in escalationSink.GetOpen())
+            {
+                if (esc.SessionId == sid)
+                {
+                    var ok = escalationSink.Decide(esc.Id,
+                        WellKnown.EscalationActions.Resolve,
+                        assignedTo: requestedBy,
+                        resolution: note ?? WellKnown.FallbackMessages.ReplanResolution);
+                    if (ok) resolved++;
+                }
+            }
+
+            var releasedFromHuman = false;
+            if (registry.GetMode(sid) == ChatMode.Human)
+                releasedFromHuman = registry.Release(sid);
+
+            bridge.PublishSystemMessage(sid, WellKnown.FallbackMessages.ReplanCustomerNotice);
+
+            _ = AdminEndpoints.RunReplanBotTurnAsync(
+                sid, sessions, bridge, team, reasoningService,
+                approvalContext, loggerFactory.CreateLogger("ReplanBotRun"));
+
+            return Results.Json(new { sessionId = sid, status = "replan_queued", requestedBy, escalationsResolved = resolved, releasedFromHuman });
         });
 
         // ─── SSE — müşteri mesajlarını dinle ───

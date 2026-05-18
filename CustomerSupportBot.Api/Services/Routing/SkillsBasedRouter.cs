@@ -138,7 +138,7 @@ public class SkillsBasedRouter : ISkillsBasedRouter
                 result.Add("complaint");
             else if (agentName.Contains("OrderPlacement", StringComparison.OrdinalIgnoreCase))
                 result.Add("order");
-            else if (agentName.Contains("OrderInquiry", StringComparison.OrdinalIgnoreCase))
+            else if (agentName.Contains("Order", StringComparison.OrdinalIgnoreCase))
                 result.Add("order");
             else if (agentName.Contains("Product", StringComparison.OrdinalIgnoreCase))
                 result.Add("product");

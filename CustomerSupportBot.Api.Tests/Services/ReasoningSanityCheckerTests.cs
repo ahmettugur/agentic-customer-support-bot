@@ -76,14 +76,14 @@ public class ReasoningSanityCheckerTests
 
     // ─── IntentActionMismatchRule ───
     [Fact]
-    public void IntentActionMismatch_ComplaintIntentVsOrderInquiryAction_Warns()
+    public void IntentActionMismatch_ComplaintIntentVsOrderAction_Warns()
     {
         var rule = new IntentActionMismatchRule();
         var issues = new List<ReasoningIssue>();
         rule.Apply(new ReasoningResult
         {
             Intent = WellKnown.Intents.Complaint,
-            NextAction = "OrderInquiryAgent'e yönlendir"
+            NextAction = "OrderAgent'e yönlendir"
         }, new VerifiedEntities(), issues);
 
         issues.Should().ContainSingle().Which.Code.Should().Be("intent_action_mismatch");
@@ -189,7 +189,7 @@ public class ReasoningSanityCheckerTests
         };
         rule.Apply(new ReasoningResult
         {
-            NextAction = "OrderInquiryAgent'e yönlendir"
+            NextAction = "OrderAgent'e yönlendir"
         }, verified, issues);
 
         issues.Should().ContainSingle().Which.Severity.Should().Be(IssueSeverity.Error);
@@ -225,10 +225,10 @@ public class ReasoningSanityCheckerTests
         {
             SubTasks = new()
             {
-                new SubTask { Order = 1, TargetAgent = "OrderInquiryAgent" },
+                new SubTask { Order = 1, TargetAgent = "OrderAgent" },
                 new SubTask { Order = 2, TargetAgent = "ComplaintAgent" }
             },
-            NextAction = "orderinquiryagent'e yönlendir"
+            NextAction = "orderagent'e yönlendir"
         }, new VerifiedEntities(), issues);
 
         issues.Should().ContainSingle().Which.Code.Should().Be("subtasks_ignored");
@@ -241,7 +241,7 @@ public class ReasoningSanityCheckerTests
         var issues = new List<ReasoningIssue>();
         rule.Apply(new ReasoningResult
         {
-            SubTasks = new() { new SubTask { Order = 1, TargetAgent = "OrderInquiryAgent" } }
+            SubTasks = new() { new SubTask { Order = 1, TargetAgent = "OrderAgent" } }
         }, new VerifiedEntities(), issues);
         issues.Should().BeEmpty();
     }

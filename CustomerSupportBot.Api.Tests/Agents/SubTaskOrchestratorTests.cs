@@ -26,8 +26,8 @@ public class SubTaskOrchestratorTests
         {
             SubTasks = new()
             {
-                new SubTask { TargetAgent = "OrderInquiryAgent" },
-                new SubTask { TargetAgent = "OrderInquiryAgent" }
+                new SubTask { TargetAgent = "OrderAgent" },
+                new SubTask { TargetAgent = "OrderAgent" }
             }
         };
         SubTaskOrchestrator.IsCompoundQuery(r).Should().BeFalse();
@@ -40,7 +40,7 @@ public class SubTaskOrchestratorTests
         {
             SubTasks = new()
             {
-                new SubTask { TargetAgent = "OrderInquiryAgent" },
+                new SubTask { TargetAgent = "OrderAgent" },
                 new SubTask { TargetAgent = "ComplaintAgent" }
             }
         };

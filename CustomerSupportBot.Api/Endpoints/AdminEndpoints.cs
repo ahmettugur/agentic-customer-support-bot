@@ -466,7 +466,7 @@ public static class AdminEndpoints
     /// koştur, bot yanıtını bridge üzerinden müşteriye Bot mesajı olarak yayınla.
     /// Müşteri yeni mesaj yazmasa bile bot otomatik konuşmaya devam eder.
     /// </summary>
-    private static async Task RunReplanBotTurnAsync(
+    internal static async Task RunReplanBotTurnAsync(
         string sessionId,
         ISessionManager sessions,
         IChatBridge bridge,

@@ -41,7 +41,7 @@ Bu dokümanda sistemde uygulanan **agentic design pattern'leri** haritalanır. H
 **Gerçekleme**:
 
 - **Planner**: `PlanningAgent` — tool yok, sadece routing JSON üretir
-- **Executors**: 4 specialist ajan (ProductInquiry, OrderPlacement, OrderInquiry, Complaint) — hepsi tool kullanır
+- **Executors**: 3 specialist ajan (ProductInquiry, Order, Complaint) — hepsi tool kullanır
 
 **Dosya**: `@Agents/CustomerSupportTeam.cs:60-101`
 
@@ -69,7 +69,7 @@ User query → PlanningAgent (plan üret) → Specialist (tool çağır) → Res
 {
   "detectedIntent": "sipariş_sorgulama",
   "intentConfidence": 0.95,
-  "selectedAgent": "OrderInquiryAgent",
+  "selectedAgent": "OrderAgent",
   "alternativesRejected": [
     { "agent": "ComplaintAgent", "reason": "şikayet iması yok" }
   ]
@@ -398,7 +398,7 @@ public string Render(string key, IDictionary<string, string?>? vars);
   category: "sipariş_sorgulama"
   query: "ORD-1 siparişim nerede?"
   expected_intent: "sipariş_sorgulama"
-  expected_agents: ["PlanningAgent", "OrderInquiryAgent", "ResponseAgent"]
+  expected_agents: ["PlanningAgent", "OrderAgent", "ResponseAgent"]
   expected_tools: ["order_status_tool"]
   success_criteria:
     - type: "response_contains"
@@ -488,7 +488,7 @@ Tespit edilen her issue `result.SanityIssues` listesine eklenir, trace'e yazıl�
 ```json
 "subTasks": [
   { "order": 1, "intent": "sipariş_sorgulama", "description": "ORD-1 için durum sorgula",
-    "targetAgent": "OrderInquiryAgent", "entities": { "order_id": "ORD-1" }, "dependencies": [] },
+    "targetAgent": "OrderAgent", "entities": { "order_id": "ORD-1" }, "dependencies": [] },
   { "order": 2, "intent": "şikayet", "description": "ORD-2 için şikayet aç",
     "targetAgent": "ComplaintAgent", "entities": { "order_id": "ORD-2" }, "dependencies": [] }
 ]

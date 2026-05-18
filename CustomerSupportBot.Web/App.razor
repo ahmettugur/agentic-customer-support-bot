@@ -1,15 +1,37 @@
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
         <Found Context="routeData">
-            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
-                <NotAuthorized>
-                    <RedirectToLogin />
-                </NotAuthorized>
-                <Authorizing>
-                    <p class="muted" style="padding:2rem;">Yetkilendiriliyor…</p>
-                </Authorizing>
-            </AuthorizeRouteView>
-            <FocusOnNavigate RouteData="@routeData" Selector="h1"/>
+            <ErrorBoundary @ref="_errorBoundary">
+                <ChildContent>
+                    <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                        <NotAuthorized>
+                            <RedirectToLogin />
+                        </NotAuthorized>
+                        <Authorizing>
+                            <p class="muted" style="padding:2rem;">Yetkilendiriliyor…</p>
+                        </Authorizing>
+                    </AuthorizeRouteView>
+                    <FocusOnNavigate RouteData="@routeData" Selector="h1"/>
+                </ChildContent>
+                <ErrorContent Context="ex">
+                    <div style="padding:2rem;font-family:monospace;">
+                        <h2 style="color:#dc2626;">⚠ Beklenmeyen Hata</h2>
+                        <p><strong>@ex.GetType().Name:</strong> @ex.Message</p>
+                        <pre style="background:#f3f4f6;padding:1rem;border-radius:6px;font-size:12px;overflow:auto;max-height:300px;">@ex.StackTrace</pre>
+                        <button onclick="window.location.reload()" style="margin-top:1rem;padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;">
+                            Sayfayı Yenile
+                        </button>
+                        <button @onclick="ResetError" style="margin-top:1rem;margin-left:8px;padding:8px 16px;background:#fff;border:1px solid #d1d5db;border-radius:4px;cursor:pointer;">
+                            Hatayı Kapat
+                        </button>
+                    </div>
+                </ErrorContent>
+            </ErrorBoundary>
         </Found>
     </Router>
 </CascadingAuthenticationState>
+
+@code {
+    private ErrorBoundary? _errorBoundary;
+    private void ResetError() => _errorBoundary?.Recover();
+}

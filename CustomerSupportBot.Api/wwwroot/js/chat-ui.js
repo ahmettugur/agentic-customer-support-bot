@@ -700,8 +700,7 @@ class ChatUI {
         const map = {
             "PlanningAgent": "Planlama Ajanı",
             "ProductInquiryAgent": "Ürün Ajanı",
-            "OrderPlacementAgent": "Sipariş Ajanı",
-            "OrderInquiryAgent": "Sipariş Sorgu Ajanı",
+            "OrderAgent": "Sipariş Ajanı",
             "ComplaintAgent": "Şikayet Ajanı",
             "ResponseAgent": "Yanıt Ajanı",
             "Orchestrator": "Orkestratör"

@@ -171,7 +171,7 @@ TERMINATE: reason=<completed|awaiting_user_input|escalation_needed|not_found|err
     "tone": "appropriate" | "too_formal" | "too_casual" | "robotic" | "impolite",
     "completeness": 0.0-1.0,
     "hallucinationRisk": 0.0-1.0,
-    "sources": [<"OrderInquiryAgent.resultNotes", vb>],
+    "sources": [<"OrderAgent.resultNotes", vb>],
     "issuesFound": [<varsa sorunlar>],
     "revisionNeeded": true | false,
     "revisionNotes": "<yanıt nasıl iyileştirilirdi>"
@@ -189,7 +189,7 @@ TERMINATE: reason=<completed|awaiting_user_input|escalation_needed|not_found|err
   > - Uydurma sipariş/müşteri/ürün/şikayet numarası **yasak**.
   > - *"Metin hazırlayayım"*, *"teslim süresini hesaplayım"*, *"kargo takip numarası verebilirim"* gibi **olmayan capability vaadi** → `hallucinationRisk ≥ 0.7`, `revisionNeeded=true`.
   > - *"Tekrar hoş geldin"* gibi konuşma geçmişi varsayımı → `hallucinationRisk ≥ 0.4`.
-- **`sources`** — Beslendiğin kaynakları belirt (ör. `OrderInquiryAgent.resultNotes`).
+- **`sources`** — Beslendiğin kaynakları belirt (ör. `OrderAgent.resultNotes`).
 - **`issuesFound`** — Yanıtta robotik kalıp, "talebiniz işleme alındı" vb. ifade, eksik empati (olumsuz sonuçta), ping-pong sorgu, capability vaadi, uzun yanıt (>4 cümle / >200 kelime) gördüysen ekle.
 - **`revisionNeeded`** — `hallucinationRisk ≥ 0.5` veya `addressesUserQuery=false` veya `completeness < 0.7` veya `tone ∈ {"robotic", "impolite"}` ise **mutlaka `true`**.
 
@@ -199,6 +199,6 @@ TERMINATE: reason=<completed|awaiting_user_input|escalation_needed|not_found|err
 Merhaba! ORD-1 numaralı siparişiniz teslim edildi.
 TERMINATE: reason=completed
 ```json
-{"selfCritique": {"addressesUserQuery": true, "tone": "appropriate", "completeness": 0.95, "hallucinationRisk": 0.0, "sources": ["OrderInquiryAgent.resultNotes"], "issuesFound": [], "revisionNeeded": false, "revisionNotes": ""}}
+{"selfCritique": {"addressesUserQuery": true, "tone": "appropriate", "completeness": 0.95, "hallucinationRisk": 0.0, "sources": ["OrderAgent.resultNotes"], "issuesFound": [], "revisionNeeded": false, "revisionNotes": ""}}
 ```
 ````
