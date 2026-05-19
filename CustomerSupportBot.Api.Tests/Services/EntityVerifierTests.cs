@@ -1,7 +1,6 @@
 // Tests/Services/EntityVerifierTests.cs
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;

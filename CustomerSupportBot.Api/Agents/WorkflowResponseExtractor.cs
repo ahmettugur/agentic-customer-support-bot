@@ -4,7 +4,7 @@
 
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Domain.Services;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 

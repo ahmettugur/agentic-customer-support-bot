@@ -20,7 +20,6 @@ using System.Text.RegularExpressions;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Application.Ports.Driven.Locking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;

@@ -29,8 +29,8 @@ public class ReasoningMessageBuilderTests
         var session = new AgentSession { SessionId = "s1" };
         var history = new List<ChatMessage>
         {
-            new(ChatRole.User, "geçmiþ soru"),
-            new(ChatRole.Assistant, "geçmiþ cevap")
+            new(ChatRole.User, "geÃ§miÅŸ soru"),
+            new(ChatRole.Assistant, "geÃ§miÅŸ cevap")
         };
 
         var msgs = builder.Build("yeni", session, history, new VerifiedEntities());
@@ -38,7 +38,7 @@ public class ReasoningMessageBuilderTests
         msgs.Should().HaveCount(4);
         msgs[0].Role.Should().Be(ChatRole.System);
         msgs[1].Role.Should().Be(ChatRole.User);
-        msgs[1].Text.Should().Be("geçmiþ soru");
+        msgs[1].Text.Should().Be("geÃ§miÅŸ soru");
         msgs[3].Text.Should().Be("yeni");
     }
 

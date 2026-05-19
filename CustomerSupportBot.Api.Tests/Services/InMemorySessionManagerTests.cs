@@ -1,9 +1,6 @@
 // Tests/Services/InMemorySessionManagerTests.cs
 
-using CustomerSupportBot.Adapters.Persistence.InMemory;
-using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Locking;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.Options;
 
@@ -49,7 +46,7 @@ public class InMemorySessionManagerTests
     public void AddExchange_BuildsHistory()
     {
         _mgr.AddExchange("s1", "merhaba", "selam");
-        _mgr.AddExchange("s1", "yardým", "tabii");
+        _mgr.AddExchange("s1", "yardï¿½m", "tabii");
 
         var history = _mgr.GetHistory("s1");
         history.Should().HaveCount(4);
@@ -66,7 +63,7 @@ public class InMemorySessionManagerTests
     [Fact]
     public void ExtractAndUpdateState_CapturesCustomerId()
     {
-        _mgr.AddExchange("s1", "ben CUST-1990 müþteriyim", "merhaba");
+        _mgr.AddExchange("s1", "ben CUST-1990 mï¿½ï¿½teriyim", "merhaba");
         var s = _mgr.GetSession("s1");
         s!.State.CustomerId.Should().Be("CUST-1990");
     }
@@ -74,7 +71,7 @@ public class InMemorySessionManagerTests
     [Fact]
     public void ExtractAndUpdateState_CapturesOrderId()
     {
-        _mgr.AddExchange("s1", "ORD-1 nerede?", "sipariþiniz yolda");
+        _mgr.AddExchange("s1", "ORD-1 nerede?", "sipariï¿½iniz yolda");
         var s = _mgr.GetSession("s1");
         s!.State.CollectedInfo.Should().ContainKey("LastMentionedOrderId");
     }
@@ -100,10 +97,10 @@ public class InMemorySessionManagerTests
     public void AppendAssistantMessage_AppendsToHistory()
     {
         _mgr.GetOrCreateSession("s1");
-        _mgr.AppendAssistantMessage("s1", "agent yanýtý");
+        _mgr.AppendAssistantMessage("s1", "agent yanï¿½tï¿½");
         var h = _mgr.GetHistory("s1");
         h.Should().HaveCount(1);
-        h[0].Text.Should().Be("agent yanýtý");
+        h[0].Text.Should().Be("agent yanï¿½tï¿½");
     }
 
     [Fact]

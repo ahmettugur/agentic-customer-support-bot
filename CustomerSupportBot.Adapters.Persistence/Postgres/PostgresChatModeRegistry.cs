@@ -16,7 +16,6 @@ using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Application.Ports.Driven.Locking;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 using Microsoft.Extensions.Logging;

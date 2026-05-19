@@ -2,7 +2,6 @@
 
 using System.Collections.Concurrent;
 using CustomerSupportBot.Domain.Model.Improvement;
-using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.InMemory;
 

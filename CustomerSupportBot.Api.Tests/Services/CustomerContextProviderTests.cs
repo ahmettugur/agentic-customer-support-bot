@@ -32,8 +32,8 @@ public class CustomerContextProviderTests
         session.State.CustomerId = "CUST-1990";
         var ctx = await _provider.GetContextAsync(session);
         ctx.Should().NotBeNull();
-        ctx!.Should().Contain("CUST-1990");
-        ctx.Should().Contain("Toplam sipariþ");
+        ctx.Should().Contain("CUST-1990");
+        ctx.Should().Contain("Toplam sipariï¿½");
     }
 
     [Fact]
@@ -43,6 +43,6 @@ public class CustomerContextProviderTests
         session.State.CustomerId = "CUST-NOTEXIST";
         var ctx = await _provider.GetContextAsync(session);
         ctx.Should().NotBeNull();
-        ctx!.Should().Contain("Kayýtlý sipariþ bulunamadý");
+        ctx.Should().Contain("Kayï¿½tlï¿½ sipariï¿½ bulunamadï¿½");
     }
 }

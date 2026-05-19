@@ -7,9 +7,9 @@
 //   POST /improvements/{id}/reject  — reddet
 //   GET  /improvements/{id}         — tek lesson detayı
 
+using CustomerSupportBot.Application.Services.Improvement;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Improvement;
-using CustomerSupportBot.Api.Services.Improvement;
 
 namespace CustomerSupportBot.Api.Endpoints;
 

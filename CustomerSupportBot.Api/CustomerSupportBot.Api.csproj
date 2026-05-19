@@ -48,6 +48,7 @@
     <ProjectReference Include="..\CustomerSupportBot.Adapters.Persistence\CustomerSupportBot.Adapters.Persistence.csproj" />
     <ProjectReference Include="..\CustomerSupportBot.Adapters.Redis\CustomerSupportBot.Adapters.Redis.csproj" />
     <ProjectReference Include="..\CustomerSupportBot.Adapters.AI\CustomerSupportBot.Adapters.AI.csproj" />
+    <ProjectReference Include="..\CustomerSupportBot.Adapters.Telemetry\CustomerSupportBot.Adapters.Telemetry.csproj" />
   </ItemGroup>
 
   <!-- Prompt markdown dosyalarını build çıktısına kopyala.

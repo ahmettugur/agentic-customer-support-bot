@@ -1,7 +1,7 @@
 // Tests/Services/SpecialistReasoningParserTests.cs
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 
@@ -41,7 +41,7 @@ public class SpecialistReasoningParserTests
         var result = SpecialistReasoningParser.TryParse(input, "OrderPlacementAgent");
 
         result.Should().NotBeNull();
-        result!.AgentName.Should().Be("OrderPlacementAgent");
+        result.AgentName.Should().Be("OrderPlacementAgent");
         result.PreToolCheck.Should().NotBeNull();
         result.PreToolCheck!.CanProceed.Should().BeFalse();
         result.PreToolCheck.MissingParams.Should().Contain("productId");
@@ -66,7 +66,7 @@ public class SpecialistReasoningParserTests
         var result = SpecialistReasoningParser.TryParse(input, "OrderAgent");
 
         result.Should().NotBeNull();
-        result!.ResultConfidence.Should().Be(0.95);
+        result.ResultConfidence.Should().Be(0.95);
         result.PostToolReflection.Should().NotBeNull();
         result.PostToolReflection!.TaskComplete.Should().BeTrue();
         result.PostToolReflection.StatusEnum.Should().Be(TaskCompletionStatus.Done);
@@ -82,7 +82,7 @@ public class SpecialistReasoningParserTests
         var result = SpecialistReasoningParser.TryParse(input, "ComplaintAgent");
 
         result.Should().NotBeNull();
-        result!.PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.NeedsEscalation);
+        result.PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.NeedsEscalation);
     }
 
     [Fact]
@@ -131,6 +131,6 @@ public class SpecialistReasoningParserTests
         var input = """{"resultConfidence":2.5}""";
         var result = SpecialistReasoningParser.TryParse(input, "X");
         result.Should().NotBeNull();
-        result!.ResultConfidence.Should().Be(1.0);
+        result.ResultConfidence.Should().Be(1.0);
     }
 }

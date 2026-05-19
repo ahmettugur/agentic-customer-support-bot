@@ -1,9 +1,14 @@
 using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Api.Services.Memory;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
-using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Memory;
-using CustomerSupportBot.Api.Services.Telemetry;
+using CustomerSupportBot.Application.Services.Memory;
+using CustomerSupportBot.Adapters.AI.Chat;
+using CustomerSupportBot.Adapters.AI.OpenAi;
+using CustomerSupportBot.Adapters.AI.Qdrant;
+using CustomerSupportBot.Adapters.Telemetry.Chat;
+using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
+using CustomerSupportBot.Application.Ports.Driven.Observability;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
@@ -36,8 +41,8 @@ public static class AiServicesExtensions
                       ?? new SemanticMemoryOptions();
         if (memOpts.Enabled)
         {
-            services.AddSingleton<IEmbeddingService, OpenAiEmbeddingService>();
-            services.AddSingleton<IVectorMemoryStore, QdrantVectorMemoryStore>();
+            services.AddSingleton<IEmbeddingService, OpenAiEmbeddingAdapter>();
+            services.AddSingleton<IVectorMemoryStore, QdrantVectorMemoryAdapter>();
             services.AddSingleton<SemanticMemoryService>();
             services.AddSingleton<KnowledgeBaseIngestor>();
             services.AddHostedService(sp => sp.GetRequiredService<KnowledgeBaseIngestor>());
@@ -56,7 +61,7 @@ public static class AiServicesExtensions
 
         return new TelemetryChatClient(
             inner,
-            sp.GetRequiredService<ICostCalculator>(),
+            sp.GetRequiredService<ICostCalculatorPort>(),
             sp.GetRequiredService<CostUsageStore>(),
             modelHint,
             provider,

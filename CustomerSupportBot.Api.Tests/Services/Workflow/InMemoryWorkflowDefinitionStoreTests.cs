@@ -1,7 +1,7 @@
 // Tests/Services/Workflow/InMemoryWorkflowDefinitionStoreTests.cs
 
 using CustomerSupportBot.Domain.Model.Workflow;
-using CustomerSupportBot.Api.Services.Workflow;
+using CustomerSupportBot.Application.Services.Workflow;
 
 namespace CustomerSupportBot.Api.Tests.Services.Workflow;
 
@@ -19,10 +19,10 @@ public class InMemoryWorkflowDefinitionStoreTests
     public void Upsert_NoIdProvided_GeneratesSlugFromName()
     {
         var sut = new InMemoryWorkflowDefinitionStore();
-        var saved = sut.Upsert(new WorkflowDefinition { Name = "Sipariþ Durumu Akýþý" });
+        var saved = sut.Upsert(new WorkflowDefinition { Name = "Sipariï¿½ Durumu Akï¿½ï¿½ï¿½" });
 
         saved.Id.Should().NotBeNullOrWhiteSpace();
-        saved.Id.Should().NotContain(" ").And.NotContain("þ").And.NotContain("ý");
+        saved.Id.Should().NotContain(" ").And.NotContain("ï¿½").And.NotContain("ï¿½");
     }
 
     [Fact]

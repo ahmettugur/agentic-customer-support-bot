@@ -12,7 +12,6 @@ using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
 using CustomerSupportBot.Adapters.Persistence.Postgres;
-using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Auth;
 using Microsoft.EntityFrameworkCore;
 

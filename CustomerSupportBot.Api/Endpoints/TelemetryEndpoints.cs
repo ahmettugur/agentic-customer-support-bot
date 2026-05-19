@@ -2,7 +2,8 @@
 // /admin/telemetry/cost — model bazlı toplam token + USD maliyet özetini döner.
 // Admin panelinde dashboard kartı olarak gösterilebilir.
 
-using CustomerSupportBot.Api.Services.Telemetry;
+using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
+using CustomerSupportBot.Application.Ports.Driven.Observability;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -18,7 +19,7 @@ public static class TelemetryEndpoints
             return Results.Ok(snapshot);
         });
 
-        group.MapGet("/cost/models", (ICostCalculator calc) =>
+        group.MapGet("/cost/models", (ICostCalculatorPort calc) =>
         {
             return Results.Ok(new { knownModels = calc.KnownModels });
         });

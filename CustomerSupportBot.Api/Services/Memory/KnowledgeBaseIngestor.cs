@@ -4,6 +4,7 @@
 
 using System.Security.Cryptography;
 using System.Text;
+using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Options;
 

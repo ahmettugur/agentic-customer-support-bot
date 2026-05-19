@@ -1,4 +1,3 @@
-using CustomerSupportBot.Api.Models;
 // Services/Realtime/RealtimeNativeBridge.cs
 //
 // "Hızlı Sesli" mod — gpt-realtime-2 modelinin kendi çok-kipli yetenekleri kullanılır.

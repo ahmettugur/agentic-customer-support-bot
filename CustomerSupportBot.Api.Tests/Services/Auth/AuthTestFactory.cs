@@ -1,8 +1,7 @@
 // Tests/Services/Auth/AuthTestFactory.cs
-// Auth testleri için EF Core InMemory DbContextFactory kurar.
+// Auth testleri iï¿½in EF Core InMemory DbContextFactory kurar.
 
 using CustomerSupportBot.Adapters.Persistence.EfCore;
-using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Domain.Model.Auth;
 using CustomerSupportBot.Api.Services.Auth;
 using Microsoft.EntityFrameworkCore;

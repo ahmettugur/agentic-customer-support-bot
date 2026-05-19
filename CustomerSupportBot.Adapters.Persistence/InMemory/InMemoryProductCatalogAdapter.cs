@@ -8,7 +8,6 @@
 using System.Collections.Concurrent;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
-using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.InMemory;
 

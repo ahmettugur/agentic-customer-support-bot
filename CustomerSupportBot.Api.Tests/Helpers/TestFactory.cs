@@ -1,7 +1,6 @@
 // Helpers/TestFactory.cs — Test projesinde sık kullanılan nesnelerin factory metodları.
-using CustomerSupportBot.Adapters.Persistence.InMemory;
+
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
-using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Api.Tests.Helpers;
 

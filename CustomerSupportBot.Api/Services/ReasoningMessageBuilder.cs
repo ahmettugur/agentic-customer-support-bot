@@ -10,6 +10,7 @@ namespace CustomerSupportBot.Api.Services;
 /// Reasoning LLM'ine gönderilecek mesajları (system prompt + history + user query)
 /// kurar. Verified entity bloğunu, history note'unu ve session state'ini
 /// prompt template'e enjekte eder.
+using CustomerSupportBot.Application.Services;
 /// </summary>
 public class ReasoningMessageBuilder
 {

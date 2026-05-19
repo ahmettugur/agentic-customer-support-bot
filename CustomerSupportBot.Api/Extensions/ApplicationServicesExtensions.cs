@@ -4,7 +4,7 @@ using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Evaluation;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Providers;
-using CustomerSupportBot.Domain.Services;
+using CustomerSupportBot.Application.DependencyInjection;
 
 namespace CustomerSupportBot.Api.Extensions;
 
@@ -12,6 +12,8 @@ public static class ApplicationServicesExtensions
 {
     public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration configuration)
     {
+        // ─── Hexagonal: Application Driving Portları ───
+        services.AddApplicationDrivingPorts();
         var allowedOrigins = configuration
             .GetSection("Cors:AllowedOrigins")
             .Get<string[]>();
@@ -49,9 +51,7 @@ public static class ApplicationServicesExtensions
         // Prompt yükleyici
         services.AddSingleton<PromptService>();
 
-        // AI tool servisi (FakeDatabase statik bağımlılığı kırıldı — port'lar inject edilir)
-        // IProductCatalogRepository, IOrderRepository, IComplaintRepository → PersistenceServicesExtensions'da kayıtlı
-        services.AddSingleton<CustomerSupportToolsService>();
+        // AI tool servisi → Application katmanında AddApplicationDrivingPorts() ile kaydedildi
 
         // HITL — approval gate + context accessor
         services.AddSingleton<ApprovalGateService>();
@@ -84,7 +84,7 @@ public static class ApplicationServicesExtensions
         services.AddSingleton<IContextProvider>(sp =>
         {
             // SemanticMemoryService opsiyonel — yoksa no-op provider üret
-            var mem = sp.GetService<Services.Memory.SemanticMemoryService>();
+            var mem = sp.GetService<CustomerSupportBot.Application.Services.Memory.SemanticMemoryService>();
             if (mem == null) return new NoopContextProvider();
             return new Services.Providers.SemanticMemoryContextProvider(
                 mem,
@@ -100,20 +100,20 @@ public static class ApplicationServicesExtensions
 
         // ─── Self-Improvement (LessonMiner) ───
         // ILessonStore → PersistenceServicesExtensions'da provider'a göre kaydedilir.
-        services.AddSingleton<Services.Improvement.LessonMiner>();
+        services.AddSingleton<Application.Services.Improvement.LessonMiner>();
 
         // ─── Per-Customer Personalization ───
         // ICustomerProfileStore → PersistenceServicesExtensions'da provider'a göre kaydedilir.
-        services.AddSingleton<Services.Personalization.CustomerProfileService>();
+        services.AddSingleton<Application.Services.Personalization.CustomerProfileService>();
 
         // ─── Smart Routing & Skills-Based Escalation (#11) ───
         // IHumanAgentRegistry → PersistenceServicesExtensions'da provider'a göre kaydedilir.
-        services.AddSingleton<Services.Routing.ISkillsBasedRouter,
-            Services.Routing.SkillsBasedRouter>();
+        services.AddSingleton<Application.Services.Routing.ISkillsBasedRouter,
+            Application.Services.Routing.SkillsBasedRouter>();
 
         // ─── Low-Code Workflow Designer (#14) ───
         // IWorkflowDefinitionStore → PersistenceServicesExtensions'da provider'a göre kaydedilir.
-        services.AddSingleton<Services.Workflow.WorkflowExecutor>();
+        services.AddSingleton<Application.Services.Workflow.WorkflowExecutor>();
 
         // ─── SLA / Response Time Guardian (#H) ───
         // ISlaEventSink → PersistenceServicesExtensions'da provider'a göre kaydedilir.

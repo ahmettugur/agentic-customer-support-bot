@@ -4,10 +4,7 @@
 // Hepsi RequireAuthorization("Admin") scope altında map edilir.
 
 using CustomerSupportBot.Adapters.Persistence.EfCore;
-using CustomerSupportBot.Api.Infrastructure.Persistence;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Routing;
 using Microsoft.EntityFrameworkCore;
 
 namespace CustomerSupportBot.Api.Endpoints;

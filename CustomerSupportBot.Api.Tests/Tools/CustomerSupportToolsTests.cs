@@ -1,11 +1,9 @@
-using CustomerSupportBot.Adapters.Persistence.InMemory;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Api.Tests.Tools;
 
 /// <summary>
-/// CustomerSupportToolsService testleri — InMemory adapter'larla izole edilmiþ.
+/// CustomerSupportToolsService testleri ï¿½ InMemory adapter'larla izole edilmiï¿½.
 /// </summary>
 public class CustomerSupportToolsTests
 {
@@ -19,7 +17,7 @@ public class CustomerSupportToolsTests
         _svc = new CustomerSupportToolsService(_products, _orders, _complaints);
     }
 
-    // ¦¦¦ ProductInquiryTool ¦¦¦
+    // ï¿½ï¿½ï¿½ ProductInquiryTool ï¿½ï¿½ï¿½
     [Fact]
     public void ProductInquiry_BlankName_ValidationError()
     {
@@ -46,7 +44,7 @@ public class CustomerSupportToolsTests
         r.Message.Should().Contain(firstProduct);
     }
 
-    // ¦¦¦ OrderPlacementTool ¦¦¦
+    // ï¿½ï¿½ï¿½ OrderPlacementTool ï¿½ï¿½ï¿½
     [Fact]
     public void OrderPlacement_AllMissing_ValidationError()
     {
@@ -93,7 +91,7 @@ public class CustomerSupportToolsTests
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.StockInsufficient);
     }
 
-    // ¦¦¦ OrderStatusTool ¦¦¦
+    // ï¿½ï¿½ï¿½ OrderStatusTool ï¿½ï¿½ï¿½
     [Fact]
     public void OrderStatus_BlankId_ValidationError()
     {
@@ -116,11 +114,11 @@ public class CustomerSupportToolsTests
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
     }
 
-    // ¦¦¦ ComplaintRegistrationTool ¦¦¦
+    // ï¿½ï¿½ï¿½ ComplaintRegistrationTool ï¿½ï¿½ï¿½
     [Fact]
     public void Complaint_MissingFields_ValidationError()
     {
-        var r = _svc.ComplaintRegistrationTool("", "kýsa", null);
+        var r = _svc.ComplaintRegistrationTool("", "kï¿½sa", null);
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
@@ -135,7 +133,7 @@ public class CustomerSupportToolsTests
     public void Complaint_UnknownOrder_NotFound()
     {
         var r = _svc.ComplaintRegistrationTool(
-            "ORD-99999", "þikayet açýklamasý burada yer alýr", "CUST-X");
+            "ORD-99999", "ï¿½ikayet aï¿½ï¿½klamasï¿½ burada yer alï¿½r", "CUST-X");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
     }
 
@@ -143,7 +141,7 @@ public class CustomerSupportToolsTests
     public void Complaint_CustomerIdMismatch_Conflict()
     {
         var r = _svc.ComplaintRegistrationTool(
-            "ORD-1", "ürün hatalý geldi paket açýlmýþ", "CUST-WRONG-XYZ");
+            "ORD-1", "ï¿½rï¿½n hatalï¿½ geldi paket aï¿½ï¿½lmï¿½ï¿½", "CUST-WRONG-XYZ");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.CustomerIdMismatch);
     }
 
@@ -155,13 +153,13 @@ public class CustomerSupportToolsTests
         var orderResult = _svc.OrderPlacementTool(product, 1, customerId);
         var orderId = orderResult.Data!.GetType().GetProperty("orderId")!.GetValue(orderResult.Data) as string;
         var r = _svc.ComplaintRegistrationTool(
-            orderId!, $"þikayet metni unique {Guid.NewGuid()}", null);
+            orderId!, $"ï¿½ikayet metni unique {Guid.NewGuid()}", null);
         r.Success.Should().BeTrue();
         var inferred = (bool)r.Data!.GetType().GetProperty("customerIdInferred")!.GetValue(r.Data)!;
         inferred.Should().BeTrue();
     }
 
-    // ¦¦¦ GetLastOrderTool ¦¦¦
+    // ï¿½ï¿½ï¿½ GetLastOrderTool ï¿½ï¿½ï¿½
     [Fact]
     public void GetLastOrder_BlankCustomer_ValidationError()
     {
@@ -183,7 +181,7 @@ public class CustomerSupportToolsTests
         r.Success.Should().BeTrue();
     }
 
-    // ¦¦¦ GetAllOrdersTool ¦¦¦
+    // ï¿½ï¿½ï¿½ GetAllOrdersTool ï¿½ï¿½ï¿½
     [Fact]
     public void GetAllOrders_BlankCustomer_ValidationError()
     {
@@ -207,7 +205,7 @@ public class CustomerSupportToolsTests
         total.Should().BeGreaterThan(0);
     }
 
-    // ¦¦¦ HumanHandoffTool ¦¦¦
+    // ï¿½ï¿½ï¿½ HumanHandoffTool ï¿½ï¿½ï¿½
     [Fact]
     public void HumanHandoff_BlankReason_ValidationError()
     {
@@ -218,7 +216,7 @@ public class CustomerSupportToolsTests
     [Fact]
     public void HumanHandoff_WithReason_Ok()
     {
-        var r = CustomerSupportToolsService.HumanHandoffTool("kullanýcý açýkça istedi");
+        var r = CustomerSupportToolsService.HumanHandoffTool("kullanï¿½cï¿½ aï¿½ï¿½kï¿½a istedi");
         r.Success.Should().BeTrue();
         var requested = (bool)r.Data!.GetType().GetProperty("handoffRequested")!.GetValue(r.Data)!;
         requested.Should().BeTrue();

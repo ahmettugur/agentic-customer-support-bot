@@ -6,7 +6,7 @@ using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Routing;
+using CustomerSupportBot.Application.Services.Routing;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

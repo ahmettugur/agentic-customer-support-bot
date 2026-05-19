@@ -57,6 +57,12 @@ public static class PersistenceServicesExtensions
             services.AddSingleton<ILessonStore, PostgresLessonStore>();
             services.AddSingleton<IWorkflowDefinitionStore, PostgresWorkflowDefinitionStore>();
             services.AddSingleton<ISlaEventSink, PostgresSlaEventSink>();
+
+            // Demo/test verileri — Postgres provider'da da InMemory adapter kullanılır
+            // İleride gerçek EF Core entity'lerine dönüştürülebilir
+            services.AddSingleton<IProductCatalogRepository, InMemoryProductCatalogAdapter>();
+            services.AddSingleton<IOrderRepository, InMemoryOrderAdapter>();
+            services.AddSingleton<IComplaintRepository, InMemoryComplaintAdapter>();
         }
         else
         {
@@ -74,7 +80,7 @@ public static class PersistenceServicesExtensions
             services.AddSingleton<IWorkflowDefinitionStore, InMemoryWorkflowDefinitionStore>();
             services.AddSingleton<ISlaEventSink, InMemorySlaEventSink>();
 
-            // Hexagonal: FakeDatabase'in yerini alan InMemory port adapter'lar�
+            // Hexagonal: FakeDatabase'in yerini alan InMemory port adapter'lar�
             services.AddSingleton<IProductCatalogRepository, InMemoryProductCatalogAdapter>();
             services.AddSingleton<IOrderRepository, InMemoryOrderAdapter>();
             services.AddSingleton<IComplaintRepository, InMemoryComplaintAdapter>();

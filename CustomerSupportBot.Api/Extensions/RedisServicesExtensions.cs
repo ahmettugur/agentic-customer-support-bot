@@ -1,4 +1,4 @@
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 // Extensions/RedisServicesExtensions.cs
 // Redis bağlantısını ve distributed lock altyapısını DI'a kaydeder.
 // Redis zorunludur — connection string yoksa uygulama başlatılmaz.
@@ -7,8 +7,6 @@ using CustomerSupportBot.Api.Models;
 //   1) Redis:ConnectionString (override)
 //   2) ConnectionStrings:Redis
 //   3) Yoksa → InvalidOperationException
-
-using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Redis.Locking;
 using StackExchange.Redis;
 

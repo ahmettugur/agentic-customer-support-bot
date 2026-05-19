@@ -123,7 +123,7 @@ public class WorkflowResponseExtractorOutputTests
         };
         var result = WorkflowResponseExtractor.ExtractPlanningFromOutput(Out(messages));
         result.Should().NotBeNull();
-        result!.SelectedAgent.Should().Be("OrderAgent");
+        result.SelectedAgent.Should().Be("OrderAgent");
     }
 
     // ��� ExtractSpecialistReasoningsFromOutput ���

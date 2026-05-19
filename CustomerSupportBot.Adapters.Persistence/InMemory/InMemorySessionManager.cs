@@ -5,9 +5,7 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Application.Ports.Driven.Locking;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.InMemory;
 

@@ -1,7 +1,5 @@
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PersistenceOptions = CustomerSupportBot.Api.Infrastructure.Persistence.PersistenceOptions;

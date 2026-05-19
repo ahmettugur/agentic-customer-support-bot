@@ -29,7 +29,6 @@ using System.Security.Claims;
 using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Routing;
 
 namespace CustomerSupportBot.Api.Endpoints;
 

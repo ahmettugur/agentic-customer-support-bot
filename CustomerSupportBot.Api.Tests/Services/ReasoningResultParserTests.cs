@@ -1,6 +1,6 @@
 // Tests/Services/ReasoningResultParserTests.cs
 
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 

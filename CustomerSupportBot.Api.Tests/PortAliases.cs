@@ -30,6 +30,8 @@ global using InMemoryComplaintAdapter    = CustomerSupportBot.Adapters.Persisten
 global using InMemoryCustomerProfileStore = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryCustomerProfileStore;
 global using InMemorySessionManager      = CustomerSupportBot.Adapters.Persistence.InMemory.InMemorySessionManager;
 global using InMemoryHumanAgentRegistry  = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryHumanAgentRegistry;
+global using InMemoryLessonStore         = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryLessonStore;
+global using InMemoryWorkflowDefinitionStore = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryWorkflowDefinitionStore;
 
 // Application Services re-export
 global using CustomerSupportBot.Application.Services;

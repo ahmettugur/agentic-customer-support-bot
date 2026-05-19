@@ -1,4 +1,6 @@
-using CustomerSupportBot.Api.Services.Telemetry;
+using CustomerSupportBot.Adapters.Telemetry.Chat;
+using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
+using CustomerSupportBot.Application.Ports.Driven.Observability;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -10,8 +12,8 @@ public class TelemetryChatClientTests
         decimal estimatedCost = 0.01m)
     {
         var inner = new FakeChatClient();
-        var calculator = Substitute.For<ICostCalculator>();
-        calculator.Estimate(Arg.Any<string?>(), Arg.Any<long>(), Arg.Any<long>()).Returns(estimatedCost);
+        var calculator = Substitute.For<ICostCalculatorPort>();
+        calculator.CalculateCost(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>()).Returns(estimatedCost);
         var store = new CostUsageStore();
         var client = new TelemetryChatClient(inner, calculator, store, "gpt-x", "OpenAI", NullLogger<TelemetryChatClient>.Instance);
         return (client, store, inner);

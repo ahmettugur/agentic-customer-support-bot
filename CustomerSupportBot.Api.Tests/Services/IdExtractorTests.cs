@@ -1,6 +1,7 @@
 // Tests/Services/IdExtractorTests.cs
 
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 
@@ -83,7 +84,7 @@ public class IdExtractorTests
     {
         var hint = IdExtractor.BuildHintMessage(new ExtractedIds { OrderId = "ORD-1" });
         hint.Should().NotBeNull();
-        hint!.Should().Contain("ORD-1");
+        hint.Should().Contain("ORD-1");
         hint.Should().Contain("order_status_tool");
     }
 
@@ -92,6 +93,6 @@ public class IdExtractorTests
     {
         var hint = IdExtractor.BuildHintMessage(new ExtractedIds { CustomerId = "CUST-1" });
         hint.Should().NotBeNull();
-        hint!.Should().Contain("get_last_order_tool");
+        hint.Should().Contain("get_last_order_tool");
     }
 }

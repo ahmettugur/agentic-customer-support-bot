@@ -1,12 +1,11 @@
-using CustomerSupportBot.Api.Models;
+using CustomerSupportBot.Domain.Model;
 // Extensions/TelemetryExtensions.cs
 // OpenTelemetry tracing + metric pipeline'ı kurar. Tüm domain ActivitySource ve
 // Meter'ları (CustomerSupportTelemetry), ASP.NET Core, HttpClient ve EF Core
 // instrumentation'ı dahil eder. OTLP endpoint configure edildiyse exporter'ı bağlar;
 // development'ta console exporter opsiyonel olarak açılabilir.
-
-using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services.Telemetry;
+using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
+using CustomerSupportBot.Application.Ports.Driven.Observability;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -24,7 +23,7 @@ public static class TelemetryExtensions
                       ?? new TelemetryOptions();
 
         // Domain singleton'ları — telemetri kapalıyken de çalışmalı (no-op olur)
-        services.AddSingleton<ICostCalculator, CostCalculator>();
+        services.AddSingleton<ICostCalculatorPort, Adapters.Telemetry.OpenTelemetry.CostCalculator>();
         services.AddSingleton<CostUsageStore>();
 
         if (!options.Enabled)

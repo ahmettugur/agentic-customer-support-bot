@@ -6,6 +6,8 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Services;
+using CustomerSupportBot.Adapters.AI.Chat;
 using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Api.Services;

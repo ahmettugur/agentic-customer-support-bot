@@ -2,7 +2,7 @@
 
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
-using CustomerSupportBot.Api.Services.Routing;
+using CustomerSupportBot.Application.Services.Routing;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Services.Routing;
@@ -18,9 +18,9 @@ public class SkillsBasedRouterTests
             SeedAgents = seeds.ToList(),
             IntentSkillMap = new(StringComparer.OrdinalIgnoreCase)
             {
-                ["þikayet"] = new() { "complaint" },
-                ["sipariþ_sorgulama"] = new() { "order" },
-                ["ürün_bilgisi"] = new() { "product" }
+                ["ï¿½ikayet"] = new() { "complaint" },
+                ["sipariï¿½_sorgulama"] = new() { "order" },
+                ["ï¿½rï¿½n_bilgisi"] = new() { "product" }
             },
             ProfileKeywordSkillMap = new(StringComparer.OrdinalIgnoreCase)
             {
@@ -47,10 +47,10 @@ public class SkillsBasedRouterTests
     {
         var (router, _) = Build();
 
-        var decision = router.Decide(TraceWithIntent("þikayet"), "ComplaintAgent", null);
+        var decision = router.Decide(TraceWithIntent("ï¿½ikayet"), "ComplaintAgent", null);
 
         decision.SuggestedAgentId.Should().BeNull();
-        decision.Note.Should().Contain("Müsait temsilci yok");
+        decision.Note.Should().Contain("Mï¿½sait temsilci yok");
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class SkillsBasedRouterTests
         };
         var (router, _) = Build(seeds: new[] { alice, bob });
 
-        var decision = router.Decide(TraceWithIntent("þikayet"), "ComplaintAgent", null);
+        var decision = router.Decide(TraceWithIntent("ï¿½ikayet"), "ComplaintAgent", null);
 
         decision.SuggestedAgentId.Should().Be("alice");
         decision.MatchedSkills.Should().Contain("complaint");
@@ -107,7 +107,7 @@ public class SkillsBasedRouterTests
                                  seeds: new[] { trAgent, enAgent });
 
         var profile = new CustomerProfile { CustomerId = "c1", PreferredLanguage = "en" };
-        var decision = router.Decide(TraceWithIntent("sipariþ_sorgulama"), "OrderAgent", profile);
+        var decision = router.Decide(TraceWithIntent("sipariï¿½_sorgulama"), "OrderAgent", profile);
 
         decision.SuggestedAgentId.Should().Be("en-only");
     }
@@ -129,14 +129,14 @@ public class SkillsBasedRouterTests
         {
             Id = "free",
             DisplayName = "Free",
-            Skills = new() { "order" }, // farklý skill — yine de seçilmeli (busy filtre dýþý)
+            Skills = new() { "order" }, // farklï¿½ skill ï¿½ yine de seï¿½ilmeli (busy filtre dï¿½ï¿½ï¿½)
             Languages = new() { "tr" },
             IsActive = true,
             MaxConcurrentLoad = 5
         };
         var (router, _) = Build(seeds: new[] { busy, free });
 
-        var decision = router.Decide(TraceWithIntent("þikayet"), "ComplaintAgent", null);
+        var decision = router.Decide(TraceWithIntent("ï¿½ikayet"), "ComplaintAgent", null);
 
         decision.SuggestedAgentId.Should().Be("free");
     }
@@ -147,17 +147,17 @@ public class SkillsBasedRouterTests
         var (router, _) = Build(o => o.Enabled = false,
                                  seeds: new[] { new HumanAgent { DisplayName = "X", IsActive = true } });
 
-        var decision = router.Decide(TraceWithIntent("þikayet"), "ComplaintAgent", null);
+        var decision = router.Decide(TraceWithIntent("ï¿½ikayet"), "ComplaintAgent", null);
 
         decision.SuggestedAgentId.Should().BeNull();
-        decision.Note.Should().Contain("devre dýþý");
+        decision.Note.Should().Contain("devre dï¿½ï¿½ï¿½");
     }
 
     [Fact]
     public void ExtractRequiredSkills_IntentMappedToTags()
     {
         var (router, _) = Build();
-        var trace = TraceWithIntent("þikayet");
+        var trace = TraceWithIntent("ï¿½ikayet");
         var profile = new CustomerProfile { CustomerId = "c1", PreferredLanguage = "tr" };
 
         var skills = router.ExtractRequiredSkills(trace, "ComplaintAgent", profile);
@@ -170,12 +170,12 @@ public class SkillsBasedRouterTests
     public void ExtractRequiredSkills_VipKeywordFromAdminNote_AddsVipTag()
     {
         var (router, _) = Build();
-        var trace = TraceWithIntent("þikayet");
+        var trace = TraceWithIntent("ï¿½ikayet");
         var profile = new CustomerProfile
         {
             CustomerId = "c1",
             PreferredLanguage = "tr",
-            AdminNote = "VIP müþteri, kurumsal hesap"
+            AdminNote = "VIP mï¿½ï¿½teri, kurumsal hesap"
         };
 
         var skills = router.ExtractRequiredSkills(trace, "ComplaintAgent", profile);
@@ -210,10 +210,10 @@ public class SkillsBasedRouterTests
         {
             CustomerId = "c1",
             PreferredLanguage = "tr",
-            AdminNote = "VIP müþteri"
+            AdminNote = "VIP mï¿½ï¿½teri"
         };
 
-        var decision = router.Decide(TraceWithIntent("þikayet"), "ComplaintAgent", profile);
+        var decision = router.Decide(TraceWithIntent("ï¿½ikayet"), "ComplaintAgent", profile);
 
         decision.SuggestedAgentId.Should().Be("vip-expert");
         decision.MatchedSkills.Should().Contain("vip");

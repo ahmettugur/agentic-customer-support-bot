@@ -1,6 +1,5 @@
-using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services.Telemetry;
+using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Services.Telemetry;
@@ -15,7 +14,7 @@ public class CostCalculatorTests
     }
 
     [Fact]
-    public void Estimate_NoTokens_ReturnsZero()
+    public void CalculateCost_NoTokens_ReturnsZero()
     {
         var calc = Build(o => o.Pricing["gpt-x"] = new TelemetryOptions.ModelPricing
         {
@@ -23,18 +22,18 @@ public class CostCalculatorTests
             OutputPer1K = 0.03m
         });
 
-        calc.Estimate("gpt-x", 0, 0).Should().Be(0m);
+        calc.CalculateCost("gpt-x", "", 0, 0).Should().Be(0m);
     }
 
     [Fact]
-    public void Estimate_NoPricingTable_ReturnsZero()
+    public void CalculateCost_NoPricingTable_ReturnsZero()
     {
         var calc = Build();
-        calc.Estimate("gpt-x", 1000, 500).Should().Be(0m);
+        calc.CalculateCost("gpt-x", "", 1000, 500).Should().Be(0m);
     }
 
     [Fact]
-    public void Estimate_KnownModel_ComputesUsd()
+    public void CalculateCost_KnownModel_ComputesUsd()
     {
         var calc = Build(o => o.Pricing["gpt-x"] = new TelemetryOptions.ModelPricing
         {
@@ -43,12 +42,12 @@ public class CostCalculatorTests
         });
 
         // 1000 input * 0.002 + 500 output * 0.006/1000 = 0.002 + 0.003 = 0.005
-        var actual = calc.Estimate("gpt-x", 1000, 500);
+        var actual = calc.CalculateCost("gpt-x", "", 1000, 500);
         actual.Should().Be(0.005m);
     }
 
     [Fact]
-    public void Estimate_UnknownModel_FallsBackToDefault()
+    public void CalculateCost_UnknownModel_FallsBackToDefault()
     {
         var calc = Build(o =>
         {
@@ -60,20 +59,24 @@ public class CostCalculatorTests
         });
 
         // 2000 input * 0.001/1000 + 1000 output * 0.002/1000 = 0.002 + 0.002 = 0.004
-        var actual = calc.Estimate("unknown-model", 2000, 1000);
+        var actual = calc.CalculateCost("unknown-model", "", 2000, 1000);
         actual.Should().Be(0.004m);
     }
 
     [Fact]
-    public void Estimate_ModelMatchIsCaseInsensitive()
+    public void CalculateCost_ProviderFallback_UsesProviderDefault()
     {
-        var calc = Build(o => o.Pricing["GPT-X"] = new TelemetryOptions.ModelPricing
+        var calc = Build(o =>
         {
-            InputPer1K = 0.01m,
-            OutputPer1K = 0m
+            o.Pricing["azure_default"] = new TelemetryOptions.ModelPricing
+            {
+                InputPer1K = 0.01m,
+                OutputPer1K = 0.02m
+            };
         });
 
-        calc.Estimate("gpt-x", 1000, 0).Should().Be(0.01m);
+        var actual = calc.CalculateCost("unknown-model", "azure", 1000, 1000);
+        actual.Should().Be(0.03m); // 0.01 + 0.02
     }
 
     [Fact]

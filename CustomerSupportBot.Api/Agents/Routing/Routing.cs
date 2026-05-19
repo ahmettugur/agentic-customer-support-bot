@@ -9,7 +9,7 @@
 // Manager bu listede ilk null-olmayan sonucu alır; hiçbiri seçim yapmazsa PlanningAgent'a düşer (no-op fallback).
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Domain.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

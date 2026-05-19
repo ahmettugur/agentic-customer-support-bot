@@ -7,7 +7,7 @@
 using System.Text;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
-using CustomerSupportBot.Api.Services.Memory;
+using CustomerSupportBot.Application.Services.Memory;
 
 namespace CustomerSupportBot.Api.Services.Providers;
 

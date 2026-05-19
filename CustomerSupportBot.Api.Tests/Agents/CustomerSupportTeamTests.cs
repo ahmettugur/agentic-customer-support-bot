@@ -123,7 +123,7 @@ public class CustomerSupportTeamTests
         var resultProp = task.GetType().GetProperty("Result")!;
         var messages = resultProp.GetValue(task) as List<ChatMessage>;
         messages.Should().NotBeNull();
-        messages!.Should().NotBeEmpty();
+        messages.Should().NotBeEmpty();
         messages.Last().Role.Should().Be(ChatRole.User);
         messages.Last().Text.Should().Be("merhaba");
     }

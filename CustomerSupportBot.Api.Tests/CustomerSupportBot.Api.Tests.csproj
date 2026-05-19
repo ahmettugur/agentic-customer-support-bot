@@ -42,6 +42,7 @@
     <ProjectReference Include="..\CustomerSupportBot.Application\CustomerSupportBot.Application.csproj" />
     <ProjectReference Include="..\CustomerSupportBot.Api\CustomerSupportBot.Api.csproj" />
     <ProjectReference Include="..\CustomerSupportBot.Adapters.Persistence\CustomerSupportBot.Adapters.Persistence.csproj" />
+    <ProjectReference Include="..\CustomerSupportBot.Adapters.Telemetry\CustomerSupportBot.Adapters.Telemetry.csproj" />
   </ItemGroup>
 
   <ItemGroup>

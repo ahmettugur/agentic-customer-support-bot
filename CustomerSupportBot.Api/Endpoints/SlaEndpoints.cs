@@ -4,7 +4,6 @@
 //   GET /sla/status    — güncel pending/open kuyruk + max yaş + ihlal sayısı
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Services.Sla;
 using Microsoft.Extensions.Options;
 

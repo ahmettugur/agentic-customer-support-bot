@@ -1,4 +1,4 @@
-using CustomerSupportBot.Api.Services.Telemetry;
+using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 
 namespace CustomerSupportBot.Api.Tests.Services.Telemetry;
 

@@ -4,7 +4,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
 using CustomerSupportBot.Api.Models.Auth;
-using CustomerSupportBot.Domain.Model.Auth;
 using CustomerSupportBot.Api.Services.Auth;
 
 namespace CustomerSupportBot.Api.Tests.Endpoints;
@@ -14,14 +13,14 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
     private readonly TestWebApplicationFactory _factory;
     public AuthEndpointsTests(TestWebApplicationFactory f) => _factory = f;
 
-    private async Task<UserEntity> SeedAdminAsync(string username, string password)
+    private async Task SeedAdminAsync(string username, string password)
     {
         var dbf = _factory.GetDbContextFactory();
         await using var ctx = await dbf.CreateDbContextAsync();
 
         // Ayn� username varsa kullan
         var existing = ctx.Users.FirstOrDefault(u => u.Username == username);
-        if (existing is not null) return existing;
+        if (existing is not null) return;
 
         var hasher = new BCryptPasswordHasher();
         var user = new UserEntity
@@ -35,7 +34,6 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
         };
         ctx.Users.Add(user);
         await ctx.SaveChangesAsync();
-        return user;
     }
 
     [Fact]
@@ -49,7 +47,7 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await resp.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken: TestContext.Current.CancellationToken);
         body.Should().NotBeNull();
-        body!.AccessToken.Should().NotBeNullOrEmpty();
+        body.AccessToken.Should().NotBeNullOrEmpty();
         body.RefreshToken.Should().NotBeNullOrEmpty();
         body.Username.Should().Be("login-ok");
         body.Role.Should().Be("Admin");

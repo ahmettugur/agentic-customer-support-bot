@@ -1,7 +1,6 @@
 // Tests/Services/InMemoryChatModeRegistryTests.cs
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services;

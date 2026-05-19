@@ -1,4 +1,3 @@
-using CustomerSupportBot.Api.Models;
 // Services/Realtime/RealtimeBridge.cs
 // OpenAI Realtime API ile browser arasında ses köprüsü.
 //

@@ -2,7 +2,6 @@
 // /auth/login + /auth/refresh + /auth/logout endpoint'leri.
 
 using CustomerSupportBot.Api.Models.Auth;
-using CustomerSupportBot.Domain.Model.Auth;
 using CustomerSupportBot.Api.Services.Auth;
 
 namespace CustomerSupportBot.Api.Endpoints;

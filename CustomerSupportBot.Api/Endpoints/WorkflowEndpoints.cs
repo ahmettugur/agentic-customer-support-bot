@@ -4,7 +4,7 @@
 
 using System.Security.Claims;
 using CustomerSupportBot.Domain.Model.Workflow;
-using CustomerSupportBot.Api.Services.Workflow;
+using CustomerSupportBot.Application.Services.Workflow;
 
 namespace CustomerSupportBot.Api.Endpoints;
 

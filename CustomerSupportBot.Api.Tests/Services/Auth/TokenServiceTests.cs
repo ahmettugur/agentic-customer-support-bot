@@ -77,7 +77,7 @@ public class TokenServiceTests
         var second = await tokens.RefreshAsync(first.RefreshToken, TestContext.Current.CancellationToken);
 
         second.Should().NotBeNull();
-        second!.RefreshToken.Should().NotBe(first.RefreshToken);
+        second.RefreshToken.Should().NotBe(first.RefreshToken);
         second.AccessToken.Should().NotBeNullOrEmpty();
 
         using var ctx = await dbf.CreateDbContextAsync(TestContext.Current.CancellationToken);
@@ -126,7 +126,7 @@ public class TokenServiceTests
         var user = Seed(dbf);
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
-        // User'ý pasifleþtir
+        // User'ï¿½ pasifleï¿½tir
         await using (var ctx = await dbf.CreateDbContextAsync(TestContext.Current.CancellationToken))
         {
             var u = await ctx.Users.FirstAsync(x => x.Id == user.Id, cancellationToken: TestContext.Current.CancellationToken);

@@ -1,5 +1,4 @@
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services;
@@ -98,13 +97,13 @@ public class InMemoryChatBridgeTests
             return null;
         }, cts.Token);
 
-        // Aboneliðin oluþmasý için kýsa bekleme
+        // Aboneliï¿½in oluï¿½masï¿½ iï¿½in kï¿½sa bekleme
         await Task.Delay(100, cts.Token);
         _bridge.PublishAdminMessage("s1", "Ali", "merhaba");
 
         var msg = await task;
         msg.Should().NotBeNull();
-        msg!.Sender.Should().Be(ChatBridgeSender.Admin);
+        msg.Sender.Should().Be(ChatBridgeSender.Admin);
     }
 
     [Fact]
@@ -125,6 +124,6 @@ public class InMemoryChatBridgeTests
 
         var msg = await task;
         msg.Should().NotBeNull();
-        msg!.Sender.Should().Be(ChatBridgeSender.User);
+        msg.Sender.Should().Be(ChatBridgeSender.User);
     }
 }

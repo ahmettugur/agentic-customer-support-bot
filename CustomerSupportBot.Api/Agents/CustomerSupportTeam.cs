@@ -17,7 +17,8 @@ using CustomerSupportBot.Domain.Model;
 using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
 using CustomerSupportBot.Domain.Services;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Memory;
+using CustomerSupportBot.Application.Services.Memory;
+using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -47,7 +48,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
     private readonly CustomerSupportToolsService _tools;
     private readonly ILoggerFactory _loggerFactory;
     private readonly SemanticMemoryService? _semanticMemory;
-    private readonly Services.Personalization.CustomerProfileService? _profileService;
+    private readonly Application.Services.Personalization.CustomerProfileService? _profileService;
     private readonly ParallelExecutionOptions _parallelOptions;
 
     public CustomerSupportTeam(
@@ -60,7 +61,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         CustomerSupportToolsService tools,
         ILoggerFactory loggerFactory,
         SemanticMemoryService? semanticMemory = null,
-        Services.Personalization.CustomerProfileService? profileService = null)
+        Application.Services.Personalization.CustomerProfileService? profileService = null)
     {
         _contextPipeline = contextPipeline;
         _chatClient = chatClient;
@@ -85,7 +86,7 @@ public class CustomerSupportTeam : ICustomerSupportTeam
         // Her agent OpenTelemetry middleware ile sarılarak otomatik agent.run / tool.invoke
         // span'ları üretir; CustomerSupportTelemetry.ActivitySource ile aynı source adı üzerinde
         // toplanır ve yapılandırılan exporter'a (OTLP/Console) akar.
-        var sourceName = Services.Telemetry.CustomerSupportTelemetry.ActivitySourceName;
+        var sourceName = CustomerSupportTelemetry.ActivitySourceName;
 
         _planningAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,

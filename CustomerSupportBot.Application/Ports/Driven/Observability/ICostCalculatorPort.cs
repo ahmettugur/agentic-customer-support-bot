@@ -14,4 +14,7 @@ public interface ICostCalculatorPort
     /// Verilen model + token sayısı için USD maliyeti hesaplar.
     /// </summary>
     decimal CalculateCost(string modelHint, string provider, int inputTokens, int outputTokens);
+
+    /// <summary>Bilinen model adlarını döner (UI için).</summary>
+    IReadOnlyCollection<string> KnownModels { get; }
 }

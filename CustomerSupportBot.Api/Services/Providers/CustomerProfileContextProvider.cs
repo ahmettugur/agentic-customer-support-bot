@@ -6,7 +6,6 @@
 
 using System.Text;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services.Personalization;
 
 namespace CustomerSupportBot.Api.Services.Providers;
 

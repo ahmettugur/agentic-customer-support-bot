@@ -6,10 +6,8 @@ using CustomerSupportBot.Domain.Model.Memory;
 // specialist reasoning'leri escalation sink'e yazar.
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Domain.Services;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Personalization;
-using CustomerSupportBot.Api.Services.Routing;
+using CustomerSupportBot.Application.Services.Routing;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 

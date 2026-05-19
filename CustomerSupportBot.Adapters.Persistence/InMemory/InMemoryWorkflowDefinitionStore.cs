@@ -3,7 +3,6 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Domain.Model.Workflow;
-using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.InMemory;
 

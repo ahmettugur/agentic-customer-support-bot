@@ -25,7 +25,6 @@ using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Application.Ports.Driven.Locking;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;

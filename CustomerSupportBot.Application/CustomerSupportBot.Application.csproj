@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="CustomerSupportBot.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Application katmanı sadece Domain'e bağımlı -->
     <ProjectReference Include="..\CustomerSupportBot.Domain\CustomerSupportBot.Domain.csproj" />
   </ItemGroup>
@@ -16,6 +20,7 @@
     <!-- Application servisleri için gerekli paketler -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.8" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.8" />
     <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.6.0" />
   </ItemGroup>
 

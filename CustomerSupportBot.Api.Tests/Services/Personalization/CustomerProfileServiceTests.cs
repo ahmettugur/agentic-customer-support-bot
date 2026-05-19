@@ -1,4 +1,5 @@
-using CustomerSupportBot.Api.Services.Personalization;
+using RedisOptions = CustomerSupportBot.Domain.Model.RedisOptions;
+using CustomerSupportBot.Application.Services.Personalization;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,7 +13,7 @@ public class CustomerProfileServiceTests
     {
         var store = new InMemoryCustomerProfileStore();
         var chat = new FakeChat();
-        var lockOptions = Options.Create(new Api.Models.RedisOptions { DefaultLockTimeoutSeconds = 10 });
+        var lockOptions = Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 });
         var distributedLock = new InMemoryDistributedLock(lockOptions);
         var svc = new CustomerProfileService(store, chat, distributedLock, new InMemoryProductCatalogAdapter(), NullLogger<CustomerProfileService>.Instance);
         return (svc, store, chat);
@@ -43,7 +44,7 @@ public class CustomerProfileServiceTests
         var p = await svc.RecordInteractionAsync("CUST-1", "Dell XPS 15 stokta var mı?", "Evet 10 adet.", "product_inquiry", isNewSession: true, ct: TestContext.Current.CancellationToken);
 
         p.Should().NotBeNull();
-        p!.TotalSessions.Should().Be(1);
+        p.TotalSessions.Should().Be(1);
         p.TotalTurns.Should().Be(1);
         p.IntentFrequency["product_inquiry"].Should().Be(1);
         p.PreferredLanguage.Should().Be("tr");

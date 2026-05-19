@@ -1,7 +1,6 @@
 // Tests/Services/Routing/InMemoryHumanAgentRegistryTests.cs
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services.Routing;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Services.Routing;
@@ -68,7 +67,7 @@ public class InMemoryHumanAgentRegistryTests
         });
 
         updated.Should().NotBeNull();
-        updated!.DisplayName.Should().Be("New");
+        updated.DisplayName.Should().Be("New");
         updated.IsActive.Should().BeFalse();
         updated.Priority.Should().Be(1); // korundu
         updated.Skills.Should().BeEquivalentTo(new[] { "complaint" }); // korundu

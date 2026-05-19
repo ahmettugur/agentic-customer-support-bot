@@ -1,15 +1,17 @@
 // Tests/Evaluation/EvaluationRunnerTests.cs
 
+using CustomerSupportBot.Adapters.AI.Chat;
 using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Evaluation;
 using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using EntityVerifier = CustomerSupportBot.Application.Services.EntityVerifier;
 
 namespace CustomerSupportBot.Api.Tests.Evaluation;
 
@@ -54,7 +56,7 @@ public class EvaluationRunnerTests
         return new EvaluationRunner(team, reasoningService, sessionManager, traceStore);
     }
 
-    // ¦¦¦ LoadScenarios ¦¦¦
+    // ï¿½ï¿½ï¿½ LoadScenarios ï¿½ï¿½ï¿½
 
     [Fact]
     public void LoadScenarios_ValidYaml_DeserializesScenarios()
@@ -64,7 +66,7 @@ public class EvaluationRunnerTests
             scenarios:
               - id: order-1
                 category: order
-                query: "sipariþim nerede"
+                query: "sipariÅŸim nerede"
                 expected_intent: order_inquiry
                 expected_agents: [PlanningAgent, OrderAgent]
                 expected_tools: [order_status_tool]
@@ -73,7 +75,7 @@ public class EvaluationRunnerTests
                   - "turn_count <= 5"
               - id: complaint-1
                 category: complaint
-                query: "ürün bozuk geldi"
+                query: "ï¿½rï¿½n bozuk geldi"
                 expected_tools: []
                 success_criteria: []
             """;
@@ -88,7 +90,7 @@ public class EvaluationRunnerTests
             var s1 = file.Scenarios[0];
             s1.Id.Should().Be("order-1");
             s1.Category.Should().Be("order");
-            s1.Query.Should().Be("sipariþim nerede");
+            s1.Query.Should().Be("sipariï¿½im nerede");
             s1.ExpectedIntent.Should().Be("order_inquiry");
             s1.ExpectedAgents.Should().HaveCount(2);
             s1.ExpectedTools.Should().ContainSingle().Which.Should().Be("order_status_tool");
@@ -144,7 +146,7 @@ public class EvaluationRunnerTests
         act.Should().Throw<FileNotFoundException>();
     }
 
-    // ¦¦¦ RunAsync ¦¦¦
+    // ï¿½ï¿½ï¿½ RunAsync ï¿½ï¿½ï¿½
 
     [Fact]
     public async Task RunAsync_EmptyScenarios_CompletesWithZeroResults()
@@ -174,11 +176,11 @@ public class EvaluationRunnerTests
         var result = await runner.RunAsync(scenarios, cts.Token);
 
         result.TotalScenarios.Should().Be(2);
-        result.Results.Should().BeEmpty(); // hiç çalýþtýrmadan break
+        result.Results.Should().BeEmpty(); // hiï¿½ ï¿½alï¿½ï¿½tï¿½rmadan break
     }
 
-    // ¦¦¦ RunScenarioAsync ¦¦¦
-    // Not: Tam akýþ reasoning + workflow gerektirdiðinden CancellationToken alsa bile
-    // Mock IChatClient ile workflow baþlangýcý asýlý kalabiliyor; bu yüzden yalnýzca
-    // RunAsync seviyesinde pre-cancellation kapsamý yeterli.
+    // ï¿½ï¿½ï¿½ RunScenarioAsync ï¿½ï¿½ï¿½
+    // Not: Tam akï¿½ï¿½ reasoning + workflow gerektirdiï¿½inden CancellationToken alsa bile
+    // Mock IChatClient ile workflow baï¿½langï¿½cï¿½ asï¿½lï¿½ kalabiliyor; bu yï¿½zden yalnï¿½zca
+    // RunAsync seviyesinde pre-cancellation kapsamï¿½ yeterli.
 }

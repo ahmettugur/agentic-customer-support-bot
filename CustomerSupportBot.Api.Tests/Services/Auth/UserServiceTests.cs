@@ -43,7 +43,7 @@ public class UserServiceTests
         var result = await svc.AuthenticateAsync("alice", "MyPass123!", TestContext.Current.CancellationToken);
 
         result.Should().NotBeNull();
-        result!.Username.Should().Be("alice");
+        result.Username.Should().Be("alice");
     }
 
     [Fact]

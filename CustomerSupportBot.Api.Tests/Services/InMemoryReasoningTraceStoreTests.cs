@@ -1,7 +1,5 @@
 // Tests/Services/InMemoryReasoningTraceStoreTests.cs
 
-using CustomerSupportBot.Api.Services;
-
 namespace CustomerSupportBot.Api.Tests.Services;
 
 public class InMemoryReasoningTraceStoreTests

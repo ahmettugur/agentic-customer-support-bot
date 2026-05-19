@@ -1,6 +1,6 @@
 // Tests/Services/PlanningResultParserTests.cs
 
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 
@@ -49,7 +49,7 @@ public class PlanningResultParserTests
         var plan = PlanningResultParser.TryParse(input);
 
         plan.Should().NotBeNull();
-        plan!.DetectedIntent.Should().Be("order_inquiry");
+        plan.DetectedIntent.Should().Be("order_inquiry");
         plan.IntentConfidence.Should().Be(0.85);
         plan.SelectedAgent.Should().Be("OrderAgent");
         plan.NeedsClarification.Should().BeFalse();
@@ -65,7 +65,7 @@ public class PlanningResultParserTests
         var plan = PlanningResultParser.TryParse(input);
 
         plan.Should().NotBeNull();
-        plan!.SelectedAgent.Should().Be("ProductInquiryAgent");
+        plan.SelectedAgent.Should().Be("ProductInquiryAgent");
         plan.IntentConfidence.Should().Be(0.9);
     }
 
@@ -75,7 +75,7 @@ public class PlanningResultParserTests
         var input = """{"intentConfidence":"yüksek","selectedAgent":"X"}""";
         var plan = PlanningResultParser.TryParse(input);
         plan.Should().NotBeNull();
-        plan!.IntentConfidence.Should().BeGreaterThan(0.5);
+        plan.IntentConfidence.Should().BeGreaterThan(0.5);
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class PlanningResultParserTests
         var input = """{"intentConfidence":2.5,"selectedAgent":"X"}""";
         var plan = PlanningResultParser.TryParse(input);
         plan.Should().NotBeNull();
-        plan!.IntentConfidence.Should().Be(1.0);
+        plan.IntentConfidence.Should().Be(1.0);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class PlanningResultParserTests
         var input = """{"intentConfidence":-0.5,"selectedAgent":"X"}""";
         var plan = PlanningResultParser.TryParse(input);
         plan.Should().NotBeNull();
-        plan!.IntentConfidence.Should().Be(0.0);
+        plan.IntentConfidence.Should().Be(0.0);
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public class PlanningResultParserTests
         var plan = PlanningResultParser.TryParse(input);
 
         plan.Should().NotBeNull();
-        plan!.NeedsClarification.Should().BeTrue();
+        plan.NeedsClarification.Should().BeTrue();
         plan.ClarificationQuestion.Should().Contain("Hangi siparişi");
     }
 
@@ -126,7 +126,7 @@ public class PlanningResultParserTests
         var plan = PlanningResultParser.TryParse(input);
 
         plan.Should().NotBeNull();
-        plan!.AlternativesRejected.Should().HaveCount(2);
+        plan.AlternativesRejected.Should().HaveCount(2);
         plan.AlternativesRejected[0].Agent.Should().Be("ComplaintAgent");
     }
 
@@ -140,7 +140,7 @@ public class PlanningResultParserTests
         var plan = PlanningResultParser.TryParse(input);
 
         plan.Should().NotBeNull();
-        plan!.SupportingEvidence.Should().HaveCount(2);
+        plan.SupportingEvidence.Should().HaveCount(2);
         plan.SupportingEvidence.Should().Contain("evidence 1");
     }
 
@@ -150,6 +150,6 @@ public class PlanningResultParserTests
         var input = """{"selectedAgent":"X"}""";
         var plan = PlanningResultParser.TryParse(input);
         plan.Should().NotBeNull();
-        plan!.IntentConfidence.Should().Be(0.5);
+        plan.IntentConfidence.Should().Be(0.5);
     }
 }
