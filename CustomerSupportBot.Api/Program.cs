@@ -16,7 +16,6 @@ builder.Services.AddAppHealthChecks(builder.Configuration);
 var app = builder.Build();
 
 await app.MigrateIfDevelopmentAsync();
-app.WireRoutingLoadTracking();
 
 app.MapAppHealthChecks();
 

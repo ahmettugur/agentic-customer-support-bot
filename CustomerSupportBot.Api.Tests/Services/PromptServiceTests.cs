@@ -1,11 +1,11 @@
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 
 public class PromptServiceTests
 {
-    private readonly PromptService _svc = new(NullLogger<PromptService>.Instance);
+    private readonly FileSystemPromptRepository _svc = new(NullLogger<FileSystemPromptRepository>.Instance);
 
     [Fact]
     public void Keys_ContainsKnownAgents()

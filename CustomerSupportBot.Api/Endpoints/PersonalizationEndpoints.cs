@@ -7,11 +7,6 @@ namespace CustomerSupportBot.Api.Endpoints;
 
 public static class PersonalizationEndpoints
 {
-    public sealed class AdminNoteInput
-    {
-        public string? Note { get; set; }
-    }
-
     public static IEndpointRouteBuilder MapPersonalizationEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/customers").WithTags("Personalization");

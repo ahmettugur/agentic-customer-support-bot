@@ -1,5 +1,5 @@
 // Tests/Agents/WorkflowResponseExtractorTests.cs
-using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Adapters.Agents;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 

@@ -1,6 +1,6 @@
 // Tests/Agents/WorkflowResponseExtractorOutputTests.cs
 // WorkflowOutputEvent ile �al��an extractor metodlar�.
-using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -202,7 +202,7 @@ public class WorkflowResponseExtractorOutputTests
     public void RemoveTechnicalJsonBlocks_PlainJsonWithSelfCritique_Stripped()
     {
         var input = """
-            Cevap haz�r.
+            Cevap hazır.
             {"selfCritique": {"rating": "good"}}
             """;
         var result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(input);

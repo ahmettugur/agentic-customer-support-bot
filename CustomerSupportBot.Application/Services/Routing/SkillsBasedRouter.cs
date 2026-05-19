@@ -11,6 +11,7 @@
 //   score = (1 - LanguageWeight) * skillMatch + LanguageWeight * langMatch
 //   tie-break: yüksek loadFactor + Priority + son atama eskiliği
 
+using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;

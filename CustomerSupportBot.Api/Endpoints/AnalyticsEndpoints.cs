@@ -5,8 +5,8 @@
 //   - GET  /sessions/{sid}/rating     : Konuşmanın mevcut rating'ini getir
 //   - GET  /analytics/ratings/recent  : Son N rating
 
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -15,12 +15,12 @@ public static class AnalyticsEndpoints
     public static IEndpointRouteBuilder MapAnalyticsEndpoints(this IEndpointRouteBuilder app)
     {
         // ─── ANALYTICS DASHBOARD (admin-only) ───
-        app.MapGet("/analytics/dashboard", (AnalyticsService analytics) =>
+        app.MapGet("/analytics/dashboard", (IAnalyticsPort analytics) =>
             Results.Json(analytics.GetDashboard()))
             .RequireAuthorization("Admin");
 
         // GET /analytics/session/{sid} — Tek bir oturum için detaylı analytics
-        app.MapGet("/analytics/session/{sid}", (string sid, AnalyticsService analytics) =>
+        app.MapGet("/analytics/session/{sid}", (string sid, IAnalyticsPort analytics) =>
         {
             var result = analytics.GetSessionAnalytics(sid);
             return result == null
@@ -34,7 +34,7 @@ public static class AnalyticsEndpoints
             (string sid, RatingInput body, IRatingStore ratings, ISessionManager sessions) =>
             {
                 // Oturum var mı kontrol et
-                var session = sessions.GetSession(sid);
+                var session = sessions.Get(sid);
                 if (session == null)
                     return Results.NotFound(new { error = "Session bulunamadı." });
 

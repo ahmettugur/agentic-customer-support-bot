@@ -1,9 +1,7 @@
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
-using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Evaluation;
+using CustomerSupportBot.Adapters.Agents.DependencyInjection;
 using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Api.Services.Providers;
 using CustomerSupportBot.Application.DependencyInjection;
 
 namespace CustomerSupportBot.Api.Extensions;
@@ -12,8 +10,9 @@ public static class ApplicationServicesExtensions
 {
     public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration configuration)
     {
-        // ─── Hexagonal: Application Driving Portları ───
-        services.AddApplicationDrivingPorts();
+        // ─── Hexagonal: Application katmanı servisleri ───
+        services.AddApplicationDrivingPorts(configuration);
+
         var allowedOrigins = configuration
             .GetSection("Cors:AllowedOrigins")
             .Get<string[]>();
@@ -48,24 +47,10 @@ public static class ApplicationServicesExtensions
                     }));
         });
 
-        // Prompt yükleyici
-        services.AddSingleton<PromptService>();
+        // Agents adapter — CustomerSupportTeam + ApprovalGateService
+        services.AddAgentsAdapter();
 
-        // AI tool servisi → Application katmanında AddApplicationDrivingPorts() ile kaydedildi
-
-        // HITL — approval gate + context accessor
-        services.AddSingleton<ApprovalGateService>();
-        services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
-
-        // Domain servisleri
-        services.AddSingleton<EntityVerifier>();
-        services.AddSingleton<ReasoningSanityChecker>();
-        services.AddSingleton<ReasoningService>();
-        services.AddSingleton<CustomerSupportTeam>();
-        services.AddSingleton<ICustomerSupportTeam>(sp => sp.GetRequiredService<CustomerSupportTeam>());
-        services.AddSingleton<EvaluationRunner>();
-
-        // Chat orchestrators — istek başına yeni instance
+        // Chat orchestrators — istek başına yeni instance (Api'ye özgü SSE/HTTP transport)
         services.AddScoped<ChatStreamOrchestrator>();
         services.AddScoped<ChatEventOrchestrator>();
 
@@ -76,48 +61,6 @@ public static class ApplicationServicesExtensions
         // tool'ları çağırır. Sipariş/şikayet gibi HITL gerektiren işlemler bu kanalda yok.
         services.AddSingleton<Services.Realtime.RealtimeFunctionTools>();
         services.AddScoped<Services.Realtime.RealtimeNativeBridge>();
-
-        // Context provider'lar
-        services.AddSingleton<IContextProvider, CustomerContextProvider>();
-        services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
-        services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();
-        services.AddSingleton<IContextProvider>(sp =>
-        {
-            // SemanticMemoryService opsiyonel — yoksa no-op provider üret
-            var mem = sp.GetService<CustomerSupportBot.Application.Services.Memory.SemanticMemoryService>();
-            if (mem == null) return new NoopContextProvider();
-            return new Services.Providers.SemanticMemoryContextProvider(
-                mem,
-                sp.GetRequiredService<ISessionManager>(),
-                sp.GetRequiredService<ILogger<Services.Providers.SemanticMemoryContextProvider>>());
-        });
-        services.AddSingleton<ContextPipeline>();
-
-        // Güvenlik — deterministik input gate
-        services.AddSingleton<InputGuard>();
-
-        services.AddSingleton<AnalyticsService>();
-
-        // ─── Self-Improvement (LessonMiner) ───
-        // ILessonStore → PersistenceServicesExtensions'da provider'a göre kaydedilir.
-        services.AddSingleton<Application.Services.Improvement.LessonMiner>();
-
-        // ─── Per-Customer Personalization ───
-        // ICustomerProfileStore → PersistenceServicesExtensions'da provider'a göre kaydedilir.
-        services.AddSingleton<Application.Services.Personalization.CustomerProfileService>();
-
-        // ─── Smart Routing & Skills-Based Escalation (#11) ───
-        // IHumanAgentRegistry → PersistenceServicesExtensions'da provider'a göre kaydedilir.
-        services.AddSingleton<Application.Services.Routing.ISkillsBasedRouter,
-            Application.Services.Routing.SkillsBasedRouter>();
-
-        // ─── Low-Code Workflow Designer (#14) ───
-        // IWorkflowDefinitionStore → PersistenceServicesExtensions'da provider'a göre kaydedilir.
-        services.AddSingleton<Application.Services.Workflow.WorkflowExecutor>();
-
-        // ─── SLA / Response Time Guardian (#H) ───
-        // ISlaEventSink → PersistenceServicesExtensions'da provider'a göre kaydedilir.
-        services.AddHostedService<Services.Sla.SlaGuardianService>();
 
         return services;
     }

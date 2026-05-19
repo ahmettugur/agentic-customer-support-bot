@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 
-namespace CustomerSupportBot.Api.Endpoints;
+namespace CustomerSupportBot.Api.Infrastructure;
 
 internal static class SseWriter
 {
@@ -24,6 +24,7 @@ internal static class SseWriter
         response.Headers["Content-Type"] = "text/event-stream";
         response.Headers["Cache-Control"] = "no-cache, no-transform";
         response.Headers["X-Accel-Buffering"] = "no";
+        response.Headers["Connection"] = "keep-alive";
     }
 
     /// <summary>

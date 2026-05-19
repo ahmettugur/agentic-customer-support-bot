@@ -1,8 +1,9 @@
 // Tests/Services/Auth/TokenServiceTests.cs
 
+using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
-using CustomerSupportBot.Api.Services.Auth;
+using CustomerSupportBot.Adapters.Persistence.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -11,10 +12,10 @@ namespace CustomerSupportBot.Api.Tests.Services.Auth;
 
 public class TokenServiceTests
 {
-    private static UserEntity Seed(TestDbContextFactory dbf, string username = "alice", bool active = true)
+    private static UserInfo Seed(TestDbContextFactory dbf, string username = "alice", bool active = true)
     {
         using var ctx = dbf.CreateDbContext();
-        var user = new UserEntity
+        var entity = new UserEntity
         {
             Id = Guid.NewGuid().ToString("N"),
             Username = username,
@@ -23,9 +24,10 @@ public class TokenServiceTests
             IsActive = active,
             CreatedAt = DateTime.UtcNow.AddDays(-10)
         };
-        ctx.Users.Add(user);
+        ctx.Users.Add(entity);
         ctx.SaveChanges();
-        return user;
+        return new UserInfo(entity.Id, entity.Username, entity.PasswordHash, entity.Role,
+            entity.LinkedAgentId, entity.IsActive, entity.CreatedAt, entity.LastLoginAt);
     }
 
     [Fact]
@@ -33,7 +35,9 @@ public class TokenServiceTests
     {
         var opts = Options.Create(new JwtOptions { SigningKey = "too-short" });
         var dbf = new TestDbContextFactory($"k-{Guid.NewGuid():N}");
-        Action act = () => _ = new TokenService(dbf, opts, NullLogger<TokenService>.Instance);
+        var userRepo = new EfUserAuthRepository(dbf);
+        var tokenRepo = new EfRefreshTokenRepository(dbf);
+        Action act = () => _ = new TokenService(userRepo, tokenRepo, opts, NullLogger<TokenService>.Instance);
         act.Should().Throw<InvalidOperationException>();
     }
 
@@ -42,14 +46,16 @@ public class TokenServiceTests
     {
         var opts = Options.Create(new JwtOptions { SigningKey = "" });
         var dbf = new TestDbContextFactory($"k-{Guid.NewGuid():N}");
-        Action act = () => _ = new TokenService(dbf, opts, NullLogger<TokenService>.Instance);
+        var userRepo = new EfUserAuthRepository(dbf);
+        var tokenRepo = new EfRefreshTokenRepository(dbf);
+        Action act = () => _ = new TokenService(userRepo, tokenRepo, opts, NullLogger<TokenService>.Instance);
         act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
     public async Task IssueAsync_ReturnsTokens_AndPersistsRefresh_AndUpdatesLastLogin()
     {
-        var (tokens, _, _, dbf) = AuthTestFactory.Build();
+        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build();
         var user = Seed(dbf);
 
         var resp = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
@@ -70,7 +76,7 @@ public class TokenServiceTests
     [Fact]
     public async Task RefreshAsync_ValidToken_RotatesAndRevokesOld()
     {
-        var (tokens, _, _, dbf) = AuthTestFactory.Build();
+        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build();
         var user = Seed(dbf);
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
@@ -90,7 +96,7 @@ public class TokenServiceTests
     [Fact]
     public async Task RefreshAsync_UnknownToken_ReturnsNull()
     {
-        var (tokens, _, _, _) = AuthTestFactory.Build();
+        var (tokens, _, _, _, _, _) = AuthTestFactory.Build();
         var resp = await tokens.RefreshAsync("does-not-exist", TestContext.Current.CancellationToken);
         resp.Should().BeNull();
     }
@@ -101,7 +107,7 @@ public class TokenServiceTests
     [InlineData("   ")]
     public async Task RefreshAsync_NullOrWhitespace_ReturnsNull(string? token)
     {
-        var (tokens, _, _, _) = AuthTestFactory.Build();
+        var (tokens, _, _, _, _, _) = AuthTestFactory.Build();
         var resp = await tokens.RefreshAsync(token!, TestContext.Current.CancellationToken);
         resp.Should().BeNull();
     }
@@ -109,7 +115,7 @@ public class TokenServiceTests
     [Fact]
     public async Task RefreshAsync_RevokedToken_ReturnsNull()
     {
-        var (tokens, _, _, dbf) = AuthTestFactory.Build();
+        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build();
         var user = Seed(dbf);
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
@@ -122,7 +128,7 @@ public class TokenServiceTests
     [Fact]
     public async Task RefreshAsync_InactiveUser_ReturnsNull()
     {
-        var (tokens, _, _, dbf) = AuthTestFactory.Build();
+        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build();
         var user = Seed(dbf);
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
@@ -141,7 +147,7 @@ public class TokenServiceTests
     [Fact]
     public async Task RefreshAsync_ExpiredToken_ReturnsNull()
     {
-        var (tokens, _, _, dbf) = AuthTestFactory.Build();
+        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build();
         var user = Seed(dbf);
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
@@ -159,7 +165,7 @@ public class TokenServiceTests
     [Fact]
     public async Task RevokeAsync_UnknownToken_ReturnsFalse()
     {
-        var (tokens, _, _, _) = AuthTestFactory.Build();
+        var (tokens, _, _, _, _, _) = AuthTestFactory.Build();
         (await tokens.RevokeAsync("nope", TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
@@ -169,14 +175,14 @@ public class TokenServiceTests
     [InlineData("   ")]
     public async Task RevokeAsync_NullOrWhitespace_ReturnsFalse(string? token)
     {
-        var (tokens, _, _, _) = AuthTestFactory.Build();
+        var (tokens, _, _, _, _, _) = AuthTestFactory.Build();
         (await tokens.RevokeAsync(token!, TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
     public async Task RevokeAsync_AlreadyRevoked_ReturnsFalse()
     {
-        var (tokens, _, _, dbf) = AuthTestFactory.Build();
+        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build();
         var user = Seed(dbf);
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 

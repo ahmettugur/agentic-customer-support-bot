@@ -1,9 +1,14 @@
+// Extensions/HealthCheckExtensions.cs
+// Sağlık denetimleri: implementasyonlar Adapters.Persistence ve Adapters.Redis'e taşındı.
+
 using CustomerSupportBot.Adapters.Persistence.EfCore;
+using CustomerSupportBot.Adapters.Persistence.HealthChecks;
+using CustomerSupportBot.Adapters.Redis.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using StackExchange.Redis;
-using PersistenceOptions = CustomerSupportBot.Api.Infrastructure.Persistence.PersistenceOptions;
-using PersistenceProvider = CustomerSupportBot.Api.Infrastructure.Persistence.PersistenceProvider;
+using PersistenceOptions = CustomerSupportBot.Adapters.Persistence.EfCore.PersistenceOptions;
+using PersistenceProvider = CustomerSupportBot.Adapters.Persistence.EfCore.PersistenceProvider;
 
 namespace CustomerSupportBot.Api.Extensions;
 
@@ -37,20 +42,16 @@ public static class HealthCheckExtensions
         return services;
     }
 
-    // ── Liveness: /health/live ────────────────────────────────────────────────
-    // Pod ayakta mı? DB/Redis'e dokunmaz, K8s restart kararı için.
     public static IEndpointRouteBuilder MapAppHealthChecks(this IEndpointRouteBuilder app)
     {
-        // Liveness — yalnızca process sağlığı
         app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }))
            .WithTags("health")
            .AllowAnonymous();
 
-        // Readiness — DB + Redis bağlantısı
         app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
         {
-            Predicate        = hc => hc.Tags.Contains("ready"),
-            ResponseWriter   = WriteJsonResponse,
+            Predicate         = hc => hc.Tags.Contains("ready"),
+            ResponseWriter    = WriteJsonResponse,
             ResultStatusCodes =
             {
                 [HealthStatus.Healthy]   = 200,
@@ -59,10 +60,9 @@ public static class HealthCheckExtensions
             }
         }).AllowAnonymous();
 
-        // Kısayol — her ikisini de kapsayan genel /health
         app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
         {
-            ResponseWriter  = WriteJsonResponse,
+            ResponseWriter    = WriteJsonResponse,
             ResultStatusCodes =
             {
                 [HealthStatus.Healthy]   = 200,
@@ -87,49 +87,11 @@ public static class HealthCheckExtensions
         });
         var result = System.Text.Json.JsonSerializer.Serialize(new
         {
-            status     = report.Status.ToString(),
-            totalMs    = (int)report.TotalDuration.TotalMilliseconds,
-            checks     = entries
+            status  = report.Status.ToString(),
+            totalMs = (int)report.TotalDuration.TotalMilliseconds,
+            checks  = entries
         });
         return ctx.Response.WriteAsync(result);
-    }
-}
-
-// ── PostgreSQL health check ───────────────────────────────────────────────────
-file sealed class PostgresHealthCheck(IDbContextFactory<CustomerSupportDbContext> factory) : IHealthCheck
-{
-    public async Task<HealthCheckResult> CheckHealthAsync(
-        HealthCheckContext context, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            await using var db = await factory.CreateDbContextAsync(cancellationToken);
-            await db.Database.ExecuteSqlRawAsync("SELECT 1", cancellationToken);
-            return HealthCheckResult.Healthy("PostgreSQL erişilebilir.");
-        }
-        catch (Exception ex)
-        {
-            return HealthCheckResult.Unhealthy("PostgreSQL erişilemiyor.", ex);
-        }
-    }
-}
-
-// ── Redis health check ────────────────────────────────────────────────────────
-file sealed class RedisHealthCheck(IConnectionMultiplexer redis) : IHealthCheck
-{
-    public async Task<HealthCheckResult> CheckHealthAsync(
-        HealthCheckContext context, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var db = redis.GetDatabase();
-            await db.PingAsync();
-            return HealthCheckResult.Healthy("Redis erişilebilir.");
-        }
-        catch (Exception ex)
-        {
-            return HealthCheckResult.Unhealthy("Redis erişilemiyor.", ex);
-        }
     }
 }
 

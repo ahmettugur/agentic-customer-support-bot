@@ -16,13 +16,13 @@ public interface IReasoningPort
     Task<ReasoningResult> ReasonAsync(
         string query,
         AgentSession session,
-        List<ChatMessage> history,
+        List<ChatMessage>? history = null,
         CancellationToken ct = default);
 
     /// <summary>Streaming reasoning — delta event'leri yayar.</summary>
     IAsyncEnumerable<StreamEvent> ReasonStreamingAsync(
         string query,
         AgentSession session,
-        List<ChatMessage> history,
+        List<ChatMessage>? history = null,
         CancellationToken ct = default);
 }

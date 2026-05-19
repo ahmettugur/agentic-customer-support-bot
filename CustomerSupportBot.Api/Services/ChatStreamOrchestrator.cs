@@ -1,12 +1,14 @@
 // Services/ChatStreamOrchestrator.cs
 // Orchestrates the SSE streaming chat flow including reasoning, workflow execution,
 // and HITL (Human-in-the-Loop) event forwarding. Separates streaming concerns from HTTP layer.
+// Ä°ÅŸ mantÄ±ÄŸÄ± (sentiment, intent, persist) Application katmanÄ±ndaki SessionStateService'e delege edilir.
 
 namespace CustomerSupportBot.Api.Services;
 
 using System.Text;
-using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 
@@ -16,25 +18,27 @@ using Microsoft.Extensions.AI;
 /// </summary>
 public sealed class ChatStreamOrchestrator
 {
-    private readonly CustomerSupportTeam _team;
+    private readonly IAgentTeamPort _team;
     private readonly ISessionManager _sessionManager;
-    private readonly ReasoningService _reasoningService;
+    private readonly IReasoningPort _reasoningService;
     private readonly IApprovalQueue _approvalQueue;
     private readonly IEscalationSink _escalationSink;
     private readonly IChatModeRegistry _modeRegistry;
     private readonly IChatBridge _chatBridge;
     private readonly IApprovalContextAccessor _approvalContext;
+    private readonly SessionStateService _sessionState;
     private readonly ILogger<ChatStreamOrchestrator> _logger;
 
     public ChatStreamOrchestrator(
-        CustomerSupportTeam team,
+        IAgentTeamPort team,
         ISessionManager sessionManager,
-        ReasoningService reasoningService,
+        IReasoningPort reasoningService,
         IApprovalQueue approvalQueue,
         IEscalationSink escalationSink,
         IChatModeRegistry modeRegistry,
         IChatBridge chatBridge,
         IApprovalContextAccessor approvalContext,
+        SessionStateService sessionState,
         ILogger<ChatStreamOrchestrator> logger)
     {
         _team = team;
@@ -45,6 +49,7 @@ public sealed class ChatStreamOrchestrator
         _modeRegistry = modeRegistry;
         _chatBridge = chatBridge;
         _approvalContext = approvalContext;
+        _sessionState = sessionState;
         _logger = logger;
     }
 
@@ -104,7 +109,7 @@ public sealed class ChatStreamOrchestrator
     }
 
     /// <summary>
-    /// Executes the normal bot-mode flow: reasoning › workflow › response.
+    /// Executes the normal bot-mode flow: reasoning ï¿½ workflow ï¿½ response.
     /// </summary>
     private async Task ExecuteBotModeAsync(
         ChatRequest request,
@@ -121,29 +126,24 @@ public sealed class ChatStreamOrchestrator
         var finalReasoning = await ExecuteReasoningStreamAsync(
             request.Query, session, history, sse, ct);
 
-        // Set approval context for tools — IDisposable scope ensures cleanup after workflow
+        // Set approval context for tools ï¿½ IDisposable scope ensures cleanup after workflow
         using var approvalScope = _approvalContext.SetScope(sessionId, null, request.Query);
 
-        // Phase 2: LLM sentiment › session state override (kural tabanlý üzerine yazar)
-        // Not: Ayrý lock almaz — hemen ardýndan AddExchange lock altýnda persist eder.
+        // Phase 2: LLM sentiment â†’ session state override (Application katmanÄ±na delege)
         if (finalReasoning != null)
         {
-            UpdateSessionSentiment(session, finalReasoning);
+            _sessionState.UpdateSessionSentiment(session, finalReasoning);
         }
 
         // Phase 3: Workflow Stream
         var fullResponse = await ExecuteWorkflowStreamAsync(
             request.Query, history, session, finalReasoning, sse, ct);
 
-        // Phase 4: Persist conversation (state extraction triggers rule-based sentiment too)
-        if (!string.IsNullOrWhiteSpace(fullResponse))
-        {
-            _sessionManager.AddExchange(sessionId, request.Query, fullResponse);
-            _chatBridge.RecordBotExchange(sessionId, request.Query, fullResponse);
-        }
+        // Phase 4: Persist conversation (Application katmanÄ±na delege)
+        _sessionState.PersistExchange(sessionId, request.Query, fullResponse, _chatBridge);
 
-        // Phase 5: Sentiment SSE events — her tur sonrasý frontend'e gönder
-        var updatedSession = _sessionManager.GetSession(sessionId);
+        // Phase 5: Sentiment SSE events â†’ her tur sonrasÄ± frontend'e gÃ¶nder
+        var updatedSession = _sessionManager.Get(sessionId);
         if (updatedSession != null)
         {
             await EmitSentimentEventsAsync(updatedSession, sse);
@@ -172,23 +172,11 @@ public sealed class ChatStreamOrchestrator
             if (evt.Type == StreamEventTypes.ReasoningComplete && evt.Data is ReasoningResult rr)
             {
                 finalReasoning = rr;
-                UpdateSessionIntent(session, rr.Intent);
+                _sessionState.UpdateSessionIntent(session, rr.Intent);
             }
         }
 
         return finalReasoning;
-    }
-
-    /// <summary>
-    /// Updates the session intent if the reasoning provided a valid intent.
-    /// </summary>
-    private void UpdateSessionIntent(AgentSession session, string? intent)
-    {
-        if (!string.IsNullOrWhiteSpace(intent) && intent != WellKnown.Intents.Unknown)
-        {
-            session.State.CurrentIntent = intent;
-            _sessionManager.UpdateSession(session);
-        }
     }
 
     /// <summary>
@@ -210,7 +198,7 @@ public sealed class ChatStreamOrchestrator
 
             if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is not null)
             {
-                var text = Endpoints.SseWriter.GetTextFromAnon(evt.Data);
+                var text = Infrastructure.SseWriter.GetTextFromAnon(evt.Data);
                 if (!string.IsNullOrEmpty(text))
                 {
                     responseBuilder.Append(text);
@@ -222,61 +210,33 @@ public sealed class ChatStreamOrchestrator
     }
 
     /// <summary>
-    /// LLM reasoning sonucundaki sentiment'i session state'e yazar.
-    /// Kural tabanlý sonucu override eder (LLM daha doðru).
-    /// Not: Ayrý distributed lock almaz — AddExchange hemen ardýndan zaten lock altýnda
-    /// state persist eder. Burada sadece in-memory session objesini güncelliyoruz.
-    /// </summary>
-    private void UpdateSessionSentiment(AgentSession session, ReasoningResult reasoning)
-    {
-        if (string.IsNullOrWhiteSpace(reasoning.Sentiment) ||
-            reasoning.Sentiment == WellKnown.Sentiments.Neutral && reasoning.SentimentScore == 0.5)
-        {
-            return; // LLM sentiment döndürmemiþ, kural tabanlý sonucu koru
-        }
-
-        var state = session.State;
-        state.Sentiment = reasoning.Sentiment;
-        state.SentimentScore = reasoning.SentimentScore;
-
-        // Ardýþýk negatif sayacýný güncelle
-        if (reasoning.SentimentScore < WellKnown.SentimentThresholds.NegativeThreshold)
-            state.ConsecutiveNegativeTurns++;
-        else
-            state.ConsecutiveNegativeTurns = 0;
-    }
-
-    /// <summary>
-    /// Her tur sonrasý sentiment_update SSE event'i yayýnlar.
-    /// Ardýþýk negatif sayacý eþiði aþarsa sentiment_alert de gönderir.
+    /// Her tur sonrasÄ± sentiment_update SSE event'i yayÄ±nlar.
+    /// ArdÄ±ÅŸÄ±k negatif sayacÄ± eÅŸiÄŸi aÅŸarsa sentiment_alert de gÃ¶nderir.
+    /// Sentiment iÅŸ mantÄ±ÄŸÄ± SessionStateService'te, burada sadece SSE transport.
     /// </summary>
     private async Task EmitSentimentEventsAsync(AgentSession session, SseForwarder sse)
     {
-        var state = session.State;
+        var alert = _sessionState.CheckSentimentAlert(session);
 
         // Her tur: sentiment_update
         await sse.WriteAsync(StreamEventTypes.SentimentUpdate, new
         {
-            sentiment = state.Sentiment,
-            score = state.SentimentScore,
-            consecutive = state.ConsecutiveNegativeTurns,
-            sessionId = session.SessionId
+            sentiment = alert.Sentiment,
+            score = alert.Score,
+            consecutive = alert.ConsecutiveNegativeTurns,
+            sessionId = alert.SessionId
         });
 
-        // Otomatik eskalasyon uyarýsý — ardýþýk negatif eþik aþýldýysa
-        if (state.ConsecutiveNegativeTurns >= WellKnown.SentimentThresholds.AutoEscalationConsecutiveNegative)
+        // Otomatik eskalasyon uyarÄ±sÄ± â€” ardÄ±ÅŸÄ±k negatif eÅŸik aÅŸÄ±ldÄ±ysa
+        if (alert.ShouldAlert)
         {
-            _logger.LogWarning(
-                "[Sentiment Alert] Session {SessionId}: {Consecutive} ardýþýk negatif tur (skor: {Score})",
-                session.SessionId, state.ConsecutiveNegativeTurns, state.SentimentScore);
-
             await sse.WriteAsync(StreamEventTypes.SentimentAlert, new
             {
-                sentiment = state.Sentiment,
-                score = state.SentimentScore,
-                consecutive = state.ConsecutiveNegativeTurns,
-                sessionId = session.SessionId,
-                message = $"Müþteri {state.ConsecutiveNegativeTurns} tur boyunca olumsuz. Bir temsilci baðlanmalý."
+                sentiment = alert.Sentiment,
+                score = alert.Score,
+                consecutive = alert.ConsecutiveNegativeTurns,
+                sessionId = alert.SessionId,
+                message = alert.AlertMessage
             });
         }
     }

@@ -209,7 +209,7 @@ public class ReasoningSanityCheckerTests
         };
         rule.Apply(new ReasoningResult
         {
-            NextAction = "Kullan�c�ya sipari� numaras�n� do�rulat"
+            NextAction = "Kullanıcıya sipariş numarasını doğrulat"
         }, verified, issues);
         issues.Should().BeEmpty();
     }

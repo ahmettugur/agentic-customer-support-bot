@@ -4,7 +4,7 @@
 // - POST /eval/run                : Tüm senaryoları koşturur
 // - POST /eval/run/{id}           : Tek senaryoyu koşturur
 
-using CustomerSupportBot.Api.Evaluation;
+using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;

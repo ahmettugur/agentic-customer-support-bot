@@ -19,4 +19,10 @@ public interface IAnalyticsPort
 
     /// <summary>Özet istatistikler (ortalama puan, toplam sayı vb.).</summary>
     object GetSummary();
+
+    /// <summary>Tüm dashboard istatistiklerini döner.</summary>
+    AnalyticsDashboard GetDashboard();
+
+    /// <summary>Tek bir oturum için detaylı analytics döner.</summary>
+    SessionAnalytics? GetSessionAnalytics(string sessionId);
 }

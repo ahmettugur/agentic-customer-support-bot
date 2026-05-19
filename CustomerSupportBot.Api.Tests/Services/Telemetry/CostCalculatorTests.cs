@@ -1,4 +1,4 @@
-using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Adapters.Telemetry;
 using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 using Microsoft.Extensions.Options;
 

@@ -1,4 +1,4 @@
-using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Adapters.AI;
 using CustomerSupportBot.Adapters.AI.Chat;
 
 namespace CustomerSupportBot.Api.Tests.Services;

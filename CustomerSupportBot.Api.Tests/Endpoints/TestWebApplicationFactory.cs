@@ -3,8 +3,10 @@
 // Redis ba��ml�l��� test ortam�nda InMemoryDistributedLock ile override edilir.
 
 using CustomerSupportBot.Adapters.Persistence.EfCore;
-using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
+using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Api.Tests.Helpers;
+using CustomerSupportBot.Application.Ports.Driven.Auth;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -53,6 +55,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
         {
             services.AddDbContextFactory<CustomerSupportDbContext>(opt =>
                 opt.UseInMemoryDatabase(_dbName));
+
+            // InMemory modda PersistenceServicesExtensions auth repo'larını kaydetmez;
+            // test ortamı için EF Core implementasyonlarını manuel olarak ekle.
+            services.AddScoped<IUserAuthRepository, EfUserAuthRepository>();
+            services.AddScoped<IRefreshTokenRepository, EfRefreshTokenRepository>();
 
             // Redis ba�lant�s�n� ve distributed lock'u test-only InMemory ile de�i�tir.
             // Bu sayede integration testleri ger�ek Redis sunucusuna ihtiya� duymaz.

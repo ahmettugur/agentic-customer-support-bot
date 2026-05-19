@@ -26,7 +26,8 @@
 //   GET  /agent/profile                           → Kendi agent profilim
 
 using System.Security.Claims;
-using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 
@@ -130,17 +131,14 @@ public static class AgentPanelEndpoints
              ISessionManager sessions,
              IChatModeRegistry registry,
              IChatBridge bridge,
-             CustomerSupportTeam team,
-             ReasoningService reasoningService,
-             IApprovalContextAccessor approvalContext,
-             ILoggerFactory loggerFactory) =>
+             IReplanPort replanPort) =>
         {
             var esc = sink.Get(id);
             if (esc == null) return Results.NotFound(new { error = "Escalation bulunamıyor." });
             if (string.IsNullOrEmpty(esc.SessionId))
                 return Results.BadRequest(new { error = "Eskalasyona bağlı bir session yok." });
 
-            var session = sessions.GetSession(esc.SessionId);
+            var session = sessions.Get(esc.SessionId);
             if (session == null)
                 return Results.NotFound(new { error = "Session bulunamadı." });
 
@@ -154,7 +152,7 @@ public static class AgentPanelEndpoints
             session.State.ReplanRequestedBy = requestedBy;
             session.State.ReplanRequestedAt = DateTime.UtcNow;
             session.State.ReplanNote = note;
-            sessions.UpdateSession(session);
+            sessions.Update(session);
 
             sink.Decide(id, WellKnown.EscalationActions.Resolve,
                 assignedTo: requestedBy,
@@ -166,9 +164,7 @@ public static class AgentPanelEndpoints
 
             bridge.PublishSystemMessage(esc.SessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
 
-            _ = AdminEndpoints.RunReplanBotTurnAsync(
-                esc.SessionId, sessions, bridge, team, reasoningService,
-                approvalContext, loggerFactory.CreateLogger("ReplanBotRun"));
+            _ = replanPort.ExecuteAsync(esc.SessionId);
 
             return Results.Json(new { id, sessionId = esc.SessionId, status = "replan_queued", requestedBy, releasedFromHuman });
         });
@@ -364,7 +360,7 @@ public static class AgentPanelEndpoints
         group.MapGet("/chat-sessions/{sid}/sentiment",
             (string sid, ISessionManager sessions) =>
         {
-            var session = sessions.GetSession(sid);
+            var session = sessions.Get(sid);
             if (session is null) return Results.NotFound();
             var state = session.State;
             return Results.Json(new
@@ -384,12 +380,9 @@ public static class AgentPanelEndpoints
              IEscalationSink escalationSink,
              IChatModeRegistry registry,
              IChatBridge bridge,
-             CustomerSupportTeam team,
-             ReasoningService reasoningService,
-             IApprovalContextAccessor approvalContext,
-             ILoggerFactory loggerFactory) =>
+             IReplanPort replanPort) =>
         {
-            var session = sessions.GetSession(sid);
+            var session = sessions.Get(sid);
             if (session == null)
                 return Results.NotFound(new { error = "Session bulunamadı." });
 
@@ -403,7 +396,7 @@ public static class AgentPanelEndpoints
             session.State.ReplanRequestedBy = requestedBy;
             session.State.ReplanRequestedAt = DateTime.UtcNow;
             session.State.ReplanNote = note;
-            sessions.UpdateSession(session);
+            sessions.Update(session);
 
             var resolved = 0;
             foreach (var esc in escalationSink.GetOpen())
@@ -424,9 +417,7 @@ public static class AgentPanelEndpoints
 
             bridge.PublishSystemMessage(sid, WellKnown.FallbackMessages.ReplanCustomerNotice);
 
-            _ = AdminEndpoints.RunReplanBotTurnAsync(
-                sid, sessions, bridge, team, reasoningService,
-                approvalContext, loggerFactory.CreateLogger("ReplanBotRun"));
+            _ = replanPort.ExecuteAsync(sid);
 
             return Results.Json(new { sessionId = sid, status = "replan_queued", requestedBy, escalationsResolved = resolved, releasedFromHuman });
         });

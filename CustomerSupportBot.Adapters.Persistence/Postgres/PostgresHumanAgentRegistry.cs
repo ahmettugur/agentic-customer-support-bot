@@ -144,6 +144,29 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
         return true;
     }
 
+    public async Task<IReadOnlyList<HumanAgent>> GetLinkedUsersAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+            return await ctx.Users
+                .Where(u => u.Role == "Agent" && u.LinkedAgentId != null && u.IsActive)
+                .OrderBy(u => u.Username)
+                .Select(u => new HumanAgent
+                {
+                    Id = u.LinkedAgentId!,
+                    DisplayName = u.Username,
+                    IsActive = u.IsActive
+                })
+                .ToListAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Routing] GetLinkedUsersAsync başarısız");
+            return new List<HumanAgent>();
+        }
+    }
+
     // ─── Hydration ───
 
     private void EnsureHydrated()

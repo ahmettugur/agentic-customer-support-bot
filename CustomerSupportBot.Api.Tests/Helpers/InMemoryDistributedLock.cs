@@ -1,4 +1,4 @@
-using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Adapters.Redis;
 // Tests/Helpers/InMemoryDistributedLock.cs
 // Test-only in-process distributed lock implementasyonu.
 // SemaphoreSlim(1,1) per-key kullan�r � async-friendly ve reentrant-safe.

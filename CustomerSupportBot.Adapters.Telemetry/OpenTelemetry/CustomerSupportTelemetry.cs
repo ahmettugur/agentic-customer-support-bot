@@ -6,6 +6,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 
@@ -15,8 +16,8 @@ namespace CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 /// </summary>
 public static class CustomerSupportTelemetry
 {
-    public const string ActivitySourceName = "CustomerSupportBot.Api";
-    public const string MeterName = "CustomerSupportBot.Api";
+    public const string ActivitySourceName = WellKnown.Telemetry.ActivitySourceName;
+    public const string MeterName = WellKnown.Telemetry.MeterName;
 
     /// <summary>Tüm domain span'lerinin ortak kaynağı.</summary>
     public static readonly ActivitySource ActivitySource = new(ActivitySourceName, "1.0.0");

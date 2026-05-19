@@ -1,6 +1,6 @@
 // Tests/Services/InMemorySessionManagerTests.cs
 
-using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.Options;
 
@@ -15,7 +15,7 @@ public class InMemorySessionManagerTests
     [Fact]
     public void GetOrCreateSession_NewId_CreatesSession()
     {
-        var s = _mgr.GetOrCreateSession("s1");
+        var s = _mgr.GetOrCreate("s1");
         s.Should().NotBeNull();
         s.SessionId.Should().Be("s1");
         s.State.Should().NotBeNull();
@@ -24,22 +24,22 @@ public class InMemorySessionManagerTests
     [Fact]
     public void GetOrCreateSession_ExistingId_ReturnsSame()
     {
-        var s1 = _mgr.GetOrCreateSession("s1");
-        var s2 = _mgr.GetOrCreateSession("s1");
+        var s1 = _mgr.GetOrCreate("s1");
+        var s2 = _mgr.GetOrCreate("s1");
         s1.Should().BeSameAs(s2);
     }
 
     [Fact]
     public void GetOrCreateSession_NullId_GeneratesNewId()
     {
-        var s = _mgr.GetOrCreateSession(null);
+        var s = _mgr.GetOrCreate(null);
         s.SessionId.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
     public void GetSession_Unknown_ReturnsNull()
     {
-        _mgr.GetSession("unknown").Should().BeNull();
+        _mgr.Get("unknown").Should().BeNull();
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class InMemorySessionManagerTests
     public void ExtractAndUpdateState_CapturesCustomerId()
     {
         _mgr.AddExchange("s1", "ben CUST-1990 m��teriyim", "merhaba");
-        var s = _mgr.GetSession("s1");
+        var s = _mgr.Get("s1");
         s!.State.CustomerId.Should().Be("CUST-1990");
     }
 
@@ -72,7 +72,7 @@ public class InMemorySessionManagerTests
     public void ExtractAndUpdateState_CapturesOrderId()
     {
         _mgr.AddExchange("s1", "ORD-1 nerede?", "sipari�iniz yolda");
-        var s = _mgr.GetSession("s1");
+        var s = _mgr.Get("s1");
         s!.State.CollectedInfo.Should().ContainKey("LastMentionedOrderId");
     }
 
@@ -81,7 +81,7 @@ public class InMemorySessionManagerTests
     {
         _mgr.AddExchange("s1", "msg1", "r1");
         _mgr.AddExchange("s1", "msg2", "r2");
-        _mgr.GetSession("s1")!.State.TurnCount.Should().Be(2);
+        _mgr.Get("s1")!.State.TurnCount.Should().Be(2);
     }
 
     [Fact]
@@ -89,14 +89,14 @@ public class InMemorySessionManagerTests
     {
         _mgr.AddExchange("s1", "x", "y");
         _mgr.ClearSession("s1");
-        _mgr.GetSession("s1").Should().BeNull();
+        _mgr.Get("s1").Should().BeNull();
         _mgr.GetHistory("s1").Should().BeEmpty();
     }
 
     [Fact]
     public void AppendAssistantMessage_AppendsToHistory()
     {
-        _mgr.GetOrCreateSession("s1");
+        _mgr.GetOrCreate("s1");
         _mgr.AppendAssistantMessage("s1", "agent yan�t�");
         var h = _mgr.GetHistory("s1");
         h.Should().HaveCount(1);
@@ -116,10 +116,10 @@ public class InMemorySessionManagerTests
     [Fact]
     public void UpdateSession_UpdatesLastActivity()
     {
-        var s = _mgr.GetOrCreateSession("s1");
+        var s = _mgr.GetOrCreate("s1");
         var before = s.LastActivity;
         Thread.Sleep(5);
-        _mgr.UpdateSession(s);
+        _mgr.Update(s);
         s.LastActivity.Should().BeAfter(before);
     }
 }

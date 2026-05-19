@@ -1,4 +1,4 @@
-using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Tests.Helpers;
@@ -168,7 +168,7 @@ public class ApprovalGateServiceEscalationTests
         svc.ProcessPendingEscalations(trace, "q", longResponse);
         var esc = _sink.GetOpen()[0];
         esc.ResponseSummary!.Length.Should().BeLessThanOrEqualTo(501);
-        esc.ResponseSummary.Should().EndWith("�");
+        esc.ResponseSummary.Should().EndWith("…");
     }
 
     [Fact]

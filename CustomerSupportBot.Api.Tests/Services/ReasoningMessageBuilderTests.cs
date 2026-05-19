@@ -1,5 +1,6 @@
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Adapters.Persistence.FileSystem;
+using CustomerSupportBot.Application.Services;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -7,7 +8,7 @@ namespace CustomerSupportBot.Api.Tests.Services;
 
 public class ReasoningMessageBuilderTests
 {
-    private readonly PromptService _prompts = new(NullLogger<PromptService>.Instance);
+    private readonly FileSystemPromptRepository _prompts = new(NullLogger<FileSystemPromptRepository>.Instance);
 
     [Fact]
     public void Build_NoHistory_OnlySystemAndUser()

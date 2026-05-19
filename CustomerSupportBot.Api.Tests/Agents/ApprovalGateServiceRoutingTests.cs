@@ -2,9 +2,10 @@
 // Smart Routing entegrasyon testleri � ApprovalGateService ProcessPendingEscalations
 // �a�r�s� sonras� EscalationRequest'in routing alanlar�n�n do�ru dolduruldu�unu do�rular.
 
-using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Application.Services.Routing;
 using CustomerSupportBot.Api.Tests.Helpers;
@@ -84,7 +85,7 @@ public class ApprovalGateServiceRoutingTests
     public void Routing_AssignsBestMatchedAgentAndIncrementsLoad()
     {
         var (svc, registry, _, sessions) = BuildWithRouting();
-        var session = sessions.GetOrCreateSession("s1");
+        var session = sessions.GetOrCreate("s1");
         session.State.CustomerId = "CUST-1";
 
         svc.ProcessPendingEscalations(TraceFor("s1", "�ikayet", WellKnown.AgentNames.Complaint),
@@ -115,7 +116,7 @@ public class ApprovalGateServiceRoutingTests
             }
         };
         var (svc, _, profiles, sessions) = BuildWithRouting(routingOpts);
-        var session = sessions.GetOrCreateSession("s2");
+        var session = sessions.GetOrCreate("s2");
         session.State.CustomerId = "CUST-VIP";
 
         profiles.Upsert(new CustomerSupportBot.Domain.Model.Memory.CustomerProfile
@@ -138,7 +139,7 @@ public class ApprovalGateServiceRoutingTests
     {
         var routingOpts = new RoutingOptions { SeedAgents = new() }; // bo�
         var (svc, _, _, sessions) = BuildWithRouting(routingOpts);
-        sessions.GetOrCreateSession("s3").State.CustomerId = "C";
+        sessions.GetOrCreate("s3").State.CustomerId = "C";
 
         svc.ProcessPendingEscalations(TraceFor("s3", "�ikayet", WellKnown.AgentNames.Complaint),
             "test", "yan�t");

@@ -38,7 +38,7 @@ public sealed class SseForwarder : IDisposable
         {
             if (!_cancellationToken.IsCancellationRequested)
             {
-                await Endpoints.SseWriter.WriteEventAsync(_response, eventType, data, _cancellationToken);
+                await SseWriter.WriteEventAsync(_response, eventType, data, _cancellationToken);
             }
         }
         catch (OperationCanceledException)

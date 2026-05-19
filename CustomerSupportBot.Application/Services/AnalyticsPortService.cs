@@ -61,33 +61,24 @@ public sealed class AnalyticsPortService : IAnalyticsPort
 
         var summary = new
         {
-            // Sessions
             TotalSessions = sessionInfos.Count,
             TotalMessages = sessionInfos.Sum(s => s.MessageCount),
             AverageSessionMessages = sessionInfos.Count > 0
                 ? Math.Round((double)sessionInfos.Sum(s => s.MessageCount) / sessionInfos.Count, 1)
                 : 0,
-
-            // Ratings
             TotalRatings = allRatings.Count,
             AverageRating = allRatings.Count > 0
                 ? Math.Round(allRatings.Average(r => r.Stars), 2)
                 : 0,
             RatingDistribution = Enumerable.Range(1, 5)
                 .ToDictionary(star => star, star => allRatings.Count(r => r.Stars == star)),
-
-            // Approvals
             TotalApprovals = recentApprovals.Count,
             ApprovedCount = recentApprovals.Count(a => a.Status == ApprovalStatus.Approved),
             RejectedCount = recentApprovals.Count(a => a.Status == ApprovalStatus.Rejected),
             PendingCount = recentApprovals.Count(a => a.Status == ApprovalStatus.Pending),
-
-            // Escalations
             TotalEscalations = recentEscalations.Count,
             OpenEscalations = recentEscalations.Count(e => e.Status == EscalationStatus.Open),
             ResolvedEscalations = recentEscalations.Count(e => e.Status == EscalationStatus.Resolved),
-
-            // Intent distribution
             IntentDistribution = allSessions
                 .Where(s => !string.IsNullOrEmpty(s.State?.CurrentIntent))
                 .GroupBy(s => s.State!.CurrentIntent!)
@@ -95,5 +86,164 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         };
 
         return summary;
+    }
+
+    public AnalyticsDashboard GetDashboard()
+    {
+        var dashboard = new AnalyticsDashboard();
+
+        var allSessions = _sessions.GetAllSessions();
+        dashboard.TotalSessions = allSessions.Count;
+        dashboard.TotalMessages = allSessions.Sum(s => s.MessageCount);
+        dashboard.AverageSessionMessages = allSessions.Count > 0
+            ? Math.Round((double)dashboard.TotalMessages / allSessions.Count, 1)
+            : 0;
+
+        var allRatings = _ratings.GetAll();
+        dashboard.TotalRatings = allRatings.Count;
+        dashboard.AverageRating = allRatings.Count > 0
+            ? Math.Round(allRatings.Average(r => r.Stars), 2)
+            : 0;
+        dashboard.RatingDistribution = Enumerable.Range(1, 5)
+            .ToDictionary(star => star, star => allRatings.Count(r => r.Stars == star));
+        dashboard.RecentRatings = [..allRatings.TakeLast(10)];
+
+        var recentApprovals = _approvals.GetRecent(200);
+        dashboard.TotalApprovals = recentApprovals.Count;
+        dashboard.ApprovedCount = recentApprovals.Count(a => a.Status == ApprovalStatus.Approved);
+        dashboard.RejectedCount = recentApprovals.Count(a => a.Status == ApprovalStatus.Rejected);
+        dashboard.ExpiredCount = recentApprovals.Count(a => a.Status == ApprovalStatus.Expired);
+        dashboard.PendingCount = recentApprovals.Count(a => a.Status == ApprovalStatus.Pending);
+
+        var recentEscalations = _escalations.GetRecent(200);
+        dashboard.TotalEscalations = recentEscalations.Count;
+        dashboard.OpenEscalations = recentEscalations.Count(e => e.Status == EscalationStatus.Open);
+        dashboard.AcknowledgedEscalations = recentEscalations.Count(e => e.Status == EscalationStatus.Acknowledged);
+        dashboard.ResolvedEscalations = recentEscalations.Count(e => e.Status == EscalationStatus.Resolved);
+        dashboard.DismissedEscalations = recentEscalations.Count(e => e.Status == EscalationStatus.Dismissed);
+
+        var intentCounts = new Dictionary<string, int>();
+        var phaseCounts = new Dictionary<string, int>();
+        var sentimentCounts = new Dictionary<string, int>
+        {
+            [WellKnown.Sentiments.Positive] = 0,
+            [WellKnown.Sentiments.Neutral] = 0,
+            [WellKnown.Sentiments.Negative] = 0,
+            [WellKnown.Sentiments.Angry] = 0
+        };
+        var sentimentScores = new List<double>();
+        int negativeCount = 0;
+        int alertCount = 0;
+
+        foreach (var s in allSessions)
+        {
+            var session = _sessions.Get(s.SessionId);
+            if (session == null) continue;
+            var state = session.State;
+
+            if (!string.IsNullOrEmpty(state.CurrentIntent))
+                intentCounts[state.CurrentIntent] = intentCounts.GetValueOrDefault(state.CurrentIntent) + 1;
+
+            if (!string.IsNullOrEmpty(state.Phase))
+                phaseCounts[state.Phase] = phaseCounts.GetValueOrDefault(state.Phase) + 1;
+
+            var label = state.Sentiment ?? WellKnown.Sentiments.Neutral;
+            sentimentCounts[label] = sentimentCounts.GetValueOrDefault(label) + 1;
+            sentimentScores.Add(state.SentimentScore);
+
+            if (state.SentimentScore < WellKnown.SentimentThresholds.NegativeThreshold)
+                negativeCount++;
+            if (state.ConsecutiveNegativeTurns >= WellKnown.SentimentThresholds.AutoEscalationConsecutiveNegative)
+                alertCount++;
+        }
+
+        dashboard.IntentDistribution = intentCounts;
+        dashboard.PhaseDistribution = phaseCounts;
+        dashboard.SentimentDistribution = sentimentCounts;
+        dashboard.AverageSentimentScore = sentimentScores.Count > 0
+            ? Math.Round(sentimentScores.Average(), 2)
+            : 0.5;
+        dashboard.NegativeSessionCount = negativeCount;
+        dashboard.SentimentAlertCount = alertCount;
+
+        return dashboard;
+    }
+
+    public SessionAnalytics? GetSessionAnalytics(string sessionId)
+    {
+        var session = _sessions.Get(sessionId);
+        if (session == null) return null;
+
+        var state = session.State;
+        var history = _sessions.GetHistory(sessionId);
+
+        var result = new SessionAnalytics
+        {
+            SessionId = sessionId,
+            CreatedAt = session.CreatedAt,
+            LastActivity = session.LastActivity,
+            MessageCount = history.Count,
+            TurnCount = state.TurnCount,
+            CurrentIntent = state.CurrentIntent,
+            Phase = state.Phase,
+            CustomerId = state.CustomerId,
+            Sentiment = state.Sentiment,
+            SentimentScore = state.SentimentScore,
+            ConsecutiveNegativeTurns = state.ConsecutiveNegativeTurns,
+            SentimentTimeline = state.SentimentHistory
+                .Select(e => new SentimentTimelineEntry
+                {
+                    Turn = e.Turn,
+                    Label = e.Label,
+                    Score = e.Score,
+                    Timestamp = e.Timestamp
+                })
+                .ToList()
+        };
+
+        var rating = _ratings.GetBySession(sessionId);
+        if (rating != null)
+        {
+            result.Rating = new SessionRatingInfo
+            {
+                Stars = rating.Stars,
+                Feedback = rating.Feedback,
+                RatedAt = rating.RatedAt
+            };
+        }
+
+        var sessionApprovals = _approvals.GetRecent(200)
+            .Where(a => a.SessionId == sessionId).ToList();
+        result.TotalApprovals = sessionApprovals.Count;
+        result.ApprovedCount = sessionApprovals.Count(a => a.Status == ApprovalStatus.Approved);
+        result.RejectedCount = sessionApprovals.Count(a => a.Status == ApprovalStatus.Rejected);
+        result.ExpiredCount = sessionApprovals.Count(a => a.Status == ApprovalStatus.Expired);
+        result.ApprovalDetails = sessionApprovals.Select(a => new ApprovalSummary
+        {
+            Id = a.Id,
+            ToolName = a.ToolName,
+            Status = a.Status.ToString().ToLowerInvariant(),
+            RequestedAt = a.RequestedAt,
+            DecidedAt = a.DecidedAt,
+            DecidedBy = a.DecidedBy
+        }).ToList();
+
+        var sessionEscalations = _escalations.GetRecent(200)
+            .Where(e => e.SessionId == sessionId).ToList();
+        result.TotalEscalations = sessionEscalations.Count;
+        result.OpenEscalations = sessionEscalations.Count(e => e.Status == EscalationStatus.Open);
+        result.ResolvedEscalations = sessionEscalations.Count(e => e.Status == EscalationStatus.Resolved);
+        result.EscalationDetails = sessionEscalations.Select(e => new EscalationSummary
+        {
+            Id = e.Id,
+            AgentName = e.AgentName,
+            Reason = e.Reason,
+            Status = e.Status.ToString().ToLowerInvariant(),
+            CreatedAt = e.CreatedAt,
+            Resolution = e.Resolution
+        }).ToList();
+
+        result.CollectedInfo = state.CollectedInfo;
+        return result;
     }
 }

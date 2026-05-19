@@ -3,8 +3,8 @@
 //   GET /sla/events    — son N warn/breach olayı
 //   GET /sla/status    — güncel pending/open kuyruk + max yaş + ihlal sayısı
 
+using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services.Sla;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Endpoints;

@@ -1,9 +1,12 @@
 // Tests/Services/Auth/AuthTestFactory.cs
-// Auth testleri i�in EF Core InMemory DbContextFactory kurar.
+// Auth testleri için EF Core InMemory altyapısı ve servis fabrikası.
 
+using CustomerSupportBot.Adapters.Persistence.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
+using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Application.Services.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
-using CustomerSupportBot.Api.Services.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -29,7 +32,8 @@ internal sealed class TestDbContextFactory : IDbContextFactory<CustomerSupportDb
 
 internal static class AuthTestFactory
 {
-    public static (TokenService tokens, UserService users, IPasswordHasher hasher, TestDbContextFactory dbf) Build(
+    public static (TokenService tokens, UserService users, IPasswordHasher hasher,
+        TestDbContextFactory dbf, IUserAuthRepository userRepo, IRefreshTokenRepository tokenRepo) Build(
         JwtOptions? jwt = null)
     {
         jwt ??= new JwtOptions
@@ -43,11 +47,14 @@ internal static class AuthTestFactory
 
         var dbf = new TestDbContextFactory($"auth-{Guid.NewGuid():N}");
         var hasher = new BCryptPasswordHasher();
-        var tokens = new TokenService(
-            dbf, Options.Create(jwt), NullLogger<TokenService>.Instance);
-        var users = new UserService(
-            dbf, hasher, NullLogger<UserService>.Instance);
+        var userRepo = new EfUserAuthRepository(dbf);
+        var tokenRepo = new EfRefreshTokenRepository(dbf);
 
-        return (tokens, users, hasher, dbf);
+        var tokens = new TokenService(
+            userRepo, tokenRepo, Options.Create(jwt), NullLogger<TokenService>.Instance);
+        var users = new UserService(
+            userRepo, hasher, NullLogger<UserService>.Instance);
+
+        return (tokens, users, hasher, dbf, userRepo, tokenRepo);
     }
 }

@@ -1,5 +1,5 @@
 // Tests/Evaluation/CriteriaEvaluatorTests.cs
-using CustomerSupportBot.Api.Evaluation;
+using CustomerSupportBot.Application.Services.Evaluation;
 
 namespace CustomerSupportBot.Api.Tests.Evaluation;
 

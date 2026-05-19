@@ -50,7 +50,7 @@ public class SkillsBasedRouterTests
         var decision = router.Decide(TraceWithIntent("�ikayet"), "ComplaintAgent", null);
 
         decision.SuggestedAgentId.Should().BeNull();
-        decision.Note.Should().Contain("M�sait temsilci yok");
+        decision.Note.Should().Contain("temsilci yok");
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class SkillsBasedRouterTests
         var decision = router.Decide(TraceWithIntent("�ikayet"), "ComplaintAgent", null);
 
         decision.SuggestedAgentId.Should().BeNull();
-        decision.Note.Should().Contain("devre d���");
+        decision.Note.Should().Contain("devre d");
     }
 
     [Fact]

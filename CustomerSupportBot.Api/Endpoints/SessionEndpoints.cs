@@ -31,7 +31,7 @@ public static class SessionEndpoints
         // GET /sessions/{sessionId}/state — Oturum durumunu getir (debug/frontend için)
         app.MapGet("/sessions/{sessionId}/state", (string sessionId, ISessionManager sessionManager) =>
         {
-            var session = sessionManager.GetSession(sessionId);
+            var session = sessionManager.Get(sessionId);
             if (session == null)
                 return Results.NotFound();
 

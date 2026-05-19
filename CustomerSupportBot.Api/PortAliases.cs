@@ -1,9 +1,6 @@
 // PortAliases.cs
-// Hexagonal Architecture geçiş katmanı — global using alias'ları.
-//
-// Bu dosya, eski Api interface isimlerini Application port isimlerine yönlendirir.
-// Böylece mevcut kodun refaktör edilmesine gerek kalmadan Application port'ları
-// otomatik olarak kullanılmış olur.
+// Global using alias'ları — uzun Application port namespace'lerini kısaltır.
+// Bu alias'lar, kod okunabilirliği için kısa isimler sağlar; geriye dönük uyumluluk için değil.
 
 global using IApprovalQueue           = CustomerSupportBot.Application.Ports.Driven.Persistence.IApprovalQueueRepository;
 global using IEscalationSink          = CustomerSupportBot.Application.Ports.Driven.Persistence.IEscalationRepository;
@@ -23,29 +20,11 @@ global using ISessionManager          = CustomerSupportBot.Application.Ports.Dri
 global using IConversationStore       = CustomerSupportBot.Application.Ports.Driven.Persistence.ISessionRepository;
 global using SessionInfo              = CustomerSupportBot.Application.Ports.Driven.Persistence.SessionInfo;
 
+// Approval context port
+global using CustomerSupportBot.Application.Ports.Driven;
+
 // Application Services re-export
 global using CustomerSupportBot.Application.Services;
 
-using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
-
-namespace CustomerSupportBot.Api;
-
-/// <summary>
-/// Geriye uyumluluk için eski method isimlerini sağlayan extension method'lar.
-/// ISessionRepository'nin yeni method isimleri:
-///   GetOrCreate, Get, Update, GetAll
-/// Eski isimler:
-///   GetOrCreateSession, GetSession, UpdateSession
-/// </summary>
-public static class SessionRepositoryExtensions
-{
-    public static AgentSession GetOrCreateSession(this ISessionRepository repo, string? sessionId)
-        => repo.GetOrCreate(sessionId);
-
-    public static AgentSession? GetSession(this ISessionRepository repo, string sessionId)
-        => repo.Get(sessionId);
-
-    public static void UpdateSession(this ISessionRepository repo, AgentSession session)
-        => repo.Update(session);
-}
+// Admin panel HTTP DTO'ları
+global using CustomerSupportBot.Api.Models;

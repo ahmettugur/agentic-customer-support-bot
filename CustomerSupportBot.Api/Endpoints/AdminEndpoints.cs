@@ -23,10 +23,10 @@
 //
 // Production'da bu endpoint'lerin önüne auth (admin role) gelmelidir.
 
-using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
-using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -160,17 +160,14 @@ public static class AdminEndpoints
              ISessionManager sessions,
              IChatModeRegistry registry,
              IChatBridge bridge,
-             CustomerSupportTeam team,
-             ReasoningService reasoningService,
-             IApprovalContextAccessor approvalContext,
-             ILoggerFactory loggerFactory) =>
+             IReplanPort replanPort) =>
         {
             var esc = sink.Get(id);
             if (esc == null) return Results.NotFound(new { error = "Escalation bulunamıyor." });
             if (string.IsNullOrEmpty(esc.SessionId))
                 return Results.BadRequest(new { error = "Eskalasyona bağlı bir session yok." });
 
-            var session = sessions.GetSession(esc.SessionId);
+            var session = sessions.Get(esc.SessionId);
             if (session == null)
                 return Results.NotFound(new { error = "Session bulunamadı." });
 
@@ -183,7 +180,7 @@ public static class AdminEndpoints
             session.State.ReplanRequestedBy = requestedBy;
             session.State.ReplanRequestedAt = DateTime.UtcNow;
             session.State.ReplanNote = note;
-            sessions.UpdateSession(session);
+            sessions.Update(session);
 
             // Eskalasyonu otomatik kapat — audit kaydına not düşer (varsa)
             sink.Decide(id, WellKnown.EscalationActions.Resolve,
@@ -193,18 +190,13 @@ public static class AdminEndpoints
             // Session Human modaysa Bot'a döndür (admin sohbeti kapansın)
             var releasedFromHuman = false;
             if (registry.GetMode(esc.SessionId) == ChatMode.Human)
-            {
                 releasedFromHuman = registry.Release(esc.SessionId);
-            }
 
-            // Müşteriye bildirim — not İÇERİDE DEĞİL, sadece nazik yönlendirme metni
-            bridge.PublishSystemMessage(esc.SessionId,
-                WellKnown.FallbackMessages.ReplanCustomerNotice);
+            // Müşteriye bildirim
+            bridge.PublishSystemMessage(esc.SessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
 
-            // Arka planda otomatik bot turunu tetikle
-            _ = RunReplanBotTurnAsync(
-                esc.SessionId, sessions, bridge, team, reasoningService,
-                approvalContext, loggerFactory.CreateLogger("ReplanBotRun"));
+            // Arka planda Application use case'i koştur
+            _ = replanPort.ExecuteAsync(esc.SessionId);
 
             return Results.Json(new
             {
@@ -224,12 +216,9 @@ public static class AdminEndpoints
              IEscalationSink escalationSink,
              IChatModeRegistry registry,
              IChatBridge bridge,
-             CustomerSupportTeam team,
-             ReasoningService reasoningService,
-             IApprovalContextAccessor approvalContext,
-             ILoggerFactory loggerFactory) =>
+             IReplanPort replanPort) =>
         {
-            var session = sessions.GetSession(sid);
+            var session = sessions.Get(sid);
             if (session == null)
                 return Results.NotFound(new { error = "Session bulunamadı." });
 
@@ -241,7 +230,7 @@ public static class AdminEndpoints
             session.State.ReplanRequestedBy = requestedBy;
             session.State.ReplanRequestedAt = DateTime.UtcNow;
             session.State.ReplanNote = note;
-            sessions.UpdateSession(session);
+            sessions.Update(session);
 
             // Bu session'a bağlı açık eskalasyonları da otomatik kapat
             var resolved = 0;
@@ -264,14 +253,9 @@ public static class AdminEndpoints
                 releasedFromHuman = registry.Release(sid);
             }
 
-            bridge.PublishSystemMessage(sid,
-                WellKnown.FallbackMessages.ReplanCustomerNotice);
+            bridge.PublishSystemMessage(sid, WellKnown.FallbackMessages.ReplanCustomerNotice);
 
-            // Arka planda son müşteri mesajı için PlanningAgent + workflow çalıştır,
-            // bot yanıtı "bot" gönderici olarak persistent SSE üzerinden müşteriye yayılacak
-            _ = RunReplanBotTurnAsync(
-                sid, sessions, bridge, team, reasoningService,
-                approvalContext, loggerFactory.CreateLogger("ReplanBotRun"));
+            _ = replanPort.ExecuteAsync(sid);
 
             return Results.Json(new
             {
@@ -304,7 +288,7 @@ public static class AdminEndpoints
         app.MapGet("/chat-sessions/{sid}/sentiment",
             (string sid, ISessionManager sessions) =>
         {
-            var session = sessions.GetSession(sid);
+            var session = sessions.Get(sid);
             if (session == null) return Results.NotFound(new { error = "Session bulunamadı." });
             var state = session.State;
             return Results.Json(new
@@ -461,85 +445,6 @@ public static class AdminEndpoints
         return app;
     }
 
-    /// <summary>
-    /// Replan sonrası arka planda son müşteri mesajı için PlanningAgent + workflow
-    /// koştur, bot yanıtını bridge üzerinden müşteriye Bot mesajı olarak yayınla.
-    /// Müşteri yeni mesaj yazmasa bile bot otomatik konuşmaya devam eder.
-    /// </summary>
-    internal static async Task RunReplanBotTurnAsync(
-        string sessionId,
-        ISessionManager sessions,
-        IChatBridge bridge,
-        CustomerSupportTeam team,
-        ReasoningService reasoningService,
-        IApprovalContextAccessor approvalContext,
-        ILogger logger)
-    {
-        try
-        {
-            var session = sessions.GetSession(sessionId);
-            if (session == null) return;
-
-            var history = sessions.GetHistory(sessionId);
-            // En son müşteri (User) mesajını bul — bunu yeniden değerlendireceğiz
-            var lastUserQuery = history.LastOrDefault(m => m.Role == ChatRole.User)?.Text;
-            if (string.IsNullOrWhiteSpace(lastUserQuery))
-            {
-                // Müşteri henüz hiçbir şey yazmamış — bot çalıştırmaya gerek yok,
-                // ReplanCustomerNotice kullanıcıyı yazmaya davet ediyor.
-                return;
-            }
-
-            // Müşteriye "bot şu an çalışıyor" canlı geri bildirim
-            bridge.PublishBotTyping(sessionId, true);
-
-            try
-            {
-                // Reasoning + workflow (ForceReplanNextTurn flag CustomerSupportTeam'de okunur)
-                var reasoning = await reasoningService.ReasonAsync(lastUserQuery, session, history);
-
-                using var approvalScope = approvalContext.SetScope(sessionId, null, lastUserQuery);
-                var response = await team.RunAsync(lastUserQuery, history, session, reasoning);
-
-                if (string.IsNullOrWhiteSpace(response))
-                {
-                    logger.LogWarning("Replan bot run produced empty response for session {Session}", sessionId);
-                    return;
-                }
-
-                // Session history'sini güncelle — son user'ın boş asistan turunu doldur
-                sessions.AppendAssistantMessage(sessionId, response);
-
-                // Müşteriye bot yanıtı olarak yayınla (persistent SSE → bot bubble)
-                bridge.PublishBotMessage(sessionId, response);
-            }
-            finally
-            {
-                bridge.PublishBotTyping(sessionId, false);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Replan bot run failed for session {Session}", sessionId);
-            try
-            {
-                bridge.PublishSystemMessage(sessionId,
-                    "⚠️ Otomatik yeniden planlama sırasında bir sorun oluştu. " +
-                    "Lütfen sorunuzu tekrar yazar mısınız?");
-            }
-            catch { /* swallow */ }
-        }
-    }
 }
 
-// ─── Admin DTO'ları ───
-public record ChatTakeoverInput(string? HumanAgent);
-public record ChatAdminMessageInput(string Text, string? HumanAgent);
-public record ChatReplanInput(string? RequestedBy);
-
-/// <summary>
-/// Replan input'u: hem eskalasyon hem aktif sohbet endpoint'leri kullanır.
-/// Note PlanningAgent'a one-shot hint olarak gider; müşteriye GÖSTERİLMEZ.
-/// </summary>
-public record ReplanInput(string? RequestedBy, string? Note);
 

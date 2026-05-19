@@ -3,8 +3,8 @@
 // ScanOnce davran���n� do�rular: warn/breach kay�tlar�, AutoReject ve
 // �ncelik y�kseltmesi.
 
+using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services.Sla;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

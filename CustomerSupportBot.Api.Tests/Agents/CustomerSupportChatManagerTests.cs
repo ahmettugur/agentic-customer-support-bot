@@ -1,7 +1,7 @@
 using System.Reflection;
-using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,7 +10,7 @@ namespace CustomerSupportBot.Api.Tests.Agents;
 
 public class CustomerSupportChatManagerTests
 {
-    private readonly PromptService _prompts = new(NullLogger<PromptService>.Instance);
+    private readonly FileSystemPromptRepository _prompts = new(NullLogger<FileSystemPromptRepository>.Instance);
 
     private static AIAgent MakeAgent(string name, string desc = "stub")
     {

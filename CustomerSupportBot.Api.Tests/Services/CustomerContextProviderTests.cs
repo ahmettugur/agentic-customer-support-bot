@@ -1,5 +1,5 @@
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services.Providers;
+using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Api.Tests.Helpers;
 
 namespace CustomerSupportBot.Api.Tests.Services;
@@ -33,7 +33,7 @@ public class CustomerContextProviderTests
         var ctx = await _provider.GetContextAsync(session);
         ctx.Should().NotBeNull();
         ctx.Should().Contain("CUST-1990");
-        ctx.Should().Contain("Toplam sipari�");
+        ctx.Should().Contain("Toplam sipariş");
     }
 
     [Fact]
@@ -43,6 +43,6 @@ public class CustomerContextProviderTests
         session.State.CustomerId = "CUST-NOTEXIST";
         var ctx = await _provider.GetContextAsync(session);
         ctx.Should().NotBeNull();
-        ctx.Should().Contain("Kay�tl� sipari� bulunamad�");
+        ctx.Should().Contain("bulunamad");
     }
 }

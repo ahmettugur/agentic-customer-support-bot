@@ -1,5 +1,4 @@
 using System.Text;
-using CustomerSupportBot.Api.Endpoints;
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.AspNetCore.Http;

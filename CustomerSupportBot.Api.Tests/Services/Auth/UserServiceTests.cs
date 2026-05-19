@@ -1,7 +1,9 @@
 // Tests/Services/Auth/UserServiceTests.cs
 
+using CustomerSupportBot.Adapters.Persistence.Auth;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
-using CustomerSupportBot.Api.Services.Auth;
+using CustomerSupportBot.Application.Services.Auth;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services.Auth;
@@ -12,7 +14,8 @@ public class UserServiceTests
     {
         var dbf = new TestDbContextFactory($"u-{Guid.NewGuid():N}");
         var hasher = new BCryptPasswordHasher();
-        var svc = new UserService(dbf, hasher, NullLogger<UserService>.Instance);
+        var userRepo = new EfUserAuthRepository(dbf);
+        var svc = new UserService(userRepo, hasher, NullLogger<UserService>.Instance);
         return (svc, dbf, hasher);
     }
 

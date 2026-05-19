@@ -102,6 +102,9 @@ public class InMemoryHumanAgentRegistry : IHumanAgentRegistry
         return true;
     }
 
+    public Task<IReadOnlyList<HumanAgent>> GetLinkedUsersAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<HumanAgent>>(new List<HumanAgent>());
+
     private static List<string> NormalizeTags(List<string>? input)
     {
         if (input == null || input.Count == 0) return new();

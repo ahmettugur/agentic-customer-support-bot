@@ -1,0 +1,27 @@
+// Api/Models/EndpointModels.cs
+// Endpoint'lere özgü HTTP input DTO'ları.
+
+namespace CustomerSupportBot.Api.Models;
+
+// ─── AgentsEndpoints ───
+public class RerouteInput
+{
+    public string? AgentId { get; set; }
+    public string? Reason { get; set; }
+}
+
+// ─── WorkflowEndpoints ───
+public class TestRunInput
+{
+    public string? Input { get; set; }
+    public Dictionary<string, string>? Variables { get; set; }
+}
+
+// ─── ImprovementsEndpoints ───
+public sealed record ImprovementDecision(string? DecidedBy, string? Reason);
+
+// ─── PersonalizationEndpoints ───
+public sealed class AdminNoteInput
+{
+    public string? Note { get; set; }
+}

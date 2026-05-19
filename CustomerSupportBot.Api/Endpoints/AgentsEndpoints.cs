@@ -3,9 +3,7 @@
 // /agents (GET, POST, PUT/{id}, DELETE/{id}) ve /escalations/{id}/reroute.
 // Hepsi RequireAuthorization("Admin") scope altında map edilir.
 
-using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Domain.Model;
-using Microsoft.EntityFrameworkCore;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -16,21 +14,19 @@ public static class AgentsEndpoints
         var group = app.MapGroup("/agents");
 
         // ─── List ───
-        group.MapGet("", async (IHumanAgentRegistry registry, CustomerSupportDbContext db) =>
+        group.MapGet("", async (IHumanAgentRegistry registry, CancellationToken ct) =>
         {
             var all = registry.GetAll();
 
-            // DB'deki Agent rolü kullanıcılarını registry'ye ekle (linked_agent_id olanlar)
-            var dbLinked = await db.Users
-                .Where(u => u.Role == "Agent" && u.LinkedAgentId != null && u.IsActive)
-                .OrderBy(u => u.Username)
-                .Select(u => new { id = u.LinkedAgentId!, displayName = u.Username, isActive = u.IsActive })
-                .ToListAsync();
+            // Auth tablosundaki Agent rolü + LinkedAgentId'si olan kullanıcıları port üzerinden al
+            var linked = await registry.GetLinkedUsersAsync(ct);
 
-            // Registry + DB birleştir (ID'ye göre deduplikasyon)
+            // Registry + linked users birleştir (ID'ye göre deduplikasyon)
             var registryIds = all.Select(a => a.Id).ToHashSet();
             var merged = all.Select(a => new { id = a.Id, displayName = a.DisplayName, isActive = a.IsActive })
-                .Concat(dbLinked.Where(d => !registryIds.Contains(d.id)))
+                .Concat(linked
+                    .Where(u => !registryIds.Contains(u.Id))
+                    .Select(u => new { id = u.Id, displayName = u.DisplayName, isActive = u.IsActive }))
                 .OrderBy(a => a.displayName)
                 .ToList();
 
@@ -113,9 +109,4 @@ public static class AgentsEndpoints
     }
 }
 
-public class RerouteInput
-{
-    public string? AgentId { get; set; }
-    public string? Reason { get; set; }
-}
 

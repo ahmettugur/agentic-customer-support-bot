@@ -66,9 +66,4 @@ public static class WorkflowEndpoints
     }
 }
 
-public class TestRunInput
-{
-    public string? Input { get; set; }
-    public Dictionary<string, string>? Variables { get; set; }
-}
 

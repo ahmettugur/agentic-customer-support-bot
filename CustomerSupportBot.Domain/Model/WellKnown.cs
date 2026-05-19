@@ -259,6 +259,13 @@ public static class WellKnown
         public const string ComplaintDescription = "description";
     }
 
+    /// <summary>OpenTelemetry ActivitySource ve Meter isimleri — tek kaynak noktası.</summary>
+    public static class Telemetry
+    {
+        public const string ActivitySourceName = "CustomerSupportBot.Api";
+        public const string MeterName = "CustomerSupportBot.Api";
+    }
+
     /// <summary>
     /// Niyet algılama anahtar kelimeleri.
     /// Sıraya dikkat: ilk eşleşen niyet seçilir.

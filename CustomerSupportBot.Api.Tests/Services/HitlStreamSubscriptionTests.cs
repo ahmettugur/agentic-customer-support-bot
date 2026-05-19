@@ -1,5 +1,5 @@
 using System.Text;
-using CustomerSupportBot.Api.Evaluation;
+using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
@@ -173,7 +173,7 @@ public class EvaluationRunnerLoadScenariosTests
     [Fact]
     public void LoadScenarios_RealFile_Works()
     {
-        // Repository içindeki gerçek senaryo dosyasý kopyalandýysa dene; yoksa skip
+        // Repository iÃ§indeki gerÃ§ek senaryo dosyasÃ½ kopyalandÃ½ysa dene; yoksa skip
         var candidatePaths = new[]
         {
             Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docs", "evaluation-scenarios.yaml"),

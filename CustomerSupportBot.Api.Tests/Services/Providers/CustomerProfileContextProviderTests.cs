@@ -1,6 +1,6 @@
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
-using CustomerSupportBot.Api.Services.Providers;
+using CustomerSupportBot.Application.Services.Providers;
 using Microsoft.Extensions.Logging.Abstractions;
 using SessionState = CustomerSupportBot.Domain.Model.SessionState;
 
@@ -73,10 +73,10 @@ public class CustomerProfileContextProviderTests
         var ctx = await provider.GetContextAsync(session);
 
         ctx.Should().NotBeNull();
-        ctx.Should().Contain("?? M��teri Profili")
+        ctx.Should().Contain("Profili")
                   .And.Contain("CUST-1990")
-                  .And.Contain("Dell XPS 15 m��terisi")
-                  .And.Contain("VIP m��teri")
+                  .And.Contain("Dell XPS 15")
+                  .And.Contain("VIP")
                   .And.Contain("order_inquiry")
                   .And.Match("*ortalama puan: 4*5*"); // (4+5+3)/3 = 4.0; culture-agnostic
     }

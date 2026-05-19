@@ -1,5 +1,5 @@
 using System.Text.Json;
-using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Tests.Helpers;

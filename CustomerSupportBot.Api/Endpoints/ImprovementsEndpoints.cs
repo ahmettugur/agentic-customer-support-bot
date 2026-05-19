@@ -15,8 +15,6 @@ namespace CustomerSupportBot.Api.Endpoints;
 
 public static class ImprovementsEndpoints
 {
-    public sealed record ImprovementDecision(string? DecidedBy, string? Reason);
-
     public static IEndpointRouteBuilder MapImprovementsEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/improvements");

@@ -1,6 +1,9 @@
 using System.Text;
+using CustomerSupportBot.Adapters.Persistence.Auth;
+using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Application.Ports.Driving.Auth;
+using CustomerSupportBot.Application.Services.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
-using CustomerSupportBot.Api.Services.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -17,8 +20,8 @@ public static class AuthServicesExtensions
         var jwtOptions = jwtSection.Get<JwtOptions>() ?? new JwtOptions();
 
         services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
-        services.AddSingleton<ITokenService, TokenService>();
-        services.AddSingleton<IUserService, UserService>();
+        services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<IUserService, Application.Services.Auth.UserService>();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>

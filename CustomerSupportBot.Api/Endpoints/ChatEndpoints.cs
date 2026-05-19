@@ -2,8 +2,8 @@
 // Chat endpoint registration — delegates all logic to orchestrator services.
 // Routes: POST /chat/ (non-streaming), POST /chat/stream (SSE), GET /chat/events/{id} (persistent SSE)
 
-using CustomerSupportBot.Api.Agents;
 using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 
@@ -24,14 +24,12 @@ public static class ChatEndpoints
     /// </summary>
     private static async Task<IResult> HandleChatAsync(
         ChatRequest request,
-        CustomerSupportTeam team,
-        ISessionManager sessionManager,
-        ReasoningService reasoningService,
-        IApprovalContextAccessor approvalContext,
+        IChatPort chatPort,
         InputGuard inputGuard,
         ILoggerFactory loggerFactory)
     {
         var logger = loggerFactory.CreateLogger("ChatEndpoints");
+
         var guardResult = inputGuard.Inspect(request.Query);
         if (guardResult.Verdict == InputGuardVerdict.Reject)
         {
@@ -46,7 +44,6 @@ public static class ChatEndpoints
             }, statusCode: StatusCodes.Status400BadRequest);
         }
 
-        var safeQuery = guardResult.SanitizedInput;
         if (guardResult.Flags.Count > 0)
         {
             logger.LogInformation(
@@ -54,25 +51,9 @@ public static class ChatEndpoints
                 request.SessionId, string.Join(",", guardResult.Flags));
         }
 
-        var session = sessionManager.GetOrCreateSession(request.SessionId);
-        var sessionId = session.SessionId;
-        var history = sessionManager.GetHistory(sessionId);
-
-        var reasoning = await reasoningService.ReasonAsync(safeQuery, session, history);
-
-        // Approval context'i set et — HITL tool onayı için gerekli
-        using var approvalScope = approvalContext.SetScope(sessionId, null, safeQuery);
-        var response = await team.RunAsync(safeQuery, history, session, reasoning);
-
-        if (!string.IsNullOrWhiteSpace(reasoning.Intent) && reasoning.Intent != "bilinmiyor")
-        {
-            session.State.CurrentIntent = reasoning.Intent;
-            sessionManager.UpdateSession(session);
-        }
-
-        sessionManager.AddExchange(sessionId, safeQuery, response);
-
-        return Results.Json(new ChatResponse(response, sessionId, reasoning));
+        var safeRequest = request with { Query = guardResult.SanitizedInput };
+        var response = await chatPort.HandleAsync(safeRequest);
+        return Results.Json(response);
     }
 
     /// <summary>
@@ -115,13 +96,13 @@ public static class ChatEndpoints
                 request.SessionId, string.Join(",", guardResult.Flags));
         }
 
-        // Sanitize edilmiş sorguyla devam et
         var safeRequest = request with { Query = guardResult.SanitizedInput };
 
         using var sse = new SseForwarder(response, httpContext.RequestAborted);
-        var session = sessionManager.GetOrCreateSession(safeRequest.SessionId);
+        var session = sessionManager.GetOrCreate(safeRequest.SessionId);
 
         await sse.WriteSessionAsync(session.SessionId);
+        // ChatStreamOrchestrator: HITL subscription, human mode, SSE-specific logic
         await orchestrator.ExecuteAsync(safeRequest, session, sse, httpContext.RequestAborted);
     }
 

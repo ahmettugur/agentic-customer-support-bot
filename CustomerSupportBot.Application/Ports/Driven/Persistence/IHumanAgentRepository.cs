@@ -32,4 +32,11 @@ public interface IHumanAgentRepository
 
     /// <summary>Eskalasyon kapanınca current load'u -1 yapar (min 0).</summary>
     bool DecrementLoad(string id);
+
+    /// <summary>
+    /// Auth tablosundaki Agent rolü + LinkedAgentId'si olan kullanıcıları döner.
+    /// Registry ile merge edilerek tam temsilci listesi oluşturulur.
+    /// InMemory implementasyonu boş liste döner.
+    /// </summary>
+    Task<IReadOnlyList<HumanAgent>> GetLinkedUsersAsync(CancellationToken ct = default);
 }

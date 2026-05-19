@@ -32,6 +32,13 @@ global using InMemorySessionManager      = CustomerSupportBot.Adapters.Persisten
 global using InMemoryHumanAgentRegistry  = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryHumanAgentRegistry;
 global using InMemoryLessonStore         = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryLessonStore;
 global using InMemoryWorkflowDefinitionStore = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryWorkflowDefinitionStore;
+global using InMemorySlaEventSink            = CustomerSupportBot.Adapters.Persistence.InMemory.InMemorySlaEventSink;
+
+// Auth ports
+global using IPasswordHasher = CustomerSupportBot.Application.Ports.Driven.Auth.IPasswordHasher;
+
+// Approval and context ports
+global using CustomerSupportBot.Application.Ports.Driven;
 
 // Application Services re-export
 global using CustomerSupportBot.Application.Services;

@@ -1,5 +1,5 @@
 // Tests/Services/Auth/BCryptPasswordHasherTests.cs
-using CustomerSupportBot.Api.Services.Auth;
+using CustomerSupportBot.Adapters.Persistence.Auth;
 
 namespace CustomerSupportBot.Api.Tests.Services.Auth;
 

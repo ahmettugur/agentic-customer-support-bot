@@ -14,7 +14,8 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Adapters.AI;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Options;
 
@@ -30,9 +31,9 @@ public sealed class RealtimeBridge : IAsyncDisposable
 
     private readonly RealtimeOptions _options;
     private readonly string _apiKey;
-    private readonly ICustomerSupportTeam _team;
+    private readonly IAgentTeamPort _team;
     private readonly ISessionManager _sessionManager;
-    private readonly ReasoningService _reasoningService;
+    private readonly IReasoningPort _reasoningService;
     private readonly IApprovalContextAccessor _approvalContext;
     private readonly IChatBridge _chatBridge;
     private readonly InputGuard _inputGuard;
@@ -47,9 +48,9 @@ public sealed class RealtimeBridge : IAsyncDisposable
 
     public RealtimeBridge(
         IOptions<AiOptions> aiOptions,
-        ICustomerSupportTeam team,
+        IAgentTeamPort team,
         ISessionManager sessionManager,
-        ReasoningService reasoningService,
+        IReasoningPort reasoningService,
         IApprovalContextAccessor approvalContext,
         IChatBridge chatBridge,
         InputGuard inputGuard,
@@ -86,7 +87,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
             return;
         }
 
-        var session = _sessionManager.GetOrCreateSession(sessionId);
+        var session = _sessionManager.GetOrCreate(sessionId);
         var actualSessionId = session.SessionId;
 
         // 1) OpenAI Realtime WS bağlantısı
@@ -451,7 +452,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
                     if (!string.IsNullOrWhiteSpace(rr.Intent) && rr.Intent != WellKnown.Intents.Unknown)
                     {
                         session.State.CurrentIntent = rr.Intent;
-                        _sessionManager.UpdateSession(session);
+                        _sessionManager.Update(session);
                     }
                 }
             }
@@ -465,7 +466,7 @@ public sealed class RealtimeBridge : IAsyncDisposable
 
                 if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is not null)
                 {
-                    var text = Endpoints.SseWriter.GetTextFromAnon(evt.Data);
+                    var text = Infrastructure.SseWriter.GetTextFromAnon(evt.Data);
                     if (!string.IsNullOrEmpty(text)) responseBuilder.Append(text);
                 }
             }

@@ -3,9 +3,9 @@
 // Tam workflow execution �ok dependency gerektirdi�i i�in sadece yap� testleri.
 
 using System.Reflection;
-using CustomerSupportBot.Api.Agents;
+using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -21,7 +21,7 @@ public class CustomerSupportTeamTests
     {
         chatClient ??= Substitute.For<IChatClient>();
 
-        var prompts = new PromptService(NullLogger<PromptService>.Instance);
+        var prompts = new FileSystemPromptRepository(NullLogger<FileSystemPromptRepository>.Instance);
 
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

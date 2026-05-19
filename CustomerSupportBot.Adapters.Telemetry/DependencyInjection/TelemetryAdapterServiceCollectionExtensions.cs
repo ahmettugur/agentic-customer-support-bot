@@ -1,7 +1,7 @@
 // Adapters.Telemetry/DependencyInjection/TelemetryAdapterServiceCollectionExtensions.cs
 // Telemetri adapter'ları için DI kayıtları.
+// TelemetryOptions (Options/TelemetryOptions.cs) kullanır — TelemetryAdapterOptions kaldırıldı.
 
-using CustomerSupportBot.Adapters.Telemetry.Models;
 using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 using CustomerSupportBot.Application.Ports.Driven.Observability;
 using Microsoft.Extensions.Configuration;
@@ -20,7 +20,7 @@ namespace CustomerSupportBot.Adapters.Telemetry.DependencyInjection;
 public static class TelemetryAdapterServiceCollectionExtensions
 {
     /// <summary>
-    /// ICostCalculatorPort adaptörünü ve OpenTelemetry pipeline'ını kaydeder.
+    /// ICostCalculatorPort adaptörünü, CostUsageStore'u ve OpenTelemetry pipeline'ını kaydeder.
     /// </summary>
     public static IServiceCollection AddTelemetryAdapters(
         this IServiceCollection services,
@@ -28,18 +28,16 @@ public static class TelemetryAdapterServiceCollectionExtensions
         string activitySourceName = "CustomerSupportBot",
         string meterName = "CustomerSupportBot")
     {
-        services.Configure<TelemetryAdapterOptions>(configuration.GetSection(TelemetryAdapterOptions.SectionName));
+        services.Configure<TelemetryOptions>(configuration.GetSection(TelemetryOptions.SectionName));
 
-        var options = configuration.GetSection(TelemetryAdapterOptions.SectionName)
-            .Get<TelemetryAdapterOptions>() ?? new TelemetryAdapterOptions();
+        var options = configuration.GetSection(TelemetryOptions.SectionName)
+            .Get<TelemetryOptions>() ?? new TelemetryOptions();
 
-        // ICostCalculatorPort adapter
-        services.AddSingleton<ICostCalculatorPort, OpenTelemetry.CostCalculator>();
+        services.AddSingleton<ICostCalculatorPort, CostCalculator>();
+        services.AddSingleton<CostUsageStore>();
 
         if (!options.Enabled)
-        {
             return services;
-        }
 
         services.AddOpenTelemetry()
             .ConfigureResource(r => r.AddService(options.ServiceName, serviceVersion: options.ServiceVersion))
@@ -54,9 +52,7 @@ public static class TelemetryAdapterServiceCollectionExtensions
                     .AddEntityFrameworkCoreInstrumentation();
 
                 if (!string.IsNullOrWhiteSpace(options.Otlp.Endpoint))
-                {
                     tracing.AddOtlpExporter(o => ConfigureOtlp(o, options.Otlp));
-                }
             })
             .WithMetrics(metrics =>
             {
@@ -68,15 +64,13 @@ public static class TelemetryAdapterServiceCollectionExtensions
                     .AddHttpClientInstrumentation();
 
                 if (!string.IsNullOrWhiteSpace(options.Otlp.Endpoint))
-                {
                     metrics.AddOtlpExporter(o => ConfigureOtlp(o, options.Otlp));
-                }
             });
 
         return services;
     }
 
-    private static void ConfigureOtlp(OtlpExporterOptions otlpOptions, TelemetryAdapterOptions.OtlpExporterOptions src)
+    private static void ConfigureOtlp(OtlpExporterOptions otlpOptions, TelemetryOptions.OtlpExporterOptions src)
     {
         otlpOptions.Endpoint = new Uri(src.Endpoint!);
         otlpOptions.Protocol = src.Protocol?.ToLowerInvariant() switch
@@ -85,8 +79,6 @@ public static class TelemetryAdapterServiceCollectionExtensions
             _ => OtlpExportProtocol.Grpc
         };
         if (!string.IsNullOrWhiteSpace(src.Headers))
-        {
             otlpOptions.Headers = src.Headers;
-        }
     }
 }

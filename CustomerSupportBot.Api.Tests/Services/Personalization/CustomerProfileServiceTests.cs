@@ -1,4 +1,4 @@
-using RedisOptions = CustomerSupportBot.Domain.Model.RedisOptions;
+using RedisOptions = CustomerSupportBot.Adapters.Redis.RedisOptions;
 using CustomerSupportBot.Application.Services.Personalization;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;

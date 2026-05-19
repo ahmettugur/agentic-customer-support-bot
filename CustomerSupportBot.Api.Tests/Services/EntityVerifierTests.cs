@@ -117,6 +117,6 @@ public class EntityVerifierTests
             }
         };
         var block = EntityVerifier.BuildPromptBlock(verified);
-        block.Should().Contain("DB'de bulunamad�");
+        block.Should().Contain("bulunamad");
     }
 }

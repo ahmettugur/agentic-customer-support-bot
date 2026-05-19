@@ -20,6 +20,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CustomerSupportBot.Adapters.AI;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Options;
 
@@ -90,7 +91,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
             return;
         }
 
-        var session = _sessionManager.GetOrCreateSession(sessionId);
+        var session = _sessionManager.GetOrCreate(sessionId);
         var actualSessionId = session.SessionId;
 
         // 1) OpenAI Realtime WS bağlantısı

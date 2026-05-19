@@ -1,11 +1,13 @@
 // Tests/Evaluation/EvaluationRunnerTests.cs
 
 using CustomerSupportBot.Adapters.AI.Chat;
-using CustomerSupportBot.Api.Agents;
-using CustomerSupportBot.Api.Evaluation;
+using CustomerSupportBot.Adapters.Agents;
+using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Api.Models;
-using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Adapters.Persistence.FileSystem;
+using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -20,7 +22,7 @@ public class EvaluationRunnerTests
     private static EvaluationRunner BuildRunner()
     {
         var chatClient = Substitute.For<IChatClient>();
-        var prompts = new PromptService(NullLogger<PromptService>.Instance);
+        var prompts = new FileSystemPromptRepository(NullLogger<FileSystemPromptRepository>.Instance);
         var configuration = new ConfigurationBuilder().Build();
         var contextPipeline = new ContextPipeline(
             Array.Empty<IContextProvider>(), NullLogger<ContextPipeline>.Instance);
@@ -90,7 +92,7 @@ public class EvaluationRunnerTests
             var s1 = file.Scenarios[0];
             s1.Id.Should().Be("order-1");
             s1.Category.Should().Be("order");
-            s1.Query.Should().Be("sipari�im nerede");
+            s1.Query.Should().Be("siparişim nerede");
             s1.ExpectedIntent.Should().Be("order_inquiry");
             s1.ExpectedAgents.Should().HaveCount(2);
             s1.ExpectedTools.Should().ContainSingle().Which.Should().Be("order_status_tool");

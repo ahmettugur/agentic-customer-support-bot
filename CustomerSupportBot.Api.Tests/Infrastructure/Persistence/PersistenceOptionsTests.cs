@@ -1,6 +1,6 @@
 // Tests/Infrastructure/Persistence/PersistenceOptionsTests.cs
 
-using CustomerSupportBot.Api.Infrastructure.Persistence;
+using CustomerSupportBot.Adapters.Persistence.EfCore;
 
 namespace CustomerSupportBot.Api.Tests.Infrastructure.Persistence;
 
