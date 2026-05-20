@@ -30,8 +30,6 @@
     </PackageReference>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.8" />
-    <!-- Redis — bazı Postgres adaptörleri pub/sub için kullanır -->
-    <PackageReference Include="StackExchange.Redis" Version="2.13.1" />
   </ItemGroup>
 
 </Project>

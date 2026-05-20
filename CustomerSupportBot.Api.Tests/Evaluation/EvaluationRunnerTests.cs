@@ -2,6 +2,7 @@
 
 using CustomerSupportBot.Adapters.AI.Chat;
 using CustomerSupportBot.Adapters.Agents;
+using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
@@ -85,7 +86,7 @@ public class EvaluationRunnerTests
         File.WriteAllText(path, yaml);
         try
         {
-            var file = EvaluationRunner.LoadScenarios(path);
+            var file = ScenarioLoader.LoadScenarios(path);
             file.Version.Should().Be(1);
             file.Scenarios.Should().HaveCount(2);
 
@@ -120,7 +121,7 @@ public class EvaluationRunnerTests
         File.WriteAllText(path, yaml);
         try
         {
-            var f = EvaluationRunner.LoadScenarios(path);
+            var f = ScenarioLoader.LoadScenarios(path);
             f.Version.Should().Be(2);
             f.Scenarios.Should().ContainSingle();
         }
@@ -135,7 +136,7 @@ public class EvaluationRunnerTests
         File.WriteAllText(path, yaml);
         try
         {
-            var f = EvaluationRunner.LoadScenarios(path);
+            var f = ScenarioLoader.LoadScenarios(path);
             f.Scenarios.Should().BeEmpty();
         }
         finally { File.Delete(path); }
@@ -144,7 +145,7 @@ public class EvaluationRunnerTests
     [Fact]
     public void LoadScenarios_NonExistentFile_Throws()
     {
-        var act = () => EvaluationRunner.LoadScenarios(Path.Combine(Path.GetTempPath(), "does-not-exist.yaml"));
+        var act = () => ScenarioLoader.LoadScenarios(Path.Combine(Path.GetTempPath(), "does-not-exist.yaml"));
         act.Should().Throw<FileNotFoundException>();
     }
 

@@ -2,6 +2,7 @@
 
 using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
+using CustomerSupportBot.Application.Ports.Driven.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
 using CustomerSupportBot.Adapters.Persistence.Auth;
 using Microsoft.EntityFrameworkCore;

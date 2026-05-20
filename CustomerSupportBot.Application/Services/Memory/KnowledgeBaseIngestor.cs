@@ -4,6 +4,7 @@
 
 using System.Security.Cryptography;
 using System.Text;
+using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

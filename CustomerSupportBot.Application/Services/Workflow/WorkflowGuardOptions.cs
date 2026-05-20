@@ -1,7 +1,7 @@
-// Models/WorkflowGuardOptions.cs
+// Application/Services/Workflow/WorkflowGuardOptions.cs
 // Workflow seviyesi guard ayarları. appsettings.json'dan bind edilir.
 
-namespace CustomerSupportBot.Domain.Model;
+namespace CustomerSupportBot.Application.Services.Workflow;
 
 /// <summary>
 /// Workflow için guard parametreleri. appsettings.json "WorkflowGuards" bölümü.
@@ -40,6 +40,4 @@ public class WorkflowGuardOptions
     /// Planning sonucunda intent confidence bu eşiğin altındaysa clarification yoluna sap.
     /// </summary>
     public double PlanConfidenceThreshold { get; set; } = 0.7;
-
 }
-

@@ -18,9 +18,9 @@ using System.Text.Json;
 using System.Threading.Channels;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
+using CustomerSupportBot.Application.Ports.Driven.Messaging;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
-using StackExchange.Redis;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
@@ -31,8 +31,7 @@ public sealed class PostgresChatBridge : IChatBridge
 
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresChatBridge> _logger;
-    private readonly ISubscriber _sub;
-    private readonly string _nodeId = RedisNodeId.Value;
+    private readonly IMessageBusPort _messageBus;
 
     private readonly ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> _toAdmin = new();
     private readonly ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> _toUser = new();
@@ -41,14 +40,14 @@ public sealed class PostgresChatBridge : IChatBridge
 
     public PostgresChatBridge(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
-        IConnectionMultiplexer redis,
+        IMessageBusPort messageBus,
         ILogger<PostgresChatBridge> logger)
     {
         _dbFactory = dbFactory;
         _logger = logger;
-        _sub = redis.GetSubscriber();
-        _sub.Subscribe(RedisChannel.Literal("csbot:bridge:touser"), OnRemoteBridgeToUser);
-        _sub.Subscribe(RedisChannel.Literal("csbot:bridge:toadmin"), OnRemoteBridgeToAdmin);
+        _messageBus = messageBus;
+        _messageBus.Subscribe("csbot:bridge:touser", val => OnRemoteBridge(_toUser, val));
+        _messageBus.Subscribe("csbot:bridge:toadmin", val => OnRemoteBridge(_toAdmin, val));
     }
 
     // ─── Publish ───
@@ -298,23 +297,17 @@ public sealed class PostgresChatBridge : IChatBridge
 
     // ─── Redis cross-pod handlers ─────────────────────────────────────────────
 
-    private void OnRemoteBridgeToUser(RedisChannel _, RedisValue val) =>
-        OnRemoteBridge(_toUser, val);
-
-    private void OnRemoteBridgeToAdmin(RedisChannel _, RedisValue val) =>
-        OnRemoteBridge(_toAdmin, val);
-
     private void OnRemoteBridge(
         ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> registry,
-        RedisValue val)
+        string val)
     {
         try
         {
-            using var doc = JsonDocument.Parse(val.ToString());
+            using var doc = JsonDocument.Parse(val);
             var root = doc.RootElement;
 
             // nodeId field'ı varsa ve bu pod'dan geldiyse atla
-            if (root.TryGetProperty("nodeId", out var nid) && nid.GetString() == _nodeId) return;
+            if (root.TryGetProperty("nodeId", out var nid) && nid.GetString() == _messageBus.NodeId) return;
 
             var sessionId = root.GetProperty("SessionId").GetString()!;
             var senderStr = root.GetProperty("Sender").GetString() ?? "System";
@@ -341,24 +334,17 @@ public sealed class PostgresChatBridge : IChatBridge
 
     private void PublishRedis(string channel, ChatBridgeMessage msg)
     {
-        try
+        var payload = new
         {
-            var payload = new
-            {
-                nodeId = _nodeId,
-                msg.Id,
-                msg.SessionId,
-                Sender = msg.Sender.ToString(),
-                msg.Text,
-                msg.HumanAgent,
-                msg.Timestamp
-            };
-            _sub.Publish(RedisChannel.Literal(channel), JsonSerializer.Serialize(payload));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[Bridge] Redis publish başarısız: {Channel}", channel);
-        }
+            nodeId = _messageBus.NodeId,
+            msg.Id,
+            msg.SessionId,
+            Sender = msg.Sender.ToString(),
+            msg.Text,
+            msg.HumanAgent,
+            msg.Timestamp
+        };
+        _messageBus.Publish(channel, JsonSerializer.Serialize(payload));
     }
 }
 

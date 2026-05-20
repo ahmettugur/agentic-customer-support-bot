@@ -1,12 +1,10 @@
 // Application/Services/Evaluation/EvaluationRunner.cs
-// Evaluation-scenarios.yaml'daki senaryoları sistem üzerinde otomatik çalıştırır.
+// Evaluation-scenarios'daki senaryoları sistem üzerinde otomatik çalıştırır.
 // Her senaryo için reasoning + workflow + critique akışını koşturur, trace üzerinden doğrular.
 
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Application.Ports.Driven.Observability;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 
 namespace CustomerSupportBot.Application.Services.Evaluation;
 
@@ -27,17 +25,6 @@ public class EvaluationRunner
         _reasoningService = reasoningService;
         _sessionManager = sessionManager;
         _traceStore = traceStore;
-    }
-
-    /// <summary>YAML dosyasından senaryoları yükler.</summary>
-    public static ScenarioFile LoadScenarios(string yamlPath)
-    {
-        var yaml = File.ReadAllText(yamlPath);
-        var deserializer = new DeserializerBuilder()
-            .WithNamingConvention(UnderscoredNamingConvention.Instance)
-            .IgnoreUnmatchedProperties()
-            .Build();
-        return deserializer.Deserialize<ScenarioFile>(yaml);
     }
 
     /// <summary>

@@ -1,9 +1,11 @@
-// Models/ParallelExecutionOptions.cs
+// Application/Services/ParallelExecutionOptions.cs
 // Compound query alt görevleri için paralel çalıştırma ayarları.
 // Hangi agent'ların read-only (yan-etkisiz) olduğu WellKnown.AgentNames.ReadOnly
 // üzerinden belirlenir — config'de ayrı bir liste tutulmaz.
 
-namespace CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model;
+
+namespace CustomerSupportBot.Application.Services;
 
 /// <summary>
 /// Bileşik (compound) sorgudaki alt görevlerin paralel yürütme politikası.
@@ -30,4 +32,3 @@ public class ParallelExecutionOptions
         return WellKnown.AgentNames.ReadOnly.Contains(sub.TargetAgent);
     }
 }
-

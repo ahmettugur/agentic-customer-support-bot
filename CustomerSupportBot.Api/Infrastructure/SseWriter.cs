@@ -1,4 +1,4 @@
-// Endpoints/SseWriter.cs
+// Infrastructure/SseWriter.cs
 // Server-Sent Events (SSE) formatında event yazmak için yardımcı sınıf.
 // "event: TYPE\ndata: JSON\n\n" formatını üretir ve response body'yi flush eder.
 

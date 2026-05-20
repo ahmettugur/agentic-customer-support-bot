@@ -8,7 +8,9 @@
 //   3) Yoksa → InvalidOperationException
 
 using CustomerSupportBot.Adapters.Redis.Locking;
+using CustomerSupportBot.Adapters.Redis.Messaging;
 using CustomerSupportBot.Application.Ports.Driven.Locking;
+using CustomerSupportBot.Application.Ports.Driven.Messaging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -63,6 +65,9 @@ public static class RedisAdapterServiceCollectionExtensions
 
         // Distributed lock — Redis-backed (Medallion RedLock)
         services.AddSingleton<IDistributedLockPort, RedisDistributedLockAdapter>();
+
+        // Message bus — Redis pub/sub (yatay ölçeklendirme)
+        services.AddSingleton<IMessageBusPort, RedisMessageBusAdapter>();
 
         return services;
     }

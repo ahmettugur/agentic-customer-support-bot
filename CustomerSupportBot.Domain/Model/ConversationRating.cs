@@ -22,11 +22,6 @@ public class ConversationRating
 }
 
 /// <summary>
-/// Rating submit endpoint input modeli.
-/// </summary>
-public record RatingInput(int Stars, string? Feedback);
-
-/// <summary>
 /// Analytics dashboard için özet veri modeli.
 /// </summary>
 public class AnalyticsDashboard

@@ -1,8 +1,10 @@
-// Models/ApprovalOptions.cs
+// Application/Services/ApprovalOptions.cs
 // HITL config — appsettings.json > "HumanInTheLoop" bölümünden bind edilir.
 // Hangi tool'ların onay gerektirdiği ve timeout değeri burada tanımlıdır.
 
-namespace CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model;
+
+namespace CustomerSupportBot.Application.Services;
 
 /// <summary>
 /// HITL ayarları. Approval gate feature'ı Enabled=false ise bypass edilir —
@@ -35,4 +37,3 @@ public class ApprovalOptions
     /// </summary>
     public bool EscalationEnabled { get; set; } = true;
 }
-

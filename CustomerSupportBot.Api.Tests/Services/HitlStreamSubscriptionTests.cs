@@ -153,7 +153,7 @@ public class EvaluationRunnerLoadScenariosTests
         File.WriteAllText(path, yaml);
         try
         {
-            var file = EvaluationRunner.LoadScenarios(path);
+            var file = ScenarioLoader.LoadScenarios(path);
             file.Version.Should().Be(1);
             file.Scenarios.Should().HaveCount(1);
             var s = file.Scenarios[0];
@@ -181,7 +181,7 @@ public class EvaluationRunnerLoadScenariosTests
         };
         var existing = candidatePaths.FirstOrDefault(File.Exists);
         if (existing == null) return;
-        var file = EvaluationRunner.LoadScenarios(Path.GetFullPath(existing));
+        var file = ScenarioLoader.LoadScenarios(Path.GetFullPath(existing));
         file.Should().NotBeNull();
         file.Scenarios.Should().NotBeEmpty();
     }

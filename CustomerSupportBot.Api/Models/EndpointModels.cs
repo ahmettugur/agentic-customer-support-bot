@@ -25,3 +25,6 @@ public sealed class AdminNoteInput
 {
     public string? Note { get; set; }
 }
+
+// ─── AnalyticsEndpoints ───
+public sealed record RatingInput(int Stars, string? Feedback);

@@ -457,6 +457,96 @@ Varsayılan persistence provider **Postgres**'dur (`appsettings.json > Persisten
 
 Detaylar → [developer-guide.md](developer-guide.md).
 
+## Multi-Provider Stratejisi
+
+Sistem, altyapı bileşenlerini çalışma zamanında değiştirmeye olanak tanıyan **runtime provider switch** deseni kullanır. Bu strateji hexagonal mimarinin (ports & adapters) doğal bir uzantısıdır — tüm altyapı erişimi interface (port) arkasındadır ve DI composition root'unda hangi adaptörün bağlanacağı yapılandırma ile belirlenir.
+
+### AI Provider Switch
+
+```
+appsettings.json → AI:Provider
+```
+
+| Değer | Chat Client | Reasoning Client | Gerekli Config |
+|-------|-------------|------------------|----------------|
+| `OpenAI` | `gpt-5.4` | `gpt-5.4-nano` | `AI:OpenAI:ApiKey` |
+| `AzureOpenAI` | deployment config | reasoning deployment | `AI:AzureOpenAI:Endpoint`, `ApiKey` |
+| `Anthropic` | `claude-haiku-4-5` | `claude-haiku-4-5` | `AI:Anthropic:ApiKey` |
+
+**Karar noktası:** `AiClientFactory.CreateStandardChatClient()` ve `CreateReasoningChatClient()` — `AI:Provider` değerine göre sadece ilgili sağlayıcının alt bloğundaki alanlar zorunlu kılınır.
+
+**İki bağımsız model:** Standard (hız/maliyet optimize) + Reasoning (derin düşünme). Bağımsız upgrade/downgrade yapılabilir.
+
+### Persistence Provider Switch
+
+```
+appsettings.json → Persistence:Provider
+```
+
+| Değer | Adaptörler | Kullanım |
+|-------|-----------|----------|
+| `Postgres` | `PostgresSessionManager`, `PostgresApprovalQueue`, `PostgresEscalationSink`, ... | Production — kalıcı, yatay ölçeklenebilir |
+| `InMemory` | `InMemorySessionManager`, `InMemoryApprovalQueue`, `InMemoryEscalationSink`, ... | Development, test — restart'ta sıfırlanır |
+
+**Karar noktası:** `PersistenceAdapterServiceCollectionExtensions.AddPersistenceAdapters()` — tek `if/else` ile 14+ repository aynı interface'lere farklı implementasyonlar bağlar.
+
+### Message Bus Provider Switch
+
+```
+Redis varsa → RedisMessageBusAdapter (pod'lar arası pub/sub)
+Redis yoksa → InMemoryMessageBusAdapter (tek instance, lokal pub/sub)
+```
+
+**Karar noktası:** `IMessageBusPort` — Redis adaptörü DI'da kayıtlıysa Redis kullanılır; InMemory modda `TryAddSingleton` ile fallback devreye girer. Persistence adaptörleri hiçbir zaman doğrudan Redis'e bağımlı değildir.
+
+### Prompt Source Switch
+
+```
+appsettings.json → Prompts:RootPath (opsiyonel)
+```
+
+| Senaryo | Yapılandırma |
+|---------|-------------|
+| Varsayılan (local) | Boş bırakılır → `AppContext.BaseDirectory/Prompts` |
+| Azure Files mount | `"/mnt/shared/prompts"` |
+| NFS volume | `"/data/prompts"` |
+| Göreli path | `"../shared-prompts"` → BaseDirectory'e göre çözümlenir |
+
+### Strateji Özeti
+
+```
+                    ┌─────────────────────────────────────────┐
+                    │          appsettings.json                │
+                    │  AI:Provider      = OpenAI|Azure|Anthro  │
+                    │  Persistence:Provider = Postgres|InMemory│
+                    │  Prompts:RootPath = (opsiyonel path)     │
+                    │  ConnectionStrings:Redis = (gerekli)     │
+                    └──────────────┬──────────────────────────┘
+                                   │ IConfiguration
+                    ┌──────────────▼──────────────────────────┐
+                    │      Program.cs (Composition Root)       │
+                    │  .AddAiServices(config)                  │
+                    │  .AddRedisAdapters(config)               │
+                    │  .AddPersistenceAdapters(config)         │
+                    │  .AddTelemetryServices(config)           │
+                    └──────────────┬──────────────────────────┘
+                                   │ DI Container
+                    ┌──────────────▼──────────────────────────┐
+                    │        Runtime Port Bindings             │
+                    │  IChatClient ──→ OpenAI | Azure | Anthr. │
+                    │  ISessionRepository ──→ Postgres | InMem │
+                    │  IMessageBusPort ──→ Redis | InMemory    │
+                    │  IDistributedLockPort ──→ Redis          │
+                    │  IPromptRepository ──→ FileSystem(path)  │
+                    └─────────────────────────────────────────┘
+```
+
+**Yeni provider ekleme:**
+1. `Application/Ports/Driven/` altında yeni port tanımla (veya mevcut portu kullan)
+2. Yeni adapter projesi veya mevcut adapter'da implementasyon yaz
+3. DI extension metodunda yapılandırmaya göre kayıt ekle
+4. `appsettings.json`'a yeni provider bloğu ekle
+
 ## Çapraz referanslar
 
 - **Her class/interface ne iş yapar?** → [reference.md](reference.md)

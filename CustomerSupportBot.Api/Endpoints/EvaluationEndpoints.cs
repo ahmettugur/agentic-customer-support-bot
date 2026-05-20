@@ -4,6 +4,7 @@
 // - POST /eval/run                : Tüm senaryoları koşturur
 // - POST /eval/run/{id}           : Tek senaryoyu koşturur
 
+using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Domain.Model;
 
@@ -27,7 +28,7 @@ public static class EvaluationEndpoints
 
         try
         {
-            var file = EvaluationRunner.LoadScenarios(path);
+            var file = ScenarioLoader.LoadScenarios(path);
             return Results.Json(new
             {
                 version = file.Version,
@@ -62,7 +63,7 @@ public static class EvaluationEndpoints
         var path = ResolveScenarioPath(env);
         if (path == null) return Results.NotFound(new { error = "evaluation-scenarios.yaml bulunamadı" });
 
-        var file = EvaluationRunner.LoadScenarios(path);
+        var file = ScenarioLoader.LoadScenarios(path);
         var scenarios = limit.HasValue ? file.Scenarios.Take(limit.Value).ToList() : file.Scenarios;
 
         var result = await runner.RunAsync(scenarios, ctx.RequestAborted);
@@ -79,7 +80,7 @@ public static class EvaluationEndpoints
         var path = ResolveScenarioPath(env);
         if (path == null) return Results.NotFound(new { error = "evaluation-scenarios.yaml bulunamadı" });
 
-        var file = EvaluationRunner.LoadScenarios(path);
+        var file = ScenarioLoader.LoadScenarios(path);
         var scenario = file.Scenarios.FirstOrDefault(s =>
             s.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
 

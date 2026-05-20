@@ -54,10 +54,9 @@ public class PostToolReflection
 
     /// <summary>
     /// <see cref="Status"/>'un type-safe enum karşılığı.
-    /// JSON serialization'da görünmez (computed). Routing kodunda <c>Status == "needs_escalation"</c>
+    /// Routing kodunda <c>Status == "needs_escalation"</c>
     /// yerine <c>StatusEnum == TaskCompletionStatus.NeedsEscalation</c> kullanılabilir.
     /// </summary>
-    [System.Text.Json.Serialization.JsonIgnore]
     public TaskCompletionStatus StatusEnum => Status switch
     {
         WellKnown.TaskStatuses.Done => TaskCompletionStatus.Done,

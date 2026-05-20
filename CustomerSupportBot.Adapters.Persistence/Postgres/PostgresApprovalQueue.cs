@@ -24,10 +24,11 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
+using CustomerSupportBot.Application.Ports.Driven.Messaging;
+using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using StackExchange.Redis;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
@@ -37,9 +38,8 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ApprovalOptions _options;
     private readonly ILogger<PostgresApprovalQueue> _logger;
-    private readonly ISubscriber _sub;
+    private readonly IMessageBusPort _messageBus;
     private readonly IAppDistributedLock _distributedLock;
-    private readonly string _nodeId = RedisNodeId.Value;
     private readonly ConcurrentDictionary<string, QueueEntry> _entries = new();
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
@@ -52,17 +52,17 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
     public PostgresApprovalQueue(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
         IOptions<ApprovalOptions> options,
-        IConnectionMultiplexer redis,
+        IMessageBusPort messageBus,
         IAppDistributedLock distributedLock,
         ILogger<PostgresApprovalQueue> logger)
     {
         _dbFactory = dbFactory;
         _options = options.Value;
         _distributedLock = distributedLock;
+        _messageBus = messageBus;
         _logger = logger;
-        _sub = redis.GetSubscriber();
-        _sub.Subscribe(RedisChannel.Literal("csbot:approval:created"), OnRemoteCreated);
-        _sub.Subscribe(RedisChannel.Literal("csbot:approval:decided"), OnRemoteDecided);
+        _messageBus.Subscribe("csbot:approval:created", OnRemoteCreated);
+        _messageBus.Subscribe("csbot:approval:decided", OnRemoteDecided);
     }
 
     public ApprovalRequest Create(ApprovalRequest request)
@@ -93,7 +93,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
 
         PublishRedis("csbot:approval:created", new
         {
-            nodeId = _nodeId,
+            nodeId = _messageBus.NodeId,
             id = request.Id,
             sessionId = request.SessionId,
             traceId = request.TraceId,
@@ -190,7 +190,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
 
             PublishRedis("csbot:approval:decided", new
             {
-                nodeId = _nodeId,
+                nodeId = _messageBus.NodeId,
                 id,
                 approved,
                 decidedBy = entry.Request.DecidedBy,
@@ -373,13 +373,13 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
 
     // ─── Redis cross-pod handlers ─────────────────────────────────────────────
 
-    private void OnRemoteCreated(RedisChannel _, RedisValue val)
+    private void OnRemoteCreated(string val)
     {
         try
         {
-            using var doc = JsonDocument.Parse(val.ToString());
+            using var doc = JsonDocument.Parse(val);
             var root = doc.RootElement;
-            if (root.GetProperty("nodeId").GetString() == _nodeId) return;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
 
             var id = root.GetProperty("id").GetString()!;
             if (_entries.ContainsKey(id)) return;
@@ -414,13 +414,13 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         }
     }
 
-    private void OnRemoteDecided(RedisChannel _, RedisValue val)
+    private void OnRemoteDecided(string val)
     {
         try
         {
-            using var doc = JsonDocument.Parse(val.ToString());
+            using var doc = JsonDocument.Parse(val);
             var root = doc.RootElement;
-            if (root.GetProperty("nodeId").GetString() == _nodeId) return;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
 
             var id = root.GetProperty("id").GetString()!;
             if (!_entries.TryGetValue(id, out var entry)) return;
@@ -447,8 +447,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
 
     private void PublishRedis(string channel, object payload)
     {
-        try { _sub.Publish(RedisChannel.Literal(channel), JsonSerializer.Serialize(payload)); }
-        catch (Exception ex) { _logger.LogWarning(ex, "[HITL] Redis publish başarısız: {Channel}", channel); }
+        _messageBus.Publish(channel, JsonSerializer.Serialize(payload));
     }
 
     // ─────────────────────────────────────────────────────────────────────────

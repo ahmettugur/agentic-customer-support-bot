@@ -104,9 +104,7 @@ public class ReasoningResult
 
     /// <summary>
     /// <see cref="ConfidenceScore"/>'un type-safe enum karşılığı.
-    /// JSON serialization'da görünmez (computed).
     /// </summary>
-    [System.Text.Json.Serialization.JsonIgnore]
     public ConfidenceLevel ConfidenceLevel => ConfidenceScore switch
     {
         >= 0.75 => ConfidenceLevel.High,

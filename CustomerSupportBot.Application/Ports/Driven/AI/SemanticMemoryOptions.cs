@@ -1,7 +1,8 @@
-// Models/Memory/SemanticMemoryOptions.cs
+// Application/Ports/Driven/AI/SemanticMemoryOptions.cs
 // appsettings.json > "SemanticMemory" bölümüne bind edilen opsiyonlar.
+// Vendor-spesifik (Qdrant, Embedding) ve domain-agnostik (Retrieval, Collections) konfigürasyonları içerir.
 
-namespace CustomerSupportBot.Domain.Model.Memory;
+namespace CustomerSupportBot.Application.Ports.Driven.AI;
 
 public sealed class SemanticMemoryOptions
 {

@@ -10,6 +10,7 @@ using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Application.Ports.Driven;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Adapters.Persistence.FileSystem;
 
@@ -26,10 +27,12 @@ public class FileSystemPromptRepository : IPromptRepository
     private readonly ILogger<FileSystemPromptRepository> _logger;
     private readonly string _rootDirectory;
 
-    public FileSystemPromptRepository(ILogger<FileSystemPromptRepository> logger)
+    public FileSystemPromptRepository(
+        ILogger<FileSystemPromptRepository> logger,
+        IOptions<PromptOptions>? options = null)
     {
         _logger = logger;
-        _rootDirectory = ResolveRootDirectory();
+        _rootDirectory = ResolveRootDirectory(options?.Value);
         LoadAll();
     }
 
@@ -130,10 +133,20 @@ public class FileSystemPromptRepository : IPromptRepository
     }
 
     /// <summary>
-    /// Prompts dizinini bulur. Önce çalışma dizini, sonra BaseDirectory (publish).
+    /// Prompts dizinini bulur. Yapılandırma ile override edilebilir.
+    /// Cloud ortamlarında Azure Files / NFS mount yolu verilebilir.
     /// </summary>
-    private static string ResolveRootDirectory()
+    private static string ResolveRootDirectory(PromptOptions? options)
     {
+        // 0) Yapılandırmadan gelen explicit path
+        if (!string.IsNullOrWhiteSpace(options?.RootPath))
+        {
+            var configured = options.RootPath;
+            if (!Path.IsPathRooted(configured))
+                configured = Path.Combine(AppContext.BaseDirectory, configured);
+            if (Directory.Exists(configured)) return configured;
+        }
+
         // 1) Uygulama base dizini (publish + normal build çıktısı)
         var baseDir = Path.Combine(AppContext.BaseDirectory, "Prompts");
         if (Directory.Exists(baseDir)) return baseDir;

@@ -16,10 +16,10 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
+using CustomerSupportBot.Application.Ports.Driven.Messaging;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using Microsoft.EntityFrameworkCore;
-using StackExchange.Redis;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
@@ -28,8 +28,7 @@ public sealed class PostgresEscalationSink : IEscalationSink
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresEscalationSink> _logger;
-    private readonly ISubscriber _sub;
-    private readonly string _nodeId = RedisNodeId.Value;
+    private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, EscalationRequest> _byId = new();
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
@@ -41,14 +40,14 @@ public sealed class PostgresEscalationSink : IEscalationSink
 
     public PostgresEscalationSink(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
-        IConnectionMultiplexer redis,
+        IMessageBusPort messageBus,
         ILogger<PostgresEscalationSink> logger)
     {
         _dbFactory = dbFactory;
         _logger = logger;
-        _sub = redis.GetSubscriber();
-        _sub.Subscribe(RedisChannel.Literal("csbot:escalation:created"), OnRemoteCreated);
-        _sub.Subscribe(RedisChannel.Literal("csbot:escalation:decided"), OnRemoteDecided);
+        _messageBus = messageBus;
+        _messageBus.Subscribe("csbot:escalation:created", OnRemoteCreated);
+        _messageBus.Subscribe("csbot:escalation:decided", OnRemoteDecided);
     }
 
     public EscalationRequest Create(EscalationRequest request)
@@ -256,13 +255,13 @@ public sealed class PostgresEscalationSink : IEscalationSink
 
     // ─── Redis cross-pod handlers ─────────────────────────────────────────────
 
-    private void OnRemoteCreated(RedisChannel _, RedisValue val)
+    private void OnRemoteCreated(string val)
     {
         try
         {
-            using var doc = JsonDocument.Parse(val.ToString());
+            using var doc = JsonDocument.Parse(val);
             var root = doc.RootElement;
-            if (root.GetProperty("nodeId").GetString() == _nodeId) return;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
 
             var req = JsonSerializer.Deserialize<EscalationRequest>(
                 root.GetProperty("payload").GetRawText());
@@ -279,13 +278,13 @@ public sealed class PostgresEscalationSink : IEscalationSink
         }
     }
 
-    private void OnRemoteDecided(RedisChannel _, RedisValue val)
+    private void OnRemoteDecided(string val)
     {
         try
         {
-            using var doc = JsonDocument.Parse(val.ToString());
+            using var doc = JsonDocument.Parse(val);
             var root = doc.RootElement;
-            if (root.GetProperty("nodeId").GetString() == _nodeId) return;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
 
             var req = JsonSerializer.Deserialize<EscalationRequest>(
                 root.GetProperty("payload").GetRawText());
@@ -304,15 +303,8 @@ public sealed class PostgresEscalationSink : IEscalationSink
 
     private void PublishRedis(string channel, EscalationRequest req)
     {
-        try
-        {
-            var payload = new { nodeId = _nodeId, payload = req };
-            _sub.Publish(RedisChannel.Literal(channel), JsonSerializer.Serialize(payload));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[HITL] Redis escalation publish başarısız: {Channel}", channel);
-        }
+        var payload = new { nodeId = _messageBus.NodeId, payload = req };
+        _messageBus.Publish(channel, JsonSerializer.Serialize(payload));
     }
 }
 

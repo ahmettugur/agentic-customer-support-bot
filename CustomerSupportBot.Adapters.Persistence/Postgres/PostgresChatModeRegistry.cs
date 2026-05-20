@@ -15,9 +15,9 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
+using CustomerSupportBot.Application.Ports.Driven.Messaging;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
-using StackExchange.Redis;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
@@ -26,9 +26,8 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresChatModeRegistry> _logger;
-    private readonly ISubscriber _sub;
+    private readonly IMessageBusPort _messageBus;
     private readonly IAppDistributedLock _distributedLock;
-    private readonly string _nodeId = RedisNodeId.Value;
     private readonly ConcurrentDictionary<string, ChatSessionState> _states = new();
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
@@ -37,15 +36,15 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
 
     public PostgresChatModeRegistry(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
-        IConnectionMultiplexer redis,
+        IMessageBusPort messageBus,
         IAppDistributedLock distributedLock,
         ILogger<PostgresChatModeRegistry> logger)
     {
         _dbFactory = dbFactory;
         _distributedLock = distributedLock;
+        _messageBus = messageBus;
         _logger = logger;
-        _sub = redis.GetSubscriber();
-        _sub.Subscribe(RedisChannel.Literal("csbot:chatmode"), OnRemoteModeChanged);
+        _messageBus.Subscribe("csbot:chatmode", OnRemoteModeChanged);
     }
 
     public ChatMode GetMode(string sessionId)
@@ -247,13 +246,13 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
 
     // ─── Redis cross-pod handlers ─────────────────────────────────────────────
 
-    private void OnRemoteModeChanged(RedisChannel _, RedisValue val)
+    private void OnRemoteModeChanged(string val)
     {
         try
         {
-            using var doc = JsonDocument.Parse(val.ToString());
+            using var doc = JsonDocument.Parse(val);
             var root = doc.RootElement;
-            if (root.GetProperty("nodeId").GetString() == _nodeId) return;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
 
             var sessionId = root.GetProperty("sessionId").GetString()!;
             var modeStr = root.GetProperty("mode").GetString() ?? "Bot";
@@ -288,23 +287,16 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
 
     private void PublishRedis(ChatSessionState state)
     {
-        try
+        var payload = new
         {
-            var payload = new
-            {
-                nodeId = _nodeId,
-                sessionId = state.SessionId,
-                mode = state.Mode.ToString(),
-                humanAgent = state.HumanAgent,
-                enteredAt = state.EnteredAt,
-                lastActivityAt = state.LastActivityAt
-            };
-            _sub.Publish(RedisChannel.Literal("csbot:chatmode"), JsonSerializer.Serialize(payload));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[HITL] Redis chatmode publish başarısız");
-        }
+            nodeId = _messageBus.NodeId,
+            sessionId = state.SessionId,
+            mode = state.Mode.ToString(),
+            humanAgent = state.HumanAgent,
+            enteredAt = state.EnteredAt,
+            lastActivityAt = state.LastActivityAt
+        };
+        _messageBus.Publish("csbot:chatmode", JsonSerializer.Serialize(payload));
     }
 }
 

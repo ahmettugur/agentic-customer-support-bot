@@ -1,6 +1,4 @@
-// Models/Auth/AuthOptions.cs
-
-namespace CustomerSupportBot.Domain.Model.Auth;
+// Ports/Driven/Auth/JwtOptions.cs\n// JWT altyapı yapılandırması — Application katmanında tanımlıdır çünkü\n// hem Adapters.Persistence (TokenService) hem de API (AuthServicesExtensions) tarafından kullanılır.\n\nnamespace CustomerSupportBot.Application.Ports.Driven.Auth;
 
 public sealed class JwtOptions
 {

@@ -13,6 +13,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driven.Observability;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Services.Memory;

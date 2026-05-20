@@ -9,10 +9,15 @@ using CustomerSupportBot.Adapters.Persistence.InMemory;
 using CustomerSupportBot.Adapters.Persistence.Postgres;
 using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Application.Ports.Driven.Messaging;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using CustomerSupportBot.Application.Services;
+using CustomerSupportBot.Application.Services.Routing;
+using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CustomerSupportBot.Adapters.Persistence.DependencyInjection;
 
@@ -61,6 +66,9 @@ public static class PersistenceAdapterServiceCollectionExtensions
         }
         else
         {
+            // InMemory modunda Redis yoksa IMessageBusPort fallback kaydı
+            services.TryAddSingleton<IMessageBusPort, InMemoryMessageBusAdapter>();
+
             services.AddSingleton<IReasoningTraceStore, InMemoryReasoningTraceStore>();
             services.AddSingleton<IApprovalQueue, InMemoryApprovalQueue>();
             services.AddSingleton<IEscalationSink, InMemoryEscalationSink>();
@@ -83,6 +91,7 @@ public static class PersistenceAdapterServiceCollectionExtensions
         services.AddSingleton<IComplaintRepository, InMemoryComplaintAdapter>();
 
         // Prompt şablonları — FileSystem adapter, her iki provider'da aynı
+        services.Configure<PromptOptions>(configuration.GetSection(PromptOptions.SectionName));
         services.AddSingleton<FileSystemPromptRepository>();
         services.AddSingleton<IPromptRepository>(sp =>
             sp.GetRequiredService<FileSystemPromptRepository>());

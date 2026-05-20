@@ -1,8 +1,10 @@
-// Models/RoutingOptions.cs
+// Application/Services/Routing/RoutingOptions.cs
 // Smart Routing & Skills-Based Escalation — appsettings.json "Routing" section
 // üzerinden okunan konfigürasyon. Intent → skill tag mapping ve routing davranışı.
 
-namespace CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model;
+
+namespace CustomerSupportBot.Application.Services.Routing;
 
 /// <summary>SkillsBasedRouter için konfigürasyon.</summary>
 public class RoutingOptions
@@ -40,4 +42,3 @@ public class RoutingOptions
     /// <summary>Seed temsilciler (ilk başlatmada InMemoryHumanAgentRegistry'e eklenir).</summary>
     public List<HumanAgent> SeedAgents { get; set; } = new();
 }
-

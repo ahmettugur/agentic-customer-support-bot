@@ -1,9 +1,9 @@
-// Models/SlaOptions.cs
-// SLA / Response Time Guardian config (#H).
+// Application/Services/Sla/SlaOptions.cs
+// SLA / Response Time Guardian config.
 // HITL onay kuyruğunda veya açık eskalasyonlarda uzun süre bekleyen kayıtlar
 // için uyarı + ihlal eşikleri. Guardian periyodik tarayıp aksiyon alır.
 
-namespace CustomerSupportBot.Domain.Model;
+namespace CustomerSupportBot.Application.Services.Sla;
 
 /// <summary>
 /// Bekleyen onay/eskalasyon kayıtları için SLA politikası.
@@ -64,22 +64,3 @@ public enum SlaBreachAction
     AutoReject,
     AutoApprove
 }
-
-/// <summary>SLA Guardian'ın ürettiği breach/warn olayı.</summary>
-public class SlaEvent
-{
-    public string Id { get; set; } = Guid.NewGuid().ToString("N")[..12];
-    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
-
-    /// <summary>"approval" | "escalation".</summary>
-    public string Kind { get; set; } = "";
-
-    /// <summary>"warn" | "breach".</summary>
-    public string Severity { get; set; } = "";
-
-    public string TargetId { get; set; } = "";
-    public int AgeSeconds { get; set; }
-    public string? Action { get; set; }
-    public string? Note { get; set; }
-}
-
