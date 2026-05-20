@@ -310,8 +310,7 @@ _workflow = AgentWorkflowBuilder
     .AddParticipants(
         planningAgent,
         productInquiryAgent,
-        orderPlacementAgent,
-        orderInquiryAgent,
+        orderAgent,
         complaintAgent,
         billingAgent,  // ← yeni
         responseAgent)

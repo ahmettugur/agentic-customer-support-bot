@@ -85,7 +85,7 @@ Sen bir **müşteri destek analiz ajanısın**. Kullanıcı sorgusunu analiz et 
 | `order` | ✓ | 1-indexed yürütme sırası |
 | `intent` | ✓ | Alt görevin niyeti |
 | `description` | ✓ | 1 cümle Türkçe açıklama |
-| `targetAgent` | ✓ | `ProductInquiryAgent` / `OrderPlacementAgent` / `OrderAgent` / `ComplaintAgent` |
+| `targetAgent` | ✓ | `ProductInquiryAgent` / `OrderAgent` / `ComplaintAgent` |
 | `entities` | opsiyonel | Bu görevin kullanacağı entity'ler (obje) |
 | `dependencies` | opsiyonel | Önce tamamlanması gereken `order` numaraları |
 

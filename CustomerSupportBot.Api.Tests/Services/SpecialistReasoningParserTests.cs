@@ -38,10 +38,10 @@ public class SpecialistReasoningParserTests
             }
             """;
 
-        var result = SpecialistReasoningParser.TryParse(input, "OrderPlacementAgent");
+        var result = SpecialistReasoningParser.TryParse(input, "OrderAgent");
 
         result.Should().NotBeNull();
-        result.AgentName.Should().Be("OrderPlacementAgent");
+        result.AgentName.Should().Be("OrderAgent");
         result.PreToolCheck.Should().NotBeNull();
         result.PreToolCheck!.CanProceed.Should().BeFalse();
         result.PreToolCheck.MissingParams.Should().Contain("productId");
@@ -100,12 +100,12 @@ public class SpecialistReasoningParserTests
     public void TryParse_HandoffSuggestion_AgentNamePreserved()
     {
         var input = """
-            {"postToolReflection":{"handoffSuggestion":"OrderPlacementAgent","handoffReason":"order needed"}}
+            {"postToolReflection":{"handoffSuggestion":"OrderAgent","handoffReason":"order needed"}}
             """;
 
         var result = SpecialistReasoningParser.TryParse(input, "ProductInquiryAgent");
 
-        result!.PostToolReflection!.HandoffSuggestion.Should().Be("OrderPlacementAgent");
+        result!.PostToolReflection!.HandoffSuggestion.Should().Be("OrderAgent");
         result.PostToolReflection.HandoffReason.Should().Be("order needed");
     }
 

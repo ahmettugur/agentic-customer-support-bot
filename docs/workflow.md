@@ -45,8 +45,7 @@ _workflow = AgentWorkflowBuilder
     .AddParticipants(
         planningAgent,
         productInquiryAgent,
-        orderPlacementAgent,
-        orderInquiryAgent,
+        orderAgent,
         complaintAgent,
         responseAgent)
     .Build();

@@ -12,7 +12,7 @@ namespace CustomerSupportBot.Domain.Model;
 /// </summary>
 public class SpecialistReasoning
 {
-    /// <summary>Hangi agent ürettikteyse (ör. "OrderPlacementAgent").</summary>
+    /// <summary>Hangi agent ürettikteyse (ör. "OrderAgent").</summary>
     public string AgentName { get; set; } = "";
 
     /// <summary>Tool çağrısı öncesi parametre doğrulaması.</summary>
@@ -70,8 +70,8 @@ public class PostToolReflection
     /// <summary>
     /// Dinamik handoff önerisi — bir başka specialist ajana devredilmeli mi?
     /// Null veya "ResponseAgent" ise akış normal yönde (ResponseAgent'a) devam eder.
-    /// Geçerli değerler: "ProductInquiryAgent", "OrderPlacementAgent",
-    /// "OrderAgent", "ComplaintAgent", "ResponseAgent".
+    /// Geçerli değerler: "ProductInquiryAgent", "OrderAgent",
+    /// "ComplaintAgent", "ResponseAgent".
     /// </summary>
     public string? HandoffSuggestion { get; set; }
 
