@@ -21,7 +21,7 @@ Uygulama iki persistence modunu destekler. Seçim `appsettings.json` üzerinden 
 | **`Postgres`** (varsayılan) | Production ve development | Veriler kalıcı |
 | **`InMemory`** | Test ve hızlı prototip | Tüm veriler kaybolur |
 
-`AddPersistenceServices(config)` extension metodu, `Provider` değerine göre aynı interface'lere farklı implementasyonlar bağlar.
+`AddPersistenceAdapters(config)` extension metodu, `Provider` değerine göre aynı interface'lere farklı implementasyonlar bağlar.
 
 ---
 
@@ -43,7 +43,7 @@ Uygulama iki persistence modunu destekler. Seçim `appsettings.json` üzerinden 
 
 **Not**: `IChatBridge` her iki modda da in-memory'dir (gerçek zamanlı, geçici veri). `IChatModeRegistry` Postgres modunda kalıcı olarak `chat.session_modes` tablosuna yazar; uygulama restart'ında sohbet modları korunur.
 
-Tüm store kayıtları `PersistenceServicesExtensions.AddPersistenceServices()` içindeki `Provider` koşuluna göre yapılır. `ApplicationServicesExtensions` artık hiçbir store kaydı içermez.
+Tüm store kayıtları `PersistenceAdapterServiceCollectionExtensions.AddPersistenceAdapters()` içindeki `Provider` koşuluna göre yapılır. `ApplicationServicesExtensions` artık hiçbir store kaydı içermez.
 
 ---
 
@@ -86,26 +86,32 @@ public class CustomerSupportDbContext : DbContext
 Entity'ler ve konfigürasyonlar alan bazlı organize edilmiştir:
 
 ```
-Infrastructure/Persistence/
-├── Entities/
-│   ├── Auth/            → UserEntity, RefreshTokenEntity
-│   ├── Chat/            → SessionEntity, MessageEntity, ChatSessionModeEntity, ChatBridgeMessageEntity
-│   ├── Hitl/            → ApprovalRequestEntity, EscalationEntity, HumanAgentEntity
-│   ├── Analytics/       → RatingEntity, SlaEventEntity
-│   ├── Observability/   → ReasoningTraceEntity
-│   ├── Personalization/ → CustomerProfileEntity
-│   ├── Improvement/     → LessonEntity
-│   └── Workflow/        → WorkflowDefinitionEntity
-├── Configurations/
-│   ├── Auth/            → UserConfiguration, RefreshTokenConfiguration
-│   ├── Chat/            → SessionConfiguration, MessageConfiguration, ...
-│   ├── Hitl/            → ApprovalRequestConfiguration, ...
-│   ├── Analytics/       → RatingConfiguration, SlaEventConfiguration
-│   ├── Observability/   → ReasoningTraceConfiguration
-│   ├── Personalization/ → CustomerProfileConfiguration
-│   ├── Improvement/     → LessonConfiguration
-│   └── Workflow/        → WorkflowDefinitionConfiguration
-└── Migrations/          → Code-first migration dosyaları
+CustomerSupportBot.Adapters.Persistence/
+├── EfCore/
+│   ├── CustomerSupportDbContext.cs
+│   ├── Entities/
+│   │   ├── Auth/            → UserEntity, RefreshTokenEntity
+│   │   ├── Chat/            → SessionEntity, MessageEntity, ChatSessionModeEntity, ChatBridgeMessageEntity
+│   │   ├── Hitl/            → ApprovalRequestEntity, EscalationEntity, HumanAgentEntity
+│   │   ├── Analytics/       → RatingEntity, SlaEventEntity
+│   │   ├── Observability/   → ReasoningTraceEntity
+│   │   ├── Personalization/ → CustomerProfileEntity
+│   │   ├── Improvement/     → LessonEntity
+│   │   └── Workflow/        → WorkflowDefinitionEntity
+│   ├── Configurations/
+│   │   ├── Auth/            → UserConfiguration, RefreshTokenConfiguration
+│   │   ├── Chat/            → SessionConfiguration, MessageConfiguration, ...
+│   │   ├── Hitl/            → ApprovalRequestConfiguration, ...
+│   │   ├── Analytics/       → RatingConfiguration, SlaEventConfiguration
+│   │   ├── Observability/   → ReasoningTraceConfiguration
+│   │   ├── Personalization/ → CustomerProfileConfiguration
+│   │   ├── Improvement/     → LessonConfiguration
+│   │   └── Workflow/        → WorkflowDefinitionConfiguration
+│   └── Migrations/          → Code-first migration dosyaları
+├── Postgres/                 → Postgres adapter implementasyonları
+├── InMemory/                 → InMemory adapter implementasyonları
+├── FileSystem/               → FileSystemPromptRepository
+└── Auth/                     → JWT kullanıcı yönetimi
 ```
 
 ### Schema Haritası
@@ -176,9 +182,9 @@ await app.MigrateIfDevelopmentAsync();
 ### Yeni Migration Oluşturma
 
 ```powershell
-cd CustomerSupportBot
-dotnet ef migrations add <MigrationName>
-dotnet ef database update
+cd CustomerSupportBot.Adapters.Persistence
+dotnet ef migrations add <MigrationName> --startup-project ../CustomerSupportBot.Api
+dotnet ef database update --startup-project ../CustomerSupportBot.Api
 ```
 
 ### PersistenceHydrator
@@ -205,18 +211,29 @@ dotnet ef database update
 
 ---
 
-## 7. Distributed Lock
+## 7. Distributed Lock ve Message Bus
+
+### Distributed Lock
 
 Uygulama, aynı kaynağa eşzamanlı erişimi serialize etmek için Redis tabanlı distributed lock kullanır.
-
-### Implementasyon
 
 | Sınıf | Paket | Kullanım |
 |-------|-------|----------|
 | `RedisDistributedLock` | `DistributedLock.Redis` v1.1.1 (Medallion.Threading) | Production — tüm ortamlar |
 | `InMemoryDistributedLock` | — (test projesi) | Yalnızca birim testleri |
 
-`RedisServicesExtensions.AddRedisServices()` Redis bağlantı string'i yoksa `InvalidOperationException` fırlatır — Redis her zaman zorunludur.
+`RedisAdapterServiceCollectionExtensions.AddRedisAdapters()` Redis bağlantı string'i yoksa `InvalidOperationException` fırlatır — Redis her zaman zorunludur.
+
+### Message Bus (IMessageBusPort)
+
+Persistence adapter'ları (PostgresChatModeRegistry, PostgresChatBridge, PostgresEscalationSink, PostgresApprovalQueue) pod'lar arası gerçek zamanlı bildirimler için **dogrudan Redis'e bağlı değildir**. Bunun yerine `IMessageBusPort` port'unu kullanırlar:
+
+| Mod | Implementasyon | Konum |
+|-----|---------------|-------|
+| Redis (production) | `RedisMessageBusAdapter` | `CustomerSupportBot.Adapters.Redis/Messaging/` |
+| InMemory (development/test) | `InMemoryMessageBusAdapter` | `CustomerSupportBot.Adapters.Persistence/InMemory/` |
+
+Bu tasarım sayesinde `Adapters.Persistence` projesi `StackExchange.Redis`'e bağlı değildir — Redis bağlımlılığı yalnızca `Adapters.Redis`'te bulunur.
 
 ### Lock Key'leri
 
@@ -266,6 +283,10 @@ InMemory modda veriler bellekte tutulur ve uygulama restart'ında kaybolur:
 | `InMemoryLessonStore` | Sınırsız (RAM) |
 | `InMemoryWorkflowDefinitionStore` | Sınırsız (RAM) |
 | `InMemorySlaEventSink` | Ring buffer, max 500 olay |
+| `InMemoryMessageBusAdapter` | Lokal pub/sub (cross-pod iletişim yok) |
+| `InMemoryProductCatalogAdapter` | Sabit seed katalog (5 ürün) |
+| `InMemoryOrderAdapter` | Demo sipariş deposu |
+| `InMemoryComplaintAdapter` | Demo şikayet deposu |
 
 `InMemorySessionManager` tek bir singleton olarak oluşturulup `ISessionManager` ve `IConversationStore` interface'lerine aynı instance üzerinden bağlanır.
 
@@ -287,9 +308,15 @@ Semantic memory için kullanılır. EF Core dışında, `Qdrant.Client` gRPC ile
 
 Detay → [intelligence.md](intelligence.md).
 
-### FakeDatabase
+### Demo Veri Katalogları (InMemory Adapter'ları)
 
-Demo amaçlı in-memory product/order/complaint deposu. Static seed verilerle başlar ve uygulama restart'ında sıfırlanır.
+Hexagonal dönüşümden önce `FakeDatabase` adlı statik sınıf kullanılırdı. Bu sınıf kaldırılmış; demo veriler artık `Adapters.Persistence/InMemory/` altındaki adapter'lara taşınmıştır:
+
+- `InMemoryProductCatalogAdapter` — 5 ürün seed verisi (`IProductCatalogRepository`)
+- `InMemoryOrderAdapter` — demo sipariş deposu (`IOrderRepository`)
+- `InMemoryComplaintAdapter` — demo şikayet deposu (`IComplaintRepository`)
+
+`Application` katmanı artık bu verilere doğrudan statik erişimle değil, port interface'leri üzerinden erişir.
 
 ---
 
@@ -318,7 +345,7 @@ CORS policy `appsettings.json` üzerinden kontrol edilir. `Cors:AllowedOrigins` 
 ## Çapraz Referanslar
 
 - **Mimari + DI haritası** → [architecture.md](architecture.md)
-- **Konfigürasyon** → [runtime.md](runtime.md#2-konfigürasyon)
+- **Konfigürasyon** → [operations.md](operations.md#2-konfigürasyon)
 - **Docker kurulumu** → [deployment.md](deployment.md)
 - **Semantic memory** → [intelligence.md](intelligence.md)
 - **Blazor frontend** → [frontend.md](frontend.md)

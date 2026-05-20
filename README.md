@@ -1,4 +1,4 @@
-# Agentic Müşteri Destek Botu
+﻿# Agentic Müşteri Destek Botu
 
 **Microsoft Agents Framework (MAF)** ve **.NET 10** üzerine inşa edilmiş, agentik mimarili bir müşteri destek chatbot'u.
 
@@ -104,7 +104,7 @@ Temel yetenekler:
     │              ┌──────────────────────┴───────────┐
     │              ▼                                  ▼
     │     CustomerContext                  ConversationSummary
-    │     (FakeDatabase)                   (LLM summary)
+    │     (repository port'ları)        (LLM summary)
     │
     │  ┌─────────────────────────────────────────────────────────┐
     └─▶│         Deterministic Reasoning Helpers                 │
@@ -116,7 +116,7 @@ Temel yetenekler:
 ┌─────────────────────────────────────────────────────────────────┐
 │                      ALTYAPI                                    │
 │  OpenAI Chat Client (gpt-5.4) │ ReasoningChatClient (gpt-5.4-nano)│
-│  PostgreSQL + Qdrant + FakeDatabase      │  IdExtractor (regex) │
+│  PostgreSQL + Qdrant + InMemory adapters       │  IdExtractor (regex) │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -171,7 +171,7 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 
 ### Yapılandırma
 
-`CustomerSupportBot/appsettings.json` dosyasını düzenleyin:
+`CustomerSupportBot.Api/appsettings.json` dosyasını düzenlleyin:
 
 ```json
 {
@@ -187,15 +187,15 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 ### Çalıştırma
 
 ```bash
-dotnet run --project CustomerSupportBot/CustomerSupportBot.csproj
+dotnet run --project CustomerSupportBot.Api
 ```
 
-API `https://localhost:<port>` adresinde başlar ve chat arayüzü `wwwroot/index.html` üzerinden sunulur.
+API `http://localhost:5021` adresinde başlar ve chat arayüzü `CustomerSupportBot.Api/wwwroot/index.html` üzerinden sunulur.
 
 ### Hızlı API Testi
 
 ```bash
-curl -X POST http://localhost:<port>/chat/ \
+curl -X POST http://localhost:5021/chat/ \
   -H "Content-Type: application/json" \
   -d '{"query": "ORD-1 siparişim nerede?", "sessionId": null}'
 ```
@@ -272,7 +272,7 @@ Bot iki HITL modunu destekler:
 Senaryo tabanlı değerlendirme, `EvaluationRunner` tarafından yürütülür. Her senaryo canlı iş akışına karşı çalıştırılır ve her kriter için geçti/kaldı raporu sunulur.
 
 ```bash
-curl -X POST http://localhost:<port>/evaluation/run
+curl -X POST http://localhost:5021/evaluation/run
 ```
 
 ---
@@ -309,74 +309,59 @@ Detay için: [`docs/intelligence.md`](docs/intelligence.md).
 
 ## Proje Yapısı
 
-```
-CustomerSupportBot/
-├── Program.cs                    # DI + endpoint mapping
-├── appsettings.json              # OpenAI, WorkflowGuards, HITL config
-│
-├── Agents/
-│   ├── CustomerSupportTeam.cs    # 7 MAF ajanı + workflow builder
-│   └── CustomerSupportChatManager.cs  # GroupChatManager (seçim + sonlandırma)
-│
-├── Endpoints/
-│   ├── ChatEndpoints.cs          # POST /chat + /chat/stream (SSE)
-│   ├── SessionEndpoints.cs       # Oturum sorguları
-│   ├── TraceEndpoints.cs         # Reasoning trace erişimi
-│   ├── EvaluationEndpoints.cs    # Test koşturucu
-│   ├── AdminEndpoints.cs         # HITL onayları + yükseltmeler
-│   └── SseWriter.cs              # SSE event yardımcısı
-│
-├── Evaluation/
-│   ├── EvaluationRunner.cs
-│   ├── CriteriaEvaluator.cs
-│   └── ScenarioModels.cs
-│
-├── Models/
-│   ├── ChatRequest.cs / ChatResponse.cs
-│   ├── PlanningResult.cs
-│   ├── ReasoningResult.cs / ReasoningStep.cs / ReasoningIssue.cs
-│   ├── SpecialistReasoning.cs
-│   ├── ResponseCritique.cs
-│   ├── ReasoningTrace.cs
-│   ├── VerifiedEntities.cs
-│   ├── ToolResult.cs
-│   ├── FakeDatabase.cs           # Bellek içi Product / Order / Complaint deposu
-│   └── ...
-│
-├── Prompts/
-│   ├── agents/                   # 7 ajan instruction prompt'u (markdown)
-│   │   ├── planning-agent.md
-│   │   ├── product-inquiry-agent.md
-│   │   ├── order-placement-agent.md
-│   │   ├── order-inquiry-agent.md
-│   │   ├── complaint-agent.md
-│   │   ├── human-handoff-agent.md
-│   │   └── response-agent.md
-│   └── services/                 # Reasoning ipuçları, entity extraction ipuçları, vb.
-│
-├── Services/
-│   ├── ReasoningService.cs       # o-series yapılandırılmış reasoning
-│   ├── ReasoningSanityChecker.cs # 8 kural deterministik doğrulama
-│   ├── EntityVerifier.cs         # ReAct-lite entity grounding
-│   ├── RevisionService.cs        # Yanıt revizyon döngüsü
-│   ├── PromptService.cs          # Markdown prompt yükleyici
-│   ├── ContextPipeline.cs        # Bağlam toplama
-│   ├── InMemorySessionManager.cs # Oturum + konuşma deposu
-│   ├── InMemoryApprovalQueue.cs  # HITL onay kuyruğu
-│   ├── InMemoryChatBridge.cs     # Canlı devralma mesaj köprüsü
-│   └── ...
-│
-├── Tools/
-│   └── (Ajanlar tarafından kullanılan AIFunction tool'ları)
-│
-└── wwwroot/
-    ├── index.html                # Chat arayüzü
-    ├── admin.html                # Admin / HITL paneli
-    ├── traces.html               # Trace görüntüleyici
-    ├── js/                       # chat-ui.js, admin.js, vb.
-    └── css/
-```
+Proje **hexagonal (ports & adapters) mimarisi** ile 7 katmana ayrılmıştır:
 
+```
+agentic-customer-support-bot/
+├── CustomerSupportBot.Domain/                # Domain modelleri + saf iş kuralları
+│   ├── Model/                               # Entity POCO'lar, VO'lar, senaryo modelleri
+│   └── Services/                            # Domain servisleri (IdExtractor, vb.)
+│
+├── CustomerSupportBot.Application/           # Port tanımları + uygulama servisleri
+│   ├── Ports/
+│   │   ├── Driving/                         # CustomerSupportToolsService, vb.
+│   │   └── Driven/                          # ISessionManager, IPromptRepository, IMessageBusPort, ...
+│   ├── Services/                            # ReasoningService, EntityVerifier, ContextPipeline, ...
+│   └── DependencyInjection/
+│
+├── CustomerSupportBot.Adapters.Agents/       # MAF ajan orkestrasyon adaptörü
+│   ├── CustomerSupportTeam.cs               # 7 MAF ajanı + workflow builder
+│   ├── CustomerSupportChatManager.cs        # GroupChatManager (seçim + sonlandırma)
+│   ├── ApprovalGateService.cs
+│   └── Routing/
+│
+├── CustomerSupportBot.Adapters.Persistence/ # Kalıcı veri adaptörleri
+│   ├── EfCore/                              # CustomerSupportDbContext + migrations
+│   ├── Postgres/                            # PostgresSessionManager, Approvals, vb.
+│   ├── InMemory/                            # InMemorySessionManager, demo katalog adaptörleri
+│   ├── FileSystem/                          # FileSystemPromptRepository + PromptOptions
+│   └── DependencyInjection/
+│
+├── CustomerSupportBot.Adapters.Redis/        # Redis adaptörleri (locking, pub/sub)
+│   ├── Locking/                             # RedisLockAdapter
+│   ├── Messaging/                           # RedisMessageBusAdapter (IMessageBusPort)
+│   └── DependencyInjection/
+│
+├── CustomerSupportBot.Adapters.Telemetry/    # OpenTelemetry + maliyet telemetrisi
+│   ├── Chat/
+│   ├── OpenTelemetry/
+│   └── DependencyInjection/
+│
+├── CustomerSupportBot.Api/                   # Composition root (ASP.NET Core Minimal API)
+│   ├── Program.cs                           # DI + endpoint mapping
+│   ├── appsettings.json                     # AI, WorkflowGuards, HITL, Persistence config
+│   ├── Endpoints/                           # ChatEndpoints, AdminEndpoints, TraceEndpoints, ...
+│   ├── Prompts/                             # Ajan + servis prompt MD dosyaları
+│   │   ├── agents/                          # planning-agent.md, product-inquiry-agent.md, ...
+│   │   └── services/                        # reasoning-system.md, entity-hints.md, ...
+│   ├── KnowledgeBase/                       # RAG dökümanı: iade politikası, kargo, SSS
+│   └── wwwroot/                             # index.html, admin.html, replay.html, js/, css/
+│
+└── CustomerSupportBot.Api.Tests/             # Entegrasyon + değerlendirme testleri
+    ├── Evaluation/
+    ├── Endpoints/
+    └── ...
+```
 ---
 
 ## Dokümantasyon
@@ -386,11 +371,11 @@ CustomerSupportBot/
 | Doküman | İçerik |
 |---------|--------|
 | [`docs/architecture.md`](docs/architecture.md) | Üst seviye mimari, bileşen haritası, DI, istek yaşam döngüsü |
-| [`docs/runtime.md`](docs/runtime.md) | Uygulama nasıl çalışır? Kurulum, başlangıç sırası, SSE kanalları, admin paneli, sorun giderme |
+| [`docs/operations.md`](docs/operations.md) | Uygulama nasıl çalışır? Kurulum, başlangıç sırası, SSE kanalları, admin paneli, sorun giderme |
 | [`docs/agents.md`](docs/agents.md) | Ajan sorumlulukları, alt-bileşen zinciri, iç anatomi |
 | [`docs/api.md`](docs/api.md) | Tam HTTP + SSE event referansı |
 | [`docs/workflow.md`](docs/workflow.md) | İş akışı fazları, compound query orkestrasyonu |
-| [`docs/patterns.md`](docs/patterns.md) | Tasarım desenleri: ReAct, Self-Reflection, Chain-of-Thought, sub-agent vs sub-component |
+| [`docs/agentic-patterns.md`](docs/agentic-patterns.md) | Tasarım desenleri: ReAct, Self-Reflection, Chain-of-Thought, sub-agent vs sub-component |
 | [`docs/reasoning.md`](docs/reasoning.md) | Reasoning servisi, sanity check'ler, entity doğrulama, yapılandırılmış çıktı |
 | [`docs/intelligence.md`](docs/intelligence.md) | Semantic memory (Qdrant), Self-Improving Loop, Replay UI, Personalization |
 | [`docs/security.md`](docs/security.md) | JWT kimlik doğrulama, InputGuard, HITL güvenlik, workflow guard'lar |
@@ -402,6 +387,6 @@ CustomerSupportBot/
 | [`docs/realtime.md`](docs/realtime.md) | Sesli konuşma modu (çift kanal: köprü + native), WebSocket API |
 | [`docs/workflow-designer.md`](docs/workflow-designer.md) | Low-code deterministik workflow designer |
 | [`docs/developer-guide.md`](docs/developer-guide.md) | Ajan, tool ve prompt ekleme için geliştirici rehberi |
-| [`docs/reference.md`](docs/reference.md) | Sınıf/arayüz kontratları (C# API referansı) |
+| [`docs/class-reference.md`](docs/class-reference.md) | Sınıf/arayüz kontratları (C# API referansı) |
 
 ---

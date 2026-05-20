@@ -267,7 +267,7 @@ Semantic memory **konuşma içeriği** üzerinde çalışırken, personalization
 Workflow tamamlandı  ───► RecordInteraction (heuristik, LLM-siz)
                             • TotalTurns++
                             • IntentFrequency[finalIntent]++
-                            • ProductInterests (FakeDatabase.ProductCatalog substring match)
+                            • ProductInterests (IProductCatalogRepository substring match)
                             • PreferredLanguage (TR-chars / regex)
                             • RecentRatings (rating geldiyse)
 

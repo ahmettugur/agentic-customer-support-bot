@@ -209,6 +209,6 @@ dotnet run --project CustomerSupportBot
 
 ## Çapraz Referanslar
 
-- **Konfigürasyon detayları** → [runtime.md](runtime.md#telemetry)
+- **Konfigürasyon detayları** → [operations.md](operations.md#telemetry)
 - **Mimari bakış** → [architecture.md](architecture.md)
 - **Endpoint referansı** → [api.md](api.md#8-telemetry-endpoints)

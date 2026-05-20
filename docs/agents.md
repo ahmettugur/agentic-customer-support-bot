@@ -1,6 +1,6 @@
 # Agents
 
-Sistemde **6 ajan** vardır. Hepsi MAF `ChatClientAgent` olarak `@Agents/CustomerSupportTeam.cs`'de oluşturulur ve aynı `IChatClient` (gpt-4o) üzerinde çalışır. Her ajanın **instructions**'u `Prompts/agents/<name>.md` dosyasından okunur.
+Sistemde **6 ajan** vardır. Hepsi MAF `ChatClientAgent` olarak `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs`'de oluşturulur ve aynı `IChatClient` (gpt-4o) üzerinde çalışır. Her ajanın **instructions**'u `Prompts/agents/<name>.md` dosyasından okunur.
 
 ## Sorumluluk matrisi
 
@@ -23,7 +23,7 @@ Tüm specialist ajanlar aynı desenleri takip eder:
 3. **Post-tool reflection**: Tool sonrası `postToolReflection` JSON bloğunda `status` (done/needs_followup/needs_escalation/failed/partial) ve `handoffSuggestion` alanları doldurulur.
 4. **Kullanıcıya mesaj**: JSON bloğundan sonra Türkçe, kısa kullanıcı mesajı yazılır (bu mesaj teknik JSON içermez — ChatManager ve `StripTechnicalJsonBlocks` sızıntıları temizler).
 
-Bu yapı **Self-Reflection** + **ReAct** pattern'lerinin birleşimidir, detayı [patterns.md](patterns.md)'de.
+Bu yapı **Self-Reflection** + **ReAct** pattern'lerinin birleşimidir, detayı [agentic-patterns.md](agentic-patterns.md)'de.
 
 ---
 
@@ -69,7 +69,7 @@ Bir ajan MAF'ta **monolitik bir LLM çağrısı** değildir. Tek bir agent itera
 │    ProductInquiryTool / OrderPlacementTool / ...                 │
 │  • Dönüş: ToolResult {Success, Confidence, Message, Data,        │
 │                       Error?, SuggestedAction}                    │
-│  • FakeDatabase state değişir (side-effect varsa — lock altında) │
+│  • Repository port’ları üzerinden state değişir (side-effect varsa — lock altında) │
 │  • Trace'e ToolInvocation kaydı eklenir                          │
 └──────────┬───────────────────────────────────────────────────────┘
            ▼
@@ -141,10 +141,10 @@ Bunlar dışında 6 ana ajan **peer**'dir (eşit seviyede) — biri diğerinin s
 
 ## 1. PlanningAgent
 
-**Dosya**: `@Prompts/agents/planning-agent.md`
-**Kod**: `@Agents/CustomerSupportTeam.cs:60-65`
-**Çıktı modeli**: `@Models/PlanningResult.cs`
-**Parser**: `@Services/PlanningResultParser.cs`
+**Dosya**: `CustomerSupportBot.Api/Prompts/agents/planning-agent.md`
+**Kod**: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:60-65`
+**Çıktı modeli**: `CustomerSupportBot.Domain/Model/PlanningResult.cs`
+**Parser**: `CustomerSupportBot.Application/Services/PlanningResultParser.cs`
 
 ### Sorumluluk
 
@@ -202,7 +202,7 @@ PlanningAgent'a şu system mesajları workflow tarafından enjekte edilir (sıra
 
 ### ChatManager ile etkileşimi
 
-`@Agents/CustomerSupportChatManager.cs:80-106` — PlanningAgent mesajı geldikten sonra:
+`CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:80-106` — PlanningAgent mesajı geldikten sonra:
 
 - `needsClarification=true` VEYA `intentConfidence < 0.7` → `ResponseAgent`'a yönlendirilir (clarification için)
 - Aksi halde `selectedAgent` alanındaki ajan çağrılır
@@ -282,7 +282,7 @@ Sipariş oluşturma ve sorgulama işlemlerini tek çatı altında yürütür. In
 
 ### Sipariş sorgulama — tool seçim öncelik kuralı (kritik)
 
-IdExtractor'ın `@Services/IdExtractor.cs:118-157` ürettiği hint mesajı bu kuralı LLM'e dikte eder:
+IdExtractor'ın `CustomerSupportBot.Application/Services/IdExtractor.cs:118-157` ürettiği hint mesajı bu kuralı LLM'e dikte eder:
 
 ```
 1) order_id VAR → order_status_tool (customer_id İSTEME)
@@ -330,11 +330,11 @@ IdExtractor'ın `@Services/IdExtractor.cs:118-157` ürettiği hint mesajı bu ku
 
 ### Sorumluluk
 
-Şikayet kaydı oluşturur. **Yan etkili** — `FakeDatabase.ComplaintsDb`'ye yazar.
+Şikayet kaydı oluşturur. **Yan etkili** — `IComplaintRepository` port’u üzerinden yazar.
 
 ### Önemli: customer_id opsiyoneldir
 
-`@Tools/CustomerSupportTools.cs:157-218` — eğer `customer_id` boş gelirse tool, `order_id`'ye bakarak siparişin sahibini alır ve otomatik doldurur. Eğer hem kullanıcı hem de sipariş sahibi belirtilmişse tutarsızlıkta `CUSTOMER_ID_MISMATCH` conflict döner.
+`CustomerSupportBot.Application/Services/CustomerSupportToolsService.cs:157-218` — eğer `customer_id` boş gelirse tool, `order_id`'ye bakarak siparişin sahibini alır ve otomatik doldurur. Eğer hem kullanıcı hem de sipariş sahibi belirtilmişse tutarsızlıkta `CUSTOMER_ID_MISMATCH` conflict döner.
 
 Bu davranış **ping-pong'u önler** — kullanıcı şikayet için `CUST-001` ve `ORD-1` verdiyse iki kez sorulmaz. Prompt'ta da net: `requiredParams: ["order_id", "description"]`, customer_id `optionalParams`'ta.
 
@@ -459,7 +459,7 @@ Tüm ajanlar MAF'ın `.UseOpenTelemetry()` middleware'i ile sarılarak **otomati
 
 ### Kurulum
 
-`@Agents/CustomerSupportTeam.cs` ajanları tek bir helper'dan geçirir:
+`CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs` ajanları tek bir helper'dan geçirir:
 
 ```csharp
 var sourceName = CustomerSupportTelemetry.ActivitySourceName; // "CustomerSupportBot"

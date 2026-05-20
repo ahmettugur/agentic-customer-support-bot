@@ -186,7 +186,7 @@ volumes:
 
 ## Çapraz Referanslar
 
-- **Konfigürasyon detayları** → [runtime.md](runtime.md)
+- **Konfigürasyon detayları** → [operations.md](operations.md)
 - **Veritabanı yapısı** → [persistence.md](persistence.md)
 - **Güvenlik** → [security.md](security.md)
 - **Telemetri stack** → [telemetry.md](telemetry.md)

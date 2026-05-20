@@ -58,7 +58,7 @@ Naif yaklaşım: "Ajanın kendisi düşünsün, yanıt versin." Bu yaklaşımın
 
 ## Katman 1 — Global Reasoning (ReasoningService)
 
-**Dosya**: `@Services/ReasoningService.cs`
+**Dosya**: `CustomerSupportBot.Application/Services/ReasoningService.cs`
 **Prompt**: `Prompts/services/reasoning-system.md` (+ koşullu `reasoning-history-note.md`)
 **Çıktı modeli**: `Models/ReasoningResult.cs`
 
@@ -72,7 +72,7 @@ O-series (o4-mini, o1) modeller **daha uzun iç düşünme** süresine sahiptir 
 
 ### Girdi
 
-`@Services/ReasoningService.cs:232-253`:
+`CustomerSupportBot.Application/Services/ReasoningService.cs:232-253`:
 
 ```
 [System] reasoning-system.md (STATE_INFO + HISTORY_NOTE placeholder'ları ile render edilmiş)
@@ -126,7 +126,7 @@ CustomerId: CUST-001, Phase: inquiry, TurnCount: 3
 
 ### PlanningAgent'a nasıl iletilir?
 
-`@Agents/CustomerSupportTeam.cs:590-612` — `BuildReasoningHint(r)` metodu boş olmayan alanları satır satır birleştirip `Prompts/services/reasoning-hint.md` template'ine `{{REASONING_LINES}}` placeholder'ı olarak geçer. Bu hint bir system mesajı olarak workflow'un başına eklenir.
+`CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:590-612` — `BuildReasoningHint(r)` metodu boş olmayan alanları satır satır birleştirip `Prompts/services/reasoning-hint.md` template'ine `{{REASONING_LINES}}` placeholder'ı olarak geçer. Bu hint bir system mesajı olarak workflow'un başına eklenir.
 
 Örnek hint (kullanıcı mesajından ÖNCE PlanningAgent'ın görecekleri):
 
@@ -162,7 +162,7 @@ Bu sayede reasoning katmanı down olsa bile workflow çalışmaya devam eder —
 
 ### Streaming
 
-`ReasonStreamingAsync` SSE için tasarlandı. O-series modellerde "thinking" evresi sessiz olduğundan, thinking sonrası JSON hızlı akıtılır. Biz token'lar arası minimum 20ms pacing uygulayarak kullanıcıya progressive reasoning görseli sunarız (`@Services/ReasoningService.cs:122-163`).
+`ReasonStreamingAsync` SSE için tasarlandı. O-series modellerde "thinking" evresi sessiz olduğundan, thinking sonrası JSON hızlı akıtılır. Biz token'lar arası minimum 20ms pacing uygulayarak kullanıcıya progressive reasoning görseli sunarız (`CustomerSupportBot.Application/Services/ReasoningService.cs:122-163`).
 
 ---
 
@@ -183,7 +183,7 @@ Bu sayede reasoning katmanı down olsa bile workflow çalışmaya devam eder —
 
 ### Çıktı şeması
 
-`@Models/PlanningResult.cs`:
+`CustomerSupportBot.Domain/Model/PlanningResult.cs`:
 
 ```json
 {
@@ -207,7 +207,7 @@ Bu sayede reasoning katmanı down olsa bile workflow çalışmaya devam eder —
 `intentConfidence < 0.7` → `needsClarification=true` + `selectedAgent=ResponseAgent` üretilmeli. ChatManager bunu görürse specialist'i atlayıp doğrudan ResponseAgent'ı çağırır:
 
 ```csharp
-@Agents/CustomerSupportChatManager.cs:91-96
+CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:91-96
 if (plan.NeedsClarification || plan.IntentConfidence < 0.7)
 {
     var responseAgent = _agents.FirstOrDefault(a =>
@@ -281,7 +281,7 @@ Her specialist (ProductInquiry, Order, Complaint) tool çağrısı **etrafında*
 `handoffSuggestion` başka bir specialist ismiyse ChatManager **ping-pong guard**'ını kontrol eder (aynı ajana max 2 handoff) ve yönlendirme yapar:
 
 ```csharp
-@Agents/CustomerSupportChatManager.cs:127-144
+CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:127-144
 if (!string.IsNullOrWhiteSpace(reflection.HandoffSuggestion)
     && !reflection.HandoffSuggestion.Equals("ResponseAgent", …))
 {
@@ -302,7 +302,7 @@ if (!string.IsNullOrWhiteSpace(reflection.HandoffSuggestion)
 Tüm bu katmanların çıktıları tek bir `ReasoningTrace` nesnesinde birleştirilir:
 
 ```csharp
-@Models/ReasoningTrace.cs
+CustomerSupportBot.Domain/Model/ReasoningTrace.cs
 public class ReasoningTrace
 {
     public string TraceId { get; set; }
@@ -322,7 +322,7 @@ public class ReasoningTrace
 }
 ```
 
-Trace'e `GET /traces/{id}` veya `GET /traces/recent?count=20` ile erişilebilir (`@Endpoints/TraceEndpoints.cs`).
+Trace'e `GET /traces/{id}` veya `GET /traces/recent?count=20` ile erişilebilir (`CustomerSupportBot.Api/Endpoints/TraceEndpoints.cs`).
 
 ### Aggregate stats
 
@@ -454,8 +454,8 @@ User query
 
 **Dosyalar**:
 
-- `@Models/VerifiedEntities.cs`
-- `@Services/EntityVerifier.cs`
+- `CustomerSupportBot.Domain/Model/VerifiedEntities.cs`
+- `CustomerSupportBot.Application/Services/EntityVerifier.cs`
 
 **Problem**: Reasoning modeli query'deki *"ORD-9999"* ifadesini gördüğünde, sadece formatın doğruluğuna bakıyordu — DB'de gerçekten var olup olmadığını kontrol etmiyordu. Bu *hallucination* kaynağıydı.
 
@@ -464,7 +464,7 @@ User query
 1. `IdExtractor.Extract(query)` — regex ile ID'leri çıkar
 2. History'deki önceki turlardan eksikleri tamamla
 3. `session.State.CustomerId` varsa onu da ekle
-4. Her entity için `FakeDatabase`'te lookup yap:
+4. Her entity için repository port'ları üzerinden lookup yap:
    - `Verified` — format + DB'de var
    - `NotFoundInDb` — format doğru ama DB'de yok
    - `FormatOnly` — DB lookup uygulanmadı
@@ -498,7 +498,7 @@ Reasoning prompt'u ayrıca buna uygun **grounding kuralları** içerir:
 
 ## 2. Structured Steps
 
-**Dosya**: `@Models/ReasoningStep.cs`
+**Dosya**: `CustomerSupportBot.Domain/Model/ReasoningStep.cs`
 
 **Önceki hal**:
 
@@ -540,7 +540,7 @@ Reasoning prompt'u ayrıca buna uygun **grounding kuralları** içerir:
 
 ### Parser + geriye dönük uyumluluk
 
-`@Services/ReasoningService.cs:399-458` içindeki `ParseSteps` helper'ı **hem** object array hem legacy string array formatını destekler. Model eski tarz dönerse (`["Adım 1: ..."]`), her string otomatik olarak `ReasoningStep.Description`'a wrap edilir.
+`CustomerSupportBot.Application/Services/ReasoningService.cs:399-458` içindeki `ParseSteps` helper'ı **hem** object array hem legacy string array formatını destekler. Model eski tarz dönerse (`["Adım 1: ..."]`), her string otomatik olarak `ReasoningStep.Description`'a wrap edilir.
 
 ### Frontend render
 
@@ -555,8 +555,8 @@ CSS: `@wwwroot/css/styles.css` `.step-chip` ve türevleri.
 
 ## 3. Sanity Checker (deterministic rules)
 
-**Dosya**: `@Services/ReasoningSanityChecker.cs`
-**Model**: `@Models/ReasoningIssue.cs`
+**Dosya**: `CustomerSupportBot.Application/Services/ReasoningSanityChecker.cs`
+**Model**: `CustomerSupportBot.Domain/Model/ReasoningIssue.cs`
 
 Reasoning LLM çağrısından **sonra** deterministic kural tabanlı tarama. **Sıfır ekstra LLM çağrısı**. Bulunan her tutarsızlık `ReasoningIssue` olarak `result.SanityIssues` listesine eklenir ve trace'e yazılır.
 
@@ -608,7 +608,7 @@ Her issue: kod badge + mesaj + *"→ suggestedFix"*.
 
 ## 4. Sub-task Decomposition
 
-**Dosya**: `@Models/SubTask.cs`
+**Dosya**: `CustomerSupportBot.Domain/Model/SubTask.cs`
 
 ### Problem
 
@@ -638,7 +638,7 @@ Reasoning modelinin `subTasks[]` alanında query'yi ayrıştırması:
 
 ### Workflow'a nasıl iletilir?
 
-`@Agents/CustomerSupportTeam.cs:607-621` — `BuildReasoningHint`, subTasks varsa PlanningAgent'a şu formatta enjekte eder:
+`CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:607-621` — `BuildReasoningHint`, subTasks varsa PlanningAgent'a şu formatta enjekte eder:
 
 ```
 - ⚠️ COMPOUND QUERY: 2 alt göreve ayrıştırıldı. PlanningAgent olarak her birini SIRAYLA aynı yanıtta yönlendir:
@@ -688,7 +688,7 @@ RunAsync(query, reasoning)
                       └─ "**1) <desc>**\n\n<response>\n\n---\n\n**2) <desc>**\n\n<response>"
 ```
 
-#### Helper'lar (`@Agents/CustomerSupportTeam.cs:912-1192`)
+#### Helper'lar (`CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:912-1192`)
 
 | Helper | Amaç |
 |---|---|

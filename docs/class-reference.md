@@ -1,6 +1,6 @@
 # Reference — Class / Interface Sözlüğü
 
-Sistemde yer alan her sınıf, interface ve enum için **tek paragraflık** rol tanımı + ana alan/metod listesi. Diğer dokümanlar (agents.md, workflow.md, reasoning.md, patterns.md) bu referans üzerinden yüksek seviyeli anlatım yapar.
+Sistemde yer alan her sınıf, interface ve enum için **tek paragraf lık** rol tanımı + ana alan/metod listesi. Diğer dokümanlar (agents.md, workflow.md, reasoning.md, agentic-patterns.md) bu referans üzerinden yüksek seviyeli anlatım yapar.
 
 **Bölümler**:
 
@@ -78,7 +78,7 @@ Reasoning pipeline'ın ana beyni. Workflow **öncesinde** çalışır. O-series 
 - **`Verify(query, session?, history?)` → `VerifiedEntities`** —
   1. `IdExtractor.Extract(query)` ile regex tabanlı çıkarım
   2. History ve session state'ten eksik ID'leri tamamla (5 turluk geriye tarama)
-  3. Her entity için `FakeDatabase.OrdersDb` / `ProductCatalog` / `ComplaintsDb` lookup
+  3. Her entity için repository port'ları üzerinden lookup (`IOrderRepository`, `IProductCatalogRepository`, `IComplaintRepository`)
   4. Sonuç: `Verified` | `NotFoundInDb` | `FormatOnly`
   5. `customer_id Verified` ise `DerivedLastOrderId` ve `DerivedOrderCount` türetir
 - **`BuildVerifiedBlock(verified)` → string** — reasoning prompt'una enjekte edilecek `[VERIFIED ENTITIES]` bloğunu oluşturur.
@@ -152,7 +152,7 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
 ### `CustomerContextProvider` — `Services/Providers/CustomerContextProvider.cs`
 
-`Order=10`. Oturumdaki `State.CustomerId` varsa `FakeDatabase.GetAllOrders` + `ComplaintsDb` query ile müşterinin son 5 siparişi + son 3 şikayeti hakkında metin üretir. Format: `[Müşteri Bağlamı — {id}] Toplam sipariş: N ... Toplam şikayet: M ...`.
+`Order=10`. Oturumdaki `State.CustomerId` varsa `IOrderRepository.GetAllAsync` + `IComplaintRepository.QueryAsync` ile müşterinin son 5 siparişi + son 3 şikayet hakkında metin üretir. Format: `[Müşteri Bağlamı — {id}] Toplam sipariş: N ... Toplam şikayet: M ...`.
 
 ---
 
@@ -302,11 +302,11 @@ Statik sınıf. Specialist ajan çıktısından `SpecialistReasoning` çıkarır
 
 ---
 
-## 3. Models/
+## 3. Domain Modelleri
 
-### Domain modelleri
+### Entity POCO'lar
 
-Kod içinde `FakeDatabase` tarafından kullanılan **5 POCO**:
+Hexagonal mimaride **domain modelleri** `CustomerSupportBot.Domain/Model/` altında tanımlı, repository port'ları üzerinden erişilir:
 
 | Model | Alan | Açıklama |
 |---|---|---|
@@ -314,23 +314,21 @@ Kod içinde `FakeDatabase` tarafından kullanılan **5 POCO**:
 | `OrderInfo` | `Product`, `Quantity`, `CustomerId`, `Status`, `OrderDate` | Sipariş kaydı. `Status` değerleri `WellKnown.OrderStatuses` içinde (`Processing`, `Shipped`, `Delivered`, `Cancelled`). `Models/OrderInfo.cs` |
 | `ComplaintInfo` | `OrderId`, `CustomerId`, `Complaint`, `Status` | Şikayet kaydı. `Status` değerleri `WellKnown.ComplaintStatuses` içinde (`Pending`, `InProgress`, `Resolved`). `Models/ComplaintInfo.cs` |
 | `AgentSession` | `SessionId`, `CreatedAt`, `LastActivity`, `State` | Oturumun kendisi; `State` alt nesnesi state'i taşır. `Models/AgentSession.cs` |
-| `SessionState` | `CustomerId`, `CurrentIntent`, `CollectedInfo`, `TurnCount`, `ConversationSummary`, `Phase`, `ForceReplanNextTurn`, `ReplanNote`, `ReplanRequestedBy`, `ReplanRequestedAt` | Oturum durumu — ajanlar arası paylaşılan bağlam. Replan alanları admin "Yeniden Planla" akışında one-shot olarak kullanılır (bkz. [patterns.md#204-admin-replan](patterns.md#204-admin-replan-one-shot-planning-override--auto-bot-turn)). `Models/AgentSession.cs` |
+| `SessionState` | `CustomerId`, `CurrentIntent`, `CollectedInfo`, `TurnCount`, `ConversationSummary`, `Phase`, `ForceReplanNextTurn`, `ReplanNote`, `ReplanRequestedBy`, `ReplanRequestedAt` | Oturum durumu — ajanlar arası paylaşılan bağlam. Replan alanları admin "Yeniden Planla" akışında one-shot olarak kullanılır (bkz. [agentic-patterns.md#204-admin-replan](agentic-patterns.md#204-admin-replan-one-shot-planning-override--auto-bot-turn)). `CustomerSupportBot.Domain/Model/AgentSession.cs` |
 
 ---
 
-### `FakeDatabase` — `Models/FakeDatabase.cs`
+### Demo Veri Adapтörleri — `CustomerSupportBot.Adapters.Persistence/InMemory/`
 
-Statik sınıf. `ConcurrentDictionary` kullanan 3 tablo + yardımcılar:
+`FakeDatabase` statik sınıfı kaldırılmıştır. Yerini hexagonal adapter implementasyonları almıştır:
 
-- **`ProductCatalog`** — 5 ürün (Dell XPS 15, iPhone 15 Pro, Sony WH-1000XM5, Galaxy Tab S9, MX Master 3S)
-- **`OrdersDb`** — 2 seed sipariş (`ORD-1` → CUST-1990, `ORD-2` → CUST-2026)
-- **`ComplaintsDb`** — 2 seed şikayet (`CMP-1`, `CMP-2`)
-- **`GetNextOrderId` / `GetNextComplaintId`** — `Interlocked.Increment` ile thread-safe ID üretimi (`ORD-3`, `ORD-4`, ...)
-- **`FindClosestProduct(name)`** — case-insensitive substring match
-- **`GetLastOrder(customerId)`** — `OrderDate DESC` sıralayıp ilk kaydı döner
-- **`GetAllOrders(customerId)`** — müşterinin tüm siparişleri (tarih DESC)
+| Adapter | Implements | Seed Veri |
+|---|---|---|
+| `InMemoryProductCatalogAdapter` | `IProductCatalogRepository` | 5 ürün (Dell XPS 15, iPhone 15 Pro, Sony WH-1000XM5, Galaxy Tab S9, MX Master 3S) |
+| `InMemoryOrderAdapter` | `IOrderRepository` | 2 seed sipariş (`ORD-1` → CUST-1990, `ORD-2` → CUST-2026) |
+| `InMemoryComplaintAdapter` | `IComplaintRepository` | 2 seed şikayet (`CMP-1`, `CMP-2`) |
 
-Stok kontrolü `OrderPlacementTool` içinde **`lock`** altında yapılır.
+Thread-safety: `ConcurrentDictionary` ile sağlanır. Stok kontrolü `IOrderRepository.PlaceAsync` içinde `lock` altında yapılır.
 
 ---
 
@@ -537,7 +535,7 @@ Sistemdeki tüm magic string ve sabit değerlerin **tek merkezi kaynağı**. Yen
 | `IntentKeywords` | `(Intent, string[] keywords)` tuple listesi | `InMemorySessionManager.DetectUserIntent` tablo tabanlı niyet algılama |
 | `Phases` | `Inquiry`, `Action`, `Resolution` | `SessionState.Phase` |
 | `AgentNames` | `Planning`, `ProductInquiry`, `Order`, `Complaint`, `Response`, + `Specialists[]`, `All[]` | Agent referansları, ChatManager routing |
-| `OrderStatuses` | `Processing`, `Shipped`, `Delivered`, `Cancelled` | `OrderInfo.Status`, `FakeDatabase` seed |
+| `OrderStatuses` | `Processing`, `Shipped`, `Delivered`, `Cancelled` | `OrderInfo.Status`, InMemory seed veri |
 | `ComplaintStatuses` | `Pending`, `InProgress`, `Resolved` | `ComplaintInfo.Status` |
 | `ToolErrorCodes` | `MissingRequiredField`, `ProductNotFound`, `OrderNotFound`, `StockInsufficient`, `CustomerIdMismatch`, `NoOrdersForCustomer` | `ToolResult.NotFound/Conflict` |
 | `ToolParameterNames` | `CustomerId`, `OrderId`, `ProductName`, `Quantity`, `Reason`, `ComplaintDescription` (snake_case) | Tool validation `MissingFields` |
@@ -666,55 +664,64 @@ YAML için DTO + sonuç modelleri:
 
 ## 7. Program & DI
 
-### `Program.cs` — `Program.cs`
+### `Program.cs` — `CustomerSupportBot.Api/Program.cs`
 
-Uygulama giriş noktası + DI konfigürasyonu. Ana kayıtlar:
+Hexagonal mimaride `Program.cs` **composition root** rolündedir — DI kayıtlarını doğrudan değil, her katmanın kendi extension method'u üzerinden yapar:
 
 ```csharp
-// AI options + chat clients (sağlayıcı OpenAI / AzureOpenAI / Anthropic)
-services.Configure<AiOptions>(config.GetSection(AiOptions.SectionName)) // "AI"
-services.AddSingleton<IChatClient>(sp =>
-    AiClientFactory.CreateStandardChatClient(
-        sp.GetRequiredService<IOptions<AiOptions>>().Value))
-services.AddSingleton<ReasoningChatClient>(sp =>
-    AiClientFactory.CreateReasoningChatClient(
-        sp.GetRequiredService<IOptions<AiOptions>>().Value))
+// 1. Telemetri (cross-cutting — ilk kayıt)
+builder.Services.AddTelemetryAdapters(builder.Configuration);   // CustomerSupportBot.Adapters.Telemetry
 
-// Prompts & services
-services.AddSingleton<PromptService>()
-services.AddSingleton<EntityVerifier>()
-services.AddSingleton<ReasoningSanityChecker>()
-services.AddSingleton<ReasoningService>()
-services.AddSingleton<ContextPipeline>()
+// 2. AI istemcileri (sağlayıcı: OpenAI / AzureOpenAI / Anthropic)
+builder.Services.AddAiServices(builder.Configuration);           // CustomerSupportBot.Api
 
-// Providers
-services.AddSingleton<IContextProvider, CustomerContextProvider>()
-services.AddSingleton<IContextProvider, ConversationSummaryProvider>()
+// 3. Redis adaptörleri (opsiyonel — locking + IMessageBusPort)
+builder.Services.AddRedisAdapters(builder.Configuration);        // CustomerSupportBot.Adapters.Redis
 
-// Session + store (iki interface → tek instance)
-services.AddSingleton<InMemorySessionManager>()
-services.AddSingleton<ISessionManager>(sp => sp.GetRequiredService<InMemorySessionManager>())
-services.AddSingleton<IConversationStore>(sp => sp.GetRequiredService<InMemorySessionManager>())
+// 4. Persistence adaptörleri (Persistence:Provider'a göre Postgres / InMemory)
+builder.Services.AddPersistenceAdapters(builder.Configuration);  // CustomerSupportBot.Adapters.Persistence
 
-// Trace store + workflow
-services.AddSingleton<IReasoningTraceStore>(new InMemoryReasoningTraceStore(maxCapacity: 500))
-services.Configure<WorkflowGuardOptions>(config.GetSection("WorkflowGuards"))
-services.AddSingleton<CustomerSupportChatManager>()
-services.AddSingleton<CustomerSupportTeam>()
-services.AddSingleton<EvaluationRunner>()
+// 5. Uygulama servisleri (Application katmanı)
+builder.Services.AddApplicationServices(builder.Configuration);  // CustomerSupportBot.Application
 
-// JSON global: camelCase + enum string converter
-services.Configure<JsonOptions>(opt => {
-    opt.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-    opt.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-});
+// 6. Ajan adaptörleri (MAF + CustomerSupportTeam)
+builder.Services.AddAgentAdapters(builder.Configuration);        // CustomerSupportBot.Adapters.Agents
 
-// Endpoint mapping
-app.MapChatEndpoints();
-app.MapTraceEndpoints();
-app.MapSessionEndpoints();
-app.MapEvaluationEndpoints();
+// 7. Auth (JWT Bearer + Admin policy)
+builder.Services.AddAuthenticationServices(builder.Configuration);
+
+// Development'ta DB migration
+await app.MigrateIfDevelopmentAsync();
 ```
+
+Her `Add*` metodu kendi katmanının sınıflarını kaydeder:
+
+| Extension | Kayıt edilen başlıcalar |
+|---|---|
+| `AddTelemetryAdapters` | OTLP exporter, `ICostTracker`, `ChatTelemetryMiddleware` |
+| `AddAiServices` | `IChatClient`, `ReasoningChatClient`, `AiClientFactory`, `IOptions<AiProviderOptions>` |
+| `AddRedisAdapters` | `IConnectionMultiplexer`, `IDistributedLockProvider`, `IMessageBusPort → RedisMessageBusAdapter` |
+| `AddPersistenceAdapters` | Postgres: `PostgresSessionManager`, `PostgresApprovalQueue`, `PostgresRatingStore`, `IMessageBusPort → InMemoryMessageBusAdapter` (InMemory mod); `IOptions<PromptOptions>`, `IPromptRepository → FileSystemPromptRepository` |
+| `AddApplicationServices` | `EntityVerifier`, `ReasoningSanityChecker`, `ReasoningService`, `ContextPipeline`, `IContextProvider` × 4, `ApprovalGateService`, `InputGuard`, `CustomerProfileService`, `SkillsBasedRouter` |
+| `AddAgentAdapters` | `CustomerSupportChatManager`, `CustomerSupportTeam`, `EvaluationRunner` |
+
+### `IMessageBusPort` — `CustomerSupportBot.Application/Ports/Driven/Messaging/IMessageBusPort.cs`
+
+Secondary port. Postgres adaptörlerinin Redis'e doğrudan bağımlılığını kaldıran mesajlaşma soyutlaması:
+
+| Üye | Açıklama |
+|---|---|
+| `NodeId` | Çalışan pod/instance kimliği (çoklu pod senaryolarında mesaj routing için) |
+| `PublishAsync(channel, payload)` | Verilen kanala mesaj yayınlar |
+| `SubscribeAsync(channel, handler)` | Kanala abone olur; her mesajda `handler` çağrılır |
+
+**Implementasyonlar**:
+- `RedisMessageBusAdapter` (`CustomerSupportBot.Adapters.Redis/Messaging/`) — production Redis pub/sub
+- `InMemoryMessageBusAdapter` (`CustomerSupportBot.Adapters.Persistence/InMemory/`) — geliştirme/test in-process fallback
+
+### `PromptOptions` — `CustomerSupportBot.Adapters.Persistence/FileSystem/PromptOptions.cs`
+
+`FileSystemPromptRepository`'nin prompt kök dizinini yapılandırma üzerinden almasını sağlar. Config section: `"Prompts"`, key: `RootPath`. Varsayılan: `AppContext.BaseDirectory/Prompts`.
 
 ---
 
@@ -723,7 +730,7 @@ app.MapEvaluationEndpoints();
 - **Agent davranışı detayı** → [agents.md](agents.md)
 - **Workflow akışı / compound query** → [workflow.md](workflow.md)
 - **Reasoning pipeline katmanları** → [reasoning.md](reasoning.md)
-- **Tasarım örüntüleri** → [patterns.md](patterns.md)
+- **Tasarım örüntüleri** → [agentic-patterns.md](agentic-patterns.md)
 - **Mimari + DI + sequence diagram** → [architecture.md](architecture.md)
 - **Endpoint + event şemaları** → [api.md](api.md)
 - **Güvenlik ve kimlik doğrulama** → [security.md](security.md)

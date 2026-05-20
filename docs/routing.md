@@ -203,7 +203,7 @@ Routing sonrası `EscalationRequest`'e eklenen alanlar:
 
 ## Çapraz Referanslar
 
-- **Eskalasyon akışı** → [runtime.md](runtime.md#b-eskalasyon-yolu)
-- **HITL pattern** → [patterns.md](patterns.md#20-human-in-the-loop)
+- **Eskalasyon akışı** → [operations.md](operations.md#b-eskalasyon-yolu)
+- **HITL pattern** → [agentic-patterns.md](agentic-patterns.md#20-human-in-the-loop)
 - **API endpoint'leri** → [api.md](api.md#10-smart-routing-endpoints)
 - **Mimari** → [architecture.md](architecture.md)

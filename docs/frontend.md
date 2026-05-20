@@ -206,6 +206,6 @@ WASM uygulaması, statik dosyaları API sunucusunun `wwwroot/` klasöründen sun
 - **API endpoint'leri** → [api.md](api.md)
 - **Auth yapısı** → [security.md](security.md)
 - **HITL / Onay akışı** → [workflow.md](workflow.md)
-- **SLA Guardian** → [runtime.md](runtime.md)
+- **SLA Guardian** → [operations.md](operations.md)
 - **Workflow Designer** → [workflow-designer.md](workflow-designer.md)
 - **Mimari** → [architecture.md](architecture.md)

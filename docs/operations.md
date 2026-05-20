@@ -1,6 +1,6 @@
-# Runtime — Uygulama Nasıl Çalışır?
+# Operations — Uygulama Nasıl Çalışır?
 
-Bu doküman uygulamayı **kuran**, **çalıştıran**, **gözlemleyen** ve **konfigüre eden** bakış açısıyla yazılmıştır. Kod-içi mimari için → [architecture.md](architecture.md), endpoint sözleşmeleri için → [api.md](api.md), pattern detayları için → [patterns.md](patterns.md).
+Bu doküman uygulamanı **kuran**, **çalıştıran**, **gözlemleyen** ve **konfigüre eden** bakış açısıyla yazılmıştır. Kod-içi mimari için → [architecture.md](architecture.md), endpoint sözleşmeleri için → [api.md](api.md), pattern detayları için → [agentic-patterns.md](agentic-patterns.md).
 
 **Bölümler**:
 
@@ -28,7 +28,7 @@ Bu doküman uygulamayı **kuran**, **çalıştıran**, **gözlemleyen** ve **kon
 ### Çalıştırma
 
 ```powershell
-cd CustomerSupportBot
+cd CustomerSupportBot.Api
 
 # Gizli API key (sağlayıcıya göre birini seçin)
 dotnet user-secrets init
@@ -68,7 +68,7 @@ dotnet run
 
 ## 2. Konfigürasyon (appsettings + environment)
 
-Tüm konfigürasyon `CustomerSupportBot/appsettings.json` üzerinden okunur. Override sırası: `appsettings.json` < `appsettings.Development.json` < user secrets < environment variables.
+Tüm konfigürasyon `CustomerSupportBot.Api/appsettings.json` üzerinden okunur. Override sırası: `appsettings.json` < `appsettings.Development.json` < user secrets < environment variables.
 
 ### `AI` bölümü
 
@@ -112,7 +112,7 @@ Tüm konfigürasyon `CustomerSupportBot/appsettings.json` üzerinden okunur. Ove
 }
 ```
 
-Pattern → [patterns.md#9-guardrails--circuit-breaker](patterns.md).
+Pattern → [agentic-patterns.md#9-guardrails--circuit-breaker](agentic-patterns.md).
 
 ### `HumanInTheLoop`
 
@@ -214,7 +214,7 @@ Bunlara ek olarak ASP.NET Core, HttpClient ve EF Core instrumentation otomatik e
 
 ```powershell
 docker compose up -d jaeger elasticsearch     # OTLP receiver: 4317 (gRPC), 4318 (HTTP)
-dotnet run --project CustomerSupportBot
+dotnet run --project CustomerSupportBot.Api
 # Jaeger UI: http://localhost:16686  → Service: CustomerSupportBot
 ```
 
@@ -248,11 +248,12 @@ Tüm `Telemetry` ayarı kapatılmak istenirse `Telemetry.Enabled = false` — tr
 2. AddTelemetryServices      → ActivitySource + Meter + (opsiyonel) OTLP exporter
 3. AddAiServices             → IChatClient + ReasoningChatClient (TelemetryChatClient ile sarılı)
                                + SemanticMemory stack (Qdrant + embedding, Enabled ise)
-4. AddPersistenceServices    → Persistence:Provider'a göre:
+4. AddPersistenceAdapters   → Persistence:Provider'a göre:
                                ├─ "Postgres" → PostgresSessionManager, PostgresReasoningTraceStore,
                                │               PostgresApprovalQueue, PostgresRatingStore, ...
-                               │               + EF Core DbContext factory + PersistenceHydrator
+                               │               + EF Core DbContext factory + IMessageBusPort + PersistenceHydrator
                                └─ "InMemory" → InMemory* fallback implementasyonları
+                                               + InMemoryMessageBusAdapter
 5. AddApplicationServices    → PromptService, EntityVerifier, ReasoningSanityChecker,
                                ReasoningService, ContextPipeline + 4 IContextProvider,
                                ApprovalGateService, InputGuard, CustomerSupportTeam (lazy),
@@ -397,7 +398,7 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
   │     (admin onay verene kadar       │   │   │   │   ▲
   │      orchestrator askıda kalır)    │   │   │   │   │ admin /approvals/{id}/approve
   │◀── approval_resolved            ───┤   │   │   │   ▼
-  │                                    │   │   │   ├─ tool exec (FakeDatabase)
+  │                                    │   │   │   ├─ tool exec (repository port'ları üzerinden)
   │                                    │   │   │   └─ postToolReflection
   │◀── agent (ResponseAgent, run)   ───┤   │   ├─ ChatManager: ResponseAgent
   │◀── response_start               ───┤   │   ├─ ResponseAgent.RunStreamingAsync
@@ -437,7 +438,7 @@ ADMIN ──release ───▶ /chat-sessions/{sid}/release
                               └─ müşteri tekrar bot moduna döner
 ```
 
-Pattern → [patterns.md#203-live-human-takeover](patterns.md#203-live-human-takeover-real-time-agent-handover).
+Pattern → [agentic-patterns.md#203-live-human-takeover](agentic-patterns.md#203-live-human-takeover-real-time-agent-handover).
 
 ### D) Admin Replan yolu (one-shot planning override)
 
@@ -460,7 +461,7 @@ ADMIN ── replan + note ─▶ /chat-sessions/{sid}/replan
                                  └─ bridge.PublishBotTyping(false)  →  bot_typing(off)
 ```
 
-Pattern → [patterns.md#204-admin-replan](patterns.md#204-admin-replan-one-shot-planning-override--auto-bot-turn).
+Pattern → [agentic-patterns.md#204-admin-replan](agentic-patterns.md#204-admin-replan-one-shot-planning-override--auto-bot-turn).
 
 ---
 
@@ -531,7 +532,7 @@ Varsayılan persistence provider **Postgres**'dur (`appsettings.json > Persisten
 | Chat mode | `InMemoryChatModeRegistry` | Kayıp |
 | Workflow definitions | `InMemoryWorkflowDefinitionStore` | Kayıp |
 | Customer profiles | `InMemoryCustomerProfileStore` | Kayıp |
-| FakeDatabase (demo) | Static seed | Yeni instance |
+| Demo kataloglar (InMemory) | `InMemoryProductCatalogAdapter` vs | Sabit seed | Yeni instance |
 
 **InMemory modunda** (geliştirme/test):
 
@@ -632,11 +633,11 @@ Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 
 - **Mimari + DI haritası** → [architecture.md](architecture.md)
 - **Endpoint sözleşmeleri + SSE event şemaları** → [api.md](api.md)
-- **Tasarım pattern'leri (HITL, Replan, Compound query, …)** → [patterns.md](patterns.md)
+- **Tasarım pattern'leri (HITL, Replan, Compound query, …)** → [agentic-patterns.md](agentic-patterns.md)
 - **Agent davranış sözleşmeleri** → [agents.md](agents.md)
 - **Workflow + ChatManager mantığı** → [workflow.md](workflow.md)
 - **Reasoning pipeline ve sanity rule'lar** → [reasoning.md](reasoning.md)
-- **Class/interface sözleşmeleri** → [reference.md](reference.md)
+- **Class/interface sözleşmeleri** → [class-reference.md](class-reference.md)
 - **Yeni feature/agent/tool ekleme** → [developer-guide.md](developer-guide.md)
 - **Semantic memory, Self-Improving Loop, Personalization** → [intelligence.md](intelligence.md)
 - **Sesli konuşma (Realtime)** → [realtime.md](realtime.md)

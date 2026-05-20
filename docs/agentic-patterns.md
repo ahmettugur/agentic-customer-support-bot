@@ -43,7 +43,7 @@ Bu dokümanda sistemde uygulanan **agentic design pattern'leri** haritalanır. H
 - **Planner**: `PlanningAgent` — tool yok, sadece routing JSON üretir
 - **Executors**: 3 specialist ajan (ProductInquiry, Order, Complaint) — hepsi tool kullanır
 
-**Dosya**: `@Agents/CustomerSupportTeam.cs:60-101`
+**Dosya**: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:60-101`
 
 **Akış**:
 
@@ -76,7 +76,7 @@ User query → PlanningAgent (plan üret) → Specialist (tool çağır) → Res
 }
 ```
 
-**Dosya**: `@Prompts/agents/planning-agent.md`
+**Dosya**: `CustomerSupportBot.Api/Prompts/agents/planning-agent.md`
 
 **Confidence-aware routing**: `< 0.7` ise ResponseAgent'a düşür (clarification). Detay → [reasoning.md#katman-2](reasoning.md#katman-2--planning-reasoning-planningagent).
 
@@ -100,8 +100,8 @@ Reason   → postToolReflection {status: "done", handoffSuggestion: "ResponseAge
 **Dosya**:
 
 - Prompt'lar: `Prompts/agents/{product,order-placement,order-inquiry,complaint}-agent.md`
-- Model: `@Models/SpecialistReasoning.cs`
-- Parser: `@Services/SpecialistReasoningParser.cs`
+- Model: `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`
+- Parser: `CustomerSupportBot.Application/Services/SpecialistReasoningParser.cs`
 
 **Neden?** Tool'un doğru/yanlış kullanıldığını sonradan kanıtlamak/eğitmek için explicit trace gerek. Ayrıca `canProceed=false` erken çıkışı, eksik parametreyle yan etkili tool çağırmayı önler.
 
@@ -137,7 +137,7 @@ Reason   → postToolReflection {status: "done", handoffSuggestion: "ResponseAge
 
 **b) Post-tool reflection**: Tool sonrası `postToolReflection` JSON'u üretilir — `status`, `handoffSuggestion`, `summary` alanları ile sonraki adım belirlenir.
 
-**Dosya**: `@Prompts/agents/{specialist}-agent.md`, `@Models/SpecialistReasoning.cs`
+**Dosya**: `CustomerSupportBot.Api/Prompts/agents/{specialist}-agent.md`, `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`
 
 **Neden?** Tool çağrıları yan etkili olabilir (sipariş oluşturma, şikayet kaydetme). Pre-check eksik parametreyle yan etkili çağrıyı engeller; post-reflection sonuç değerlendirmesi yapar.
 
@@ -149,7 +149,7 @@ Reason   → postToolReflection {status: "done", handoffSuggestion: "ResponseAge
 
 **Gerçekleme**:
 
-- **Tool tanımı**: `@Tools/CustomerSupportTools.cs` — 6 `[Description]`-attributed static method.
+- **Tool tanımı**: `CustomerSupportBot.Application/Services/CustomerSupportToolsService.cs` — 6 `[Description]`-attributed method.
 - **Tool factory**: `AIFunctionFactory.Create(CustomerSupportTools.OrderPlacementTool)` → LLM function schema.
 - **Pre-validation**: Specialist `preToolCheck.canProceed=false` ise tool hiç çağrılmaz.
 - **Post-validation**: Tool `ToolResult` zarfı ile success/error ve categorized error code (validation/not_found/conflict/system) döner.
@@ -157,7 +157,7 @@ Reason   → postToolReflection {status: "done", handoffSuggestion: "ResponseAge
 **ToolResult taksonomisi**:
 
 ```csharp
-@Models/ToolResult.cs:137-144
+CustomerSupportBot.Domain/Model/ToolResult.cs:137-144
 public static class ToolErrorCategories
 {
     public const string Validation = "validation";
@@ -179,10 +179,10 @@ public static class ToolErrorCategories
 **Gerçekleme**: MAF `AgentWorkflowBuilder.CreateGroupChatBuilderWith(…)` + custom `CustomerSupportChatManager`:
 
 ```csharp
-@Agents/CustomerSupportTeam.cs:121-140
+CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:121-140
 ```
 
-**Dosya**: `@Agents/CustomerSupportChatManager.cs`
+**Dosya**: `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`
 
 **Detay** → [workflow.md](workflow.md).
 
@@ -209,7 +209,7 @@ public static class ToolErrorCategories
 `CustomerSupportChatManager` bunu görüp ilgili ajana yönlendirir. **Ping-pong guard** aktif: aynı ajana max 2 handoff:
 
 ```csharp
-@Agents/CustomerSupportChatManager.cs:134-144
+CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:134-144
 if (count < MaxHandoffsPerAgent)   // = 2
 {
     _handoffCounts[targetName] = count + 1;
@@ -236,8 +236,8 @@ if (count < MaxHandoffsPerAgent)   // = 2
 
 **Dosya**:
 
-- `@Models/WorkflowGuardOptions.cs`
-- `@Agents/CustomerSupportChatManager.cs:204-287`
+- `CustomerSupportBot.Domain/Model/WorkflowGuardOptions.cs`
+- `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:204-287`
 
 **Neden?** LLM ajansız bırakılırsa "düşünüyorum... düşünüyorum..." sonsuza kadar dönebilir. Production'da her guard = bir bütçe hattı.
 
@@ -250,7 +250,7 @@ if (count < MaxHandoffsPerAgent)   // = 2
 **Gerçekleme**:
 
 ```csharp
-@Services/ContextPipeline.cs
+CustomerSupportBot.Application/Services/ContextPipeline.cs
 public class ContextPipeline
 {
     // IEnumerable<IContextProvider> Order'a göre sıralı koşturulur
@@ -260,7 +260,7 @@ public class ContextPipeline
 
 İki provider var:
 
-1. **`CustomerContextProvider`** (Order=10): FakeDatabase'den müşterinin sipariş + şikayet geçmişini çeker (ilk 5 sipariş, ilk 3 şikayet).
+1. **`CustomerContextProvider`** (Order=10): Repository port'ları (`IOrderRepository`, `IComplaintRepository`) üzerinden müşterinin sipariş + şikayet geçmişini çeker (ilk 5 sipariş, ilk 3 şikayet).
 2. **`ConversationSummaryProvider`** (Order=5): Konuşma 8+ mesaja ulaştığında eskileri LLM ile özetler.
 
 **Dosya**: `Services/Providers/*.cs`
@@ -286,7 +286,7 @@ Kullanıcı ORD-1 hakkında daha önce...
 **Gerçekleme**: `ConversationSummaryProvider`:
 
 ```csharp
-@Services/Providers/ConversationSummaryProvider.cs:40-75
+CustomerSupportBot.Application/Services/Providers/ConversationSummaryProvider.cs:40-75
 if (history.Count < SummaryThreshold) return null;        // 8+ mesaj gerek
 
 // Son 4 mesajı atlayıp geri kalanı özetle
@@ -308,7 +308,7 @@ session.State.ConversationSummary = summary;
 **Gerçekleme**: `IdExtractor`:
 
 ```csharp
-@Services/IdExtractor.cs
+CustomerSupportBot.Domain/Services/IdExtractor.cs
 OrderIdPattern = \bORD[-_\s]?(\d+)\b               // ORD-1, ORD_1
 ComplaintIdPattern = \bCMP[-_\s]?(\d+)\b           // CMP-1
 CustomerIdPrefixPattern = \bCUST[-_\s]?(\d+)\b     // CUST-001
@@ -337,7 +337,7 @@ SİPARİŞ SORGUSU ÖNCELİK KURALI:
 
 **Gerçekleme**:
 
-- **Model**: `@Models/ReasoningTrace.cs`
+- **Model**: `CustomerSupportBot.Domain/Model/ReasoningTrace.cs`
 - **Store**: `InMemoryReasoningTraceStore` (ring buffer, max 500)
 - **Endpoint'ler**: `/traces/recent`, `/traces/{id}`, `/traces/by-session/{sid}`, `/traces/stats`
 
@@ -363,7 +363,7 @@ TerminationReason, FinalResponse, IterationCount, Error
 **Gerçekleme**: `PromptService`:
 
 ```csharp
-@Services/PromptService.cs
+CustomerSupportBot.Adapters.Persistence/FileSystem/FileSystemPromptRepository.cs
 // Prompts/**/*.md → ConcurrentDictionary<string, string>
 public string Get(string key);
 public string Render(string key, IDictionary<string, string?>? vars);
@@ -416,12 +416,12 @@ public string Render(string key, IDictionary<string, string?>? vars);
 **Gerçekleme**: `EntityVerifier`:
 
 ```csharp
-@Services/EntityVerifier.cs
+CustomerSupportBot.Application/Services/EntityVerifier.cs
 public VerifiedEntities Verify(string query, AgentSession? session, IList<ChatMessage>? history)
 {
     var ids = IdExtractor.Extract(query);        // regex
     // history + session state'ten eksikleri doldur
-    // Her entity için FakeDatabase.TryGetOrder / TryGetCustomer / TryGetComplaint
+    // Her entity için repository port'ları (IOrderRepository.TryGetAsync / IProductCatalogRepository / IComplaintRepository)
     //   → Verified / NotFoundInDb / FormatOnly
     // customer_id Verified ise DerivedLastOrderId hesaplanır
     return verified;
@@ -440,8 +440,8 @@ Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN.
 
 **Dosya**:
 
-- `@Models/VerifiedEntities.cs`
-- `@Services/EntityVerifier.cs`
+- `CustomerSupportBot.Domain/Model/VerifiedEntities.cs`
+- `CustomerSupportBot.Application/Services/EntityVerifier.cs`
 
 **Literatürdeki yeri**: Klasik [ReAct](https://arxiv.org/abs/2210.03629)'ın "Observe" adımı normalde model tarafından tool çağrısıyla yapılır. Biz bu adımı **LLM'den önce, kodda deterministik** yapıyoruz — sıfır latency + sıfır LLM maliyeti. Bu yaklaşım *grounded prompting* veya *entity grounding* olarak da anılır.
 
@@ -470,8 +470,8 @@ Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN.
 
 **Dosya**:
 
-- `@Services/ReasoningSanityChecker.cs`
-- `@Models/ReasoningIssue.cs`
+- `CustomerSupportBot.Application/Services/ReasoningSanityChecker.cs`
+- `CustomerSupportBot.Domain/Model/ReasoningIssue.cs`
 
 Tespit edilen her issue `result.SanityIssues` listesine eklenir, trace'e yazılır ve UI'da gösterilir. Şu an **bilgilendirme modunda** — workflow akışını değiştirmez; ileride error severity'de LLM re-prompt tetikleyebilir.
 
@@ -503,8 +503,8 @@ Tespit edilen her issue `result.SanityIssues` listesine eklenir, trace'e yazıl�
 
 **Dosya**:
 
-- `@Models/SubTask.cs`
-- `@Prompts/services/reasoning-system.md` (decomposition bölümü)
+- `CustomerSupportBot.Domain/Model/SubTask.cs`
+- `CustomerSupportBot.Api/Prompts/services/reasoning-system.md` (decomposition bölümü)
 
 **Neden?** Tek intent'li routing compound query'lerde ikinci istek kaybına sebep olur. Decomposition ile her istek isimlendirilir, hedeflenir ve **Pattern 19 (Task Orchestration)** tarafından paralel/sıralı yürütülür.
 
@@ -534,7 +534,7 @@ private async Task<string> RunDecomposedAsync(...)
 }
 ```
 
-**Dosya**: `@Agents/CustomerSupportTeam.cs:912-1192`
+**Dosya**: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:912-1192`
 
 **Karakteristikleri**:
 
@@ -591,11 +591,11 @@ Bu sistemde **iki farklı HITL mekanizması** vardır ve birbirlerini tamamlar:
 
 **Gerçekleme**:
 
-- Queue: `@Services/InMemoryApprovalQueue.cs` — `ConcurrentDictionary` + `TaskCompletionSource<ApprovalRequest>` per request
-- Tool wrapper: `@Agents/CustomerSupportTeam.cs` (bkz. `BuildOrderPlacementTool`, `BuildComplaintRegistrationTool`, `RequestApprovalAsync`)
-- Config: `@Models/ApprovalOptions.cs` (`appsettings.json > "HumanInTheLoop"`)
+- Queue: `CustomerSupportBot.Adapters.Persistence/InMemory/InMemoryApprovalQueue.cs` — `ConcurrentDictionary` + `TaskCompletionSource<ApprovalRequest>` per request
+- Tool wrapper: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs` (bkz. `BuildOrderPlacementTool`, `BuildComplaintRegistrationTool`, `RequestApprovalAsync`)
+- Config: `CustomerSupportBot.Domain/Model/ApprovalOptions.cs` (`appsettings.json > "HumanInTheLoop"`)
 - Endpoints: `/approvals/pending`, `/approvals/{id}/approve`, `/approvals/{id}/reject`
-- UI: `@wwwroot/admin.html` + `js/admin.js` — 3sn auto-refresh
+- UI: `CustomerSupportBot.Api/wwwroot/admin.html` + `js/admin.js` — 3sn auto-refresh
 
 **Context propagation** — tool lambda'sı session/trace/query bağlamını `AsyncLocal<ApprovalContext>` üzerinden alır; ChatEndpoints her workflow öncesi `CustomerSupportTeam.SetApprovalContext(...)` çağırır.
 
@@ -630,8 +630,8 @@ IEscalationSink.Create(new EscalationRequest { ... })
 
 **Gerçekleme**:
 
-- Sink: `@Services/InMemoryEscalationSink.cs` — ring buffer (max 500)
-- Hook: `@Agents/CustomerSupportTeam.cs` → `EmitEscalationsIfAny(...)` trace completion öncesi çağrılır
+- Sink: `CustomerSupportBot.Adapters.Persistence/InMemory/InMemoryEscalationSink.cs` — ring buffer (max 500)
+- Hook: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs` → `EmitEscalationsIfAny(...)` trace completion öncesi çağrılır
 - Endpoints: `/escalations/open`, `/escalations/{id}/acknowledge`, `/escalations/{id}/resolve`, `/escalations/{id}/dismiss`
 
 **Senkron vs asenkron ayrımı** — critical:
@@ -666,7 +666,7 @@ Birlikte kullanıldıklarında **production-grade HITL** elde edilir: proaktif k
 ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  ChatMode.Bot
 ```
 
-`@Endpoints/ChatEndpoints.cs:90-96` → her `/chat/stream` isteğinde önce `IChatModeRegistry.GetMode(sessionId)` okunur:
+`CustomerSupportBot.Api/Endpoints/ChatEndpoints.cs:90-96` → her `/chat/stream` isteğinde önce `IChatModeRegistry.GetMode(sessionId)` okunur:
 
 - **Bot** → mevcut workflow (reasoning + agent + response)
 - **Human** → workflow **tamamen atlanır**, mesaj `IChatBridge`'e push edilir, admin yanıtı stream'lenir
@@ -697,7 +697,7 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
                   └─────────────────────────────────────────────┘
 ```
 
-**Bot history → admin context**: Bot moddayken her tur sonunda `chatBridge.RecordBotExchange()` çağrılır (`@Endpoints/ChatEndpoints.cs:202-204`). Admin "Devral" deyince son 200 mesajlık tam bağlam (bot + user) panele yüklenir — temsilci sıfırdan başlamaz.
+**Bot history → admin context**: Bot moddayken her tur sonunda `chatBridge.RecordBotExchange()` çağrılır (`CustomerSupportBot.Api/Endpoints/ChatEndpoints.cs:202-204`). Admin "Devral" deyince son 200 mesajlık tam bağlam (bot + user) panele yüklenir — temsilci sıfırdan başlamaz.
 
 **Mod değişim kanalı**: `ModeChanged` event'i, açık duran user `/chat/stream` SSE bağlantısını da koparır → `human_left` + `done` gönderilir, akış normal Bot moduna düşer (bir sonraki user mesajı tekrar workflow tetikler).
 
@@ -831,7 +831,7 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
 - **Biz neden uygulamadık?** Mevcut helper'lar sıralı (`foreach`). `SubTask.Dependencies` alanı var ama kullanılmıyor. Paralele geçmek için:
   - Topolojik sıralama
   - `Task.WhenAll` ile bağımsız subtask'leri tetikleme
-  - `FakeDatabase` lock'larının race condition'a dayanıklı olduğundan emin olma
+  - `InMemoryProductCatalogAdapter`, `InMemoryOrderAdapter`, `InMemoryComplaintAdapter` lock'larının race condition'a dayanıklı olduğundan emin olma
 - **Ne zaman ekleriz?** Ortalama subtask başına latency yüksek olur (gerçek DB + external API çağrısı) ve paralel kazanç belirginleşirse.
 
 ---
@@ -845,7 +845,7 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
                       │ hint
                       ▼
  ┌─────────────────────────────────────────┐
- │ Grounded Reasoning (Entity Verify)      │◀─── FakeDatabase lookup
+ │ Grounded Reasoning (Entity Verify) │◄─── Repository port lookup
  │                              — Katman 0 │
  └────────────────────┬────────────────────┘
                       │ verified entities
@@ -906,18 +906,18 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
 
 | Pattern | Dosyalar |
 |---|---|
-| Planner-Executor, Router | `Prompts/agents/planning-agent.md`, `Models/PlanningResult.cs`, `Services/PlanningResultParser.cs` |
-| ReAct | `Prompts/agents/{product,order-placement,order-inquiry,complaint}-agent.md`, `Models/SpecialistReasoning.cs`, `Services/SpecialistReasoningParser.cs` |
-| Self-Reflection | `Prompts/agents/{specialist}-agent.md`, `Models/SpecialistReasoning.cs`, `Services/SpecialistReasoningParser.cs` |
-| Group Chat + Guardrails | `Agents/CustomerSupportChatManager.cs`, `Models/WorkflowGuardOptions.cs` |
-| Tool Use + Validation | `Tools/CustomerSupportTools.cs`, `Models/ToolResult.cs` |
-| Dynamic Handoff | `CustomerSupportChatManager.SelectNextAgentAsync` (L108-153) |
-| Context Pipeline + Summarization | `Services/ContextPipeline.cs`, `Services/Providers/*.cs` |
-| Deterministic Preprocessing | `Services/IdExtractor.cs` |
-| Observability | `Models/ReasoningTrace.cs`, `Services/InMemoryReasoningTraceStore.cs`, `Endpoints/TraceEndpoints.cs` |
-| Prompt Externalization | `Services/PromptService.cs`, `Prompts/**/*.md` |
-| Evaluation | `Evaluation/*.cs`, `docs/evaluation-scenarios.yaml` |
-| **Grounded Reasoning** | `Services/EntityVerifier.cs`, `Models/VerifiedEntities.cs`, `Prompts/services/reasoning-system.md` |
-| **Sanity Checking** | `Services/ReasoningSanityChecker.cs`, `Models/ReasoningIssue.cs` |
-| **Task Decomposition** | `Models/SubTask.cs`, `Services/ReasoningService.cs` (ParseSubTasks), `Prompts/services/reasoning-system.md` |
-| **Task Orchestration** | `Agents/CustomerSupportTeam.cs:912-1192` (`RunDecomposedAsync`, helper'lar) |
+| Planner-Executor, Router | `CustomerSupportBot.Api/Prompts/agents/planning-agent.md`, `CustomerSupportBot.Domain/Model/PlanningResult.cs`, `CustomerSupportBot.Application/Services/PlanningResultParser.cs` |
+| ReAct | `CustomerSupportBot.Api/Prompts/agents/{product,order-placement,order-inquiry,complaint}-agent.md`, `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`, `CustomerSupportBot.Application/Services/SpecialistReasoningParser.cs` |
+| Self-Reflection | `CustomerSupportBot.Api/Prompts/agents/{specialist}-agent.md`, `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`, `CustomerSupportBot.Application/Services/SpecialistReasoningParser.cs` |
+| Group Chat + Guardrails | `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`, `CustomerSupportBot.Domain/Model/WorkflowGuardOptions.cs` |
+| Tool Use + Validation | `CustomerSupportBot.Application/Services/CustomerSupportToolsService.cs`, `CustomerSupportBot.Domain/Model/ToolResult.cs` |
+| Dynamic Handoff | `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs SelectNextAgentAsync` (L108-153) |
+| Context Pipeline + Summarization | `CustomerSupportBot.Application/Services/ContextPipeline.cs`, `CustomerSupportBot.Application/Services/Providers/*.cs` |
+| Deterministic Preprocessing | `CustomerSupportBot.Domain/Services/IdExtractor.cs` |
+| Observability | `CustomerSupportBot.Domain/Model/ReasoningTrace.cs`, `CustomerSupportBot.Adapters.Persistence/InMemory/InMemoryReasoningTraceStore.cs`, `CustomerSupportBot.Api/Endpoints/TraceEndpoints.cs` |
+| Prompt Externalization | `CustomerSupportBot.Adapters.Persistence/FileSystem/FileSystemPromptRepository.cs`, `CustomerSupportBot.Api/Prompts/**/*.md` |
+| Evaluation | `CustomerSupportBot.Api.Tests/Evaluation/*.cs`, `docs/evaluation-scenarios.yaml` |
+| **Grounded Reasoning** | `CustomerSupportBot.Application/Services/EntityVerifier.cs`, `CustomerSupportBot.Domain/Model/VerifiedEntities.cs`, `CustomerSupportBot.Api/Prompts/services/reasoning-system.md` |
+| **Sanity Checking** | `CustomerSupportBot.Application/Services/ReasoningSanityChecker.cs`, `CustomerSupportBot.Domain/Model/ReasoningIssue.cs` |
+| **Task Decomposition** | `CustomerSupportBot.Domain/Model/SubTask.cs`, `CustomerSupportBot.Application/Services/ReasoningService.cs` (ParseSubTasks), `CustomerSupportBot.Api/Prompts/services/reasoning-system.md` |
+| **Task Orchestration** | `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:912-1192` (`RunDecomposedAsync`, helper'lar) |

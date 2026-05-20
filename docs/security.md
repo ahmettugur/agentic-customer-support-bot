@@ -241,7 +241,7 @@ appsettings.Production.json
 
 ## 7. Entity Verification (Grounded Reasoning)
 
-`EntityVerifier` kullanıcı sorgusundaki ID'leri (ORD-1, CST-001 gibi) regex ile çıkarır ve `FakeDatabase`'e karşı doğrular. Bu sayede:
+`EntityVerifier` kullanıcı sorgusundaki ID'leri (ORD-1, CST-001 gibi) regex ile çıkarır ve repository port'ları üzerinden doğrular. Bu sayede:
 
 - LLM'in uydurduğu (hallucinated) ID'ler tespit edilir
 - Doğrulanmış entity'ler reasoning'e `VerifiedEntities` olarak geçilir
@@ -251,7 +251,7 @@ appsettings.Production.json
 
 ## Çapraz Referanslar
 
-- **HITL pattern detayları** → [patterns.md](patterns.md#20-human-in-the-loop)
+- **HITL pattern detayları** → [agentic-patterns.md](agentic-patterns.md#20-human-in-the-loop)
 - **API endpoint güvenlik kapsamı** → [api.md](api.md)
 - **Workflow guard'lar** → [workflow.md](workflow.md)
 - **Mimari genel bakış** → [architecture.md](architecture.md)

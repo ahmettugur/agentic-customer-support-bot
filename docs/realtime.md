@@ -286,7 +286,7 @@ WebSocket: /chat/realtime-native/{sessionId?}  ← Native modu (RealtimeNativeBr
 - `sessionId` verilmezse yeni session oluşturulur; `connected` event'iyle ID döner
 - Aynı session text chat ile paylaşılabilir — kullanıcı önce yazılı başlayıp sonra sesliye geçebilir
 
-Handler: `@Services/Realtime/RealtimeBridge.cs:HandleAsync`. DI: `@Extensions/AiExtensions.cs` içinde `AddRealtimeServices(...)`.
+Handler: `CustomerSupportBot.Application/Services/Realtime/RealtimeBridge.cs:HandleAsync`. DI: `CustomerSupportBot.Api/Extensions/AiExtensions.cs` içinde `AddRealtimeServices(...)`.
 
 ---
 
@@ -315,12 +315,12 @@ Handler: `@Services/Realtime/RealtimeBridge.cs:HandleAsync`. DI: `@Extensions/Ai
 ## İlgili dosyalar
 
 **Backend**
-- `@Services/Realtime/RealtimeBridge.cs` — köprü modu WS bridge + pump'lar + agent dispatcher
-- `@Services/Realtime/RealtimeNativeBridge.cs` — native modu WS bridge + function call dispatch + TTS
-- `@Services/Realtime/RealtimeFunctionTools.cs` — native modun okuma-only tool subset'i (5 fonksiyon — end_conversation dahil)
-- `@Models/AiProviderOptions.cs` — `RealtimeOptions` POCO
-- `@Extensions/ApplicationServicesExtensions.cs` — DI kayıtları (`RealtimeBridge`, `RealtimeNativeBridge`, `RealtimeFunctionTools`)
-- `@Endpoints/RealtimeEndpoints.cs` — `/chat/realtime` ve `/chat/realtime-native` handler'ları
+- `CustomerSupportBot.Application/Services/Realtime/RealtimeBridge.cs` — köprü modu WS bridge + pump'lar + agent dispatcher
+- `CustomerSupportBot.Application/Services/Realtime/RealtimeNativeBridge.cs` — native modu WS bridge + function call dispatch + TTS
+- `CustomerSupportBot.Application/Services/Realtime/RealtimeFunctionTools.cs` — native modun okuma-only tool subset'i (5 fonksiyon — end_conversation dahil)
+- `CustomerSupportBot.Domain/Model/AiProviderOptions.cs` — `RealtimeOptions` POCO
+- `CustomerSupportBot.Api/Extensions/ApplicationServicesExtensions.cs` — DI kayıtları (`RealtimeBridge`, `RealtimeNativeBridge`, `RealtimeFunctionTools`)
+- `CustomerSupportBot.Api/Endpoints/RealtimeEndpoints.cs` — `/chat/realtime` ve `/chat/realtime-native` handler'ları
 
 **Frontend**
 - `@wwwroot/js/realtime-client.js` — WS client + AudioWorklet capture + PCM playback (her iki mod için ortak)
@@ -369,7 +369,7 @@ Latency tipik: **800ms-1.5sn** (köprüde 3-5sn). Token maliyeti **~70% daha dü
 
 ### Tool subset — yalnızca okuma-only
 
-`@Services/Realtime/RealtimeFunctionTools.cs` modele **sadece** şu tool'ları tanıtır:
+`CustomerSupportBot.Application/Services/Realtime/RealtimeFunctionTools.cs` modele **sadece** şu tool'ları tanıtır:
 
 | Tool | Wrapper | Yan etki |
 |---|---|---|
@@ -396,7 +396,7 @@ UI: `conversation_ended` callback'i ile "Görüşme sonlandırıldı" mesajı g�
 
 ### Sistem prompt'u (model talimatı)
 
-`@Services/Realtime/RealtimeNativeBridge.cs:BuildSystemInstructions` modele şu kuralları verir:
+`CustomerSupportBot.Application/Services/Realtime/RealtimeNativeBridge.cs:BuildSystemInstructions` modele şu kuralları verir:
 
 - **YAPABİLDİKLERİN**: ürün katalog sorgusu, sipariş durumu, son sipariş, müşterinin tüm siparişleri
 - **YAPAMADIKLARIN** (tool ÇAĞIRMA, kullanıcıyı yazılı sohbete yönlendir):
@@ -443,7 +443,7 @@ Köprüye özgü `workflow_start`/`reasoning_*`/`agent`/`workflow_done` event'le
 
 ### Persistence ve audit
 
-Native modda **DB session geçmişine** asistan yanıtı yazılır (`@Services/Realtime/RealtimeNativeBridge.cs:HandleOpenAiEventAsync` → `_chatBridge.RecordBotExchange`), kullanıcı transcript'i ise `"(sesli)"` etiketiyle kaydedilir. Reasoning trace **yoktur** — bu modun ayırt edici farkı.
+Native modda **DB session geçmişine** asistan yanıtı yazılır (`CustomerSupportBot.Application/Services/Realtime/RealtimeNativeBridge.cs:HandleOpenAiEventAsync` → `_chatBridge.RecordBotExchange`), kullanıcı transcript'i ise `"(sesli)"` etiketiyle kaydedilir. Reasoning trace **yoktur** — bu modun ayırt edici farkı.
 
 Bu trade-off bilinçlidir: hız ve maliyet için audit trail kısalır. Production'da audit kritikse bu kanal yalnızca okuma-only kalmalıdır (zaten kalır).
 
@@ -462,5 +462,5 @@ Bu özellik açık unutulmuş mikrofonları önler. Aktivite zaman damgası `_la
 
 - [agents.md](agents.md) — Ajan takımı ve agent-level OpenTelemetry
 - [workflow.md](workflow.md) — MAF workflow akışı (köprü modunda aynı)
-- [patterns.md](patterns.md) — Streaming, HITL, admin takeover pattern'leri
-- [runtime.md](runtime.md) — Servis yaşam döngüleri ve DI
+- [agentic-patterns.md](agentic-patterns.md) — Streaming, HITL, admin takeover pattern'leri
+- [operations.md](operations.md) — Servis yaşam döngüleri ve DI

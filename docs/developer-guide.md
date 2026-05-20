@@ -33,11 +33,12 @@ Bu doküman geliştiricilerin en sık ihtiyaç duyacağı iş senaryolarını **
   - **Azure OpenAI** (`gpt-5.1` deployment + reasoning deployment)
   - **Anthropic** (Claude — Sonnet/Opus/Haiku)
 
-**Sağlayıcı seçimi**: `appsettings.json > AI:Provider` (`OpenAI` | `AzureOpenAI` | `Anthropic`). Yapılandırma sınıfları: [`AiOptions`](../CustomerSupportBot/Models/AiProviderOptions.cs).
+**Sağlayıcı seçimi**: `appsettings.json > AI:Provider` (`OpenAI` | `AzureOpenAI` | `Anthropic`). Yapılandırma sınıfı: `CustomerSupportBot.Adapters.AI/Options/AiProviderOptions.cs`.
 
 **Çalıştırma**:
 ```bash
 # Gizli API key (kullanılan sağlayıcıya göre birini seçin)
+cd CustomerSupportBot.Api
 dotnet user-secrets init
 
 # OpenAI
@@ -55,14 +56,15 @@ dotnet user-secrets set "AI:Provider"           "Anthropic"
 dotnet user-secrets set "AI:Anthropic:ApiKey"   "sk-ant-..."
 
 # Sunucu
-cd CustomerSupportBot
-dotnet run
+dotnet run --project CustomerSupportBot.Api
 # → http://localhost:5099
 ```
 
 **Build:**
 ```bash
-dotnet build CustomerSupportBot.csproj -nologo -v q
+dotnet build CustomerSupportBot.Api/CustomerSupportBot.Api.csproj -nologo -v q
+# veya tüm çözüm:
+dotnet build CustomerSupport.slnx -nologo -v q
 ```
 
 **Temel kontrol**:
@@ -104,7 +106,7 @@ Kullanıcı kimliği: {{CUSTOMER_ID}}
 Türkçe yaz, en fazla 2 cümle.
 ```
 
-**2. `.csproj` zaten `Prompts/**/*.md`'yi otomatik kopyalıyor** — ekstra kayıt gereksiz.
+**2. `CustomerSupportBot.Api.csproj` zaten `Prompts/**/*.md`'yi `PreserveNewest` ile kopyalıyor** — ekstra kayıt gereksiz.
 
 **3. Kodda kullan:**
 
@@ -131,7 +133,7 @@ var text = _prompts.Render("services/hata-mesaji", new Dictionary<string, string
 ### Prompt dizin konvansiyonu
 
 ```
-Prompts/
+CustomerSupportBot.Api/Prompts/
 ├── README.md              # Loader atlar
 ├── agents/                # ChatClientAgent instructions
 │   └── <agent-name>.md
@@ -151,13 +153,13 @@ Prompts/
 
 ### Adımlar
 
-**1. `CustomerSupportTools.cs`'de static method ekle**:
+**1. `CustomerSupportToolsService.cs`'e metod ekle**:
 
 ```csharp
-// @Tools/CustomerSupportTools.cs
+// CustomerSupportBot.Application/Services/CustomerSupportToolsService.cs
 [Description("Sipariş için iade süreci başlatır. orderId ve reason zorunlu. " +
              "Sonuç ToolResult olarak döner.")]
-public static ToolResult RefundInitiateTool(
+public ToolResult RefundInitiateTool(
     [Description("İade edilecek sipariş numarası (ör. 'ORD-1')")] string orderId,
     [Description("İade sebebi (en az 10 karakter)")] string reason)
 {
@@ -172,8 +174,9 @@ public static ToolResult RefundInitiateTool(
             missing.ToArray());
     }
 
-    // 2) Business logic — error code'lar için WellKnown.ToolErrorCodes kullan
-    if (!FakeDatabase.OrdersDb.TryGetValue(orderId, out var order))
+    // 2) Business logic — IOrderRepository port'u üzerinden erişim
+    var order = _orderRepository.FindOrder(orderId);
+    if (order == null)
     {
         return ToolResult.NotFound(
             WellKnown.ToolErrorCodes.OrderNotFound,
@@ -192,7 +195,7 @@ public static ToolResult RefundInitiateTool(
 **2. İlgili agent prompt'unda tool'u dokümante et**:
 
 ```md
-<!-- Prompts/agents/complaint-agent.md -->
+<!-- CustomerSupportBot.Api/Prompts/agents/complaint-agent.md -->
 ...
 TOOL'LAR:
   - complaint_registration_tool : Şikayet kaydı (yan etkili)
@@ -208,15 +211,15 @@ REFUND İÇİN:
 **3. Agent'ın `tools:` listesine ekle**:
 
 ```csharp
-// @Agents/CustomerSupportTeam.cs:96-101
+// CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs
 var complaintAgent = new ChatClientAgent(
     chatClient,
     instructions: _prompts.Get("agents/complaint-agent"),
     name: "ComplaintAgent",
     description: "Müşteri şikayetlerini işler.",
     tools: [
-        AIFunctionFactory.Create(CustomerSupportTools.ComplaintRegistrationTool),
-        AIFunctionFactory.Create(CustomerSupportTools.RefundInitiateTool)  // ← eklendi
+        AIFunctionFactory.Create(_tools.ComplaintRegistrationTool),
+        AIFunctionFactory.Create(_tools.RefundInitiateTool)  // ← eklendi
     ]);
 ```
 
@@ -251,7 +254,7 @@ var complaintAgent = new ChatClientAgent(
 
 ### Adımlar
 
-**1. Prompt dosyası oluştur** (`Prompts/agents/billing-agent.md`):
+**1. Prompt dosyası oluştur** (`CustomerSupportBot.Api/Prompts/agents/billing-agent.md`):
 
 ```md
 Sen BillingAgent'sın. Fatura işlemleri için `fetch_invoice_tool` kullanırsın.
@@ -288,7 +291,7 @@ HANDOFF KURALLARI:
 **2. Agent'ı `CustomerSupportTeam` ctor'da yarat**:
 
 ```csharp
-// @Agents/CustomerSupportTeam.cs
+// CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs
 
 // 7. BillingAgent — yeni specialist
 var billingAgent = new ChatClientAgent(
@@ -296,7 +299,7 @@ var billingAgent = new ChatClientAgent(
     instructions: _prompts.Get("agents/billing-agent"),
     name: "BillingAgent",
     description: "Fatura sorgularını işler.",
-    tools: [AIFunctionFactory.Create(CustomerSupportTools.FetchInvoiceTool)]);
+    tools: [AIFunctionFactory.Create(_tools.FetchInvoiceTool)]);
 ```
 
 **3. Workflow'a ekle**:
@@ -315,7 +318,7 @@ _workflow = AgentWorkflowBuilder
     .Build();
 ```
 
-**4. `PlanningAgent` prompt'unu güncelle** (`Prompts/agents/planning-agent.md`):
+**4. `PlanningAgent` prompt'unu güncelle** (`CustomerSupportBot.Api/Prompts/agents/planning-agent.md`):
 
 ```md
 MEVCUT AJANLAR:
@@ -329,7 +332,7 @@ MEVCUT AJANLAR:
 **5. `CustomerSupportChatManager` specialist listelerine ekle**:
 
 ```csharp
-// @Agents/CustomerSupportChatManager.cs:304-310
+// CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs
 private static readonly string[] SpecialistPrefixes =
 {
     "ProductInquiryAgent",
@@ -349,7 +352,7 @@ private static readonly string[] SpecialistPrefixes =
 
 ### Checklist
 
-- [ ] `Prompts/agents/<name>.md` oluşturuldu
+- [ ] `CustomerSupportBot.Api/Prompts/agents/<name>.md` oluşturuldu
 - [ ] `ChatClientAgent` `CustomerSupportTeam` ctor'da
 - [ ] `AddParticipants(...)` listesinde
 - [ ] PlanningAgent prompt'unda bahsedildi
@@ -378,10 +381,11 @@ private static readonly string[] SpecialistPrefixes =
 **1. `IContextProvider` implementasyonu**:
 
 ```csharp
-// Services/Providers/LoyaltyContextProvider.cs
-using CustomerSupportBot.Models;
+// CustomerSupportBot.Application/Services/Providers/LoyaltyContextProvider.cs
+using CustomerSupportBot.Application.Ports.Driven;
+using CustomerSupportBot.Domain.Model;
 
-namespace CustomerSupportBot.Services.Providers;
+namespace CustomerSupportBot.Application.Services.Providers;
 
 public class LoyaltyContextProvider : IContextProvider
 {
@@ -406,13 +410,13 @@ public class LoyaltyContextProvider : IContextProvider
 }
 ```
 
-**2. `Program.cs`'de kaydet**:
+**2. `ApplicationServicesExtensions.cs`'de kaydet**:
 
 ```csharp
-@Program.cs:63-66
-builder.Services.AddSingleton<IContextProvider, CustomerContextProvider>();
-builder.Services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
-builder.Services.AddSingleton<IContextProvider, LoyaltyContextProvider>();  // ← yeni
+// CustomerSupportBot.Api/Extensions/ApplicationServicesExtensions.cs
+services.AddSingleton<IContextProvider, CustomerContextProvider>();
+services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
+services.AddSingleton<IContextProvider, LoyaltyContextProvider>();  // ← yeni
 ```
 
 **3. Test et**: Bir oturumda `customerId` set edildiğinde prompt'ta `[Sadakat Bilgisi]` bölümünün göründüğünü `/traces/{id}` ile kontrol edebilirsiniz.
@@ -437,8 +441,8 @@ builder.Services.AddSingleton<IContextProvider, LoyaltyContextProvider>();  // �
 **1. Extension metod ekle** (örneğin `SessionEndpoints.cs`'e):
 
 ```csharp
-// Endpoints/SessionEndpoints.cs
-app.MapDelete("/sessions/purge-old", (int daysOld, InMemorySessionManager mgr) =>
+// CustomerSupportBot.Api/Endpoints/SessionEndpoints.cs
+app.MapDelete("/sessions/purge-old", (int daysOld, ISessionRepository sessionRepo) =>
 {
     var cutoff = DateTime.UtcNow.AddDays(-daysOld);
     var removed = mgr.PurgeOlderThan(cutoff);
@@ -449,7 +453,7 @@ app.MapDelete("/sessions/purge-old", (int daysOld, InMemorySessionManager mgr) =
 **2. (Varsa) yeni endpoint grubu için ayrı dosya**:
 
 ```csharp
-// Endpoints/AdminEndpoints.cs
+// CustomerSupportBot.Api/Endpoints/AdminEndpoints.cs
 public static class AdminEndpoints
 {
     public static IEndpointRouteBuilder MapAdminEndpoints(this IEndpointRouteBuilder app)
@@ -513,7 +517,7 @@ curl -X POST "http://localhost:5099/evaluation/run?file=docs/evaluation-scenario
 
 ### Desteklenen criterion tipleri
 
-`@Evaluation/CriteriaEvaluator.cs` okuyarak mevcut tiplere bakabilirsiniz. Yeni criterion tipi eklemek için `CriteriaEvaluator.Evaluate` içinde bir `case` eklenir.
+`CustomerSupportBot.Application/Services/Evaluation/CriteriaEvaluator.cs` okuyarak mevcut tiplere bakabilirsiniz. Yeni criterion tipi eklemek için `CriteriaEvaluator.Evaluate` içinde bir `case` eklenir.
 
 ---
 
@@ -527,10 +531,10 @@ curl -X POST "http://localhost:5099/evaluation/run?file=docs/evaluation-scenario
 
 **1. `IReasoningSanityRule` implementasyonu olarak yeni sınıf ekle**:
 
-Sanity checker artık **strategy pattern** kullanır — her kural ayrı bir sınıftır. `@Services/ReasoningSanityChecker.cs` dosyasının sonuna ekle:
+Sanity checker artık **strategy pattern** kullanır — her kural ayrı bir sınıftır. `CustomerSupportBot.Application/Services/ReasoningSanityChecker.cs` dosyasının sonuna ekle:
 
 ```csharp
-// @Services/ReasoningSanityChecker.cs
+// CustomerSupportBot.Application/Services/ReasoningSanityChecker.cs
 
 /// <summary>Yüksek confidence + boş supportingEvidence çelişkisi.</summary>
 public sealed class OverconfidentWithoutEvidenceRule : IReasoningSanityRule
@@ -627,7 +631,7 @@ Detay → [reasoning.md#sanity-checker-deterministic-rules](reasoning.md#sanity-
 **1. `IdExtractor.cs`'e regex ekle**:
 
 ```csharp
-// @Services/IdExtractor.cs
+// CustomerSupportBot.Domain/Services/IdExtractor.cs
 private static readonly Regex CampaignIdPattern =
     new(@"\bCMPG[-_\s]?(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -643,7 +647,7 @@ public static ExtractedIds Extract(string text)
 **2. `VerifiedEntities` model'ine alan ekle**:
 
 ```csharp
-// @Models/VerifiedEntities.cs
+// CustomerSupportBot.Domain/Model/VerifiedEntities.cs
 public class VerifiedEntities
 {
     public VerifiedEntity? OrderId { get; set; }
@@ -654,13 +658,15 @@ public class VerifiedEntities
 }
 ```
 
-**3. `EntityVerifier.Verify` içinde DB lookup**:
+**3. `EntityVerifier.Verify` içinde port lookup**:
 
 ```csharp
-// @Services/EntityVerifier.cs
+// CustomerSupportBot.Application/Services/EntityVerifier.cs
+// Önce IProductCatalogRepository / IOrderRepository gibi uygun bir port'u enjekte edin
 if (!string.IsNullOrWhiteSpace(ids.CampaignId))
 {
-    if (FakeDatabase.CampaignsDb.TryGetValue(ids.CampaignId, out var campaign))
+    var campaign = _campaignRepository?.FindCampaign(ids.CampaignId);
+    if (campaign != null)
     {
         verified.CampaignId = new VerifiedEntity
         {
@@ -904,7 +910,7 @@ Yasak — tüm prompt'lar `Prompts/**/*.md`'de olmalı. Kodda inline string bulu
 
 ### 🕳️ `Interlocked.Increment` atlama
 
-`FakeDatabase.GetNextOrderId` / `GetNextComplaintId` thread-safe counter kullanıyor. Kendi ID generator'ınızda aynı pattern'i kullanın:
+`InMemoryOrderAdapter` / `InMemoryComplaintAdapter` içinde thread-safe `Interlocked.Increment` counter kullanılıyor. Kendi ID generator'ınızda aynı pattern'i kullanın:
 
 ```csharp
 private static int _counter = 0;
@@ -976,4 +982,4 @@ curl -sX POST "http://localhost:5099/evaluation/run?file=docs/evaluation-scenari
 
 ---
 
-Sorularınız olursa: [architecture.md](architecture.md), [reasoning.md](reasoning.md), [workflow.md](workflow.md), [patterns.md](patterns.md) dokümanlarını ilk uğrak olarak öneririz.
+Sorularınız olursa: [architecture.md](architecture.md), [reasoning.md](reasoning.md), [workflow.md](workflow.md), [agentic-patterns.md](agentic-patterns.md) dokümanlarını ilk uğrak olarak öneririz.

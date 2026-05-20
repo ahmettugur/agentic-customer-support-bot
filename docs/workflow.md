@@ -28,7 +28,7 @@ Bu doküman öncelikle **alt seviye**yi (ChatManager'ı) anlatır; sonda "**Comp
 Sistem MAF 1.4.0'ın `AgentWorkflowBuilder.CreateGroupChatBuilderWith(…)` API'sini kullanır. AutoGen'deki `SelectorGroupChat`'in MAF karşılığıdır:
 
 ```csharp
-@Agents/CustomerSupportTeam.cs:120-140
+CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:120-140
 CustomerSupportChatManager? managerRef = null;
 _workflow = AgentWorkflowBuilder
     .CreateGroupChatBuilderWith(agents =>
@@ -56,7 +56,7 @@ Workflow şablonu **bir kez** derlenir (constructor'da), her istek için yeniden
 
 ## Çalıştırma mekanizması
 
-`@Agents/CustomerSupportTeam.cs:198-199`:
+`CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:198-199`:
 
 ```csharp
 await using var run = await InProcessExecution.RunStreamingAsync(_workflow, messages);
@@ -82,7 +82,7 @@ System-internal executor'lar (`GroupChatHost`, `RoundRobinGroupChatManager`, `St
 
 ## `CustomerSupportChatManager`
 
-**Dosya**: `@Agents/CustomerSupportChatManager.cs`
+**Dosya**: `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`
 **Base**: `Microsoft.Agents.AI.Workflows.GroupChatManager`
 
 MAF'ın `GroupChatManager` soyut sınıfından türetilmiş iki abstract metodu override eder:
@@ -122,7 +122,7 @@ MAF'ın `GroupChatManager` soyut sınıfından türetilmiş iki abstract metodu 
 ### 1. Katman: PlanningAgent mesajı
 
 ```csharp
-@Agents/CustomerSupportChatManager.cs:80-106
+CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:80-106
 var lastMessage = history.LastOrDefault();
 if (lastMessage?.AuthorName == "PlanningAgent" ||
     (lastMessage?.Text?.Contains("\"selectedAgent\"", …) == true))
@@ -150,7 +150,7 @@ MAF bazen `AuthorName`'i ayarlamayabilir (stream sırasında). `"selectedAgent"`
 ### 2. Katman: Specialist'ten gelen `postToolReflection`
 
 ```csharp
-@Agents/CustomerSupportChatManager.cs:108-153
+CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:108-153
 if (lastMessage != null && IsSpecialistMessage(lastMessage))
 {
     var specReasoning = SpecialistReasoningParser.TryParse(
@@ -195,7 +195,7 @@ if (lastMessage != null && IsSpecialistMessage(lastMessage))
 `ShouldTerminateAsync` 3 koşuldan birini true bulursa workflow sonlanır:
 
 ```csharp
-@Agents/CustomerSupportChatManager.cs:204-237
+CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:204-237
 protected override ValueTask<bool> ShouldTerminateAsync(…)
 {
     // Koşul 1: TERMINATE metin kontrolü
@@ -261,7 +261,7 @@ Bu kritiktir — 2. tura gelen bir kullanıcıda "geçmişte 10 mesaj vardı, +2
 Aynı tool'un aynı parametrelerle 3+ kez çağrılması yakalanır:
 
 ```csharp
-@Agents/CustomerSupportChatManager.cs:263-300
+CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:263-300
 private bool DetectRepeatedToolCall(IReadOnlyList<ChatMessage> history)
 {
     var recent = history.TakeLast(10);
@@ -288,7 +288,7 @@ private bool DetectRepeatedToolCall(IReadOnlyList<ChatMessage> history)
 
 ## Guard'lar (WorkflowGuardOptions)
 
-`@Models/WorkflowGuardOptions.cs`:
+`CustomerSupportBot.Domain/Model/WorkflowGuardOptions.cs`:
 
 ```json
 "WorkflowGuards": {
@@ -309,7 +309,7 @@ private bool DetectRepeatedToolCall(IReadOnlyList<ChatMessage> history)
 ### Timeout akışı
 
 ```csharp
-@Agents/CustomerSupportTeam.cs:331-335
+CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:331-335
 using var timeoutCts = new CancellationTokenSource(
     TimeSpan.FromSeconds(_guards.TimeoutSeconds));
 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
@@ -319,7 +319,7 @@ var effectiveCt = linkedCts.Token;
 Timeout vs. client cancellation ayrı ayrı takip edilir — timeout yüzünden iptal olduysa kullanıcıya anlaşılır mesaj gösterilir:
 
 ```csharp
-@Agents/CustomerSupportTeam.cs:450-459
+CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:450-459
 if (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
 {
     _traceStore.Complete(trace.TraceId, terminationReason: "timeout", …);
@@ -369,7 +369,7 @@ Admin "🔄 Yeniden Planla" tetiklerse `BuildWorkflowMessagesAsync` `state.Force
               📌 Admin notu (sadece sana, müşteri görmez): "şikayet kaydı aç"
 ```
 
-Flag + `state.ReplanNote` tek seferlik kullanıldıktan sonra temizlenir. PlanningAgent bu hint'i gördükten sonra önceki tool sonuçlarını yok sayar ama admin/müşteri konuşma bağlamına göre yeniden planlar. Ayrıntı → [patterns.md#204-admin-replan](patterns.md#204-admin-replan-one-shot-planning-override--auto-bot-turn).
+Flag + `state.ReplanNote` tek seferlik kullanıldıktan sonra temizlenir. PlanningAgent bu hint'i gördükten sonra önceki tool sonuçlarını yok sayar ama admin/müşteri konuşma bağlamına göre yeniden planlar. Ayrıntı → [agentic-patterns.md#204-admin-replan](agentic-patterns.md#204-admin-replan-one-shot-planning-override--auto-bot-turn).
 
 ---
 
@@ -378,7 +378,7 @@ Flag + `state.ReplanNote` tek seferlik kullanıldıktan sonra temizlenir. Planni
 MAF `WorkflowOutputEvent` ile nihai mesaj listesini verir. Biz içinden doğru mesajı seçmek için öncelik sıralaması kullanırız:
 
 ```csharp
-@Agents/CustomerSupportTeam.cs:713-736
+CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:713-736
 private string ExtractResultFromOutput(WorkflowOutputEvent output)
 {
     if (output.Data is IEnumerable<ChatMessage> chatMessages)
@@ -448,7 +448,7 @@ Her workflow koşusu için `IReasoningTraceStore.StartTrace` çağrılır ve her
 
 ## Compound query orkestrasyonu
 
-**Dosya**: `@Agents/CustomerSupportTeam.cs:912-1192` (helper bloğu)
+**Dosya**: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:912-1192` (helper bloğu)
 
 ### Neden?
 

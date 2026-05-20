@@ -18,7 +18,7 @@ Backend `CustomerSupportBot` üzerinde tanımlı **tüm HTTP endpoint'leri** + *
 - [12. SLA Guardian endpoints](#12-sla-guardian-endpoints)
 - [14. Agent Panel endpoints](#14-agent-panel-endpoints)
 
-Sınıf/interface sözleşmeleri → [reference.md](reference.md).
+Sınıf/interface sözleşmeleri → [class-reference.md](class-reference.md).
 
 ---
 
@@ -71,7 +71,7 @@ Tek bir kullanıcı sorgusunu işler ve **JSON yanıt** döner. Reasoning + work
 |---|---|---|
 | `response` | string | ResponseAgent'ın temizlenmiş final mesajı (TERMINATE marker çıkarılmış) |
 | `sessionId` | string | Cevap dönüldüğü oturum (client bunu sonraki istekte yollar) |
-| `reasoning` | `ReasoningResult?` | Tam reasoning çıktısı (şema → [reference.md](reference.md)) |
+| `reasoning` | `ReasoningResult?` | Tam reasoning çıktısı (şema → [class-reference.md](class-reference.md)) |
 
 **Status kodları**:
 
@@ -251,7 +251,7 @@ Oturumun **full state** dökümü — debug/frontend için.
 
 Son N trace'i döner. Varsayılan `count=20`.
 
-**Response**: `ReasoningTrace[]` — tam şema [reference.md#reasoningtrace](reference.md) → `ReasoningTrace` alan listesi. Ör:
+**Response**: `ReasoningTrace[]` — tam şema [class-reference.md#reasoningtrace](class-reference.md) → `ReasoningTrace` alan listesi. Ör:
 
 ```json
 [
@@ -421,7 +421,7 @@ Tek senaryo.
 - `200 OK`
 - `404 Not Found` — `id` ile senaryo yok
 
-Desteklenen criterion pattern'ları → [reference.md#criteriaevaluator](reference.md).
+Desteklenen criterion pattern'ları → [class-reference.md#criteriaevaluator](class-reference.md).
 
 ---
 
@@ -728,14 +728,14 @@ ISO 8601 string'leri:
 
 ## 7. Admin endpoints (HITL)
 
-**Dosya**: `@Endpoints/AdminEndpoints.cs`
+**Dosya**: `CustomerSupportBot.Api/Endpoints/AdminEndpoints.cs`
 
 Human-in-the-Loop mekanizması için **2 alt grup** endpoint:
 
 - **Approval queue** — `order_placement_tool` / `complaint_registration_tool` öncesi onay
 - **Escalation sink** — `needs_escalation` status'u için ticket kuyruğu
 
-Tam pattern açıklaması → [patterns.md#20-human-in-the-loop](patterns.md#20-human-in-the-loop-approval-gate--escalation-sink).
+Tam pattern açıklaması → [agentic-patterns.md#20-human-in-the-loop](agentic-patterns.md#20-human-in-the-loop-approval-gate--escalation-sink).
 
 > 🔒 Bu endpoint'ler `RequireAuthorization("Admin")` ile korunmaktadır. Erişim için `Authorization: Bearer <token>` header'ı gerekmektedir. Detay → [security.md](security.md).
 
@@ -934,7 +934,7 @@ Yan etkiler:
 
 ### 7.3 Live Takeover (chat-sessions)
 
-Gerçek-zamanlı admin sohbet kontrolü. İlgili pattern → [patterns.md#203-live-human-takeover](patterns.md#203-live-human-takeover-real-time-agent-handover).
+Gerçek-zamanlı admin sohbet kontrolü. İlgili pattern → [agentic-patterns.md#203-live-human-takeover](agentic-patterns.md#203-live-human-takeover-real-time-agent-handover).
 
 #### `GET /chat-sessions/active`
 
@@ -1120,17 +1120,17 @@ Müşteri tarafından görünen akış: yeşil temsilci bandı kalkar → sistem
 }
 ```
 
-`Enabled=false` yaparsanız tüm HITL mekanizması bypass edilir — eski davranış korunur. Detay → `@Models/ApprovalOptions.cs`.
+`Enabled=false` yaparsanız tüm HITL mekanizması bypass edilir — eski davranış korunur. Detay → `CustomerSupportBot.Domain/Model/ApprovalOptions.cs`.
 
 ---
 
 ## 8. Telemetry endpoints
 
-**Dosya**: `@Endpoints/TelemetryEndpoints.cs` — admin scope'unda.
+**Dosya**: `CustomerSupportBot.Api/Endpoints/TelemetryEndpoints.cs` — admin scope'unda.
 
 OpenTelemetry pipeline'ı (`ActivitySource = "CustomerSupportBot"`, `Meter = "CustomerSupportBot"`) tüm LLM çağrılarını, ajan adımlarını ve tool kullanımlarını yayar; OTLP endpoint set edildiyse Jaeger / Prometheus / Grafana / Application Insights gibi backend'lere gönderilir. Aşağıdaki endpoint'ler ek olarak in-memory aggregat edilen **token + USD maliyet** özetine erişim sağlar.
 
-Pricing tablosu ve OTLP exporter ayarları → [runtime.md#telemetry](runtime.md#telemetry).
+Pricing tablosu ve OTLP exporter ayarları → [operations.md#telemetry](operations.md#telemetry).
 
 ### `GET /telemetry/cost`
 
@@ -1191,7 +1191,7 @@ In-memory maliyet sayaçlarını sıfırlar. OpenTelemetry meter counter'ların�
 
 ## 9. Personalization endpoints
 
-**Dosya**: `@Endpoints/PersonalizationEndpoints.cs` — admin scope.
+**Dosya**: `CustomerSupportBot.Api/Endpoints/PersonalizationEndpoints.cs` — admin scope.
 
 Per-customer kalıcı profil yönetimi. Her workflow turunun bitiminde `state.CustomerId` set'liyse `CustomerProfileService.RecordInteraction` heuristik olarak (LLM-siz) niyet frekansı, ürün ilgi alanları, dil ve son rating bilgilerini günceller. Profil bir sonraki konuşmada `CustomerProfileContextProvider` (Order = 6) üzerinden tüm ajanlara enjekte edilir.
 
@@ -1270,7 +1270,7 @@ Profil kaydını tamamen siler.
 
 ## 10. Smart Routing endpoints
 
-**Dosya**: `@Endpoints/AgentsEndpoints.cs` — admin scope.
+**Dosya**: `CustomerSupportBot.Api/Endpoints/AgentsEndpoints.cs` — admin scope.
 
 İnsan müşteri temsilcisi (HumanAgent) registry'si ve eskalasyon manuel re-route. Bir eskalasyon oluşturulduğunda `SkillsBasedRouter` otomatik olarak en iyi temsilciyi `EscalationRequest.SuggestedAgentId` alanına yazar; bu endpoint'ler ile registry yönetilir veya öneri admin tarafından override edilir.
 
@@ -1366,7 +1366,7 @@ Bir eskalasyonu manuel olarak başka bir temsilciye atar (router önerisini over
 
 ## 11. Workflow Designer endpoints
 
-**Dosya**: `@Endpoints/WorkflowEndpoints.cs` — admin scope.
+**Dosya**: `CustomerSupportBot.Api/Endpoints/WorkflowEndpoints.cs` — admin scope.
 
 JSON tabanlı, deterministik (LLM-siz) low-code workflow definition CRUD ve dry-run test endpoint'leri. Admin UI: [`/workflow-designer.html`](../CustomerSupportBot/wwwroot/workflow-designer.html).
 
@@ -1467,7 +1467,7 @@ Workflow'u verilen input ile dry-run çalıştırır. Production trafiğini etki
 
 ## 12. SLA Guardian endpoints
 
-**Dosya**: `@Endpoints/SlaEndpoints.cs` — admin scope.
+**Dosya**: `CustomerSupportBot.Api/Endpoints/SlaEndpoints.cs` — admin scope.
 
 Bekleyen onaylar ve açık eskalasyonlar için SLA tarama servisi (`SlaGuardianService` BackgroundService). Eşik aşılan onaylar `AutoReject`, eskalasyonların önceliği otomatik bir kademe yükseltilir.
 
@@ -1559,7 +1559,7 @@ Son `count` adet warn / breach kaydı. Default 100, max 500.
 
 ## 14. Agent Panel endpoints
 
-**Dosya**: `@Endpoints/AgentPanelEndpoints.cs` — `AdminOrAgent` policy.
+**Dosya**: `CustomerSupportBot.Api/Endpoints/AgentPanelEndpoints.cs` — `AdminOrAgent` policy.
 
 `Agent` rolündeki kullanıcıların kendi eskalasyonlarını yönetmesi, tool onayı vermesi ve müşterilerle canlı sohbet etmesi için endpoint grubu. **Admin kullanıcılar da bu endpoint'lere erişebilir.**
 
@@ -1649,7 +1649,7 @@ Session'ı `Bot` moduna geri alır. Bu session'a bağlı tüm açık eskalasyonl
 
 ## Çapraz referanslar
 
-- **Sınıf/interface sözleşmeleri** → [reference.md](reference.md)
+- **Sınıf/interface sözleşmeleri** → [class-reference.md](class-reference.md)
 - **Agent davranışı + sub-component anatomisi** → [agents.md](agents.md)
 - **Workflow + Compound query orkestrasyon** → [workflow.md](workflow.md)
 - **Reasoning pipeline** → [reasoning.md](reasoning.md)
