@@ -1,11 +1,12 @@
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Application.Services.Sla;
+namespace CustomerSupportBot.Api.Workers;
 
 public class SlaGuardianService : BackgroundService
 {

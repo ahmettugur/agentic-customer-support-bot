@@ -5,6 +5,7 @@
 // - POST /eval/run/{id}           : Tek senaryoyu koşturur
 
 using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Domain.Model;
 
@@ -55,7 +56,7 @@ public static class EvaluationEndpoints
 
     /// <summary>Tüm senaryoları (veya limit kadarını) koşturur.</summary>
     private static async Task<IResult> HandleRunAll(
-        EvaluationRunner runner,
+        IEvaluationPort runner,
         IWebHostEnvironment env,
         HttpContext ctx,
         int? limit = null)
@@ -73,7 +74,7 @@ public static class EvaluationEndpoints
     /// <summary>Tek bir senaryoyu (id ile) koşturur.</summary>
     private static async Task<IResult> HandleRunOne(
         string id,
-        EvaluationRunner runner,
+        IEvaluationPort runner,
         IWebHostEnvironment env,
         HttpContext ctx)
     {

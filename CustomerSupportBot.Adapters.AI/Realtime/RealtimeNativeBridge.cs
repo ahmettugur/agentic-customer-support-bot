@@ -1,4 +1,4 @@
-// Services/Realtime/RealtimeNativeBridge.cs
+// Adapters.AI/Realtime/RealtimeNativeBridge.cs
 //
 // "Hızlı Sesli" mod — gpt-realtime-2 modelinin kendi çok-kipli yetenekleri kullanılır.
 // Model sesi kendisi anlar, kararı kendisi verir, gerekirse function calling ile
@@ -20,18 +20,19 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using CustomerSupportBot.Adapters.AI;
-using CustomerSupportBot.Application.Services;
+using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Api.Services.Realtime;
+namespace CustomerSupportBot.Adapters.AI.Realtime;
 
 /// <summary>
 /// Tek bir browser realtime-native bağlantısı için scoped servis.
 /// Model kendisi konuşur ve okuma-only tool'ları doğrudan çağırır.
 /// </summary>
-public sealed class RealtimeNativeBridge : IAsyncDisposable
+public sealed class RealtimeNativeBridge : IRealtimeNativeBridge, IAsyncDisposable
 {
     private const string OpenAiRealtimeUrl = "wss://api.openai.com/v1/realtime?model=";
 
@@ -39,24 +40,20 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
     private readonly string _apiKey;
     private readonly ISessionManager _sessionManager;
     private readonly RealtimeFunctionTools _toolDispatcher;
-    private readonly InputGuard _inputGuard;
+    private readonly IInputGuard _inputGuard;
     private readonly IChatBridge _chatBridge;
     private readonly ILogger<RealtimeNativeBridge> _logger;
 
     private ClientWebSocket? _openAiWs;
 
-    // Half-duplex gating — bkz. RealtimeBridge açıklaması. Bot konuşurken mikrofon
-    // sesi OpenAI'a forward edilmez; aksi halde TTS hoparlörden mikrofona dolar ve
-    // OpenAI VAD echo'yu yeni kullanıcı turu sanarak sahte yanıt üretir.
+    // Half-duplex gating — bkz. RealtimeBridge açıklaması.
     private volatile bool _assistantSpeaking;
 
-    // Model end_conversation tool'unu çağırdığında set edilir; veda audio'su
-    // bittikten sonra (response.done) WebSocket nazikçe kapatılır.
+    // Model end_conversation tool'unu çağırdığında set edilir.
     private volatile bool _endRequested;
     private string _endReason = "user_farewell";
 
-    // Inactivity tracking — son kullanıcı ses/transcript zaman damgası. Background
-    // timer bunu izler; eşik aşılırsa görüşme zaman aşımıyla biter.
+    // Inactivity tracking
     private long _lastUserActivityTicks = DateTime.UtcNow.Ticks;
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromSeconds(60);
 
@@ -64,7 +61,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         IOptions<AiOptions> aiOptions,
         ISessionManager sessionManager,
         RealtimeFunctionTools toolDispatcher,
-        InputGuard inputGuard,
+        IInputGuard inputGuard,
         IChatBridge chatBridge,
         ILogger<RealtimeNativeBridge> logger)
     {
@@ -95,7 +92,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         var session = _sessionManager.GetOrCreate(sessionId);
         var actualSessionId = session.SessionId;
 
-        // 1) OpenAI Realtime WS bağlantısı
         try
         {
             _openAiWs = new ClientWebSocket();
@@ -114,10 +110,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
             return;
         }
 
-        // 2) Session config — model kendisi konuşur ve okuma-only tool'ları çağırabilir
-        // gpt-realtime-2 API: audio config nested under session.audio.input / session.audio.output
-        // Transcription explicit: conversation.item.input_audio_transcription.completed event'inin
-        // tetiklenmesi için gerekli — kullanıcı baloncuğunu UI'da göstermek ve buffer flush etmek için.
         var transcriptionConfig = new Dictionary<string, object?>
         {
             ["model"] = _options.TranscriptionModel
@@ -170,7 +162,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
             tools = _toolDispatcher.GetToolNames()
         }, ct);
 
-        // 3) Üç paralel pump: browser↔openai çift yönlü + inactivity watcher
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var browserPump = PumpBrowserToOpenAiAsync(browserWs, _openAiWs, linked.Token);
         var openAiPump = PumpOpenAiToBrowserAsync(browserWs, _openAiWs, session, linked.Token);
@@ -190,11 +181,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Inactivity watcher: kullanıcı uzun süre konuşmazsa görüşmeyi nazikçe sonlandırır.
-    /// Son ses/transcript zaman damgasını izler; <see cref="InactivityTimeout"/> aşılırsa
-    /// browser'a <c>conversation_ended</c> bildirir ve WS'leri kapatır.
-    /// </summary>
     private async Task WatchInactivityAsync(WebSocket browserWs, ClientWebSocket openAiWs, CancellationToken ct)
     {
         try
@@ -202,7 +188,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
             while (!ct.IsCancellationRequested)
             {
                 await Task.Delay(TimeSpan.FromSeconds(5), ct);
-                if (_endRequested) return; // tool ile zaten kapanıyor
+                if (_endRequested) return;
 
                 var lastTicks = Interlocked.Read(ref _lastUserActivityTicks);
                 var elapsed = DateTime.UtcNow - new DateTime(lastTicks, DateTimeKind.Utc);
@@ -213,11 +199,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 _endRequested = true;
                 _endReason = "idle_timeout";
 
-                try
-                {
-                    await SendBrowserJsonAsync(browserWs,
-                        new { type = "conversation_ended", reason = _endReason }, ct);
-                }
+                try { await SendBrowserJsonAsync(browserWs, new { type = "conversation_ended", reason = _endReason }, ct); }
                 catch { /* best effort */ }
                 try
                 {
@@ -234,13 +216,9 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 return;
             }
         }
-        catch (OperationCanceledException) { /* normal cancel */ }
+        catch (OperationCanceledException) { }
     }
 
-    /// <summary>
-    /// Modele rolünü, kapsamını ve hangi konularda kullanıcıyı yazılı sohbete
-    /// yönlendireceğini bildiren sistem talimatı.
-    /// </summary>
     private static string BuildSystemInstructions() =>
         """
         Sen bir müşteri destek asistanısın. Türkçe konuş ve yanıtların KISA, doğal, samimi olsun (1-2 cümle, sesli okumaya uygun).
@@ -299,10 +277,8 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
 
             if (result.MessageType == WebSocketMessageType.Binary)
             {
-                // Half-duplex: bot konuşurken mikrofon sesini forward etme (echo loop kırıcı)
                 if (_assistantSpeaking) continue;
 
-                // Inactivity tracking: kullanıcı audio gönderdi (gercek mikrofon)
                 Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
 
                 var b64 = Convert.ToBase64String(payload);
@@ -363,13 +339,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         var buffer = new byte[32 * 1024];
         var ms = new MemoryStream();
         var assistantTextBuilder = new StringBuilder();
-        // Parallel tool calls: bir response içinde birden fazla function call biriktirilir,
-        // response.done'da toplu dispatch edilir.
         var pendingToolCalls = new List<(string CallId, string Name, string ArgsJson)>();
-        // Native modda model, kullanıcı transcript'i tamamlanmadan yanıt üretmeye başlar.
-        // UI'da kullanıcı baloncuğu asistan baloncuğundan önce görünmesi için,
-        // user_transcript gelene kadar assistant_text_delta'ları tamponlarız.
-        // (Audio gercek-zamanlı akışa devam eder; sadece metin alt yazı sırası düzeltilir.)
         var userTranscriptSent = false;
         var bufferedAssistantDeltas = new List<string>();
 
@@ -420,10 +390,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 break;
 
             case "response.created":
-                // Model yanıt üretmeye başladı — ilk audio.delta gelmeden mic gating'i aç.
-                // audio.delta ile arasındaki kısa pencerede de echo'yu önler.
                 _assistantSpeaking = true;
-                // Yeni tur başlıyor: user_transcript bayrağını ve buffer'ı sıfırla.
                 userTranscriptSent = false;
                 bufferedAssistantDeltas.Clear();
                 break;
@@ -441,15 +408,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 var transcript = node["transcript"]?.GetValue<string>() ?? "";
                 if (string.IsNullOrWhiteSpace(transcript)) break;
 
-                // NOT: Burada "_assistantSpeaking ise drop et" gibi bir echo-guard YOK.
-                // OpenAI'da kullanıcı transcribe'ı asenkrondur ve sıklıkla model yanıtı
-                // üretmeye başladıktan sonra tamamlanır; o noktada drop edersek gerçek
-                // kullanıcı baloncuğu kaybolur. Echo'yu kaynağında kesen iki katman var:
-                //  1) PumpBrowserToOpenAi: _assistantSpeaking iken binary audio drop
-                //  2) Frontend: micTrack.enabled = false (bot konuşurken)
-                // Yani buraya gelen transcript gerçek bir kullanıcı turudur.
-
-                // Input guard — prompt injection vb.
                 var guard = _inputGuard.Inspect(transcript);
                 if (guard.Verdict == InputGuardVerdict.Reject)
                 {
@@ -462,12 +420,10 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                     break;
                 }
 
-                // Inactivity tracking: kullanıcı transcribe olabilen bir şey söyledi
                 Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
 
                 await SendBrowserJsonAsync(browserWs, new { type = "user_transcript", text = transcript }, ct);
                 userTranscriptSent = true;
-                // user_transcript gelmeden önce biriken assistant_text_delta'ları şimdi flush et
                 if (bufferedAssistantDeltas.Count > 0)
                 {
                     foreach (var delta in bufferedAssistantDeltas)
@@ -477,7 +433,7 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                     }
                     bufferedAssistantDeltas.Clear();
                 }
-                assistantTextBuilder.Clear();  // yeni tur başlıyor
+                assistantTextBuilder.Clear();
                 break;
             }
 
@@ -506,7 +462,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                     }
                     else
                     {
-                        // Kullanıcı transcript'i henüz gelmedi — UI'da sıra bozulmasın diye buffer'la
                         bufferedAssistantDeltas.Add(delta!);
                     }
                 }
@@ -515,19 +470,14 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
 
             case "response.output_audio_transcript.done":
             {
-                // Tek seferde tam transcript — bazen delta'lar atlanırsa burada toparlanır
                 var fullText = node["transcript"]?.GetValue<string>();
                 if (!string.IsNullOrEmpty(fullText) && assistantTextBuilder.Length == 0)
-                {
                     assistantTextBuilder.Append(fullText);
-                }
                 break;
             }
 
             case "response.function_call_arguments.done":
             {
-                // Parallel tool calls: argümanları listeye ekle, henüz dispatch etme.
-                // Tüm tool call'lar response.done'da toplu işlenir.
                 var callId = node["call_id"]?.GetValue<string>();
                 var name   = node["name"]?.GetValue<string>();
                 var args   = node["arguments"]?.GetValue<string>() ?? "{}";
@@ -536,7 +486,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 {
                     pendingToolCalls.Add((callId!, name!, args));
 
-                    // end_conversation özel: görüşme sonlandırma niyeti işaretle
                     if (name == RealtimeFunctionTools.EndConversationToolName)
                     {
                         _endRequested = true;
@@ -546,10 +495,9 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                             var reason = argNode?["reason"]?.GetValue<string>();
                             if (!string.IsNullOrWhiteSpace(reason)) _endReason = reason!;
                         }
-                        catch { /* args parse edilemezse default reason kalır */ }
+                        catch { }
                     }
 
-                    // Browser'a görsel ipucu
                     await SendBrowserJsonAsync(browserWs, new
                     {
                         type = "tool_call",
@@ -574,20 +522,16 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
 
             case "response.done":
             {
-                // Parallel tool calls: bekleyen call varsa toplu dispatch et, ardından
-                // tek bir response.create ile modeli devam ettir.
                 if (pendingToolCalls.Count > 0)
                 {
                     await DispatchPendingToolCallsAsync(browserWs, openAiWs, pendingToolCalls, ct);
                     pendingToolCalls.Clear();
-                    // _assistantSpeaking'i sıfırlama — model hemen yeni bir response başlatacak.
                     break;
                 }
 
                 _assistantSpeaking = false;
                 try { await SendOpenAiJsonAsync(openAiWs, new { type = "input_audio_buffer.clear" }, ct); }
                 catch { /* best effort */ }
-                // Safety fallback: user transcript hiç gelmediyse, biriken delta'ları yine de göster
                 if (bufferedAssistantDeltas.Count > 0)
                 {
                     foreach (var delta in bufferedAssistantDeltas)
@@ -600,9 +544,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 var finalText = assistantTextBuilder.ToString().Trim();
                 if (!string.IsNullOrEmpty(finalText))
                 {
-                    // En son user transcript'i bilmiyoruz burada — onun yerine session manager
-                    // history'sinde son user mesajı zaten eklenmiş olmaz çünkü bu modda
-                    // pipeline atlanıyor. Basit olarak sadece chat bridge'e yansıt.
                     _chatBridge.RecordBotExchange(session.SessionId, "(sesli)", finalText);
                 }
                 await SendBrowserJsonAsync(browserWs,
@@ -610,7 +551,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
                 await SendBrowserJsonAsync(browserWs, new { type = "response_done" }, ct);
                 assistantTextBuilder.Clear();
 
-                // end_conversation flag'i set'liyse: nazikçe kapat
                 if (_endRequested)
                 {
                     await SendBrowserJsonAsync(browserWs,
@@ -646,18 +586,12 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         return (userTranscriptSent, false);
     }
 
-    /// <summary>
-    /// Bir response içinde biriken tüm tool call'ları toplu olarak dispatch eder.
-    /// Tüm <c>function_call_output</c>'ları conversation'a ekledikten sonra tek bir
-    /// <c>response.create</c> ile modeli devam ettirir — parallel tool calls desteği.
-    /// </summary>
     private async Task DispatchPendingToolCallsAsync(
         WebSocket browserWs,
         ClientWebSocket openAiWs,
         List<(string CallId, string Name, string ArgsJson)> calls,
         CancellationToken ct)
     {
-        // Tüm tool'ları paralel çalıştır
         var tasks = calls.Select(async c =>
         {
             string outputJson;
@@ -679,7 +613,6 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
 
         var results = await Task.WhenAll(tasks);
 
-        // Her sonucu browser'a bildir ve conversation'a ekle
         foreach (var (callId, name, outputJson) in results)
         {
             await SendBrowserJsonAsync(browserWs, new
@@ -701,11 +634,8 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
             }, ct);
         }
 
-        // Eğer end_conversation çağrıldıysa: yeni response.create gerekmez — model zaten
-        // bu turda veda cümlesini söyleyip tool'u çağırdı. response.done'da WS kapatılacak.
         if (_endRequested) return;
 
-        // Tüm output'lar eklendikten sonra tek bir response.create → sesli yanıt
         await SendOpenAiJsonAsync(openAiWs, new { type = "response.create" }, ct);
     }
 
@@ -748,4 +678,3 @@ public sealed class RealtimeNativeBridge : IAsyncDisposable
         _openAiWs?.Dispose();
     }
 }
-

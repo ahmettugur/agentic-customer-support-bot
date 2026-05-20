@@ -1,8 +1,12 @@
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using CustomerSupportBot.Adapters.Agents.DependencyInjection;
+using CustomerSupportBot.Adapters.AI.Realtime;
 using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Workers;
 using CustomerSupportBot.Application.DependencyInjection;
+using CustomerSupportBot.Application.Ports.Driven.AI;
+using CustomerSupportBot.Application.Services.Memory;
 
 namespace CustomerSupportBot.Api.Extensions;
 
@@ -54,12 +58,27 @@ public static class ApplicationServicesExtensions
         services.AddScoped<ChatEventOrchestrator>();
 
         // Realtime köprüsü — her WS bağlantısı için ayrı instance
-        services.AddScoped<Services.Realtime.RealtimeBridge>();
+        services.AddScoped<RealtimeBridge>();
+        services.AddScoped<IRealtimeBridge>(sp => sp.GetRequiredService<RealtimeBridge>());
 
         // Realtime "native" modu — gpt-realtime-2 kendisi konuşur ve okuma-only
         // tool'ları çağırır. Sipariş/şikayet gibi HITL gerektiren işlemler bu kanalda yok.
-        services.AddSingleton<Services.Realtime.RealtimeFunctionTools>();
-        services.AddScoped<Services.Realtime.RealtimeNativeBridge>();
+        services.AddSingleton<RealtimeFunctionTools>();
+        services.AddScoped<RealtimeNativeBridge>();
+        services.AddScoped<IRealtimeNativeBridge>(sp => sp.GetRequiredService<RealtimeNativeBridge>());
+
+        // ─── Background Workers (hosting adapter) ───
+        services.AddHostedService<SlaGuardianService>();
+        services.AddHostedService<RoutingLoadTrackerService>();
+
+        // KnowledgeBase ingestor — SemanticMemory aktifse kaydet
+        var cfg = configuration.GetSection("SemanticMemory");
+        if (cfg.GetValue<bool>("Enabled"))
+        {
+            services.AddSingleton<KnowledgeBaseIngestor>();
+            services.AddHostedService(sp => sp.GetRequiredService<KnowledgeBaseIngestor>());
+            services.AddSingleton<IKnowledgeBaseIngestor>(sp => sp.GetRequiredService<KnowledgeBaseIngestor>());
+        }
 
         return services;
     }

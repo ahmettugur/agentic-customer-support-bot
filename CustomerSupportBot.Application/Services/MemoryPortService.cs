@@ -1,6 +1,7 @@
 // Application/Services/MemoryPortService.cs
-// DRIVING PORT IMPL — IMemoryPort → SemanticMemoryService + KnowledgeBaseIngestor.
+// DRIVING PORT IMPL — IMemoryPort → SemanticMemoryService + IKnowledgeBaseIngestor.
 
+using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Domain.Model.Memory;
@@ -10,9 +11,9 @@ namespace CustomerSupportBot.Application.Services;
 public sealed class MemoryPortService : IMemoryPort
 {
     private readonly SemanticMemoryService _memory;
-    private readonly KnowledgeBaseIngestor _ingestor;
+    private readonly IKnowledgeBaseIngestor _ingestor;
 
-    public MemoryPortService(SemanticMemoryService memory, KnowledgeBaseIngestor ingestor)
+    public MemoryPortService(SemanticMemoryService memory, IKnowledgeBaseIngestor ingestor)
     {
         _memory = memory;
         _ingestor = ingestor;
@@ -33,7 +34,7 @@ public sealed class MemoryPortService : IMemoryPort
         => _memory.SearchAsync(kind, query, topK: topK, ct: ct);
 
     public Task IngestAsync(CancellationToken ct = default)
-        => _ingestor.StartAsync(ct);
+        => _ingestor.IngestAsync(ct);
 }
 
 /// <summary>

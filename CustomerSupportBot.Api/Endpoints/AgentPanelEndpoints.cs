@@ -44,13 +44,13 @@ public static class AgentPanelEndpoints
         // ════════════════════════════════════════════════════════════════
 
         // ─── Bana atanmış eskalasyonlar ───
-        group.MapGet("/escalations/my", (HttpContext ctx, IEscalationSink sink) =>
+        group.MapGet("/escalations/my", (HttpContext ctx, IEscalationPort escalations) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             if (agentId is null)
                 return Results.BadRequest(new { error = "Kullanıcıya bağlı agent kaydı yok." });
 
-            var mine = sink.GetOpen()
+            var mine = escalations.GetOpen()
                 .Where(e => string.Equals(e.SuggestedAgentId, agentId, StringComparison.OrdinalIgnoreCase)
                          || string.Equals(e.AssignedTo, agentId, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -60,10 +60,10 @@ public static class AgentPanelEndpoints
 
         // ─── Agent'ın görebileceği açık eskalasyonlar ───
         // Kural: atanmamış VEYA bu agent'a atanmış olanlar
-        group.MapGet("/escalations/open", (HttpContext ctx, IEscalationSink sink) =>
+        group.MapGet("/escalations/open", (HttpContext ctx, IEscalationPort escalations) =>
         {
             var agentId = GetLinkedAgentId(ctx);
-            var all = sink.GetOpen();
+            var all = escalations.GetOpen();
             var visible = agentId is null
                 ? all
                 : all.Where(e => string.IsNullOrEmpty(e.AssignedTo)
@@ -74,28 +74,28 @@ public static class AgentPanelEndpoints
 
         // ─── Üstlen (herhangi bir agent herhangi bir açık eskalasyonu üstlenebilir) ───
         group.MapPost("/escalations/{id}/acknowledge",
-            (string id, HttpContext ctx, IEscalationSink sink, IHumanAgentRegistry registry,
-             IChatBridge bridge) =>
+            (string id, HttpContext ctx, IEscalationPort escalations, IHumanAgentPort agents,
+             IChatSessionPort chatSessions) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             if (agentId is null)
                 return Results.BadRequest(new { error = "Kullanıcıya bağlı agent kaydı yok." });
 
-            var esc = sink.Get(id);
+            var esc = escalations.Get(id);
             if (esc is null)
                 return Results.NotFound(new { error = "Escalation bulunamadı." });
 
-            var ok = sink.Decide(id, WellKnown.EscalationActions.Acknowledge, assignedTo: agentId);
+            var ok = escalations.Decide(id, WellKnown.EscalationActions.Acknowledge, assignedTo: agentId);
             if (!ok)
                 return Results.Conflict(new { error = "Escalation zaten karara bağlanmış." });
 
-            registry.IncrementLoad(agentId);
+            agents.IncrementLoad(agentId);
 
             // Müşteriye bildirim
-            var agent = registry.Get(agentId);
+            var agent = agents.GetAgent(agentId);
             if (!string.IsNullOrEmpty(esc.SessionId))
             {
-                bridge.PublishSystemMessage(esc.SessionId,
+                chatSessions.PublishSystemMessage(esc.SessionId,
                     $"ℹ️ {agent?.DisplayName ?? agentId} talebinizi üstlendi.");
             }
 
@@ -105,19 +105,19 @@ public static class AgentPanelEndpoints
         // ─── Çöz ───
         group.MapPost("/escalations/{id}/resolve",
             (string id, EscalationDecisionInput? body, HttpContext ctx,
-             IEscalationSink sink, IHumanAgentRegistry registry) =>
+             IEscalationPort escalations, IHumanAgentPort agents) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             if (agentId is null)
                 return Results.BadRequest(new { error = "Kullanıcıya bağlı agent kaydı yok." });
 
-            var ok = sink.Decide(id, WellKnown.EscalationActions.Resolve,
+            var ok = escalations.Decide(id, WellKnown.EscalationActions.Resolve,
                 assignedTo: agentId,
                 resolution: body?.Resolution);
             if (!ok)
                 return Results.NotFound(new { error = "Escalation bulunamadı veya zaten çözüldü." });
 
-            registry.DecrementLoad(agentId);
+            agents.DecrementLoad(agentId);
 
             return Results.Ok(new { id, status = "resolved", assignedTo = agentId });
         });
@@ -127,58 +127,41 @@ public static class AgentPanelEndpoints
             (string id,
              ReplanInput? body,
              HttpContext ctx,
-             IEscalationSink sink,
-             ISessionManager sessions,
-             IChatModeRegistry registry,
-             IChatBridge bridge,
-             IReplanPort replanPort) =>
+             IChatSessionPort chatSessions) =>
         {
-            var esc = sink.Get(id);
-            if (esc == null) return Results.NotFound(new { error = "Escalation bulunamıyor." });
-            if (string.IsNullOrEmpty(esc.SessionId))
-                return Results.BadRequest(new { error = "Eskalasyona bağlı bir session yok." });
-
-            var session = sessions.Get(esc.SessionId);
-            if (session == null)
-                return Results.NotFound(new { error = "Session bulunamadı." });
-
             var agentId = GetLinkedAgentId(ctx)
                 ?? ctx.User.FindFirstValue(ClaimTypes.Name)
                 ?? WellKnown.Defaults.Admin;
             var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy) ? agentId : body!.RequestedBy!;
             var note = string.IsNullOrWhiteSpace(body?.Note) ? null : body!.Note!.Trim();
+            var result = chatSessions.ReplanEscalation(id, requestedBy, note);
+            if (!result.Success)
+            {
+                return result.ErrorCode == "invalid_request"
+                    ? Results.BadRequest(new { error = result.ErrorMessage })
+                    : Results.NotFound(new { error = result.ErrorMessage });
+            }
 
-            session.State.ForceReplanNextTurn = true;
-            session.State.ReplanRequestedBy = requestedBy;
-            session.State.ReplanRequestedAt = DateTime.UtcNow;
-            session.State.ReplanNote = note;
-            sessions.Update(session);
-
-            sink.Decide(id, WellKnown.EscalationActions.Resolve,
-                assignedTo: requestedBy,
-                resolution: note ?? WellKnown.FallbackMessages.ReplanResolution);
-
-            var releasedFromHuman = false;
-            if (registry.GetMode(esc.SessionId) == ChatMode.Human)
-                releasedFromHuman = registry.Release(esc.SessionId);
-
-            bridge.PublishSystemMessage(esc.SessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
-
-            _ = replanPort.ExecuteAsync(esc.SessionId);
-
-            return Results.Json(new { id, sessionId = esc.SessionId, status = "replan_queued", requestedBy, releasedFromHuman });
+            return Results.Json(new
+            {
+                id,
+                sessionId = result.SessionId,
+                status = "replan_queued",
+                requestedBy,
+                releasedFromHuman = result.ReleasedFromHuman
+            });
         });
 
         // ─── Reddet ───
         group.MapPost("/escalations/{id}/dismiss",
             (string id, EscalationDecisionInput? body, HttpContext ctx,
-             IEscalationSink sink) =>
+             IEscalationPort escalations) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             if (agentId is null)
                 return Results.BadRequest(new { error = "Kullanıcıya bağlı agent kaydı yok." });
 
-            var ok = sink.Decide(id, WellKnown.EscalationActions.Dismiss,
+            var ok = escalations.Decide(id, WellKnown.EscalationActions.Dismiss,
                 assignedTo: agentId,
                 resolution: body?.Resolution);
             return ok
@@ -190,16 +173,16 @@ public static class AgentPanelEndpoints
         // APPROVALS
         // ════════════════════════════════════════════════════════════════
 
-        group.MapGet("/approvals/pending", (IApprovalQueue queue) =>
-            Results.Json(queue.GetPending()));
+        group.MapGet("/approvals/pending", (IApprovalPort approvals) =>
+            Results.Json(approvals.GetPending()));
 
         group.MapPost("/approvals/{id}/approve",
-            (string id, ApprovalDecisionInput? body, HttpContext ctx, IApprovalQueue queue) =>
+            (string id, ApprovalDecisionInput? body, HttpContext ctx, IApprovalPort approvals) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             var decidedBy = agentId ?? ctx.User.FindFirstValue(ClaimTypes.Name) ?? "agent";
 
-            var req = queue.Get(id);
+            var req = approvals.Get(id);
             if (req == null)
                 return Results.NotFound(new { error = "Request bulunamadı." });
 
@@ -213,7 +196,7 @@ public static class AgentPanelEndpoints
                 });
             }
 
-            var ok = queue.Decide(id, approved: true,
+            var ok = approvals.Decide(id, approved: true,
                 decidedBy: decidedBy,
                 reason: body?.Reason);
             return ok
@@ -222,12 +205,12 @@ public static class AgentPanelEndpoints
         });
 
         group.MapPost("/approvals/{id}/reject",
-            (string id, ApprovalDecisionInput? body, HttpContext ctx, IApprovalQueue queue) =>
+            (string id, ApprovalDecisionInput? body, HttpContext ctx, IApprovalPort approvals) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             var decidedBy = agentId ?? ctx.User.FindFirstValue(ClaimTypes.Name) ?? "agent";
 
-            var ok = queue.Decide(id, approved: false,
+            var ok = approvals.Decide(id, approved: false,
                 decidedBy: decidedBy,
                 reason: body?.Reason ?? "Agent reddetti");
             return ok
@@ -240,134 +223,85 @@ public static class AgentPanelEndpoints
         // ════════════════════════════════════════════════════════════════
 
         // ─── Human modda olan session'lar ───
-        group.MapGet("/chat-sessions/active", (IChatModeRegistry registry) =>
-            Results.Json(registry.GetActive()));
+        group.MapGet("/chat-sessions/active", (IChatSessionPort chatSessions) =>
+            Results.Json(chatSessions.GetActive()));
 
         // ─── Sohbete katıl (takeover) ───
         group.MapPost("/chat-sessions/{sid}/takeover",
             (string sid, HttpContext ctx,
-             IChatModeRegistry registry, IChatBridge bridge,
-             IEscalationSink escalationSink, IHumanAgentRegistry agentRegistry) =>
+             IChatSessionPort chatSessions, IHumanAgentPort agents) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             var agentLabel = agentId is not null
-                ? (agentRegistry.Get(agentId)?.DisplayName ?? agentId)
+                ? (agents.GetAgent(agentId)?.DisplayName ?? agentId)
                 : (ctx.User.FindFirstValue(ClaimTypes.Name) ?? "Agent");
 
-            var ok = registry.TakeOver(sid, agentLabel);
-            if (!ok) return Results.BadRequest(new { error = "TakeOver başarısız." });
-
-            bridge.PublishSystemMessage(sid,
-                $"Müşteri temsilcisi {agentLabel} sohbete katıldı.");
-
-            // Bu session'ın açık eskalasyonlarını otomatik acknowledge yap
-            var acknowledged = 0;
-            foreach (var esc in escalationSink.GetOpen())
-            {
-                if (esc.SessionId == sid && esc.Status == EscalationStatus.Open)
-                {
-                    if (escalationSink.Decide(esc.Id, WellKnown.EscalationActions.Acknowledge,
-                            assignedTo: agentId ?? agentLabel))
-                        acknowledged++;
-                }
-            }
-
-            if (agentId is not null)
-                agentRegistry.IncrementLoad(agentId);
+            var result = chatSessions.TakeOver(sid, agentLabel, agentId);
+            if (!result.Success) return Results.BadRequest(new { error = result.ErrorMessage });
 
             return Results.Ok(new
             {
                 sessionId = sid,
                 mode = WellKnown.ChatModes.Human,
                 humanAgent = agentLabel,
-                escalationsAcknowledged = acknowledged
+                escalationsAcknowledged = result.EscalationsAcknowledged
             });
         });
 
         // ─── Sohbeti bırak (release → Bot moda dön) ───
         group.MapPost("/chat-sessions/{sid}/release",
             (string sid, HttpContext ctx,
-             IChatModeRegistry registry, IChatBridge bridge,
-             IEscalationSink escalationSink, IHumanAgentRegistry agentRegistry) =>
+             IChatSessionPort chatSessions) =>
         {
             var agentId = GetLinkedAgentId(ctx);
-            var state = registry.GetState(sid);
-            var agent = state?.HumanAgent;
-
-            var ok = registry.Release(sid);
-            if (!ok) return Results.NotFound(new { error = "Session zaten Bot modda." });
-
-            bridge.PublishSystemMessage(sid,
-                "Müşteri temsilcisi sohbeti sonlandırdı. Bot moduna dönüldü.");
-
-            // Açık eskalasyonları resolve yap
-            var resolved = 0;
-            foreach (var esc in escalationSink.GetOpen())
-            {
-                if (esc.SessionId == sid)
-                {
-                    var ok2 = escalationSink.Decide(esc.Id,
-                        WellKnown.EscalationActions.Resolve,
-                        assignedTo: agentId ?? agent,
-                        resolution: WellKnown.FallbackMessages.LiveTakeoverResolution);
-                    if (ok2) resolved++;
-                }
-            }
-
-            if (agentId is not null)
-                agentRegistry.DecrementLoad(agentId);
+            var result = chatSessions.Release(sid, agentId);
+            if (!result.Success) return Results.NotFound(new { error = result.ErrorMessage });
 
             return Results.Ok(new
             {
                 sessionId = sid,
                 mode = WellKnown.ChatModes.Bot,
-                escalationsResolved = resolved
+                escalationsResolved = result.EscalationsResolved
             });
         });
 
         // ─── Müşteriye mesaj gönder ───
         group.MapPost("/chat-sessions/{sid}/messages",
             (string sid, ChatAdminMessageInput? body, HttpContext ctx,
-             IChatModeRegistry registry, IChatBridge bridge, ISessionManager sessions,
-             IHumanAgentRegistry agentRegistry) =>
+             IChatSessionPort chatSessions, IHumanAgentPort agents) =>
         {
-            if (body == null || string.IsNullOrWhiteSpace(body.Text))
+            if (body == null)
                 return Results.BadRequest(new { error = "text zorunlu." });
-
-            if (registry.GetMode(sid) != ChatMode.Human)
-                return Results.BadRequest(new { error = "Session Human modda değil." });
 
             var agentId = GetLinkedAgentId(ctx);
             var agentLabel = !string.IsNullOrWhiteSpace(body.HumanAgent)
                 ? body.HumanAgent
                 : agentId is not null
-                    ? (agentRegistry.Get(agentId)?.DisplayName ?? agentId)
-                    : (registry.GetState(sid)?.HumanAgent ?? "Agent");
-
-            var text = body.Text.Trim();
-            bridge.PublishAdminMessage(sid, agentLabel, text);
-            sessions.AppendAssistantMessage(sid, text);
+                    ? (agents.GetAgent(agentId)?.DisplayName ?? agentId)
+                    : (chatSessions.GetStateOrDefault(sid).HumanAgent ?? "Agent");
+            var result = chatSessions.SendAdminMessage(sid, agentLabel, body.Text);
+            if (!result.Success)
+                return Results.BadRequest(new { error = result.ErrorMessage });
 
             return Results.Ok(new { sessionId = sid, ok = true });
         });
 
         // ─── Sohbet geçmişi ───
         group.MapGet("/chat-sessions/{sid}/history",
-            (string sid, IChatBridge bridge, int take = 50) =>
-                Results.Json(bridge.GetHistory(sid, take)));
+            (string sid, IChatSessionPort chatSessions, int take = 50) =>
+                Results.Json(chatSessions.GetHistory(sid, take)));
 
         // ─── Session sentiment (read-only) ───
         group.MapGet("/chat-sessions/{sid}/sentiment",
-            (string sid, ISessionManager sessions) =>
+            (string sid, IChatSessionPort chatSessions) =>
         {
-            var session = sessions.Get(sid);
-            if (session is null) return Results.NotFound();
-            var state = session.State;
+            var sentiment = chatSessions.GetSentiment(sid);
+            if (sentiment is null) return Results.NotFound();
             return Results.Json(new
             {
-                sentiment = state.Sentiment,
-                score = state.SentimentScore,
-                consecutiveNegative = state.ConsecutiveNegativeTurns
+                sentiment = sentiment.Sentiment,
+                score = sentiment.Score,
+                consecutiveNegative = sentiment.ConsecutiveNegative
             });
         });
 
@@ -376,55 +310,30 @@ public static class AgentPanelEndpoints
             (string sid,
              ReplanInput? body,
              HttpContext ctx,
-             ISessionManager sessions,
-             IEscalationSink escalationSink,
-             IChatModeRegistry registry,
-             IChatBridge bridge,
-             IReplanPort replanPort) =>
+             IChatSessionPort chatSessions) =>
         {
-            var session = sessions.Get(sid);
-            if (session == null)
-                return Results.NotFound(new { error = "Session bulunamadı." });
-
             var agentId = GetLinkedAgentId(ctx)
                 ?? ctx.User.FindFirstValue(ClaimTypes.Name)
                 ?? WellKnown.Defaults.Admin;
             var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy) ? agentId : body!.RequestedBy!;
             var note = string.IsNullOrWhiteSpace(body?.Note) ? null : body!.Note!.Trim();
+            var result = chatSessions.ReplanSession(sid, requestedBy, note);
+            if (!result.Success)
+                return Results.NotFound(new { error = result.ErrorMessage });
 
-            session.State.ForceReplanNextTurn = true;
-            session.State.ReplanRequestedBy = requestedBy;
-            session.State.ReplanRequestedAt = DateTime.UtcNow;
-            session.State.ReplanNote = note;
-            sessions.Update(session);
-
-            var resolved = 0;
-            foreach (var esc in escalationSink.GetOpen())
+            return Results.Json(new
             {
-                if (esc.SessionId == sid)
-                {
-                    var ok = escalationSink.Decide(esc.Id,
-                        WellKnown.EscalationActions.Resolve,
-                        assignedTo: requestedBy,
-                        resolution: note ?? WellKnown.FallbackMessages.ReplanResolution);
-                    if (ok) resolved++;
-                }
-            }
-
-            var releasedFromHuman = false;
-            if (registry.GetMode(sid) == ChatMode.Human)
-                releasedFromHuman = registry.Release(sid);
-
-            bridge.PublishSystemMessage(sid, WellKnown.FallbackMessages.ReplanCustomerNotice);
-
-            _ = replanPort.ExecuteAsync(sid);
-
-            return Results.Json(new { sessionId = sid, status = "replan_queued", requestedBy, escalationsResolved = resolved, releasedFromHuman });
+                sessionId = sid,
+                status = "replan_queued",
+                requestedBy,
+                escalationsResolved = result.EscalationsResolved,
+                releasedFromHuman = result.ReleasedFromHuman
+            });
         });
 
         // ─── SSE — müşteri mesajlarını dinle ───
         group.MapGet("/chat-sessions/{sid}/subscribe",
-            async (string sid, HttpResponse response, HttpContext httpContext, IChatBridge bridge) =>
+            async (string sid, HttpResponse response, HttpContext httpContext, IChatSessionPort chatSessions) =>
         {
             SseWriter.WriteHeaders(response);
             var ct = httpContext.RequestAborted;
@@ -434,7 +343,7 @@ public static class AgentPanelEndpoints
 
             try
             {
-                await foreach (var msg in bridge.SubscribeToAdminAsync(sid, ct))
+                await foreach (var msg in chatSessions.SubscribeToAdminAsync(sid, ct))
                 {
                     await SseWriter.WriteEventAsync(response, StreamEventTypes.BridgeMessage, new
                     {
@@ -454,13 +363,13 @@ public static class AgentPanelEndpoints
         // PROFILE
         // ════════════════════════════════════════════════════════════════
 
-        group.MapGet("/profile", (HttpContext ctx, IHumanAgentRegistry registry) =>
+        group.MapGet("/profile", (HttpContext ctx, IHumanAgentPort agents) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             if (agentId is null)
                 return Results.BadRequest(new { error = "Kullanıcıya bağlı agent kaydı yok." });
 
-            var agent = registry.Get(agentId);
+            var agent = agents.GetAgent(agentId);
             return agent is null
                 ? Results.NotFound(new { error = "Agent kaydı bulunamadı." })
                 : Results.Ok(agent);
@@ -473,4 +382,3 @@ public static class AgentPanelEndpoints
     private static string? GetLinkedAgentId(HttpContext ctx) =>
         ctx.User.FindFirstValue("linked_agent_id");
 }
-

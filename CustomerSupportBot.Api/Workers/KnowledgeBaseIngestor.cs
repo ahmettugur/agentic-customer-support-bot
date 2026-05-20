@@ -1,22 +1,22 @@
-// Application/Services/Memory/KnowledgeBaseIngestor.cs
+// Api/Workers/KnowledgeBaseIngestor.cs
 // KnowledgeBase/*.md dosyalarını chunk'lara böler, embed eder, Qdrant Knowledge collection'a yazar.
 // Hash tabanlı change detection: her dosya için son işlenen hash'i hatırlar; değişmediyse atlar.
 
 using System.Security.Cryptography;
 using System.Text;
 using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Domain.Model.Memory;
+using CustomerSupportBot.Application.Services.Memory;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace CustomerSupportBot.Application.Services.Memory;
+namespace CustomerSupportBot.Api.Workers;
 
 /// <summary>
 /// Startup hosted service — KnowledgeBase dizinini Qdrant'a senkronize eder.
 /// Yapılandırma: SemanticMemory:KnowledgeBase:AutoIngestOnStartup
 /// </summary>
-public sealed class KnowledgeBaseIngestor : IHostedService
+public sealed class KnowledgeBaseIngestor : IHostedService, IKnowledgeBaseIngestor
 {
     private readonly SemanticMemoryService _memory;
     private readonly SemanticMemoryOptions _options;
@@ -36,7 +36,9 @@ public sealed class KnowledgeBaseIngestor : IHostedService
         _stateFile = Path.Combine(AppContext.BaseDirectory, ".kb-ingest-state.txt");
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken) => IngestAsync(cancellationToken);
+
+    public async Task IngestAsync(CancellationToken ct = default)
     {
         if (!_memory.Enabled || !_options.KnowledgeBase.AutoIngestOnStartup)
         {
@@ -46,7 +48,7 @@ public sealed class KnowledgeBaseIngestor : IHostedService
 
         try
         {
-            await _memory.EnsureCollectionsAsync(cancellationToken);
+            await _memory.EnsureCollectionsAsync(ct);
         }
         catch (Exception ex)
         {
@@ -69,7 +71,6 @@ public sealed class KnowledgeBaseIngestor : IHostedService
             return;
         }
 
-        // Embedding client yoksa hiç başlama — sessizce atla (memory effectively disabled).
         if (!_memory.IsConfigured)
         {
             _logger.LogWarning("Embedding client yapılandırılmadı; KnowledgeBase ingest atlandı (memory devre dışı).");
@@ -79,17 +80,17 @@ public sealed class KnowledgeBaseIngestor : IHostedService
         var files = Directory.EnumerateFiles(_rootDir, "*.md", SearchOption.AllDirectories).ToList();
         _logger.LogInformation("KnowledgeBase ingest başlıyor: {Count} dosya", files.Count);
 
-        var docs = new List<MemoryDocument>();
+        var docs = new List<Domain.Model.Memory.MemoryDocument>();
         foreach (var file in files)
         {
-            var text = await File.ReadAllTextAsync(file, cancellationToken);
+            var text = await File.ReadAllTextAsync(file, ct);
             var relative = Path.GetRelativePath(_rootDir, file).Replace('\\', '/');
             var title = Path.GetFileNameWithoutExtension(file);
             foreach (var (chunk, idx) in ChunkText(text, _options.KnowledgeBase.ChunkSize, _options.KnowledgeBase.ChunkOverlap))
             {
-                docs.Add(new MemoryDocument
+                docs.Add(new Domain.Model.Memory.MemoryDocument
                 {
-                    Kind = MemoryKind.Knowledge,
+                    Kind = Domain.Model.Memory.MemoryKind.Knowledge,
                     Title = title,
                     Source = relative,
                     Text = chunk,
@@ -102,7 +103,7 @@ public sealed class KnowledgeBaseIngestor : IHostedService
         {
             try
             {
-                await _memory.UpsertManyAsync(MemoryKind.Knowledge, docs, cancellationToken);
+                await _memory.UpsertManyAsync(Domain.Model.Memory.MemoryKind.Knowledge, docs, ct);
                 File.WriteAllText(_stateFile, currentHash);
                 _logger.LogInformation("KnowledgeBase ingest tamamlandı: {ChunkCount} chunk", docs.Count);
             }
@@ -123,7 +124,6 @@ public sealed class KnowledgeBaseIngestor : IHostedService
         if (string.IsNullOrWhiteSpace(text)) yield break;
         text = text.Replace("\r\n", "\n");
 
-        // Heading'leri ayrı chunk başlangıcına itecek şekilde böl
         var paragraphs = text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries)
             .Select(p => p.Trim()).Where(p => p.Length > 0).ToList();
 
@@ -134,7 +134,6 @@ public sealed class KnowledgeBaseIngestor : IHostedService
             if (sb.Length + p.Length + 2 > size && sb.Length > 0)
             {
                 yield return (sb.ToString().Trim(), idx++);
-                // overlap — son N karakteri yeni chunk'ın başına al
                 var carry = overlap > 0 && sb.Length > overlap ? sb.ToString()[^overlap..] : "";
                 sb.Clear();
                 if (carry.Length > 0) sb.AppendLine(carry);
@@ -149,7 +148,6 @@ public sealed class KnowledgeBaseIngestor : IHostedService
     {
         if (!Directory.Exists(_rootDir)) return "empty";
         var sb = new StringBuilder();
-        // Embedding model + boyutu hash'e dahil et — model değişince yeniden ingest tetiklenir.
         sb.Append("embed=").Append(_options.Embedding.Model)
           .Append(":").Append(_options.Embedding.Dimension).Append(';');
         foreach (var f in Directory.EnumerateFiles(_rootDir, "*.md", SearchOption.AllDirectories).OrderBy(p => p))

@@ -1,4 +1,4 @@
-// Application/Services/Routing/RoutingLoadTrackerService.cs
+// Api/Workers/RoutingLoadTrackerService.cs
 // Eskalasyon kapanınca (resolve/dismiss) atanan temsilcinin CurrentLoad'unu
 // otomatik olarak azaltan event subscriber. IHostedService olarak çalışır.
 
@@ -7,7 +7,7 @@ using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace CustomerSupportBot.Application.Services.Routing;
+namespace CustomerSupportBot.Api.Workers;
 
 /// <summary>
 /// Smart Routing — eskalasyon kapandığında atanan temsilcinin load'unu azaltır.
@@ -34,7 +34,6 @@ public sealed class RoutingLoadTrackerService : IHostedService
     {
         _handler = (_, esc) =>
         {
-            // Sadece kapanmış (Resolved/Dismissed) eskalasyonlar için load azalt
             if (esc.Status is EscalationStatus.Resolved or EscalationStatus.Dismissed
                 && !string.IsNullOrWhiteSpace(esc.SuggestedAgentId))
             {

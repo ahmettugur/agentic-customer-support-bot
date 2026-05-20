@@ -37,6 +37,10 @@ public sealed class HumanAgentPortService : IHumanAgentPort
 
     public bool DeleteAgent(string id) => _agents.Delete(id);
 
+    public bool IncrementLoad(string id) => _agents.IncrementLoad(id);
+
+    public bool DecrementLoad(string id) => _agents.DecrementLoad(id);
+
     public RerouteResult RerouteEscalation(string escalationId, string? agentId, string? reason)
     {
         var esc = _escalations.Get(escalationId);

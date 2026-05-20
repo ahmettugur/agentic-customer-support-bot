@@ -17,5 +17,7 @@ public interface IHumanAgentPort
     HumanAgent CreateAgent(HumanAgent agent);
     HumanAgent? UpdateAgent(string id, HumanAgentInput input);
     bool DeleteAgent(string id);
+    bool IncrementLoad(string id);
+    bool DecrementLoad(string id);
     RerouteResult RerouteEscalation(string escalationId, string? agentId, string? reason);
 }

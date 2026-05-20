@@ -1,4 +1,4 @@
-// Services/Realtime/RealtimeFunctionTools.cs
+// Adapters.AI/Realtime/RealtimeFunctionTools.cs
 //
 // gpt-realtime-1.5 modeline expose edilen function calling subset'i.
 //
@@ -14,8 +14,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
+using Microsoft.Extensions.Logging;
 
-namespace CustomerSupportBot.Api.Services.Realtime;
+namespace CustomerSupportBot.Adapters.AI.Realtime;
 
 /// <summary>
 /// Realtime native moduna özel okuma-only tool seti ve OpenAI function calling sözleşmesi.
@@ -213,4 +214,3 @@ public sealed class RealtimeFunctionTools
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 }
-

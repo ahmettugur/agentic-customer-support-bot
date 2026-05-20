@@ -31,36 +31,32 @@ public static class AnalyticsEndpoints
 
         // ─── CONVERSATION RATING (public — kullanıcı oturum açmadan rating bırakır) ───
         app.MapPost("/sessions/{sid}/rating",
-            (string sid, RatingInput body, IRatingStore ratings, ISessionManager sessions) =>
+            (string sid, RatingInput body, IAnalyticsPort analytics) =>
             {
-                // Oturum var mı kontrol et
-                var session = sessions.Get(sid);
-                if (session == null)
+                if (analytics.GetSessionAnalytics(sid) == null)
                     return Results.NotFound(new { error = "Session bulunamadı." });
 
-                // Stars validasyonu
                 if (body.Stars < 1 || body.Stars > 5)
                     return Results.BadRequest(new { error = "Yıldız puanı 1–5 arasında olmalıdır." });
 
-                var rating = ratings.Submit(sid, body.Stars, body.Feedback);
+                var rating = analytics.Rate(sid, body.Stars, body.Feedback);
                 return Results.Json(rating);
             });
 
         app.MapGet("/sessions/{sid}/rating",
-            (string sid, IRatingStore ratings) =>
+            (string sid, IAnalyticsPort analytics) =>
             {
-                var rating = ratings.GetBySession(sid);
+                var rating = analytics.GetRating(sid);
                 return rating == null
                     ? Results.NotFound(new { error = "Bu session için rating bulunamadı." })
                     : Results.Json(rating);
             });
 
         app.MapGet("/analytics/ratings/recent",
-            (IRatingStore ratings, int count = 20) =>
-                Results.Json(ratings.GetRecent(count)))
+            (IAnalyticsPort analytics, int count = 20) =>
+                Results.Json(analytics.GetRecentRatings(count)))
             .RequireAuthorization("Admin");
 
         return app;
     }
 }
-

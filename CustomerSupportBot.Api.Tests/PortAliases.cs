@@ -26,6 +26,7 @@ global using IPasswordHasher = CustomerSupportBot.Application.Ports.Driven.Auth.
 
 // Approval and context ports
 global using CustomerSupportBot.Application.Ports.Driven;
+global using CustomerSupportBot.Application.Ports.Driving;
 
 // Application Services re-export
 global using CustomerSupportBot.Application.Services;

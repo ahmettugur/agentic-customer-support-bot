@@ -34,6 +34,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<IApprovalPort, ApprovalPortService>();
         services.AddScoped<IEscalationPort, EscalationPortService>();
         services.AddScoped<IAnalyticsPort, AnalyticsPortService>();
+        services.AddScoped<IChatSessionPort, ChatSessionPortService>();
+        services.AddScoped<IHitlEventPort, HitlEventPortService>();
+        services.AddScoped<ITelemetryPort, TelemetryPortService>();
         services.AddSingleton<ITracePort, TracePortService>();
         services.AddSingleton<IHumanAgentPort, HumanAgentPortService>();
         services.AddSingleton<IImprovementsPort, ImprovementsPortService>();
@@ -76,9 +79,11 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<EntityVerifier>();
         services.AddSingleton<ReasoningSanityChecker>();
         services.AddSingleton<EvaluationRunner>();
+        services.AddSingleton<IEvaluationPort>(sp => sp.GetRequiredService<EvaluationRunner>());
 
         // Güvenlik — deterministik input gate
         services.AddSingleton<InputGuard>();
+        services.AddSingleton<IInputGuard>(sp => sp.GetRequiredService<InputGuard>());
 
         // Session state yönetimi (sentiment, intent, persist)
         services.AddSingleton<SessionStateService>();
@@ -101,20 +106,12 @@ public static class ApplicationServiceCollectionExtensions
         if (memOpts.Enabled)
         {
             services.AddSingleton<SemanticMemoryService>();
-            services.AddSingleton<KnowledgeBaseIngestor>();
-            services.AddHostedService(sp => sp.GetRequiredService<KnowledgeBaseIngestor>());
             services.AddSingleton<IMemoryPort, MemoryPortService>();
         }
         else
         {
             services.AddSingleton<IMemoryPort, DisabledMemoryPort>();
         }
-
-        // ─── SLA / Response Time Guardian ───
-        services.AddHostedService<Services.Sla.SlaGuardianService>();
-
-        // ─── Smart Routing — Load Tracking ───
-        services.AddHostedService<Services.Routing.RoutingLoadTrackerService>();
 
         return services;
     }

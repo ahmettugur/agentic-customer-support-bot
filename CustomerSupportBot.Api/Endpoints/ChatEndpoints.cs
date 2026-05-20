@@ -5,7 +5,6 @@
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Application.Ports.Driving;
-using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;
@@ -26,7 +25,7 @@ public static class ChatEndpoints
     private static async Task<IResult> HandleChatAsync(
         ChatRequest request,
         IChatPort chatPort,
-        InputGuard inputGuard,
+        IInputGuard inputGuard,
         ILoggerFactory loggerFactory)
     {
         var logger = loggerFactory.CreateLogger("ChatEndpoints");
@@ -67,9 +66,8 @@ public static class ChatEndpoints
         HttpResponse response,
         HttpContext httpContext,
         IChatPort chatPort,
-        IApprovalQueue approvalQueue,
-        IEscalationSink escalationSink,
-        InputGuard inputGuard,
+        IHitlEventPort hitlEvents,
+        IInputGuard inputGuard,
         ILoggerFactory loggerFactory)
     {
         SseWriter.WriteHeaders(response);
@@ -106,7 +104,7 @@ public static class ChatEndpoints
         // Session ID is resolved by IChatPort and carried in the first Session event.
         // HITL subscription is wired up when that event arrives (before workflow begins).
         var resolvedSessionId = "";
-        HitlStreamSubscription? hitlSubscription = null;
+        IHitlEventSubscription? hitlSubscription = null;
         try
         {
             await foreach (var evt in chatPort.HandleStreamAsync(safeRequest, httpContext.RequestAborted))
@@ -116,8 +114,9 @@ public static class ChatEndpoints
                 if (hitlSubscription == null && evt.Type == StreamEventTypes.Session)
                 {
                     resolvedSessionId = ExtractSessionId(evt.Data);
-                    hitlSubscription = new HitlStreamSubscription(approvalQueue, escalationSink, sse, resolvedSessionId);
-                    hitlSubscription.Subscribe();
+                    hitlSubscription = hitlEvents.Subscribe(
+                        resolvedSessionId,
+                        (eventType, eventData) => sse.WriteAsync(eventType, eventData));
                 }
             }
         }
@@ -158,4 +157,3 @@ public static class ChatEndpoints
         await orchestrator.ExecuteAsync(sessionId, sse, httpContext.RequestAborted);
     }
 }
-

@@ -46,6 +46,16 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         return rating;
     }
 
+    public ConversationRating? GetRating(string sessionId)
+    {
+        return _ratings.GetBySession(sessionId);
+    }
+
+    public IReadOnlyList<ConversationRating> GetRecentRatings(int count = 20)
+    {
+        return _ratings.GetRecent(count);
+    }
+
     public IReadOnlyList<ConversationRating> GetAllRatings()
     {
         return _ratings.GetAll();

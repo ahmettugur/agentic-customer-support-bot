@@ -35,6 +35,7 @@ public static class TelemetryAdapterServiceCollectionExtensions
 
         services.AddSingleton<ICostCalculatorPort, CostCalculator>();
         services.AddSingleton<CostUsageStore>();
+        services.AddSingleton<ICostUsageStorePort>(sp => sp.GetRequiredService<CostUsageStore>());
 
         if (!options.Enabled)
             return services;

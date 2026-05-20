@@ -6,10 +6,11 @@
 // pratik bir çözümdür.
 
 using System.Collections.Concurrent;
+using CustomerSupportBot.Application.Ports.Driven.Observability;
 
 namespace CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 
-public sealed class CostUsageStore
+public sealed class CostUsageStore : ICostUsageStorePort
 {
     private readonly ConcurrentDictionary<string, ModelUsage> _byModel =
         new(StringComparer.OrdinalIgnoreCase);
@@ -87,6 +88,26 @@ public sealed class CostUsageStore
         }
     }
 
+    public CostUsageSnapshot GetUsageSnapshot()
+    {
+        var snapshot = GetSnapshot();
+        return new CostUsageSnapshot(
+            snapshot.TotalCalls,
+            snapshot.TotalInputTokens,
+            snapshot.TotalOutputTokens,
+            snapshot.TotalCostUsd,
+            snapshot.ByModel
+                .Select(m => new CostModelUsageSnapshot(
+                    m.Model,
+                    m.Calls,
+                    m.InputTokens,
+                    m.OutputTokens,
+                    m.CostUsd,
+                    m.AverageLatencyMs,
+                    m.LastUsed))
+                .ToList());
+    }
+
     public void Reset()
     {
         lock (_lock)
@@ -98,6 +119,8 @@ public sealed class CostUsageStore
             _totalCalls = 0;
         }
     }
+
+    public void ResetUsage() => Reset();
 }
 
 public sealed class ModelUsage

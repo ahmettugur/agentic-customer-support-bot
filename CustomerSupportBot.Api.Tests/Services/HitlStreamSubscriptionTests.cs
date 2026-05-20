@@ -1,15 +1,15 @@
 using System.Text;
 using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 
-public class HitlStreamSubscriptionTests
+public class HitlEventPortServiceTests
 {
     private static (DefaultHttpContext ctx, MemoryStream body) BuildResponse()
     {
@@ -19,17 +19,25 @@ public class HitlStreamSubscriptionTests
         return (ctx, body);
     }
 
-    [Fact]
-    public async Task ApprovalCreated_ForCurrentSession_WritesSseEvent()
+    private static (InMemoryApprovalQueue queue, InMemoryEscalationSink sink, InMemoryChatModeRegistry modeRegistry) BuildDeps()
     {
-        var (ctx, body) = BuildResponse();
         var queue = new InMemoryApprovalQueue(
             Options.Create(new ApprovalOptions()),
             NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
+        var modeRegistry = new InMemoryChatModeRegistry(NullLogger<InMemoryChatModeRegistry>.Instance);
+        return (queue, sink, modeRegistry);
+    }
+
+    [Fact]
+    public async Task ApprovalCreated_ForCurrentSession_WritesSseEvent()
+    {
+        var (ctx, body) = BuildResponse();
+        var (queue, sink, modeRegistry) = BuildDeps();
+        var port = new HitlEventPortService(queue, sink, modeRegistry);
         using var fwd = new SseForwarder(ctx.Response, default);
-        using var sub = new HitlStreamSubscription(queue, sink, fwd, "s1");
-        sub.Subscribe();
+
+        using var sub = port.Subscribe("s1", (eventType, data) => fwd.WriteAsync(eventType, data));
 
         queue.Create(new ApprovalRequest { SessionId = "s1", ToolName = "x", AgentName = "a" });
 
@@ -42,13 +50,11 @@ public class HitlStreamSubscriptionTests
     public async Task ApprovalCreated_OtherSession_NoSseEvent()
     {
         var (ctx, body) = BuildResponse();
-        var queue = new InMemoryApprovalQueue(
-            Options.Create(new ApprovalOptions()),
-            NullLogger<InMemoryApprovalQueue>.Instance);
-        var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
+        var (queue, sink, modeRegistry) = BuildDeps();
+        var port = new HitlEventPortService(queue, sink, modeRegistry);
         using var fwd = new SseForwarder(ctx.Response, default);
-        using var sub = new HitlStreamSubscription(queue, sink, fwd, "s1");
-        sub.Subscribe();
+
+        using var sub = port.Subscribe("s1", (eventType, data) => fwd.WriteAsync(eventType, data));
 
         queue.Create(new ApprovalRequest { SessionId = "OTHER", ToolName = "x", AgentName = "a" });
 
@@ -60,13 +66,11 @@ public class HitlStreamSubscriptionTests
     public async Task ApprovalDecided_WritesResolvedEvent()
     {
         var (ctx, body) = BuildResponse();
-        var queue = new InMemoryApprovalQueue(
-            Options.Create(new ApprovalOptions()),
-            NullLogger<InMemoryApprovalQueue>.Instance);
-        var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
+        var (queue, sink, modeRegistry) = BuildDeps();
+        var port = new HitlEventPortService(queue, sink, modeRegistry);
         using var fwd = new SseForwarder(ctx.Response, default);
-        using var sub = new HitlStreamSubscription(queue, sink, fwd, "s1");
-        sub.Subscribe();
+
+        using var sub = port.Subscribe("s1", (eventType, data) => fwd.WriteAsync(eventType, data));
 
         var req = new ApprovalRequest { SessionId = "s1", ToolName = "x", AgentName = "a" };
         queue.Create(req);
@@ -81,13 +85,11 @@ public class HitlStreamSubscriptionTests
     public async Task EscalationCreated_WritesSseEvent()
     {
         var (ctx, body) = BuildResponse();
-        var queue = new InMemoryApprovalQueue(
-            Options.Create(new ApprovalOptions()),
-            NullLogger<InMemoryApprovalQueue>.Instance);
-        var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
+        var (queue, sink, modeRegistry) = BuildDeps();
+        var port = new HitlEventPortService(queue, sink, modeRegistry);
         using var fwd = new SseForwarder(ctx.Response, default);
-        using var sub = new HitlStreamSubscription(queue, sink, fwd, "s1");
-        sub.Subscribe();
+
+        using var sub = port.Subscribe("s1", (eventType, data) => fwd.WriteAsync(eventType, data));
 
         sink.Create(new EscalationRequest { SessionId = "s1", AgentName = "a", Reason = "r" });
 
@@ -97,17 +99,15 @@ public class HitlStreamSubscriptionTests
     }
 
     [Fact]
-    public async Task Unsubscribe_StopsReceivingEvents()
+    public async Task Dispose_StopsReceivingEvents()
     {
         var (ctx, body) = BuildResponse();
-        var queue = new InMemoryApprovalQueue(
-            Options.Create(new ApprovalOptions()),
-            NullLogger<InMemoryApprovalQueue>.Instance);
-        var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
+        var (queue, sink, modeRegistry) = BuildDeps();
+        var port = new HitlEventPortService(queue, sink, modeRegistry);
         using var fwd = new SseForwarder(ctx.Response, default);
-        var sub = new HitlStreamSubscription(queue, sink, fwd, "s1");
-        sub.Subscribe();
-        sub.Unsubscribe();
+
+        var sub = port.Subscribe("s1", (eventType, data) => fwd.WriteAsync(eventType, data));
+        sub.Dispose();
 
         queue.Create(new ApprovalRequest { SessionId = "s1", ToolName = "x", AgentName = "a" });
 
@@ -116,16 +116,13 @@ public class HitlStreamSubscriptionTests
     }
 
     [Fact]
-    public void Dispose_CallsUnsubscribe()
+    public void Subscribe_Dispose_DoesNotThrow()
     {
         var (ctx, _) = BuildResponse();
-        var queue = new InMemoryApprovalQueue(
-            Options.Create(new ApprovalOptions()),
-            NullLogger<InMemoryApprovalQueue>.Instance);
-        var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
+        var (queue, sink, modeRegistry) = BuildDeps();
+        var port = new HitlEventPortService(queue, sink, modeRegistry);
         using var fwd = new SseForwarder(ctx.Response, default);
-        var sub = new HitlStreamSubscription(queue, sink, fwd, "s1");
-        sub.Subscribe();
+        var sub = port.Subscribe("s1", (_, _) => Task.CompletedTask);
         Action act = () => sub.Dispose();
         act.Should().NotThrow();
     }

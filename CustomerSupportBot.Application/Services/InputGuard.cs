@@ -9,23 +9,11 @@
 
 using System.Text;
 using System.Text.RegularExpressions;
+using CustomerSupportBot.Application.Ports.Driving;
 
 namespace CustomerSupportBot.Application.Services;
 
-public enum InputGuardVerdict
-{
-    Allow,
-    Sanitize,
-    Reject
-}
-
-public sealed record InputGuardResult(
-    InputGuardVerdict Verdict,
-    string SanitizedInput,
-    IReadOnlyList<string> Flags,
-    string? RejectionReason);
-
-public sealed partial class InputGuard
+public sealed partial class InputGuard : IInputGuard
 {
     /// <summary>Maksimum kullanıcı mesaj uzunluğu (karakter).</summary>
     public const int MaxInputLength = 2000;
