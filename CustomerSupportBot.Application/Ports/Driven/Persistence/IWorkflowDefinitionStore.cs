@@ -1,4 +1,4 @@
-// Ports/Driven/Persistence/IWorkflowDefinitionRepository.cs
+// Ports/Driven/Persistence/IWorkflowDefinitionStore.cs
 // SECONDARY PORT — Low-code workflow tanım kalıcılığı.
 
 using CustomerSupportBot.Domain.Model.Workflow;
@@ -9,7 +9,7 @@ namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
 /// Persisted (in-memory veya Postgres) workflow definition secondary port.
 /// Adaptörler: PostgresWorkflowDefinitionStore, InMemoryWorkflowDefinitionStore.
 /// </summary>
-public interface IWorkflowDefinitionRepository
+public interface IWorkflowDefinitionStore
 {
     IReadOnlyList<WorkflowDefinition> GetAll();
     IReadOnlyList<WorkflowDefinition> GetActive();

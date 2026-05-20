@@ -20,7 +20,6 @@ using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Improvement;
 using CustomerSupportBot.Domain.Model.Memory;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -28,19 +27,19 @@ namespace CustomerSupportBot.Application.Services.Improvement;
 
 public sealed class LessonMiner
 {
-    private readonly IReasoningTraceRepository _traceStore;
-    private readonly IRatingRepository _ratingStore;
-    private readonly ILessonRepository _lessonStore;
+    private readonly IReasoningTraceStore _traceStore;
+    private readonly IRatingStore _ratingStore;
+    private readonly ILessonStore _lessonStore;
     private readonly SemanticMemoryService? _memory;
-    private readonly IChatClient _chatClient;
+    private readonly IGeneralChatClient _chatClient;
     private readonly SelfImprovementOptions _options;
     private readonly ILogger<LessonMiner> _logger;
 
     public LessonMiner(
-        IReasoningTraceRepository traceStore,
-        IRatingRepository ratingStore,
-        ILessonRepository lessonStore,
-        IChatClient chatClient,
+        IReasoningTraceStore traceStore,
+        IRatingStore ratingStore,
+        ILessonStore lessonStore,
+        IGeneralChatClient chatClient,
         IOptions<SelfImprovementOptions> options,
         ILogger<LessonMiner> logger,
         SemanticMemoryService? memory = null)
@@ -88,8 +87,7 @@ public sealed class LessonMiner
         string llmText;
         try
         {
-            var resp = await _chatClient.GetResponseAsync(prompt, cancellationToken: ct);
-            llmText = resp.Text ?? "";
+            llmText = await _chatClient.CompleteAsync(prompt, ct);
         }
         catch (Exception ex)
         {
@@ -169,7 +167,7 @@ public sealed class LessonMiner
 
     // ─── helpers ───
 
-    private static List<ChatMessage> BuildAnalysisPrompt(
+    private static List<ConversationMessage> BuildAnalysisPrompt(
         List<ReasoningTrace> traces, IDictionary<string, ConversationRating> lowRatings)
     {
         var sb = new StringBuilder();
@@ -197,10 +195,10 @@ public sealed class LessonMiner
                 sb.AppendLine($"- Agents: {string.Join(" → ", t.AgentVisits.Select(v => v.AgentName))}");
         }
 
-        return new List<ChatMessage>
+        return new List<ConversationMessage>
         {
-            new(ChatRole.System, "You are an expert in agentic system root-cause analysis. Output strict JSON."),
-            new(ChatRole.User, sb.ToString())
+            new(ConversationRoles.System, "You are an expert in agentic system root-cause analysis. Output strict JSON."),
+            new(ConversationRoles.User, sb.ToString())
         };
     }
 
@@ -262,10 +260,6 @@ public sealed class LessonMiner
         public string? Observation { get; set; }
         public string? SuggestedAgent { get; set; }
     }
-}
-
-internal interface IReasoningTraceStore
-{
 }
 
 public sealed class MiningRunReport

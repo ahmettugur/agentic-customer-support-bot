@@ -1,6 +1,6 @@
 // Application/Services/Routing/SkillsBasedRouter.cs
 // SkillsBasedRouter — Reasoning trace + müşteri profilinden skill etiketlerini
-// çıkarır, IHumanAgentRepository'deki aday temsilciler arasında en iyi skill +
+// çıkarır, IHumanAgentRegistry'deki aday temsilciler arasında en iyi skill +
 // dil eşleşmesini bulur. LLM-siz, deterministik ve hızlı (<1ms).
 //
 // Skor Formülü:
@@ -24,10 +24,10 @@ namespace CustomerSupportBot.Application.Services.Routing;
 /// </summary>
 public class SkillsBasedRouter : ISkillsBasedRouter
 {
-    private readonly IHumanAgentRepository _registry;
+    private readonly IHumanAgentRegistry _registry;
     private readonly RoutingOptions _options;
 
-    public SkillsBasedRouter(IHumanAgentRepository registry, IOptions<RoutingOptions> options)
+    public SkillsBasedRouter(IHumanAgentRegistry registry, IOptions<RoutingOptions> options)
     {
         _registry = registry;
         _options = options.Value;

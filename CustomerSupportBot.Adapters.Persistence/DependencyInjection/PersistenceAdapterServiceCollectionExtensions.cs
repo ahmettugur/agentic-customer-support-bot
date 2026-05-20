@@ -56,7 +56,6 @@ public static class PersistenceAdapterServiceCollectionExtensions
             services.AddSingleton<IChatBridge, PostgresChatBridge>();
             services.AddSingleton<PostgresSessionManager>();
             services.AddSingleton<ISessionManager>(sp => sp.GetRequiredService<PostgresSessionManager>());
-            services.AddSingleton<IConversationStore>(sp => sp.GetRequiredService<PostgresSessionManager>());
             services.AddSingleton<IRatingStore, PostgresRatingStore>();
             services.AddSingleton<IHumanAgentRegistry, PostgresHumanAgentRegistry>();
             services.AddSingleton<ICustomerProfileStore, PostgresCustomerProfileStore>();
@@ -76,7 +75,6 @@ public static class PersistenceAdapterServiceCollectionExtensions
             services.AddSingleton<IChatBridge, InMemoryChatBridge>();
             services.AddSingleton<InMemorySessionManager>();
             services.AddSingleton<ISessionManager>(sp => sp.GetRequiredService<InMemorySessionManager>());
-            services.AddSingleton<IConversationStore>(sp => sp.GetRequiredService<InMemorySessionManager>());
             services.AddSingleton<IRatingStore, InMemoryRatingStore>();
             services.AddSingleton<IHumanAgentRegistry, InMemoryHumanAgentRegistry>();
             services.AddSingleton<ICustomerProfileStore, InMemoryCustomerProfileStore>();

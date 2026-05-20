@@ -1,11 +1,9 @@
 // Services/InMemorySessionManager.cs
 // ISessionManager'ın bellek içi implementasyonu.
-// IConversationStore metodlarını da karşılar (geriye uyumluluk).
 
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Domain.Model;
-using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Adapters.Persistence.InMemory;
 
@@ -17,7 +15,7 @@ namespace CustomerSupportBot.Adapters.Persistence.InMemory;
 public partial class InMemorySessionManager : ISessionManager
 {
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
-    private readonly ConcurrentDictionary<string, List<ChatMessage>> _messageHistory = new();
+    private readonly ConcurrentDictionary<string, List<ConversationMessage>> _messageHistory = new();
     private readonly IAppDistributedLock _distributedLock;
 
     public InMemorySessionManager(IAppDistributedLock distributedLock)
@@ -25,7 +23,7 @@ public partial class InMemorySessionManager : ISessionManager
         _distributedLock = distributedLock;
     }
 
-    // ─── ISessionRepository (eski ISessionManager) ───
+    // ─── ISessionManager (eski ISessionManager) ───
 
     public AgentSession GetOrCreate(string? sessionId)
     {
@@ -140,30 +138,27 @@ public partial class InMemorySessionManager : ISessionManager
         Update(session);
     }
 
-    // ─── IConversationStore ───
+    // ─── Konuşma geçmişi ───
 
-    public List<ChatMessage> GetHistory(string sessionId)
+    public List<ConversationMessage> GetHistory(string sessionId)
     {
         if (_messageHistory.TryGetValue(sessionId, out var history))
         {
             lock (history)
             {
-                return new List<ChatMessage>(history);
+                return new List<ConversationMessage>(history);
             }
         }
-        return new List<ChatMessage>();
+        return new List<ConversationMessage>();
     }
 
     public void AddExchange(string sessionId, string userQuery, string assistantResponse)
     {
-        // Mesaj geçmişini güncelle
-        var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ChatMessage>());
-        int count;
+        var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
         lock (history)
         {
-            history.Add(new ChatMessage(ChatRole.User, userQuery));
-            history.Add(new ChatMessage(ChatRole.Assistant, assistantResponse));
-            count = history.Count;
+            history.Add(new ConversationMessage(ConversationRoles.User, userQuery));
+            history.Add(new ConversationMessage(ConversationRoles.Assistant, assistantResponse));
         }
 
         // Oturumun var olduğundan emin ol
@@ -185,20 +180,20 @@ public partial class InMemorySessionManager : ISessionManager
     {
         if (string.IsNullOrWhiteSpace(text)) return;
 
-        var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ChatMessage>());
+        var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
         lock (history)
         {
             // Bot Human modda placeholder olarak "" assistant mesajı ekliyor.
             // Admin yanıtı geldiğinde bunu doldur; aksi halde yeni mesaj ekle.
             if (history.Count > 0
-                && history[^1].Role == ChatRole.Assistant
+                && history[^1].Role == ConversationRoles.Assistant
                 && string.IsNullOrEmpty(history[^1].Text))
             {
-                history[^1] = new ChatMessage(ChatRole.Assistant, text);
+                history[^1] = new ConversationMessage(ConversationRoles.Assistant, text);
             }
             else
             {
-                history.Add(new ChatMessage(ChatRole.Assistant, text));
+                history.Add(new ConversationMessage(ConversationRoles.Assistant, text));
             }
         }
 
@@ -215,7 +210,7 @@ public partial class InMemorySessionManager : ISessionManager
         {
             var session = kvp.Value;
             var history = GetHistory(kvp.Key);
-            var firstUserMsg = history.FirstOrDefault(m => m.Role == ChatRole.User)?.Text;
+            var firstUserMsg = history.FirstOrDefault(m => m.Role == ConversationRoles.User)?.Text;
 
             result.Add(new SessionInfo
             {

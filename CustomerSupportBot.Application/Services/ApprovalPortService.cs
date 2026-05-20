@@ -14,11 +14,11 @@ namespace CustomerSupportBot.Application.Services;
 /// </summary>
 public sealed class ApprovalPortService : IApprovalPort
 {
-    private readonly IApprovalQueueRepository _approvalQueue;
+    private readonly IApprovalQueue _approvalQueue;
     private readonly ILogger<ApprovalPortService> _logger;
 
     public ApprovalPortService(
-        IApprovalQueueRepository approvalQueue,
+        IApprovalQueue approvalQueue,
         ILogger<ApprovalPortService> logger)
     {
         _approvalQueue = approvalQueue;

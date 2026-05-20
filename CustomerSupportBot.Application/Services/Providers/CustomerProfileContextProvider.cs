@@ -12,7 +12,7 @@ namespace CustomerSupportBot.Application.Services.Providers;
 
 public sealed class CustomerProfileContextProvider : IContextProvider
 {
-    private readonly ICustomerProfileRepository _store;
+    private readonly ICustomerProfileStore _store;
     private readonly ILogger<CustomerProfileContextProvider> _logger;
 
     public string Name => "CustomerProfile";
@@ -24,7 +24,7 @@ public sealed class CustomerProfileContextProvider : IContextProvider
     public int Order => 6;
 
     public CustomerProfileContextProvider(
-        ICustomerProfileRepository store,
+        ICustomerProfileStore store,
         ILogger<CustomerProfileContextProvider> logger)
     {
         _store = store;

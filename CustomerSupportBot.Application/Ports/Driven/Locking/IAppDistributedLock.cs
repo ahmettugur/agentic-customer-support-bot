@@ -1,4 +1,4 @@
-// Ports/Driven/Locking/IDistributedLockPort.cs
+// Ports/Driven/Locking/IAppDistributedLock.cs
 // SECONDARY PORT — Dağıtık kilit soyutlaması.
 // Adaptör: RedisDistributedLockAdapter (CustomerSupportBot.Adapters.Redis)
 
@@ -9,7 +9,7 @@ namespace CustomerSupportBot.Application.Ports.Driven.Locking;
 /// Core concurrent state mutasyonlarını bu port üzerinden serialize eder.
 /// Adaptörler: RedisDistributedLockAdapter, InMemorySemaphoreAdapter.
 /// </summary>
-public interface IDistributedLockPort
+public interface IAppDistributedLock
 {
     /// <summary>
     /// Verilen resource key için kilit almayı dener.

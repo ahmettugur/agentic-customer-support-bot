@@ -51,7 +51,6 @@ public static class ApplicationServicesExtensions
         services.AddAgentsAdapter();
 
         // Chat orchestrators — istek başına yeni instance (Api'ye özgü SSE/HTTP transport)
-        services.AddScoped<ChatStreamOrchestrator>();
         services.AddScoped<ChatEventOrchestrator>();
 
         // Realtime köprüsü — her WS bağlantısı için ayrı instance

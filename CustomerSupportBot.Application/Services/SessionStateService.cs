@@ -14,11 +14,11 @@ namespace CustomerSupportBot.Application.Services;
 /// </summary>
 public sealed class SessionStateService
 {
-    private readonly ISessionRepository _sessionManager;
+    private readonly ISessionManager _sessionManager;
     private readonly ILogger<SessionStateService> _logger;
 
     public SessionStateService(
-        ISessionRepository sessionManager,
+        ISessionManager sessionManager,
         ILogger<SessionStateService> logger)
     {
         _sessionManager = sessionManager;
@@ -67,7 +67,7 @@ public sealed class SessionStateService
         string sessionId,
         string query,
         string response,
-        IChatBridgeRepository chatBridge)
+        IChatBridge chatBridge)
     {
         if (!string.IsNullOrWhiteSpace(response))
         {

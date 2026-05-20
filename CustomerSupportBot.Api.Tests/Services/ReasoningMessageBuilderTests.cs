@@ -1,7 +1,6 @@
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Application.Services;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services;
@@ -18,8 +17,8 @@ public class ReasoningMessageBuilderTests
         var msgs = builder.Build("merhaba", session, history: null, new VerifiedEntities());
 
         msgs.Should().HaveCount(2);
-        msgs[0].Role.Should().Be(ChatRole.System);
-        msgs[1].Role.Should().Be(ChatRole.User);
+        msgs[0].Role.Should().Be(ConversationRoles.System);
+        msgs[1].Role.Should().Be(ConversationRoles.User);
         msgs[1].Text.Should().Be("merhaba");
     }
 
@@ -28,17 +27,17 @@ public class ReasoningMessageBuilderTests
     {
         var builder = new ReasoningMessageBuilder(_prompts);
         var session = new AgentSession { SessionId = "s1" };
-        var history = new List<ChatMessage>
+        var history = new List<ConversationMessage>
         {
-            new(ChatRole.User, "geçmiş soru"),
-            new(ChatRole.Assistant, "geçmiş cevap")
+            new(ConversationRoles.User, "geçmiş soru"),
+            new(ConversationRoles.Assistant, "geçmiş cevap")
         };
 
         var msgs = builder.Build("yeni", session, history, new VerifiedEntities());
 
         msgs.Should().HaveCount(4);
-        msgs[0].Role.Should().Be(ChatRole.System);
-        msgs[1].Role.Should().Be(ChatRole.User);
+        msgs[0].Role.Should().Be(ConversationRoles.System);
+        msgs[1].Role.Should().Be(ConversationRoles.User);
         msgs[1].Text.Should().Be("geçmiş soru");
         msgs[3].Text.Should().Be("yeni");
     }

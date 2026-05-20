@@ -2,7 +2,6 @@
 
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Tests.Helpers;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using SessionState = CustomerSupportBot.Domain.Model.SessionState;
 
@@ -71,9 +70,9 @@ public class EntityVerifierTests
     public void Verify_CustomerFromHistory_UsesHistory()
     {
         var session = EmptySession();
-        var history = new List<ChatMessage>
+        var history = new List<ConversationMessage>
         {
-            new(ChatRole.User, "ben CUST-1990 m��teriyim")
+            new(ConversationRoles.User, "ben CUST-1990 müşteriyim")
         };
 
         var result = _verifier.Verify("sipari�im?", session, history);

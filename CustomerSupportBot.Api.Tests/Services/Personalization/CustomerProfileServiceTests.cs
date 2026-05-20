@@ -1,7 +1,8 @@
 using RedisOptions = CustomerSupportBot.Adapters.Redis.RedisOptions;
+using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Services.Personalization;
 using CustomerSupportBot.Api.Tests.Helpers;
-using Microsoft.Extensions.AI;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -156,28 +157,15 @@ public class CustomerProfileServiceTests
     }
 
     // ─── Test helpers ───
-    private sealed class FakeChat : IChatClient
+    private sealed class FakeChat : IGeneralChatClient
     {
         public string Reply { get; set; } = "{}";
         public Exception? ThrowOnCall { get; set; }
 
-        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+        public Task<string> CompleteAsync(IReadOnlyList<ConversationMessage> messages, CancellationToken ct = default)
         {
             if (ThrowOnCall != null) throw ThrowOnCall;
-            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, Reply)));
+            return Task.FromResult(Reply);
         }
-
-#pragma warning disable CS1998
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> messages,
-            ChatOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            yield break;
-        }
-#pragma warning restore CS1998
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-        public void Dispose() { }
     }
 }

@@ -1,27 +1,70 @@
 // Adapters.AI/Chat/ReasoningChatClient.cs
-// Reasoning modeli için ayrı IChatClient wrapper'ı.
-// Keyed service olarak kaydedilir, ReasoningAgent tarafından kullanılır.
+// Reasoning model (o-series) için IReasoningChatClient implementasyonu.
+// IChatClient'ı port sınırında sararak ConversationMessage ↔ ChatMessage dönüşümü yapar.
 
 using CustomerSupportBot.Application.Ports.Driven.AI;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Adapters.AI.Chat;
 
 /// <summary>
-/// Reasoning model (o-series) için ayrılmış IChatClient wrapper.
-/// DI'da keyed service olarak kullanılabilir — bu sayede standart chat client
-/// ile reasoning chat client ayrıştırılır.
+/// Reasoning model için IReasoningChatClient implementasyonu.
+/// ConversationMessage domain tiplerini adapte ederek Microsoft.Extensions.AI'ye iletir.
 /// </summary>
 public class ReasoningChatClient : IReasoningChatClient
 {
-    public IChatClient Client { get; }
+    private readonly IChatClient _client;
     public string ModelName { get; }
     public string ReasoningEffort { get; }
 
     public ReasoningChatClient(IChatClient client, string modelName, string reasoningEffort)
     {
-        Client = client;
+        _client = client;
         ModelName = modelName;
         ReasoningEffort = reasoningEffort;
     }
+
+    public async Task<string> CompleteAsync(
+        IReadOnlyList<ConversationMessage> messages,
+        CancellationToken ct = default)
+    {
+        var chatMessages = Map(messages);
+        var options = BuildOptions();
+        var response = await _client.GetResponseAsync(chatMessages, options, ct);
+        return response.Text ?? "";
+    }
+
+    public async IAsyncEnumerable<string> StreamAsync(
+        IReadOnlyList<ConversationMessage> messages,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        var chatMessages = Map(messages);
+        var options = BuildOptions();
+
+        await foreach (var update in _client.GetStreamingResponseAsync(chatMessages, options, ct))
+        {
+            var text = update.Text;
+            if (!string.IsNullOrEmpty(text))
+                yield return text;
+        }
+    }
+
+    private ChatOptions BuildOptions() => new()
+    {
+        AdditionalProperties = new AdditionalPropertiesDictionary
+        {
+            [WellKnown.ReasoningEffort.PropertyKey] = ReasoningEffort
+        }
+    };
+
+    internal static IList<ChatMessage> Map(IReadOnlyList<ConversationMessage> messages)
+        => messages.Select(m => new ChatMessage(RoleFor(m.Role), m.Text)).ToList();
+
+    private static ChatRole RoleFor(string role) => role switch
+    {
+        ConversationRoles.User      => ChatRole.User,
+        ConversationRoles.System    => ChatRole.System,
+        _                           => ChatRole.Assistant
+    };
 }

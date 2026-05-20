@@ -1,10 +1,9 @@
 // Endpoints/WorkflowEndpoints.cs
 // Low-Code Workflow Designer — Admin CRUD + test-run endpoint.
-// /workflows altında map edilir, RequireAuthorization("Admin") scope altında.
 
 using System.Security.Claims;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model.Workflow;
-using CustomerSupportBot.Application.Services.Workflow;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -15,55 +14,51 @@ public static class WorkflowEndpoints
         var group = app.MapGroup("/workflows");
 
         // ─── List ───
-        group.MapGet("", (IWorkflowDefinitionStore store) =>
+        group.MapGet("", (IWorkflowPort port) =>
         {
-            var all = store.GetAll();
+            var all = port.GetAll();
             return Results.Ok(new { count = all.Count, items = all });
         });
 
         // ─── Get ───
-        group.MapGet("/{id}", (string id, IWorkflowDefinitionStore store) =>
+        group.MapGet("/{id}", (string id, IWorkflowPort port) =>
         {
-            var d = store.Get(id);
+            var d = port.Get(id);
             return d is null ? Results.NotFound() : Results.Ok(d);
         });
 
         // ─── Create / Update (upsert) ───
-        group.MapPost("", (WorkflowDefinition def, IWorkflowDefinitionStore store, ClaimsPrincipal user) =>
+        group.MapPost("", (WorkflowDefinition def, IWorkflowPort port, ClaimsPrincipal user) =>
         {
             if (string.IsNullOrWhiteSpace(def.Name))
                 return Results.BadRequest(new { error = "name is required." });
 
-            var saved = store.Upsert(def, user.Identity?.Name);
+            var saved = port.Upsert(def, user.Identity?.Name);
             return Results.Created($"/workflows/{saved.Id}", saved);
         });
 
-        group.MapPut("/{id}", (string id, WorkflowDefinition def, IWorkflowDefinitionStore store, ClaimsPrincipal user) =>
+        group.MapPut("/{id}", (string id, WorkflowDefinition def, IWorkflowPort port, ClaimsPrincipal user) =>
         {
             def.Id = id;
-            var saved = store.Upsert(def, user.Identity?.Name);
+            var saved = port.Upsert(def, user.Identity?.Name);
             return Results.Ok(saved);
         });
 
         // ─── Delete ───
-        group.MapDelete("/{id}", (string id, IWorkflowDefinitionStore store) =>
+        group.MapDelete("/{id}", (string id, IWorkflowPort port) =>
         {
-            return store.Delete(id) ? Results.NoContent() : Results.NotFound();
+            return port.Delete(id) ? Results.NoContent() : Results.NotFound();
         });
 
         // ─── Test run ───
-        group.MapPost("/{id}/test", (string id, TestRunInput input,
-            IWorkflowDefinitionStore store, WorkflowExecutor executor) =>
+        group.MapPost("/{id}/test", (string id, TestRunInput input, IWorkflowPort port) =>
         {
-            var def = store.Get(id);
-            if (def is null) return Results.NotFound(new { error = "Workflow not found." });
-
-            var result = executor.Execute(def, input.Input ?? "", input.Variables);
-            return Results.Ok(result);
+            var (result, error) = port.Test(id, input.Input ?? "", input.Variables);
+            return error != null
+                ? Results.NotFound(new { error })
+                : Results.Ok(result);
         });
 
         return app;
     }
 }
-
-

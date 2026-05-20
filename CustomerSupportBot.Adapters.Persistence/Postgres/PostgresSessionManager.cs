@@ -1,6 +1,6 @@
 // Services/Persistence/PostgresSessionManager.cs
 // Hibrit cache + PostgreSQL oturum yöneticisi.
-// ISessionManager (= IConversationStore + state) implementasyonu.
+// ISessionManager implementasyonu.
 //
 // Davranış (in-memory ile aynı API ve semantik):
 //   - Cache: ConcurrentDictionary<sessionId, AgentSession> + message history.
@@ -21,7 +21,6 @@ using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
@@ -32,7 +31,7 @@ public sealed partial class PostgresSessionManager : ISessionManager
     private readonly ILogger<PostgresSessionManager> _logger;
     private readonly IAppDistributedLock _distributedLock;
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
-    private readonly ConcurrentDictionary<string, List<ChatMessage>> _messageHistory = new();
+    private readonly ConcurrentDictionary<string, List<ConversationMessage>> _messageHistory = new();
     private readonly ConcurrentDictionary<string, byte> _hydratedSessions = new();
     private readonly object _allHydrationLock = new();
     private volatile bool _allListHydrated;
@@ -172,30 +171,30 @@ public sealed partial class PostgresSessionManager : ISessionManager
         Update(session);
     }
 
-    // ─── IConversationStore ───
+    // ─── Konuşma geçmişi ───
 
-    public List<ChatMessage> GetHistory(string sessionId)
+    public List<ConversationMessage> GetHistory(string sessionId)
     {
         EnsureSessionHydrated(sessionId);
         if (_messageHistory.TryGetValue(sessionId, out var history))
         {
             lock (history)
             {
-                return new List<ChatMessage>(history);
+                return new List<ConversationMessage>(history);
             }
         }
-        return new List<ChatMessage>();
+        return new List<ConversationMessage>();
     }
 
     public void AddExchange(string sessionId, string userQuery, string assistantResponse)
     {
         EnsureSessionHydrated(sessionId);
 
-        var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ChatMessage>());
+        var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
         lock (history)
         {
-            history.Add(new ChatMessage(ChatRole.User, userQuery));
-            history.Add(new ChatMessage(ChatRole.Assistant, assistantResponse));
+            history.Add(new ConversationMessage(ConversationRoles.User, userQuery));
+            history.Add(new ConversationMessage(ConversationRoles.Assistant, assistantResponse));
         }
 
         var session = GetOrCreate(sessionId);
@@ -217,22 +216,22 @@ public sealed partial class PostgresSessionManager : ISessionManager
         if (string.IsNullOrWhiteSpace(text)) return;
         EnsureSessionHydrated(sessionId);
 
-        var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ChatMessage>());
+        var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
         bool replacedLastEmpty;
         lock (history)
         {
             replacedLastEmpty =
                 history.Count > 0
-                && history[^1].Role == ChatRole.Assistant
+                && history[^1].Role == ConversationRoles.Assistant
                 && string.IsNullOrEmpty(history[^1].Text);
 
             if (replacedLastEmpty)
             {
-                history[^1] = new ChatMessage(ChatRole.Assistant, text);
+                history[^1] = new ConversationMessage(ConversationRoles.Assistant, text);
             }
             else
             {
-                history.Add(new ChatMessage(ChatRole.Assistant, text));
+                history.Add(new ConversationMessage(ConversationRoles.Assistant, text));
             }
         }
 
@@ -275,7 +274,7 @@ public sealed partial class PostgresSessionManager : ISessionManager
         {
             var session = kvp.Value;
             var history = GetHistory(kvp.Key);
-            var firstUserMsg = history.FirstOrDefault(m => m.Role == ChatRole.User)?.Text;
+            var firstUserMsg = history.FirstOrDefault(m => m.Role == ConversationRoles.User)?.Text;
 
             result.Add(new SessionInfo
             {
@@ -452,16 +451,16 @@ public sealed partial class PostgresSessionManager : ISessionManager
             .OrderBy(m => m.Id)
             .ToListAsync();
 
-        var list = _messageHistory.GetOrAdd(sessionId, _ => new List<ChatMessage>());
+        var list = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
         lock (list)
         {
             list.Clear();
             foreach (var m in messages)
             {
                 var role = string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase)
-                    ? ChatRole.User
-                    : ChatRole.Assistant;
-                list.Add(new ChatMessage(role, m.Text));
+                    ? ConversationRoles.User
+                    : ConversationRoles.Assistant;
+                list.Add(new ConversationMessage(role, m.Text));
             }
         }
     }

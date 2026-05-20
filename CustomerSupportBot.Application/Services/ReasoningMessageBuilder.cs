@@ -3,7 +3,6 @@
 
 using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Domain.Model;
-using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Application.Services;
 
@@ -24,17 +23,17 @@ public class ReasoningMessageBuilder
     /// <summary>
     /// Reasoning çağrısı için tam mesaj listesini kurar.
     /// </summary>
-    public List<ChatMessage> Build(
+    public List<ConversationMessage> Build(
         string query,
         AgentSession session,
-        List<ChatMessage>? history,
+        List<ConversationMessage>? history,
         VerifiedEntities verified)
     {
         var systemPrompt = BuildSystemPrompt(session, verified, hasHistory: history is { Count: > 0 });
 
-        var messages = new List<ChatMessage>
+        var messages = new List<ConversationMessage>
         {
-            new(ChatRole.System, systemPrompt)
+            new(ConversationRoles.System, systemPrompt)
         };
 
         if (history is { Count: > 0 })
@@ -42,14 +41,10 @@ public class ReasoningMessageBuilder
             messages.AddRange(history);
         }
 
-        messages.Add(new ChatMessage(ChatRole.User, query));
+        messages.Add(new ConversationMessage(ConversationRoles.User, query));
         return messages;
     }
 
-    /// <summary>
-    /// Reasoning system prompt'unu render eder. Session state, history note ve
-    /// verified entity bloğunu placeholder'lara enjekte eder.
-    /// </summary>
     private string BuildSystemPrompt(AgentSession session, VerifiedEntities verified, bool hasHistory)
     {
         var stateInfo = $"CustomerId: {session.State.CustomerId ?? WellKnown.Intents.Unknown}, " +

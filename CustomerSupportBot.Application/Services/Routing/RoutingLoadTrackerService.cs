@@ -14,15 +14,15 @@ namespace CustomerSupportBot.Application.Services.Routing;
 /// </summary>
 public sealed class RoutingLoadTrackerService : IHostedService
 {
-    private readonly IEscalationRepository _escalationSink;
-    private readonly IHumanAgentRepository _agentRegistry;
+    private readonly IEscalationSink _escalationSink;
+    private readonly IHumanAgentRegistry _agentRegistry;
     private readonly ILogger<RoutingLoadTrackerService> _logger;
 
     private EventHandler<EscalationRequest>? _handler;
 
     public RoutingLoadTrackerService(
-        IEscalationRepository escalationSink,
-        IHumanAgentRepository agentRegistry,
+        IEscalationSink escalationSink,
+        IHumanAgentRegistry agentRegistry,
         ILogger<RoutingLoadTrackerService> logger)
     {
         _escalationSink = escalationSink;

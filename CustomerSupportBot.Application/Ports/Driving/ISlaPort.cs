@@ -1,0 +1,37 @@
+// Ports/Driving/ISlaPort.cs
+// PRIMARY PORT — SLA Guardian durum izleme ve olay listeleme.
+
+using CustomerSupportBot.Domain.Model;
+
+namespace CustomerSupportBot.Application.Ports.Driving;
+
+public sealed record SlaApprovalStatus(
+    int PendingCount,
+    int OldestSeconds,
+    int WarnAfterSeconds,
+    int BreachAfterSeconds,
+    string OnBreach,
+    int BreachCountRecent);
+
+public sealed record SlaEscalationStatus(
+    int OpenCount,
+    int OldestSeconds,
+    int WarnAfterSeconds,
+    int BreachAfterSeconds,
+    bool BoostPriorityOnBreach,
+    int BreachCountRecent);
+
+public sealed record SlaStatusResult(
+    bool Enabled,
+    int PollIntervalSeconds,
+    SlaApprovalStatus Approvals,
+    SlaEscalationStatus Escalations);
+
+/// <summary>
+/// SLA olay listesi ve anlık durum özeti için primary (driving) port.
+/// </summary>
+public interface ISlaPort
+{
+    IReadOnlyList<SlaEvent> GetRecentEvents(int count = 100);
+    SlaStatusResult GetStatus();
+}

@@ -64,7 +64,7 @@ public static class RedisAdapterServiceCollectionExtensions
         });
 
         // Distributed lock — Redis-backed (Medallion RedLock)
-        services.AddSingleton<IDistributedLockPort, RedisDistributedLockAdapter>();
+        services.AddSingleton<IAppDistributedLock, RedisDistributedLockAdapter>();
 
         // Message bus — Redis pub/sub (yatay ölçeklendirme)
         services.AddSingleton<IMessageBusPort, RedisMessageBusAdapter>();

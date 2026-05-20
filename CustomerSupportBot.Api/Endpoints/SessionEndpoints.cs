@@ -1,7 +1,8 @@
 // Endpoints/SessionEndpoints.cs
 // Oturum yönetimi endpoint'leri — sidebar/debug kullanımı için.
 
-using Microsoft.Extensions.AI;
+using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -10,28 +11,28 @@ public static class SessionEndpoints
     public static IEndpointRouteBuilder MapSessionEndpoints(this IEndpointRouteBuilder app)
     {
         // GET /sessions/ — Tüm oturumları listele (sidebar için)
-        app.MapGet("/sessions/", (ISessionManager sessionManager) =>
+        app.MapGet("/sessions/", (ISessionPort sessionPort) =>
         {
-            var sessions = sessionManager.GetAllSessions();
+            var sessions = sessionPort.GetAllSessions();
             return Results.Json(sessions);
         });
 
         // GET /sessions/{sessionId}/messages — Belirli oturumun mesajlarını getir
-        app.MapGet("/sessions/{sessionId}/messages", (string sessionId, ISessionManager sessionManager) =>
+        app.MapGet("/sessions/{sessionId}/messages", (string sessionId, ISessionPort sessionPort) =>
         {
-            var history = sessionManager.GetHistory(sessionId);
+            var history = sessionPort.GetHistory(sessionId);
             var messages = history.Select(m => new
             {
-                role = m.Role == ChatRole.User ? "user" : "bot",
+                role = m.Role == ConversationRoles.User ? "user" : "bot",
                 text = m.Text ?? ""
             });
             return Results.Json(messages);
         });
 
         // GET /sessions/{sessionId}/state — Oturum durumunu getir (debug/frontend için)
-        app.MapGet("/sessions/{sessionId}/state", (string sessionId, ISessionManager sessionManager) =>
+        app.MapGet("/sessions/{sessionId}/state", (string sessionId, ISessionPort sessionPort) =>
         {
-            var session = sessionManager.Get(sessionId);
+            var session = sessionPort.GetSession(sessionId);
             if (session == null)
                 return Results.NotFound();
 

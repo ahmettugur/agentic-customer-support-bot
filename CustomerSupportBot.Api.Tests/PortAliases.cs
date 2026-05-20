@@ -1,21 +1,9 @@
-// PortAliases.cs — Test projesi için Application port alias'ları
-global using IApprovalQueue           = CustomerSupportBot.Application.Ports.Driven.Persistence.IApprovalQueueRepository;
-global using IEscalationSink          = CustomerSupportBot.Application.Ports.Driven.Persistence.IEscalationRepository;
-global using IChatBridge              = CustomerSupportBot.Application.Ports.Driven.Persistence.IChatBridgeRepository;
-global using IChatModeRegistry        = CustomerSupportBot.Application.Ports.Driven.Persistence.IChatModeRepository;
-global using IReasoningTraceStore     = CustomerSupportBot.Application.Ports.Driven.Observability.IReasoningTraceRepository;
-global using IRatingStore             = CustomerSupportBot.Application.Ports.Driven.Persistence.IRatingRepository;
-global using ILessonStore             = CustomerSupportBot.Application.Ports.Driven.Persistence.ILessonRepository;
-global using ICustomerProfileStore    = CustomerSupportBot.Application.Ports.Driven.Persistence.ICustomerProfileRepository;
-global using IHumanAgentRegistry      = CustomerSupportBot.Application.Ports.Driven.Persistence.IHumanAgentRepository;
-global using IWorkflowDefinitionStore = CustomerSupportBot.Application.Ports.Driven.Persistence.IWorkflowDefinitionRepository;
-global using ISlaEventSink            = CustomerSupportBot.Application.Ports.Driven.Persistence.ISlaEventRepository;
-global using IVectorMemoryStore       = CustomerSupportBot.Application.Ports.Driven.AI.IVectorMemoryPort;
-global using IEmbeddingService        = CustomerSupportBot.Application.Ports.Driven.AI.IEmbeddingPort;
-global using IAppDistributedLock      = CustomerSupportBot.Application.Ports.Driven.Locking.IDistributedLockPort;
-global using ISessionManager          = CustomerSupportBot.Application.Ports.Driven.Persistence.ISessionRepository;
-global using IConversationStore       = CustomerSupportBot.Application.Ports.Driven.Persistence.ISessionRepository;
-global using SessionInfo              = CustomerSupportBot.Application.Ports.Driven.Persistence.SessionInfo;
+// PortAliases.cs — Test projesi
+// Driven port alias'ları kaldırıldı; namespace import'ları kalmıştır.
+
+global using CustomerSupportBot.Application.Ports.Driven.Persistence;
+global using CustomerSupportBot.Application.Ports.Driven.Observability;
+global using CustomerSupportBot.Application.Ports.Driven.Locking;
 
 // InMemory adapter alias'ları
 global using InMemoryApprovalQueue       = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryApprovalQueue;
@@ -30,7 +18,6 @@ global using InMemoryComplaintAdapter    = CustomerSupportBot.Adapters.Persisten
 global using InMemoryCustomerProfileStore = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryCustomerProfileStore;
 global using InMemorySessionManager      = CustomerSupportBot.Adapters.Persistence.InMemory.InMemorySessionManager;
 global using InMemoryHumanAgentRegistry  = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryHumanAgentRegistry;
-global using InMemoryLessonStore         = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryLessonStore;
 global using InMemoryWorkflowDefinitionStore = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryWorkflowDefinitionStore;
 global using InMemorySlaEventSink            = CustomerSupportBot.Adapters.Persistence.InMemory.InMemorySlaEventSink;
 

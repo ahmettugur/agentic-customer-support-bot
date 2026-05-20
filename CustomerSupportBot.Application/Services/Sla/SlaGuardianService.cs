@@ -64,9 +64,9 @@ public class SlaGuardianService : BackgroundService
     public void ScanOnce(SlaOptions opts)
     {
         using var scope = _services.CreateScope();
-        var sink = scope.ServiceProvider.GetRequiredService<ISlaEventRepository>();
-        var approvals = scope.ServiceProvider.GetRequiredService<IApprovalQueueRepository>();
-        var escalations = scope.ServiceProvider.GetRequiredService<IEscalationRepository>();
+        var sink = scope.ServiceProvider.GetRequiredService<ISlaEventSink>();
+        var approvals = scope.ServiceProvider.GetRequiredService<IApprovalQueue>();
+        var escalations = scope.ServiceProvider.GetRequiredService<IEscalationSink>();
 
         var now = DateTime.UtcNow;
 
@@ -95,7 +95,7 @@ public class SlaGuardianService : BackgroundService
     }
 
     private void ApplyApprovalBreach(
-        IApprovalQueueRepository queue,
+        IApprovalQueue queue,
         ApprovalRequest req,
         SlaBreachAction action)
     {

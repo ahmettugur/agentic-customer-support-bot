@@ -14,14 +14,14 @@ namespace CustomerSupportBot.Application.Services;
 /// </summary>
 public sealed class EscalationPortService : IEscalationPort
 {
-    private readonly IEscalationRepository _escalations;
+    private readonly IEscalationSink _escalations;
     private readonly ILogger<EscalationPortService> _logger;
 
     public event EventHandler<EscalationRequest>? RequestCreated;
     public event EventHandler<EscalationRequest>? RequestDecided;
 
     public EscalationPortService(
-        IEscalationRepository escalations,
+        IEscalationSink escalations,
         ILogger<EscalationPortService> logger)
     {
         _escalations = escalations;

@@ -1,8 +1,8 @@
 // Ports/Driving/ISessionPort.cs
 // PRIMARY PORT — Oturum yönetimi (SessionEndpoints, AdminEndpoints tarafından kullanılır).
 
+using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Domain.Model;
-using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Application.Ports.Driving;
 
@@ -14,7 +14,8 @@ public interface ISessionPort
     AgentSession GetOrCreateSession(string? sessionId);
     AgentSession? GetSession(string sessionId);
     void UpdateSession(AgentSession session);
-    List<ChatMessage> GetHistory(string sessionId);
+    IReadOnlyList<SessionInfo> GetAllSessions();
+    List<ConversationMessage> GetHistory(string sessionId);
     void AddExchange(string sessionId, string userMessage, string botResponse);
     void ExtractAndUpdateState(string sessionId, string userMessage, string botResponse);
     Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default);

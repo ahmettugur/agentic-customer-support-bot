@@ -157,7 +157,7 @@ public class CustomerSupportTeam : IAgentTeamPort
 
     public async Task<string> RunAsync(
         string query,
-        List<ChatMessage>? conversationHistory = null,
+        List<ConversationMessage>? conversationHistory = null,
         AgentSession? session = null,
         ReasoningResult? reasoning = null)
     {
@@ -201,7 +201,7 @@ public class CustomerSupportTeam : IAgentTeamPort
 
     public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(
         string query,
-        List<ChatMessage>? conversationHistory = null,
+        List<ConversationMessage>? conversationHistory = null,
         AgentSession? session = null,
         ReasoningResult? reasoning = null,
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -461,7 +461,7 @@ public class CustomerSupportTeam : IAgentTeamPort
 
     private async Task<List<ChatMessage>> BuildWorkflowMessagesAsync(
         string query,
-        List<ChatMessage>? conversationHistory,
+        List<ConversationMessage>? conversationHistory,
         AgentSession? session,
         ReasoningResult? reasoning)
     {
@@ -495,7 +495,7 @@ public class CustomerSupportTeam : IAgentTeamPort
         }
 
         if (conversationHistory is { Count: > 0 })
-            messages.AddRange(conversationHistory);
+            messages.AddRange(conversationHistory.Select(m => new ChatMessage(ToChatRole(m.Role), m.Text)));
 
         if (session?.State.ForceReplanNextTurn == true)
         {
@@ -578,16 +578,16 @@ public class CustomerSupportTeam : IAgentTeamPort
 
     private async Task<string> RunDecomposedAsync(
         string query,
-        List<ChatMessage>? conversationHistory,
+        List<ConversationMessage>? conversationHistory,
         AgentSession? session,
         ReasoningResult reasoning)
     {
         var parts = new List<string>();
         var runningHistory = conversationHistory != null
-            ? new List<ChatMessage>(conversationHistory)
-            : new List<ChatMessage>();
+            ? new List<ConversationMessage>(conversationHistory)
+            : new List<ConversationMessage>();
 
-        runningHistory.Add(new ChatMessage(ChatRole.User, query));
+        runningHistory.Add(new ConversationMessage(ConversationRoles.User, query));
 
         var groups = SubTaskOrchestrator.Partition(reasoning.SubTasks, _parallelOptions);
         var collected = new SortedDictionary<int, string>();
@@ -619,9 +619,9 @@ public class CustomerSupportTeam : IAgentTeamPort
                 foreach (var (sub, resp) in results.OrderBy(t => t.sub.Order))
                 {
                     collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, resp);
-                    runningHistory.Add(new ChatMessage(ChatRole.User,
+                    runningHistory.Add(new ConversationMessage(ConversationRoles.User,
                         SubTaskOrchestrator.FormatSubTaskQuery(sub)));
-                    runningHistory.Add(new ChatMessage(ChatRole.Assistant, resp));
+                    runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, resp));
                 }
             }
             else
@@ -633,8 +633,8 @@ public class CustomerSupportTeam : IAgentTeamPort
                     var subResp = await RunAsync(subQuery, runningHistory, session, subReasoning)
                         .ConfigureAwait(false);
                     collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, subResp);
-                    runningHistory.Add(new ChatMessage(ChatRole.User, subQuery));
-                    runningHistory.Add(new ChatMessage(ChatRole.Assistant, subResp));
+                    runningHistory.Add(new ConversationMessage(ConversationRoles.User, subQuery));
+                    runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, subResp));
                 }
             }
         }
@@ -644,15 +644,15 @@ public class CustomerSupportTeam : IAgentTeamPort
 
     private async IAsyncEnumerable<StreamEvent> RunDecomposedStreamingAsync(
         string query,
-        List<ChatMessage>? conversationHistory,
+        List<ConversationMessage>? conversationHistory,
         AgentSession? session,
         ReasoningResult reasoning,
         [EnumeratorCancellation] CancellationToken ct)
     {
         var runningHistory = conversationHistory != null
-            ? new List<ChatMessage>(conversationHistory)
-            : new List<ChatMessage>();
-        runningHistory.Add(new ChatMessage(ChatRole.User, query));
+            ? new List<ConversationMessage>(conversationHistory)
+            : new List<ConversationMessage>();
+        runningHistory.Add(new ConversationMessage(ConversationRoles.User, query));
 
         var collected = new SortedDictionary<int, string>();
         var total = reasoning.SubTasks.Count;
@@ -711,9 +711,9 @@ public class CustomerSupportTeam : IAgentTeamPort
                 foreach (var (sub, resp) in results.OrderBy(t => t.sub.Order))
                 {
                     collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, resp);
-                    runningHistory.Add(new ChatMessage(ChatRole.User,
+                    runningHistory.Add(new ConversationMessage(ConversationRoles.User,
                         SubTaskOrchestrator.FormatSubTaskQuery(sub)));
-                    runningHistory.Add(new ChatMessage(ChatRole.Assistant, resp));
+                    runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, resp));
 
                     yield return new StreamEvent(StreamEventTypes.Agent,
                         new { name = $"SubTask#{sub.Order}", status = "done", order = sub.Order });
@@ -765,8 +765,8 @@ public class CustomerSupportTeam : IAgentTeamPort
 
                     var subResponse = subResponseBuilder.ToString().Trim();
                     collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, subResponse);
-                    runningHistory.Add(new ChatMessage(ChatRole.User, subQuery));
-                    runningHistory.Add(new ChatMessage(ChatRole.Assistant, subResponse));
+                    runningHistory.Add(new ConversationMessage(ConversationRoles.User, subQuery));
+                    runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, subResponse));
 
                     yield return new StreamEvent(StreamEventTypes.Agent,
                         new { name = $"SubTask#{sub.Order}", status = "done", order = sub.Order });
@@ -839,4 +839,11 @@ public class CustomerSupportTeam : IAgentTeamPort
             await enumerator.DisposeAsync();
         }
     }
+
+    private static ChatRole ToChatRole(string role) => role switch
+    {
+        ConversationRoles.User   => ChatRole.User,
+        ConversationRoles.System => ChatRole.System,
+        _                        => ChatRole.Assistant
+    };
 }

@@ -1,4 +1,4 @@
-// Ports/Driven/Persistence/ICustomerProfileRepository.cs
+// Ports/Driven/Persistence/ICustomerProfileStore.cs
 // SECONDARY PORT — Müşteri profili kalıcılığı.
 
 using CustomerSupportBot.Domain.Model.Memory;
@@ -9,7 +9,7 @@ namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
 /// Per-customer profil verisi için secondary port.
 /// Adaptörler: PostgresCustomerProfileStore, InMemoryCustomerProfileStore.
 /// </summary>
-public interface ICustomerProfileRepository
+public interface ICustomerProfileStore
 {
     /// <summary>Var olan profili döndürür, yoksa null.</summary>
     CustomerProfile? Get(string customerId);

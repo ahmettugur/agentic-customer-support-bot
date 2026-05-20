@@ -19,10 +19,11 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driven.Locking;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services.Personalization;
@@ -33,16 +34,16 @@ public sealed partial class CustomerProfileService
     private const int MaxRecentRatings = 10;
     private const int MaxIntents = 20;
 
-    private readonly ICustomerProfileRepository _store;
-    private readonly IChatClient _chatClient;
-    private readonly IDistributedLockPort _distributedLock;
+    private readonly ICustomerProfileStore _store;
+    private readonly IGeneralChatClient _chatClient;
+    private readonly IAppDistributedLock _distributedLock;
     private readonly IProductCatalogRepository _products;
     private readonly ILogger<CustomerProfileService> _logger;
 
     public CustomerProfileService(
-        ICustomerProfileRepository store,
-        IChatClient chatClient,
-        IDistributedLockPort distributedLock,
+        ICustomerProfileStore store,
+        IGeneralChatClient chatClient,
+        IAppDistributedLock distributedLock,
         IProductCatalogRepository products,
         ILogger<CustomerProfileService> logger)
     {
@@ -140,19 +141,17 @@ public sealed partial class CustomerProfileService
         var prompt = BuildConsolidatePrompt(profile);
         try
         {
-            var resp = await _chatClient.GetResponseAsync(
-                new[]
-                {
-                    new ChatMessage(ChatRole.System,
-                        "Sen müşteri profili özetleyicisisin. SADECE geçerli JSON dön: " +
-                        "{\"summary\":\"...\",\"preferredTone\":\"formal|casual|concise|verbose|neutral\"}. " +
-                        "Summary 1-2 cümle, Türkçe."),
-                    new ChatMessage(ChatRole.User, prompt)
-                },
-                options: null,
-                cancellationToken: ct);
+            var messages = new List<ConversationMessage>
+            {
+                new(ConversationRoles.System,
+                    "Sen müşteri profili özetleyicisisin. SADECE geçerli JSON dön: " +
+                    "{\"summary\":\"...\",\"preferredTone\":\"formal|casual|concise|verbose|neutral\"}. " +
+                    "Summary 1-2 cümle, Türkçe."),
+                new(ConversationRoles.User, prompt)
+            };
+            var responseText = await _chatClient.CompleteAsync(messages, ct);
 
-            var json = ExtractJson(resp.Text ?? "");
+            var json = ExtractJson(responseText);
             if (string.IsNullOrWhiteSpace(json))
             {
                 _logger.LogWarning("Profil consolidate: LLM JSON dönmedi. customerId={Id}", customerId);

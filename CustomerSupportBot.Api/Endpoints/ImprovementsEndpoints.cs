@@ -1,13 +1,7 @@
 // Endpoints/ImprovementsEndpoints.cs
 // Self-improving loop için admin endpoint'leri.
-//   POST /improvements/mine         — düşük puanlı / hatalı trace'leri tara, lesson aday üret
-//   GET  /improvements              — tüm lesson'lar (status filter optional)
-//   GET  /improvements/proposed     — sadece pending
-//   POST /improvements/{id}/approve — approve + Qdrant'a yaz
-//   POST /improvements/{id}/reject  — reddet
-//   GET  /improvements/{id}         — tek lesson detayı
 
-using CustomerSupportBot.Application.Services.Improvement;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Improvement;
 
@@ -19,33 +13,29 @@ public static class ImprovementsEndpoints
     {
         var group = app.MapGroup("/improvements");
 
-        group.MapPost("/mine", async (LessonMiner miner, CancellationToken ct) =>
+        group.MapPost("/mine", async (IImprovementsPort port, CancellationToken ct) =>
+            Results.Json(await port.MineAsync(ct)));
+
+        group.MapGet("/", (IImprovementsPort port, string? status = null) =>
         {
-            var report = await miner.MineAsync(ct);
-            return Results.Json(report);
+            LessonStatus? st = Enum.TryParse<LessonStatus>(status, ignoreCase: true, out var parsed)
+                ? parsed : null;
+            return Results.Json(port.GetLessons(st));
         });
 
-        group.MapGet("/", (ILessonStore store, string? status = null) =>
-        {
-            if (!string.IsNullOrWhiteSpace(status) &&
-                Enum.TryParse<LessonStatus>(status, ignoreCase: true, out var st))
-                return Results.Json(store.GetByStatus(st));
-            return Results.Json(store.GetAll());
-        });
+        group.MapGet("/proposed", (IImprovementsPort port) =>
+            Results.Json(port.GetLessons(LessonStatus.Proposed)));
 
-        group.MapGet("/proposed", (ILessonStore store) =>
-            Results.Json(store.GetByStatus(LessonStatus.Proposed)));
-
-        group.MapGet("/{id}", (string id, ILessonStore store) =>
+        group.MapGet("/{id}", (string id, IImprovementsPort port) =>
         {
-            var l = store.Get(id);
+            var l = port.GetLesson(id);
             return l == null ? Results.NotFound() : Results.Json(l);
         });
 
         group.MapPost("/{id}/approve",
-            async (string id, ImprovementDecision? body, LessonMiner miner, CancellationToken ct) =>
+            async (string id, ImprovementDecision? body, IImprovementsPort port, CancellationToken ct) =>
         {
-            var ok = await miner.ApproveAsync(id,
+            var ok = await port.ApproveAsync(id,
                 body?.DecidedBy ?? WellKnown.Defaults.Admin, body?.Reason, ct);
             return ok
                 ? Results.Json(new { id, status = "approved" })
@@ -53,9 +43,9 @@ public static class ImprovementsEndpoints
         });
 
         group.MapPost("/{id}/reject",
-            (string id, ImprovementDecision? body, LessonMiner miner) =>
+            (string id, ImprovementDecision? body, IImprovementsPort port) =>
         {
-            var ok = miner.Reject(id, body?.DecidedBy ?? WellKnown.Defaults.Admin, body?.Reason);
+            var ok = port.Reject(id, body?.DecidedBy ?? WellKnown.Defaults.Admin, body?.Reason);
             return ok
                 ? Results.Json(new { id, status = "rejected" })
                 : Results.NotFound(new { error = "Lesson bulunamadı veya zaten karara bağlanmış." });
@@ -64,4 +54,3 @@ public static class ImprovementsEndpoints
         return app;
     }
 }
-

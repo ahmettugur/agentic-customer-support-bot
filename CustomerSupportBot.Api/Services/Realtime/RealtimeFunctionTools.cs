@@ -12,6 +12,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Services.Realtime;

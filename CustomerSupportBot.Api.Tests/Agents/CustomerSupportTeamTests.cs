@@ -137,10 +137,10 @@ public class CustomerSupportTeamTests
             "BuildWorkflowMessagesAsync", BindingFlags.Instance | BindingFlags.NonPublic);
         if (method == null) return;
 
-        var history = new List<ChatMessage>
+        var history = new List<ConversationMessage>
         {
-            new(ChatRole.User, "�nceki mesaj"),
-            new(ChatRole.Assistant, "�nceki yan�t"),
+            new(ConversationRoles.User, "�nceki mesaj"),
+            new(ConversationRoles.Assistant, "�nceki yan�t"),
         };
         var task = (Task)method.Invoke(team, ["�imdiki", history, null, null])!;
         await task.ConfigureAwait(true);

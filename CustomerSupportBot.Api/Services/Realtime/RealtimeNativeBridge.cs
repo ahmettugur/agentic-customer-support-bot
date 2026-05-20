@@ -21,6 +21,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CustomerSupportBot.Adapters.AI;
+using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Options;
 

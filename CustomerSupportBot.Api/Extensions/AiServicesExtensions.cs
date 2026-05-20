@@ -40,6 +40,9 @@ public static class AiServicesExtensions
         services.AddSingleton<IReasoningChatClient>(sp =>
             sp.GetRequiredService<ReasoningChatClient>());
 
+        services.AddSingleton<IGeneralChatClient>(sp =>
+            new GeneralChatClientAdapter(sp.GetRequiredService<IChatClient>()));
+
         return services;
     }
 

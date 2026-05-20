@@ -1,6 +1,5 @@
-// Ports/Driven/Persistence/IEscalationRepository.cs
+// Ports/Driven/Persistence/IEscalationSink.cs
 // SECONDARY PORT — Eskalasyon kalıcılığı.
-// Mevcut IEscalationSink interface'i bu port'a taşınır.
 
 using CustomerSupportBot.Domain.Model;
 
@@ -10,7 +9,7 @@ namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
 /// Eskalasyon kayıtları için secondary port.
 /// Adaptörler: PostgresEscalationSink, InMemoryEscalationSink.
 /// </summary>
-public interface IEscalationRepository
+public interface IEscalationSink
 {
     EscalationRequest Create(EscalationRequest request);
     IReadOnlyList<EscalationRequest> GetOpen();

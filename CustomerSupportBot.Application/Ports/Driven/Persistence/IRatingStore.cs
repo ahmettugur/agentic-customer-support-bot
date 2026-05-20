@@ -1,4 +1,4 @@
-// Ports/Driven/Persistence/IRatingRepository.cs
+// Ports/Driven/Persistence/IRatingStore.cs
 // SECONDARY PORT — Konuşma değerlendirme kalıcılığı.
 
 using CustomerSupportBot.Domain.Model;
@@ -9,7 +9,7 @@ namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
 /// Müşteri geri bildirimi (1-5 yıldız + yorum) depolama arayüzü.
 /// Adaptörler: PostgresRatingStore, InMemoryRatingStore.
 /// </summary>
-public interface IRatingRepository
+public interface IRatingStore
 {
     /// <summary>Yeni bir değerlendirme kaydeder. Session başına tek rating.</summary>
     ConversationRating Submit(string sessionId, int stars, string? feedback);

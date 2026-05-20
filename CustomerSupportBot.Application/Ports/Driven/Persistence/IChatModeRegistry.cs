@@ -1,6 +1,5 @@
-// Ports/Driven/Persistence/IChatModeRepository.cs
+// Ports/Driven/Persistence/IChatModeRegistry.cs
 // SECONDARY PORT — Session chat modu (Bot | Human) yönetimi.
-// Mevcut IChatModeRegistry interface'i bu port'a taşınır.
 
 using CustomerSupportBot.Domain.Model;
 
@@ -10,7 +9,7 @@ namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
 /// Session başına chat modunu tutan secondary port.
 /// Adaptörler: PostgresChatModeRegistry, InMemoryChatModeRegistry.
 /// </summary>
-public interface IChatModeRepository
+public interface IChatModeRegistry
 {
     ChatMode GetMode(string sessionId);
     ChatSessionState? GetState(string sessionId);

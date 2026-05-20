@@ -34,6 +34,12 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<IApprovalPort, ApprovalPortService>();
         services.AddScoped<IEscalationPort, EscalationPortService>();
         services.AddScoped<IAnalyticsPort, AnalyticsPortService>();
+        services.AddSingleton<ITracePort, TracePortService>();
+        services.AddSingleton<IHumanAgentPort, HumanAgentPortService>();
+        services.AddSingleton<IImprovementsPort, ImprovementsPortService>();
+        services.AddSingleton<IPersonalizationPort, PersonalizationPortService>();
+        services.AddSingleton<IWorkflowPort, WorkflowPortService>();
+        services.AddSingleton<ISlaPort, SlaPortService>();
 
         // Use case servisleri
         services.AddSingleton<CustomerSupportToolsService>();
@@ -55,7 +61,7 @@ public static class ApplicationServiceCollectionExtensions
             if (mem == null) return new NoopContextProvider();
             return new SemanticMemoryContextProvider(
                 mem,
-                sp.GetRequiredService<ISessionRepository>(),
+                sp.GetRequiredService<ISessionManager>(),
                 sp.GetRequiredService<ILogger<SemanticMemoryContextProvider>>());
         });
         services.AddSingleton<ContextPipeline>();
@@ -97,6 +103,11 @@ public static class ApplicationServiceCollectionExtensions
             services.AddSingleton<SemanticMemoryService>();
             services.AddSingleton<KnowledgeBaseIngestor>();
             services.AddHostedService(sp => sp.GetRequiredService<KnowledgeBaseIngestor>());
+            services.AddSingleton<IMemoryPort, MemoryPortService>();
+        }
+        else
+        {
+            services.AddSingleton<IMemoryPort, DisabledMemoryPort>();
         }
 
         // ─── SLA / Response Time Guardian ───

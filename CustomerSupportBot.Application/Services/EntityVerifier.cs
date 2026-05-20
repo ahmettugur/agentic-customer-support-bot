@@ -14,7 +14,6 @@ using CustomerSupportBot.Domain.Services;
 // Tahmin üzerinden değil, grounded doğrulama üzerinden verir.
 
 using CustomerSupportBot.Domain.Model;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services;
@@ -49,7 +48,7 @@ public class EntityVerifier
     public VerifiedEntities Verify(
         string query,
         AgentSession session,
-        List<ChatMessage>? history = null)
+        List<ConversationMessage>? history = null)
     {
         var result = new VerifiedEntities();
 
@@ -263,7 +262,7 @@ public class EntityVerifier
     /// Konuşma geçmişindeki (tüm turlar) mesajları tarayarak ID'leri çıkarır.
     /// En son turdan başlar — yakın bağlam önceliklidir.
     /// </summary>
-    private static ExtractedIds ExtractFromHistory(List<ChatMessage>? history)
+    private static ExtractedIds ExtractFromHistory(List<ConversationMessage>? history)
     {
         var result = new ExtractedIds();
         if (history is null || history.Count == 0) return result;

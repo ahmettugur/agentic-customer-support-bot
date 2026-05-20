@@ -12,14 +12,14 @@ public class EvaluationRunner
 {
     private readonly IAgentTeamPort _team;
     private readonly IReasoningPort _reasoningService;
-    private readonly ISessionRepository _sessionManager;
-    private readonly IReasoningTraceRepository _traceStore;
+    private readonly ISessionManager _sessionManager;
+    private readonly IReasoningTraceStore _traceStore;
 
     public EvaluationRunner(
         IAgentTeamPort team,
         IReasoningPort reasoningService,
-        ISessionRepository sessionManager,
-        IReasoningTraceRepository traceStore)
+        ISessionManager sessionManager,
+        IReasoningTraceStore traceStore)
     {
         _team = team;
         _reasoningService = reasoningService;

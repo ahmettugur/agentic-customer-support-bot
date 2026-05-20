@@ -25,7 +25,7 @@ public static class SlaPolicyEvaluator
     public static ApprovalEvaluation EvaluateApproval(
         ApprovalRequest request,
         ApprovalSlaOptions options,
-        ISlaEventRepository sink,
+        ISlaEventSink sink,
         DateTime now)
     {
         var age = (int)Math.Floor((now - request.RequestedAt).TotalSeconds);
@@ -71,7 +71,7 @@ public static class SlaPolicyEvaluator
     public static EscalationEvaluation EvaluateEscalation(
         EscalationRequest request,
         EscalationSlaOptions options,
-        ISlaEventRepository sink,
+        ISlaEventSink sink,
         DateTime now)
     {
         var age = (int)Math.Floor((now - request.CreatedAt).TotalSeconds);

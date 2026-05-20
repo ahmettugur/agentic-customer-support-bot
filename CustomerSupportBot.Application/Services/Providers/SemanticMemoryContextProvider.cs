@@ -8,7 +8,6 @@ using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services.Providers;
@@ -16,7 +15,7 @@ namespace CustomerSupportBot.Application.Services.Providers;
 public sealed class SemanticMemoryContextProvider : IContextProvider
 {
     private readonly SemanticMemoryService _memory;
-    private readonly ISessionRepository _sessionRepository;
+    private readonly ISessionManager _sessionRepository;
     private readonly ILogger<SemanticMemoryContextProvider> _logger;
 
     public string Name => "SemanticMemory";
@@ -24,7 +23,7 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
 
     public SemanticMemoryContextProvider(
         SemanticMemoryService memory,
-        ISessionRepository sessionRepository,
+        ISessionManager sessionRepository,
         ILogger<SemanticMemoryContextProvider> logger)
     {
         _memory = memory;
@@ -37,7 +36,7 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
         if (!_memory.Enabled) return null;
 
         var history = _sessionRepository.GetHistory(session.SessionId);
-        var lastUserMsg = history.LastOrDefault(m => m.Role == ChatRole.User);
+        var lastUserMsg = history.LastOrDefault(m => m.Role == ConversationRoles.User);
         var query = lastUserMsg?.Text;
         if (string.IsNullOrWhiteSpace(query)) return null;
 

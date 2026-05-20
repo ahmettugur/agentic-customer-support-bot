@@ -6,7 +6,6 @@ using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services;
@@ -18,16 +17,16 @@ namespace CustomerSupportBot.Application.Services;
 /// </summary>
 public sealed class ReplanService : IReplanPort
 {
-    private readonly ISessionRepository _sessions;
-    private readonly IChatBridgeRepository _bridge;
+    private readonly ISessionManager _sessions;
+    private readonly IChatBridge _bridge;
     private readonly IAgentTeamPort _team;
     private readonly IReasoningPort _reasoning;
     private readonly IApprovalContextAccessor _approvalContext;
     private readonly ILogger<ReplanService> _logger;
 
     public ReplanService(
-        ISessionRepository sessions,
-        IChatBridgeRepository bridge,
+        ISessionManager sessions,
+        IChatBridge bridge,
         IAgentTeamPort team,
         IReasoningPort reasoning,
         IApprovalContextAccessor approvalContext,
@@ -49,7 +48,7 @@ public sealed class ReplanService : IReplanPort
             if (session == null) return;
 
             var history = _sessions.GetHistory(sessionId);
-            var lastUserQuery = history.LastOrDefault(m => m.Role == ChatRole.User)?.Text;
+            var lastUserQuery = history.LastOrDefault(m => m.Role == ConversationRoles.User)?.Text;
             if (string.IsNullOrWhiteSpace(lastUserQuery))
                 return;
 

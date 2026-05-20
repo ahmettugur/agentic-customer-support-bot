@@ -3,9 +3,9 @@
 
 using System.Text;
 using CustomerSupportBot.Application.Ports.Driven;
+using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Domain.Model;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services.Providers;
@@ -13,12 +13,11 @@ namespace CustomerSupportBot.Application.Services.Providers;
 /// <summary>
 /// Konuşma geçmişi belirli bir eşiği aştığında, eski mesajları
 /// LLM kullanarak özetler ve özet + son mesajları bağlam olarak sunar.
-/// Bu sayede token limiti aşılmadan uzun konuşmalar sürdürülebilir.
 /// </summary>
 public class ConversationSummaryProvider : IContextProvider
 {
-    private readonly IChatClient _chatClient;
-    private readonly ISessionRepository _sessionRepository;
+    private readonly IGeneralChatClient _chatClient;
+    private readonly ISessionManager _sessionRepository;
     private readonly ILogger<ConversationSummaryProvider> _logger;
 
     private const int SummaryThreshold = 8;
@@ -28,8 +27,8 @@ public class ConversationSummaryProvider : IContextProvider
     public int Order => 5;
 
     public ConversationSummaryProvider(
-        IChatClient chatClient,
-        ISessionRepository sessionRepository,
+        IGeneralChatClient chatClient,
+        ISessionManager sessionRepository,
         ILogger<ConversationSummaryProvider> logger)
     {
         _chatClient = chatClient;
@@ -72,26 +71,25 @@ public class ConversationSummaryProvider : IContextProvider
         }
     }
 
-    private async Task<string> SummarizeAsync(List<ChatMessage> messages)
+    private async Task<string> SummarizeAsync(List<ConversationMessage> messages)
     {
         var conversationText = new StringBuilder();
         foreach (var msg in messages)
         {
-            var role = msg.Role == ChatRole.User ? "Müşteri" : "Asistan";
+            var role = msg.Role == ConversationRoles.User ? "Müşteri" : "Asistan";
             conversationText.AppendLine($"{role}: {msg.Text}");
         }
 
-        var prompt = new List<ChatMessage>
+        var prompt = new List<ConversationMessage>
         {
-            new(ChatRole.System,
+            new(ConversationRoles.System,
                 "Aşağıdaki müşteri destek konuşmasını kısa ve öz bir şekilde özetle. " +
                 "Önemli bilgileri koru: müşteri kimliği, sipariş numaraları, yapılan işlemler, " +
                 "çözülmemiş sorunlar. Türkçe yaz. Maksimum 150 kelime."),
-            new(ChatRole.User, conversationText.ToString())
+            new(ConversationRoles.User, conversationText.ToString())
         };
 
-        var response = await _chatClient.GetResponseAsync(prompt);
-        return response.Text ?? "";
+        return await _chatClient.CompleteAsync(prompt);
     }
 
     private static string FormatSummaryContext(string summary)

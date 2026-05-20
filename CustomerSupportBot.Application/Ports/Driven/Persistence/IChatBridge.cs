@@ -1,6 +1,5 @@
-// Ports/Driven/Persistence/IChatBridgeRepository.cs
+// Ports/Driven/Persistence/IChatBridge.cs
 // SECONDARY PORT — HITL Live Takeover mesaj köprüsü.
-// Mevcut IChatBridge interface'i bu port'a taşınır.
 
 using CustomerSupportBot.Domain.Model;
 
@@ -11,7 +10,7 @@ namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
 /// User ↔ Admin arası mesaj köprüsü.
 /// Adaptörler: PostgresChatBridge, InMemoryChatBridge.
 /// </summary>
-public interface IChatBridgeRepository
+public interface IChatBridge
 {
     void PublishUserMessage(string sessionId, string text);
     void PublishAdminMessage(string sessionId, string humanAgent, string text);

@@ -1,6 +1,6 @@
 // Adapters.Redis/Locking/RedisDistributedLockAdapter.cs
-// DRIVEN ADAPTER — IDistributedLockPort → Redis (Medallion RedLock) implementasyonu.
-// Core bu adapter'ı bilmez; sadece IDistributedLockPort'a bağımlıdır.
+// DRIVEN ADAPTER — IAppDistributedLock → Redis (Medallion RedLock) implementasyonu.
+// Core bu adapter'ı bilmez; sadece IAppDistributedLock'a bağımlıdır.
 
 using CustomerSupportBot.Application.Ports.Driven.Locking;
 using Medallion.Threading.Redis;
@@ -13,7 +13,7 @@ namespace CustomerSupportBot.Adapters.Redis.Locking;
 /// Redis tabanlı dağıtık kilit adapter'ı.
 /// Medallion.Threading.Redis (RedLock algoritması) kullanır.
 /// </summary>
-public sealed class RedisDistributedLockAdapter : IDistributedLockPort
+public sealed class RedisDistributedLockAdapter : IAppDistributedLock
 {
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisDistributedLockAdapter> _logger;

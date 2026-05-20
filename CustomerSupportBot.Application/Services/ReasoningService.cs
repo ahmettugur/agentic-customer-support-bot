@@ -1,7 +1,5 @@
 // Application/Services/ReasoningService.cs
 // Kullanıcı sorgusu için açık (explicit) reasoning adımları üretir.
-// ReasoningAgent rolünü workflow dışında çalıştırır — böylece group chat
-// akışı bozulmaz ve reasoning çıktısı bağımsız olarak kullanıcıya sunulabilir.
 
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -10,7 +8,6 @@ using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services;
@@ -18,7 +15,6 @@ namespace CustomerSupportBot.Application.Services;
 /// <summary>
 /// Reasoning adımlarını üretir ve yapılandırılmış formatta döner.
 /// Group chat workflow'dan bağımsız çalışır — önce reasoning, sonra ana workflow.
-/// Mesaj kurma, parse ve sanity check ayrı sınıflara delege edilir.
 /// </summary>
 public class ReasoningService : IReasoningPort
 {
@@ -42,13 +38,10 @@ public class ReasoningService : IReasoningPort
         _messageBuilder = new ReasoningMessageBuilder(prompts);
     }
 
-    /// <summary>
-    /// Verilen sorgu için reasoning üretir. Tek seferlik (non-streaming) çağrı.
-    /// </summary>
     public async Task<ReasoningResult> ReasonAsync(
         string query,
         AgentSession session,
-        List<ChatMessage>? history = null,
+        List<ConversationMessage>? history = null,
         CancellationToken ct = default)
     {
         var verified = _entityVerifier.Verify(query, session, history);
@@ -56,22 +49,9 @@ public class ReasoningService : IReasoningPort
 
         try
         {
-            var options = new ChatOptions
-            {
-                AdditionalProperties = new AdditionalPropertiesDictionary
-                {
-                    [WellKnown.ReasoningEffort.PropertyKey] = _reasoningClient.ReasoningEffort
-                }
-            };
-
-            var response = await _reasoningClient.Client.GetResponseAsync(
-                messages, options, ct);
-
-            var text = response.Text ?? "";
+            var text = await _reasoningClient.CompleteAsync(messages, ct);
             var result = ReasoningResultParser.Parse(text);
-
             result.SanityIssues = _sanityChecker.Check(result, verified);
-
             return result;
         }
         catch (Exception ex)
@@ -90,14 +70,10 @@ public class ReasoningService : IReasoningPort
         }
     }
 
-    /// <summary>
-    /// Reasoning'i streaming olarak üretir ve <see cref="StreamEvent"/> dizisi döner.
-    /// Token'lar geldikçe reasoning_delta yayınlanır, sonunda reasoning_complete döner.
-    /// </summary>
     public async IAsyncEnumerable<StreamEvent> ReasonStreamingAsync(
         string query,
         AgentSession session,
-        List<ChatMessage>? history = null,
+        List<ConversationMessage>? history = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         yield return new StreamEvent(StreamEventTypes.ReasoningStart, null);
@@ -105,21 +81,13 @@ public class ReasoningService : IReasoningPort
         var verified = _entityVerifier.Verify(query, session, history);
         var messages = _messageBuilder.Build(query, session, history, verified);
 
-        var options = new ChatOptions
-        {
-            AdditionalProperties = new AdditionalPropertiesDictionary
-            {
-                [WellKnown.ReasoningEffort.PropertyKey] = _reasoningClient.ReasoningEffort
-            }
-        };
-
         var buffer = new StringBuilder();
         string? streamError = null;
 
-        IAsyncEnumerable<ChatResponseUpdate>? stream = null;
+        IAsyncEnumerable<string>? stream = null;
         try
         {
-            stream = _reasoningClient.Client.GetStreamingResponseAsync(messages, options, ct);
+            stream = _reasoningClient.StreamAsync(messages, ct);
         }
         catch (Exception ex)
         {
@@ -133,38 +101,32 @@ public class ReasoningService : IReasoningPort
             var lastEmit = DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(100);
             var minInterval = TimeSpan.FromMilliseconds(20);
 
-            await foreach (var update in EnumerateSafely(stream, ct))
+            await foreach (var (chunk, error) in EnumerateSafely(stream, ct))
             {
-                if (update.Error != null)
+                if (error != null)
                 {
-                    streamError = update.Error;
+                    streamError = error;
                     break;
                 }
 
-                var text = update.Text;
-                if (string.IsNullOrEmpty(text)) continue;
+                if (string.IsNullOrEmpty(chunk)) continue;
 
-                buffer.Append(text);
-                pendingChunks.Append(text);
+                buffer.Append(chunk);
+                pendingChunks.Append(chunk);
 
                 var elapsed = DateTimeOffset.UtcNow - lastEmit;
                 if (elapsed >= minInterval)
                 {
                     var chunkText = pendingChunks.ToString();
                     pendingChunks.Clear();
-                    yield return new StreamEvent(StreamEventTypes.ReasoningDelta,
-                        new { text = chunkText });
+                    yield return new StreamEvent(StreamEventTypes.ReasoningDelta, new { text = chunkText });
                     lastEmit = DateTimeOffset.UtcNow;
-
                     await Task.Delay(minInterval, ct);
                 }
             }
 
             if (pendingChunks.Length > 0)
-            {
-                yield return new StreamEvent(StreamEventTypes.ReasoningDelta,
-                    new { text = pendingChunks.ToString() });
-            }
+                yield return new StreamEvent(StreamEventTypes.ReasoningDelta, new { text = pendingChunks.ToString() });
         }
 
         var fullText = buffer.ToString();
@@ -192,8 +154,8 @@ public class ReasoningService : IReasoningPort
         yield return new StreamEvent(StreamEventTypes.ReasoningComplete, result);
     }
 
-    private static async IAsyncEnumerable<SafeUpdate> EnumerateSafely(
-        IAsyncEnumerable<ChatResponseUpdate> stream,
+    private static async IAsyncEnumerable<(string Chunk, string? Error)> EnumerateSafely(
+        IAsyncEnumerable<string> stream,
         [EnumeratorCancellation] CancellationToken ct)
     {
         var enumerator = stream.GetAsyncEnumerator(ct);
@@ -201,19 +163,19 @@ public class ReasoningService : IReasoningPort
         {
             while (true)
             {
-                SafeUpdate update;
+                (string Chunk, string? Error) item;
                 try
                 {
                     if (!await enumerator.MoveNextAsync())
                         yield break;
-                    update = new SafeUpdate(enumerator.Current.Text ?? "", null);
+                    item = (enumerator.Current, null);
                 }
                 catch (Exception ex)
                 {
-                    update = new SafeUpdate("", ex.Message);
+                    item = ("", ex.Message);
                 }
-                yield return update;
-                if (update.Error != null) yield break;
+                yield return item;
+                if (item.Error != null) yield break;
             }
         }
         finally
@@ -221,6 +183,4 @@ public class ReasoningService : IReasoningPort
             await enumerator.DisposeAsync();
         }
     }
-
-    private record SafeUpdate(string Text, string? Error);
 }

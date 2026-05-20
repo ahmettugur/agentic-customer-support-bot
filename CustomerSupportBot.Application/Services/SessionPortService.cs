@@ -4,7 +4,6 @@
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services;
@@ -15,11 +14,11 @@ namespace CustomerSupportBot.Application.Services;
 /// </summary>
 public sealed class SessionPortService : ISessionPort
 {
-    private readonly ISessionRepository _sessions;
+    private readonly ISessionManager _sessions;
     private readonly ILogger<SessionPortService> _logger;
 
     public SessionPortService(
-        ISessionRepository sessions,
+        ISessionManager sessions,
         ILogger<SessionPortService> logger)
     {
         _sessions = sessions;
@@ -44,7 +43,12 @@ public sealed class SessionPortService : ISessionPort
         _logger.LogDebug("Session updated: {SessionId}", session.SessionId);
     }
 
-    public List<ChatMessage> GetHistory(string sessionId)
+    public IReadOnlyList<SessionInfo> GetAllSessions()
+    {
+        return _sessions.GetAllSessions();
+    }
+
+    public List<ConversationMessage> GetHistory(string sessionId)
     {
         return _sessions.GetHistory(sessionId);
     }

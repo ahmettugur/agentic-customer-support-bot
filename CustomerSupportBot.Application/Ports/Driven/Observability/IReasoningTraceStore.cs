@@ -1,4 +1,4 @@
-// Ports/Driven/Observability/IReasoningTraceRepository.cs
+// Ports/Driven/Observability/IReasoningTraceStore.cs
 // SECONDARY PORT — Reasoning trace kalıcılığı ve okunması.
 // Adaptörler: PostgresReasoningTraceStore, InMemoryReasoningTraceStore
 
@@ -9,7 +9,7 @@ namespace CustomerSupportBot.Application.Ports.Driven.Observability;
 /// <summary>
 /// Agent reasoning trace'lerinin gözlemlenebilirlik kaydı için secondary port.
 /// </summary>
-public interface IReasoningTraceRepository
+public interface IReasoningTraceStore
 {
     ReasoningTrace StartTrace(string sessionId, string query);
     void Update(ReasoningTrace trace);

@@ -14,17 +14,17 @@ namespace CustomerSupportBot.Application.Services;
 /// </summary>
 public sealed class AnalyticsPortService : IAnalyticsPort
 {
-    private readonly IRatingRepository _ratings;
-    private readonly ISessionRepository _sessions;
-    private readonly IApprovalQueueRepository _approvals;
-    private readonly IEscalationRepository _escalations;
+    private readonly IRatingStore _ratings;
+    private readonly ISessionManager _sessions;
+    private readonly IApprovalQueue _approvals;
+    private readonly IEscalationSink _escalations;
     private readonly ILogger<AnalyticsPortService> _logger;
 
     public AnalyticsPortService(
-        IRatingRepository ratings,
-        ISessionRepository sessions,
-        IApprovalQueueRepository approvals,
-        IEscalationRepository escalations,
+        IRatingStore ratings,
+        ISessionManager sessions,
+        IApprovalQueue approvals,
+        IEscalationSink escalations,
         ILogger<AnalyticsPortService> logger)
     {
         _ratings = ratings;
