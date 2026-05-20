@@ -55,9 +55,9 @@ public sealed class ChatEventOrchestrator
         // Main loop: forward admin messages from chat bridge
         await ProcessBridgeMessagesAsync(sessionId, sse, ct);
 
-        // Baðlantý kapandý — kaynaðý kontrol et:
-        // Server shutdown ise eskalasyonlara dokunma (restart sonrasý hayatta kalsýn).
-        // Sadece müþteri kendi isteðiyle ayrýldýysa otomatik kapat.
+        // BaÄŸlantÄ± kapandÄ± - kaynaÄŸÄ± kontrol et:
+        // Server shutdown ise eskalasyonlara dokunma (restart sonrasÄ± hayatta kalsÄ±n).
+        // Sadece mÃ¼ÅŸteri kendi istediyle ayrÄ±ldÄ±ysa otomatik kapat.
         if (!_appLifetime.ApplicationStopping.IsCancellationRequested)
             DismissOrphanedEscalations(sessionId);
     }
@@ -72,17 +72,17 @@ public sealed class ChatEventOrchestrator
                 var dismissed = _escalationSink.Decide(
                     esc.Id,
                     WellKnown.EscalationActions.Dismiss,
-                    resolution: "Müþteri baðlantýyý kesti.");
+                    resolution: "MÃ¼ÅŸteri baÄŸlantÄ±yÄ± kesti.");
                 if (dismissed)
                     _logger.LogInformation(
-                        "[Escalation] Müþteri ayrýldý, eskalasyon otomatik kapatýldý: {Id} session={Session}",
+                        "[Escalation] MÃ¼ÅŸteri ayrÄ±ldÄ±, eskalasyon otomatik kapatÄ±ldÄ±: {Id} session={Session}",
                         esc.Id, sessionId);
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "[Escalation] Auto-dismiss baþarýsýz. session={Session}", sessionId);
+                "[Escalation] Auto-dismiss baÅŸarÄ±sÄ±z. session={Session}", sessionId);
         }
     }
 
@@ -123,7 +123,7 @@ public sealed class ChatEventOrchestrator
     }
 
     /// <summary>
-    /// Processes messages from the chat bridge (admin/system › user).
+    /// Processes messages from the chat bridge (admin/system - user).
     /// Continues until cancellation is requested.
     /// </summary>
     private async Task ProcessBridgeMessagesAsync(string sessionId, SseForwarder sse, CancellationToken ct)
@@ -134,7 +134,7 @@ public sealed class ChatEventOrchestrator
             {
                 if (msg.Sender == ChatBridgeSender.BotTyping)
                 {
-                    // Transient kontrol sinyali — typing indicator aç/kapa
+                    // Transient kontrol sinyali - typing indicator aÃ§/kapa
                     await sse.WriteAsync(StreamEventTypes.BotTyping, new
                     {
                         sessionId,
