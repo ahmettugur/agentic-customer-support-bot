@@ -1,10 +1,10 @@
-// Ports/Driven/AI/ISemanticMemoryIngestor.cs
-// SECONDARY PORT — KnowledgeBaseIngestor'ın SemanticMemoryService'e erişim sözleşmesi.
-// Yalnızca KB ingestion sürecinin ihtiyaç duyduğu üyeleri açığa çıkarır.
+// Ports/Driving/ISemanticMemoryIngestor.cs
+// PRIMARY PORT — KnowledgeBaseIngestor (hosting adapter) core'u bu arayüz üzerinden sürer.
+// Implementasyon: Application/Services/Memory/SemanticMemoryService (hexagonal: core'da).
 
 using CustomerSupportBot.Domain.Model.Memory;
 
-namespace CustomerSupportBot.Application.Ports.Driven.AI;
+namespace CustomerSupportBot.Application.Ports.Driving;
 
 public interface ISemanticMemoryIngestor
 {
