@@ -1,10 +1,9 @@
 // Ports/Driving/IRealtimeNativeBridge.cs
 // PRIMARY PORT — Native modda OpenAI Realtime oturumu (model kendisi konuşur).
-// Driving adapter (RealtimeEndpoints) bunu enjekte eder.
+// Driving adapter (RealtimeEndpoints) WebSocket'i IBrowserChannel olarak sarmalar ve bu port'u çağırır.
 // Implementasyon: Application/Services/RealtimeNativeService (hexagonal: core'da).
-// OpenAI Realtime transport IOpenAiRealtimeClient secondary port'u arkasına taşındı.
 
-using System.Net.WebSockets;
+using CustomerSupportBot.Application.Ports.Driven;
 
 namespace CustomerSupportBot.Application.Ports.Driving;
 
@@ -13,5 +12,5 @@ namespace CustomerSupportBot.Application.Ports.Driving;
 /// </summary>
 public interface IRealtimeNativeBridge
 {
-    Task RunAsync(WebSocket browserWs, string sessionId, CancellationToken ct);
+    Task RunAsync(IBrowserChannel channel, string sessionId, CancellationToken ct);
 }

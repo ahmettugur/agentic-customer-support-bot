@@ -1,0 +1,28 @@
+// Application/Ports/Driven/IBrowserChannel.cs
+// SECONDARY PORT — Tarayıcı mesajlaşma kanalının soyutlaması.
+// Application çekirdeği bu port'u çağırır; WebSocket framing ve JSON serileştirme adaptörde gizlenir.
+// Implementasyon: CustomerSupportBot.Api/Infrastructure/WebSocketBrowserChannel
+
+namespace CustomerSupportBot.Application.Ports.Driven;
+
+public enum BrowserMessageKind { Text, Binary, Closed }
+
+public sealed record BrowserMessage(BrowserMessageKind Kind, byte[]? Data)
+{
+    public string AsText() => Kind == BrowserMessageKind.Text && Data is not null
+        ? System.Text.Encoding.UTF8.GetString(Data)
+        : string.Empty;
+}
+
+/// <summary>
+/// Tarayıcı ile çift yönlü mesajlaşma kanalı için secondary (driven) port.
+/// WebSocket framing, JSON serileştirme ve bağlantı durum yönetimi bu port'un arkasında gizlenir.
+/// </summary>
+public interface IBrowserChannel
+{
+    bool IsOpen { get; }
+    IAsyncEnumerable<BrowserMessage> ReceiveMessagesAsync(CancellationToken ct);
+    Task SendJsonAsync(object payload, CancellationToken ct);
+    Task SendBinaryAsync(byte[] data, CancellationToken ct);
+    Task CloseAsync(string reason, CancellationToken ct);
+}

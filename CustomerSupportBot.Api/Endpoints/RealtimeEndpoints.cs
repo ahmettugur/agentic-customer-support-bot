@@ -1,7 +1,8 @@
 // Endpoints/RealtimeEndpoints.cs
 // Sesli sohbet için WebSocket endpoint'i.
-// Browser bu endpoint'e bağlanır; backend RealtimeBridge ile OpenAI Realtime API'ye köprü kurar.
+// Browser bu endpoint'e bağlanır; driving adapter WebSocket'i IBrowserChannel olarak sarmalar.
 
+using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Driving;
 
 namespace CustomerSupportBot.Api.Endpoints;
@@ -38,10 +39,11 @@ public static class RealtimeEndpoints
         var logger = loggerFactory.CreateLogger("RealtimeEndpoints");
         var ws = await httpContext.WebSockets.AcceptWebSocketAsync();
         var sid = sessionId ?? Guid.NewGuid().ToString();
+        var channel = new WebSocketBrowserChannel(ws);
 
         try
         {
-            await bridge.RunAsync(ws, sid, httpContext.RequestAborted);
+            await bridge.RunAsync(channel, sid, httpContext.RequestAborted);
         }
         catch (OperationCanceledException) { /* client kapattı */ }
         catch (Exception ex)
@@ -70,10 +72,11 @@ public static class RealtimeEndpoints
         var logger = loggerFactory.CreateLogger("RealtimeEndpoints");
         var ws = await httpContext.WebSockets.AcceptWebSocketAsync();
         var sid = sessionId ?? Guid.NewGuid().ToString();
+        var channel = new WebSocketBrowserChannel(ws);
 
         try
         {
-            await bridge.RunAsync(ws, sid, httpContext.RequestAborted);
+            await bridge.RunAsync(channel, sid, httpContext.RequestAborted);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)

@@ -2,11 +2,12 @@
 // IRealtimeNativeBridge driving port'unun Application katmanı implementasyonu.
 // Native modda model kendi karar verir ve okuma-only tool'ları çağırır.
 // Tool dispatch iş mantığı (hangi araçlar sesli modda kullanılabilir) burada kapsüllenir.
+// Tarayıcı kanalı IBrowserChannel'da, OpenAI transport IOpenAiRealtimeClient'ta gizlenir.
 
-using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Ports.Driving;
@@ -53,24 +54,24 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         _logger = logger;
     }
 
-    public async Task RunAsync(WebSocket browserWs, string sessionId, CancellationToken ct)
+    public async Task RunAsync(IBrowserChannel channel, string sessionId, CancellationToken ct)
     {
         if (!_client.IsEnabled)
         {
-            await SendBrowserJsonAsync(browserWs, new { type = "error", message = "Realtime özelliği kapalı." }, ct);
+            await channel.SendJsonAsync(new { type = "error", message = "Realtime özelliği kapalı." }, ct);
             return;
         }
 
         if (!await _client.TryConnectAsync(ct))
         {
-            await SendBrowserJsonAsync(browserWs, new { type = "error", message = "OpenAI Realtime bağlantısı kurulamadı." }, ct);
+            await channel.SendJsonAsync(new { type = "error", message = "OpenAI Realtime bağlantısı kurulamadı." }, ct);
             return;
         }
 
         var session = _sessionManager.GetOrCreate(sessionId);
         await _client.ConfigureNativeSessionAsync(ct);
 
-        await SendBrowserJsonAsync(browserWs, new
+        await channel.SendJsonAsync(new
         {
             type = "connected",
             mode = "native",
@@ -81,9 +82,9 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         }, ct);
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var browserPump       = PumpBrowserAsync(browserWs, linked.Token);
-        var eventPump         = HandleEventsAsync(browserWs, session, linked.Token);
-        var inactivityWatcher = WatchInactivityAsync(browserWs, linked.Token);
+        var browserPump       = PumpBrowserAsync(channel, linked.Token);
+        var eventPump         = HandleEventsAsync(channel, session, linked.Token);
+        var inactivityWatcher = WatchInactivityAsync(channel, linked.Token);
 
         try
         {
@@ -99,7 +100,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         }
     }
 
-    private async Task WatchInactivityAsync(WebSocket browserWs, CancellationToken ct)
+    private async Task WatchInactivityAsync(IBrowserChannel channel, CancellationToken ct)
     {
         try
         {
@@ -117,15 +118,11 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                 _endRequested = true;
                 _endReason = "idle_timeout";
 
-                try { await SendBrowserJsonAsync(browserWs, new { type = "conversation_ended", reason = _endReason }, ct); }
+                try { await channel.SendJsonAsync(new { type = "conversation_ended", reason = _endReason }, ct); }
                 catch { /* best effort */ }
                 try { await _client.CloseAsync("idle_timeout", ct); }
                 catch { /* best effort */ }
-                try
-                {
-                    if (browserWs.State == WebSocketState.Open)
-                        await browserWs.CloseAsync(WebSocketCloseStatus.NormalClosure, "idle_timeout", CancellationToken.None);
-                }
+                try { await channel.CloseAsync("idle_timeout", CancellationToken.None); }
                 catch { /* best effort */ }
                 return;
             }
@@ -135,35 +132,26 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
 
     // ─── Browser → OpenAI ───
 
-    private async Task PumpBrowserAsync(WebSocket browserWs, CancellationToken ct)
+    private async Task PumpBrowserAsync(IBrowserChannel channel, CancellationToken ct)
     {
-        var buffer = new byte[16 * 1024];
-        var ms = new MemoryStream();
-
-        while (!ct.IsCancellationRequested && browserWs.State == WebSocketState.Open)
+        await foreach (var msg in channel.ReceiveMessagesAsync(ct))
         {
-            ms.SetLength(0);
-            WebSocketReceiveResult result;
-            do
+            switch (msg.Kind)
             {
-                result = await browserWs.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
-                if (result.MessageType == WebSocketMessageType.Close) return;
-                ms.Write(buffer, 0, result.Count);
-            }
-            while (!result.EndOfMessage);
+                case BrowserMessageKind.Closed:
+                    return;
 
-            var payload = ms.ToArray();
-            if (payload.Length == 0) continue;
+                case BrowserMessageKind.Binary:
+                    if (!_assistantSpeaking)
+                    {
+                        Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
+                        await _client.SendAudioChunkAsync(msg.Data!, ct);
+                    }
+                    break;
 
-            if (result.MessageType == WebSocketMessageType.Binary)
-            {
-                if (_assistantSpeaking) continue;
-                Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
-                await _client.SendAudioChunkAsync(payload, ct);
-            }
-            else if (result.MessageType == WebSocketMessageType.Text)
-            {
-                await HandleBrowserControlAsync(Encoding.UTF8.GetString(payload), ct);
+                case BrowserMessageKind.Text:
+                    await HandleBrowserControlAsync(msg.AsText(), ct);
+                    break;
             }
         }
     }
@@ -191,7 +179,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
 
     // ─── OpenAI → Browser + tool dispatch ───
 
-    private async Task HandleEventsAsync(WebSocket browserWs, AgentSession session, CancellationToken ct)
+    private async Task HandleEventsAsync(IBrowserChannel channel, AgentSession session, CancellationToken ct)
     {
         var assistantTextBuilder    = new StringBuilder();
         var pendingCalls            = new List<(string CallId, string Name, string ArgsJson)>();
@@ -209,11 +197,11 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                     break;
 
                 case RealtimeServerEventType.SpeechStarted:
-                    await SendBrowserJsonAsync(browserWs, new { type = "speech_started" }, ct);
+                    await channel.SendJsonAsync(new { type = "speech_started" }, ct);
                     break;
 
                 case RealtimeServerEventType.SpeechStopped:
-                    await SendBrowserJsonAsync(browserWs, new { type = "speech_stopped" }, ct);
+                    await channel.SendJsonAsync(new { type = "speech_stopped" }, ct);
                     break;
 
                 case RealtimeServerEventType.InputTranscriptCompleted:
@@ -226,17 +214,17 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                     {
                         _logger.LogInformation("RealtimeNative: input guard reject session={Sid}", session.SessionId);
                         await _client.SendInterruptAsync(ct);
-                        await SendBrowserJsonAsync(browserWs, new { type = "user_transcript", text = transcript }, ct);
-                        await SendBrowserJsonAsync(browserWs,
+                        await channel.SendJsonAsync(new { type = "user_transcript", text = transcript }, ct);
+                        await channel.SendJsonAsync(
                             new { type = "error", message = guard.RejectionReason ?? "Mesaj işlenemedi." }, ct);
                         break;
                     }
 
                     Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
-                    await SendBrowserJsonAsync(browserWs, new { type = "user_transcript", text = transcript }, ct);
+                    await channel.SendJsonAsync(new { type = "user_transcript", text = transcript }, ct);
                     userTranscriptSent = true;
                     foreach (var delta in bufferedAssistantDeltas)
-                        await SendBrowserJsonAsync(browserWs, new { type = "assistant_text_delta", text = delta }, ct);
+                        await channel.SendJsonAsync(new { type = "assistant_text_delta", text = delta }, ct);
                     bufferedAssistantDeltas.Clear();
                     assistantTextBuilder.Clear();
                     break;
@@ -245,7 +233,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                 case RealtimeServerEventType.AudioDelta:
                     _assistantSpeaking = true;
                     if (evt.AudioDelta is { Length: > 0 })
-                        await browserWs.SendAsync(evt.AudioDelta, WebSocketMessageType.Binary, true, ct);
+                        await channel.SendBinaryAsync(evt.AudioDelta, ct);
                     break;
 
                 case RealtimeServerEventType.AssistantTextDelta:
@@ -254,7 +242,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                     if (string.IsNullOrEmpty(delta)) break;
                     assistantTextBuilder.Append(delta);
                     if (userTranscriptSent)
-                        await SendBrowserJsonAsync(browserWs, new { type = "assistant_text_delta", text = delta }, ct);
+                        await channel.SendJsonAsync(new { type = "assistant_text_delta", text = delta }, ct);
                     else
                         bufferedAssistantDeltas.Add(delta);
                     break;
@@ -281,7 +269,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                         catch { }
                     }
 
-                    await SendBrowserJsonAsync(browserWs,
+                    await channel.SendJsonAsync(
                         new { type = "tool_call", name = evt.ToolName, arguments = evt.ToolArguments }, ct);
                     pendingCalls.Add((evt.ToolCallId!, evt.ToolName!, evt.ToolArguments ?? "{}"));
                     break;
@@ -297,42 +285,36 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                 {
                     if (pendingCalls.Count > 0)
                     {
-                        await DispatchToolCallsAsync(browserWs, pendingCalls, ct);
+                        await DispatchToolCallsAsync(channel, pendingCalls, ct);
                         pendingCalls.Clear();
                         break;
                     }
 
                     _assistantSpeaking = false;
                     foreach (var delta in bufferedAssistantDeltas)
-                        await SendBrowserJsonAsync(browserWs, new { type = "assistant_text_delta", text = delta }, ct);
+                        await channel.SendJsonAsync(new { type = "assistant_text_delta", text = delta }, ct);
                     bufferedAssistantDeltas.Clear();
 
                     var finalText = assistantTextBuilder.ToString().Trim();
                     if (!string.IsNullOrEmpty(finalText))
                         _chatBridge.RecordBotExchange(session.SessionId, "(sesli)", finalText);
-                    await SendBrowserJsonAsync(browserWs, new { type = "assistant_text", text = finalText }, ct);
-                    await SendBrowserJsonAsync(browserWs, new { type = "response_done" }, ct);
+                    await channel.SendJsonAsync(new { type = "assistant_text", text = finalText }, ct);
+                    await channel.SendJsonAsync(new { type = "response_done" }, ct);
                     assistantTextBuilder.Clear();
 
                     if (_endRequested)
                     {
-                        await SendBrowserJsonAsync(browserWs,
+                        await channel.SendJsonAsync(
                             new { type = "conversation_ended", reason = _endReason }, ct);
                         try { await _client.CloseAsync("end_conversation", CancellationToken.None); } catch { }
-                        try
-                        {
-                            if (browserWs.State == WebSocketState.Open)
-                                await browserWs.CloseAsync(WebSocketCloseStatus.NormalClosure,
-                                    "end_conversation", CancellationToken.None);
-                        }
-                        catch { }
+                        try { await channel.CloseAsync("end_conversation", CancellationToken.None); } catch { }
                     }
                     break;
                 }
 
                 case RealtimeServerEventType.Error:
                     _logger.LogWarning("RealtimeNative: OpenAI error {Msg}", evt.ErrorMessage);
-                    await SendBrowserJsonAsync(browserWs, new { type = "error", message = evt.ErrorMessage }, ct);
+                    await channel.SendJsonAsync(new { type = "error", message = evt.ErrorMessage }, ct);
                     break;
 
                 case RealtimeServerEventType.ConnectionClosed:
@@ -342,7 +324,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
     }
 
     private async Task DispatchToolCallsAsync(
-        WebSocket browserWs,
+        IBrowserChannel channel,
         List<(string CallId, string Name, string ArgsJson)> calls,
         CancellationToken ct)
     {
@@ -360,7 +342,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                 {
                     success = false,
                     error = new { code = "TOOL_DISPATCH_ERROR", message = ex.Message }
-                });
+                }, ToolResultJsonOpts);
             }
             return new RealtimeToolResult(c.CallId, c.Name, outputJson);
         });
@@ -368,8 +350,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         var results = await Task.WhenAll(tasks);
 
         foreach (var r in results)
-            await SendBrowserJsonAsync(browserWs,
-                new { type = "tool_result", name = r.Name, output = r.OutputJson }, ct);
+            await channel.SendJsonAsync(new { type = "tool_result", name = r.Name, output = r.OutputJson }, ct);
 
         await _client.SendToolResultsAsync(results, triggerNextResponse: !_endRequested, ct);
     }
@@ -414,19 +395,6 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         if (!obj.TryGetPropertyValue(key, out var node) || node is null) return null;
         return node.GetValue<string>();
     }
-
-    private static async Task SendBrowserJsonAsync(WebSocket ws, object payload, CancellationToken ct)
-    {
-        if (ws.State != WebSocketState.Open) return;
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(payload, BrowserJsonOpts);
-        await ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
-    }
-
-    private static readonly JsonSerializerOptions BrowserJsonOpts = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-    };
 
     private static readonly JsonSerializerOptions ToolResultJsonOpts = new()
     {
