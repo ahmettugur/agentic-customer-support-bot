@@ -1,6 +1,7 @@
 // Application/Services/ChatSessionPortService.cs
 // DRIVING PORT IMPL — IChatSessionPort → canlı takeover ve replan orkestrasyonu.
 
+using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
