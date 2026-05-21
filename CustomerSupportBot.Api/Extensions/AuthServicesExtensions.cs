@@ -20,7 +20,8 @@ public static class AuthServicesExtensions
         var jwtOptions = jwtSection.Get<JwtOptions>() ?? new JwtOptions();
 
         services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
-        services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<IJwtAccessTokenProvider, JwtAccessTokenProvider>();
+        services.AddScoped<ITokenService, TokenPortService>();
         services.AddScoped<IUserService, Application.Services.Auth.UserService>();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -37,7 +38,7 @@ public static class AuthServicesExtensions
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
                         string.IsNullOrWhiteSpace(jwtOptions.SigningKey)
-                            ? new string('x', 32) // boşsa boot fail edecek (TokenService throw eder)
+                            ? new string('x', 32) // boşsa boot fail edecek (JwtAccessTokenProvider throw eder)
                             : jwtOptions.SigningKey)),
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30)

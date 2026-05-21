@@ -1,7 +1,7 @@
 // Adapters.Agents/DependencyInjection/AgentsAdapterServiceCollectionExtensions.cs
 // Agents adapter servislerini DI container'a kaydeder.
 
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Driven;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CustomerSupportBot.Adapters.Agents.DependencyInjection;

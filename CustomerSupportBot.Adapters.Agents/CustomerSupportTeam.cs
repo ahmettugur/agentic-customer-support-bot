@@ -17,7 +17,6 @@ using CustomerSupportBot.Domain.Model;
 using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
 using CustomerSupportBot.Domain.Services;
 using CustomerSupportBot.Application.Ports.Driven;
-using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Application.Services.Workflow;
 using CustomerSupportBot.Application.Services.Memory;

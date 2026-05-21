@@ -1,12 +1,11 @@
 // Tests/Services/Auth/TokenServiceTests.cs
 
+using CustomerSupportBot.Adapters.Persistence.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
 using CustomerSupportBot.Application.Ports.Driven.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
-using CustomerSupportBot.Adapters.Persistence.Auth;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Services.Auth;
@@ -35,10 +34,7 @@ public class TokenServiceTests
     public void Ctor_ShortSigningKey_Throws()
     {
         var opts = Options.Create(new JwtOptions { SigningKey = "too-short" });
-        var dbf = new TestDbContextFactory($"k-{Guid.NewGuid():N}");
-        var userRepo = new EfUserAuthRepository(dbf);
-        var tokenRepo = new EfRefreshTokenRepository(dbf);
-        Action act = () => _ = new TokenService(userRepo, tokenRepo, opts, NullLogger<TokenService>.Instance);
+        Action act = () => _ = new JwtAccessTokenProvider(opts);
         act.Should().Throw<InvalidOperationException>();
     }
 
@@ -46,10 +42,7 @@ public class TokenServiceTests
     public void Ctor_EmptySigningKey_Throws()
     {
         var opts = Options.Create(new JwtOptions { SigningKey = "" });
-        var dbf = new TestDbContextFactory($"k-{Guid.NewGuid():N}");
-        var userRepo = new EfUserAuthRepository(dbf);
-        var tokenRepo = new EfRefreshTokenRepository(dbf);
-        Action act = () => _ = new TokenService(userRepo, tokenRepo, opts, NullLogger<TokenService>.Instance);
+        Action act = () => _ = new JwtAccessTokenProvider(opts);
         act.Should().Throw<InvalidOperationException>();
     }
 

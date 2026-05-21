@@ -5,6 +5,7 @@ using CustomerSupportBot.Adapters.Persistence.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
 using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Application.Ports.Driving.Auth;
 using CustomerSupportBot.Application.Services.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
 using Microsoft.EntityFrameworkCore;
@@ -32,7 +33,7 @@ internal sealed class TestDbContextFactory : IDbContextFactory<CustomerSupportDb
 
 internal static class AuthTestFactory
 {
-    public static (TokenService tokens, UserService users, IPasswordHasher hasher,
+    public static (ITokenService tokens, UserService users, IPasswordHasher hasher,
         TestDbContextFactory dbf, IUserAuthRepository userRepo, IRefreshTokenRepository tokenRepo) Build(
         JwtOptions? jwt = null)
     {
@@ -45,15 +46,15 @@ internal static class AuthTestFactory
             RefreshTokenDays = 14
         };
 
+        var opts = Options.Create(jwt);
         var dbf = new TestDbContextFactory($"auth-{Guid.NewGuid():N}");
         var hasher = new BCryptPasswordHasher();
         var userRepo = new EfUserAuthRepository(dbf);
         var tokenRepo = new EfRefreshTokenRepository(dbf);
+        var jwtProvider = new JwtAccessTokenProvider(opts);
 
-        var tokens = new TokenService(
-            userRepo, tokenRepo, Options.Create(jwt), NullLogger<TokenService>.Instance);
-        var users = new UserService(
-            userRepo, hasher, NullLogger<UserService>.Instance);
+        var tokens = new TokenPortService(userRepo, tokenRepo, jwtProvider, opts);
+        var users = new UserService(userRepo, hasher, NullLogger<UserService>.Instance);
 
         return (tokens, users, hasher, dbf, userRepo, tokenRepo);
     }
