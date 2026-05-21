@@ -42,6 +42,11 @@ public static class ApplicationServiceCollectionExtensions
     {
         // Tüm driving port servisleri stateless — bağımlılıkları Singleton.
         // Singleton lifetime: tutarlı, gereksiz allokasyon yok, event subscription'lar tek sefer.
+
+        // Realtime oturumları bağlantı başına durum taşıdığından Scoped kaydedilir.
+        services.AddScoped<IRealtimeBridge, RealtimeBridgeService>();
+        services.AddScoped<IRealtimeNativeBridge, RealtimeNativeService>();
+
         services.AddSingleton<ISessionPort, SessionPortService>();
         services.AddSingleton<IApprovalPort, ApprovalPortService>();
         services.AddSingleton<IEscalationPort, EscalationPortService>();

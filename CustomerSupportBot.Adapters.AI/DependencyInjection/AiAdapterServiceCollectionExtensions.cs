@@ -4,6 +4,7 @@
 
 using CustomerSupportBot.Adapters.AI.OpenAi;
 using CustomerSupportBot.Adapters.AI.Qdrant;
+using CustomerSupportBot.Adapters.AI.Realtime;
 using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Configuration;
@@ -28,6 +29,10 @@ public static class AiAdapterServiceCollectionExtensions
         services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
         services.Configure<SemanticMemoryOptions>(configuration.GetSection(SemanticMemoryOptions.SectionName));
         services.Configure<SelfImprovementOptions>(configuration.GetSection(SelfImprovementOptions.SectionName));
+
+        // Realtime: tool şemaları Singleton, WS client bağlantı başına Scoped.
+        services.AddSingleton<RealtimeFunctionTools>();
+        services.AddScoped<IOpenAiRealtimeClient, OpenAiRealtimeClientAdapter>();
 
         var memOpts = configuration.GetSection(SemanticMemoryOptions.SectionName)
                           .Get<SemanticMemoryOptions>() ?? new SemanticMemoryOptions();

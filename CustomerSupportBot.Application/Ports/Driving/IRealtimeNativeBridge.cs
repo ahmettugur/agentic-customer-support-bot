@@ -1,6 +1,8 @@
 // Ports/Driving/IRealtimeNativeBridge.cs
-// PRIMARY PORT — Native modda OpenAI Realtime köprüsü (model kendisi konuşur).
-// Driving adapter (RealtimeEndpoints) bunu enjekte eder; uygulama Adapters.AI'da.
+// PRIMARY PORT — Native modda OpenAI Realtime oturumu (model kendisi konuşur).
+// Driving adapter (RealtimeEndpoints) bunu enjekte eder.
+// Implementasyon: Application/Services/RealtimeNativeService (hexagonal: core'da).
+// OpenAI Realtime transport IOpenAiRealtimeClient secondary port'u arkasına taşındı.
 
 using System.Net.WebSockets;
 

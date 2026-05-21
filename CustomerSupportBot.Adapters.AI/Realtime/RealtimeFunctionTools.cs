@@ -6,31 +6,17 @@
 // (OrderPlacement, ComplaintRegistration) HITL gerektirdiği için bilinçli olarak
 // **YOK** — model bunları çağıramaz çünkü tanımlarını bile görmez.
 //
-// Akış:
-//   GetToolDefinitions() → session.update'te modele gönderilir
-//   DispatchAsync(name, argsJson) → tool çalıştırılır → JSON çıktı döner
-
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using CustomerSupportBot.Application.Services;
-using CustomerSupportBot.Domain.Model;
-using Microsoft.Extensions.Logging;
+// Tool dispatch iş mantığı Application katmanına taşındı (RealtimeNativeService).
+// Bu sınıf yalnızca OpenAI session.update için tool şemalarını sağlar.
 
 namespace CustomerSupportBot.Adapters.AI.Realtime;
 
 /// <summary>
-/// Realtime native moduna özel okuma-only tool seti ve OpenAI function calling sözleşmesi.
+/// Realtime native moduna özel okuma-only tool seti — OpenAI function calling şemaları.
 /// </summary>
 public sealed class RealtimeFunctionTools
 {
-    private readonly ILogger<RealtimeFunctionTools> _logger;
-    private readonly CustomerSupportToolsService _tools;
-
-    public RealtimeFunctionTools(CustomerSupportToolsService tools, ILogger<RealtimeFunctionTools> logger)
-    {
-        _tools = tools;
-        _logger = logger;
-    }
+    public RealtimeFunctionTools() { }
 
     /// <summary>
     /// OpenAI Realtime <c>session.update</c> içindeki <c>tools</c> dizisi için function tanımları.
@@ -143,74 +129,4 @@ public sealed class RealtimeFunctionTools
         }
     ];
 
-    /// <summary>
-    /// Tool adına göre dispatch eder. Argümanlar JSON string'inden parse edilir.
-    /// Dönen değer her zaman JSON string'idir ve <c>function_call_output</c> olarak
-    /// modele geri verilir. Bilinmeyen / blocked tool'lar açıklayıcı bir hata döner.
-    /// </summary>
-    public Task<string> DispatchAsync(string name, string argumentsJson, CancellationToken ct)
-    {
-        _logger.LogInformation("RealtimeNative: tool dispatch name={Name} args={Args}",
-            name, Truncate(argumentsJson, 200));
-
-        ToolResult result;
-
-        try
-        {
-            var args = JsonNode.Parse(argumentsJson) as JsonObject ?? new JsonObject();
-
-            result = name switch
-            {
-                "product_inquiry_tool"
-                    => _tools.ProductInquiryTool(GetString(args, "product_name") ?? ""),
-
-                "order_status_tool"
-                    => _tools.OrderStatusTool(GetString(args, "order_id") ?? ""),
-
-                "get_last_order_tool"
-                    => _tools.GetLastOrderTool(GetString(args, "customer_id") ?? ""),
-
-                "get_all_orders_tool"
-                    => _tools.GetAllOrdersTool(GetString(args, "customer_id") ?? ""),
-
-                EndConversationToolName
-                    => ToolResult.Ok("Görüşme sonlandırılıyor.", new
-                    {
-                        ended = true,
-                        reason = GetString(args, "reason") ?? "user_farewell"
-                    }),
-
-                // HITL gerektiren tool'lar — model bunları görmemeli ama yine de
-                // savunma katmanı: çağrılırsa açıkça reddet.
-                "order_placement_tool" or "complaint_registration_tool"
-                    => ToolResult.SystemError("FORBIDDEN_IN_VOICE",
-                        "Bu işlem güvenlik adımları gerektirir; yazılı sohbet üzerinden yapılmalıdır."),
-
-                _ => ToolResult.SystemError("UNKNOWN_TOOL",
-                    $"'{name}' bu modda mevcut değil.")
-            };
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "RealtimeNative: tool argümanları parse edilemedi name={Name}", name);
-            result = ToolResult.SystemError("INVALID_ARGS", "Tool argümanları geçersiz JSON.");
-        }
-
-        return Task.FromResult(JsonSerializer.Serialize(result, JsonOpts));
-    }
-
-    private static string? GetString(JsonObject obj, string key)
-    {
-        if (!obj.TryGetPropertyValue(key, out var node) || node is null) return null;
-        return node.GetValue<string>();
-    }
-
-    private static string Truncate(string s, int max) =>
-        string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max] + "…";
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-    };
 }

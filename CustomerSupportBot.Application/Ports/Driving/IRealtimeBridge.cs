@@ -1,6 +1,8 @@
 // Ports/Driving/IRealtimeBridge.cs
-// PRIMARY PORT — Tarayıcı WebSocket ↔ OpenAI Realtime köprüsü (köprü modu).
-// Driving adapter (RealtimeEndpoints) bunu enjekte eder; uygulama Adapters.AI'da.
+// PRIMARY PORT — Tarayıcı WebSocket ↔ agent pipeline köprüsü (köprü modu).
+// Driving adapter (RealtimeEndpoints) bunu enjekte eder.
+// Implementasyon: Application/Services/RealtimeBridgeService (hexagonal: core'da).
+// OpenAI Realtime transport IOpenAiRealtimeClient secondary port'u arkasına taşındı.
 
 using System.Net.WebSockets;
 
