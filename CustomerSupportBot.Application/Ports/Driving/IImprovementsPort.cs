@@ -1,6 +1,3 @@
-// Ports/Driving/IImprovementsPort.cs
-// PRIMARY PORT — Self-improvement döngüsü: lesson madenciliği ve onay akışı.
-
 using CustomerSupportBot.Application.Services.Improvement;
 using CustomerSupportBot.Domain.Model.Improvement;
 

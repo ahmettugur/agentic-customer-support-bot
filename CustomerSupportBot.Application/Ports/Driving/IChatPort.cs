@@ -1,7 +1,3 @@
-// Ports/Driving/IChatPort.cs
-// PRIMARY PORT — HTTP driving adapter (ChatEndpoints) bu port aracılığıyla Core'u çağırır.
-// Core'un "chat" kullanım senaryosunu dışarıya sunan sözleşme.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driving;

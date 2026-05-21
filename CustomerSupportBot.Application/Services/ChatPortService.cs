@@ -1,8 +1,3 @@
-// Application/Services/ChatPortService.cs
-// IChatPort implementasyonu.
-// Driving adapter (HTTP endpoint) bu servis üzerinden Core'u çağırır.
-// Non-streaming ve streaming her iki kullanım senaryosunu orkestre eder.
-
 using System.Runtime.CompilerServices;
 using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
@@ -13,10 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace CustomerSupportBot.Application.Services;
 
 /// <summary>
-/// IChatPort implementasyonu — HTTP driving adapter'ının bağlandığı Application kapısı.
-/// Driving adapter'lar (endpoints) input doğrulamayı (InputGuard) kendi katmanlarında
-/// uygular; bu servis sanitized request alır ve use-case'i orkestre eder.
-/// Human mode (HITL), sentiment güncelleme ve persist işlemleri burada yönetilir.
+/// IChatPort implementasyonu — chat kullanım senaryosunu orkestre eder.
+///Human mode (HITL), sentiment güncelleme ve persist işlemleri burada yönetilir.
 /// </summary>
 public sealed class ChatPortService : IChatPort
 {

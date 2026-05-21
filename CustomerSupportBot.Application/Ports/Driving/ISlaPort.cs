@@ -1,6 +1,3 @@
-// Ports/Driving/ISlaPort.cs
-// PRIMARY PORT — SLA Guardian durum izleme ve olay listeleme.
-
 using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
 

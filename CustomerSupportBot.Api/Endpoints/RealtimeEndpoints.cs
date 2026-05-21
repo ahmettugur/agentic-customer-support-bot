@@ -1,7 +1,3 @@
-// Endpoints/RealtimeEndpoints.cs
-// Sesli sohbet için WebSocket endpoint'i.
-// Browser bu endpoint'e bağlanır; driving adapter WebSocket'i IBrowserChannel olarak sarmalar.
-
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Driving;
 

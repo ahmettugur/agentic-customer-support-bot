@@ -1,8 +1,3 @@
-// Application/Ports/Driven/AI/IKnowledgeBaseSource.cs
-// SECONDARY PORT — KnowledgeBase dosya kaynağı soyutlaması.
-// Application çekirdeği dizin tarama, içerik okuma ve state yönetimini bu port üzerinden yapar.
-// Implementasyon: Adapters.Persistence/FileSystem/FileSystemKnowledgeBaseSource
-
 namespace CustomerSupportBot.Application.Ports.Driven.AI;
 
 public sealed record KnowledgeBaseFile(string RelativePath, string Title, string Content);

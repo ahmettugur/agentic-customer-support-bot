@@ -1,6 +1,3 @@
-// Ports/Driving/ITracePort.cs
-// PRIMARY PORT — Reasoning trace gözlemlenebilirliği.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driving;

@@ -1,6 +1,3 @@
-// Ports/Driving/IMemoryPort.cs
-// PRIMARY PORT — Semantic memory istatistik, arama ve ingest işlemleri.
-
 using CustomerSupportBot.Domain.Model.Memory;
 
 namespace CustomerSupportBot.Application.Ports.Driving;

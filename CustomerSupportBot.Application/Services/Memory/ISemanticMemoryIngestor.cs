@@ -1,10 +1,5 @@
 // Application/Services/Memory/ISemanticMemoryIngestor.cs
 // Application-internal servis arayüzü — vector store'a toplu doküman yazma kapasitesini soyutlar.
-// Implementasyonlar: SemanticMemoryService (aktif), DisabledSemanticMemoryIngestor (devre dışı null-object).
-// Tüketici: KnowledgeBaseIngestionService (Application).
-//
-// NOT: Bu arayüz Application-internal bir soyutlamadır — hiçbir adapter bunu tüketmez.
-// Port değildir; Services/ altında doğru konumdadır.
 
 using CustomerSupportBot.Domain.Model.Memory;
 

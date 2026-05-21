@@ -1,14 +1,10 @@
-// Ports/Driven/Persistence/IApprovalQueue.cs
-// SECONDARY PORT — HITL onay kuyruğu kalıcılığı.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
 
 /// <summary>
 /// HITL onay kuyruğu için secondary port.
-/// Adaptörler: PostgresApprovalQueue, InMemoryApprovalQueue.
-/// </summary>
+///</summary>
 public interface IApprovalQueue
 {
     ApprovalRequest Create(ApprovalRequest request);

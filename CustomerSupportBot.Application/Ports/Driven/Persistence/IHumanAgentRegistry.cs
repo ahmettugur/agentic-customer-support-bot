@@ -1,14 +1,10 @@
-// Ports/Driven/Persistence/IHumanAgentRegistry.cs
-// SECONDARY PORT — İnsan müşteri temsilcisi kayıt arayüzü.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
 
 /// <summary>
 /// Müşteri temsilcisi kaydı ve yük yönetimi için secondary port.
-/// Adaptörler: PostgresHumanAgentRegistry, InMemoryHumanAgentRegistry.
-/// </summary>
+///</summary>
 public interface IHumanAgentRegistry
 {
     /// <summary>Tüm kayıtlı temsilciler (admin UI için).</summary>

@@ -1,7 +1,3 @@
-// Domain/Model/ConversationMessage.cs
-// Saf domain konuşma mesajı — herhangi bir dış kütüphane tipine bağımlılık yok.
-// Adaptörler kendi teknolojilerine (ChatMessage, LangChain, vb.) dönüşümü sınır noktasında yapar.
-
 namespace CustomerSupportBot.Domain.Model;
 
 /// <summary>

@@ -1,8 +1,3 @@
-// Ports/Driven/Persistence/ISessionManager.cs
-// SECONDARY PORT — Oturum kalıcılığı + konuşma geçmişi.
-// Postgres adaptörü: PostgresSessionManager
-// InMemory adaptörü: InMemorySessionManager
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
@@ -20,8 +15,7 @@ public class SessionInfo
 
 /// <summary>
 /// Oturum ve konuşma geçmişi kalıcılığı için secondary (driven) port.
-/// Core bu port'a bağımlıdır; hangi adaptörün (Postgres/InMemory) kullanıldığını bilmez.
-/// </summary>
+///</summary>
 public interface ISessionManager
 {
     // ─── Session yönetimi ───

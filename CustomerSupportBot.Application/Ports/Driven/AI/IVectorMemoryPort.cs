@@ -1,6 +1,3 @@
-// Ports/Driven/AI/IVectorMemoryPort.cs
-// SECONDARY PORT — Vector veritabanlarına (Qdrant, Milvus, Pinecone vb.) soyutlanmış erişim.
-
 using CustomerSupportBot.Domain.Model.Memory;
 
 namespace CustomerSupportBot.Application.Ports.Driven.AI;

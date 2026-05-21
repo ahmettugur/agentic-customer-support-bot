@@ -1,12 +1,7 @@
-// Application/Ports/Driven/IPromptRepository.cs
-// SECONDARY PORT — Prompt şablon erişimi.
-// Implementasyon (FileSystemPromptRepository) Adapters.Persistence katmanında Prompts/*.md dosyalarını yükler.
-
 namespace CustomerSupportBot.Application.Ports.Driven;
 
 /// <summary>
 /// Prompt şablonlarına erişim için secondary port.
-/// Implementasyon Adapters.Persistence katmanında; Application katmanı bu arayüze bağımlıdır.
 /// </summary>
 public interface IPromptRepository
 {

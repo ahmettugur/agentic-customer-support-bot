@@ -1,14 +1,3 @@
-// Application/Services/RealtimeBridgeService.cs
-// IRealtimeBridge driving port'unun Application katmanı implementasyonu.
-// Köprü modu orkestrasyon burada; Realtime voice transport IRealtimeVoiceTransport'ta,
-// tarayıcı kanalı IBrowserChannel'da gizlenir.
-//
-// Akış:
-//   RealtimeEndpoints (driving adapter) → IRealtimeBridge.RunAsync
-//     → IRealtimeVoiceTransport (driven port, Adapters.AI)
-//     → transkript hazır olunca IReasoningPort + IAgentTeamPort (agent pipeline)
-//     → yanıt metni IRealtimeVoiceTransport.SpeakTextAsync ile seslendirmeye gönderilir
-
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;

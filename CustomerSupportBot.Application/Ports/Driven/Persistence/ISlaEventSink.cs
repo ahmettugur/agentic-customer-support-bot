@@ -1,14 +1,10 @@
-// Ports/Driven/Persistence/ISlaEventSink.cs
-// SECONDARY PORT — SLA olay kalıcılığı ve bildirimi.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
 
 /// <summary>
 /// SLA Guardian'ın ürettiği warn/breach olayları için secondary port.
-/// Adaptörler: PostgresSlaEventSink, InMemorySlaEventSink.
-/// </summary>
+///</summary>
 public interface ISlaEventSink
 {
     /// <summary>Yeni bir SLA olayı kaydeder ve event yayar.</summary>

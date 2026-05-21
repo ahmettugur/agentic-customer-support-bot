@@ -1,7 +1,3 @@
-// Ports/Driven/Observability/IReasoningTraceStore.cs
-// SECONDARY PORT — Reasoning trace kalıcılığı ve okunması.
-// Adaptörler: PostgresReasoningTraceStore, InMemoryReasoningTraceStore
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driven.Observability;

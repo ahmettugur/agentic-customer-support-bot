@@ -1,10 +1,6 @@
 // Application/Services/IReplanService.cs
 // Application-internal strateji arayüzü — bir session için bot'un yeniden planlama
 // yapması ve müşteriye yanıt yayınlaması use case'ini tanımlar.
-//
-// NOT: Bu arayüz Application-internal bir soyutlamadır — hiçbir adapter veya endpoint
-// bunu tüketmez. Yalnızca ChatSessionPortService (Application) çağırır.
-// Port değildir; Services/ altında doğru konumdadır.
 
 namespace CustomerSupportBot.Application.Services;
 

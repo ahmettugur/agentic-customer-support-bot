@@ -1,7 +1,3 @@
-// Ports/Driving/IReasoningPort.cs
-// PRIMARY PORT — Reasoning kullanım senaryosu.
-// ChatStreamOrchestrator bu port'u çağırarak ön-analiz üretir.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driving;

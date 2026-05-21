@@ -1,8 +1,3 @@
-// Application/Ports/Driven/AI/IReasoningChatClient.cs
-// SECONDARY PORT — Reasoning model (o-series) için ayrılmış chat client sözleşmesi.
-// IChatClient'ı dışarı sızdırmak yerine yalnızca reasoning operasyonlarını expose eder.
-// Implementasyon Adapters.AI katmanında; Application katmanı bu arayüze bağımlıdır.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driven.AI;

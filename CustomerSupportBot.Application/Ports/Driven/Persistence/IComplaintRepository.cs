@@ -1,7 +1,3 @@
-// Ports/Driven/Persistence/IComplaintRepository.cs
-// SECONDARY PORT — Şikayet kalıcılığı.
-// FakeDatabase.ComplaintsDb statik erişimini bu port'a dönüştürür.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driven.Persistence;

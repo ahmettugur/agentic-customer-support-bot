@@ -1,6 +1,3 @@
-// Ports/Driving/IHitlEventPort.cs
-// PRIMARY PORT — approval/escalation stream event aboneliği.
-
 namespace CustomerSupportBot.Application.Ports.Driving;
 
 public interface IHitlEventSubscription : IDisposable;

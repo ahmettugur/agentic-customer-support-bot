@@ -1,6 +1,3 @@
-// Ports/Driving/IChatSessionPort.cs
-// PRIMARY PORT — canlı takeover, sohbet geçmişi ve replan orkestrasyonu.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driving;

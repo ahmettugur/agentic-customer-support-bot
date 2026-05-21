@@ -1,9 +1,3 @@
-// Application/Ports/Driven/AI/IRealtimeVoiceTransport.cs
-// SECONDARY PORT — Realtime sesli API WebSocket transport soyutlaması.
-// ClientWebSocket, PCM16 base64 encode/decode ve provider-specific event JSON şeması
-// bu port'un arkasında gizlenir.
-// Implementasyon: Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.
-
 namespace CustomerSupportBot.Application.Ports.Driven.AI;
 
 /// <summary>

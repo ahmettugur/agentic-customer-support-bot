@@ -1,7 +1,3 @@
-// Ports/Driven/Persistence/IOrderRepository.cs
-// SECONDARY PORT — Sipariş kalıcılığı.
-// FakeDatabase.OrdersDb statik erişimini bu port'a dönüştürür.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driven.Persistence;

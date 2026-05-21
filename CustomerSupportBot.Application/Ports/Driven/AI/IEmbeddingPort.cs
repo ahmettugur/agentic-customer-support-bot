@@ -1,6 +1,3 @@
-// Ports/Driven/AI/IEmbeddingPort.cs
-// SECONDARY PORT — Metin embedding üretimi.
-
 namespace CustomerSupportBot.Application.Ports.Driven.AI;
 
 /// <summary>

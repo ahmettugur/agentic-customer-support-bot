@@ -1,6 +1,3 @@
-// Ports/Driven/Messaging/IMessageBusPort.cs
-// SECONDARY PORT — Dağıtık mesajlaşma (pub/sub) soyutlaması.
-
 namespace CustomerSupportBot.Application.Ports.Driven.Messaging;
 
 /// <summary>

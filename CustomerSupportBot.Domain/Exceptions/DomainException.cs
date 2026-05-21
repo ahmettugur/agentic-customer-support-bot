@@ -1,8 +1,3 @@
-// Domain/Exceptions/DomainException.cs
-// Domain katmanı exception hiyerarşisi.
-// Adapter'lar infrastructure hatalarını bu exception'lara çevirir,
-// böylece Application katmanı tutarlı hata yönetimi yapabilir.
-
 namespace CustomerSupportBot.Domain.Exceptions;
 
 /// <summary>

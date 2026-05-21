@@ -1,7 +1,3 @@
-// Ports/Driving/IAnalyticsPort.cs
-// PRIMARY PORT — Analitik ve değerlendirme verileri.
-// AnalyticsEndpoints bu port üzerinden okunur.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driving;

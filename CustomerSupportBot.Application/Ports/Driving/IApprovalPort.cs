@@ -1,15 +1,10 @@
-// Ports/Driving/IApprovalPort.cs
-// PRIMARY PORT — HITL onay akışı.
-// AdminEndpoints bu port üzerinden pending onayları listeler ve karar verir.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driving;
 
 /// <summary>
 /// Human-in-the-Loop onay akışı için primary port.
-/// Admin panel adaptörü (AgentPanelEndpoints) bu arayüzü kullanır.
-/// </summary>
+///</summary>
 public interface IApprovalPort
 {
     /// <summary>Bekleyen onay istekleri.</summary>

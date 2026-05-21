@@ -1,6 +1,3 @@
-// Ports/Driving/IWorkflowPort.cs
-// PRIMARY PORT — Low-code workflow tanım yönetimi ve test koşturma.
-
 using CustomerSupportBot.Domain.Model.Workflow;
 
 namespace CustomerSupportBot.Application.Ports.Driving;

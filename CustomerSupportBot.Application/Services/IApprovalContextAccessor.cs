@@ -1,8 +1,3 @@
-// Application/Services/IApprovalContextAccessor.cs
-// Uygulama-içi ambient context soyutlaması — HITL approval akışı için.
-// Implementasyon: ApprovalContextAccessor (AsyncLocal tabanlı, aynı dosya).
-// Adapters.Agents/ApprovalGateService bu interface'i tüketir (uygulama-içi bağımlılık).
-
 namespace CustomerSupportBot.Application.Services;
 
 public interface IApprovalContextAccessor

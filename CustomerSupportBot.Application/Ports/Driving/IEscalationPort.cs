@@ -1,7 +1,3 @@
-// Ports/Driving/IEscalationPort.cs
-// PRIMARY PORT — Eskalasyon yönetimi.
-// AdminEndpoints eskalasyonları listeler ve karar verir.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driving;

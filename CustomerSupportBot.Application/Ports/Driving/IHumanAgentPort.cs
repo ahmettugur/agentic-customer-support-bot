@@ -1,6 +1,3 @@
-// Ports/Driving/IHumanAgentPort.cs
-// PRIMARY PORT — İnsan temsilci yönetimi ve eskalasyon yeniden yönlendirme.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driving;

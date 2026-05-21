@@ -1,6 +1,3 @@
-// Ports/Driven/Locking/IAppDistributedLock.cs
-// SECONDARY PORT — Dağıtık kilit soyutlaması.
-
 namespace CustomerSupportBot.Application.Ports.Driven.Locking;
 
 /// <summary>

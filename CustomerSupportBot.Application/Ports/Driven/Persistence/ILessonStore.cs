@@ -1,14 +1,10 @@
-// Ports/Driven/Persistence/ILessonStore.cs
-// SECONDARY PORT — Self-improvement ders kalıcılığı.
-
 using CustomerSupportBot.Domain.Model.Improvement;
 
 namespace CustomerSupportBot.Application.Ports.Driven.Persistence;
 
 /// <summary>
 /// LessonMiner tarafından üretilen derslerin kalıcılığı için secondary port.
-/// Adaptörler: PostgresLessonStore, InMemoryLessonStore.
-/// </summary>
+///</summary>
 public interface ILessonStore
 {
     void Add(Lesson lesson);

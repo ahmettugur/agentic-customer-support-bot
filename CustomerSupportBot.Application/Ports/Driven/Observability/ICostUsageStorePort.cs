@@ -1,6 +1,3 @@
-// Ports/Driven/Observability/ICostUsageStorePort.cs
-// SECONDARY PORT — maliyet kullanım snapshot'ı.
-
 namespace CustomerSupportBot.Application.Ports.Driven.Observability;
 
 public sealed record CostModelUsageSnapshot(

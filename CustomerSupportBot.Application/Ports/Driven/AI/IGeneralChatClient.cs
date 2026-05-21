@@ -1,9 +1,3 @@
-// Application/Ports/Driven/AI/IGeneralChatClient.cs
-// SECONDARY PORT — Genel amaçlı LLM metin tamamlama.
-// LessonMiner, CustomerProfileService, ConversationSummaryProvider gibi servisler
-// doğrudan IChatClient yerine bu port'a bağımlıdır.
-// Implementasyon: Adapters.AI katmanında GeneralChatClientAdapter.
-
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driven.AI;

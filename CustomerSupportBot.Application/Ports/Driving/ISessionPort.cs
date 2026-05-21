@@ -1,6 +1,3 @@
-// Ports/Driving/ISessionPort.cs
-// PRIMARY PORT — Oturum yönetimi (SessionEndpoints, AdminEndpoints tarafından kullanılır).
-
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Domain.Model;
 

@@ -1,6 +1,3 @@
-// Ports/Driving/IPersonalizationPort.cs
-// PRIMARY PORT — Müşteri profili yönetimi.
-
 using CustomerSupportBot.Domain.Model.Memory;
 
 namespace CustomerSupportBot.Application.Ports.Driving;
