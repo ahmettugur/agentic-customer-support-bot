@@ -1,6 +1,7 @@
 // Ports/Driving/ISlaPort.cs
 // PRIMARY PORT — SLA Guardian durum izleme ve olay listeleme.
 
+using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driving;
@@ -28,10 +29,13 @@ public sealed record SlaStatusResult(
     SlaEscalationStatus Escalations);
 
 /// <summary>
-/// SLA olay listesi ve anlık durum özeti için primary (driving) port.
+/// SLA olay listesi, anlık durum özeti ve periyodik tarama için primary (driving) port.
 /// </summary>
 public interface ISlaPort
 {
     IReadOnlyList<SlaEvent> GetRecentEvents(int count = 100);
     SlaStatusResult GetStatus();
+
+    /// <summary>Tek bir SLA tarama döngüsünü çalıştırır; arka plan worker'ı tarafından her iterasyonda çağrılır.</summary>
+    void ScanOnce(SlaOptions opts);
 }

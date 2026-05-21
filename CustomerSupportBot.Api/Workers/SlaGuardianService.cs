@@ -1,25 +1,28 @@
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Workers;
 
+/// <summary>
+/// Hosting adapter — periyodik SLA taramasını tetikler.
+/// İş mantığı ISlaPort.ScanOnce() içinde (Application katmanı).
+/// </summary>
 public class SlaGuardianService : BackgroundService
 {
-    private readonly IServiceProvider _services;
+    private readonly ISlaPort _slaPort;
     private readonly IOptionsMonitor<SlaOptions> _options;
     private readonly ILogger<SlaGuardianService> _logger;
 
     public SlaGuardianService(
-        IServiceProvider services,
+        ISlaPort slaPort,
         IOptionsMonitor<SlaOptions> options,
         ILogger<SlaGuardianService> logger)
     {
-        _services = services;
+        _slaPort = slaPort;
         _options = options;
         _logger = logger;
     }
@@ -44,7 +47,7 @@ public class SlaGuardianService : BackgroundService
             var opts = _options.CurrentValue;
             try
             {
-                ScanOnce(opts);
+                _slaPort.ScanOnce(opts);
             }
             catch (Exception ex)
             {
@@ -58,63 +61,6 @@ public class SlaGuardianService : BackgroundService
                     stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { break; }
-        }
-    }
-
-    /// <summary>Tek bir tarama döngüsü — testlerin de doğrudan çağırabilmesi için public.</summary>
-    public void ScanOnce(SlaOptions opts)
-    {
-        using var scope = _services.CreateScope();
-        var sink = scope.ServiceProvider.GetRequiredService<ISlaEventSink>();
-        var approvals = scope.ServiceProvider.GetRequiredService<IApprovalQueue>();
-        var escalations = scope.ServiceProvider.GetRequiredService<IEscalationSink>();
-
-        var now = DateTime.UtcNow;
-
-        foreach (var req in approvals.GetPending())
-        {
-            var eval = SlaPolicyEvaluator.EvaluateApproval(req, opts.Approvals, sink, now);
-            if (eval.WarnEvent is not null) sink.Record(eval.WarnEvent);
-            if (eval.BreachEvent is not null)
-            {
-                sink.Record(eval.BreachEvent);
-                ApplyApprovalBreach(approvals, req, eval.BreachAction);
-            }
-        }
-
-        foreach (var esc in escalations.GetOpen())
-        {
-            var eval = SlaPolicyEvaluator.EvaluateEscalation(esc, opts.Escalations, sink, now);
-            if (eval.WarnEvent is not null) sink.Record(eval.WarnEvent);
-            if (eval.BreachEvent is not null)
-            {
-                sink.Record(eval.BreachEvent);
-                if (eval.NewPriority.HasValue && eval.NewPriority.Value != esc.Priority)
-                    esc.Priority = eval.NewPriority.Value;
-            }
-        }
-    }
-
-    private void ApplyApprovalBreach(
-        IApprovalQueue queue,
-        ApprovalRequest req,
-        SlaBreachAction action)
-    {
-        switch (action)
-        {
-            case SlaBreachAction.AutoReject:
-                queue.Decide(req.Id, approved: false,
-                    decidedBy: WellKnown.Defaults.System,
-                    reason: "SLA breach — auto-reject");
-                break;
-            case SlaBreachAction.AutoApprove:
-                queue.Decide(req.Id, approved: true,
-                    decidedBy: WellKnown.Defaults.System,
-                    reason: "SLA breach — auto-approve");
-                break;
-            case SlaBreachAction.None:
-            default:
-                break;
         }
     }
 }

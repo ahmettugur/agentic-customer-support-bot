@@ -2,7 +2,7 @@
 // Sesli sohbet için WebSocket endpoint'i.
 // Browser bu endpoint'e bağlanır; backend RealtimeBridge ile OpenAI Realtime API'ye köprü kurar.
 
-using CustomerSupportBot.Adapters.AI.Realtime;
+using CustomerSupportBot.Application.Ports.Driving;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -26,7 +26,7 @@ public static class RealtimeEndpoints
         HttpContext httpContext,
         string? sessionId,
         IRealtimeBridge bridge,
-        ILogger<RealtimeBridge> logger)
+        ILoggerFactory loggerFactory)
     {
         if (!httpContext.WebSockets.IsWebSocketRequest)
         {
@@ -35,6 +35,7 @@ public static class RealtimeEndpoints
             return;
         }
 
+        var logger = loggerFactory.CreateLogger("RealtimeEndpoints");
         var ws = await httpContext.WebSockets.AcceptWebSocketAsync();
         var sid = sessionId ?? Guid.NewGuid().ToString();
 
@@ -57,7 +58,7 @@ public static class RealtimeEndpoints
         HttpContext httpContext,
         string? sessionId,
         IRealtimeNativeBridge bridge,
-        ILogger<RealtimeNativeBridge> logger)
+        ILoggerFactory loggerFactory)
     {
         if (!httpContext.WebSockets.IsWebSocketRequest)
         {
@@ -66,6 +67,7 @@ public static class RealtimeEndpoints
             return;
         }
 
+        var logger = loggerFactory.CreateLogger("RealtimeEndpoints");
         var ws = await httpContext.WebSockets.AcceptWebSocketAsync();
         var sid = sessionId ?? Guid.NewGuid().ToString();
 

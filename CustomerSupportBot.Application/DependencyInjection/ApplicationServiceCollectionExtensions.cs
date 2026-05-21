@@ -106,6 +106,7 @@ public static class ApplicationServiceCollectionExtensions
         if (memOpts.Enabled)
         {
             services.AddSingleton<SemanticMemoryService>();
+            services.AddSingleton<ISemanticMemoryIngestor>(sp => sp.GetRequiredService<SemanticMemoryService>());
             services.AddSingleton<IMemoryPort, MemoryPortService>();
         }
         else

@@ -5,7 +5,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Application.Services.Memory;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -18,14 +17,14 @@ namespace CustomerSupportBot.Api.Workers;
 /// </summary>
 public sealed class KnowledgeBaseIngestor : IHostedService, IKnowledgeBaseIngestor
 {
-    private readonly SemanticMemoryService _memory;
+    private readonly ISemanticMemoryIngestor _memory;
     private readonly SemanticMemoryOptions _options;
     private readonly ILogger<KnowledgeBaseIngestor> _logger;
     private readonly string _rootDir;
     private readonly string _stateFile;
 
     public KnowledgeBaseIngestor(
-        SemanticMemoryService memory,
+        ISemanticMemoryIngestor memory,
         IOptions<SemanticMemoryOptions> options,
         ILogger<KnowledgeBaseIngestor> logger)
     {

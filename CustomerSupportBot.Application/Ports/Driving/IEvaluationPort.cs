@@ -1,5 +1,3 @@
-using CustomerSupportBot.Application.Services.Evaluation;
-
 namespace CustomerSupportBot.Application.Ports.Driving;
 
 public interface IEvaluationPort

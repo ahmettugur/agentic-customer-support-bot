@@ -6,6 +6,7 @@ using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Workers;
 using CustomerSupportBot.Application.DependencyInjection;
 using CustomerSupportBot.Application.Ports.Driven.AI;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Application.Services.Memory;
 
 namespace CustomerSupportBot.Api.Extensions;
@@ -69,7 +70,7 @@ public static class ApplicationServicesExtensions
 
         // ─── Background Workers (hosting adapter) ───
         services.AddHostedService<SlaGuardianService>();
-        services.AddHostedService<RoutingLoadTrackerService>();
+        // RoutingLoadTrackerService kaldırıldı — load-tracking HumanAgentPortService constructor'ında.
 
         // KnowledgeBase ingestor — SemanticMemory aktifse kaydet
         var cfg = configuration.GetSection("SemanticMemory");

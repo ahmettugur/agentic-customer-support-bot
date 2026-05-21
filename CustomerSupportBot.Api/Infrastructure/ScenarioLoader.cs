@@ -2,7 +2,7 @@
 // YAML dosyasından evaluation senaryolarını yükler.
 // YamlDotNet bağımlılığı altyapı katmanında (API) izole edilir.
 
-using CustomerSupportBot.Application.Services.Evaluation;
+using CustomerSupportBot.Application.Ports.Driving;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 

@@ -12,7 +12,7 @@ using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Application.Services.Memory;
 
-public sealed class SemanticMemoryService
+public sealed class SemanticMemoryService : ISemanticMemoryIngestor
 {
     private readonly IVectorMemoryPort _store;
     private readonly IEmbeddingPort _embedder;

@@ -4,18 +4,43 @@
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
+using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services;
 
-public sealed class HumanAgentPortService : IHumanAgentPort
+public sealed class HumanAgentPortService : IHumanAgentPort, IDisposable
 {
     private readonly IHumanAgentRegistry _agents;
     private readonly IEscalationSink _escalations;
+    private readonly ILogger<HumanAgentPortService> _logger;
+    private readonly EventHandler<EscalationRequest> _loadTrackingHandler;
 
-    public HumanAgentPortService(IHumanAgentRegistry agents, IEscalationSink escalations)
+    public HumanAgentPortService(
+        IHumanAgentRegistry agents,
+        IEscalationSink escalations,
+        ILogger<HumanAgentPortService> logger)
     {
         _agents = agents;
         _escalations = escalations;
+        _logger = logger;
+
+        _loadTrackingHandler = (_, esc) =>
+        {
+            if (esc.Status is EscalationStatus.Resolved or EscalationStatus.Dismissed
+                && !string.IsNullOrWhiteSpace(esc.SuggestedAgentId))
+            {
+                _agents.DecrementLoad(esc.SuggestedAgentId);
+                _logger.LogDebug(
+                    "RoutingLoadTracker: {AgentId} load decremented (escalation {EscId} {Status})",
+                    esc.SuggestedAgentId, esc.Id, esc.Status);
+            }
+        };
+        _escalations.RequestDecided += _loadTrackingHandler;
+    }
+
+    public void Dispose()
+    {
+        _escalations.RequestDecided -= _loadTrackingHandler;
     }
 
     public async Task<IReadOnlyList<HumanAgent>> GetAllMergedAsync(CancellationToken ct = default)

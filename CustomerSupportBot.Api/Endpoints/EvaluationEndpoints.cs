@@ -6,7 +6,6 @@
 
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Driving;
-using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;

@@ -1,9 +1,8 @@
 // Services/Sla/SlaGuardianServiceTests.cs
-// Guardian'�n ger�ek InMemoryApprovalQueue + InMemoryEscalationSink �zerinde
-// ScanOnce davran���n� do�rular: warn/breach kay�tlar�, AutoReject ve
-// �ncelik y�kseltmesi.
+// ISlaPort.ScanOnce davranışını doğrular: warn/breach kayıtları, AutoReject ve
+// öncelik yükseltmesi. SlaPortService (Application katmanı) doğrudan test edilir;
+// SlaGuardianService artık ince bir tetikleyici olduğundan ayrıca test edilmez.
 
-using CustomerSupportBot.Api.Workers;
 using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
@@ -15,7 +14,7 @@ namespace CustomerSupportBot.Api.Tests.Services.Sla;
 
 public class SlaGuardianServiceTests
 {
-    private static (SlaGuardianService svc, IServiceProvider sp,
+    private static (ISlaPort slaPort,
                     InMemoryApprovalQueue approvals, InMemoryEscalationSink escalations,
                     InMemorySlaEventSink sink)
         BuildHarness(SlaOptions opts)
@@ -29,12 +28,17 @@ public class SlaGuardianServiceTests
 
         var sp = services.BuildServiceProvider();
         var monitor = new TestOptionsMonitor<SlaOptions>(opts);
-        var guardian = new SlaGuardianService(sp, monitor, NullLogger<SlaGuardianService>.Instance);
+
+        var slaPort = new SlaPortService(
+            sp.GetRequiredService<ISlaEventSink>(),
+            sp.GetRequiredService<IApprovalQueue>(),
+            sp.GetRequiredService<IEscalationSink>(),
+            monitor);
 
         var approvals = (InMemoryApprovalQueue)sp.GetRequiredService<IApprovalQueue>();
         var escalations = (InMemoryEscalationSink)sp.GetRequiredService<IEscalationSink>();
         var sink = (InMemorySlaEventSink)sp.GetRequiredService<ISlaEventSink>();
-        return (guardian, sp, approvals, escalations, sink);
+        return (slaPort, approvals, escalations, sink);
     }
 
     [Fact]
@@ -49,7 +53,7 @@ public class SlaGuardianServiceTests
                 OnBreach = SlaBreachAction.AutoReject
             }
         };
-        var (svc, _, approvals, _, sink) = BuildHarness(opts);
+        var (slaPort, approvals, _, sink) = BuildHarness(opts);
 
         var req = approvals.Create(new ApprovalRequest
         {
@@ -58,7 +62,7 @@ public class SlaGuardianServiceTests
             SessionId = "s1"
         });
 
-        svc.ScanOnce(opts);
+        slaPort.ScanOnce(opts);
 
         sink.GetRecent().Should().Contain(e =>
             e.Severity == SlaPolicyEvaluator.SeverityBreach &&
@@ -79,7 +83,7 @@ public class SlaGuardianServiceTests
                 OnBreach = SlaBreachAction.AutoReject
             }
         };
-        var (svc, _, approvals, _, sink) = BuildHarness(opts);
+        var (slaPort, approvals, _, sink) = BuildHarness(opts);
 
         var req = approvals.Create(new ApprovalRequest
         {
@@ -88,7 +92,7 @@ public class SlaGuardianServiceTests
             SessionId = "s1"
         });
 
-        svc.ScanOnce(opts);
+        slaPort.ScanOnce(opts);
 
         var events = sink.GetRecent();
         events.Should().Contain(e => e.Severity == SlaPolicyEvaluator.SeverityWarn);
@@ -108,7 +112,7 @@ public class SlaGuardianServiceTests
                 BoostPriorityOnBreach = true
             }
         };
-        var (svc, _, _, escalations, sink) = BuildHarness(opts);
+        var (slaPort, _, escalations, sink) = BuildHarness(opts);
 
         var esc = escalations.Create(new EscalationRequest
         {
@@ -118,7 +122,7 @@ public class SlaGuardianServiceTests
             Reason = "y"
         });
 
-        svc.ScanOnce(opts);
+        slaPort.ScanOnce(opts);
 
         escalations.Get(esc.Id)!.Priority.Should().Be(EscalationPriority.High);
         sink.GetRecent().Should().Contain(e =>
@@ -137,7 +141,7 @@ public class SlaGuardianServiceTests
                 OnBreach = SlaBreachAction.None
             }
         };
-        var (svc, _, approvals, _, sink) = BuildHarness(opts);
+        var (slaPort, approvals, _, sink) = BuildHarness(opts);
 
         approvals.Create(new ApprovalRequest
         {
@@ -145,9 +149,9 @@ public class SlaGuardianServiceTests
             RequestedAt = DateTime.UtcNow.AddSeconds(-5)
         });
 
-        svc.ScanOnce(opts);
-        svc.ScanOnce(opts);
-        svc.ScanOnce(opts);
+        slaPort.ScanOnce(opts);
+        slaPort.ScanOnce(opts);
+        slaPort.ScanOnce(opts);
 
         var breachEvents = sink.GetRecent().Where(e =>
             e.Severity == SlaPolicyEvaluator.SeverityBreach).ToList();
