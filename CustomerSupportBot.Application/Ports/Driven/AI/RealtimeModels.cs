@@ -1,5 +1,5 @@
 // Application/Ports/Driven/AI/RealtimeModels.cs
-// IOpenAiRealtimeClient port'u için domain-nötr veri modelleri.
+// IRealtimeVoiceTransport port'u için domain-nötr veri modelleri.
 // OpenAI protokolüne özgü tipler (JsonNode, base64, event string'leri) burada yoktur.
 
 namespace CustomerSupportBot.Application.Ports.Driven.AI;

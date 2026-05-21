@@ -1,6 +1,12 @@
 // Application/Ports/Driven/IBrowserChannel.cs
 // SECONDARY PORT — Tarayıcı mesajlaşma kanalının soyutlaması.
 // Application çekirdeği bu port'u çağırır; WebSocket framing ve JSON serileştirme adaptörde gizlenir.
+//
+// 🏗️ MİMARİ NOT: Implementasyon (WebSocketBrowserChannel) API katmanında bulunur.
+// Bu bilinçli bir pragmatik sapmadır — WebSocket nesnesi HttpContext'ten gelir ve
+// endpoint başına yaşam döngüsüne sahiptir. DI'a kaydedilmez, doğrudan
+// `new WebSocketBrowserChannel(ws)` ile oluşturulur. Sınıf `internal sealed` olarak
+// işaretlenmiştir ve dışarıya sızmaz.
 // Implementasyon: CustomerSupportBot.Api/Infrastructure/WebSocketBrowserChannel
 
 namespace CustomerSupportBot.Application.Ports.Driven;

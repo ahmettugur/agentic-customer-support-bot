@@ -2,7 +2,6 @@
 // Null Object pattern — SemanticMemory devre dışıyken kullanılır.
 // Service locator anti-pattern'ı yerine açık null-object kaydı kullanır.
 
-using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model.Memory;
 
 namespace CustomerSupportBot.Application.Services.Memory;

@@ -51,7 +51,7 @@ public sealed class KnowledgeBaseIngestionService : IKnowledgeBaseIngestor
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Qdrant'a bağlanılamadı; KnowledgeBase ingest atlandı (servis çalışırken).");
+            _logger.LogWarning(ex, "VectorStore'a bağlanılamadı; KnowledgeBase ingest atlandı (servis çalışırken).");
             return;
         }
 

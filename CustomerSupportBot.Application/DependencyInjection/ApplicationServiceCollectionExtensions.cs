@@ -1,6 +1,7 @@
 // Application/DependencyInjection/ApplicationServiceCollectionExtensions.cs
 // Application katmanı servis kayıtları — driving port implementasyonları ve use case servisleri.
 
+using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Ports.Driving;
@@ -9,6 +10,7 @@ using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Application.Services.Routing;
+using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,6 +31,7 @@ public static class ApplicationServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddApplicationOptions(configuration);
         services.AddDrivingPorts();
         services.AddChatServices();
         services.AddContextProviders();
@@ -36,6 +39,15 @@ public static class ApplicationServiceCollectionExtensions
         services.AddMemoryServices(configuration);
 
         return services;
+    }
+
+    private static void AddApplicationOptions(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<ApprovalOptions>(configuration.GetSection("HumanInTheLoop"));
+        services.Configure<RoutingOptions>(configuration.GetSection("Routing"));
+        services.Configure<ParallelExecutionOptions>(
+            configuration.GetSection(ParallelExecutionOptions.SectionName));
+        services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
     }
 
     private static void AddDrivingPorts(this IServiceCollection services)
@@ -72,7 +84,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ChatPortService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
-        services.AddSingleton<IReplanPort, ReplanService>();
+        services.AddSingleton<IReplanService, ReplanService>();
         services.AddSingleton<SessionStateService>();
     }
 

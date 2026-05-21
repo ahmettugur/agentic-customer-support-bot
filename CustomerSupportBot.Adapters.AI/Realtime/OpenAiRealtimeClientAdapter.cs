@@ -1,5 +1,5 @@
 // Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.cs
-// IOpenAiRealtimeClient secondary port'unun OpenAI Realtime WebSocket implementasyonu.
+// IRealtimeVoiceTransport secondary port'unun OpenAI Realtime WebSocket implementasyonu.
 // ClientWebSocket, base64 ses encode, OpenAI event JSON şeması ve session.update protokolü
 // bu sınıfta kapsüllenir — Application katmanı bunları bilmez.
 
@@ -15,10 +15,10 @@ using Microsoft.Extensions.Options;
 namespace CustomerSupportBot.Adapters.AI.Realtime;
 
 /// <summary>
-/// OpenAI Realtime WebSocket API için IOpenAiRealtimeClient implementasyonu.
+/// OpenAI Realtime WebSocket API için IRealtimeVoiceTransport implementasyonu.
 /// Her WebSocket bağlantısı için Scoped bir instance oluşturulur.
 /// </summary>
-public sealed class OpenAiRealtimeClientAdapter : IOpenAiRealtimeClient
+public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
 {
     private const string OpenAiRealtimeUrl = "wss://api.openai.com/v1/realtime?model=";
 

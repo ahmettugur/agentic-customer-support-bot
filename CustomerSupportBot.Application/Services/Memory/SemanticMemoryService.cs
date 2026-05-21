@@ -6,7 +6,6 @@
 //   - Tek-noktadan embedding + upsert + search akışı
 
 using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

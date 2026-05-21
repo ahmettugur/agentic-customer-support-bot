@@ -14,7 +14,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
     private readonly ISessionManager _sessions;
     private readonly IEscalationSink _escalations;
     private readonly IHumanAgentRegistry _agents;
-    private readonly IReplanPort _replanPort;
+    private readonly IReplanService _replanService;
 
     public ChatSessionPortService(
         IChatModeRegistry chatModes,
@@ -22,14 +22,14 @@ public sealed class ChatSessionPortService : IChatSessionPort
         ISessionManager sessions,
         IEscalationSink escalations,
         IHumanAgentRegistry agents,
-        IReplanPort replanPort)
+        IReplanService replanService)
     {
         _chatModes = chatModes;
         _chatBridge = chatBridge;
         _sessions = sessions;
         _escalations = escalations;
         _agents = agents;
-        _replanPort = replanPort;
+        _replanService = replanService;
     }
 
     public IReadOnlyList<ChatSessionState> GetActive() => _chatModes.GetActive();
@@ -192,7 +192,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
         var releasedFromHuman = ReleaseIfHumanMode(sessionId);
 
         _chatBridge.PublishSystemMessage(sessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
-        _ = _replanPort.ExecuteAsync(sessionId);
+        _ = _replanService.ExecuteAsync(sessionId);
 
         return new ChatSessionReplanResult(
             sessionId,
@@ -256,7 +256,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
         var releasedFromHuman = ReleaseIfHumanMode(escalation.SessionId);
 
         _chatBridge.PublishSystemMessage(escalation.SessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
-        _ = _replanPort.ExecuteAsync(escalation.SessionId);
+        _ = _replanService.ExecuteAsync(escalation.SessionId);
 
         return new ChatSessionReplanResult(
             escalation.SessionId,

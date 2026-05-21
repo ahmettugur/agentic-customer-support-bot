@@ -13,8 +13,6 @@ using CustomerSupportBot.Application.Ports.Driven.Auth;
 using CustomerSupportBot.Application.Ports.Driven.Messaging;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Services;
-using CustomerSupportBot.Application.Services.Routing;
-using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,12 +29,6 @@ public static class PersistenceAdapterServiceCollectionExtensions
         var persistenceSection = configuration.GetSection(PersistenceOptions.SectionName);
         services.Configure<PersistenceOptions>(persistenceSection);
         var opts = persistenceSection.Get<PersistenceOptions>() ?? new PersistenceOptions();
-
-        services.Configure<ApprovalOptions>(configuration.GetSection("HumanInTheLoop"));
-        services.Configure<RoutingOptions>(configuration.GetSection("Routing"));
-        services.Configure<ParallelExecutionOptions>(
-            configuration.GetSection(ParallelExecutionOptions.SectionName));
-        services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
 
         if (opts.Provider == PersistenceProvider.Postgres)
         {

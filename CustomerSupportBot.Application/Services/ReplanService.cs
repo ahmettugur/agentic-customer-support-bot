@@ -1,10 +1,11 @@
 // Application/Services/ReplanService.cs
-// IReplanPort implementasyonu: bir session'daki son kullanıcı mesajını yeniden
+// IReplanService implementasyonu: bir session'daki son kullanıcı mesajını yeniden
 // değerlendirerek bot yanıtı üretir ve bridge aracılığıyla müşteriye iletir.
 
 using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Ports.Driving;
+
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
 
@@ -15,7 +16,7 @@ namespace CustomerSupportBot.Application.Services;
 /// Reasoning + workflow pipeline'ı koşturur, yanıtı session history'ye yazar
 /// ve ChatBridge üzerinden müşteriye bot mesajı olarak yayınlar.
 /// </summary>
-public sealed class ReplanService : IReplanPort
+public sealed class ReplanService : IReplanService
 {
     private readonly ISessionManager _sessions;
     private readonly IChatBridge _bridge;

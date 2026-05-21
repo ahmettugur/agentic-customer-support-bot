@@ -1,6 +1,6 @@
 // Application/Ports/Driven/AI/SemanticMemoryOptions.cs
 // appsettings.json > "SemanticMemory" bölümüne bind edilen opsiyonlar.
-// Vendor-spesifik (Qdrant, Embedding) ve domain-agnostik (Retrieval, Collections) konfigürasyonları içerir.
+// VectorStore, Embedding, Retrieval ve Collections gibi domain-agnostik konfigürasyonları içerir.
 
 namespace CustomerSupportBot.Application.Ports.Driven.AI;
 
@@ -9,13 +9,13 @@ public sealed class SemanticMemoryOptions
     public const string SectionName = "SemanticMemory";
 
     public bool Enabled { get; set; } = true;
-    public QdrantOptions Qdrant { get; set; } = new();
+    public VectorStoreOptions VectorStore { get; set; } = new();
     public EmbeddingOptions Embedding { get; set; } = new();
     public CollectionOptions Collections { get; set; } = new();
     public RetrievalOptions Retrieval { get; set; } = new();
     public KnowledgeBaseOptions KnowledgeBase { get; set; } = new();
 
-    public sealed class QdrantOptions
+    public sealed class VectorStoreOptions
     {
         public string Host { get; set; } = "localhost";
         public int Port { get; set; } = 6334;

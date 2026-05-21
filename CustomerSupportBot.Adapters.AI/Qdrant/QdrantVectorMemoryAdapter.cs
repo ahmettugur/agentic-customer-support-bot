@@ -35,7 +35,7 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
         ILogger<QdrantVectorMemoryAdapter> logger)
     {
         _logger = logger;
-        var q = options.Value.Qdrant;
+        var q = options.Value.VectorStore;
         _client = string.IsNullOrWhiteSpace(q.ApiKey)
             ? new QdrantClient(q.Host, q.Port, q.UseHttps)
             : new QdrantClient(q.Host, q.Port, q.UseHttps, q.ApiKey);

@@ -2,7 +2,7 @@
 // IRealtimeNativeBridge driving port'unun Application katmanı implementasyonu.
 // Native modda model kendi karar verir ve okuma-only tool'ları çağırır.
 // Tool dispatch iş mantığı (hangi araçlar sesli modda kullanılabilir) burada kapsüllenir.
-// Tarayıcı kanalı IBrowserChannel'da, OpenAI transport IOpenAiRealtimeClient'ta gizlenir.
+// Tarayıcı kanalı IBrowserChannel'da, realtime voice transport IRealtimeVoiceTransport'ta gizlenir.
 
 using System.Text;
 using System.Text.Json;
@@ -26,7 +26,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
     private const string EndConversationToolName = "end_conversation";
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromSeconds(60);
 
-    private readonly IOpenAiRealtimeClient _client;
+    private readonly IRealtimeVoiceTransport _client;
     private readonly ISessionManager _sessionManager;
     private readonly CustomerSupportToolsService _tools;
     private readonly IInputGuard _inputGuard;
@@ -39,7 +39,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
     private long _lastUserActivityTicks = DateTime.UtcNow.Ticks;
 
     public RealtimeNativeService(
-        IOpenAiRealtimeClient client,
+        IRealtimeVoiceTransport client,
         ISessionManager sessionManager,
         CustomerSupportToolsService tools,
         IInputGuard inputGuard,

@@ -2,6 +2,7 @@
 // Low-Code Workflow Designer — Admin CRUD + test-run endpoint.
 
 using System.Security.Claims;
+using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model.Workflow;
 
@@ -27,18 +28,21 @@ public static class WorkflowEndpoints
             return d is null ? Results.NotFound() : Results.Ok(d);
         });
 
-        // ─── Create / Update (upsert) ───
-        group.MapPost("", (WorkflowDefinition def, IWorkflowPort port, ClaimsPrincipal user) =>
+        // ─── Create ───
+        group.MapPost("", (WorkflowRequest req, IWorkflowPort port, ClaimsPrincipal user) =>
         {
-            if (string.IsNullOrWhiteSpace(def.Name))
+            if (string.IsNullOrWhiteSpace(req.Name))
                 return Results.BadRequest(new { error = "name is required." });
 
+            var def = MapToDefinition(req);
             var saved = port.Upsert(def, user.Identity?.Name);
             return Results.Created($"/workflows/{saved.Id}", saved);
         });
 
-        group.MapPut("/{id}", (string id, WorkflowDefinition def, IWorkflowPort port, ClaimsPrincipal user) =>
+        // ─── Update ───
+        group.MapPut("/{id}", (string id, WorkflowRequest req, IWorkflowPort port, ClaimsPrincipal user) =>
         {
+            var def = MapToDefinition(req);
             def.Id = id;
             var saved = port.Upsert(def, user.Identity?.Name);
             return Results.Ok(saved);
@@ -61,4 +65,32 @@ public static class WorkflowEndpoints
 
         return app;
     }
+
+    /// <summary>
+    /// WorkflowRequest DTO → WorkflowDefinition domain modeli dönüşümü.
+    /// Domain modeli doğrudan HTTP sınırına maruz kalmaz.
+    /// </summary>
+    private static WorkflowDefinition MapToDefinition(WorkflowRequest req) => new()
+    {
+        Name = req.Name,
+        Description = req.Description,
+        Version = req.Version,
+        IsActive = req.IsActive,
+        TriggerKeywords = req.TriggerKeywords,
+        InputPatterns = req.InputPatterns,
+        Steps = req.Steps.Select(s => new WorkflowStep
+        {
+            Id = s.Id ?? Guid.NewGuid().ToString("N")[..6],
+            Type = Enum.TryParse<WorkflowStepType>(s.Type, true, out var t) ? t : WorkflowStepType.Respond,
+            Label = s.Label,
+            Template = s.Template,
+            Tool = s.Tool,
+            Parameters = s.Parameters,
+            StoreAs = s.StoreAs,
+            Condition = s.Condition,
+            SkipNext = s.SkipNext,
+            VariableName = s.VariableName,
+            VariableValue = s.VariableValue
+        }).ToList()
+    };
 }

@@ -1,7 +1,6 @@
 // Application/Services/MemoryPortService.cs
 // DRIVING PORT IMPL — IMemoryPort → SemanticMemoryService + IKnowledgeBaseIngestor.
 
-using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Domain.Model.Memory;

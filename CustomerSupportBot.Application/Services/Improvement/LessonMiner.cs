@@ -115,7 +115,7 @@ public sealed class LessonMiner
         };
     }
 
-    /// <summary>Lesson'ı approve eder, opsiyonel olarak Qdrant Lessons collection'ına yazar.</summary>
+    /// <summary>Lesson'ı approve eder, opsiyonel olarak VectorStore Lessons collection'ına yazar.</summary>
     public async Task<bool> ApproveAsync(string lessonId, string decidedBy, string? reason, CancellationToken ct = default)
     {
         var lesson = _lessonStore.Get(lessonId);
@@ -126,7 +126,7 @@ public sealed class LessonMiner
         lesson.DecidedAt = DateTime.UtcNow;
         lesson.DecisionReason = reason;
 
-        // Qdrant Lessons collection'a yaz — sonraki konuşmalar context olarak alır
+        // VectorStore Lessons collection'a yaz — sonraki konuşmalar context olarak alır
         if (_memory is { Enabled: true })
         {
             try
@@ -145,7 +145,7 @@ public sealed class LessonMiner
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Lesson Qdrant'a yazılamadı (lessonId={Id}); status Approved ama yalnızca DB'de.", lessonId);
+                _logger.LogWarning(ex, "Lesson VectorStore'a yazılamadı (lessonId={Id}); status Approved ama yalnızca DB'de.", lessonId);
             }
         }
         _lessonStore.Update(lesson);

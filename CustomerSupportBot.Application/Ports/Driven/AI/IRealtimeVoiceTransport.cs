@@ -1,15 +1,17 @@
-// Application/Ports/Driven/AI/IOpenAiRealtimeClient.cs
-// SECONDARY PORT — OpenAI Realtime API WebSocket transport soyutlaması.
-// ClientWebSocket, PCM16 base64 encode/decode ve OpenAI event JSON şeması bu port'un arkasında gizlenir.
+// Application/Ports/Driven/AI/IRealtimeVoiceTransport.cs
+// SECONDARY PORT — Realtime sesli API WebSocket transport soyutlaması.
+// ClientWebSocket, PCM16 base64 encode/decode ve provider-specific event JSON şeması
+// bu port'un arkasında gizlenir.
 // Implementasyon: Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.
 
 namespace CustomerSupportBot.Application.Ports.Driven.AI;
 
 /// <summary>
-/// OpenAI Realtime API ile WebSocket transport için secondary (driven) port.
-/// Application katmanı bu port'u çağırır; adaptör OpenAI protokolünü bilir.
+/// Realtime sesli API ile WebSocket transport için secondary (driven) port.
+/// Application katmanı bu port'u çağırır; adaptör provider-specific protokolü bilir.
+/// Vendor-agnostik: OpenAI, Google veya başka bir sağlayıcı ile değiştirilebilir.
 /// </summary>
-public interface IOpenAiRealtimeClient : IAsyncDisposable
+public interface IRealtimeVoiceTransport : IAsyncDisposable
 {
     bool IsEnabled { get; }
     string ModelName { get; }
@@ -18,7 +20,7 @@ public interface IOpenAiRealtimeClient : IAsyncDisposable
     /// <summary>Native modda kullanılan tool adları — frontend'e bilgi vermek için.</summary>
     IReadOnlyList<string> NativeToolNames { get; }
 
-    /// <summary>OpenAI Realtime WS'e bağlanır. Başarısız olursa false döner.</summary>
+    /// <summary>Realtime WS'e bağlanır. Başarısız olursa false döner.</summary>
     Task<bool> TryConnectAsync(CancellationToken ct);
 
     /// <summary>Bridge modu session konfigürasyonunu gönderir (model otomatik yanıt vermez).</summary>
@@ -27,20 +29,20 @@ public interface IOpenAiRealtimeClient : IAsyncDisposable
     /// <summary>Native modu session konfigürasyonunu gönderir (model kendi cevaplar + tool'lar açık).</summary>
     Task ConfigureNativeSessionAsync(CancellationToken ct);
 
-    /// <summary>Browser'dan gelen PCM16 audio chunk'ını base64 encode edip OpenAI'a iletir.</summary>
+    /// <summary>Browser'dan gelen PCM16 audio chunk'ını base64 encode edip provider'a iletir.</summary>
     Task SendAudioChunkAsync(byte[] pcm16, CancellationToken ct);
 
     /// <summary>Devam eden yanıtı iptal eder.</summary>
     Task SendInterruptAsync(CancellationToken ct);
 
-    /// <summary>OpenAI WS bağlantısını kapatır.</summary>
+    /// <summary>WS bağlantısını kapatır.</summary>
     Task CloseAsync(string reason, CancellationToken ct);
 
-    /// <summary>Bridge modu: asistan cevap metnini OpenAI'a seslendirme için gönderir.</summary>
+    /// <summary>Bridge modu: asistan cevap metnini provider'a seslendirme için gönderir.</summary>
     Task SpeakTextAsync(string text, string speakInstructions, CancellationToken ct);
 
     /// <summary>
-    /// Native modu: function call sonuçlarını OpenAI'a iletir.
+    /// Native modu: function call sonuçlarını provider'a iletir.
     /// <paramref name="triggerNextResponse"/> true ise ardından response.create gönderir.
     /// </summary>
     Task SendToolResultsAsync(
@@ -48,6 +50,6 @@ public interface IOpenAiRealtimeClient : IAsyncDisposable
         bool triggerNextResponse,
         CancellationToken ct);
 
-    /// <summary>OpenAI'dan gelen event stream'ini okur. Bağlantı kapanana kadar yield eder.</summary>
+    /// <summary>Provider'dan gelen event stream'ini okur. Bağlantı kapanana kadar yield eder.</summary>
     IAsyncEnumerable<RealtimeServerEvent> ReceiveEventsAsync(CancellationToken ct);
 }

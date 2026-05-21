@@ -1,13 +1,13 @@
 // Application/Services/RealtimeBridgeService.cs
 // IRealtimeBridge driving port'unun Application katmanı implementasyonu.
-// Köprü modu orkestrasyonu burada; OpenAI Realtime transport IOpenAiRealtimeClient'ta,
+// Köprü modu orkestrasyon burada; Realtime voice transport IRealtimeVoiceTransport'ta,
 // tarayıcı kanalı IBrowserChannel'da gizlenir.
 //
 // Akış:
 //   RealtimeEndpoints (driving adapter) → IRealtimeBridge.RunAsync
-//     → IOpenAiRealtimeClient (driven port, Adapters.AI)
+//     → IRealtimeVoiceTransport (driven port, Adapters.AI)
 //     → transkript hazır olunca IReasoningPort + IAgentTeamPort (agent pipeline)
-//     → yanıt metni IOpenAiRealtimeClient.SpeakTextAsync ile seslendirmeye gönderilir
+//     → yanıt metni IRealtimeVoiceTransport.SpeakTextAsync ile seslendirmeye gönderilir
 
 using System.Text;
 using System.Text.Json;
@@ -27,7 +27,7 @@ namespace CustomerSupportBot.Application.Services;
 /// </summary>
 public sealed class RealtimeBridgeService : IRealtimeBridge
 {
-    private readonly IOpenAiRealtimeClient _client;
+    private readonly IRealtimeVoiceTransport _client;
     private readonly IAgentTeamPort _team;
     private readonly ISessionManager _sessionManager;
     private readonly IReasoningPort _reasoningService;
@@ -41,7 +41,7 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
     private volatile bool _assistantSpeaking;
 
     public RealtimeBridgeService(
-        IOpenAiRealtimeClient client,
+        IRealtimeVoiceTransport client,
         IAgentTeamPort team,
         ISessionManager sessionManager,
         IReasoningPort reasoningService,
