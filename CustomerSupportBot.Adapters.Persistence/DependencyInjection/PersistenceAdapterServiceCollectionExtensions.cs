@@ -8,6 +8,7 @@ using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Adapters.Persistence.InMemory;
 using CustomerSupportBot.Adapters.Persistence.Postgres;
 using CustomerSupportBot.Application.Ports.Driven;
+using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driven.Auth;
 using CustomerSupportBot.Application.Ports.Driven.Messaging;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
@@ -93,6 +94,9 @@ public static class PersistenceAdapterServiceCollectionExtensions
         services.AddSingleton<FileSystemPromptRepository>();
         services.AddSingleton<IPromptRepository>(sp =>
             sp.GetRequiredService<FileSystemPromptRepository>());
+
+        // KnowledgeBase kaynak adaptörü — filesystem erişimini IKnowledgeBaseSource port'u arkasına gizler
+        services.AddSingleton<IKnowledgeBaseSource, FileSystemKnowledgeBaseSource>();
 
         return services;
     }

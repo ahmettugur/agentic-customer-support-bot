@@ -106,6 +106,8 @@ public static class ApplicationServiceCollectionExtensions
         {
             services.AddSingleton<SemanticMemoryService>();
             services.AddSingleton<ISemanticMemoryIngestor>(sp => sp.GetRequiredService<SemanticMemoryService>());
+            services.AddSingleton<KnowledgeBaseIngestionService>();
+            services.AddSingleton<IKnowledgeBaseIngestor>(sp => sp.GetRequiredService<KnowledgeBaseIngestionService>());
             services.AddSingleton<IMemoryPort, MemoryPortService>();
             services.AddSingleton<IContextProvider, SemanticMemoryContextProvider>();
         }

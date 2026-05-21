@@ -4,8 +4,6 @@ using CustomerSupportBot.Adapters.Agents.DependencyInjection;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Workers;
 using CustomerSupportBot.Application.DependencyInjection;
-using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Application.Services.Memory;
 
 namespace CustomerSupportBot.Api.Extensions;
 
@@ -60,14 +58,8 @@ public static class ApplicationServicesExtensions
         services.AddHostedService<SlaGuardianService>();
         // RoutingLoadTrackerService kaldırıldı — load-tracking HumanAgentPortService constructor'ında.
 
-        // KnowledgeBase ingestor — SemanticMemory aktifse kaydet
-        var cfg = configuration.GetSection("SemanticMemory");
-        if (cfg.GetValue<bool>("Enabled"))
-        {
-            services.AddSingleton<KnowledgeBaseIngestor>();
-            services.AddHostedService(sp => sp.GetRequiredService<KnowledgeBaseIngestor>());
-            services.AddSingleton<IKnowledgeBaseIngestor>(sp => sp.GetRequiredService<KnowledgeBaseIngestor>());
-        }
+        // KnowledgeBase startup adapter — use-case mantığı Application katmanında; bu sadece startup tetikleyicisi
+        services.AddHostedService<KnowledgeBaseStartupService>();
 
         return services;
     }

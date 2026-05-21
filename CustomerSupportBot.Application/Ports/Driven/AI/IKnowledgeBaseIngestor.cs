@@ -1,8 +1,9 @@
 namespace CustomerSupportBot.Application.Ports.Driven.AI;
 
 /// <summary>
-/// KnowledgeBase içeriğini vector store'a yükleyen driven port.
-/// Implementasyon: Api/Workers/KnowledgeBaseIngestor.cs (hosting adapter).
+/// KnowledgeBase ingest use case'i için Application-internal servis arayüzü.
+/// Implementasyon: Application/Services/Memory/KnowledgeBaseIngestionService.
+/// Tüketici: MemoryPortService (IMemoryPort impl).
 /// </summary>
 public interface IKnowledgeBaseIngestor
 {
