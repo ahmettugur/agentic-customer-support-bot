@@ -1,10 +1,13 @@
 using CustomerSupportBot.Api.Endpoints;
 using CustomerSupportBot.Api.Extensions;
+using CustomerSupportBot.Api.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddLogging();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddTelemetryServices(builder.Configuration);
 builder.Services.AddAiServices(builder.Configuration);
 builder.Services.AddRedisServices(builder.Configuration);
@@ -16,6 +19,9 @@ builder.Services.AddAppHealthChecks(builder.Configuration);
 var app = builder.Build();
 
 await app.MigrateIfDevelopmentAsync();
+
+// Inbound boundary — domain exception → HTTP status/ProblemDetails çevirisi
+app.UseExceptionHandler();
 
 app.MapAppHealthChecks();
 
