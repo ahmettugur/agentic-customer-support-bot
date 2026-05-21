@@ -1,4 +1,4 @@
-namespace CustomerSupportBot.Application.Ports.Driven;
+namespace CustomerSupportBot.Application.Services;
 
 public interface IApprovalContextAccessor
 {

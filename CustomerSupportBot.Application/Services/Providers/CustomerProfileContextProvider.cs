@@ -3,7 +3,7 @@
 // kısa bir "Müşteri Profili" bloğu olarak context'e enjekte eder.
 
 using System.Text;
-using CustomerSupportBot.Application.Ports.Driven;
+
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;

@@ -3,7 +3,7 @@
 // en yakın chunk'ları context olarak agent zincirine enjekte eder.
 
 using System.Text;
-using CustomerSupportBot.Application.Ports.Driven;
+
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Domain.Model;

@@ -2,7 +2,7 @@
 // Uzun konuşma geçmişini LLM ile özetleyerek token tasarrufu sağlar.
 
 using System.Text;
-using CustomerSupportBot.Application.Ports.Driven;
+
 using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Domain.Model;

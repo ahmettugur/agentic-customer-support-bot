@@ -2,7 +2,7 @@
 // Müşteri verilerini port'lar üzerinden çekerek ajanlara bağlam sağlar.
 
 using System.Text;
-using CustomerSupportBot.Application.Ports.Driven;
+
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Domain.Model;
 

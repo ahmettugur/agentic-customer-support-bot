@@ -1,6 +1,6 @@
 using CustomerSupportBot.Domain.Model;
 
-namespace CustomerSupportBot.Application.Ports.Driven;
+namespace CustomerSupportBot.Application.Services.Providers;
 
 public interface IContextProvider
 {

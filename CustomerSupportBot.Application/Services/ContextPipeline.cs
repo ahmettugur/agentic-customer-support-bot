@@ -1,4 +1,4 @@
-using CustomerSupportBot.Application.Ports.Driven;
+using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
 

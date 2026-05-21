@@ -1,5 +1,3 @@
-using CustomerSupportBot.Application.Ports.Driven;
-
 namespace CustomerSupportBot.Application.Services;
 
 /// <summary>

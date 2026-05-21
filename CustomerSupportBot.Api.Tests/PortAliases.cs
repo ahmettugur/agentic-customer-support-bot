@@ -30,3 +30,5 @@ global using CustomerSupportBot.Application.Ports.Driving;
 
 // Application Services re-export
 global using CustomerSupportBot.Application.Services;
+global using CustomerSupportBot.Application.Services.Providers;
+global using CustomerSupportBot.Application.Services.Routing;

@@ -1,7 +1,6 @@
 // Application/DependencyInjection/ApplicationServiceCollectionExtensions.cs
 // Application katmanı servis kayıtları — driving port implementasyonları ve use case servisleri.
 
-using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Ports.Driving;
@@ -9,6 +8,7 @@ using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Application.Services.Providers;
+using CustomerSupportBot.Application.Services.Routing;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
