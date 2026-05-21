@@ -1,6 +1,5 @@
 // Ports/Driven/Observability/ICostCalculatorPort.cs
 // SECONDARY PORT — LLM token maliyet hesaplama.
-// Adaptör: CostCalculatorAdapter (CustomerSupportBot.Adapters.Telemetry)
 
 namespace CustomerSupportBot.Application.Ports.Driven.Observability;
 

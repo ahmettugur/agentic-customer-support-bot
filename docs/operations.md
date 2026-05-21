@@ -248,21 +248,23 @@ Tüm `Telemetry` ayarı kapatılmak istenirse `Telemetry.Enabled = false` — tr
 2. AddTelemetryServices      → ActivitySource + Meter + (opsiyonel) OTLP exporter
 3. AddAiServices             → IChatClient + ReasoningChatClient (TelemetryChatClient ile sarılı)
                                + SemanticMemory stack (Qdrant + embedding, Enabled ise)
-4. AddPersistenceAdapters   → Persistence:Provider'a göre:
+3b. AddRedisServices         → IConnectionMultiplexer, IDistributedLockProvider, IMessageBusPort
+4. AddPersistenceServices    → Persistence:Provider'a göre:
                                ├─ "Postgres" → PostgresSessionManager, PostgresReasoningTraceStore,
                                │               PostgresApprovalQueue, PostgresRatingStore, ...
                                │               + EF Core DbContext factory + IMessageBusPort + PersistenceHydrator
                                └─ "InMemory" → InMemory* fallback implementasyonları
                                                + InMemoryMessageBusAdapter
-5. AddApplicationServices    → PromptService, EntityVerifier, ReasoningSanityChecker,
-                               ReasoningService, ContextPipeline + 4 IContextProvider,
-                               ApprovalGateService, InputGuard, CustomerSupportTeam (lazy),
-                               SlaGuardianService (BackgroundService), CustomerProfileService,
-                               SkillsBasedRouter, WorkflowExecutor, AnalyticsService
+5. AddApplicationServices    → 13 driving port servisi, EntityVerifier, ReasoningSanityChecker,
+                               ReasoningService, ContextPipeline + 3-4 IContextProvider,
+                               InputGuard, CustomerProfileService, SkillsBasedRouter,
+                               WorkflowExecutor, LessonMiner, EvaluationRunner,
+                               AddAgentsAdapter (CustomerSupportTeam + ApprovalGateService),
+                               SlaGuardianService (BackgroundService), KnowledgeBaseIngestor
 6. AddAuthenticationServices → JWT Bearer + Admin authorization policy
-7. MigrateIfDevelopmentAsync → Development ortamında PostgreSQL migration'ları otomatik çalışır
-8. WireRoutingLoadTracking   → Eskalasyon çözümlendiğinde temsilci yükü auto-decrement
-9. Middleware pipeline       → CORS → RateLimiter → StaticFiles → WebSockets → Auth
+7. AddAppHealthChecks        → Health check endpoint'leri
+8. MigrateIfDevelopmentAsync → Development ortamında PostgreSQL migration'ları otomatik çalışır
+9. Middleware pipeline       → CORS → RateLimiter → WebSockets → Auth → Authorization
 10. Endpoint mapping         → Public: Chat, Realtime (WS), Session, Auth
                                Admin: Trace, Eval, Memory, Improvements, Telemetry,
                                       Personalization, Agents, Workflows, SLA

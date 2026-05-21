@@ -24,9 +24,16 @@ public sealed class GeneralChatClientAdapter : IGeneralChatClient
         IReadOnlyList<ConversationMessage> messages,
         CancellationToken ct = default)
     {
-        var chatMessages = messages.Select(m => new ChatMessage(RoleFor(m.Role), m.Text)).ToList();
-        var response = await _client.GetResponseAsync(chatMessages, cancellationToken: ct);
-        return response.Text ?? "";
+        try
+        {
+            var chatMessages = messages.Select(m => new ChatMessage(RoleFor(m.Role), m.Text)).ToList();
+            var response = await _client.GetResponseAsync(chatMessages, cancellationToken: ct);
+            return response.Text ?? "";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || ct.IsCancellationRequested is false)
+        {
+            throw ExceptionTranslator.Translate(ex, "GeneralChatClient.CompleteAsync başarısız.");
+        }
     }
 
     private static ChatRole RoleFor(string role) => role switch

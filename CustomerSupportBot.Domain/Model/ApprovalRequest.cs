@@ -64,18 +64,3 @@ public class ApprovalRequest
     public int TimeoutSeconds { get; set; } = 60;
 }
 
-/// <summary>
-/// Admin endpoint'inin request body'si — approve/reject kararını taşır.
-/// </summary>
-public class ApprovalDecisionInput
-{
-    /// <summary>true → approved, false → rejected.</summary>
-    public bool Approved { get; set; }
-
-    /// <summary>Kararı veren kişi (opsiyonel, "admin" default).</summary>
-    public string? DecidedBy { get; set; }
-
-    /// <summary>Red gerekçesi (reddedilirse kullanıcıya döner).</summary>
-    public string? Reason { get; set; }
-}
-

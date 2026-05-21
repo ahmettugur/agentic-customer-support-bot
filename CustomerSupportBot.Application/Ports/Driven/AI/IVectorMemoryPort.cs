@@ -7,7 +7,6 @@ namespace CustomerSupportBot.Application.Ports.Driven.AI;
 
 /// <summary>
 /// Semantic memory için vektör deposu secondary port'u.
-/// Adaptörler: QdrantVectorMemoryAdapter (CustomerSupportBot.Adapters.AI).
 /// </summary>
 public interface IVectorMemoryPort
 {

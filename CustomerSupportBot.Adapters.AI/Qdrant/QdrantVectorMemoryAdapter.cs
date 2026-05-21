@@ -107,7 +107,14 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
             points.Add(p);
         }
 
-        await _client.UpsertAsync(collection, points, cancellationToken: ct).ConfigureAwait(false);
+        try
+        {
+            await _client.UpsertAsync(collection, points, cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw ExceptionTranslator.Translate(ex, $"Qdrant upsert başarısız (collection={collection}).");
+        }
     }
 
     public async Task<IReadOnlyList<MemorySearchHit>> SearchAsync(
@@ -149,9 +156,18 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
         return output;
     }
 
-    public Task DeleteAsync(string collection, string id, CancellationToken ct = default)
-        => _client.DeleteAsync(collection, ToPointId(id).Uuid is { } _ ? Guid.Parse(id) : Guid.Empty,
-            cancellationToken: ct);
+    public async Task DeleteAsync(string collection, string id, CancellationToken ct = default)
+    {
+        try
+        {
+            await _client.DeleteAsync(collection, ToPointId(id).Uuid is { } _ ? Guid.Parse(id) : Guid.Empty,
+                cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw ExceptionTranslator.Translate(ex, $"Qdrant delete başarısız (collection={collection}, id={id}).");
+        }
+    }
 
     public async Task<long> CountAsync(string collection, CancellationToken ct = default)
     {

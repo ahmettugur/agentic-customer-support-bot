@@ -435,7 +435,7 @@ Her workflow koşusu için `IReasoningTraceStore.StartTrace` çağrılır ve her
 
 ## Özet
 
-- **Workflow** = 7 ajan + `CustomerSupportChatManager` (MAF `GroupChatManager` türevi)
+- **Workflow** = 6 ajan + `CustomerSupportChatManager` (MAF `GroupChatManager` türevi)
 - **Ajan seçim** 3 katmanlı: PlanningAgent JSON → specialist reflection → varsayılan (ResponseAgent)
 - **Terminasyon** 3 koşul: TERMINATE marker | max iteration | repeated tool call
 - **Guard'lar** appsettings'den konfigüre edilir; timeout, max iteration, duplicate tool protection

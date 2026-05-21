@@ -2,6 +2,7 @@
 
 using CustomerSupportBot.Api.Models.Auth;
 using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Application.Ports.Driving.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
 
 namespace CustomerSupportBot.Api.Tests.Models.Auth;

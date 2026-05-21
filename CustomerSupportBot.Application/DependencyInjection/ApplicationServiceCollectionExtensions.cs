@@ -29,22 +29,36 @@ public static class ApplicationServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Driving port implementasyonları
-        services.AddScoped<ISessionPort, SessionPortService>();
-        services.AddScoped<IApprovalPort, ApprovalPortService>();
-        services.AddScoped<IEscalationPort, EscalationPortService>();
-        services.AddScoped<IAnalyticsPort, AnalyticsPortService>();
-        services.AddScoped<IChatSessionPort, ChatSessionPortService>();
-        services.AddScoped<IHitlEventPort, HitlEventPortService>();
-        services.AddScoped<ITelemetryPort, TelemetryPortService>();
+        services.AddDrivingPorts();
+        services.AddChatServices();
+        services.AddContextProviders();
+        services.AddDomainServices();
+        services.AddMemoryServices(configuration);
+
+        return services;
+    }
+
+    private static void AddDrivingPorts(this IServiceCollection services)
+    {
+        // Tüm driving port servisleri stateless — bağımlılıkları Singleton.
+        // Singleton lifetime: tutarlı, gereksiz allokasyon yok, event subscription'lar tek sefer.
+        services.AddSingleton<ISessionPort, SessionPortService>();
+        services.AddSingleton<IApprovalPort, ApprovalPortService>();
+        services.AddSingleton<IEscalationPort, EscalationPortService>();
+        services.AddSingleton<IAnalyticsPort, AnalyticsPortService>();
+        services.AddSingleton<IChatSessionPort, ChatSessionPortService>();
+        services.AddSingleton<IHitlEventPort, HitlEventPortService>();
+        services.AddSingleton<ITelemetryPort, TelemetryPortService>();
         services.AddSingleton<ITracePort, TracePortService>();
         services.AddSingleton<IHumanAgentPort, HumanAgentPortService>();
         services.AddSingleton<IImprovementsPort, ImprovementsPortService>();
         services.AddSingleton<IPersonalizationPort, PersonalizationPortService>();
         services.AddSingleton<IWorkflowPort, WorkflowPortService>();
         services.AddSingleton<ISlaPort, SlaPortService>();
+    }
 
-        // Use case servisleri
+    private static void AddChatServices(this IServiceCollection services)
+    {
         services.AddSingleton<CustomerSupportToolsService>();
         services.AddSingleton<SubTaskOrchestrator>();
         services.AddSingleton<ReasoningMessageBuilder>();
@@ -52,55 +66,35 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IReasoningPort>(sp => sp.GetRequiredService<ReasoningService>());
         services.AddSingleton<ChatPortService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
+        services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
+        services.AddSingleton<IReplanPort, ReplanService>();
+        services.AddSingleton<SessionStateService>();
+    }
 
-        // Context Providers
+    private static void AddContextProviders(this IServiceCollection services)
+    {
         services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
         services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();
         services.AddSingleton<IContextProvider, CustomerContextProvider>();
-        services.AddSingleton<IContextProvider>(sp =>
-        {
-            // SemanticMemoryService opsiyonel — yoksa no-op provider üret
-            var mem = sp.GetService<SemanticMemoryService>();
-            if (mem == null) return new NoopContextProvider();
-            return new SemanticMemoryContextProvider(
-                mem,
-                sp.GetRequiredService<ISessionManager>(),
-                sp.GetRequiredService<ILogger<SemanticMemoryContextProvider>>());
-        });
         services.AddSingleton<ContextPipeline>();
+    }
 
-        // Approval context
-        services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
-
-        // Replan use case
-        services.AddSingleton<IReplanPort, ReplanService>();
-
-        // Domain servisleri
+    private static void AddDomainServices(this IServiceCollection services)
+    {
         services.AddSingleton<EntityVerifier>();
         services.AddSingleton<ReasoningSanityChecker>();
         services.AddSingleton<EvaluationRunner>();
         services.AddSingleton<IEvaluationPort>(sp => sp.GetRequiredService<EvaluationRunner>());
-
-        // Güvenlik — deterministik input gate
         services.AddSingleton<InputGuard>();
         services.AddSingleton<IInputGuard>(sp => sp.GetRequiredService<InputGuard>());
-
-        // Session state yönetimi (sentiment, intent, persist)
-        services.AddSingleton<SessionStateService>();
-
-        // ─── Self-Improvement (LessonMiner) ───
         services.AddSingleton<Services.Improvement.LessonMiner>();
-
-        // ─── Per-Customer Personalization ───
         services.AddSingleton<Services.Personalization.CustomerProfileService>();
-
-        // ─── Smart Routing & Skills-Based Escalation ───
         services.AddSingleton<ISkillsBasedRouter, Services.Routing.SkillsBasedRouter>();
-
-        // ─── Low-Code Workflow Designer ───
         services.AddSingleton<Services.Workflow.WorkflowExecutor>();
+    }
 
-        // ─── Semantic Memory — IEmbeddingPort ve IVectorMemoryPort varsa aktif olur ───
+    private static void AddMemoryServices(this IServiceCollection services, IConfiguration configuration)
+    {
         var memOpts = configuration.GetSection(SemanticMemoryOptions.SectionName)
                           .Get<SemanticMemoryOptions>() ?? new SemanticMemoryOptions();
         if (memOpts.Enabled)
@@ -108,12 +102,13 @@ public static class ApplicationServiceCollectionExtensions
             services.AddSingleton<SemanticMemoryService>();
             services.AddSingleton<ISemanticMemoryIngestor>(sp => sp.GetRequiredService<SemanticMemoryService>());
             services.AddSingleton<IMemoryPort, MemoryPortService>();
+            services.AddSingleton<IContextProvider, SemanticMemoryContextProvider>();
         }
         else
         {
+            services.AddSingleton<ISemanticMemoryIngestor, DisabledSemanticMemoryIngestor>();
             services.AddSingleton<IMemoryPort, DisabledMemoryPort>();
+            services.AddSingleton<IContextProvider, NoopContextProvider>();
         }
-
-        return services;
     }
 }

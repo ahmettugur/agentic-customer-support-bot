@@ -16,16 +16,16 @@
 
 using System.Collections.Concurrent;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed partial class PostgresSessionManager : ISessionManager
+public sealed class PostgresSessionManager : ISessionManager
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresSessionManager> _logger;
@@ -67,6 +67,7 @@ public sealed partial class PostgresSessionManager : ISessionManager
             {
                 _logger.LogError(ex,
                     "[Session] UPSERT (create) başarısız. Id={Id}", id);
+                throw ExceptionTranslator.Translate(ex, $"Session oluşturulamadı: {id}");
             }
             return session;
         });
@@ -87,6 +88,7 @@ public sealed partial class PostgresSessionManager : ISessionManager
         {
             _logger.LogError(ex,
                 "[Session] UPSERT başarısız. Id={Id}", session.SessionId);
+            throw ExceptionTranslator.Translate(ex, $"Session güncellenemedi: {session.SessionId}");
         }
     }
 
@@ -123,51 +125,7 @@ public sealed partial class PostgresSessionManager : ISessionManager
 
     private void ExtractAndUpdateStateCore(AgentSession session, string userMessage, string botResponse)
     {
-        var state = session.State;
-        state.TurnCount++;
-
-        var custMatch = CustomerIdPattern().Match(userMessage);
-        if (custMatch.Success)
-        {
-            state.CustomerId = custMatch.Value;
-        }
-        else
-        {
-            custMatch = CustomerIdPattern().Match(botResponse);
-            if (custMatch.Success && state.CustomerId is null)
-            {
-                state.CustomerId = custMatch.Value;
-            }
-        }
-
-        var orderMatch = OrderIdPattern().Match(userMessage);
-        if (orderMatch.Success)
-        {
-            state.CollectedInfo["LastMentionedOrderId"] = orderMatch.Value;
-        }
-
-        state.CurrentIntent = DetectUserIntent(userMessage);
-        state.Phase = DetermineConversationPhase(state.TurnCount, botResponse);
-
-        var (sentimentLabel, sentimentScore) = DetectSentiment(userMessage);
-        state.Sentiment = sentimentLabel;
-        state.SentimentScore = sentimentScore;
-
-        state.SentimentHistory.Add(new SentimentEntry
-        {
-            Turn = state.TurnCount,
-            Label = sentimentLabel,
-            Score = sentimentScore
-        });
-
-        if (state.SentimentHistory.Count > 20)
-            state.SentimentHistory.RemoveRange(0, state.SentimentHistory.Count - 20);
-
-        if (sentimentScore < WellKnown.SentimentThresholds.NegativeThreshold)
-            state.ConsecutiveNegativeTurns++;
-        else
-            state.ConsecutiveNegativeTurns = 0;
-
+        SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse);
         Update(session);
     }
 
@@ -206,6 +164,7 @@ public sealed partial class PostgresSessionManager : ISessionManager
         {
             _logger.LogError(ex,
                 "[Session] AddExchange INSERT başarısız. Session={Session}", sessionId);
+            throw ExceptionTranslator.Translate(ex, $"Mesaj kaydedilemedi: {sessionId}");
         }
 
         ExtractAndUpdateState(sessionId, userQuery, assistantResponse);
@@ -248,6 +207,7 @@ public sealed partial class PostgresSessionManager : ISessionManager
         {
             _logger.LogError(ex,
                 "[Session] AppendAssistantMessage DB başarısız. Session={Session}", sessionId);
+            throw ExceptionTranslator.Translate(ex, $"Assistant mesajı kaydedilemedi: {sessionId}");
         }
     }
 
@@ -262,6 +222,7 @@ public sealed partial class PostgresSessionManager : ISessionManager
         {
             _logger.LogError(ex,
                 "[Session] ClearSession DB başarısız. Session={Session}", sessionId);
+            throw ExceptionTranslator.Translate(ex, $"Session silinemedi: {sessionId}");
         }
     }
 
@@ -513,50 +474,5 @@ public sealed partial class PostgresSessionManager : ISessionManager
         _logger.LogInformation("[Session] Metadata hydrate: {Count} session", sessions.Count);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Yardımcı kurallar (InMemorySessionManager ile birebir aynı)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    private static string DetectUserIntent(string message)
-    {
-        var lower = message.ToLowerInvariant();
-        if (lower.Contains("sipariş") &&
-            (lower.Contains("durum") || lower.Contains("takip") || lower.Contains("nerede")))
-        {
-            return WellKnown.Intents.OrderInquiry;
-        }
-
-        foreach (var (intent, keywords) in WellKnown.IntentKeywords)
-        {
-            if (keywords.Any(k => lower.Contains(k))) return intent;
-        }
-
-        return WellKnown.Intents.General;
-    }
-
-    private static string DetermineConversationPhase(int turnCount, string botResponse) =>
-        turnCount switch
-        {
-            1 => WellKnown.Phases.Inquiry,
-            _ when botResponse.Contains(WellKnown.ResponseKeywords.SuccessMarker, StringComparison.OrdinalIgnoreCase) => WellKnown.Phases.Resolution,
-            _ when botResponse.Contains(WellKnown.ResponseKeywords.MissingInfoMarker, StringComparison.OrdinalIgnoreCase) => WellKnown.Phases.Inquiry,
-            _ => WellKnown.Phases.Action
-        };
-
-    private static (string Label, double Score) DetectSentiment(string message)
-    {
-        var lower = message.ToLowerInvariant();
-        foreach (var (sentiment, score, keywords) in WellKnown.SentimentKeywords)
-        {
-            if (keywords.Any(k => lower.Contains(k))) return (sentiment, score);
-        }
-        return (WellKnown.Sentiments.Neutral, 0.5);
-    }
-
-    [GeneratedRegex(@"CUST-\d+", RegexOptions.IgnoreCase)]
-    private static partial Regex CustomerIdPattern();
-
-    [GeneratedRegex(@"ORD-\d+", RegexOptions.IgnoreCase)]
-    private static partial Regex OrderIdPattern();
 }
 

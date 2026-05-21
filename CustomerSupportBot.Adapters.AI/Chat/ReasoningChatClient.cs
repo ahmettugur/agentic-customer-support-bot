@@ -29,20 +29,36 @@ public class ReasoningChatClient : IReasoningChatClient
         IReadOnlyList<ConversationMessage> messages,
         CancellationToken ct = default)
     {
-        var chatMessages = Map(messages);
-        var options = BuildOptions();
-        var response = await _client.GetResponseAsync(chatMessages, options, ct);
-        return response.Text ?? "";
+        try
+        {
+            var chatMessages = Map(messages);
+            var options = BuildOptions();
+            var response = await _client.GetResponseAsync(chatMessages, options, ct);
+            return response.Text ?? "";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || ct.IsCancellationRequested is false)
+        {
+            throw ExceptionTranslator.Translate(ex, "ReasoningChatClient.CompleteAsync başarısız.");
+        }
     }
 
     public async IAsyncEnumerable<string> StreamAsync(
         IReadOnlyList<ConversationMessage> messages,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
-        var chatMessages = Map(messages);
-        var options = BuildOptions();
+        IAsyncEnumerable<ChatResponseUpdate> stream;
+        try
+        {
+            var chatMessages = Map(messages);
+            var options = BuildOptions();
+            stream = _client.GetStreamingResponseAsync(chatMessages, options, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || ct.IsCancellationRequested is false)
+        {
+            throw ExceptionTranslator.Translate(ex, "ReasoningChatClient.StreamAsync başarısız.");
+        }
 
-        await foreach (var update in _client.GetStreamingResponseAsync(chatMessages, options, ct))
+        await foreach (var update in stream)
         {
             var text = update.Text;
             if (!string.IsNullOrEmpty(text))

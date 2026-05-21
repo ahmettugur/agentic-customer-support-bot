@@ -1,7 +1,5 @@
 // Ports/Driven/Messaging/IMessageBusPort.cs
 // SECONDARY PORT — Dağıtık mesajlaşma (pub/sub) soyutlaması.
-// Adaptörler: RedisMessageBusAdapter (CustomerSupportBot.Adapters.Redis),
-//             InMemoryMessageBusAdapter (CustomerSupportBot.Adapters.Persistence — test/tek instance).
 
 namespace CustomerSupportBot.Application.Ports.Driven.Messaging;
 

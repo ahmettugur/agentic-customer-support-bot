@@ -41,7 +41,7 @@ Bu dokümanda sistemde uygulanan **agentic design pattern'leri** haritalanır. H
 **Gerçekleme**:
 
 - **Planner**: `PlanningAgent` — tool yok, sadece routing JSON üretir
-- **Executors**: 3 specialist ajan (ProductInquiry, Order, Complaint) — hepsi tool kullanır
+- **Executors**: 4 specialist ajan (ProductInquiry, Order, Complaint, HumanHandoff) — hepsi tool kullanır
 
 **Dosya**: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:60-101`
 

@@ -1,13 +1,11 @@
-// Models/StreamEvent.cs
-// SSE üzerinden frontend'e gönderilen event tipleri.
+// Ports/Driving/StreamEvent.cs
+// IChatPort streaming use case output DTO'su ve event tipleri.
 
-namespace CustomerSupportBot.Domain.Model;
+namespace CustomerSupportBot.Application.Ports.Driving;
 
 /// <summary>
-/// Streaming event modelI. SSE formatında frontend'e gönderilir.
-/// Type: event adı (session, reasoning_start, reasoning_delta, reasoning_complete,
-///       Agent, response_start, response_delta, response_complete, error, done)
-/// Data: JSON olarak serileştirilebilir veri
+/// Streaming event modeli — use case boundary output.
+/// Type: event adı, Data: JSON olarak serileştirilebilir veri.
 /// </summary>
 public record StreamEvent(string Type, object? Data);
 
@@ -43,12 +41,12 @@ public static class StreamEventTypes
 
     /// <summary>
     /// Bu session için bir handoff/eskalasyon açıldı; kullanıcıya "bir temsilci
-    /// Bağlanıyor, bekleyin" sinyali. Payload: { escalationId, reason, createdAt }.
+    /// bağlanıyor, bekleyin" sinyali. Payload: { escalationId, reason, createdAt }.
     /// </summary>
     public const string HandoffPending = "handoff_pending";
     /// <summary>
     /// Pending handoff iptal oldu (admin dismiss etti veya takeover olmadan resolve
-    /// Edildi). Kullanıcı pending banner'ını kaldırır. Payload: { escalationId, reason }.
+    /// edildi). Kullanıcı pending banner'ını kaldırır. Payload: { escalationId, reason }.
     /// </summary>
     public const string HandoffCleared = "handoff_cleared";
 
@@ -67,4 +65,3 @@ public static class StreamEventTypes
     /// <summary>Duygu skoru kritik eşiğin altına düştü. Payload: { sentiment, score, consecutive, sessionId }.</summary>
     public const string SentimentAlert = "sentiment_alert";
 }
-

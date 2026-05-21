@@ -81,7 +81,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         {
             _logger.LogError(ex, "[HITL] Approval INSERT başarısız. Id={Id}", request.Id);
             _entries.TryRemove(request.Id, out _);
-            throw;
+            throw ExceptionTranslator.Translate(ex, $"Approval oluşturulamadı: {request.Id}");
         }
 
         _logger.LogInformation(

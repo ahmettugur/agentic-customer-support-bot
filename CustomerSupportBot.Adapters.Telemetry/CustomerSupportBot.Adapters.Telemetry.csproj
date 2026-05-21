@@ -7,7 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Application port'larını implement eder -->
+    <!-- Hexagonal: Domain modelleri ve Application port'ları -->
+    <ProjectReference Include="..\CustomerSupportBot.Domain\CustomerSupportBot.Domain.csproj" />
     <ProjectReference Include="..\CustomerSupportBot.Application\CustomerSupportBot.Application.csproj" />
   </ItemGroup>
 

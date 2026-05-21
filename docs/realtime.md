@@ -6,7 +6,7 @@ OpenAI **Realtime API** (`gpt-realtime-2`) üzerinden kurulan full-duplex ses ka
 
 | Mod | Buton | Endpoint | gpt-realtime-2 rolü | Agent pipeline | Tool seti |
 |---|---|---|---|---|---|
-| **🎤 Sesli Asistan (köprü)** | Mikrofon | `/chat/realtime` | Yalnızca STT + TTS köprüsü (`create_response: false`) | **Tam akış** — reasoning + 7 ajan + HITL | Tüm tool'lar (sipariş aç, şikayet, vb.) |
+| **🎤 Sesli Asistan (köprü)** | Mikrofon | `/chat/realtime` | Yalnızca STT + TTS köprüsü (`create_response: false`) | **Tam akış** — reasoning + 6 ajan + HITL | Tüm tool'lar (sipariş aç, şikayet, vb.) |
 | **⚡ Hızlı Sesli (native)** | Şimşek | `/chat/realtime-native` | Modelin kendisi konuşur ve tool çağırır (`create_response: true`) | **YOK** — model tek başına yanıtlar | Yalnızca okuma-only (5 tool — veda dahil) |
 
 **Hangisini ne zaman?**

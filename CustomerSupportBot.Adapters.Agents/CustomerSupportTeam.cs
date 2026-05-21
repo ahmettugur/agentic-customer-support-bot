@@ -13,13 +13,15 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
-using CustomerSupportBot.Domain.Model;
-using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
-using CustomerSupportBot.Domain.Services;
 using CustomerSupportBot.Application.Ports.Driven;
+using CustomerSupportBot.Application.Ports.Driven.Observability;
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Application.Services.Workflow;
 using CustomerSupportBot.Application.Services.Memory;
+using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Services;
+using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -80,7 +82,7 @@ public class CustomerSupportTeam : IAgentTeamPort
         _parallelOptions = new ParallelExecutionOptions();
         configuration.GetSection(ParallelExecutionOptions.SectionName).Bind(_parallelOptions);
 
-        var sourceName = WellKnown.Telemetry.ActivitySourceName;
+        var sourceName = TelemetryConstants.ActivitySourceName;
 
         _planningAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
@@ -181,9 +183,9 @@ public class CustomerSupportTeam : IAgentTeamPort
                     result = WorkflowResponseExtractor.ExtractResultFromOutput(output);
                     break;
                 case WorkflowErrorEvent errorEvt:
-                    throw new InvalidOperationException(
-                        $"Workflow hatası: {errorEvt.Exception?.Message}",
-                        errorEvt.Exception);
+                    throw ExceptionTranslator.Translate(
+                        errorEvt.Exception ?? new InvalidOperationException("Workflow hatası"),
+                        "RunAsync workflow hatası.");
             }
         }
 

@@ -49,10 +49,19 @@ public sealed class RedisDistributedLockAdapter : IAppDistributedLock
         TimeSpan? timeout = null,
         CancellationToken ct = default)
     {
-        var handle = await TryAcquireAsync(resourceKey, timeout, ct);
-        if (handle is null)
-            throw new TimeoutException($"Distributed lock alınamadı: '{resourceKey}'");
-        return handle;
+        try
+        {
+            var handle = await TryAcquireAsync(resourceKey, timeout, ct);
+            if (handle is null)
+                throw ExceptionTranslator.Translate(
+                    new TimeoutException($"Distributed lock alınamadı: '{resourceKey}'"),
+                    $"Lock acquire timeout: {resourceKey}");
+            return handle;
+        }
+        catch (RedisException ex)
+        {
+            throw ExceptionTranslator.Translate(ex, $"Lock acquire hatası: {resourceKey}");
+        }
     }
 
     private sealed class LockHandle : IAsyncDisposable

@@ -9,7 +9,6 @@ using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
-using ChatResponse = CustomerSupportBot.Domain.Model.ChatResponse;
 
 namespace CustomerSupportBot.Application.Services;
 

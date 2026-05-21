@@ -5,7 +5,6 @@ namespace CustomerSupportBot.Application.Ports.Driven.AI;
 
 /// <summary>
 /// Metin → embedding (float[]) üreten secondary port.
-/// Adaptörler: OpenAiEmbeddingAdapter (CustomerSupportBot.Adapters.AI).
 /// </summary>
 public interface IEmbeddingPort
 {

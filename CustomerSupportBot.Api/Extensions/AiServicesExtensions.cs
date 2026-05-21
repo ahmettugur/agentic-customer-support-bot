@@ -1,7 +1,9 @@
 // Extensions/AiServicesExtensions.cs
-// AI servislerini kayıt eder. Seçenekler ve embedding/vector adapter kayıtları
-// Adapters.AI'ye taşındı; SemanticMemoryService + KnowledgeBaseIngestor Application'a.
-// Bu dosyada yalnızca IChatClient/ReasoningChatClient telemetri sarmalama bırakılmıştır.
+// Composition Root: AI + Telemetry adapter'larının IChatClient kayıtlarını birleştirir.
+// Bu dosya bilinçli olarak iki adapter'ın concern'lerini (AI client oluşturma + telemetri
+// dekorasyon) tek noktada birleştirir — Composition Root'un sorumluluk alanıdır.
+// IChatClient hem Agents adapter (CustomerSupportTeam) hem de AI adapter (IGeneralChatClient)
+// tarafından tüketilir.
 
 using CustomerSupportBot.Adapters.AI;
 using CustomerSupportBot.Adapters.AI.Chat;

@@ -441,7 +441,7 @@ services.AddSingleton<IContextProvider, LoyaltyContextProvider>();  // ← yeni
 
 ```csharp
 // CustomerSupportBot.Api/Endpoints/SessionEndpoints.cs
-app.MapDelete("/sessions/purge-old", (int daysOld, ISessionRepository sessionRepo) =>
+app.MapDelete("/sessions/purge-old", (int daysOld, ISessionManager sessionRepo) =>
 {
     var cutoff = DateTime.UtcNow.AddDays(-daysOld);
     var removed = mgr.PurgeOlderThan(cutoff);

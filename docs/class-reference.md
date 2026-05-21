@@ -20,7 +20,7 @@ MAF (`Microsoft.Agents.AI` framework) üzerine kurulu **2 orkestrasyon sınıfı
 
 ### `CustomerSupportTeam` — `Agents/CustomerSupportTeam.cs`
 
-Sistemin merkezi orkestratörü. **7 MAF `ChatClientAgent`**'ı (Planning + 5 specialist + Response) ctor'da yaratır, tüm tool'ları kaydeder ve `AgentWorkflowBuilder.CreateGroupChatBuilderWith(...)` ile workflow derler. İki genel metod:
+Sistemin merkezi orkestratörü. **6 MAF `ChatClientAgent`**'ı (Planning + 4 specialist + Response) ctor'da yaratır, tüm tool'ları kaydeder ve `AgentWorkflowBuilder.CreateGroupChatBuilderWith(...)` ile workflow derler. İki genel metod:
 
 - **`RunAsync(query, history?, session?, reasoning?)`** — non-streaming. Compound query algılayıp `RunDecomposedAsync`'a ayrılabilir. Final string response döner, ResponseAgent TERMINATE marker'ı temizlenmiş.
 - **`RunStreamingAsync(...)`** — SSE için event stream üretir (`agent`, `response_start`, `response_delta`, `response_complete`). Compound query'de `RunDecomposedStreamingAsync`'a düşer.
@@ -669,26 +669,30 @@ YAML için DTO + sonuç modelleri:
 Hexagonal mimaride `Program.cs` **composition root** rolündedir — DI kayıtlarını doğrudan değil, her katmanın kendi extension method'u üzerinden yapar:
 
 ```csharp
+// Program.cs — Api katmanı DI composition root
+// Her metod Api/Extensions/ içindeki wrapper'ları çağırır,
+// onlar da ilgili adapter DI extension'larını çalıştırır.
+
 // 1. Telemetri (cross-cutting — ilk kayıt)
-builder.Services.AddTelemetryAdapters(builder.Configuration);   // CustomerSupportBot.Adapters.Telemetry
+builder.Services.AddTelemetryServices(builder.Configuration);    // → Adapters.Telemetry
 
 // 2. AI istemcileri (sağlayıcı: OpenAI / AzureOpenAI / Anthropic)
-builder.Services.AddAiServices(builder.Configuration);           // CustomerSupportBot.Api
+builder.Services.AddAiServices(builder.Configuration);           // → Api/Extensions/AiServicesExtensions
 
-// 3. Redis adaptörleri (opsiyonel — locking + IMessageBusPort)
-builder.Services.AddRedisAdapters(builder.Configuration);        // CustomerSupportBot.Adapters.Redis
+// 3. Redis adaptörleri (locking + IMessageBusPort)
+builder.Services.AddRedisServices(builder.Configuration);        // → Adapters.Redis
 
 // 4. Persistence adaptörleri (Persistence:Provider'a göre Postgres / InMemory)
-builder.Services.AddPersistenceAdapters(builder.Configuration);  // CustomerSupportBot.Adapters.Persistence
+builder.Services.AddPersistenceServices(builder.Configuration);  // → Adapters.Persistence
 
-// 5. Uygulama servisleri (Application katmanı)
-builder.Services.AddApplicationServices(builder.Configuration);  // CustomerSupportBot.Application
+// 5. Uygulama + Ajan servisleri (Application driving ports + AddAgentsAdapter dahili)
+builder.Services.AddApplicationServices(builder.Configuration);  // → Application + Adapters.Agents
 
-// 6. Ajan adaptörleri (MAF + CustomerSupportTeam)
-builder.Services.AddAgentAdapters(builder.Configuration);        // CustomerSupportBot.Adapters.Agents
-
-// 7. Auth (JWT Bearer + Admin policy)
+// 6. Auth (JWT Bearer + Admin policy)
 builder.Services.AddAuthenticationServices(builder.Configuration);
+
+// 7. Health checks
+builder.Services.AddAppHealthChecks(builder.Configuration);
 
 // Development'ta DB migration
 await app.MigrateIfDevelopmentAsync();
@@ -698,12 +702,12 @@ Her `Add*` metodu kendi katmanının sınıflarını kaydeder:
 
 | Extension | Kayıt edilen başlıcalar |
 |---|---|
-| `AddTelemetryAdapters` | OTLP exporter, `ICostTracker`, `ChatTelemetryMiddleware` |
+| `AddTelemetryServices` | OTLP exporter, `ICostTracker`, `ChatTelemetryMiddleware` |
 | `AddAiServices` | `IChatClient`, `ReasoningChatClient`, `AiClientFactory`, `IOptions<AiProviderOptions>` |
-| `AddRedisAdapters` | `IConnectionMultiplexer`, `IDistributedLockProvider`, `IMessageBusPort → RedisMessageBusAdapter` |
-| `AddPersistenceAdapters` | Postgres: `PostgresSessionManager`, `PostgresApprovalQueue`, `PostgresRatingStore`, `IMessageBusPort → InMemoryMessageBusAdapter` (InMemory mod); `IOptions<PromptOptions>`, `IPromptRepository → FileSystemPromptRepository` |
-| `AddApplicationServices` | `EntityVerifier`, `ReasoningSanityChecker`, `ReasoningService`, `ContextPipeline`, `IContextProvider` × 4, `ApprovalGateService`, `InputGuard`, `CustomerProfileService`, `SkillsBasedRouter` |
-| `AddAgentAdapters` | `CustomerSupportChatManager`, `CustomerSupportTeam`, `EvaluationRunner` |
+| `AddRedisServices` | `IConnectionMultiplexer`, `IDistributedLockProvider`, `IMessageBusPort → RedisMessageBusAdapter` |
+| `AddPersistenceServices` | Postgres: `PostgresSessionManager`, `PostgresApprovalQueue`, `PostgresRatingStore`, `IMessageBusPort → InMemoryMessageBusAdapter` (InMemory mod); `IOptions<PromptOptions>`, `IPromptRepository → FileSystemPromptRepository` |
+| `AddApplicationServices` | 13 driving port servisi (ISessionPort, IChatPort, IApprovalPort, IEscalationPort, ...), `EntityVerifier`, `ReasoningSanityChecker`, `ReasoningService`, `EvaluationRunner`, `ContextPipeline`, `IContextProvider` × 3-4, `InputGuard`, `CustomerProfileService`, `SkillsBasedRouter`, `WorkflowExecutor`, `LessonMiner` — dahili olarak `AddAgentsAdapter()` çağırır |
+| `AddAgentsAdapter` | `ApprovalGateService`, `CustomerSupportTeam` → `IAgentTeamPort` (IChatClient fail-fast doğrulama) |
 
 ### `IMessageBusPort` — `CustomerSupportBot.Application/Ports/Driven/Messaging/IMessageBusPort.cs`
 

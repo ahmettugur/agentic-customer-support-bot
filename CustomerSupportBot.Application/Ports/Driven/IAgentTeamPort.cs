@@ -4,6 +4,7 @@
 // Implementasyon (CustomerSupportTeam) Adapters.Agents katmanında yaşar;
 // Microsoft.Agents framework bağımlılığı core'dan gizlenir.
 
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Driven;

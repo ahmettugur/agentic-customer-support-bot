@@ -10,6 +10,7 @@ Sistemde **6 ajan** vardır. Hepsi MAF `ChatClientAgent` olarak `CustomerSupport
 | **ProductInquiryAgent** | Ürün sorgusu (read-only) | `product_inquiry_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
 | **OrderAgent** | Sipariş oluşturma + sorgulama | `order_placement_tool` + `order_status_tool` + `get_last_order_tool` + `get_all_orders_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
 | **ComplaintAgent** | Şikayet kaydı (yan etkili) | `complaint_registration_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
+| **HumanHandoffAgent** | İnsan temsilciye eskalasyon | `escalate_to_human_tool` | ✅ `SpecialistReasoning` JSON | Specialist |
 | **ResponseAgent** | Son yanıt + TERMINATE | Yok | — | Turun **sonu** |
 
 **Pozisyon** sütunu kritiktir — ChatManager ajan seçimini pozisyon tabanlı yapar: ilk tur PlanningAgent, spesialist tool çağırdıktan sonra ResponseAgent, TERMINATE ile sonlanır. Bkz. [workflow.md](workflow.md).
@@ -98,7 +99,7 @@ Bir ajan MAF'ta **monolitik bir LLM çağrısı** değildir. Tek bir agent itera
 | 3. Tool | ❌ Atlandı |
 | 4. Reflection | ChatManager routing kararı (JSON'daki `selectedAgent`) |
 
-**3 Specialist** (ProductInquiry, Order, Complaint) — **tam 4-aşamalı zincir**:
+**4 Specialist** (ProductInquiry, Order, Complaint, HumanHandoff) — **tam 4-aşamalı zincir**:
 
 | Sub-component | Davranış |
 |---|---|
@@ -356,7 +357,46 @@ Bu davranış **ping-pong'u önler** — kullanıcı şikayet için `CUST-001` v
 
 ---
 
-## 5. ResponseAgent
+## 5. HumanHandoffAgent
+
+**Dosya**: `Prompts/agents/human-handoff-agent.md`
+**Kod**: `CustomerSupportTeam.cs:103-108`
+**Tool**: `human_handoff_tool(reason)`
+
+### Sorumluluk
+
+Kullanıcı **açıkça** bir insan temsilciyle görüşmek istediğinde devreye girer. `human_handoff_tool`'u çağırarak talebi kaydeder ve eskalasyon akışını başlatır.
+
+### Ne zaman çağrılır?
+
+PlanningAgent **yalnızca** kullanıcı net, explicit bir insan talebi bildirdiyse seçer:
+- *"Temsilci ile görüşmek istiyorum."*
+- *"Canlı destek bağlayın."*
+- *"Bir insanla konuşmam lazım."*
+
+Kullanıcı somut bir soru sorduysa (sipariş/şikayet/ürün) bu ajan **çağrılmaz** — ilgili specialist ilgilenir.
+
+### Gerekli parametreler
+
+- **`reason`** — Kullanıcının temsilciyle görüşme sebebi (LLM tarafından çıkarılır, boş bırakılamaz)
+
+### ToolResult davranışları
+
+| Sonuç | `status` | Davranış |
+|---|---|---|
+| `success=true` | `needs_escalation` | Talep kaydedildi, `IEscalationSink`'e yazılacak |
+| `error.category=validation` | `needs_followup` | Sebep alanı eksik (nadiren) |
+
+### Handoff kuralları
+
+- Talep kaydedildi → `needs_escalation` / `ResponseAgent`
+- Hata → `needs_followup` / `ResponseAgent`
+
+> ⚠️ **Kritik**: Başarı durumunda bile `status=needs_escalation` kullanılır — bot işi bitirmedi, sadece insan yönlendirmesi yaptı. `done` DEĞİL.
+
+---
+
+## 6. ResponseAgent
 
 **Dosya**: `Prompts/agents/response-agent.md`
 **Kod**: `CustomerSupportTeam.cs:106-110`

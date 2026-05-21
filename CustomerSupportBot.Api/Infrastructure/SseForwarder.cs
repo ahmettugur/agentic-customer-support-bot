@@ -4,6 +4,7 @@
 
 namespace CustomerSupportBot.Api.Infrastructure;
 
+using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.AspNetCore.Http;
 

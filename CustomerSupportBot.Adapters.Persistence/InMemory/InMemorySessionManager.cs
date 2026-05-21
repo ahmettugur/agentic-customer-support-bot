@@ -2,8 +2,8 @@
 // ISessionManager'ın bellek içi implementasyonu.
 
 using System.Collections.Concurrent;
-using System.Text.RegularExpressions;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Services;
 
 namespace CustomerSupportBot.Adapters.Persistence.InMemory;
 
@@ -12,7 +12,7 @@ namespace CustomerSupportBot.Adapters.Persistence.InMemory;
 /// Hem mesaj geçmişi hem de oturum durumu (state) yönetir.
 /// Thread-safe erişim için ConcurrentDictionary kullanılır.
 /// </summary>
-public partial class InMemorySessionManager : ISessionManager
+public class InMemorySessionManager : ISessionManager
 {
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
     private readonly ConcurrentDictionary<string, List<ConversationMessage>> _messageHistory = new();
@@ -81,60 +81,7 @@ public partial class InMemorySessionManager : ISessionManager
 
     private void ExtractAndUpdateStateCore(AgentSession session, string userMessage, string botResponse)
     {
-        var state = session.State;
-        state.TurnCount++;
-
-        // Müşteri kimlik numarası çıkarma (CUST-XXX formatı)
-        var custMatch = CustomerIdPattern().Match(userMessage);
-        if (custMatch.Success)
-        {
-            state.CustomerId = custMatch.Value;
-        }
-        else
-        {
-            // Bot yanıtından da çıkar (ajan müşteriye kimliğini söyleyebilir)
-            custMatch = CustomerIdPattern().Match(botResponse);
-            if (custMatch.Success && state.CustomerId == null)
-            {
-                state.CustomerId = custMatch.Value;
-            }
-        }
-
-        // Sipariş numarası çıkarma (ORD-XXX formatı)
-        var orderMatch = OrderIdPattern().Match(userMessage);
-        if (orderMatch.Success)
-        {
-            state.CollectedInfo["LastMentionedOrderId"] = orderMatch.Value;
-        }
-
-        // Niyet tespiti (basit kural tabanlı)
-        state.CurrentIntent = DetectUserIntent(userMessage);
-
-        // Güncelleme
-        state.Phase = DetermineConversationPhase(state.TurnCount, botResponse);
-
-        // Duygu analizi (hızlı kural tabanlı — reasoning LLM sonucu ile override edilebilir)
-        var (sentimentLabel, sentimentScore) = DetectSentiment(userMessage);
-        state.Sentiment = sentimentLabel;
-        state.SentimentScore = sentimentScore;
-
-        state.SentimentHistory.Add(new SentimentEntry
-        {
-            Turn = state.TurnCount,
-            Label = sentimentLabel,
-            Score = sentimentScore
-        });
-
-        // Son 20 tur dışını temizle
-        if (state.SentimentHistory.Count > 20)
-            state.SentimentHistory.RemoveRange(0, state.SentimentHistory.Count - 20);
-
-        // Ardışık negatif sayacı
-        if (sentimentScore < WellKnown.SentimentThresholds.NegativeThreshold)
-            state.ConsecutiveNegativeTurns++;
-        else
-            state.ConsecutiveNegativeTurns = 0;
-
+        SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse);
         Update(session);
     }
 
@@ -226,70 +173,5 @@ public partial class InMemorySessionManager : ISessionManager
         return result.OrderByDescending(s => s.LastActivity).ToList();
     }
 
-    // ─── YARDIMCI METODLAR ───
-
-    /// <summary>
-    /// Kullanıcı mesajından niyet algılar.
-    /// Önce <see cref="WellKnown.IntentKeywords"/> mapping'i, sonra özel kompozit kural
-    /// (sipariş + durum/takip/nerede → OrderInquiry).
-    /// </summary>
-    private static string DetectUserIntent(string message)
-    {
-        var lower = message.ToLowerInvariant();
-
-        // Özel kural: "sipariş" kelimesi tek başına yetmez, durum/takip/nerede ile birleşmeli
-        if (lower.Contains("sipariş") &&
-            (lower.Contains("durum") || lower.Contains("takip") || lower.Contains("nerede")))
-        {
-            return WellKnown.Intents.OrderInquiry;
-        }
-
-        // Tablo tabanlı eşleşme — ilk eşleşen niyet seçilir
-        foreach (var (intent, keywords) in WellKnown.IntentKeywords)
-        {
-            if (keywords.Any(k => lower.Contains(k)))
-            {
-                return intent;
-            }
-        }
-
-        return WellKnown.Intents.General;
-    }
-
-    private static string DetermineConversationPhase(int turnCount, string botResponse)
-    {
-        return turnCount switch
-        {
-            1 => WellKnown.Phases.Inquiry,
-            _ when botResponse.Contains(WellKnown.ResponseKeywords.SuccessMarker, StringComparison.OrdinalIgnoreCase) => WellKnown.Phases.Resolution,
-            _ when botResponse.Contains(WellKnown.ResponseKeywords.MissingInfoMarker, StringComparison.OrdinalIgnoreCase) => WellKnown.Phases.Inquiry,
-            _ => WellKnown.Phases.Action
-        };
-    }
-
-    /// <summary>
-    /// Kural tabanlı hızlı duygu analizi. WellKnown.SentimentKeywords tablosunu kullanır.
-    /// LLM reasoning sonucu ile daha sonra override edilebilir.
-    /// </summary>
-    private static (string Label, double Score) DetectSentiment(string message)
-    {
-        var lower = message.ToLowerInvariant();
-
-        foreach (var (sentiment, score, keywords) in WellKnown.SentimentKeywords)
-        {
-            if (keywords.Any(k => lower.Contains(k)))
-            {
-                return (sentiment, score);
-            }
-        }
-
-        return (WellKnown.Sentiments.Neutral, 0.5);
-    }
-
-    [GeneratedRegex(@"CUST-\d+", RegexOptions.IgnoreCase)]
-    private static partial Regex CustomerIdPattern();
-
-    [GeneratedRegex(@"ORD-\d+", RegexOptions.IgnoreCase)]
-    private static partial Regex OrderIdPattern();
 }
 
