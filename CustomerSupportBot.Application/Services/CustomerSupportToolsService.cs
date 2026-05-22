@@ -14,6 +14,7 @@ using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Text;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 
 namespace CustomerSupportBot.Application.Services;
@@ -22,7 +23,7 @@ namespace CustomerSupportBot.Application.Services;
 /// Müşteri destek AI araçları.
 /// Statik FakeDatabase bağımlılığı kırılmış; tüm veri erişimi port'lar üzerinden yapılır.
 /// </summary>
-public sealed class CustomerSupportToolsService
+public sealed class CustomerSupportToolsService : ICustomerSupportToolsService
 {
     private readonly IProductCatalogRepository _products;
     private readonly IOrderRepository _orders;

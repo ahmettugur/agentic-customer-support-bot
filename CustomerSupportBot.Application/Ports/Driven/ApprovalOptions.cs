@@ -4,7 +4,7 @@
 
 using CustomerSupportBot.Domain.Model;
 
-namespace CustomerSupportBot.Application.Services;
+namespace CustomerSupportBot.Application.Ports.Driven;
 
 /// <summary>
 /// HITL ayarları. Approval gate feature'ı Enabled=false ise bypass edilir —

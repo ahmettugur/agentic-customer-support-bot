@@ -34,11 +34,16 @@ public class EvaluationRunnerTests
             Options.Create(approvalOpts), NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
         var tools = TestFactory.CreateToolsService();
+        var escalationPolicy = new EscalationPolicyService(
+            sink, Options.Create(approvalOpts));
         var approvalGate = new ApprovalGateService(
-            queue, Options.Create(approvalOpts), sink, new ApprovalContextAccessor(), tools);
+            queue, Options.Create(approvalOpts), sink, new ApprovalContextAccessor(), tools, escalationPolicy);
 
         var team = new CustomerSupportTeam(
-            chatClient, contextPipeline, configuration, traceStore,
+            chatClient, contextPipeline,
+            Options.Create(new WorkflowGuardOptions()),
+            Options.Create(new ParallelExecutionOptions()),
+            traceStore,
             prompts, approvalGate, tools, NullLoggerFactory.Instance);
 
         var reasoningClient = new ReasoningChatClient(chatClient, "gpt-test", "low");

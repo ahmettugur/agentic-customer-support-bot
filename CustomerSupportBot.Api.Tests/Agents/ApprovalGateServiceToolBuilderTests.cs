@@ -21,12 +21,15 @@ public class ApprovalGateServiceToolBuilderTests
             Options.Create(opts),
             NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
+        var escalationPolicy = new EscalationPolicyService(
+            sink, Options.Create(opts));
         return new ApprovalGateService(
             queue,
             Options.Create(opts),
             sink,
             new ApprovalContextAccessor(),
-            TestFactory.CreateToolsService(_products, _orders, _complaints));
+            TestFactory.CreateToolsService(_products, _orders, _complaints),
+            escalationPolicy);
     }
 
     /// <summary>

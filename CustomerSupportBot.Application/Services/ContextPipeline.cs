@@ -1,3 +1,4 @@
+using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
@@ -8,7 +9,7 @@ namespace CustomerSupportBot.Application.Services;
 /// Kayıtlı tüm IContextProvider'ları sıralı çalıştırır ve
 /// sonuçlarını birleştirerek tek bir bağlam metni üretir.
 /// </summary>
-public class ContextPipeline
+public class ContextPipeline : IContextPipeline
 {
     private readonly IEnumerable<IContextProvider> _providers;
     private readonly ILogger<ContextPipeline> _logger;

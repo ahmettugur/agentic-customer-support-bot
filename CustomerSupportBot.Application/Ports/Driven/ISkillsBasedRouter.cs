@@ -1,7 +1,7 @@
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
 
-namespace CustomerSupportBot.Application.Services.Routing;
+namespace CustomerSupportBot.Application.Ports.Driven;
 
 /// <summary>
 /// Eskalasyon için en uygun insan müşteri temsilcisini öneren router.

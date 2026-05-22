@@ -340,7 +340,7 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
 |---|---|
 | `IHumanAgentRegistry` (`InMemoryHumanAgentRegistry`) | İnsan müşteri temsilcisi kayıtları (skill tag, dil, max load, current load). Seed `Routing.SeedAgents` config'inden yüklenir |
 | `ISkillsBasedRouter` (`SkillsBasedRouter`) | Reasoning trace + opsiyonel müşteri profilinden skill gereksinimlerini çıkarır, en iyi skill + dil + load match'iyle aday seçer. LLM-siz, deterministik (<1ms) |
-| Hook | `ApprovalGateService.ProcessPendingEscalations` artık her yeni `EscalationRequest`'e routing alanlarını (`SuggestedAgentId`, `MatchScore`, `RequiredSkills`, `Priority`, `RoutingNote`) doldurur ve `IncrementLoad` çağırır |
+| Hook | `ApprovalGateService.ProcessPendingEscalations` → `EscalationPolicyService.ProcessPendingEscalations` her yeni `EscalationRequest`'e routing alanlarını (`SuggestedAgentId`, `MatchScore`, `RequiredSkills`, `Priority`, `RoutingNote`) doldurur ve `IncrementLoad` çağırır. Routing iş mantığı Application katmanındaki `EscalationPolicyService`'dedir |
 | Auto-decrement | `WireRoutingLoadTracking` başlangıçta `IEscalationSink.RequestDecided` event'ine bağlanır; eskalasyon resolve/dismiss olunca atanan temsilcinin `CurrentLoad`'unu -1 yapar |
 
 ### Low-Code Workflow Designer

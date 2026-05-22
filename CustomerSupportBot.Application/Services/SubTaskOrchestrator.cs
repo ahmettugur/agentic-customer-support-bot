@@ -4,6 +4,7 @@
 // her biri sırayla ayrı bir workflow run olarak yürütülür ve sonuçlar birleştirilir.
 
 using System.Text;
+using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Services;

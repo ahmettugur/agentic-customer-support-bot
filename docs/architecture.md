@@ -149,13 +149,21 @@ CustomerSupport.slnx
 │   │       ├── IPromptRepository.cs     # Prompt dosyası okuma port'u
 │   │       ├── IContextProvider.cs      # Context provider arayüzü
 │   │       ├── IApprovalContextAccessor.cs
-│   │       └── ISkillsBasedRouter.cs    # İnsan temsilci yönlendirme port'u
+│   │       ├── ISkillsBasedRouter.cs    # İnsan temsilci yönlendirme port'u
+│   │       ├── IContextPipeline.cs      # Context pipeline soyutlaması
+│   │       ├── ICustomerSupportToolsService.cs  # AI tool servisi port'u
+│   │       ├── ISemanticMemoryWriter.cs # Episodik bellek yazma port'u
+│   │       ├── ICustomerProfileService.cs # Müşteri profil servisi port'u
+│   │       ├── ApprovalOptions.cs       # HITL onay yapılandırması
+│   │       ├── WorkflowGuardOptions.cs  # Workflow guard ayarları
+│   │       └── ParallelExecutionOptions.cs # Paralel yürütme ayarları
 │   └── Services/                        # Use case implementasyonları
 │       ├── ReasoningService.cs          # Reasoning pipeline (Katman 1 + 1.5)
 │       ├── EntityVerifier.cs            # Katman 0 — entity extract + port lookup
 │       ├── ReasoningSanityChecker.cs    # Katman 1.5 — IReasoningSanityRule × 8
-│       ├── CustomerSupportToolsService.cs # AI tool implementasyonları (port'lar üzerinden)
-│       ├── ContextPipeline.cs           # IContextProvider zinciri
+│       ├── CustomerSupportToolsService.cs # AI tool implementasyonları (ICustomerSupportToolsService impl)
+│       ├── ContextPipeline.cs           # IContextPipeline implementasyonu
+│       ├── EscalationPolicyService.cs   # Eskalasyon routing politikası (ApprovalGateService'den extract)
 │       ├── InputGuard.cs                # Girdi güvenlik filtresi
 │       ├── SessionPortService.cs / ChatPortService.cs / ApprovalPortService.cs
 │       ├── Providers/                   # IContextProvider implementasyonları
@@ -172,9 +180,9 @@ CustomerSupport.slnx
 │       └── Evaluation/                  # CriteriaEvaluator / EvaluationRunner
 │
 ├── CustomerSupportBot.Adapters.Agents/  ← Katman 3a: MAF ajan adaptörü
-│   ├── CustomerSupportTeam.cs           # 6 agent + workflow builder + streaming pump
+│   ├── CustomerSupportTeam.cs           # 6 agent + workflow builder + streaming pump (IOptions<T> ile yapılandırılır)
 │   ├── CustomerSupportChatManager.cs    # GroupChatManager türevi — seçim + terminasyon
-│   ├── ApprovalGateService.cs           # HITL approval gate (yan etkili tool'lar)
+│   ├── ApprovalGateService.cs           # HITL approval gate (routing'i EscalationPolicyService'e delege eder)
 │   ├── WorkflowResponseExtractor.cs     # Workflow çıktı temizleme
 │   └── Routing/                         # Ajan seçim stratejileri
 │
@@ -345,7 +353,8 @@ ReasoningSanityChecker(singleton)  ─┤
 ReasoningService      (singleton)  ─┤
 EvaluationRunner      (singleton)  ─┤  IEvaluationPort implementasyonu
 CustomerSupportTeam   (singleton)  ─┤  6 agent + workflow builder (Adapters.Agents)
-ApprovalGateService   (singleton)  ─┤  HITL onay kapısı (Adapters.Agents)
+ApprovalGateService   (singleton)  ─┤  HITL onay kapısı (Adapters.Agents — routing delegasyonu EscalationPolicyService'e)
+EscalationPolicyService(singleton)  ─┤  Eskalasyon routing politikası (Application)
 InputGuard            (singleton)  ─┤  girdi güvenlik filtresi
 WorkflowExecutor      (singleton)  ─┤  low-code workflow yürütücüsü
 LessonMiner           (singleton)  ─┤  self-improvement lesson extraction
@@ -354,11 +363,11 @@ IContextProvider      (singleton)  ─├─ CustomerContextProvider (Order=10)
                                     ├─ ConversationSummaryProvider (Order=5)
                                     ├─ SemanticMemoryContextProvider (Order=20, SemanticMemory aktifse)
                                     ├─ CustomerProfileContextProvider (Order=15)
-ContextPipeline       (singleton)  ─┘  Order'a göre sıralı çalıştırır.
+ContextPipeline       (singleton)  ─┘  IContextPipeline impl — Order'a göre sıralı çalıştırır.
                                     │
 SlaGuardianService    (hosted)     ─┤  BackgroundService — periyodik SLA taraması
 KnowledgeBaseIngestor (hosted)     ─┤  KB → Qdrant (SemanticMemory aktifse)
-CustomerProfileService(singleton)  ─┤  per-customer profil yönetimi
+CustomerProfileService(singleton)  ─┤  ICustomerProfileService impl — per-customer profil yönetimi
 SkillsBasedRouter     (singleton)  ─┘  skills + dil + yük bazlı eskalasyon
 
 ── AddTelemetryServices(config) ───────────────────────────────────────

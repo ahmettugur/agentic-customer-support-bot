@@ -27,7 +27,7 @@ Sistemin merkezi orkestratörü. **6 MAF `ChatClientAgent`**'ı (Planning + 4 sp
 
 **Compound query helper'ları** (`CustomerSupportTeam.cs:912-1192`): `ShouldDecompose`, `RunDecomposedAsync`, `RunDecomposedStreamingAsync`, `DeriveSubReasoning`, `BuildSubQuery`, `FormatSubResult`, `JoinAggregatedParts`, `ExtractTextFromDelta` — her subtask ayrı workflow run'ı olarak koşturulur ve sonuçlar `JoinAggregatedParts` ile `\n\n---\n\n` ayırıcılı birleştirilir.
 
-**Bağımlılıklar**: `IChatClient`, `ReasoningChatClient`, `PromptService`, `ContextPipeline`, `WorkflowGuardOptions`, `CustomerSupportChatManager`, `IReasoningTraceStore`.
+**Bağımlılıklar**: `IChatClient`, `ReasoningChatClient`, `PromptService`, `IContextPipeline`, `IOptions<WorkflowGuardOptions>`, `IOptions<ParallelExecutionOptions>`, `ICustomerSupportToolsService`, `ISemanticMemoryWriter?`, `ICustomerProfileService?`, `CustomerSupportChatManager`, `IReasoningTraceStore`.
 
 ---
 
@@ -221,13 +221,22 @@ Kullanıcı girdi güvenlik filtresi. `Inspect(query)` → `Pass | Flagged | Rej
 
 ---
 
-### `ApprovalGateService` — `Agents/ApprovalGateService.cs`
+### `ApprovalGateService` — `Adapters.Agents/ApprovalGateService.cs`
 
-HITL approval gate. Yan etkili tool lambda'larını sararak `HumanInTheLoop.Enabled = true` ise admin onayı bekletir. Timeout ve auto-approve politikaları destekler.
+HITL approval gate. Yan etkili tool lambda'larını sararak `HumanInTheLoop.Enabled = true` ise admin onayı bekletir. Timeout ve auto-approve politikaları destekler. Eskalasyon routing mantığını `EscalationPolicyService`'e delege eder.
 
 ---
 
-### `SlaGuardianService` — `Services/Sla/SlaGuardianService.cs`
+### `EscalationPolicyService` — `Application/Services/EscalationPolicyService.cs`
+
+Eskalasyon routing iş politikası. `ApprovalGateService`'den extract edilerek Application katmanına taşınmıştır. Sorumlulukları:
+- Pending eskalasyonları işleme (dedup, priority elevation)
+- `ISkillsBasedRouter` üzerinden skills-based temsilci eşleştirme
+- Load tracking (`IncrementLoad`/`DecrementLoad`)
+
+---
+
+### `SlaGuardianService` — `Application/Services/Sla/SlaGuardianService.cs`
 
 `BackgroundService`. Periyodik olarak bekleyen onay ve açık eskalasyonları tarar. Breach durumunda onayları reddeder, eskalasyon önceliğini yükseltir.
 
@@ -239,9 +248,9 @@ Per-customer profil yönetimi. `RecordInteraction` (LLM-siz heuristik, her turda
 
 ---
 
-### `SkillsBasedRouter` — `Services/Routing/SkillsBasedRouter.cs`
+### `SkillsBasedRouter` — `Application/Services/Routing/SkillsBasedRouter.cs`
 
-Deterministik skills-based eşleştirme. Reasoning trace + müşteri profili → required skill çıkarımı → aday seçimi (skill match + dil + load balance). LLM kullanmaz.
+Deterministik skills-based eşleştirme. Reasoning trace + müşteri profili → required skill çıkarımı → aday seçimi (skill match + dil + load balance). LLM kullanmaz. `ISkillsBasedRouter` port'unu (`Application/Ports/Driven/`) implemente eder.
 
 ---
 
@@ -485,7 +494,7 @@ Tool çağrılarının **standart dönüş zarfı**. Tüm 6 tool fonksiyonu bunu
 
 ---
 
-### `WorkflowGuardOptions` — `Models/WorkflowGuardOptions.cs`
+### `WorkflowGuardOptions` — `Application/Ports/Driven/WorkflowGuardOptions.cs`
 
 `appsettings.json` "WorkflowGuards" bölümünden bind edilen guard ayarları:
 
@@ -706,7 +715,7 @@ Her `Add*` metodu kendi katmanının sınıflarını kaydeder:
 | `AddAiServices` | `IChatClient`, `ReasoningChatClient`, `AiClientFactory`, `IOptions<AiProviderOptions>` |
 | `AddRedisServices` | `IConnectionMultiplexer`, `IDistributedLockProvider`, `IMessageBusPort → RedisMessageBusAdapter` |
 | `AddPersistenceServices` | Postgres: `PostgresSessionManager`, `PostgresApprovalQueue`, `PostgresRatingStore`, `IMessageBusPort → InMemoryMessageBusAdapter` (InMemory mod); `IOptions<PromptOptions>`, `IPromptRepository → FileSystemPromptRepository` |
-| `AddApplicationServices` | 13 driving port servisi (ISessionPort, IChatPort, IApprovalPort, IEscalationPort, ...), `EntityVerifier`, `ReasoningSanityChecker`, `ReasoningService`, `EvaluationRunner`, `ContextPipeline`, `IContextProvider` × 3-4, `InputGuard`, `CustomerProfileService`, `SkillsBasedRouter`, `WorkflowExecutor`, `LessonMiner` — dahili olarak `AddAgentsAdapter()` çağırır |
+| `AddApplicationServices` | 13 driving port servisi (ISessionPort, IChatPort, IApprovalPort, IEscalationPort, ...), `EntityVerifier`, `ReasoningSanityChecker`, `ReasoningService`, `EvaluationRunner`, `ContextPipeline` (IContextPipeline), `IContextProvider` × 3-4, `InputGuard`, `CustomerProfileService` (ICustomerProfileService), `SkillsBasedRouter` (ISkillsBasedRouter), `EscalationPolicyService`, `WorkflowExecutor`, `LessonMiner`, `IOptions<WorkflowGuardOptions>`, `IOptions<ParallelExecutionOptions>` — dahili olarak `AddAgentsAdapter()` çağırır |
 | `AddAgentsAdapter` | `ApprovalGateService`, `CustomerSupportTeam` → `IAgentTeamPort` (IChatClient fail-fast doğrulama) |
 
 ### `IMessageBusPort` — `CustomerSupportBot.Application/Ports/Driven/Messaging/IMessageBusPort.cs`

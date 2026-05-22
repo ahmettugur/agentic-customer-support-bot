@@ -236,7 +236,7 @@ if (count < MaxHandoffsPerAgent)   // = 2
 
 **Dosya**:
 
-- `CustomerSupportBot.Domain/Model/WorkflowGuardOptions.cs`
+- `CustomerSupportBot.Application/Ports/Driven/WorkflowGuardOptions.cs`
 - `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:204-287`
 
 **Neden?** LLM ajansız bırakılırsa "düşünüyorum... düşünüyorum..." sonsuza kadar dönebilir. Production'da her guard = bir bütçe hattı.
@@ -593,7 +593,7 @@ Bu sistemde **iki farklı HITL mekanizması** vardır ve birbirlerini tamamlar:
 
 - Queue: `CustomerSupportBot.Adapters.Persistence/InMemory/InMemoryApprovalQueue.cs` — `ConcurrentDictionary` + `TaskCompletionSource<ApprovalRequest>` per request
 - Tool wrapper: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs` (bkz. `BuildOrderPlacementTool`, `BuildComplaintRegistrationTool`, `RequestApprovalAsync`)
-- Config: `CustomerSupportBot.Domain/Model/ApprovalOptions.cs` (`appsettings.json > "HumanInTheLoop"`)
+- Config: `CustomerSupportBot.Application/Ports/Driven/ApprovalOptions.cs` (`appsettings.json > "HumanInTheLoop"`)
 - Endpoints: `/approvals/pending`, `/approvals/{id}/approve`, `/approvals/{id}/reject`
 - UI: `CustomerSupportBot.Api/wwwroot/admin.html` + `js/admin.js` — 3sn auto-refresh
 
@@ -909,7 +909,7 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
 | Planner-Executor, Router | `CustomerSupportBot.Api/Prompts/agents/planning-agent.md`, `CustomerSupportBot.Domain/Model/PlanningResult.cs`, `CustomerSupportBot.Application/Services/PlanningResultParser.cs` |
 | ReAct | `CustomerSupportBot.Api/Prompts/agents/{product,order-placement,order-inquiry,complaint}-agent.md`, `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`, `CustomerSupportBot.Application/Services/SpecialistReasoningParser.cs` |
 | Self-Reflection | `CustomerSupportBot.Api/Prompts/agents/{specialist}-agent.md`, `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`, `CustomerSupportBot.Application/Services/SpecialistReasoningParser.cs` |
-| Group Chat + Guardrails | `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`, `CustomerSupportBot.Domain/Model/WorkflowGuardOptions.cs` |
+| Group Chat + Guardrails | `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`, `CustomerSupportBot.Application/Ports/Driven/WorkflowGuardOptions.cs` |
 | Tool Use + Validation | `CustomerSupportBot.Application/Services/CustomerSupportToolsService.cs`, `CustomerSupportBot.Domain/Model/ToolResult.cs` |
 | Dynamic Handoff | `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs SelectNextAgentAsync` (L108-153) |
 | Context Pipeline + Summarization | `CustomerSupportBot.Application/Services/ContextPipeline.cs`, `CustomerSupportBot.Application/Services/Providers/*.cs` |

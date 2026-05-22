@@ -54,10 +54,8 @@ public class ApprovalGateServiceRoutingTests
             _sink,
             new ApprovalContextAccessor(),
             TestFactory.CreateToolsService(),
-            router,
-            registry,
-            profiles,
-            sessions);
+            new EscalationPolicyService(
+                _sink, Options.Create(_opts), router, registry, profiles, sessions));
 
         return (svc, registry, profiles, sessions);
     }

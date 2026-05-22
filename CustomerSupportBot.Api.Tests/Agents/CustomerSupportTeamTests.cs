@@ -43,15 +43,18 @@ public class CustomerSupportTeamTests
             NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
         var tools = TestFactory.CreateToolsService();
+        var escalationPolicy = new EscalationPolicyService(
+            sink, Options.Create(approvalOpts));
         var approvalGate = new ApprovalGateService(
-            queue, Options.Create(approvalOpts), sink, new ApprovalContextAccessor(), tools);
+            queue, Options.Create(approvalOpts), sink, new ApprovalContextAccessor(), tools, escalationPolicy);
 
         var loggerFactory = NullLoggerFactory.Instance;
 
         return new CustomerSupportTeam(
             chatClient,
             contextPipeline,
-            configuration,
+            Options.Create(new WorkflowGuardOptions { MaxIterations = 10, TimeoutSeconds = 30, MaxDuplicateToolCalls = 2 }),
+            Options.Create(new ParallelExecutionOptions()),
             traceStore,
             prompts,
             approvalGate,

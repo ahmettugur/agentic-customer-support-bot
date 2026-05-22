@@ -1,7 +1,7 @@
 // Application/Services/Workflow/WorkflowGuardOptions.cs
 // Workflow seviyesi guard ayarları. appsettings.json'dan bind edilir.
 
-namespace CustomerSupportBot.Application.Services.Workflow;
+namespace CustomerSupportBot.Application.Ports.Driven;
 
 /// <summary>
 /// Workflow için guard parametreleri. appsettings.json "WorkflowGuards" bölümü.

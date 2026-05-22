@@ -287,7 +287,7 @@ private bool DetectRepeatedToolCall(IReadOnlyList<ChatMessage> history)
 
 ## Guard'lar (WorkflowGuardOptions)
 
-`CustomerSupportBot.Domain/Model/WorkflowGuardOptions.cs`:
+`CustomerSupportBot.Application/Ports/Driven/WorkflowGuardOptions.cs`:
 
 ```json
 "WorkflowGuards": {

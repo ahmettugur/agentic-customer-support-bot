@@ -47,6 +47,7 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<RoutingOptions>(configuration.GetSection("Routing"));
         services.Configure<ParallelExecutionOptions>(
             configuration.GetSection(ParallelExecutionOptions.SectionName));
+        services.Configure<WorkflowGuardOptions>(configuration.GetSection("WorkflowGuards"));
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
     }
 
@@ -77,6 +78,7 @@ public static class ApplicationServiceCollectionExtensions
     private static void AddChatServices(this IServiceCollection services)
     {
         services.AddSingleton<CustomerSupportToolsService>();
+        services.AddSingleton<ICustomerSupportToolsService>(sp => sp.GetRequiredService<CustomerSupportToolsService>());
         services.AddSingleton<SubTaskOrchestrator>();
         services.AddSingleton<ReasoningMessageBuilder>();
         services.AddSingleton<ReasoningService>();
@@ -94,6 +96,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();
         services.AddSingleton<IContextProvider, CustomerContextProvider>();
         services.AddSingleton<ContextPipeline>();
+        services.AddSingleton<IContextPipeline>(sp => sp.GetRequiredService<ContextPipeline>());
     }
 
     private static void AddDomainServices(this IServiceCollection services)
@@ -106,7 +109,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IInputGuard>(sp => sp.GetRequiredService<InputGuard>());
         services.AddSingleton<Services.Improvement.LessonMiner>();
         services.AddSingleton<Services.Personalization.CustomerProfileService>();
+        services.AddSingleton<ICustomerProfileService>(sp => sp.GetRequiredService<Services.Personalization.CustomerProfileService>());
         services.AddSingleton<ISkillsBasedRouter, Services.Routing.SkillsBasedRouter>();
+        services.AddSingleton<EscalationPolicyService>();
         services.AddSingleton<Services.Workflow.WorkflowExecutor>();
     }
 
@@ -118,6 +123,7 @@ public static class ApplicationServiceCollectionExtensions
         {
             services.AddSingleton<SemanticMemoryService>();
             services.AddSingleton<ISemanticMemoryIngestor>(sp => sp.GetRequiredService<SemanticMemoryService>());
+            services.AddSingleton<ISemanticMemoryWriter>(sp => sp.GetRequiredService<SemanticMemoryService>());
             services.AddSingleton<KnowledgeBaseIngestionService>();
             services.AddSingleton<IKnowledgeBaseIngestor>(sp => sp.GetRequiredService<KnowledgeBaseIngestionService>());
             services.AddSingleton<IMemoryPort, MemoryPortService>();

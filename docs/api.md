@@ -1120,7 +1120,7 @@ Müşteri tarafından görünen akış: yeşil temsilci bandı kalkar → sistem
 }
 ```
 
-`Enabled=false` yaparsanız tüm HITL mekanizması bypass edilir — eski davranış korunur. Detay → `CustomerSupportBot.Domain/Model/ApprovalOptions.cs`.
+`Enabled=false` yaparsanız tüm HITL mekanizması bypass edilir — eski davranış korunur. Detay → `CustomerSupportBot.Application/Ports/Driven/ApprovalOptions.cs`.
 
 ---
 

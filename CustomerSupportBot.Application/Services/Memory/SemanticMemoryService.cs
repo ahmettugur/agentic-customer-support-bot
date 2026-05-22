@@ -5,6 +5,7 @@
 //   - WriteEpisodic / WriteLesson / SearchKnowledge gibi domain operasyonları sunmak
 //   - Tek-noktadan embedding + upsert + search akışı
 
+using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Logging;
@@ -12,7 +13,7 @@ using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Application.Services.Memory;
 
-public sealed class SemanticMemoryService : ISemanticMemoryIngestor
+public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMemoryWriter
 {
     private readonly IVectorMemoryPort _store;
     private readonly IEmbeddingPort _embedder;

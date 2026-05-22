@@ -17,7 +17,6 @@ using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.Observability;
 using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Application.Services;
-using CustomerSupportBot.Application.Services.Workflow;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
@@ -25,8 +24,8 @@ using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Adapters.Agents;
 
@@ -42,29 +41,30 @@ public class CustomerSupportTeam : IAgentTeamPort
     private readonly AIAgent _complaintAgent;
     private readonly AIAgent _humanHandoffAgent;
     private readonly AIAgent _responseAgent;
-    private readonly ContextPipeline _contextPipeline;
+    private readonly IContextPipeline _contextPipeline;
     private readonly IChatClient _chatClient;
     private readonly WorkflowGuardOptions _guards;
     private readonly IReasoningTraceStore _traceStore;
     private readonly IPromptRepository _prompts;
     private readonly ApprovalGateService _approvalGate;
-    private readonly CustomerSupportToolsService _tools;
+    private readonly ICustomerSupportToolsService _tools;
     private readonly ILoggerFactory _loggerFactory;
-    private readonly SemanticMemoryService? _semanticMemory;
-    private readonly CustomerSupportBot.Application.Services.Personalization.CustomerProfileService? _profileService;
+    private readonly ISemanticMemoryWriter? _semanticMemory;
+    private readonly ICustomerProfileService? _profileService;
     private readonly ParallelExecutionOptions _parallelOptions;
 
     public CustomerSupportTeam(
         IChatClient chatClient,
-        ContextPipeline contextPipeline,
-        IConfiguration configuration,
+        IContextPipeline contextPipeline,
+        IOptions<WorkflowGuardOptions> guardOptions,
+        IOptions<ParallelExecutionOptions> parallelOptions,
         IReasoningTraceStore traceStore,
         IPromptRepository prompts,
         ApprovalGateService approvalGate,
-        CustomerSupportToolsService tools,
+        ICustomerSupportToolsService tools,
         ILoggerFactory loggerFactory,
-        SemanticMemoryService? semanticMemory = null,
-        CustomerSupportBot.Application.Services.Personalization.CustomerProfileService? profileService = null)
+        ISemanticMemoryWriter? semanticMemory = null,
+        ICustomerProfileService? profileService = null)
     {
         _contextPipeline = contextPipeline;
         _chatClient = chatClient;
@@ -76,11 +76,8 @@ public class CustomerSupportTeam : IAgentTeamPort
         _semanticMemory = semanticMemory;
         _profileService = profileService;
 
-        _guards = new WorkflowGuardOptions();
-        configuration.GetSection("WorkflowGuards").Bind(_guards);
-
-        _parallelOptions = new ParallelExecutionOptions();
-        configuration.GetSection(ParallelExecutionOptions.SectionName).Bind(_parallelOptions);
+        _guards = guardOptions.Value;
+        _parallelOptions = parallelOptions.Value;
 
         var sourceName = TelemetryConstants.ActivitySourceName;
 

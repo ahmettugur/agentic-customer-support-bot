@@ -7,7 +7,7 @@
 // Database-backed bir impl yazılmalı. Şu an için in-memory yeterli.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Application.Services;
+using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;

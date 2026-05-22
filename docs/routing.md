@@ -14,6 +14,9 @@ ResponseAgent → TERMINATE: reason=escalation_needed
     ▼
 ApprovalGateService.ProcessPendingEscalations
     │
+    ▼
+EscalationPolicyService.ProcessPendingEscalations
+    │
     ├─ Reasoning trace'den required skills çıkar
     ├─ Müşteri profilinden ek skill'ler ekle (VIP → "vip")
     ├─ IHumanAgentRegistry'den adayları tara
@@ -23,6 +26,10 @@ ApprovalGateService.ProcessPendingEscalations
        SuggestedAgentId, SuggestedAgentName, MatchScore,
        RequiredSkills, Priority, RoutingNote
 ```
+
+> **Mimari notu**: Routing iş mantığı `EscalationPolicyService` (Application katmanı) içindedir.
+> `ApprovalGateService` (Adapter katmanı) yalnızca delegasyon yapar — hexagonal mimari gereği
+> business logic adapter'da bulunmaz.
 
 ---
 

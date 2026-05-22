@@ -2,9 +2,9 @@
 // HITL — Human-in-the-Loop approval gate + escalation sink servisleri.
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Domain.Model.Memory;
+using CustomerSupportBot.Application.Ports.Driven;
+using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Services;
-using CustomerSupportBot.Application.Services.Routing;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -20,11 +20,8 @@ public class ApprovalGateService
     private readonly ApprovalOptions _approvalOptions;
     private readonly IEscalationSink _escalationSink;
     private readonly IApprovalContextAccessor _contextAccessor;
-    private readonly CustomerSupportToolsService _tools;
-    private readonly ISkillsBasedRouter? _router;
-    private readonly IHumanAgentRegistry? _agentRegistry;
-    private readonly ICustomerProfileStore? _profileStore;
-    private readonly ISessionManager? _sessionManager;
+    private readonly ICustomerSupportToolsService _tools;
+    private readonly EscalationPolicyService _escalationPolicy;
     private readonly ILogger<ApprovalGateService> _logger;
 
     public ApprovalGateService(
@@ -32,11 +29,8 @@ public class ApprovalGateService
         IOptions<ApprovalOptions> approvalOptions,
         IEscalationSink escalationSink,
         IApprovalContextAccessor contextAccessor,
-        CustomerSupportToolsService tools,
-        ISkillsBasedRouter? router = null,
-        IHumanAgentRegistry? agentRegistry = null,
-        ICustomerProfileStore? profileStore = null,
-        ISessionManager? sessionManager = null,
+        ICustomerSupportToolsService tools,
+        EscalationPolicyService escalationPolicy,
         ILogger<ApprovalGateService>? logger = null)
     {
         _approvalQueue = approvalQueue;
@@ -44,10 +38,7 @@ public class ApprovalGateService
         _escalationSink = escalationSink;
         _contextAccessor = contextAccessor;
         _tools = tools;
-        _router = router;
-        _agentRegistry = agentRegistry;
-        _profileStore = profileStore;
-        _sessionManager = sessionManager;
+        _escalationPolicy = escalationPolicy;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ApprovalGateService>.Instance;
     }
 
@@ -175,71 +166,7 @@ public class ApprovalGateService
 
     public void ProcessPendingEscalations(ReasoningTrace trace, string userQuery, string finalResponse)
     {
-        if (!_approvalOptions.EscalationEnabled) return;
-
-        var candidates = trace.SpecialistReasonings
-            .Where(sr => sr.PostToolReflection?.StatusEnum == TaskCompletionStatus.NeedsEscalation)
-            .GroupBy(sr => sr.AgentName ?? "unknown", StringComparer.OrdinalIgnoreCase)
-            .Select(g => g.Last())
-            .ToList();
-
-        if (candidates.Count == 0) return;
-
-        if (candidates.Count > 1)
-        {
-            candidates = new List<SpecialistReasoning>
-            {
-                candidates.FirstOrDefault(c =>
-                    string.Equals(c.AgentName, WellKnown.AgentNames.Complaint, StringComparison.OrdinalIgnoreCase))
-                ?? candidates[^1]
-            };
-        }
-
-        if (!string.IsNullOrWhiteSpace(trace.SessionId))
-        {
-            var existing = _escalationSink.GetOpen()
-                .FirstOrDefault(e => string.Equals(e.SessionId, trace.SessionId, StringComparison.Ordinal));
-
-            if (existing != null)
-            {
-                _logger.LogDebug(
-                    "[HITL] Session {SessionId} için zaten açık eskalasyon var (id={Id}, status={Status}); yeni kayıt oluşturulmuyor.",
-                    trace.SessionId, existing.Id, existing.Status);
-                return;
-            }
-        }
-
-        foreach (var sr in candidates)
-        {
-            var reflection = sr.PostToolReflection!;
-            try
-            {
-                var newRequest = new EscalationRequest
-                {
-                    SessionId = trace.SessionId,
-                    TraceId = trace.TraceId,
-                    AgentName = sr.AgentName,
-                    UserQuery = userQuery,
-                    Reason = string.IsNullOrWhiteSpace(reflection.HandoffReason)
-                        ? reflection.Summary
-                        : reflection.HandoffReason,
-                    MissingContext = reflection.MissingContext,
-                    ResponseSummary = finalResponse.Length > 500
-                        ? finalResponse[..500] + "…"
-                        : finalResponse
-                };
-
-                ApplyRoutingDecisionSafe(newRequest, trace, sr.AgentName);
-                _escalationSink.Create(newRequest);
-
-                if (!string.IsNullOrWhiteSpace(newRequest.SuggestedAgentId))
-                    _agentRegistry?.IncrementLoad(newRequest.SuggestedAgentId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[HITL] Escalation sink kaydı başarısız.");
-            }
-        }
+        _escalationPolicy.ProcessPendingEscalations(trace, userQuery, finalResponse);
     }
 
     private static string BuildParamSignature(IReadOnlyDictionary<string, object?> parameters)
@@ -250,44 +177,6 @@ public class ApprovalGateService
             .Select(kv => $"{kv.Key}={kv.Value?.ToString() ?? string.Empty}"));
     }
 
-    private void ApplyRoutingDecisionSafe(
-        EscalationRequest req,
-        ReasoningTrace trace,
-        string? agentName)
-    {
-        if (_router == null) return;
-        try
-        {
-            CustomerProfile? profile = null;
-            string? customerId = null;
-            if (!string.IsNullOrWhiteSpace(trace.SessionId) && _sessionManager != null)
-            {
-                customerId = _sessionManager.Get(trace.SessionId!)?.State.CustomerId;
-            }
-            if (!string.IsNullOrWhiteSpace(customerId) && _profileStore != null)
-            {
-                profile = _profileStore.Get(customerId!);
-            }
-
-            var decision = _router.Decide(trace, agentName, profile);
-            req.RequiredSkills = decision.MatchedSkills.Concat(decision.MissingSkills)
-                                                       .Distinct(StringComparer.Ordinal)
-                                                       .ToList();
-            req.SuggestedAgentId = decision.SuggestedAgentId;
-            req.SuggestedAgentName = decision.SuggestedAgentName;
-            req.MatchScore = decision.MatchScore;
-            req.RoutingNote = decision.Note;
-
-            if (string.Equals(agentName, WellKnown.AgentNames.Complaint, StringComparison.OrdinalIgnoreCase))
-                req.Priority = EscalationPriority.High;
-            else if (decision.MatchScore < 0.3 && req.Priority < EscalationPriority.High)
-                req.Priority = EscalationPriority.High;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[Routing] Skills-based routing kararı başarısız.");
-        }
-    }
 }
 
 public sealed record ApprovalDecisionResult(bool Approved, string? Reason);

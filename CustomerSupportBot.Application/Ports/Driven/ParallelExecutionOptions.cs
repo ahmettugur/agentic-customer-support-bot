@@ -5,7 +5,7 @@
 
 using CustomerSupportBot.Domain.Model;
 
-namespace CustomerSupportBot.Application.Services;
+namespace CustomerSupportBot.Application.Ports.Driven;
 
 /// <summary>
 /// Bileşik (compound) sorgudaki alt görevlerin paralel yürütme politikası.

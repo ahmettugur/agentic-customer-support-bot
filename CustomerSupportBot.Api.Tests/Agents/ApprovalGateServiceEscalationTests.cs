@@ -17,12 +17,15 @@ public class ApprovalGateServiceEscalationTests
         var queue = new InMemoryApprovalQueue(
             Options.Create(_opts),
             NullLogger<InMemoryApprovalQueue>.Instance);
+        var escalationPolicy = new EscalationPolicyService(
+            _sink, Options.Create(_opts));
         return new ApprovalGateService(
             queue,
             Options.Create(_opts),
             _sink,
             new ApprovalContextAccessor(),
-            TestFactory.CreateToolsService());
+            TestFactory.CreateToolsService(),
+            escalationPolicy);
     }
 
     [Fact]

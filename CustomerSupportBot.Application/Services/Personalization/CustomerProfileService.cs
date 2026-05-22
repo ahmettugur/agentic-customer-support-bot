@@ -19,6 +19,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driven.Locking;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
@@ -28,7 +29,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services.Personalization;
 
-public sealed partial class CustomerProfileService
+public sealed partial class CustomerProfileService : ICustomerProfileService
 {
     private const int MaxProductInterests = 10;
     private const int MaxRecentRatings = 10;
