@@ -275,10 +275,31 @@
                                 @if (_chatMessages.Count == 0) { <div class="empty-state">Henüz mesaj yok.</div> }
                                 @foreach (var m in _chatMessages)
                                 {
-                                    <div class="chat-bubble @(m.Sender.ToLowerInvariant())">
-                                        @m.Text
-                                        <span class="chat-bubble-meta">@FmtTs(m.Timestamp)</span>
-                                    </div>
+                                    @if (m.Sender.Equals("system", StringComparison.OrdinalIgnoreCase) && m.Text.StartsWith("📋"))
+                                    {
+                                        var noteText = m.Text.StartsWith("📋 Temsilci yeniden planlama notu: ")
+                                            ? m.Text["📋 Temsilci yeniden planlama notu: ".Length..].Trim('"')
+                                            : m.Text[2..].Trim();
+                                        <div class="internal-note">
+                                            <div class="internal-note-header">
+                                                <span class="internal-note-badge">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                                                    </svg>
+                                                    Temsilci Notu
+                                                </span>
+                                                <span class="internal-note-time">@FmtTs(m.Timestamp)</span>
+                                            </div>
+                                            <p class="internal-note-body">@noteText</p>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="chat-bubble @(m.Sender.ToLowerInvariant())">
+                                            @m.Text
+                                            <span class="chat-bubble-meta">@FmtTs(m.Timestamp)</span>
+                                        </div>
+                                    }
                                 }
                             </div>
                             <form class="chat-panel-composer" @onsubmit="SendChatMessageAsync" @onsubmit:preventDefault>
@@ -536,10 +557,31 @@
                     @if (_transcriptMessages.Count == 0) { <div class="empty-state">Yükleniyor…</div> }
                     @foreach (var m in _transcriptMessages)
                     {
-                        <div class="chat-bubble @(m.Sender.ToLowerInvariant())">
-                            @m.Text
-                            <span class="chat-bubble-meta">@FmtTs(m.Timestamp)</span>
-                        </div>
+                        @if (m.Sender.Equals("system", StringComparison.OrdinalIgnoreCase) && m.Text.StartsWith("📋"))
+                        {
+                            var noteText = m.Text.StartsWith("📋 Temsilci yeniden planlama notu: ")
+                                ? m.Text["📋 Temsilci yeniden planlama notu: ".Length..].Trim('"')
+                                : m.Text[2..].Trim();
+                            <div class="internal-note">
+                                <div class="internal-note-header">
+                                    <span class="internal-note-badge">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                                        </svg>
+                                        Temsilci Notu
+                                    </span>
+                                    <span class="internal-note-time">@FmtTs(m.Timestamp)</span>
+                                </div>
+                                <p class="internal-note-body">@noteText</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="chat-bubble @(m.Sender.ToLowerInvariant())">
+                                @m.Text
+                                <span class="chat-bubble-meta">@FmtTs(m.Timestamp)</span>
+                            </div>
+                        }
                     }
                 </div>
             </div>

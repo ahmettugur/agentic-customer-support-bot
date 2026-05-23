@@ -640,14 +640,63 @@
 
 .chat-bubble.system {
     align-self: center;
-    background: #fef3c7;
-    border: 1px solid #fde68a;
-    color: #92400e;
+    background: transparent;
+    border: none;
+    color: #94a3b8;
     font-size: var(--font-size-xs);
     font-style: italic;
     max-width: 85%;
     text-align: center;
-    padding: 6px 12px;
+    padding: 4px 12px;
+}
+
+/* ── Internal admin-only note card (replan / agent note) ── */
+.internal-note {
+    align-self: stretch;
+    max-width: 100%;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 4px 0;
+}
+
+.internal-note-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.internal-note-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #92400e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.internal-note-badge svg {
+    color: #d97706;
+    flex-shrink: 0;
+}
+
+.internal-note-time {
+    font-size: 11px;
+    color: #b45309;
+    opacity: 0.7;
+}
+
+.internal-note-body {
+    margin: 0;
+    font-size: 13px;
+    color: #78350f;
+    line-height: 1.55;
+    font-style: italic;
 }
 
 .chat-panel-composer {

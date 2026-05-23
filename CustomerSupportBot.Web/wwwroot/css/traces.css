@@ -612,7 +612,7 @@
 }
 
 /* ── Internal admin-only note card (replan note) ── */
-.trace-internal-note {
+.internal-note {
     align-self: stretch;
     background: #fffbeb;
     border: 1px solid #fde68a;
@@ -622,14 +622,14 @@
     margin: 4px 0;
 }
 
-.trace-internal-note-header {
+.internal-note-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 6px;
 }
 
-.trace-internal-note-badge {
+.internal-note-badge {
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -640,18 +640,18 @@
     letter-spacing: 0.05em;
 }
 
-.trace-internal-note-badge svg {
+.internal-note-badge svg {
     color: #d97706;
     flex-shrink: 0;
 }
 
-.trace-internal-note-time {
+.internal-note-time {
     font-size: 11px;
     color: #b45309;
     opacity: 0.7;
 }
 
-.trace-internal-note-body {
+.internal-note-body {
     margin: 0;
     font-size: 13px;
     color: #78350f;
