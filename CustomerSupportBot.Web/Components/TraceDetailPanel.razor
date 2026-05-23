@@ -52,10 +52,17 @@ else
                             "System" => "trace-chat-system",
                             _        => "trace-chat-bot"
                         };
+                        var roleLabel = msg.Sender switch
+                        {
+                            "User"   => "Müşteri",
+                            "Admin"  => msg.HumanAgent ?? "Temsilci",
+                            "Bot"    => "Bot",
+                            _        => null
+                        };
                         <div class="trace-chat-msg @cls">
-                            @if (msg.Sender == "Admin" && !string.IsNullOrEmpty(msg.HumanAgent))
+                            @if (roleLabel is not null)
                             {
-                                <span class="trace-chat-agent-name">🧑‍💼 @msg.HumanAgent</span>
+                                <span class="trace-chat-role">@roleLabel</span>
                             }
                             <span class="trace-chat-bubble">@msg.Text</span>
                         </div>
