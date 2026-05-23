@@ -81,12 +81,101 @@ internal static class ChatBridgeScript
         },
         _handleStreamEvent: function(ctx, reasoningState, evt) {
             if (!ctx) return;
-            if (evt.type === 'response_delta' && evt.data && evt.data.text)
-                this.ui.appendResponseChunk(ctx, evt.data.text);
-            else if (evt.type === 'response_complete' && evt.data && evt.data.text) {
-                if (ctx.bubble) ctx.bubble.textContent = evt.data.text;
-                ctx._text = evt.data.text;
+            var d = evt.data || {};
+            switch (evt.type) {
+                case 'reasoning_start':
+                    reasoningState.buffer = '';
+                    if (!ctx._reasoningPanel) {
+                        var content = ctx.messageDiv.querySelector('.message-content');
+                        if (!content) {
+                            content = document.createElement('div');
+                            content.className = 'message-content';
+                            ctx.messageDiv.replaceChild(content, ctx.bubble);
+                            content.appendChild(ctx.bubble);
+                        }
+                        var panel = document.createElement('details');
+                        panel.className = 'reasoning-panel streaming';
+                        panel.open = true;
+                        panel.innerHTML =
+                            '<summary class=""reasoning-summary"">' +
+                            '<span class=""reasoning-icon"">🧠</span>' +
+                            '<span class=""reasoning-label"">Düşünce süreci</span>' +
+                            '<span class=""reasoning-dots inline""><span></span><span></span><span></span></span>' +
+                            '<span class=""reasoning-chevron""><svg width=""12"" height=""12"" viewBox=""0 0 24 24"" fill=""none"" stroke=""currentColor"" stroke-width=""2""><polyline points=""6 9 12 15 18 9""/></svg></span>' +
+                            '</summary>' +
+                            '<div class=""reasoning-body""><div class=""reasoning-section-text""></div></div>';
+                        content.insertBefore(panel, ctx.bubble);
+                        ctx._reasoningPanel = panel;
+                    }
+                    break;
+                case 'reasoning_delta':
+                    if (ctx._reasoningPanel && d.text) {
+                        reasoningState.buffer += d.text;
+                        var textEl = ctx._reasoningPanel.querySelector('.reasoning-section-text');
+                        if (textEl) textEl.textContent = this._extractAnalysis(reasoningState.buffer);
+                    }
+                    break;
+                case 'reasoning_complete':
+                    if (ctx._reasoningPanel) {
+                        ctx._reasoningPanel.classList.remove('streaming');
+                        var sum = ctx._reasoningPanel.querySelector('.reasoning-summary');
+                        var dots = sum && sum.querySelector('.reasoning-dots');
+                        if (dots) dots.remove();
+                        if (d.confidence) {
+                            var badge = document.createElement('span');
+                            badge.className = 'reasoning-badge';
+                            badge.textContent = d.confidence;
+                            var chev = sum && sum.querySelector('.reasoning-chevron');
+                            if (chev) sum.insertBefore(badge, chev);
+                        }
+                        if (d.analysis) {
+                            var body = ctx._reasoningPanel.querySelector('.reasoning-body');
+                            if (body) {
+                                body.innerHTML = '<div class=""reasoning-section""><div class=""reasoning-section-text"">' +
+                                    this._htmlEsc(d.analysis) + '</div></div>';
+                            }
+                        }
+                    }
+                    break;
+                case 'agent':
+                    if (d.name && this.ui && this.ui.setAgentStatus) {
+                        var label = this._friendlyAgent(d.name);
+                        var agentState = (d.status === 'done') ? 'completed' : 'running';
+                        try { this.ui.setAgentStatus(ctx, label, agentState); } catch {}
+                    }
+                    break;
+                case 'response_start':
+                    break;
+                case 'response_delta':
+                    if (d.text) this.ui.appendResponseChunk(ctx, d.text);
+                    break;
+                case 'response_complete':
+                    if (d.text) { if (ctx.bubble) ctx.bubble.textContent = d.text; ctx._text = d.text; }
+                    break;
             }
+        },
+        _extractAnalysis: function(raw) {
+            var idx = raw.indexOf('""analysis""');
+            if (idx < 0) return '';
+            var ci = raw.indexOf(':', idx + 10);
+            if (ci < 0) return '';
+            var qs = raw.indexOf('""', ci + 1);
+            if (qs < 0) return '';
+            var vs = qs + 1, qe = -1;
+            for (var i = vs; i < raw.length; i++) {
+                if (raw[i] === '\\') { i++; continue; }
+                if (raw[i] === '""') { qe = i; break; }
+            }
+            return qe > vs ? raw.substring(vs, qe) : raw.substring(vs);
+        },
+        _htmlEsc: function(s) {
+            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        },
+        _friendlyAgent: function(id) {
+            var m = { PlanningAgent:'Planlama Ajanı', ProductInquiryAgent:'Ürün Ajanı',
+                      OrderAgent:'Sipariş Ajanı', ComplaintAgent:'Şikayet Ajanı',
+                      ResponseAgent:'Yanıt Ajanı', Orchestrator:'Orkestratör' };
+            return m[id] || (id.startsWith('SubTask#') ? 'Alt Görev ' + id.slice(8) : id);
         }
     };
 

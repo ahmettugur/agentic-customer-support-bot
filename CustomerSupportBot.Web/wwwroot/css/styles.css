@@ -293,6 +293,34 @@ body {
     animation: pulse 2.5s ease-in-out infinite;
 }
 
+.btn-new-chat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    font-family: var(--font-family);
+    letter-spacing: 0.2px;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+    line-height: 1;
+    background: rgba(99, 102, 241, 0.08);
+    color: #6366f1;
+    border: 1px solid rgba(99, 102, 241, 0.25);
+}
+
+.btn-new-chat:hover {
+    background: rgba(99, 102, 241, 0.16);
+    border-color: rgba(99, 102, 241, 0.45);
+}
+
+.btn-new-chat svg {
+    flex-shrink: 0;
+}
+
 @keyframes pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: .6; transform: scale(.85); }
@@ -420,6 +448,12 @@ body {
 .message.user {
     align-self: flex-end;
     flex-direction: row-reverse;
+}
+
+.message.bot,
+.message.assistant {
+    align-self: flex-start;
+    max-width: min(65%, 760px);
 }
 
 .message-avatar {
