@@ -43,21 +43,21 @@ else
             </div>
             <div class="trace-section-body">
                 <div class="trace-chat-history">
-                    @foreach (var msg in _chatMessages.Where(m => m.Sender != "BotTyping"))
+                    @foreach (var msg in _chatMessages.Where(m => m.Sender != "botTyping"))
                     {
                         var cls = msg.Sender switch
                         {
-                            "User"   => "trace-chat-user",
-                            "Admin"  => "trace-chat-agent",
-                            "System" => "trace-chat-system",
+                            "user"   => "trace-chat-user",
+                            "admin"  => "trace-chat-agent",
+                            "system" => "trace-chat-system",
                             _        => "trace-chat-bot"
                         };
                         var roleLabel = msg.Sender switch
                         {
-                            "User"   => "Müşteri",
-                            "Admin"  => msg.HumanAgent ?? "Temsilci",
-                            "Bot"    => "Bot",
-                            _        => null
+                            "user"  => "Müşteri",
+                            "admin" => msg.HumanAgent ?? "Temsilci",
+                            "bot"   => "Bot",
+                            _       => null
                         };
                         <div class="trace-chat-msg @cls">
                             @if (roleLabel is not null)
