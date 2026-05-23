@@ -1316,3 +1316,36 @@
     font-size: 12px;
     color: #555;
 }
+
+/* ─── Closed escalation resolution note ─── */
+.status-tag--replan {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+}
+
+.card-resolution {
+    margin-top: 4px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.card-resolution .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+}
+
+.resolution-text {
+    font-size: 12px;
+    color: #1e293b;
+    background: #f0fdf4;
+    border-left: 3px solid #4ade80;
+    padding: 4px 8px;
+    border-radius: 0 4px 4px 0;
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

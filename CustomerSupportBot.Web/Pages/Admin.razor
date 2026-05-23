@@ -131,13 +131,33 @@
                         {
                             @foreach (var e in _closedEscalations)
                             {
+                                var isReplan = e.Resolution is not null &&
+                                    e.Resolution.Contains("yeniden planla", StringComparison.OrdinalIgnoreCase);
                                 <article class="card card-history compact-card">
                                     <header class="card-header">
-                                        <div class="card-title"><span class="status-tag">@e.Status</span><code class="card-id">@ShortId(e.Id)</code></div>
+                                        <div class="card-title">
+                                            <span class="status-tag">@e.Status</span>
+                                            @if (isReplan)
+                                            {
+                                                <span class="status-tag status-tag--replan" title="Yeniden Planla ile kapatıldı">🔄</span>
+                                            }
+                                            <code class="card-id">@ShortId(e.Id)</code>
+                                        </div>
                                         <time class="muted">@FmtRelative(e.CreatedAt)</time>
                                     </header>
                                     <div class="card-body">
                                         <div class="card-row"><span class="label">Sebep:</span> <span class="user-query">@e.Reason</span></div>
+                                        @if (e.AssignedTo is not null)
+                                        {
+                                            <div class="card-row"><span class="label">Temsilci:</span> <span>@e.AssignedTo</span></div>
+                                        }
+                                        @if (e.Resolution is not null)
+                                        {
+                                            <div class="card-row card-resolution">
+                                                <span class="label">@(isReplan ? "Yönlendirme notu:" : "Kapatma notu:")</span>
+                                                <span class="resolution-text">@e.Resolution</span>
+                                            </div>
+                                        }
                                     </div>
                                     <footer class="card-actions compact-actions">
                                         <button class="btn-secondary" @onclick="() => ShowTranscriptAsync(e.SessionId)">💬 Konuşmayı Gör</button>

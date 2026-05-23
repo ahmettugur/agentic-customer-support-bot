@@ -127,6 +127,66 @@ else
         </div>
     }
 
+    @* ── Eskalasyon Geçmişi ── *@
+    @if (_escalations.Count > 0)
+    {
+        <div class="trace-section @(IsCollapsed("escalations") ? "collapsed" : "")">
+            <div class="trace-section-header" @onclick='() => Toggle("escalations")'>
+                @Chev <span>🚨 Eskalasyon Geçmişi</span>
+                <span class="trace-section-tag" style="margin-left:auto">@_escalations.Count</span>
+            </div>
+            <div class="trace-section-body">
+                @foreach (var esc in _escalations)
+                {
+                    var escStatusCls = esc.Status switch
+                    {
+                        "Resolved"     => "pill pill-green",
+                        "Dismissed"    => "pill pill-red",
+                        "Acknowledged" => "pill pill-yellow",
+                        _              => "pill"
+                    };
+                    var escStatusLabel = esc.Status switch
+                    {
+                        "Resolved"     => "Çözüldü",
+                        "Dismissed"    => "Reddedildi",
+                        "Acknowledged" => "Alındı",
+                        "Open"         => "Açık",
+                        _              => esc.Status
+                    };
+                    var isReplan = esc.Resolution is not null &&
+                        esc.Resolution.Contains("yeniden planla", StringComparison.OrdinalIgnoreCase);
+                    <div class="trace-approval-card">
+                        <div class="trace-approval-row">
+                            <span class="@escStatusCls">@escStatusLabel</span>
+                            @if (isReplan)
+                            {
+                                <span class="pill" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe">🔄 Yeniden Planla</span>
+                            }
+                            @if (!string.IsNullOrEmpty(esc.AssignedTo))
+                            {
+                                <span class="trace-approval-meta">— @esc.AssignedTo</span>
+                            }
+                            @if (esc.ResolvedAt.HasValue)
+                            {
+                                <span class="trace-approval-meta">@esc.ResolvedAt.Value.LocalDateTime.ToString("HH:mm:ss")</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(esc.Reason))
+                        {
+                            <div class="trace-approval-reason" style="margin-top:4px">🤖 @esc.Reason</div>
+                        }
+                        @if (!string.IsNullOrEmpty(esc.Resolution))
+                        {
+                            <div class="trace-approval-reason" style="border-left-color:#16a34a;color:#166534;margin-top:4px">
+                                @(isReplan ? "🔄" : "✅") @esc.Resolution
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
     @* ── Reasoning ── *@
     @if (Trace.Reasoning.HasValue)
     {
@@ -242,6 +302,7 @@ else
     private readonly HashSet<string> _collapsed = [];
     private List<BridgeChatMessage> _chatMessages = [];
     private List<ApprovalRequest> _approvals = [];
+    private List<EscalationRequest> _escalations = [];
     private string? _loadedSessionId;
 
     private bool IsCollapsed(string k) => _collapsed.Contains(k);
@@ -254,9 +315,11 @@ else
         _loadedSessionId = sid;
         var msgsTask = TracesApi.GetBridgeHistoryAsync(sid);
         var approvalsTask = TracesApi.GetApprovalsBySessionAsync(sid);
-        await Task.WhenAll(msgsTask, approvalsTask);
+        var escalationsTask = TracesApi.GetEscalationsBySessionAsync(sid);
+        await Task.WhenAll(msgsTask, approvalsTask, escalationsTask);
         _chatMessages = msgsTask.Result;
         _approvals = approvalsTask.Result;
+        _escalations = escalationsTask.Result;
     }
 
     private static string ShortId(string? id) => id is null ? "?" : id[..Math.Min(8, id.Length)];

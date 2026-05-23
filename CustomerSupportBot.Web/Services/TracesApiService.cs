@@ -88,4 +88,14 @@ public sealed class TracesApiService(HttpClient http)
         }
         catch { return []; }
     }
+
+    public async Task<List<EscalationRequest>> GetEscalationsBySessionAsync(string sessionId)
+    {
+        try
+        {
+            var all = await http.GetFromJsonAsync<List<EscalationRequest>>("/escalations/recent?count=200");
+            return all?.Where(e => e.SessionId == sessionId).ToList() ?? [];
+        }
+        catch { return []; }
+    }
 }
