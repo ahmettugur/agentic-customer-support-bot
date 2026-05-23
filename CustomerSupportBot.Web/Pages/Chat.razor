@@ -246,7 +246,7 @@
                         <textarea class="rating-feedback" rows="2" placeholder="Yorumunuz (isteğe bağlı)" @bind="_ratingFeedback"></textarea>
                         <div class="rating-actions">
                             <button class="rating-submit" @onclick="SubmitRatingAsync">Gönder</button>
-                            <button class="rating-skip" @onclick="() => _showRating = false">Daha sonra</button>
+                            <button class="rating-skip" @onclick="() => { _showRating = false; _ratingSubmitted = true; }">Daha sonra</button>
                         </div>
                     }
                 </div>
@@ -325,6 +325,7 @@
     private bool     _pendingHandoff;
     private string?  _pendingHandoffReason;
     private System.Threading.Timer? _pendingHandoffTimer;
+    private System.Threading.Timer? _ratingDelayTimer;
     private string   _apiBase           = string.Empty;
     private DotNetObjectReference<Chat>? _dotNetRef;
 
@@ -527,6 +528,7 @@
 
     private async Task SendAsync(string text)
     {
+        ClearRatingDelayTimer();
         _messages.Add(new ChatMsg { Role = "user", Content = text });
         if (!_humanMode)
         {
@@ -621,6 +623,7 @@
     [JSInvokable]
     public void OnStreamComplete()
     {
+        ClearRatingDelayTimer();
         if (_currentBot is not null) _currentBot.IsStreaming = false;
         _isStreaming = false;
         _currentBot  = null;
@@ -691,7 +694,7 @@
                 _humanAgent = null;
                 _messages.Add(new ChatMsg { Role = "system", Content = "ℹ️ Sohbet bot moduna döndü." });
                 if (_messages.Count(m => m.Role == "user") >= 2 && !_ratingSubmitted)
-                    _showRating = true;
+                    StartRatingDelayTimer();
                 break;
             case "bot_typing":
                 var typingOn = jd.TryGetProperty("on", out var on) && on.GetBoolean();
@@ -736,6 +739,7 @@
         _agentName           = null;
         _agentStatus         = null;
         ClearPendingHandoffTimer();
+        ClearRatingDelayTimer();
         _pendingHandoff      = false;
         _pendingHandoffReason = null;
     }
@@ -780,6 +784,32 @@
         _pendingHandoffTimer = null;
     }
 
+    private void StartRatingDelayTimer()
+    {
+        ClearRatingDelayTimer();
+        _ratingDelayTimer = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                await InvokeAsync(() =>
+                {
+                    if (_isStreaming || _botTyping || _showRating || _ratingSubmitted) return;
+                    if (_messages.Count(m => m.Role == "user") < 2) return;
+                    _showRating = true;
+                    StateHasChanged();
+                });
+            }
+            catch (ObjectDisposedException) { }
+            catch (TaskCanceledException) { }
+        }, null, TimeSpan.FromSeconds(3), System.Threading.Timeout.InfiniteTimeSpan);
+    }
+
+    private void ClearRatingDelayTimer()
+    {
+        _ratingDelayTimer?.Dispose();
+        _ratingDelayTimer = null;
+    }
+
     private static string FriendlyAgentName(string id) => id switch
     {
         "PlanningAgent"      => "Planlama Ajanı",
@@ -801,6 +831,7 @@
     public async ValueTask DisposeAsync()
     {
         ClearPendingHandoffTimer();
+        ClearRatingDelayTimer();
         try { await JS.InvokeVoidAsync("__stopStream"); } catch { }
         if (_dotNetRef is not null)
         {
