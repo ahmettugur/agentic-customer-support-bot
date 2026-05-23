@@ -573,9 +573,20 @@
     white-space: pre-wrap;
 }
 
-.trace-chat-user  .trace-chat-bubble { background: #6366f1; color: #fff; border-bottom-right-radius: 3px; }
-.trace-chat-bot   .trace-chat-bubble { background: #f1f5f9; color: #1e293b; border-bottom-left-radius: 3px; }
-.trace-chat-agent .trace-chat-bubble { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; border-bottom-left-radius: 3px; }
+.trace-chat-user   .trace-chat-bubble { background: #6366f1; color: #fff; border-bottom-right-radius: 3px; }
+.trace-chat-bot    .trace-chat-bubble { background: #f1f5f9; color: #1e293b; border-bottom-left-radius: 3px; }
+.trace-chat-agent  .trace-chat-bubble { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; border-bottom-left-radius: 3px; }
+.trace-chat-system .trace-chat-bubble { background: transparent; color: #94a3b8; font-size: 11px; font-style: italic; }
+
+.trace-chat-system { align-self: center; max-width: 100%; }
+
+.trace-chat-agent-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: #166534;
+    margin-bottom: 3px;
+    display: block;
+}
 
 /* ─── Responsive ─── */
 @media (max-width: 1200px) {

@@ -43,12 +43,20 @@ else
             </div>
             <div class="trace-section-body">
                 <div class="trace-chat-history">
-                    @foreach (var msg in _chatMessages)
+                    @foreach (var msg in _chatMessages.Where(m => m.Sender != "BotTyping"))
                     {
-                        var isAgent = msg.Text.StartsWith("[🧑‍💼");
-                        var isUser  = msg.Role == "user" && !isAgent;
-                        var cls     = isAgent ? "trace-chat-agent" : (isUser ? "trace-chat-user" : "trace-chat-bot");
+                        var cls = msg.Sender switch
+                        {
+                            "User"   => "trace-chat-user",
+                            "Admin"  => "trace-chat-agent",
+                            "System" => "trace-chat-system",
+                            _        => "trace-chat-bot"
+                        };
                         <div class="trace-chat-msg @cls">
+                            @if (msg.Sender == "Admin" && !string.IsNullOrEmpty(msg.HumanAgent))
+                            {
+                                <span class="trace-chat-agent-name">🧑‍💼 @msg.HumanAgent</span>
+                            }
                             <span class="trace-chat-bubble">@msg.Text</span>
                         </div>
                     }
@@ -170,7 +178,7 @@ else
     [Parameter, EditorRequired] public TraceDetail? Trace { get; set; }
 
     private readonly HashSet<string> _collapsed = [];
-    private List<SessionChatMessage> _chatMessages = [];
+    private List<BridgeChatMessage> _chatMessages = [];
     private string? _loadedSessionId;
 
     private bool IsCollapsed(string k) => _collapsed.Contains(k);
@@ -181,7 +189,7 @@ else
         var sid = Trace?.SessionId;
         if (sid is null || sid == _loadedSessionId) return;
         _loadedSessionId = sid;
-        _chatMessages = await TracesApi.GetSessionMessagesAsync(sid);
+        _chatMessages = await TracesApi.GetBridgeHistoryAsync(sid);
     }
 
     private static string ShortId(string? id) => id is null ? "?" : id[..Math.Min(8, id.Length)];

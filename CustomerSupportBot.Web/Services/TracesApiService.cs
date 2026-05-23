@@ -13,6 +13,13 @@ public sealed record TraceSession(
 
 public sealed record SessionChatMessage(string Role, string Text);
 
+public sealed record BridgeChatMessage(
+    string Sender,
+    string Text,
+    string? HumanAgent,
+    DateTime Timestamp
+);
+
 /// <summary>
 /// Trace dashboard API servisi.
 /// traces.js'teki window.Auth.fetch('/traces/sessions') çağrısının karşılığı.
@@ -61,12 +68,12 @@ public sealed class TracesApiService(HttpClient http)
         catch { return []; }
     }
 
-    public async Task<List<SessionChatMessage>> GetSessionMessagesAsync(string sessionId)
+    public async Task<List<BridgeChatMessage>> GetBridgeHistoryAsync(string sessionId, int take = 100)
     {
         try
         {
-            var result = await http.GetFromJsonAsync<List<SessionChatMessage>>(
-                $"/sessions/{Uri.EscapeDataString(sessionId)}/messages");
+            var result = await http.GetFromJsonAsync<List<BridgeChatMessage>>(
+                $"/chat-sessions/{Uri.EscapeDataString(sessionId)}/history?take={take}");
             return result ?? [];
         }
         catch { return []; }
