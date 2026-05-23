@@ -45,34 +45,56 @@ else
                 <div class="trace-chat-history">
                     @foreach (var msg in _chatMessages.Where(m => m.Sender != "botTyping"))
                     {
-                        var cls = msg.Sender switch
+                        @if (msg.Sender == "system" && msg.Text.StartsWith("📋"))
                         {
-                            "user"   => "trace-chat-user",
-                            "admin"  => "trace-chat-agent",
-                            "system" => "trace-chat-system",
-                            _        => "trace-chat-bot"
-                        };
-                        <div class="trace-chat-msg @cls">
-                            @if (msg.Sender == "admin")
-                            {
-                                <div class="trace-chat-agent-header">
-                                    <span class="trace-chat-agent-badge">🧑‍💼 Müşteri Temsilcisi</span>
-                                    @if (!string.IsNullOrEmpty(msg.HumanAgent))
-                                    {
-                                        <span class="trace-chat-agent-name">@msg.HumanAgent</span>
-                                    }
+                            @* Admin-only internal note — amber card *@
+                            var noteText = msg.Text.StartsWith("📋 Temsilci yeniden planlama notu: ")
+                                ? msg.Text["📋 Temsilci yeniden planlama notu: ".Length..].Trim('"')
+                                : msg.Text[2..].Trim();
+                            <div class="trace-internal-note">
+                                <div class="trace-internal-note-header">
+                                    <span class="trace-internal-note-badge">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+                                        </svg>
+                                        Temsilci Notu
+                                    </span>
+                                    <span class="trace-internal-note-time">@msg.Timestamp.ToLocalTime().ToString("HH:mm")</span>
                                 </div>
-                            }
-                            else if (msg.Sender == "user")
+                                <p class="trace-internal-note-body">@noteText</p>
+                            </div>
+                        }
+                        else
+                        {
+                            var cls = msg.Sender switch
                             {
-                                <span class="trace-chat-role">Müşteri</span>
-                            }
-                            else if (msg.Sender == "bot")
-                            {
-                                <span class="trace-chat-role">Bot</span>
-                            }
-                            <span class="trace-chat-bubble">@msg.Text</span>
-                        </div>
+                                "user"   => "trace-chat-user",
+                                "admin"  => "trace-chat-agent",
+                                "system" => "trace-chat-system",
+                                _        => "trace-chat-bot"
+                            };
+                            <div class="trace-chat-msg @cls">
+                                @if (msg.Sender == "admin")
+                                {
+                                    <div class="trace-chat-agent-header">
+                                        <span class="trace-chat-agent-badge">🧑‍💼 Müşteri Temsilcisi</span>
+                                        @if (!string.IsNullOrEmpty(msg.HumanAgent))
+                                        {
+                                            <span class="trace-chat-agent-name">@msg.HumanAgent</span>
+                                        }
+                                    </div>
+                                }
+                                else if (msg.Sender == "user")
+                                {
+                                    <span class="trace-chat-role">Müşteri</span>
+                                }
+                                else if (msg.Sender == "bot")
+                                {
+                                    <span class="trace-chat-role">Bot</span>
+                                }
+                                <span class="trace-chat-bubble">@msg.Text</span>
+                            </div>
+                        }
                     }
                 </div>
             </div>
