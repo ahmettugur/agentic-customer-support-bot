@@ -10,6 +10,8 @@ public interface IChatBridge
     void PublishUserMessage(string sessionId, string text);
     void PublishAdminMessage(string sessionId, string humanAgent, string text);
     void PublishSystemMessage(string sessionId, string text);
+    /// <summary>History'ye yazar, sadece admin kanalına gönderir — müşteri görmez.</summary>
+    void PublishAdminOnlyMessage(string sessionId, string text);
     void PublishBotMessage(string sessionId, string text);
     void PublishBotTyping(string sessionId, bool on);
     void RecordBotExchange(string sessionId, string userQuery, string botResponse);

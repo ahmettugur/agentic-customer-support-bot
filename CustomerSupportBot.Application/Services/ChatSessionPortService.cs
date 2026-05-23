@@ -194,7 +194,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
         var releasedFromHuman = ReleaseIfHumanMode(sessionId);
 
         if (!string.IsNullOrWhiteSpace(note))
-            _chatBridge.PublishSystemMessage(sessionId, $"📋 Temsilci yeniden planlama notu: \"{note}\"");
+            _chatBridge.PublishAdminOnlyMessage(sessionId, $"📋 Temsilci yeniden planlama notu: \"{note}\"");
         _chatBridge.PublishSystemMessage(sessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
         _ = _replanService.ExecuteAsync(sessionId);
 

@@ -73,6 +73,19 @@ public class InMemoryChatBridge : IChatBridge
         Broadcast(_toUser, sessionId, msg);
     }
 
+    public void PublishAdminOnlyMessage(string sessionId, string text)
+    {
+        var msg = new ChatBridgeMessage
+        {
+            SessionId = sessionId,
+            Sender = ChatBridgeSender.System,
+            Text = text
+        };
+        Append(sessionId, msg);
+        Broadcast(_toAdmin, sessionId, msg);
+        // _toUser'a gönderilmez — müşteri görmez
+    }
+
     public void PublishBotMessage(string sessionId, string text)
     {
         var msg = new ChatBridgeMessage

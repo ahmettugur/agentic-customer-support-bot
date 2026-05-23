@@ -78,6 +78,15 @@ public sealed class PostgresChatBridge : IChatBridge
         PublishRedis("csbot:bridge:touser", msg);
     }
 
+    public void PublishAdminOnlyMessage(string sessionId, string text)
+    {
+        var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.System, Text = text };
+        Append(sessionId, msg);
+        Broadcast(_toAdmin, sessionId, msg);
+        PublishRedis("csbot:bridge:toadmin", msg);
+        // _toUser'a gönderilmez — müşteri görmez
+    }
+
     public void PublishBotMessage(string sessionId, string text)
     {
         var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.Bot, Text = text };
