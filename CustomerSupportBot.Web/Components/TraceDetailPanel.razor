@@ -52,22 +52,77 @@ else
                             "system" => "trace-chat-system",
                             _        => "trace-chat-bot"
                         };
-                        var roleLabel = msg.Sender switch
-                        {
-                            "user"  => "Müşteri",
-                            "admin" => msg.HumanAgent ?? "Temsilci",
-                            "bot"   => "Bot",
-                            _       => null
-                        };
                         <div class="trace-chat-msg @cls">
-                            @if (roleLabel is not null)
+                            @if (msg.Sender == "admin")
                             {
-                                <span class="trace-chat-role">@roleLabel</span>
+                                <div class="trace-chat-agent-header">
+                                    <span class="trace-chat-agent-badge">🧑‍💼 Müşteri Temsilcisi</span>
+                                    @if (!string.IsNullOrEmpty(msg.HumanAgent))
+                                    {
+                                        <span class="trace-chat-agent-name">@msg.HumanAgent</span>
+                                    }
+                                </div>
+                            }
+                            else if (msg.Sender == "user")
+                            {
+                                <span class="trace-chat-role">Müşteri</span>
+                            }
+                            else if (msg.Sender == "bot")
+                            {
+                                <span class="trace-chat-role">Bot</span>
                             }
                             <span class="trace-chat-bubble">@msg.Text</span>
                         </div>
                     }
                 </div>
+            </div>
+        </div>
+    }
+
+    @* ── Onay Geçmişi ── *@
+    @if (_approvals.Count > 0)
+    {
+        <div class="trace-section @(IsCollapsed("approvals") ? "collapsed" : "")">
+            <div class="trace-section-header" @onclick='() => Toggle("approvals")'>
+                @Chev <span>✅ Onay Geçmişi</span>
+                <span class="trace-section-tag" style="margin-left:auto">@_approvals.Count</span>
+            </div>
+            <div class="trace-section-body">
+                @foreach (var ap in _approvals)
+                {
+                    var apCls = ap.Status switch
+                    {
+                        "Approved" => "pill pill-green",
+                        "Rejected" => "pill pill-red",
+                        "Expired"  => "pill pill-yellow",
+                        _          => "pill"
+                    };
+                    var apLabel = ap.Status switch
+                    {
+                        "Approved" => "Onaylandı",
+                        "Rejected" => "Reddedildi",
+                        "Expired"  => "Süresi doldu",
+                        _          => ap.Status
+                    };
+                    <div class="trace-approval-card">
+                        <div class="trace-approval-row">
+                            <code>@(ap.ToolName)</code>
+                            <span class="@apCls" style="margin-left:8px">@apLabel</span>
+                            @if (!string.IsNullOrEmpty(ap.DecidedBy))
+                            {
+                                <span class="trace-approval-meta">— @ap.DecidedBy</span>
+                            }
+                            @if (ap.DecidedAt.HasValue)
+                            {
+                                <span class="trace-approval-meta">@ap.DecidedAt.Value.LocalDateTime.ToString("HH:mm:ss")</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(ap.DecisionReason))
+                        {
+                            <div class="trace-approval-reason">💬 @ap.DecisionReason</div>
+                        }
+                    </div>
+                }
             </div>
         </div>
     }
@@ -186,6 +241,7 @@ else
 
     private readonly HashSet<string> _collapsed = [];
     private List<BridgeChatMessage> _chatMessages = [];
+    private List<ApprovalRequest> _approvals = [];
     private string? _loadedSessionId;
 
     private bool IsCollapsed(string k) => _collapsed.Contains(k);
@@ -196,7 +252,11 @@ else
         var sid = Trace?.SessionId;
         if (sid is null || sid == _loadedSessionId) return;
         _loadedSessionId = sid;
-        _chatMessages = await TracesApi.GetBridgeHistoryAsync(sid);
+        var msgsTask = TracesApi.GetBridgeHistoryAsync(sid);
+        var approvalsTask = TracesApi.GetApprovalsBySessionAsync(sid);
+        await Task.WhenAll(msgsTask, approvalsTask);
+        _chatMessages = msgsTask.Result;
+        _approvals = approvalsTask.Result;
     }
 
     private static string ShortId(string? id) => id is null ? "?" : id[..Math.Min(8, id.Length)];

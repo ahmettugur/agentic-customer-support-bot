@@ -78,4 +78,14 @@ public sealed class TracesApiService(HttpClient http)
         }
         catch { return []; }
     }
+
+    public async Task<List<ApprovalRequest>> GetApprovalsBySessionAsync(string sessionId)
+    {
+        try
+        {
+            var all = await http.GetFromJsonAsync<List<ApprovalRequest>>("/approvals/recent?count=200");
+            return all?.Where(a => a.SessionId == sessionId).ToList() ?? [];
+        }
+        catch { return []; }
+    }
 }

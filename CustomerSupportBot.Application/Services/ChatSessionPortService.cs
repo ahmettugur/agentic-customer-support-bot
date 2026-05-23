@@ -193,6 +193,8 @@ public sealed class ChatSessionPortService : IChatSessionPort
         var resolved = ResolveOpenEscalationsForSession(sessionId, requestedBy, note);
         var releasedFromHuman = ReleaseIfHumanMode(sessionId);
 
+        if (!string.IsNullOrWhiteSpace(note))
+            _chatBridge.PublishSystemMessage(sessionId, $"📋 Temsilci yeniden planlama notu: \"{note}\"");
         _chatBridge.PublishSystemMessage(sessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
         _ = _replanService.ExecuteAsync(sessionId);
 
@@ -257,6 +259,8 @@ public sealed class ChatSessionPortService : IChatSessionPort
 
         var releasedFromHuman = ReleaseIfHumanMode(escalation.SessionId);
 
+        if (!string.IsNullOrWhiteSpace(note))
+            _chatBridge.PublishSystemMessage(escalation.SessionId, $"📋 Temsilci yeniden planlama notu: \"{note}\"");
         _chatBridge.PublishSystemMessage(escalation.SessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
         _ = _replanService.ExecuteAsync(escalation.SessionId);
 
