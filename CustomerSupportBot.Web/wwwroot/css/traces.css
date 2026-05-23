@@ -547,6 +547,36 @@
 .response-box.revised { border-left-color: var(--color-accent); }
 .response-box.draft   { border-left-color: #d97706; background: #fffbeb; border-color: #fde68a; }
 
+/* ─── Sohbet Geçmişi ─── */
+.trace-chat-history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.trace-chat-msg {
+    display: flex;
+    max-width: 80%;
+}
+
+.trace-chat-msg.trace-chat-user  { align-self: flex-end; }
+.trace-chat-msg.trace-chat-bot   { align-self: flex-start; }
+.trace-chat-msg.trace-chat-agent { align-self: flex-start; }
+
+.trace-chat-bubble {
+    padding: 8px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.trace-chat-user  .trace-chat-bubble { background: #6366f1; color: #fff; border-bottom-right-radius: 3px; }
+.trace-chat-bot   .trace-chat-bubble { background: #f1f5f9; color: #1e293b; border-bottom-left-radius: 3px; }
+.trace-chat-agent .trace-chat-bubble { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; border-bottom-left-radius: 3px; }
+
 /* ─── Responsive ─── */
 @media (max-width: 1200px) {
     .traces-main { grid-template-columns: 240px 320px 1fr; }

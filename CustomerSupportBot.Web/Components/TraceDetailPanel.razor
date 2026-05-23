@@ -1,6 +1,7 @@
 @using System.Text.Json
 @using System.Text
 @using System.Net
+@inject TracesApiService TracesApi
 
 @if (Trace is null)
 {
@@ -31,6 +32,30 @@ else
                style="margin-left:auto;text-decoration:none;font-size:12px;padding:4px 10px">▶ Replay</a>
         </div>
     </div>
+
+    @* ── Sohbet Geçmişi ── *@
+    @if (_chatMessages.Count > 0)
+    {
+        <div class="trace-section @(IsCollapsed("chat") ? "collapsed" : "")">
+            <div class="trace-section-header" @onclick='() => Toggle("chat")'>
+                @Chev <span>💬 Sohbet Geçmişi</span>
+                <span class="trace-section-tag" style="margin-left:auto">@_chatMessages.Count</span>
+            </div>
+            <div class="trace-section-body">
+                <div class="trace-chat-history">
+                    @foreach (var msg in _chatMessages)
+                    {
+                        var isAgent = msg.Text.StartsWith("[🧑‍💼");
+                        var isUser  = msg.Role == "user" && !isAgent;
+                        var cls     = isAgent ? "trace-chat-agent" : (isUser ? "trace-chat-user" : "trace-chat-bot");
+                        <div class="trace-chat-msg @cls">
+                            <span class="trace-chat-bubble">@msg.Text</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
 
     @* ── Reasoning ── *@
     @if (Trace.Reasoning.HasValue)
@@ -145,8 +170,19 @@ else
     [Parameter, EditorRequired] public TraceDetail? Trace { get; set; }
 
     private readonly HashSet<string> _collapsed = [];
+    private List<SessionChatMessage> _chatMessages = [];
+    private string? _loadedSessionId;
+
     private bool IsCollapsed(string k) => _collapsed.Contains(k);
     private void Toggle(string k) { if (!_collapsed.Remove(k)) _collapsed.Add(k); }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var sid = Trace?.SessionId;
+        if (sid is null || sid == _loadedSessionId) return;
+        _loadedSessionId = sid;
+        _chatMessages = await TracesApi.GetSessionMessagesAsync(sid);
+    }
 
     private static string ShortId(string? id) => id is null ? "?" : id[..Math.Min(8, id.Length)];
     private static string SimplifyAgent(string? name) => name is null ? "—" : name.Split('_')[0];

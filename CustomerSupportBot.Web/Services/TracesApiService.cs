@@ -11,6 +11,8 @@ public sealed record TraceSession(
     DateTimeOffset LastTraceAt
 );
 
+public sealed record SessionChatMessage(string Role, string Text);
+
 /// <summary>
 /// Trace dashboard API servisi.
 /// traces.js'teki window.Auth.fetch('/traces/sessions') çağrısının karşılığı.
@@ -54,6 +56,17 @@ public sealed class TracesApiService(HttpClient http)
         try
         {
             var result = await http.GetFromJsonAsync<List<TraceDetail>>($"/traces/recent?count={count}");
+            return result ?? [];
+        }
+        catch { return []; }
+    }
+
+    public async Task<List<SessionChatMessage>> GetSessionMessagesAsync(string sessionId)
+    {
+        try
+        {
+            var result = await http.GetFromJsonAsync<List<SessionChatMessage>>(
+                $"/sessions/{Uri.EscapeDataString(sessionId)}/messages");
             return result ?? [];
         }
         catch { return []; }
