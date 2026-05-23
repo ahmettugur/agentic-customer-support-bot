@@ -499,7 +499,26 @@
     public void VoiceSetSession(string id)
     {
         if (!string.IsNullOrEmpty(id) && _sessionId != id)
+        {
             _sessionId = id;
+            _ = JS.InvokeVoidAsync("_startPersistentEvents", id).AsTask();
+        }
+    }
+
+    [JSInvokable]
+    public void VoiceTranscript(string text)
+    {
+        _ = InvokeAsync(() =>
+        {
+            _messages.Add(new ChatMsg { Role = "user", Content = text });
+            _currentBot  = new ChatMsg { Role = "assistant", IsStreaming = true };
+            _messages.Add(_currentBot);
+            _agentName   = null;
+            _agentStatus = null;
+            _isStreaming  = true;
+            StateHasChanged();
+            _ = ScrollBottomAsync();
+        });
     }
 
     [JSInvokable]

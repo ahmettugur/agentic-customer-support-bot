@@ -16,7 +16,10 @@ window.__chatSetup = function (ref, apiBase) {
     // ── Minimal window.App bridge (realtime-ui.js uses this) ─────────────────
     window.App = {
         sendMessage: function (t) { ref.invokeMethodAsync('VoiceSendMessage', t); },
-        newChat: function () { ref.invokeMethodAsync('NewChatFromVoice'); }
+        newChat: function () { ref.invokeMethodAsync('NewChatFromVoice'); },
+        voiceTranscript: function (t) { ref.invokeMethodAsync('VoiceTranscript', t).catch(function () { }); },
+        voiceStreamEvent: function (type, data) { ref.invokeMethodAsync('OnStreamEvent', type, JSON.stringify(data || {})).catch(function () { }); },
+        voiceStreamComplete: function () { ref.invokeMethodAsync('OnStreamComplete').catch(function () { }); }
     };
 
     // ── window.chatApp — full shim for realtime-ui.js ─────────────────────────

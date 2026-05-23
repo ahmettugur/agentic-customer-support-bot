@@ -43,15 +43,13 @@
             const app = window.chatApp;
             const sessionId = app?.api?.sessionId || null;
 
-            let streamCtx = null;
-            let reasoningState = { buffer: '' };
+            let streamActive = false;
 
             const finalizeBubbleIfAny = () => {
-                if (streamCtx && app?.ui) {
-                    try { app.ui.finalizeStreamingMessage(streamCtx); } catch { }
+                if (streamActive) {
+                    window.App?.voiceStreamComplete?.();
+                    streamActive = false;
                 }
-                streamCtx = null;
-                reasoningState = { buffer: '' };
             };
 
             activeMode = 'bridge';
@@ -68,16 +66,14 @@
                         }
                     },
                     user_transcript: ({ text }) => {
-                        if (!text || !app?.ui) return;
+                        if (!text) return;
                         finalizeBubbleIfAny();
-                        app.ui.addMessage('user', text);
-                        streamCtx = app.ui.startStreamingMessage();
-                        reasoningState = { buffer: '' };
+                        window.App?.voiceTranscript?.(text);
+                        streamActive = true;
                     },
                     chat_event: (evt) => {
-                        if (!streamCtx || !app?._handleStreamEvent) return;
-                        try { app._handleStreamEvent(streamCtx, reasoningState, evt); }
-                        catch (err) { console.warn('chat_event handler hatası:', err); }
+                        if (!streamActive) return;
+                        window.App?.voiceStreamEvent?.(evt.type, evt.data || {});
                     },
                     workflow_done: () => finalizeBubbleIfAny(),
                     response_done: () => { },
