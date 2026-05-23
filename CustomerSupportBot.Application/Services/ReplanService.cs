@@ -50,17 +50,25 @@ public sealed class ReplanService : IReplanService
 
             var history = _sessions.GetHistory(sessionId);
             var lastUserQuery = history.LastOrDefault(m => m.Role == ConversationRoles.User)?.Text;
-            if (string.IsNullOrWhiteSpace(lastUserQuery))
+
+            // Admin notu varsa onu öncelikli query olarak kullan — Reasoning/Planning
+            // agent'lar gerçek müşteri talebi olarak admin notunu işler. Eski mesaj
+            // history'de bağlam için kalır.
+            var effectiveQuery = !string.IsNullOrWhiteSpace(session.State.ReplanNote)
+                ? session.State.ReplanNote!
+                : lastUserQuery;
+
+            if (string.IsNullOrWhiteSpace(effectiveQuery))
                 return;
 
             _bridge.PublishBotTyping(sessionId, true);
 
             try
             {
-                var reasoningResult = await _reasoning.ReasonAsync(lastUserQuery, session, history, ct);
+                var reasoningResult = await _reasoning.ReasonAsync(effectiveQuery, session, history, ct);
 
-                using var approvalScope = _approvalContext.SetScope(sessionId, null, lastUserQuery);
-                var response = await _team.RunAsync(lastUserQuery, history, session, reasoningResult);
+                using var approvalScope = _approvalContext.SetScope(sessionId, null, effectiveQuery);
+                var response = await _team.RunAsync(effectiveQuery, history, session, reasoningResult);
 
                 if (string.IsNullOrWhiteSpace(response))
                 {

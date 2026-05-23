@@ -211,6 +211,33 @@ public sealed class PostgresSessionManager : ISessionManager
         }
     }
 
+    public void AppendUserMessage(string sessionId, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        EnsureSessionHydrated(sessionId);
+
+        var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
+        lock (history)
+        {
+            history.Add(new ConversationMessage(ConversationRoles.User, text));
+        }
+
+        var session = GetOrCreate(sessionId);
+        session.LastActivity = DateTime.Now;
+        _sessions[sessionId] = session;
+
+        try
+        {
+            AppendUserMessageDbAsync(sessionId, text).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "[Session] AppendUserMessage DB başarısız. Session={Session}", sessionId);
+            throw ExceptionTranslator.Translate(ex, $"Kullanıcı mesajı kaydedilemedi: {sessionId}");
+        }
+    }
+
     public void ClearSession(string sessionId)
     {
         _sessions.TryRemove(sessionId, out _);
@@ -355,6 +382,32 @@ public sealed class PostgresSessionManager : ISessionManager
         {
             SessionId = sessionId,
             Role = "assistant",
+            Text = text,
+            CreatedAt = DateTime.UtcNow
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    private async Task AppendUserMessageDbAsync(string sessionId, string text)
+    {
+        await using var ctx = await _dbFactory.CreateDbContextAsync();
+
+        var sessionExists = await ctx.Sessions.AnyAsync(s => s.SessionId == sessionId);
+        if (!sessionExists)
+        {
+            ctx.Sessions.Add(new SessionEntity
+            {
+                SessionId = sessionId,
+                CreatedAt = DateTime.UtcNow,
+                LastActivity = DateTime.UtcNow,
+                StateJson = "{}"
+            });
+        }
+
+        ctx.Messages.Add(new MessageEntity
+        {
+            SessionId = sessionId,
+            Role = "user",
             Text = text,
             CreatedAt = DateTime.UtcNow
         });

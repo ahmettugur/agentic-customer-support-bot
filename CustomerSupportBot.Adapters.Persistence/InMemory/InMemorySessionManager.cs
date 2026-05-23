@@ -149,6 +149,21 @@ public class InMemorySessionManager : ISessionManager
         _sessions[sessionId] = session;
     }
 
+    public void AppendUserMessage(string sessionId, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
+        lock (history)
+        {
+            history.Add(new ConversationMessage(ConversationRoles.User, text));
+        }
+
+        var session = GetOrCreate(sessionId);
+        session.LastActivity = DateTime.Now;
+        _sessions[sessionId] = session;
+    }
+
     public List<SessionInfo> GetAllSessions()
     {
         var result = new List<SessionInfo>();

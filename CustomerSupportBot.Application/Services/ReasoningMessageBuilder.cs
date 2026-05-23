@@ -41,6 +41,16 @@ public class ReasoningMessageBuilder
             messages.AddRange(history);
         }
 
+        // Admin "Yeniden Planla" tetiklediyse override hint'ini reasoning agent da görsün.
+        // (State temizliği Planning aşamasında yapılır — burada sadece okuruz.)
+        if (session.State.ForceReplanNextTurn)
+        {
+            var hint = WellKnown.FallbackMessages.ReplanPlanningHint;
+            if (!string.IsNullOrWhiteSpace(session.State.ReplanNote))
+                hint += $"\n\n📌 Admin notu: \"{session.State.ReplanNote}\"";
+            messages.Add(new ConversationMessage(ConversationRoles.System, hint));
+        }
+
         messages.Add(new ConversationMessage(ConversationRoles.User, query));
         return messages;
     }

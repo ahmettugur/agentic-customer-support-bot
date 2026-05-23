@@ -31,6 +31,7 @@ public interface ISessionManager
     List<ConversationMessage> GetHistory(string sessionId);
     void AddExchange(string sessionId, string userMessage, string botResponse);
     void AppendAssistantMessage(string sessionId, string text);
+    void AppendUserMessage(string sessionId, string text);
     void ClearSession(string sessionId);
     List<SessionInfo> GetAllSessions();
 

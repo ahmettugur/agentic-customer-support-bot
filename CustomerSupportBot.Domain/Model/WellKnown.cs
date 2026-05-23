@@ -156,7 +156,7 @@ public static class WellKnown
         public const string LiveTakeoverResolution = "Canlı sohbet üzerinden çözüldü (Live Takeover).";
         public const string ReplanResolution = "Admin sohbeti yeniden planlattı; bot kontrolünde devam ediyor.";
         public const string ReplanCustomerNotice = "ℹ️ Talebinizi tekrar değerlendiriyoruz. Lütfen ne ile ilgili yardım istediğinizi kısaca yazar mısınız?";
-        public const string ReplanPlanningHint = "🔄 ADMIN OVERRİDE — Önceki TOOL ÇAĞRILARINI ve specialist agent kararlarını geçersiz say. Ancak müşteri ile temsilci arasında geçen son yazışmalardaki bağlamı (verilen sözler, yönlendirmeler, paylaşılan ID'ler/numaralar, temsilcinin seçtiği rota) AYNEN KORU ve dikkate al. Müşterinin BU TURDAKİ mesajını bu bağlam ışığında sıfırdan analiz et ve doğru specialist'i seç. Önceki yanlış rotalama kalıbını tekrar etme.";
+        public const string ReplanPlanningHint = "🔄 ADMIN OVERRİDE — Müşteri temsilcisi sohbeti gözden geçirip yeniden planlama talep etti. BU TURDAKİ USER mesajı doğrudan müşteriden DEĞİL; temsilcinin müşterinin gerçek talebini özetlediği bir nottur. USER mesajını müşterinin ÖNCELİKLİ ve KESİN talebi olarak kabul et ve doğru specialist agent'a yönlendir (örn. iade/şikayet → ComplaintAgent, sipariş → OrderAgent, ürün → ProductInquiryAgent). Önceki TOOL çağrılarını ve specialist kararlarını geçersiz say. Ancak history'deki müşteri-temsilci yazışmalarındaki bağlamı (verilen sözler, paylaşılan ID'ler/numaralar, temsilcinin seçtiği rota) AYNEN KORU. Tekrar eskale ETME — admin zaten karar verdi.";
     }
 
     /// <summary>Bot yanıtında fazı tespit etmek için kullanılan anahtar kelimeler.</summary>

@@ -167,7 +167,8 @@ public sealed class ChatSessionPortService : IChatSessionPort
 
         var trimmedText = text.Trim();
         _chatBridge.PublishAdminMessage(sessionId, humanAgent, trimmedText);
-        _sessions.AppendAssistantMessage(sessionId, trimmedText);
+        var agentLabel = string.IsNullOrWhiteSpace(humanAgent) ? "Temsilci" : humanAgent;
+        _sessions.AppendUserMessage(sessionId, $"[🧑‍💼 {agentLabel}]: {trimmedText}");
         return new ChatSessionMessageResult(sessionId);
     }
 
