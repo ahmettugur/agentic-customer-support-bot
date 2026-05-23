@@ -5,6 +5,7 @@
 @inject NavigationManager Nav
 @implements IAsyncDisposable
 @using System.Text.Json
+@using System.Net
 
 <link rel="stylesheet" href="css/replay.css" />
 
@@ -32,17 +33,17 @@
         </div>
     </header>
 
-    <!-- TRANSPORT (only when trace loaded) -->
+    <!-- TRANSPORT -->
     @if (_steps.Count > 0)
     {
         <section class="replay-controls">
-            <button class="btn-icon" title="Başa"           @onclick="() => GoTo(0)">⏮</button>
-            <button class="btn-icon" title="Önceki adım"   @onclick="() => GoTo(_stepIndex - 1)">◀</button>
-            <button class="btn-primary" title="Oynat/Duraklat" @onclick="TogglePlay">
+            <button class="btn-icon" title="Başa"          @onclick="() => GoTo(0)">⏮</button>
+            <button class="btn-icon" title="Önceki adım"  @onclick="() => GoTo(_stepIndex - 1)">◀</button>
+            <button class="btn-primary" @onclick="TogglePlay">
                 @(_playing ? "⏸ Duraklat" : "▶ Oynat")
             </button>
-            <button class="btn-icon" title="Sonraki adım"  @onclick="() => GoTo(_stepIndex + 1)">▶</button>
-            <button class="btn-icon" title="Sona"          @onclick="() => GoTo(_steps.Count - 1)">⏭</button>
+            <button class="btn-icon" title="Sonraki adım" @onclick="() => GoTo(_stepIndex + 1)">▶</button>
+            <button class="btn-icon" title="Sona"         @onclick="() => GoTo(_steps.Count - 1)">⏭</button>
             <span class="replay-step-label">@(_stepIndex + 1) / @_steps.Count</span>
             <label class="replay-speed">
                 Hız:
@@ -56,20 +57,20 @@
         </section>
 
         <main class="replay-main">
-            <!-- TIMELINE (left) -->
+            <!-- TIMELINE -->
             <aside class="replay-timeline-pane">
                 <h3>Zaman Çizelgesi</h3>
                 <ol class="replay-timeline">
                     @for (var i = 0; i < _steps.Count; i++)
                     {
-                        var idx = i;
+                        var idx  = i;
                         var step = _steps[i];
-                        var liClass = idx == _stepIndex ? "active" : (idx < _stepIndex ? "passed" : "");
-                        <li class="@liClass" @onclick="() => GoTo(idx)">
+                        var cls  = idx == _stepIndex ? "active" : (idx < _stepIndex ? "passed" : "");
+                        <li class="@cls" @onclick="() => GoTo(idx)">
                             <span class="step-num">#@(idx + 1)</span>
                             <div class="step-content">
                                 <div class="step-title">
-                                    <span class="step-kind-pill kind-@step.Kind">@step.Kind</span>
+                                    <span class="step-kind-pill kind-@step.Kind">@StepKindLabel(step.Kind)</span>
                                     @step.Title
                                 </div>
                                 <div class="step-meta">@FmtTime(step.Time)</div>
@@ -79,23 +80,18 @@
                 </ol>
             </aside>
 
-            <!-- DETAIL (right) -->
-            <section class="replay-detail-pane">
-                @if (_selected is not null)
-                {
-                    <header class="replay-detail-header">
-                        <span class="replay-step-num">#@(_stepIndex + 1)</span>
-                        <span class="replay-step-kind">@_selected.Kind</span>
-                        <span class="replay-step-time">@FmtTime(_selected.Time)</span>
-                    </header>
-                    <div class="replay-detail-body">
-                        @RenderDetail(_selected)
-                    </div>
-                }
-                else
-                {
-                    <p class="muted" style="padding:24px;">Bir adım seç ya da Oynat'a bas.</p>
-                }
+            <!-- CHAT FEED -->
+            <section class="replay-chat-pane" id="replayChatPane">
+                <div class="replay-chat-feed">
+                    @for (var i = 0; i <= _stepIndex && i < _steps.Count; i++)
+                    {
+                        var step    = _steps[i];
+                        var isCurr  = i == _stepIndex;
+                        <div class="rp-item rp-@step.Kind @(isCurr ? "rp-current" : "rp-past")">
+                            @RenderChatItem(step)
+                        </div>
+                    }
+                </div>
             </section>
         </main>
     }
@@ -113,15 +109,14 @@
     [SupplyParameterFromQuery(Name = "traceId")]
     private string? TraceIdParam { get; set; }
 
-    private string        _inputId    = string.Empty;
+    private string        _inputId   = string.Empty;
     private string?       _metaText;
     private string?       _errorMsg;
     private bool          _loading;
-    private List<ReplayStep> _steps   = [];
+    private List<ReplayStep> _steps  = [];
     private int           _stepIndex;
-    private ReplayStep?   _selected;
     private bool          _playing;
-    private int           _speedMs    = 1000;
+    private int           _speedMs   = 1000;
     private Timer?        _playTimer;
     private string?       _lastLoaded;
 
@@ -144,14 +139,13 @@
     {
         id = id?.Trim() ?? string.Empty;
         if (string.IsNullOrEmpty(id)) return;
-        _loading   = true;
-        _errorMsg  = null;
-        _steps     = [];
-        _selected  = null;
+        _loading  = true;
+        _errorMsg = null;
+        _steps    = [];
         StateHasChanged();
 
         var trace = await TracesApi.GetTraceAsync(id);
-        _loading   = false;
+        _loading  = false;
 
         if (trace is null)
         {
@@ -162,13 +156,12 @@
 
         _lastLoaded = id;
         Nav.NavigateTo($"/replay?traceId={Uri.EscapeDataString(id)}", replace: true);
-        _metaText   = (trace.UserQuery?.Length ?? 0) > 70
+        _metaText = (trace.UserQuery?.Length ?? 0) > 70
             ? trace.UserQuery![..70] + "…"
             : trace.UserQuery ?? "(soru yok)";
 
         _steps     = BuildSteps(trace);
         _stepIndex = 0;
-        _selected  = _steps.Count > 0 ? _steps[0] : null;
         StateHasChanged();
     }
 
@@ -178,7 +171,6 @@
         idx = Math.Clamp(idx, 0, _steps.Count - 1);
         if (idx == _steps.Count - 1) StopPlay();
         _stepIndex = idx;
-        _selected  = _steps[idx];
         StateHasChanged();
     }
 
@@ -219,60 +211,457 @@
         if (_playTimer is not null) await _playTimer.DisposeAsync();
     }
 
-    private static string FmtTime(DateTimeOffset? dt) => dt is null ? "" :
-        dt.Value.LocalDateTime.ToString("HH:mm:ss") + "." + dt.Value.Millisecond.ToString("D3");
+    private static string FmtTime(DateTimeOffset? dt) =>
+        dt is null ? "" : dt.Value.LocalDateTime.ToString("HH:mm:ss") + "." + dt.Value.Millisecond.ToString("D3");
 
-    // ── Detail panel renderer ─────────────────────────────────────────────────
-
-    private RenderFragment RenderDetail(ReplayStep step) => step.Payload switch
+    private static string StepKindLabel(string kind) => kind switch
     {
-        ReplayInitPayload p  => RenderInit(p),
-        ReplayFinalPayload p => RenderFinal(p),
-        ReplayToolPayload p  => RenderTool(p),
-        ReplayAgentPayload p => RenderAgent(p),
-        ReplayJsonPayload p  => @<pre>@p.Json</pre>,
-        _                    => @<pre>@JsonSerializer.Serialize(step.Payload, _pretty)</pre>
+        "init"      => "Soru",
+        "reasoning" => "Analiz",
+        "planning"  => "Plan",
+        "agent"     => "Agent",
+        "tool"      => "Tool",
+        "final"     => "Yanıt",
+        _           => kind
     };
 
-    private RenderFragment RenderInit(ReplayInitPayload p) =>
-        @<div>
-            <div class="field-row"><div class="field-key">Trace ID</div><div class="field-val">@p.TraceId</div></div>
-            <div class="field-row"><div class="field-key">Session</div><div class="field-val">@p.SessionId</div></div>
-            <h4>Soru</h4>
-            <pre>@(p.UserQuery ?? "")</pre>
+    // ── Chat item renderers ───────────────────────────────────────────────────
+
+    private RenderFragment RenderChatItem(ReplayStep step) => step.Payload switch
+    {
+        ReplayInitPayload p     => RenderInitBubble(p),
+        ReplayFinalPayload p    => RenderFinalBubble(p),
+        ReplayToolPayload p     => RenderToolCard(p, step),
+        ReplayAgentPayload p    => RenderAgentCard(p, step),
+        ReplayJsonPayload p when step.Kind == "reasoning" && HasProp(p.Json, "preToolCheck")
+                                => RenderSpecialistCard(p, step),
+        ReplayJsonPayload p when step.Kind == "reasoning"
+                                => RenderReasoningCard(p, step),
+        ReplayJsonPayload p     => RenderPlanningCard(p, step),
+        _                       => @<span></span>
+    };
+
+    // User query — right-aligned bubble
+    private RenderFragment RenderInitBubble(ReplayInitPayload p) =>
+        @<div class="rp-bubble-row rp-right">
+            <div class="rp-avatar rp-avatar-user">👤</div>
+            <div class="rp-bubble rp-bubble-user">
+                <div class="rp-bubble-label">Müşteri</div>
+                <div class="rp-bubble-text">@(p.UserQuery ?? "(boş soru)")</div>
+                <div class="rp-bubble-meta">
+                    <span>TraceID: @(p.TraceId?[..Math.Min(8, p.TraceId?.Length ?? 0)] ?? "?")</span>
+                </div>
+            </div>
         </div>;
 
-    private RenderFragment RenderFinal(ReplayFinalPayload p) =>
-        @<div>
-            <div class="field-row"><div class="field-key">Termination</div><div class="field-val">@(p.TerminationReason ?? "?")</div></div>
-            <div class="field-row"><div class="field-key">Iterasyon</div><div class="field-val">@(p.IterationCount?.ToString() ?? "?")</div></div>
-            <div class="field-row"><div class="field-key">Süre</div><div class="field-val">@(p.DurationMs is not null ? $"{p.DurationMs} ms" : "?")</div></div>
-            @if (p.Error is not null)
+    // Bot final answer — left-aligned bubble
+    private RenderFragment RenderFinalBubble(ReplayFinalPayload p) =>
+        @<div class="rp-bubble-row rp-left">
+            <div class="rp-avatar rp-avatar-bot">🤖</div>
+            <div class="rp-bubble rp-bubble-bot">
+                <div class="rp-bubble-label">Bot Yanıtı</div>
+                @if (p.Error is not null)
+                {
+                    <div class="rp-error-badge">⚠ @p.Error</div>
+                }
+                <div class="rp-bubble-text">@(p.Response ?? "(yanıt yok)")</div>
+                <div class="rp-bubble-meta">
+                    @if (p.DurationMs is not null) { <span>⏱ @p.DurationMs ms</span> }
+                    @if (p.IterationCount is not null) { <span>🔄 @p.IterationCount iter</span> }
+                    <span class="rp-term-badge">@(p.TerminationReason ?? "?")</span>
+                </div>
+            </div>
+        </div>;
+
+    // Reasoning card (global pre-analysis)
+    private RenderFragment RenderReasoningCard(ReplayJsonPayload p, ReplayStep step)
+    {
+        var intent     = JsonStr(p.Json, "intent");
+        var confidence = JsonDbl(p.Json, "confidenceScore") ?? JsonDbl(p.Json, "confidence");
+        var analysis   = JsonStr(p.Json, "analysis");
+        var nextAction = JsonStr(p.Json, "nextAction");
+        var pct        = confidence is not null ? (int)Math.Round(confidence.Value * 100) : (int?)null;
+
+        return @<div class="rp-card rp-card-reasoning">
+            <div class="rp-card-header">
+                <span class="rp-card-icon">🧠</span>
+                <span class="rp-card-title">Reasoning Analizi</span>
+                <span class="rp-card-time">@FmtTime(step.Time)</span>
+            </div>
+            <div class="rp-card-body">
+                @if (intent is not null)
+                {
+                    <div class="rp-kv"><span class="rp-kv-key">Niyet</span><span class="rp-pill">@intent</span></div>
+                }
+                @if (pct is not null)
+                {
+                    <div class="rp-kv">
+                        <span class="rp-kv-key">Güven</span>
+                        <span class="rp-conf-bar"><span class="rp-conf-fill" style="width:@pct%"></span></span>
+                        <span class="rp-conf-pct">@pct%</span>
+                    </div>
+                }
+                @if (analysis is not null) { <div class="rp-text">@analysis</div> }
+                @if (nextAction is not null)
+                {
+                    <div class="rp-kv"><span class="rp-kv-key">Sonraki adım</span><span>@nextAction</span></div>
+                }
+            </div>
+        </div>;
+    }
+
+    // Planning card
+    private RenderFragment RenderPlanningCard(ReplayJsonPayload p, ReplayStep step)
+    {
+        var agent      = JsonStr(p.Json, "selectedAgent");
+        var intent     = JsonStr(p.Json, "detectedIntent");
+        var rationale  = JsonStr(p.Json, "rationale");
+        var confidence = JsonDbl(p.Json, "intentConfidence");
+        var pct        = confidence is not null ? (int)Math.Round(confidence.Value * 100) : (int?)null;
+        var needsClr   = JsonBool(p.Json, "needsClarification");
+        var clrQ       = JsonStr(p.Json, "clarificationQuestion");
+
+        return @<div class="rp-card rp-card-planning">
+            <div class="rp-card-header">
+                <span class="rp-card-icon">📋</span>
+                <span class="rp-card-title">Yönlendirme Kararı</span>
+                <span class="rp-card-time">@FmtTime(step.Time)</span>
+            </div>
+            <div class="rp-card-body">
+                @if (agent is not null)
+                {
+                    <div class="rp-route-badge">
+                        <span class="rp-route-arrow">→</span>
+                        <code>@agent</code>
+                    </div>
+                }
+                @if (intent is not null)
+                {
+                    <div class="rp-kv"><span class="rp-kv-key">Tespit edilen niyet</span><span class="rp-pill">@intent</span></div>
+                }
+                @if (pct is not null)
+                {
+                    <div class="rp-kv">
+                        <span class="rp-kv-key">Güven</span>
+                        <span class="rp-conf-bar"><span class="rp-conf-fill" style="width:@pct%"></span></span>
+                        <span class="rp-conf-pct">@pct%</span>
+                    </div>
+                }
+                @if (rationale is not null) { <div class="rp-text">@rationale</div> }
+                @if (needsClr && clrQ is not null)
+                {
+                    <div class="rp-clarification">💬 @clrQ</div>
+                }
+            </div>
+        </div>;
+    }
+
+    // Agent activity card
+    private RenderFragment RenderAgentCard(ReplayAgentPayload p, ReplayStep step)
+    {
+        var output = p.Output;
+        var isPlanningJson = output is not null && HasProp(output, "selectedAgent");
+        var isSpecialistJson = output is not null && !isPlanningJson && HasProp(output, "preToolCheck");
+
+        string? planAgent = null, planIntent = null, planRationale = null, planClrQ = null;
+        double? planConf = null; bool planNeedsClr = false;
+        if (isPlanningJson)
+        {
+            planAgent    = JsonStr(output!, "selectedAgent");
+            planIntent   = JsonStr(output!, "detectedIntent");
+            planRationale = JsonStr(output!, "rationale");
+            planConf     = JsonDbl(output!, "intentConfidence");
+            planNeedsClr = JsonBool(output!, "needsClarification");
+            planClrQ     = JsonStr(output!, "clarificationQuestion");
+        }
+
+        bool? specCanProceed = null; string? specPreReasoning = null, specPostStatus = null, specPostSummary = null;
+        double? specConf = null;
+        if (isSpecialistJson)
+        {
+            specCanProceed   = JsonNestedBool(output!, "preToolCheck", "canProceed");
+            specPreReasoning = JsonNestedStr(output!, "preToolCheck", "reasoning");
+            specConf         = JsonDbl(output!, "resultConfidence");
+            specPostStatus   = JsonNestedStr(output!, "postToolReflection", "status");
+            specPostSummary  = JsonNestedStr(output!, "postToolReflection", "summary");
+        }
+
+        var planPct = planConf is not null ? (int)Math.Round(planConf.Value * 100) : (int?)null;
+        var specPct = specConf is not null ? (int)Math.Round(specConf.Value * 100) : (int?)null;
+
+        return @<div class="rp-card rp-card-agent">
+            <div class="rp-card-header">
+                <span class="rp-card-icon">⚙️</span>
+                <span class="rp-card-title">@(p.AgentName ?? "Agent")</span>
+                @if (p.DurationMs is not null) { <span class="rp-duration-badge">@p.DurationMs ms</span> }
+                <span class="rp-card-time">@FmtTime(step.Time)</span>
+            </div>
+            @if (output is not null)
             {
-                <div class="field-row"><div class="field-key">Hata</div><div class="field-val" style="color:#c00">@p.Error</div></div>
+                <div class="rp-card-body">
+                    @if (isPlanningJson)
+                    {
+                        @if (planAgent is not null)
+                        {
+                            <div class="rp-route-badge">
+                                <span class="rp-route-arrow">→</span>
+                                <code>@planAgent</code>
+                            </div>
+                        }
+                        @if (planIntent is not null)
+                        {
+                            <div class="rp-kv"><span class="rp-kv-key">Niyet</span><span class="rp-pill">@planIntent</span></div>
+                        }
+                        @if (planPct is not null)
+                        {
+                            <div class="rp-kv">
+                                <span class="rp-kv-key">Güven</span>
+                                <span class="rp-conf-bar"><span class="rp-conf-fill" style="width:@planPct%"></span></span>
+                                <span class="rp-conf-pct">@planPct%</span>
+                            </div>
+                        }
+                        @if (planRationale is not null) { <div class="rp-text">@planRationale</div> }
+                        @if (planNeedsClr && planClrQ is not null) { <div class="rp-clarification">💬 @planClrQ</div> }
+                    }
+                    else if (isSpecialistJson)
+                    {
+                        @if (specCanProceed is not null)
+                        {
+                            <div class="rp-kv">
+                                <span class="rp-kv-key">Ön kontrol</span>
+                                <span class="rp-success-badge @(specCanProceed.Value ? "ok" : "fail")">
+                                    @(specCanProceed.Value ? "Devam edilebilir" : "Devam edilemez")
+                                </span>
+                            </div>
+                        }
+                        @if (specPreReasoning is not null) { <div class="rp-text">@specPreReasoning</div> }
+                        @if (specPct is not null)
+                        {
+                            <div class="rp-kv">
+                                <span class="rp-kv-key">Sonuç güveni</span>
+                                <span class="rp-conf-bar"><span class="rp-conf-fill" style="width:@specPct%"></span></span>
+                                <span class="rp-conf-pct">@specPct%</span>
+                            </div>
+                        }
+                        @if (specPostStatus is not null)
+                        {
+                            <div class="rp-kv"><span class="rp-kv-key">Sonuç</span><span class="rp-pill">@specPostStatus</span></div>
+                        }
+                        @if (specPostSummary is not null) { <div class="rp-text">@specPostSummary</div> }
+                    }
+                    else
+                    {
+                        <div class="rp-agent-output">@output</div>
+                    }
+                </div>
             }
-            <h4>Yanıt</h4>
-            <pre>@(p.Response ?? "(boş)")</pre>
         </div>;
+    }
 
-    private RenderFragment RenderTool(ReplayToolPayload p) =>
-        @<div>
-            <div class="field-row"><div class="field-key">Tool</div><div class="field-val">@p.ToolName</div></div>
-            <div class="field-row"><div class="field-key">Agent</div><div class="field-val">@(p.AgentName ?? "?")</div></div>
-            <div class="field-row"><div class="field-key">Success</div><div class="field-val">@(p.Success ? "✅" : "❌")</div></div>
-            <h4>Parametreler</h4><pre>@(p.Parameters ?? "(yok)")</pre>
-            <h4>Sonuç</h4><pre>@(p.Result ?? "(yok)")</pre>
+    // Tool call card
+    private RenderFragment RenderToolCard(ReplayToolPayload p, ReplayStep step)
+    {
+        var paramFields  = ParseJsonFields(p.Parameters);
+        var resultFields = ParseJsonFields(p.Result);
+
+        return @<div class="rp-card rp-card-tool">
+            <div class="rp-card-header">
+                <span class="rp-card-icon">🔧</span>
+                <span class="rp-card-title">@(p.ToolName ?? "Tool")</span>
+                <span class="rp-success-badge @(p.Success ? "ok" : "fail")">@(p.Success ? "Başarılı" : "Başarısız")</span>
+                <span class="rp-card-time">@FmtTime(step.Time)</span>
+            </div>
+            <div class="rp-card-body">
+                @if (p.AgentName is not null)
+                {
+                    <div class="rp-kv"><span class="rp-kv-key">Agent</span><code>@p.AgentName</code></div>
+                }
+                @if (p.Parameters is not null)
+                {
+                    <div class="rp-kv rp-kv-top"><span class="rp-kv-key">Parametreler</span></div>
+                    @if (paramFields is not null)
+                    {
+                        <div class="rp-field-list">
+                            @foreach (var (k, v) in paramFields)
+                            {
+                                <div class="rp-kv">
+                                    <span class="rp-kv-key">@k</span>
+                                    <span class="rp-field-val">@v</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else { <div class="rp-text">@p.Parameters</div> }
+                }
+                @if (p.Result is not null)
+                {
+                    <div class="rp-kv rp-kv-top"><span class="rp-kv-key">Sonuç</span></div>
+                    @if (resultFields is not null)
+                    {
+                        <div class="rp-field-list">
+                            @foreach (var (k, v) in resultFields)
+                            {
+                                <div class="rp-kv">
+                                    <span class="rp-kv-key">@k</span>
+                                    <span class="rp-field-val">@v</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else { <div class="rp-text">@p.Result</div> }
+                }
+            </div>
         </div>;
+    }
 
-    private RenderFragment RenderAgent(ReplayAgentPayload p) =>
-        @<div>
-            <div class="field-row"><div class="field-key">Agent</div><div class="field-val">@p.AgentName</div></div>
-            <div class="field-row"><div class="field-key">Süre</div><div class="field-val">@(p.DurationMs is not null ? $"{p.DurationMs} ms" : "devam ediyor")</div></div>
-            @if (p.Output is not null) { <h4>Çıktı</h4><pre>@p.Output</pre> }
-            else { <p class="muted">Çıktı kaydedilmemiş.</p> }
+    // Specialist reasoning step (separate timeline entry)
+    private RenderFragment RenderSpecialistCard(ReplayJsonPayload p, ReplayStep step)
+    {
+        var agentName    = JsonStr(p.Json, "agentName");
+        var canProceed   = JsonNestedBool(p.Json, "preToolCheck", "canProceed");
+        var preReasoning = JsonNestedStr(p.Json, "preToolCheck", "reasoning");
+        var resultConf   = JsonDbl(p.Json, "resultConfidence");
+        var postStatus   = JsonNestedStr(p.Json, "postToolReflection", "status");
+        var postSummary  = JsonNestedStr(p.Json, "postToolReflection", "summary");
+        var pct          = resultConf is not null ? (int)Math.Round(resultConf.Value * 100) : (int?)null;
+
+        return @<div class="rp-card rp-card-reasoning">
+            <div class="rp-card-header">
+                <span class="rp-card-icon">🔍</span>
+                <span class="rp-card-title">Specialist: @(agentName ?? "?")</span>
+                <span class="rp-card-time">@FmtTime(step.Time)</span>
+            </div>
+            <div class="rp-card-body">
+                @if (canProceed is not null)
+                {
+                    <div class="rp-kv">
+                        <span class="rp-kv-key">Ön kontrol</span>
+                        <span class="rp-success-badge @(canProceed.Value ? "ok" : "fail")">
+                            @(canProceed.Value ? "Devam edilebilir" : "Devam edilemez")
+                        </span>
+                    </div>
+                }
+                @if (preReasoning is not null) { <div class="rp-text">@preReasoning</div> }
+                @if (pct is not null)
+                {
+                    <div class="rp-kv">
+                        <span class="rp-kv-key">Sonuç güveni</span>
+                        <span class="rp-conf-bar"><span class="rp-conf-fill" style="width:@pct%"></span></span>
+                        <span class="rp-conf-pct">@pct%</span>
+                    </div>
+                }
+                @if (postStatus is not null)
+                {
+                    <div class="rp-kv"><span class="rp-kv-key">Sonuç</span><span class="rp-pill">@postStatus</span></div>
+                }
+                @if (postSummary is not null) { <div class="rp-text">@postSummary</div> }
+            </div>
         </div>;
+    }
 
-    // ── BuildSteps (mirrors replay.js buildSteps) ─────────────────────────────
+    // ── JSON helpers ─────────────────────────────────────────────────────────
+
+    // Case-insensitive property lookup: tries exact key, then PascalCase, then camelCase
+    private static bool TryGetProp(JsonElement el, string key, out JsonElement value)
+    {
+        if (el.TryGetProperty(key, out value)) return true;
+        var pascal = key.Length > 0 ? char.ToUpper(key[0]) + key[1..] : key;
+        if (el.TryGetProperty(pascal, out value)) return true;
+        var camel = key.Length > 0 ? char.ToLower(key[0]) + key[1..] : key;
+        if (el.TryGetProperty(camel, out value)) return true;
+        value = default;
+        return false;
+    }
+
+    private static string? JsonStr(string json, string key)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return TryGetProp(doc.RootElement, key, out var v) && v.ValueKind == JsonValueKind.String
+                ? v.GetString() : null;
+        }
+        catch { return null; }
+    }
+
+    private static double? JsonDbl(string json, string key)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return TryGetProp(doc.RootElement, key, out var v) && v.ValueKind == JsonValueKind.Number
+                ? v.GetDouble() : null;
+        }
+        catch { return null; }
+    }
+
+    private static bool JsonBool(string json, string key)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return TryGetProp(doc.RootElement, key, out var v) && v.ValueKind == JsonValueKind.True;
+        }
+        catch { return false; }
+    }
+
+    private static bool HasProp(string? json, string key)
+    {
+        if (json is null) return false;
+        try { using var doc = JsonDocument.Parse(json); return TryGetProp(doc.RootElement, key, out _); }
+        catch { return false; }
+    }
+
+    private static string? JsonNestedStr(string json, string parent, string child)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return TryGetProp(doc.RootElement, parent, out var p)
+                && TryGetProp(p, child, out var v) && v.ValueKind == JsonValueKind.String
+                ? v.GetString() : null;
+        }
+        catch { return null; }
+    }
+
+    private static bool? JsonNestedBool(string json, string parent, string child)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!TryGetProp(doc.RootElement, parent, out var p)) return null;
+            if (!TryGetProp(p, child, out var v)) return null;
+            return v.ValueKind == JsonValueKind.True ? true : v.ValueKind == JsonValueKind.False ? false : null;
+        }
+        catch { return null; }
+    }
+
+    private static List<(string Key, string Value)>? ParseJsonFields(string? json)
+    {
+        if (json is null) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            var list = new List<(string, string)>();
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                var val = prop.Value.ValueKind switch
+                {
+                    JsonValueKind.String => prop.Value.GetString() ?? "",
+                    JsonValueKind.True   => "true",
+                    JsonValueKind.False  => "false",
+                    JsonValueKind.Null   => "null",
+                    _                    => prop.Value.GetRawText()
+                };
+                list.Add((prop.Name, val));
+            }
+            return list.Count > 0 ? list : null;
+        }
+        catch { return null; }
+    }
+
+    // ── BuildSteps ───────────────────────────────────────────────────────────
 
     private static List<ReplayStep> BuildSteps(TraceDetail trace)
     {
@@ -287,12 +676,12 @@
 
         if (trace.Planning.HasValue)
         {
-            var plan      = trace.Planning.Value;
-            string title  = "Planning";
-            if (plan.TryGetProperty("selectedAgent", out var sa) && sa.ValueKind is not JsonValueKind.Null)
-                title = $"Planning → {sa.GetString()}";
-            else if (plan.TryGetProperty("detectedIntent", out var di) && di.ValueKind is not JsonValueKind.Null)
-                title = $"Planning → {di.GetString()}";
+            var plan     = trace.Planning.Value;
+            string title = "Yönlendirme";
+            if (TryGetProp(plan, "selectedAgent", out var sa) && sa.ValueKind is not JsonValueKind.Null)
+                title = $"→ {sa.GetString()}";
+            else if (TryGetProp(plan, "detectedIntent", out var di) && di.ValueKind is not JsonValueKind.Null)
+                title = $"→ {di.GetString()}";
             steps.Add(new ReplayStep("planning", trace.StartedAt, title,
                 new ReplayJsonPayload(JsonSerializer.Serialize(plan, _pretty))));
         }
@@ -300,23 +689,23 @@
         var events = new List<(DateTimeOffset T, string Kind, string Title, ReplayStepPayload Payload)>();
 
         foreach (var v in trace.AgentVisits)
-            events.Add((v.StartedAt, "agent", $"Agent: {v.AgentName ?? "?"}",
+            events.Add((v.StartedAt, "agent", v.AgentName ?? "?",
                 new ReplayAgentPayload(v.AgentName, v.DurationMs, v.Output)));
 
         foreach (var sr in trace.SpecialistReasonings)
         {
-            var t          = trace.StartedAt;
-            var agentName  = "?";
-            if (sr.TryGetProperty("recordedAt", out var ra) && ra.ValueKind is not JsonValueKind.Null
+            var t        = trace.StartedAt;
+            var agentName = "?";
+            if (TryGetProp(sr, "recordedAt", out var ra) && ra.ValueKind is not JsonValueKind.Null
                 && DateTimeOffset.TryParse(ra.GetString(), out var parsed)) t = parsed;
-            if (sr.TryGetProperty("agentName", out var an) && an.ValueKind is not JsonValueKind.Null)
+            if (TryGetProp(sr, "agentName", out var an) && an.ValueKind is not JsonValueKind.Null)
                 agentName = an.GetString() ?? "?";
-            events.Add((t, "reasoning", $"Specialist Reasoning: {agentName}",
+            events.Add((t, "reasoning", $"Specialist: {agentName}",
                 new ReplayJsonPayload(JsonSerializer.Serialize(sr, _pretty))));
         }
 
         foreach (var tc in trace.ToolCalls)
-            events.Add((tc.InvokedAt ?? trace.StartedAt, "tool", $"Tool: {tc.ToolName ?? "?"}",
+            events.Add((tc.InvokedAt ?? trace.StartedAt, "tool", tc.ToolName ?? "?",
                 new ReplayToolPayload(tc.ToolName, tc.AgentName, tc.Success, tc.ParametersSummary, tc.ResultSummary)));
 
         events.Sort((a, b) => a.T.CompareTo(b.T));
@@ -324,7 +713,7 @@
             steps.Add(new ReplayStep(kind, t, title, payload));
 
         steps.Add(new ReplayStep("final", trace.CompletedAt ?? trace.StartedAt,
-            $"Final Yanıt ({trace.TerminationReason ?? "?"})",
+            "Bot Yanıtı",
             new ReplayFinalPayload(trace.TerminationReason, trace.DurationMs, trace.IterationCount, trace.Error, trace.FinalResponse)));
 
         return steps;

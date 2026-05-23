@@ -259,14 +259,13 @@ public class CustomerSupportTeam : IAgentTeamPort
                     if (sig == lastAgentSignature) break;
                     lastAgentSignature = sig;
 
-                    var visit = new AgentVisit
+                    // Visit'i sadece activeVisits'e kaydet; trace listesine CompletedEvent'te
+                    // ekleyeceğiz — bu şekilde pasif geçiş turları (0ms) kaydedilmez.
+                    activeVisits[executorId] = new AgentVisit
                     {
                         AgentName = executorId,
                         StartedAt = DateTime.UtcNow
                     };
-                    activeVisits[executorId] = visit;
-                    trace.AgentVisits.Add(visit);
-                    _traceStore.Update(trace);
 
                     yield return new StreamEvent(StreamEventTypes.Agent,
                         new { name = executorId, status = "running" });
@@ -286,7 +285,14 @@ public class CustomerSupportTeam : IAgentTeamPort
                     {
                         visit.CompletedAt = DateTime.UtcNow;
                         activeVisits.Remove(completedId);
-                        _traceStore.Update(trace);
+
+                        // Sadece anlamlı süre olan ziyaretleri kaydet (> 0ms).
+                        // 0ms = framework pasif geçiş turu, gerçek iş yok.
+                        if (visit.DurationMs is null or > 0)
+                        {
+                            trace.AgentVisits.Add(visit);
+                            _traceStore.Update(trace);
+                        }
                     }
 
                     yield return new StreamEvent(StreamEventTypes.Agent,
