@@ -602,7 +602,8 @@
         _dotNetRef = DotNetObjectReference.Create(this);
         var token   = await TokenStore.GetAccessTokenAsync() ?? "";
         var apiBase = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
-        await JS.InvokeVoidAsync("eval", AdminChatBridgeScript(token, apiBase));
+        await JS.InvokeVoidAsync("loadScript", "/js/admin-chat-bridge.js", "js-admin-chat-bridge");
+        await JS.InvokeVoidAsync("__adminChatSetup", token, apiBase);
     }
 
     // ── Tabs ──────────────────────────────────────────────────────────────────
@@ -878,7 +879,7 @@
 
     private async Task ScrollChatToBottomAsync()
     {
-        try { await JS.InvokeVoidAsync("eval", "var el=document.getElementById('adminChatMessages');if(el)el.scrollTop=el.scrollHeight;"); }
+        try { await JS.InvokeVoidAsync("__adminScrollToBottom", "adminChatMessages"); }
         catch { }
     }
 
@@ -980,23 +981,6 @@
     }
 
     // ── JS Bridge ─────────────────────────────────────────────────────────────
-    private static string AdminChatBridgeScript(string token, string apiBase) => $@"
-window.__adminToken   = {System.Text.Json.JsonSerializer.Serialize(token)};
-window.__adminApiBase = {System.Text.Json.JsonSerializer.Serialize(apiBase)};
-window.__adminSubscribeChat = function(ref, sessionId) {{
-    if (window.__adminChatEs) {{ window.__adminChatEs.close(); window.__adminChatEs = null; }}
-    var url = window.__adminApiBase + '/chat-sessions/' + encodeURIComponent(sessionId) + '/subscribe?access_token=' + encodeURIComponent(window.__adminToken);
-    var es = new EventSource(url);
-    window.__adminChatEs = es;
-    es.addEventListener('bridge_message', function(e) {{
-        ref.invokeMethodAsync('OnChatEvent', 'bridge_message', e.data || '{{}}').catch(function(){{}});
-    }});
-    es.onerror = function() {{}};
-}};
-window.__adminStopChat = function() {{
-    if (window.__adminChatEs) {{ window.__adminChatEs.close(); window.__adminChatEs = null; }}
-}};";
-
     // ── Helpers ───────────────────────────────────────────────────────────────
     private static string ShortId(string? id) =>
         id is null ? "—" : id[..Math.Min(8, id.Length)] + "…";

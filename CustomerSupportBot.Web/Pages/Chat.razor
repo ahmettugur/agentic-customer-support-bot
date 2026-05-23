@@ -467,7 +467,7 @@
 
         _dotNetRef = DotNetObjectReference.Create(this);
         _apiBase   = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
-        await JS.InvokeVoidAsync("eval", ChatBridgeScript.Setup);
+        await JS.InvokeVoidAsync("loadScript", "/js/chat-bridge.js", "js-chat-bridge");
         await JS.InvokeVoidAsync("__chatSetup", _dotNetRef, _apiBase);
 
         await JS.InvokeVoidAsync("loadScript", "/js/realtime-client.js", "js-realtime-client");
@@ -594,6 +594,9 @@
                 break;
         }
         StateHasChanged();
+        // İçerik büyüten event'lerde scroll'u takip ettir
+        if (type is "response_delta" or "response_complete" or "reasoning_delta" or "reasoning_complete")
+            _ = ScrollBottomAsync();
     }
 
     [JSInvokable]
@@ -772,7 +775,7 @@
 
     private async Task ScrollBottomAsync()
     {
-        try { await JS.InvokeVoidAsync("eval", "var el=document.getElementById('messages');if(el)el.scrollTop=el.scrollHeight;"); }
+        try { await JS.InvokeVoidAsync("__scrollToBottom", "messages"); }
         catch { }
     }
 

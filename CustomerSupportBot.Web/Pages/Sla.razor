@@ -99,14 +99,7 @@
     {
         if (!firstRender) return;
         _dotNetRef = DotNetObjectReference.Create(this);
-        await JS.InvokeVoidAsync("eval", @"
-            window.__slaSetup = function(ref) {
-                window.__slaRef = ref;
-                document.addEventListener('visibilitychange', function() {
-                    if (window.__slaRef)
-                        window.__slaRef.invokeMethodAsync('OnVisibilityChange', !document.hidden).catch(function(){});
-                });
-            };");
+        await JS.InvokeVoidAsync("loadScript", "/js/sla-bridge.js", "js-sla-bridge");
         await JS.InvokeVoidAsync("__slaSetup", _dotNetRef);
         await RefreshAsync();
         if (_autoRefresh) StartTimer();

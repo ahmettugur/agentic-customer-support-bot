@@ -1,17 +1,22 @@
-namespace CustomerSupportBot.Web.Pages;
+// chat-bridge.js
+// Called as: __chatSetup(dotNetRef, apiBaseUrl)
+// apiBaseUrl example: "https://localhost:7095"
 
-internal static class ChatBridgeScript
-{
-    // Called as: __chatSetup(dotNetRef, apiBaseUrl)
-    // apiBaseUrl example: "http://localhost:5021"
-    internal const string Setup = @"window.__chatSetup = function(ref, apiBase) {
+// requestAnimationFrame ile bir sonraki paint'i bekle → scrollHeight yeni DOM'u yansıtır
+window.__scrollToBottom = function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    requestAnimationFrame(function () { el.scrollTop = el.scrollHeight; });
+};
+
+window.__chatSetup = function (ref, apiBase) {
     apiBase = (apiBase || '').replace(/\/+$/, '');
     window._blazorChatRef = ref;
 
-    // ── Minimal window.App bridge (realtime-ui.js uses this) ──────────────────
+    // ── Minimal window.App bridge (realtime-ui.js uses this) ─────────────────
     window.App = {
-        sendMessage: function(t) { ref.invokeMethodAsync('VoiceSendMessage', t); },
-        newChat:     function()  { ref.invokeMethodAsync('NewChatFromVoice'); }
+        sendMessage: function (t) { ref.invokeMethodAsync('VoiceSendMessage', t); },
+        newChat: function () { ref.invokeMethodAsync('NewChatFromVoice'); }
     };
 
     // ── window.chatApp — full shim for realtime-ui.js ─────────────────────────
@@ -19,17 +24,16 @@ internal static class ChatBridgeScript
         api: {
             baseUrl: apiBase,
             sessionId: null,
-            setSession: function(sid) {
+            setSession: function (sid) {
                 this.sessionId = sid;
                 ref.invokeMethodAsync('VoiceSetSession', sid);
             },
-            resetSession: function() { this.sessionId = null; }
+            resetSession: function () { this.sessionId = null; }
         },
         ui: {
-            addMessage: function(role, text) {
+            addMessage: function (role, text) {
                 var msgs = document.getElementById('messages');
                 if (!msgs) return null;
-                // Hide the Blazor-rendered welcome screen when voice adds first message
                 var welcome = document.getElementById('welcome');
                 if (welcome) welcome.style.display = 'none';
                 var div = document.createElement('div');
@@ -42,7 +46,7 @@ internal static class ChatBridgeScript
                 msgs.scrollTop = msgs.scrollHeight;
                 return div;
             },
-            startStreamingMessage: function() {
+            startStreamingMessage: function () {
                 var msgs = document.getElementById('messages');
                 if (!msgs) return null;
                 var div = document.createElement('div');
@@ -54,17 +58,16 @@ internal static class ChatBridgeScript
                 msgs.scrollTop = msgs.scrollHeight;
                 return { messageDiv: div, bubble: bubble, _text: '' };
             },
-            finalizeStreamingMessage: function(ctx) { /* no-op */ },
-            appendResponseChunk: function(ctx, text) {
+            finalizeStreamingMessage: function (ctx) { /* no-op */ },
+            appendResponseChunk: function (ctx, text) {
                 if (!ctx || !ctx.bubble || !text) return;
                 ctx._text = (ctx._text || '') + text;
                 ctx.bubble.textContent = ctx._text;
                 var msgs = document.getElementById('messages');
                 if (msgs) msgs.scrollTop = msgs.scrollHeight;
             },
-            setAgentStatus: function(ctx, label, state) {
+            setAgentStatus: function (ctx, label, state) {
                 if (!ctx || !ctx.bubble) return;
-                // Insert chip INSIDE the bubble (not as a sibling) to avoid flex layout issues
                 var chip = ctx.bubble.querySelector('.voice-agent-chip');
                 if (!chip) {
                     chip = document.createElement('div');
@@ -74,12 +77,12 @@ internal static class ChatBridgeScript
                 }
                 chip.textContent = label + (state === 'running' ? '…' : ' ✓');
             },
-            scrollToBottom: function() {
+            scrollToBottom: function () {
                 var msgs = document.getElementById('messages');
                 if (msgs) msgs.scrollTop = msgs.scrollHeight;
             }
         },
-        _handleStreamEvent: function(ctx, reasoningState, evt) {
+        _handleStreamEvent: function (ctx, reasoningState, evt) {
             if (!ctx) return;
             var d = evt.data || {};
             switch (evt.type) {
@@ -97,13 +100,13 @@ internal static class ChatBridgeScript
                         panel.className = 'reasoning-panel streaming';
                         panel.open = true;
                         panel.innerHTML =
-                            '<summary class=""reasoning-summary"">' +
-                            '<span class=""reasoning-icon"">🧠</span>' +
-                            '<span class=""reasoning-label"">Düşünce süreci</span>' +
-                            '<span class=""reasoning-dots inline""><span></span><span></span><span></span></span>' +
-                            '<span class=""reasoning-chevron""><svg width=""12"" height=""12"" viewBox=""0 0 24 24"" fill=""none"" stroke=""currentColor"" stroke-width=""2""><polyline points=""6 9 12 15 18 9""/></svg></span>' +
+                            '<summary class="reasoning-summary">' +
+                            '<span class="reasoning-icon">🧠</span>' +
+                            '<span class="reasoning-label">Düşünce süreci</span>' +
+                            '<span class="reasoning-dots inline"><span></span><span></span><span></span></span>' +
+                            '<span class="reasoning-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>' +
                             '</summary>' +
-                            '<div class=""reasoning-body""><div class=""reasoning-section-text""></div></div>';
+                            '<div class="reasoning-body"><div class="reasoning-section-text"></div></div>';
                         content.insertBefore(panel, ctx.bubble);
                         ctx._reasoningPanel = panel;
                     }
@@ -131,7 +134,7 @@ internal static class ChatBridgeScript
                         if (d.analysis) {
                             var body = ctx._reasoningPanel.querySelector('.reasoning-body');
                             if (body) {
-                                body.innerHTML = '<div class=""reasoning-section""><div class=""reasoning-section-text"">' +
+                                body.innerHTML = '<div class="reasoning-section"><div class="reasoning-section-text">' +
                                     this._htmlEsc(d.analysis) + '</div></div>';
                             }
                         }
@@ -141,7 +144,7 @@ internal static class ChatBridgeScript
                     if (d.name && this.ui && this.ui.setAgentStatus) {
                         var label = this._friendlyAgent(d.name);
                         var agentState = (d.status === 'done') ? 'completed' : 'running';
-                        try { this.ui.setAgentStatus(ctx, label, agentState); } catch {}
+                        try { this.ui.setAgentStatus(ctx, label, agentState); } catch (e) { }
                     }
                     break;
                 case 'response_start':
@@ -154,40 +157,42 @@ internal static class ChatBridgeScript
                     break;
             }
         },
-        _extractAnalysis: function(raw) {
-            var idx = raw.indexOf('""analysis""');
+        _extractAnalysis: function (raw) {
+            var idx = raw.indexOf('"analysis"');
             if (idx < 0) return '';
             var ci = raw.indexOf(':', idx + 10);
             if (ci < 0) return '';
-            var qs = raw.indexOf('""', ci + 1);
+            var qs = raw.indexOf('"', ci + 1);
             if (qs < 0) return '';
             var vs = qs + 1, qe = -1;
             for (var i = vs; i < raw.length; i++) {
                 if (raw[i] === '\\') { i++; continue; }
-                if (raw[i] === '""') { qe = i; break; }
+                if (raw[i] === '"') { qe = i; break; }
             }
             return qe > vs ? raw.substring(vs, qe) : raw.substring(vs);
         },
-        _htmlEsc: function(s) {
-            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        _htmlEsc: function (s) {
+            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         },
-        _friendlyAgent: function(id) {
-            var m = { PlanningAgent:'Planlama Ajanı', ProductInquiryAgent:'Ürün Ajanı',
-                      OrderAgent:'Sipariş Ajanı', ComplaintAgent:'Şikayet Ajanı',
-                      ResponseAgent:'Yanıt Ajanı', Orchestrator:'Orkestratör' };
+        _friendlyAgent: function (id) {
+            var m = {
+                PlanningAgent: 'Planlama Ajanı', ProductInquiryAgent: 'Ürün Ajanı',
+                OrderAgent: 'Sipariş Ajanı', ComplaintAgent: 'Şikayet Ajanı',
+                ResponseAgent: 'Yanıt Ajanı', Orchestrator: 'Orkestratör'
+            };
             return m[id] || (id.startsWith('SubTask#') ? 'Alt Görev ' + id.slice(8) : id);
         }
     };
 
-    // ── SSE Streaming via native fetch (works with HTTP/1.1, no ALPN needed) ────
+    // ── SSE Streaming via native fetch ────────────────────────────────────────
     // Regular (non-async) function so JS.InvokeVoidAsync returns immediately.
     // The actual fetch+stream runs inside an IIFE so C# is never blocked waiting
     // for the Promise — OnStreamEvent callbacks arrive in real time.
-    window.__streamChat = function(ref, apiBase, query, sessionId) {
+    window.__streamChat = function (ref, apiBase, query, sessionId) {
         console.log('[streamChat] START apiBase=' + apiBase + ' query=' + query + ' sid=' + sessionId);
         var ctrl = new AbortController();
         window._chatStreamAbort = ctrl;
-        (async function() {
+        (async function () {
             try {
                 var url = apiBase + '/chat/stream';
                 console.log('[streamChat] fetch ' + url);
@@ -199,7 +204,7 @@ internal static class ChatBridgeScript
                 });
                 console.log('[streamChat] status=' + r.status);
                 if (!r.ok) {
-                    ref.invokeMethodAsync('OnStreamError', 'HTTP ' + r.status).catch(function(){});
+                    ref.invokeMethodAsync('OnStreamError', 'HTTP ' + r.status).catch(function () { });
                     return;
                 }
                 var reader = r.body.getReader();
@@ -217,42 +222,43 @@ internal static class ChatBridgeScript
                         else if (ln.startsWith('data:')) { dlines.push(ln.slice(5).trim()); }
                         else if (ln.length === 0 && dlines.length > 0) {
                             console.log('[streamChat] event: ' + evType);
-                            ref.invokeMethodAsync('OnStreamEvent', evType, dlines.join('\n')).catch(function(e){ console.error('[streamChat] invoke err:', e); });
+                            ref.invokeMethodAsync('OnStreamEvent', evType, dlines.join('\n')).catch(function (e) { console.error('[streamChat] invoke err:', e); });
                             evType = 'message'; dlines = [];
                         }
                     }
                 }
                 console.log('[streamChat] COMPLETE');
-                ref.invokeMethodAsync('OnStreamComplete').catch(function(){});
-            } catch(e) {
+                ref.invokeMethodAsync('OnStreamComplete').catch(function () { });
+            } catch (e) {
                 console.error('[streamChat] ERROR:', e.name, e.message);
                 if (e.name === 'AbortError') {
-                    ref.invokeMethodAsync('OnStreamComplete').catch(function(){});
+                    ref.invokeMethodAsync('OnStreamComplete').catch(function () { });
                 } else {
-                    ref.invokeMethodAsync('OnStreamError', e.message || String(e)).catch(function(){});
+                    ref.invokeMethodAsync('OnStreamError', e.message || String(e)).catch(function () { });
                 }
             }
             window._chatStreamAbort = null;
         })();
     };
-    window.__stopStream = function() {
+
+    window.__stopStream = function () {
         if (window._chatStreamAbort) { window._chatStreamAbort.abort(); window._chatStreamAbort = null; }
     };
 
-    // ── Persistent EventSource (uses absolute API URL) ─────────────────────────
-    window._startPersistentEvents = function(sid) {
+    // ── Persistent EventSource (uses absolute API URL) ────────────────────────
+    window._startPersistentEvents = function (sid) {
         if (window._chatEs) window._chatEs.close();
         var es = new EventSource(apiBase + '/chat/events/' + encodeURIComponent(sid));
         window._chatEs = es;
-        ['human_joined','human_left','bot_typing','human_message','handoff_pending','handoff_cleared'].forEach(function(t) {
-            es.addEventListener(t, function(e) {
+        ['human_joined', 'human_left', 'bot_typing', 'human_message', 'handoff_pending', 'handoff_cleared'].forEach(function (t) {
+            es.addEventListener(t, function (e) {
                 ref.invokeMethodAsync('OnPersistentEvent', t, e.data || '{}');
             });
         });
-        es.onerror = function() {};
+        es.onerror = function () { };
     };
-    window._stopPersistentEvents = function() {
+
+    window._stopPersistentEvents = function () {
         if (window._chatEs) { window._chatEs.close(); window._chatEs = null; }
     };
-};";
-}
+};
