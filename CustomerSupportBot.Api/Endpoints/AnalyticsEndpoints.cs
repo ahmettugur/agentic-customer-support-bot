@@ -41,7 +41,8 @@ public static class AnalyticsEndpoints
 
                 var rating = analytics.Rate(sid, body.Stars, body.Feedback);
                 return Results.Json(rating);
-            });
+            })
+            .RequireRateLimiting("general");
 
         app.MapGet("/sessions/{sid}/rating",
             (string sid, IAnalyticsPort analytics) =>
@@ -50,7 +51,8 @@ public static class AnalyticsEndpoints
                 return rating == null
                     ? Results.NotFound(new { error = "Bu session için rating bulunamadı." })
                     : Results.Json(rating);
-            });
+            })
+            .RequireRateLimiting("general");
 
         app.MapGet("/analytics/ratings/recent",
             (IAnalyticsPort analytics, int count = 20) =>

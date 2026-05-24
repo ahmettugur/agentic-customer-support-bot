@@ -248,6 +248,8 @@ var complaintAgent = new ChatClientAgent(
 
 ## Yeni agent ekleme
 
+> **Detaylı referans:** Tüm `Adapters.Agents` sınıflarının kapsamlı dokümantasyonu için [`docs/adapters-agents/`](adapters-agents/README.md) klasörüne, `Application` katmanı için [`docs/application/`](application/README.md) klasörüne bakın.
+
 ### Senaryo
 
 "`BillingAgent` adında fatura işlemleri için yeni bir specialist eklemek istiyorum."

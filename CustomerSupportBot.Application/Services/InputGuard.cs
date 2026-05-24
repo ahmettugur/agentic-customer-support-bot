@@ -102,16 +102,17 @@ public sealed partial class InputGuard : IInputGuard
                 $"Tek mesajda en fazla {MaxIdMentions} sipariş/şikayet numarası işleyebilirim. Lütfen ayrı mesajlar halinde gönderin.");
         }
 
-        // 6. Yumuşak sinyaller — flag'le ama geçir
+        // 6. Yumuşak sinyaller — LLM payload sahteciliği riski → reddet
+        // ```json, [INST], "approved":true gibi payload'lar LLM'e giderse yanlış karar tetiklenebilir.
         var softMatch = SoftSuspiciousPattern.Match(normalized);
         if (softMatch.Success)
         {
             flags.Add($"soft_suspicious:{softMatch.Value.ToLowerInvariant()}");
             return new InputGuardResult(
-                InputGuardVerdict.Sanitize,
+                InputGuardVerdict.Reject,
                 normalized,
                 flags,
-                null);
+                "Mesajınızda izin verilmeyen içerik tespit edildi.");
         }
 
         return new InputGuardResult(InputGuardVerdict.Allow, normalized, flags, null);

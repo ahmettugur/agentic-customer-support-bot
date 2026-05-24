@@ -60,7 +60,8 @@ public static class AiServicesExtensions
             sp.GetRequiredService<CostUsageStore>(),
             modelHint,
             provider,
-            sp.GetRequiredService<ILogger<TelemetryChatClient>>());
+            sp.GetRequiredService<ILogger<TelemetryChatClient>>(),
+            sp.GetService<ILlmCallPersistencePort>());
     }
 
     private static string ResolveStandardModel(AiOptions options) => options.Provider switch

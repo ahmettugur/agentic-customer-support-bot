@@ -12,6 +12,7 @@ using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 using CustomerSupportBot.Application.Ports.Driven.Observability;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
+using LlmCallRecord = CustomerSupportBot.Application.Ports.Driven.Observability.LlmCallRecord;
 
 namespace CustomerSupportBot.Adapters.Telemetry.Chat;
 
@@ -19,6 +20,7 @@ public sealed class TelemetryChatClient : DelegatingChatClient
 {
     private readonly ICostCalculatorPort _costCalculator;
     private readonly CostUsageStore _usageStore;
+    private readonly ILlmCallPersistencePort? _persistence;
     private readonly string _modelHint;
     private readonly string _provider;
     private readonly ILogger<TelemetryChatClient> _logger;
@@ -29,10 +31,12 @@ public sealed class TelemetryChatClient : DelegatingChatClient
         CostUsageStore usageStore,
         string modelHint,
         string provider,
-        ILogger<TelemetryChatClient> logger) : base(inner)
+        ILogger<TelemetryChatClient> logger,
+        ILlmCallPersistencePort? persistence = null) : base(inner)
     {
         _costCalculator = costCalculator;
         _usageStore = usageStore;
+        _persistence = persistence;
         _modelHint = modelHint;
         _provider = provider;
         _logger = logger;
@@ -123,6 +127,8 @@ public sealed class TelemetryChatClient : DelegatingChatClient
 
         _usageStore.Record(model, input, output, cost, durationMs);
 
+        PersistAsync(model, input, output, cost, durationMs);
+
         if (activity != null)
         {
             activity.SetTag("ai.model.actual", model);
@@ -136,6 +142,17 @@ public sealed class TelemetryChatClient : DelegatingChatClient
         _logger.LogDebug(
             "LLM call recorded: model={Model} input={Input} output={Output} cost=${Cost:F6} duration={Ms:F0}ms",
             model, input, output, cost, durationMs);
+    }
+
+    private void PersistAsync(string model, long input, long output, decimal cost, double durationMs)
+    {
+        if (_persistence == null) return;
+        var record = new LlmCallRecord(model, _provider, input, output, cost, durationMs, DateTime.UtcNow);
+        _ = Task.Run(async () =>
+        {
+            try { await _persistence.RecordAsync(record); }
+            catch { /* RecordAsync kendi içinde log'luyor */ }
+        });
     }
 
     private void RecordFailure(Activity? activity, Exception ex)

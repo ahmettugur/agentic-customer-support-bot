@@ -306,6 +306,11 @@ public sealed class NotFoundIgnoredRule : IReasoningSanityRule
 {
     public string Code => "not_found_ignored";
 
+    // Dil-bağımsız: keyword yerine confidence + requiredInfo + assumptions alanlarına bakılır.
+    // DB'de bulunamayan entity varsa:
+    //   - confidence yüksekse (≥0.6) → overconfident hallucination riski
+    //   - requiredInfo boşsa → kullanıcıdan entity doğrulanmıyor
+    //   - assumptions entity'i içermiyorsa → sessizce hallucinate edilebilir
     public void Apply(ReasoningResult r, VerifiedEntities verified, List<ReasoningIssue> issues)
     {
         var notFound = new List<string>();
@@ -316,28 +321,31 @@ public sealed class NotFoundIgnoredRule : IReasoningSanityRule
 
         if (notFound.Count == 0) return;
 
-        var action = r.NextAction?.ToLowerInvariant() ?? "";
-        var hasVerificationIntent =
-            action.Contains("doğrulat") ||
-            action.Contains("yanlış") ||
-            action.Contains("kontrol") ||
-            action.Contains("teyit");
+        // Entity'nin bilinmediği/yanlış olduğu assumptions'ta ya da requiredInfo'da açıkça belirtilmiş mi?
+        var entityIds = notFound
+            .Select(nf => nf.Split('=').Last().ToLowerInvariant())
+            .ToList();
 
-        var mentionsInAssumptions = r.Assumptions.Any(a =>
-            a.ToLowerInvariant().Contains("yanlış") ||
-            a.ToLowerInvariant().Contains("bulunam"));
+        var acknowledgedInAssumptions = r.Assumptions.Any(a =>
+            entityIds.Any(id => a.ToLowerInvariant().Contains(id)));
 
-        if (!hasVerificationIntent && !mentionsInAssumptions)
+        var acknowledgedInRequiredInfo = r.RequiredInfo.Any(ri =>
+            entityIds.Any(id => ri.ToLowerInvariant().Contains(id)));
+
+        // Low confidence → model zaten belirsizliğinin farkında
+        var isAlreadyUncertain = r.ConfidenceScore < 0.55;
+
+        if (!acknowledgedInAssumptions && !acknowledgedInRequiredInfo && !isAlreadyUncertain)
         {
             issues.Add(new ReasoningIssue
             {
                 Code = Code,
                 Severity = IssueSeverity.Error,
                 Message = $"Şu entity'ler DB'de bulunamadı: {string.Join(", ", notFound)}. " +
-                          "Ama nextAction doğrulatma/kontrol içermiyor — hallucination riski.",
+                          "Assumptions veya requiredInfo bunları içermiyor — hallucination riski.",
                 Field = "nextAction",
-                SuggestedFix = "nextAction'ı 'kullanıcıya <entity> numarasını doğrulat' olarak " +
-                               "değiştir; confidence'ı da 0.5 civarına çek."
+                SuggestedFix = "notFound entity'lerini requiredInfo'ya veya assumptions'a ekle; " +
+                               "confidence'ı 0.5 civarına çek."
             });
         }
     }

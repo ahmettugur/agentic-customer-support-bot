@@ -11,6 +11,7 @@ using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Ports.Driven.Auth;
 using CustomerSupportBot.Application.Ports.Driven.Messaging;
+using CustomerSupportBot.Application.Ports.Driven.Observability;
 using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
@@ -43,6 +44,7 @@ public static class PersistenceAdapterServiceCollectionExtensions
             services.AddScoped<IRefreshTokenRepository, EfRefreshTokenRepository>();
 
             services.AddSingleton<IReasoningTraceStore, PostgresReasoningTraceStore>();
+            services.AddSingleton<ILlmCallPersistencePort, PostgresLlmCallUsageSink>();
             services.AddSingleton<IApprovalQueue, PostgresApprovalQueue>();
             services.AddSingleton<IEscalationSink, PostgresEscalationSink>();
             services.AddSingleton<IChatModeRegistry, PostgresChatModeRegistry>();

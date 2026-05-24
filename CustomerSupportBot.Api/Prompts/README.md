@@ -7,19 +7,19 @@ ve `Get(key)` / `Render(key, vars)` metodlarıyla erişim sağlar.
 ## Klasör yapısı
 
 - `agents/` — Her bir `ChatClientAgent`'ın `instructions` metni. 6 agent:
-  - `planning-agent.md`
-  - `product-inquiry-agent.md`
-  - `order-placement-agent.md`
-  - `order-inquiry-agent.md`
-  - `complaint-agent.md`
-  - `response-agent.md`
+  - `planning-agent.md` — Gelen isteği intent'e göre analiz eder, alt görevlere böler ve ilgili agent'a yönlendirir
+  - `product-inquiry-agent.md` — Ürün özellikleri, stok ve fiyat sorguları
+  - `order-agent.md` — Sipariş oluşturma, durum sorgulama ve iptal işlemleri
+  - `complaint-agent.md` — Şikayet kaydı oluşturma ve şikayet durumu sorgulama
+  - `human-handoff-agent.md` — Çözülemeyen vakalarda insan temsilciye eskalasyon
+  - `response-agent.md` — Tüm agent çıktılarını birleştirerek son kullanıcı yanıtını üretir
+
 - `services/` — Workflow dışı servislerin prompt'ları:
-  - `reasoning-system.md` — ReasoningService system prompt template
-  - `reasoning-history-note.md` — Geçmiş varsa eklenen bağlam notu
-  - `reasoning-hint.md` — PlanningAgent'a enjekte edilen ön-analiz hint'i
-  - `revision-system.md` / `revision-user.md` — RevisionService ikili prompt
-  - `routing-rewrite-system.md` / `routing-rewrite-user.md` — PlanningAgent routing mesajını kullanıcıya çevirme
-  - `chat-manager-selection.md` — GroupChat LLM-based next-speaker seçim prompt'u
+  - `reasoning-system.md` — ReasoningService system prompt template; intent, güven skoru, eksik entity ve plan alanlarını yapılandırılmış JSON olarak üretir
+  - `reasoning-history-note.md` — Konuşma geçmişi varsa reasoning prompt'una eklenen bağlam notu
+  - `reasoning-hint.md` — PlanningAgent'a enjekte edilen ön-analiz hint'i (`{{REASONING_LINES}}` placeholder)
+  - `routing-rewrite-system.md` — Dahili yönlendirme mesajını kullanıcı dostu Türkçe yanıta çevirme kuralları
+  - `routing-rewrite-user.md` — Rewrite isteğinin kullanıcı şablonu; `{{ORIGINAL_QUERY}}` ve `{{ROUTING_MESSAGE}}` placeholder'ları + 5 örnek senaryo
 
 ## Placeholder sentaksı
 

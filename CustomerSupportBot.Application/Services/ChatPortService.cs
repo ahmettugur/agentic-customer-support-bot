@@ -70,7 +70,7 @@ public sealed class ChatPortService : IChatPort
         var session = _sessions.GetOrCreate(request.SessionId);
         var sessionId = session.SessionId;
 
-        yield return new StreamEvent(StreamEventTypes.Session, new { sessionId });
+        yield return new StreamEvent(StreamEventTypes.Session, new SessionEventPayload(sessionId));
 
         // Human mode (HITL live takeover) — bot bypass
         if (_modeRepo.GetMode(sessionId) == ChatMode.Human)

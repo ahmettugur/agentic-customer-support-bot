@@ -47,7 +47,11 @@ public static class AiClientFactory
                 var an = options.Anthropic;
                 var model = !string.IsNullOrWhiteSpace(an.ReasoningModel) ? an.ReasoningModel! : Require(an.Model, "AI:Anthropic:Model");
                 var client = decorate(CreateAnthropicChatClient(an, model));
-                // Anthropic'te ayrı bir reasoning effort kavramı yoktur — etiket olarak medium taşınır.
+                // Anthropic Messages API'sinde "reasoning_effort" parametresi desteklenmez.
+                // ReasoningChatClient bu değeri OpenAI o-series'e özgü "reasoning_effort" header'ına
+                // dönüştürerek gönderir; Anthropic bu header'ı sessizce ignore eder — API hatası oluşmaz.
+                // Dolayısıyla Anthropic provider'da standart ve reasoning model davranışı özdeştir;
+                // derin düşünme için "extended thinking" destekli bir Anthropic modeli kullanılmalıdır.
                 return new ReasoningChatClient(client, model, "medium");
             }
             default:

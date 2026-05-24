@@ -9,6 +9,12 @@ namespace CustomerSupportBot.Application.Ports.Driving;
 /// </summary>
 public record StreamEvent(string Type, object? Data);
 
+/// <summary>
+/// Session event payload — SessionId contract'ını typed tutar.
+/// ChatPortService ve ChatEndpoints bu tipi kullanarak sessiz failure riskini ortadan kaldırır.
+/// </summary>
+public sealed record SessionEventPayload(string SessionId);
+
 /// <summary>Tanımlı event tipleri — tip güvenliği için sabitler.</summary>
 public static class StreamEventTypes
 {

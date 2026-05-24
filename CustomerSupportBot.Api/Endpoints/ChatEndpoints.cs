@@ -113,7 +113,9 @@ public static class ChatEndpoints
 
                 if (hitlSubscription == null && evt.Type == StreamEventTypes.Session)
                 {
-                    resolvedSessionId = ExtractSessionId(evt.Data);
+                    resolvedSessionId = evt.Data is SessionEventPayload sp
+                        ? sp.SessionId
+                        : ExtractSessionId(evt.Data); // fallback: eski format uyumu
                     hitlSubscription = hitlEvents.Subscribe(
                         resolvedSessionId,
                         (eventType, eventData) => sse.WriteAsync(eventType, eventData));

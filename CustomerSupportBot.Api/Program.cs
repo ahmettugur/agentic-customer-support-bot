@@ -1,6 +1,8 @@
 using CustomerSupportBot.Api.Endpoints;
 using CustomerSupportBot.Api.Extensions;
 using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Application.Ports.Driven;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +19,20 @@ builder.Services.AddAuthenticationServices(builder.Configuration);
 builder.Services.AddAppHealthChecks(builder.Configuration);
 
 var app = builder.Build();
+
+// HITL guard: production'da HITL devre dışıysa açık uyarı bas
+if (!app.Environment.IsDevelopment())
+{
+    var approvalOpts = app.Services.GetRequiredService<IOptions<ApprovalOptions>>().Value;
+    if (!approvalOpts.Enabled)
+    {
+        var startupLogger = app.Services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Startup");
+        startupLogger.LogCritical(
+            "[HITL] ApprovalOptions.Enabled=false — yan etkili tool'lar (sipariş/şikayet) " +
+            "onaysız çalışıyor. Production ortamında kasıtlı mı? appsettings'i kontrol edin.");
+    }
+}
 
 await app.MigrateIfDevelopmentAsync();
 

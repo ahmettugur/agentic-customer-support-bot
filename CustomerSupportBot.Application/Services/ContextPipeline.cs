@@ -24,25 +24,32 @@ public class ContextPipeline : IContextPipeline
 
     public async Task<string> BuildContextAsync(AgentSession session)
     {
-        var parts = new List<string>();
-
-        foreach (var provider in _providers)
+        // Providers bağımsızdır — hepsi paralel çalıştırılır; hata veren atlanır.
+        var providerList = _providers.ToList(); // Order zaten ctor'da uygulandı
+        var tasks = providerList.Select(async p =>
         {
             try
             {
-                var context = await provider.GetContextAsync(session);
-                if (!string.IsNullOrWhiteSpace(context))
-                {
-                    parts.Add(context);
+                var ctx = await p.GetContextAsync(session);
+                if (!string.IsNullOrWhiteSpace(ctx))
                     _logger.LogDebug("Context provider '{Name}' bağlam üretti ({Length} karakter)",
-                        provider.Name, context.Length);
-                }
+                        p.Name, ctx.Length);
+                return (Order: p.Order, Context: ctx);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Context provider '{Name}' hata verdi, atlanıyor", provider.Name);
+                _logger.LogWarning(ex, "Context provider '{Name}' hata verdi, atlanıyor", p.Name);
+                return (Order: p.Order, Context: (string?)null);
             }
-        }
+        });
+
+        var results = await Task.WhenAll(tasks);
+
+        var parts = results
+            .OrderBy(r => r.Order)
+            .Select(r => r.Context)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .ToList();
 
         return parts.Count > 0
             ? string.Join("\n\n", parts)

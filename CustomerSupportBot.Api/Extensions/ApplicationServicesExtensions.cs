@@ -32,7 +32,7 @@ public static class ApplicationServicesExtensions
             o.SerializerOptions.Converters.Add(
                 new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase)));
 
-        // Rate limiting: dakikada 20 istek per IP, kuyruk yok
+        // Rate limiting: "chat" = 20/dk, "general" = 60/dk (public rating endpoint'leri dahil)
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -42,6 +42,16 @@ public static class ApplicationServicesExtensions
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 20,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    }));
+            options.AddPolicy("general", httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 60,
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0,
                         AutoReplenishment = true
