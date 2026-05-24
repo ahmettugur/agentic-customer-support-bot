@@ -252,6 +252,6 @@ appsettings.Production.json
 ## Çapraz Referanslar
 
 - **HITL pattern detayları** → [agentic-patterns.md](agentic-patterns.md#20-human-in-the-loop)
-- **API endpoint güvenlik kapsamı** → [api.md](api.md)
-- **Workflow guard'lar** → [workflow.md](workflow.md)
+- **API endpoint güvenlik kapsamı** → [api/](api/README.md)
+- **Workflow guard'lar** → [domain/Model-Workflow.md](domain/Model-Workflow.md)
 - **Mimari genel bakış** → [architecture.md](architecture.md)

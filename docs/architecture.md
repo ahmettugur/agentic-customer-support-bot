@@ -56,7 +56,8 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │  PostgreSQL (sessions/traces/approvals/escalations/ratings/auth) │
 │  Qdrant (cs_knowledge / cs_episodic / cs_lessons collections)    │
 │  Redis (opsiyonel cache — bağlantı var, aktif kullanım sınırlı)  │
-  │  InMemory Demo Adapters (Product/Order/Complaint — hexagonal)   │  IdExtractor (regex)│
+│  InMemory Demo Adapters (Product/Order/Complaint — hexagonal)   │
+│  IdExtractor (regex — deterministic ID extraction)              │
 │  JWT Bearer Auth (access + refresh token)                        │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -285,7 +286,7 @@ CustomerSupport.slnx
     └── Evaluation/                      # Senaryo değerlendirme testleri
 
 └── CustomerSupportBot.Web/              ← Blazor WASM frontend (bağımsız proje)
-    └── (Detay → frontend.md)            # Backend'e HTTP/SSE bağlantısı, ProjectReference yok
+    └── (Detay → web/)            # Backend'e HTTP/SSE bağlantısı, ProjectReference yok
 ```
 
 **Bağımlılık kuralı:**
@@ -452,7 +453,7 @@ RunAsync(query, reasoning)
                   → "**1) ...**\n\n<r1>\n\n---\n\n**2) ...**\n\n<r2>"
 ```
 
-Detay → [reasoning.md#compound-query--tam-orkestrasyon-tamamlandı](reasoning.md).
+Detay → [domain/Model-Reasoning.md](domain/Model-Reasoning.md).
 
 ### `POST /chat/stream` — SSE streaming
 
@@ -639,17 +640,17 @@ appsettings.json → Prompts:RootPath (opsiyonel)
 ## Çapraz referanslar
 
 - **Her class/interface ne iş yapar?** → [class-reference.md](class-reference.md)
-- **HTTP endpoint şemaları + SSE event payload'ları** → [api.md](api.md)
-- **Agent davranışı + iç sub-component anatomisi** → [agents.md](agents.md)
-- **Workflow akışı + Compound query orkestrasyon** → [workflow.md](workflow.md)
-- **Reasoning pipeline katmanları** → [reasoning.md](reasoning.md)
+- **HTTP endpoint şemaları + SSE event payload'ları** → [api/](api/README.md)
+- **Agent davranışı + iç sub-component anatomisi** → [adapters-agents/](adapters-agents/README.md)
+- **Workflow akışı + Compound query orkestrasyon** → [domain/Model-Workflow.md](domain/Model-Workflow.md)
+- **Reasoning pipeline katmanları** → [domain/Model-Reasoning.md](domain/Model-Reasoning.md)
 - **Tasarım pattern'leri** → [agentic-patterns.md](agentic-patterns.md)
 - **Semantic memory, Self-Improving Loop, Replay, Personalization** → [intelligence.md](intelligence.md)
-- **Sesli konuşma (Realtime)** → [realtime.md](realtime.md)
-- **Low-code workflow designer** → [workflow-designer.md](workflow-designer.md)
+- **Sesli konuşma (Realtime)** → [adapters-ai/Realtime.md](adapters-ai/Realtime.md)
+- **Low-code workflow designer** → [web/Pages-Workflow.md](web/Pages-Workflow.md)
 - **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
-- **Telemetri ve maliyet takibi** → [telemetry.md](telemetry.md)
-- **Veritabanı ve kalıcılık** → [persistence.md](persistence.md)
+- **Telemetri ve maliyet takibi** → [adapters-telemetry/](adapters-telemetry/README.md)
+- **Veritabanı ve kalıcılık** → [adapters-persistence/](adapters-persistence/README.md)
 - **Kurulum ve dağıtım** → [deployment.md](deployment.md)
 - **Çalıştırma ve operasyon** → [operations.md](operations.md)
 - **Geliştirici rehberi** → [developer-guide.md](developer-guide.md)

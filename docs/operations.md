@@ -1,6 +1,6 @@
 # Operations — Uygulama Nasıl Çalışır?
 
-Bu doküman uygulamanı **kuran**, **çalıştıran**, **gözlemleyen** ve **konfigüre eden** bakış açısıyla yazılmıştır. Kod-içi mimari için → [architecture.md](architecture.md), endpoint sözleşmeleri için → [api.md](api.md), pattern detayları için → [agentic-patterns.md](agentic-patterns.md).
+Bu doküman uygulamanı **kuran**, **çalıştıran**, **gözlemleyen** ve **konfigüre eden** bakış açısıyla yazılmıştır. Kod-içi mimari için → [architecture.md](architecture.md), endpoint sözleşmeleri için → [api/](api/README.md), pattern detayları için → [agentic-patterns.md](agentic-patterns.md).
 
 **Bölümler**:
 
@@ -126,7 +126,7 @@ Pattern → [agentic-patterns.md#9-guardrails--circuit-breaker](agentic-patterns
 }
 ```
 
-`Enabled = false` yaparsanız **tüm HITL mekanizması** bypass edilir (klasik bot davranışı). Detay → [api.md#7-admin-endpoints-hitl](api.md#7-admin-endpoints-hitl).
+`Enabled = false` yaparsanız **tüm HITL mekanizması** bypass edilir (klasik bot davranışı). Detay → [api/](api/Endpoints-Admin.md).
 
 ### `Routing`
 
@@ -160,7 +160,7 @@ Smart Routing & Skills-Based Escalation konfigürasyonu. Bir eskalasyon (`needs_
 }
 ```
 
-`Enabled = false` yaparsanız routing devre dışı kalır; eskalasyonlar admin manuel atayana kadar atanmamış kalır. `EscalationRequest`'in yeni alanları: `RequiredSkills`, `Priority`, `SuggestedAgentId`, `SuggestedAgentName`, `MatchScore`, `RoutingNote`. Detay → [api.md#10-smart-routing-endpoints](api.md#10-smart-routing-endpoints).
+`Enabled = false` yaparsanız routing devre dışı kalır; eskalasyonlar admin manuel atayana kadar atanmamış kalır. `EscalationRequest`'in yeni alanları: `RequiredSkills`, `Priority`, `SuggestedAgentId`, `SuggestedAgentName`, `MatchScore`, `RoutingNote`. Detay → [api/](api/Endpoints-Admin.md).
 
 ### `Telemetry`
 
@@ -478,7 +478,7 @@ Uygulama **iki ayrı SSE kanalı** kullanır — birbirini tamamlar:
 
 Frontend açılışta `EventSource` ile persistent kanalı açar (`app.js _ensurePersistentEvents`), her kullanıcı mesajı için ayrıca per-request stream başlatır. İki kanal aynı `sessionId` etrafında birleşir.
 
-Tam SSE event sözleşmeleri → [api.md#5-sse-event-şemaları](api.md#5-sse-event-şemaları).
+Tam SSE event sözleşmeleri → [api/](api/Endpoints-Chat.md).
 
 ---
 
@@ -545,7 +545,7 @@ Varsayılan persistence provider **Postgres**'dur (`appsettings.json > Persisten
 | Approval requests | `InMemoryApprovalQueue` | Ring buffer 200 | Kayıp |
 | Tüm diğerleri | In-memory | RAM | Kayıp |
 
-Detay → [persistence.md](persistence.md).
+Detay → [adapters-persistence/](adapters-persistence/README.md).
 
 ---
 
@@ -611,7 +611,7 @@ Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 | `InvalidOperationException: AI:OpenAI:ApiKey eksik` | Provider seçili ama anahtar yok | `dotnet user-secrets set "AI:OpenAI:ApiKey" "..."` |
 | Frontend SSE 5021'e bağlanmıyor | CORS / port farkı | `app.js` içinde `new ChatApp("http://localhost:5021")` |
 | Reasoning timeout | `WorkflowGuards:TimeoutSeconds` çok düşük veya model yavaş | TimeoutSeconds artır veya `ReasoningEffort: "low"` |
-| `MaxDuplicateToolCalls` tetiklendi | Bot aynı tool'u 3+ kez çağırıyor | Reasoning prompt iyileştirmesi; `agents.md`'deki `preToolCheck` kuralı |
+| `MaxDuplicateToolCalls` tetiklendi | Bot aynı tool'u 3+ kez çağırıyor | Reasoning prompt iyileştirmesi; `adapters-agents/` belgesindeki `preToolCheck` kuralı |
 | Approval expired | Admin 60 saniye içinde karar vermedi | `HumanInTheLoop:TimeoutSeconds` artır veya `AutoApproveOnTimeout` aç |
 | Replan'dan sonra bot yine yanlış agent'ı seçti | Reasoning history'de önceki tool sonuçları hâlâ etkili | Replan modal'ından **bot-içi not** ekle ("şikayet ajanına yönlendir" gibi) |
 | Admin sohbeti bittiğinde puanlama çıkmıyor | 4 mesajdan az olabilir veya zaten gösterilmiş | `_maybeShowRating` koşulları (`messageCount >= 4`, `!ratingShown`, `!humanModeActive`) |
@@ -634,16 +634,16 @@ Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 ## Çapraz referanslar
 
 - **Mimari + DI haritası** → [architecture.md](architecture.md)
-- **Endpoint sözleşmeleri + SSE event şemaları** → [api.md](api.md)
+- **Endpoint sözleşmeleri + SSE event şemaları** → [api/](api/README.md)
 - **Tasarım pattern'leri (HITL, Replan, Compound query, …)** → [agentic-patterns.md](agentic-patterns.md)
-- **Agent davranış sözleşmeleri** → [agents.md](agents.md)
-- **Workflow + ChatManager mantığı** → [workflow.md](workflow.md)
-- **Reasoning pipeline ve sanity rule'lar** → [reasoning.md](reasoning.md)
+- **Agent davranış sözleşmeleri** → [adapters-agents/](adapters-agents/README.md)
+- **Workflow + ChatManager mantığı** → [domain/Model-Workflow.md](domain/Model-Workflow.md)
+- **Reasoning pipeline ve sanity rule'lar** → [domain/Model-Reasoning.md](domain/Model-Reasoning.md)
 - **Class/interface sözleşmeleri** → [class-reference.md](class-reference.md)
 - **Yeni feature/agent/tool ekleme** → [developer-guide.md](developer-guide.md)
 - **Semantic memory, Self-Improving Loop, Personalization** → [intelligence.md](intelligence.md)
-- **Sesli konuşma (Realtime)** → [realtime.md](realtime.md)
+- **Sesli konuşma (Realtime)** → [adapters-ai/Realtime.md](adapters-ai/Realtime.md)
 - **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
-- **Veritabanı ve kalıcılık** → [persistence.md](persistence.md)
-- **Telemetri ve maliyet takibi** → [telemetry.md](telemetry.md)
+- **Veritabanı ve kalıcılık** → [adapters-persistence/](adapters-persistence/README.md)
+- **Telemetri ve maliyet takibi** → [adapters-telemetry/](adapters-telemetry/README.md)
 - **Kurulum ve dağıtım** → [deployment.md](deployment.md)

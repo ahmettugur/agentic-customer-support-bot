@@ -48,14 +48,14 @@ Bu doküman, bot'un dört "akıllı" katmanını detaylı anlatır:
 
 | Bileşen | Görev | Dosya |
 |---|---|---|
-| `IEmbeddingService` | metin → float[] | `Services/Memory/IEmbeddingService.cs` |
-| `OpenAiEmbeddingService` | OpenAI / Azure OpenAI embedding API'si (graceful fallback: ApiKey yoksa null client) | `Services/Memory/OpenAiEmbeddingService.cs` |
-| `IVectorMemoryStore` | upsert/search/count soyutlaması | `Services/Memory/IVectorMemoryStore.cs` |
-| `QdrantVectorMemoryStore` | gRPC (port 6334), Cosine, deterministik GUID point-id | `Services/Memory/QdrantVectorMemoryStore.cs` |
-| `SemanticMemoryService` | facade — `Episodic / Lessons / Knowledge` üç collection'ı yönetir | `Services/Memory/SemanticMemoryService.cs` |
-| `KnowledgeBaseIngestor` | `KnowledgeBase/*.md` → chunk → embed → upsert (hash-tabanlı change detection) | `Services/Memory/KnowledgeBaseIngestor.cs` |
-| `SemanticMemoryContextProvider` | her sorguda KB + Lessons aramasını context'e ekler | `Services/Providers/SemanticMemoryContextProvider.cs` |
-| `MemoryEndpoints` | admin REST API | `Endpoints/MemoryEndpoints.cs` |
+| `IEmbeddingPort` | metin → float[] | `Application/Ports/Driven/AI/IEmbeddingPort.cs` |
+| `OpenAiEmbeddingService` | OpenAI / Azure OpenAI embedding API'si (graceful fallback: ApiKey yoksa null client) | `Adapters.AI/Qdrant/OpenAiEmbeddingService.cs` |
+| `IVectorMemoryPort` | upsert/search/count soyutlaması | `Application/Ports/Driven/AI/IVectorMemoryPort.cs` |
+| `QdrantVectorMemoryStore` | gRPC (port 6334), Cosine, deterministik GUID point-id | `Adapters.AI/Qdrant/QdrantVectorMemoryStore.cs` |
+| `SemanticMemoryService` | facade — `Episodic / Lessons / Knowledge` üç collection'ı yönetir | `Application/Services/Memory/SemanticMemoryService.cs` |
+| `KnowledgeBaseIngestionService` | `KnowledgeBase/*.md` → chunk → embed → upsert (hash-tabanlı change detection) | `Application/Services/Memory/KnowledgeBaseIngestionService.cs` |
+| `SemanticMemoryContextProvider` | her sorguda KB + Lessons aramasını context'e ekler | `Application/Services/Providers/SemanticMemoryContextProvider.cs` |
+| `MemoryEndpoints` | admin REST API | `Api/Endpoints/MemoryEndpoints.cs` |
 
 ### 1.3 Üç Collection
 
@@ -153,10 +153,10 @@ POST /memory/ingest                              # KB'yi yeniden tara
 
 | Bileşen | Dosya |
 |---|---|
-| `Lesson` (model + `LessonStatus` enum) | `Models/Improvement/Lesson.cs` |
-| `ILessonStore` / `InMemoryLessonStore` | `Services/Improvement/` |
-| `LessonMiner` (mine + approve + reject) | `Services/Improvement/LessonMiner.cs` |
-| `ImprovementsEndpoints` | `Endpoints/ImprovementsEndpoints.cs` |
+| `Lesson` (model + `LessonStatus` enum) | `Domain/Model/Improvement/Lesson.cs` |
+| `ILessonStore` / `InMemoryLessonStore` | `Application/Ports/Driven/` + `Adapters.Persistence/InMemory/` |
+| `LessonMiner` (mine + approve + reject) | `Application/Services/Improvement/LessonMiner.cs` |
+| `ImprovementsEndpoints` | `Api/Endpoints/ImprovementsEndpoints.cs` |
 | Admin UI | `wwwroot/admin.html` (Improvements tab) + `wwwroot/js/improvements.js` |
 
 ### 2.3 Yapılandırma

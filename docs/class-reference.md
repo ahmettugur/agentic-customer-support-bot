@@ -1,6 +1,6 @@
 # Reference — Class / Interface Sözlüğü
 
-Sistemde yer alan her sınıf, interface ve enum için **tek paragraf lık** rol tanımı + ana alan/metod listesi. Diğer dokümanlar (agents.md, workflow.md, reasoning.md, agentic-patterns.md) bu referans üzerinden yüksek seviyeli anlatım yapar.
+Sistemde yer alan her sınıf, interface ve enum için **tek paragraf lık** rol tanımı + ana alan/metod listesi. Diğer dokümanlar (`adapters-agents/`, `domain/Model-Workflow.md`, `domain/Model-Reasoning.md`, `agentic-patterns.md`) bu referans üzerinden yüksek seviyeli anlatım yapar.
 
 **Bölümler**:
 
@@ -116,7 +116,7 @@ public interface IReasoningSanityRule
 
 ---
 
-### `PromptService` — `Services/PromptService.cs`
+### `IPromptRepository` + `FileSystemPromptRepository` — `Application/Ports/Driven/IPromptRepository.cs`, `Adapters.Persistence/FileSystem/FileSystemPromptRepository.cs`
 
 `Prompts/**/*.md` dosyalarını uygulama başlangıcında belleğe yükler (her istekte disk I/O yok). Key format: `agents/planning-agent`, `services/reasoning-system` (uzantı atılır, path ayıracı `/`'e normalize edilir).
 
@@ -124,7 +124,7 @@ public interface IReasoningSanityRule
 - **`Render(key, vars?)` → string** — `{{PLACEHOLDER}}` sözdizimini dictionary'den doldurur. Bulunmayan placeholder'lar boş string ile temizlenir.
 - **`Keys`** — kayıtlı tüm anahtarlar (debug için).
 
-README/NOTES adlı .md dosyaları atlanır (insanlara yönelik dokümantasyon olarak görülür).
+README/NOTES adlı .md dosyaları atlanır (insanlara yönelik dokümantasyon olarak görülür). `IPromptRepository` Application katmanında port olarak tanımlıdır, `FileSystemPromptRepository` ise Persistence adapter'ında implementasyondur.
 
 ---
 
@@ -162,7 +162,7 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
 ---
 
-### `ISessionManager` + `InMemorySessionManager` — `Services/ISessionManager.cs`, `Services/InMemorySessionManager.cs`
+### `ISessionManager` + `InMemorySessionManager` — `Application/Ports/Driven/Persistence/ISessionManager.cs`, `Adapters.Persistence/InMemory/InMemorySessionManager.cs`
 
 **Interface `ISessionManager : IConversationStore`** — oturum yönetimi + mesaj geçmişi birleşik sözleşme:
 
@@ -171,11 +171,11 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 - `UpdateSession(session)` → void
 - `ExtractAndUpdateState(sessionId, userMsg, botResp)` — CustomerId/OrderId regex çıkarımı + intent detection + state update
 
-**`InMemorySessionManager`** iki `ConcurrentDictionary` kullanır: `_sessions` (state) ve `_messageHistory` (mesajlar). Thread-safe. Persistence'a geçiş için tek yapılacak: bu sınıfın yerine DB/Redis implementasyonu koymak.
+**`InMemorySessionManager`** iki `ConcurrentDictionary` kullanır: `_sessions` (state) ve `_messageHistory` (mesajlar). Thread-safe. Postgres implementasyonu (`PostgresSessionManager`) da mevcuttur — `Persistence:Provider` ayarına göre seçilir.
 
 ---
 
-### `IConversationStore` + `InMemoryConversationStore` — `Services/ConversationStore.cs`
+### `IConversationStore` — `Application/Ports/Driven/Persistence/IConversationStore.cs`
 
 **Interface `IConversationStore`** — sadece mesaj geçmişi:
 
@@ -184,11 +184,11 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 - `ClearSession(sessionId)` — geçmişi sil
 - `GetAllSessions()` → `List<SessionInfo>` (sidebar için)
 
-**`InMemoryConversationStore`** standalone implementasyon, **kullanılmıyor**. Uygulama yerine `InMemorySessionManager`'ı her iki interface'e bind eder (Program.cs) — bkz. [architecture.md](architecture.md#dependency-injection-haritası).
+`IConversationStore` ayrı bir implementasyona sahip değildir — `InMemorySessionManager` (ve `PostgresSessionManager`) her iki interface'i (`ISessionManager` + `IConversationStore`) birden uygular. DI'da aynı instance'a bind edilir — bkz. [architecture.md](architecture.md#dependency-injection-haritası).
 
 ---
 
-### `IReasoningTraceStore` + `InMemoryReasoningTraceStore` — `Services/IReasoningTraceStore.cs`, `Services/InMemoryReasoningTraceStore.cs`
+### `IReasoningTraceStore` + `InMemoryReasoningTraceStore` — `Application/Ports/Driven/Observability/IReasoningTraceStore.cs`, `Adapters.Persistence/InMemory/InMemoryReasoningTraceStore.cs`
 
 **Interface `IReasoningTraceStore`** — trace kaydı:
 
@@ -199,7 +199,7 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 - `GetRecent(count)` → `IReadOnlyList<ReasoningTrace>`
 - `GetBySession(sessionId)` → `IReadOnlyList<ReasoningTrace>`
 
-**`InMemoryReasoningTraceStore`** — **ring buffer** pattern: `_byId` (ConcurrentDictionary) + `_insertionOrder` (ConcurrentQueue). Default kapasite **500 trace**; kapasite aşılınca en eski trace düşer. `Complete` metodunda `FinalResponse` 2000 karakterle truncate edilir.
+**`InMemoryReasoningTraceStore`** — **ring buffer** pattern: `_byId` (ConcurrentDictionary) + `_insertionOrder` (ConcurrentQueue). Default kapasite **500 trace**; kapasite aşılınca en eski trace düşer. `Complete` metodunda `FinalResponse` 2000 karakterle truncate edilir. Postgres implementasyonu (`PostgresReasoningTraceStore`) da mevcuttur.
 
 ---
 
@@ -272,15 +272,15 @@ In-memory model bazlı agregat maliyet deposu. Admin `/telemetry/cost` endpoint'
 
 ---
 
-### `AnalyticsService` — `Services/AnalyticsService.cs`
+### `AnalyticsPortService` — `Application/Services/AnalyticsPortService.cs`
 
-Oturum, intent dağılımı, ortalama puan ve son rating bilgilerini toplar. Admin analytics dashboard verisi sağlar.
+Oturum, intent dağılımı, ortalama puan ve son rating bilgilerini toplar. Admin analytics dashboard verisi sağlar. `IAnalyticsPort` driving port interface'ini implemente eder.
 
 ---
 
-### `ReasoningChatClient` — `Services/ReasoningChatClient.cs`
+### `ReasoningChatClient` — `Adapters.AI/Chat/ReasoningChatClient.cs`
 
-Reasoning modeli (varsayılan `gpt-5.4-nano`) için `IChatClient` wrapper. `ReasoningEffort` ("low", "medium", "high") + `ModelName` ile konfigüre edilir. `ReasoningService` tarafından DI'dan alınır; chat client'tan ayrışmak için sarmalayıcı sınıf kullanılır.
+Reasoning modeli (varsayılan `gpt-5.4-nano`) için `IChatClient` wrapper. `ReasoningEffort` ("low", "medium", "high") + `ModelName` ile konfigüre edilir. `ReasoningService` tarafından DI'dan alınır; chat client'tan ayrışmak için sarmalayıcı sınıf kullanılır. AI adapter katmanında yaşar.
 
 ---
 
@@ -349,7 +349,7 @@ Thread-safety: `ConcurrentDictionary` ile sağlanır. Stok kontrolü `IOrderRepo
 | `ChatResponse` | `Response`, `SessionId`, `Reasoning?` | `/chat/` response body. `record` tipi. `Models/ChatResponse.cs` |
 | `StreamEvent` | `Type`, `Data` | SSE event yapısı. `StreamEventTypes` sabitleri: `session`, `reasoning_start/delta/complete`, `agent`, `response_start/delta/complete`, `error`, `done`, HITL: `approval_required/resolved`, `escalation_created`, `human_joined/message/left`, `handoff_pending/cleared`, `bridge_message`, `bot_typing`, ayrıca `sentiment_update/alert`. `Models/StreamEvent.cs` |
 
-Event payload şemaları → [api.md](api.md).
+Event payload şemaları → [api/](api/README.md).
 
 ---
 
@@ -509,9 +509,9 @@ ChatManager `ShouldTerminateAsync` bu ayarları kullanır.
 
 ## 4. Tools/
 
-### `CustomerSupportTools` — `Tools/CustomerSupportTools.cs`
+### `CustomerSupportToolsService` — `Application/Services/CustomerSupportToolsService.cs`
 
-Statik sınıf. **7 tool fonksiyonu**, hepsi `[Description]` attribute'u ile LLM'e açıklanır ve `AIFunctionFactory.Create()` ile MAF agent'larına bağlanır. Tümü `ToolResult` döner.
+**7 tool fonksiyonu**, hepsi `[Description]` attribute'u ile LLM'e açıklanır ve `AIFunctionFactory.Create()` ile MAF agent'larına bağlanır. Tümü `ToolResult` döner. `ICustomerSupportToolsService` interface'ini implemente eder ve DI ile kayıtlıdır.
 
 | Tool | İmza | Hangi agent | Side effect |
 |---|---|---|---|
@@ -529,7 +529,7 @@ Statik sınıf. **7 tool fonksiyonu**, hepsi `[Description]` attribute'u ile LLM
 - `ComplaintRegistrationTool` — `customerId` opsiyonel; boşsa `OrdersDb[orderId].CustomerId`'den türetir. Verilen customerId order sahibiyle uyuşmuyorsa → `Conflict(WellKnown.ToolErrorCodes.CustomerIdMismatch)`.
 - Tool çıktıları her zaman `ToolResult` → LLM düz metin değil, yapılandırılmış sinyal görür.
 
-Tool → agent eşleşmesi ve handoff davranışları → [agents.md](agents.md).
+Tool → agent eşleşmesi ve handoff davranışları → [adapters-agents/](adapters-agents/README.md).
 
 ---
 
@@ -574,7 +574,7 @@ ASP.NET Core Minimal API. Her dosya **extension method** olarak kayıt: `app.Map
 | POST | `/chat/` | `HandleChatAsync` — non-streaming; reasoning → workflow sıralı; `ChatResponse` JSON döner |
 | POST | `/chat/stream` | `HandleChatStreamAsync` — SSE; reasoning stream + workflow stream + done event |
 
-Detay şemaları + akış → [api.md](api.md).
+Detay şemaları + akış → [api/](api/README.md).
 
 ---
 
@@ -740,14 +740,14 @@ Secondary port. Postgres adaptörlerinin Redis'e doğrudan bağımlılığını 
 
 ## Çapraz referanslar
 
-- **Agent davranışı detayı** → [agents.md](agents.md)
-- **Workflow akışı / compound query** → [workflow.md](workflow.md)
-- **Reasoning pipeline katmanları** → [reasoning.md](reasoning.md)
+- **Agent davranışı detayı** → [adapters-agents/](adapters-agents/README.md)
+- **Workflow akışı / compound query** → [domain/Model-Workflow.md](domain/Model-Workflow.md)
+- **Reasoning pipeline katmanları** → [domain/Model-Reasoning.md](domain/Model-Reasoning.md)
 - **Tasarım örüntüleri** → [agentic-patterns.md](agentic-patterns.md)
 - **Mimari + DI + sequence diagram** → [architecture.md](architecture.md)
-- **Endpoint + event şemaları** → [api.md](api.md)
+- **Endpoint + event şemaları** → [api/](api/README.md)
 - **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
-- **Veritabanı ve kalıcılık** → [persistence.md](persistence.md)
-- **Telemetri ve maliyet takibi** → [telemetry.md](telemetry.md)
-- **Routing ve eskalasyon** → [routing.md](routing.md)
+- **Veritabanı ve kalıcılık** → [adapters-persistence/](adapters-persistence/README.md)
+- **Telemetri ve maliyet takibi** → [adapters-telemetry/](adapters-telemetry/README.md)
+- **Routing ve eskalasyon** → [application/SkillsBasedRouter.md](application/SkillsBasedRouter.md)
 - **Yeni sınıf/tool/agent nasıl eklenir** → [developer-guide.md](developer-guide.md)

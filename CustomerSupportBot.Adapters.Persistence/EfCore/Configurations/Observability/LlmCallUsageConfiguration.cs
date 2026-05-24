@@ -1,3 +1,7 @@
+// EfCore/Configurations/Observability/LlmCallUsageConfiguration.cs
+// `observability.llm_call_usage` tablo şeması — LLM çağrı maliyeti ve token kullanımı.
+// called_at ve model üzerinde index: analytics sorgularında tarih/model filtrelemesi için.
+
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;

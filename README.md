@@ -20,7 +20,7 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 - **Sesli Konuşma Modu (Realtime) — çift kanal** — OpenAI Realtime API (`gpt-realtime-1.5`) üzerinden iki ayrı sesli mod:
   - **🎤 Sesli Asistan (köprü)** — model sadece STT/TTS köprüsü; **text chat ile aynı** 7-ajanlı MAF pipeline'ı (reasoning, HITL, tool routing) çalışır. Tüm tool'lar (sipariş aç, şikayet, vb.) destekli.
   - **⚡ Hızlı Sesli (native)** — model **kendisi** function calling yapar; sadece okuma-only tool'lar (ürün/sipariş sorgu) açıktır. ~3-5× daha hızlı, ~70% daha ucuz. Yan-etkili istek gelirse model kullanıcıyı yazılı sohbete yönlendirir (HITL korunur).
-  Detay → [`docs/realtime.md`](docs/realtime.md).
+  Detay → [`docs/adapters-ai/Realtime.md`](docs/adapters-ai/Realtime.md).
 
 ---
 
@@ -248,7 +248,7 @@ curl -X POST http://localhost:5021/chat/ \
 | `/sla/status` | `GET` | SLA Guardian güncel durum: pending/open sayı, en eski yaş, ihlal sayısı (admin) |
 | `/sla/events` | `GET` | Son SLA warn/breach olayları (admin) |
 
-Tam API referansı için [`docs/api.md`](docs/api.md) dosyasına bakın.
+Tam API referansı için [`docs/api/`](docs/api/README.md) klasörüne bakın.
 
 ---
 
@@ -365,27 +365,38 @@ agentic-customer-support-bot/
 
 ## Dokümantasyon
 
-`docs/` dizini, Türkçe olarak yazılmış detaylı teknik dokümantasyon içerir:
+`docs/` altında Türkçe yazılmış detaylı teknik dokümantasyon bulunur. İki katman:
+
+### Proje-bazlı (hexagonal mimari haritası)
+
+Her proje için: README + her sınıf/dosya grubu için ayrı doküman.
+
+| Klasör | Kapsam |
+|---|---|
+| [`docs/domain/`](docs/domain/README.md) | Domain modeller, services (parser/state machine/extractor), WellKnown |
+| [`docs/application/`](docs/application/README.md) | Port servisleri, agent'lar, reasoning, HITL, routing, workflow executor |
+| [`docs/adapters-agents/`](docs/adapters-agents/README.md) | MAF agent ekibi, tool kayıtları, approval gate |
+| [`docs/adapters-ai/`](docs/adapters-ai/README.md) | OpenAI/Azure/Anthropic chat, embedding, Qdrant vector, Realtime voice |
+| [`docs/adapters-persistence/`](docs/adapters-persistence/README.md) | InMemory + Postgres adaptörleri, EF Core, hybrid cache pattern, auth |
+| [`docs/adapters-redis/`](docs/adapters-redis/README.md) | Distributed lock (RedLock), pub/sub message bus |
+| [`docs/adapters-telemetry/`](docs/adapters-telemetry/README.md) | OpenTelemetry pipeline, cost calculator, LLM intercept decorator |
+| [`docs/api/`](docs/api/README.md) | HTTP/SSE/WebSocket endpoint'ler, middleware, workers, JWT |
+| [`docs/web/`](docs/web/README.md) | Blazor WASM admin paneli + chat UI, JS interop, voice client |
+
+### Genel bakış / operasyonel rehberler
 
 | Doküman | İçerik |
-|---------|--------|
+|---|---|
 | [`docs/architecture.md`](docs/architecture.md) | Üst seviye mimari, bileşen haritası, DI, istek yaşam döngüsü |
-| [`docs/operations.md`](docs/operations.md) | Uygulama nasıl çalışır? Kurulum, başlangıç sırası, SSE kanalları, admin paneli, sorun giderme |
-| [`docs/agents.md`](docs/agents.md) | Ajan sorumlulukları, alt-bileşen zinciri, iç anatomi |
-| [`docs/api.md`](docs/api.md) | Tam HTTP + SSE event referansı |
-| [`docs/workflow.md`](docs/workflow.md) | İş akışı fazları, compound query orkestrasyonu |
 | [`docs/agentic-patterns.md`](docs/agentic-patterns.md) | Tasarım desenleri: ReAct, Self-Reflection, Chain-of-Thought, sub-agent vs sub-component |
-| [`docs/reasoning.md`](docs/reasoning.md) | Reasoning servisi, sanity check'ler, entity doğrulama, yapılandırılmış çıktı |
-| [`docs/intelligence.md`](docs/intelligence.md) | Semantic memory (Qdrant), Self-Improving Loop, Replay UI, Personalization |
-| [`docs/security.md`](docs/security.md) | JWT kimlik doğrulama, InputGuard, HITL güvenlik, workflow guard'lar |
-| [`docs/telemetry.md`](docs/telemetry.md) | OpenTelemetry trace/metric, maliyet takibi, Jaeger entegrasyonu |
-| [`docs/persistence.md`](docs/persistence.md) | EF Core + PostgreSQL, InMemory/Postgres switch, migration stratejisi |
-| [`docs/deployment.md`](docs/deployment.md) | Docker Compose servis haritası, port yapılandırması, production hazırlık |
-| [`docs/routing.md`](docs/routing.md) | Smart Routing, skills-based eskalasyon, yük yönetimi |
-| [`docs/evaluation.md`](docs/evaluation.md) | Senaryo tabanlı test sistemi, YAML format, CriteriaEvaluator |
-| [`docs/realtime.md`](docs/realtime.md) | Sesli konuşma modu (çift kanal: köprü + native), WebSocket API |
-| [`docs/workflow-designer.md`](docs/workflow-designer.md) | Low-code deterministik workflow designer |
+| [`docs/reasoning.md`](docs/reasoning.md) | Uygulamadaki reasoning pattern'leri: CoT, sanity check, ReAct, decomposition, grounding, handoff, replan |
+| [`docs/debugging-chat.md`](docs/debugging-chat.md) | Chat akışını adım adım debug etme: breakpoint noktaları, senaryo bazlı tanı, traceId takibi, yaygın tuzaklar |
+| [`docs/intelligence.md`](docs/intelligence.md) | Semantic memory (Qdrant), Self-Improving Loop, Replay UI, Personalization birlikte |
 | [`docs/developer-guide.md`](docs/developer-guide.md) | Ajan, tool ve prompt ekleme için geliştirici rehberi |
-| [`docs/class-reference.md`](docs/class-reference.md) | Sınıf/arayüz kontratları (C# API referansı) |
+| [`docs/class-reference.md`](docs/class-reference.md) | Sınıf/arayüz sözlüğü (C# API referansı) |
+| [`docs/operations.md`](docs/operations.md) | Uygulama nasıl çalışır? Kurulum, başlangıç sırası, SSE kanalları, sorun giderme |
+| [`docs/deployment.md`](docs/deployment.md) | Docker Compose servis haritası, port yapılandırması, production hazırlık |
+| [`docs/security.md`](docs/security.md) | JWT kimlik doğrulama, InputGuard, HITL güvenlik, workflow guard'lar |
+| [`docs/evaluation.md`](docs/evaluation.md) | Senaryo tabanlı test sistemi, YAML format, CriteriaEvaluator |
 
 ---

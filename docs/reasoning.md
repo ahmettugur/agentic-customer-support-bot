@@ -1,788 +1,745 @@
-# Reasoning
+# Reasoning — Uygulamada Kullanılan Pattern'ler
 
-Bu dokümanda sistemdeki **reasoning (düşünme)** mekanizmaları ayrıntılı anlatılır. Bu sistem "tek bir LLM çağrısı sorar-yanıtlar" yapmak yerine, **3 farklı katmanda explicit structured reasoning** üretir. Her katman kendi JSON şemasını kullanır, trace'e kaydedilir ve downstream kararlarını etkiler.
+Bu doküman botun **"akıl yürütme"** stratejisini anlatır: hangi reasoning pattern'leri kullanıldı, niçin seçildi, kod içinde nerede yaşıyor.
 
-**Bölümler**:
-
-- [Neden birden fazla reasoning katmanı?](#neden-birden-fazla-reasoning-katmanı)
-- [3 katmanlı reasoning](#3-katmanlı-reasoning)
-- [Katman 0 — EntityVerifier](#katman-0--entityverifier)
-- [Katman 1 — Global Reasoning (ReasoningService)](#katman-1--global-reasoning-reasoningservice)
-- [Katman 1.5 — Sanity Checker](#katman-15--sanity-checker)
-- [Katman 2 — Planning Reasoning (PlanningAgent)](#katman-2--planning-reasoning-planningagent)
-- [Katman 3 — Specialist Reasoning](#katman-3--specialist-reasoning)
-- [Compound Query + Tam Orkestrasyon](#compound-query--tam-orkestrasyon-tamamlandı)
-- [Trace'te Reasoning Gösterimi](#tracete-reasoning-gösterimi)
+> Implementasyon detayları için: [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md), [`application/ReasoningPipeline.md`](application/ReasoningPipeline.md), [`adapters-agents/`](adapters-agents/README.md).
 
 ---
 
-## Neden birden fazla reasoning katmanı?
-
-Naif yaklaşım: "Ajanın kendisi düşünsün, yanıt versin." Bu yaklaşımın sorunları:
-
-- **İzlenebilirlik yok** — Neden bu cevabı verdi bilemeyiz.
-- **Hata ayıklama zor** — Yanlış tool çağrısı yapıldığında nerede bozuldu görmek imkansız.
-- **Niyet-karar uyumsuzluğu** — Ajan kullanıcıyı yanlış anlayıp doğru araç çağırabilir (tersine doğru anlayıp yanlış araç çağırabilir).
-- **Kalite güvencesi yok** — Hallucination veya eksik yanıt sessizce geçer.
-
-Çözüm: **Her kritik karar öncesi/sonrası explicit structured reasoning** üret. Reasoning'i trace'e kaydet.
-
-## 3 katmanlı reasoning
+## TL;DR — Reasoning katmanları
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  Katman 1 — Global Reasoning (ReasoningService)                │
-│  Model: gpt-5.4-nano (reasoning_effort: medium)                │
-│  Çıktı: ReasoningResult JSON                                   │
-│  Amaç: Ön-analiz — intent, requiredInfo, nextAction, rationale │
-└────────────────────┬───────────────────────────────────────────┘
-                     │ hint olarak
-                     ▼
-┌────────────────────────────────────────────────────────────────┐
-│  Katman 2 — Planning Reasoning (PlanningAgent)                 │
-│  Model: gpt-5.4                                                │
-│  Çıktı: PlanningResult JSON                                    │
-│  Amaç: Routing — hangi ajan + clarification gerek mi?          │
-└────────────────────┬───────────────────────────────────────────┘
-                     │
-                     ▼
-┌────────────────────────────────────────────────────────────────┐
-│  Katman 3 — Specialist Reasoning (pre/post-tool)               │
-│  Model: gpt-5.4                                                │
-│  Çıktı: SpecialistReasoning JSON (preToolCheck + post…)        │
-│  Amaç: Parametre doğrulama + tool sonrası değerlendirme        │
-└────────────────────────────────────────────────────────────────┘
+1. Deterministic Pre-Processing   (LLM'siz — IdExtractor, SessionStateExtractor)
+        ↓
+2. Reasoning Agent                (Chain-of-Thought + Self-Reflection)
+        ↓
+3. Planning Agent                 (Agent selection + Confidence-aware fallback)
+        ↓
+4. Specialist Agents              (ReAct: PreToolCheck → Tool → PostToolReflection)
+        ↓
+5. Response Agent                 (Synthesis + Markdown formatting)
 ```
+
+Her katman **farklı bir reasoning ihtiyacına** karşılık gelir — biri olmadan diğeri yapılamaz.
 
 ---
 
-## Katman 1 — Global Reasoning (ReasoningService)
+## Pattern haritası
 
-**Dosya**: `CustomerSupportBot.Application/Services/ReasoningService.cs`
-**Prompt**: `Prompts/services/reasoning-system.md` (+ koşullu `reasoning-history-note.md`)
-**Çıktı modeli**: `Models/ReasoningResult.cs`
+| Pattern | Nerede | Niçin |
+|---|---|---|
+| **Deterministic + LLM hybrid** | `IdExtractor`, `SessionStateExtractor` | Ucuz ve %100 doğru olabilen işleri LLM'e bırakma |
+| **Chain-of-Thought (CoT)** | `ReasoningAgent` → `ReasoningResult.Steps[]` | Görünür akıl yürütme, debug + audit |
+| **Self-Reflection / Sanity Check** | `ReasoningAgent` → `SanityIssues[]` | LLM kendi tutarsızlığını fark etsin |
+| **Confidence-Aware Routing** | `PlanningAgent` → `IntentConfidence` threshold | Belirsiz durumda specialist çağırma, soru sor |
+| **ReAct (Reason + Act)** | Specialist agents → `PreToolCheck` + Tool + `PostToolReflection` | Tool çağrısından önce doğrula, sonra yorumla |
+| **Decomposition** | `ReasoningResult.SubTasks[]` | Compound query'leri parçala (örn. "ORD-1 ve ORD-2") |
+| **Grounding** | `ReasoningStep.Grounding` | Her step'in kaynağı (regex/DB/history/assumption) |
+| **Dynamic Handoff** | `PostToolReflection.HandoffSuggestion` | Yanlış agent seçildiyse runtime'da düzelt |
+| **Replan** | `ReplanService` + `ChatSessionState.Replan` | Admin/agent tekrar düşünme talep eder |
+| **Reasoning Effort Tuning** | `ReasoningChatClient.ReasoningEffort` (low/med/high) | OpenAI o-series için derinlik ayarı |
+| **Few-shot via Markdown** | `Prompts/agents/*.md` + `Prompts/services/*.md` | Behavior'u kodda değil prompt'ta tut |
 
-### Ne zaman çalışır?
+---
 
-Her `/chat/` veya `/chat/stream` isteğinde workflow'dan **ÖNCE** çalışır. Çıktısı workflow'a "hint" olarak enjekte edilir.
+## 1. Deterministic + LLM Hybrid
 
-### Neden ayrı bir servis/model?
+**Problem:** LLM her şeye iyi değil. Regex'in çok daha iyi yapacağı işleri LLM'e bırakmak hem **pahalı** hem **halüsinasyon riski**.
 
-O-series (o4-mini, o1) modeller **daha uzun iç düşünme** süresine sahiptir — "thinking tokens" üretirler, sonra cevaplarlar. Niyet tespiti, eksik bilgi çıkarımı ve plan üretmek için bu düşünme faydalıdır. Ancak her tool çağrısında bu maliyete katlanmak istemeyiz, o yüzden asıl workflow **daha hızlı gpt-4o** ile yürütülür.
-
-### Girdi
-
-`CustomerSupportBot.Application/Services/ReasoningService.cs:232-253`:
-
-```
-[System] reasoning-system.md (STATE_INFO + HISTORY_NOTE placeholder'ları ile render edilmiş)
-[User]   … önceki tur …
-[Assist] … önceki tur …
-[User]   güncel query
-```
-
-`STATE_INFO` içeriği:
+### Çözüm: LLM öncesi deterministic preprocessing
 
 ```
-CustomerId: CUST-001, Phase: inquiry, TurnCount: 3
+Kullanıcı: "ORD-5 nerede"
+   ↓
+IdExtractor.Extract(query)                          ← Regex (mikrosaniye)
+   → ExtractedIds { OrderId = "ORD-5" }
+   ↓
+IdExtractor.BuildHintMessage(ids)                   ← Prompt'a inject
+   → "[ID İPUCU]
+       - order_id: ORD-5
+       [TOOL ÖNCELİĞİ]
+       order_id mevcutsa order_status_tool kullan..."
+   ↓
+ReasoningAgent prompt'una eklenir                   ← LLM bu hint'i görür
 ```
 
-`HISTORY_NOTE` — `history.Count > 0` ise enjekte edilir (`reasoning-history-note.md`'den): "BAĞLAM NOTU: Önceki turlarda geçen order_id/customer_id entity'lerini KULLAN; requiredInfo'da tekrar isteme."
+**Sonuç:**
+- LLM ID'leri tekrar çıkarmaya çalışmaz (halüsinasyon yok)
+- Cost ↓ (daha kısa LLM yanıtı)
+- Doğruluk ↑ (regex deterministic)
 
-### Çıktı şeması
+Aynı pattern `SessionStateExtractor`'da: turn count, intent keyword match, sentiment keyword match — hepsi LLM'siz.
+
+📁 Kod: [`domain/Services-IdExtractor.md`](domain/Services-IdExtractor.md), [`domain/Services-SessionStateExtractor.md`](domain/Services-SessionStateExtractor.md)
+
+---
+
+## 2. Chain-of-Thought (CoT)
+
+**Problem:** LLM "şunu yap" diye direkt cevap verirse:
+- Mantığını göremeyiz → debug zor
+- Hatalı çıkarımda yakalayamayız
+- Audit trail yok
+
+### Çözüm: Yapılandırılmış adım dizisi
+
+`ReasoningAgent` JSON üretir:
 
 ```json
 {
-  "analysis": "Müşteri ORD-1 siparişinin durumunu sorguluyor.",
+  "analysis": "Kullanıcı ORD-5 siparişinin durumunu soruyor",
   "steps": [
-    "Adım 1: order_status_tool'u ORD-1 ile çağır",
-    "Adım 2: durumu kullanıcıya ilet"
-  ],
-  "intent": "sipariş_sorgulama",
-  "requiredInfo": [],
-  "rationale": "Kullanıcı net bir sipariş numarası verdi, clarification gerekmiyor.",
-  "assumptions": ["Kullanıcının bu siparişin sahibi olduğu"],
-  "nextAction": "OrderAgent'e yönlendir",
-  "decisionReason": "ComplaintAgent alternatif değil çünkü şikayet iması yok.",
-  "confidenceScore": 0.92
-}
-```
-
-### Alanların anlamı
-
-| Alan | Amaç |
-|---|---|
-| `analysis` | Kullanıcı ne istiyor? (1-2 cümle özet) |
-| `steps` | Çözüm için atılacak adımlar (sıralı) |
-| `intent` | `sipariş_oluşturma | sipariş_sorgulama | ürün_bilgisi | şikayet | genel | bilinmiyor` |
-| `requiredInfo` | **Gerçekten** eksik alanlar; ZATEN bilinenleri tekrar isteme |
-| `rationale` | Niyet+plan seçim gerekçesi |
-| `assumptions` | Yapılan varsayımlar (transparency için) |
-| `nextAction` | Somut bir sonraki aksiyon |
-| `decisionReason` | Alternatifler + neden seçilmedikleri |
-| `confidenceScore` | 0.0-1.0 sayısal güven |
-
-`Confidence` string'i (yüksek/orta/düşük) legacy uyumluluk için hâlâ modelde; yeni kod `ConfidenceScore` kullanmalı. `ReasoningResult.ScoreToString` / `StringToScore` dönüşümleri mevcut.
-
-### PlanningAgent'a nasıl iletilir?
-
-`CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:590-612` — `BuildReasoningHint(r)` metodu boş olmayan alanları satır satır birleştirip `Prompts/services/reasoning-hint.md` template'ine `{{REASONING_LINES}}` placeholder'ı olarak geçer. Bu hint bir system mesajı olarak workflow'un başına eklenir.
-
-Örnek hint (kullanıcı mesajından ÖNCE PlanningAgent'ın görecekleri):
-
-```
-[ÖN-ANALİZ REASONING ÇIKTISI — yalnızca bilgilendirme amaçlı]
-Aşağıdaki ön-analiz kullanıcı sorgusu üzerinde yapıldı. …
-
-- Analiz: Müşteri ORD-1 siparişinin durumunu sorguluyor.
-- Ön-tahmin edilen niyet: sipariş_sorgulama
-- Önerilen adımlar: order_status_tool çağır → durumu ilet
-- Gerekli olduğu tahmin edilen bilgiler:
-- Önerilen sonraki aksiyon: OrderAgent'e yönlendir
-
-ÖNEMLİ KURALLAR:
-  - Clarification sorusu üreteceksen …
-  - Eğer 'Gerekli bilgiler' listesinde 1'den fazla alan varsa …
-```
-
-PlanningAgent bu hint'i "ön bilgi" olarak görür, farklı karar verebilir ama `rationale` alanında gerekçesini belirtmesi beklenir.
-
-### Hata yönetimi
-
-Reasoning başarısız olursa (API hatası, timeout, JSON parse hatası) **fallback** ile devam edilir:
-
-```
-Analysis = "Reasoning şu anda kullanılamıyor."
-Intent = session.State.CurrentIntent ?? "bilinmiyor"
-ConfidenceScore = 0.3
-NextAction = "workflow'a düşük güvenle devam et"
-```
-
-Bu sayede reasoning katmanı down olsa bile workflow çalışmaya devam eder — sadece hint olmadan.
-
-### Streaming
-
-`ReasonStreamingAsync` SSE için tasarlandı. O-series modellerde "thinking" evresi sessiz olduğundan, thinking sonrası JSON hızlı akıtılır. Biz token'lar arası minimum 20ms pacing uygulayarak kullanıcıya progressive reasoning görseli sunarız (`CustomerSupportBot.Application/Services/ReasoningService.cs:122-163`).
-
----
-
-## Katman 2 — Planning Reasoning (PlanningAgent)
-
-**Prompt**: `Prompts/agents/planning-agent.md`
-**Çıktı modeli**: `Models/PlanningResult.cs`
-**Parser**: `Services/PlanningResultParser.cs`
-
-### Katman 1'den farkı
-
-| | Global Reasoning | Planning Reasoning |
-|---|---|---|
-| Model | o4-mini (ayrı client) | gpt-4o (ana client) |
-| Bağlam | Sadece sorgu + history | + context + reasoning hint + entity hint |
-| Çıktı odağı | Niyet analizi + plan | **Seçim** (hangi ajan, clarification?) |
-| Side effect | Yok | Workflow'u yönlendirir |
-
-### Çıktı şeması
-
-`CustomerSupportBot.Domain/Model/PlanningResult.cs`:
-
-```json
-{
-  "detectedIntent": "sipariş_sorgulama",
-  "intentConfidence": 0.95,
-  "supportingEvidence": ["siparişim nerede", "ORD-1"],
-  "selectedAgent": "OrderAgent",
-  "rationale": "Net sipariş numarası + durum sorgusu niyeti.",
-  "alternativesRejected": [
-    { "agent": "ComplaintAgent", "reason": "Şikayet iması yok." },
-    { "agent": "OrderAgent", "reason": "Yeni sipariş değil, sorgu." }
-  ],
-  "needsClarification": false,
-  "clarificationQuestion": null,
-  "taskDescription": "ORD-1 siparişinin durumunu sorgula"
-}
-```
-
-### Clarification eşiği
-
-`intentConfidence < 0.7` → `needsClarification=true` + `selectedAgent=ResponseAgent` üretilmeli. ChatManager bunu görürse specialist'i atlayıp doğrudan ResponseAgent'ı çağırır:
-
-```csharp
-CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:91-96
-if (plan.NeedsClarification || plan.IntentConfidence < 0.7)
-{
-    var responseAgent = _agents.FirstOrDefault(a =>
-        a.Name?.Equals("ResponseAgent", StringComparison.OrdinalIgnoreCase) == true);
-    if (responseAgent != null) return responseAgent;
-}
-```
-
-### alternativesRejected neden zorunlu?
-
-"Negatif gerekçe" izlenmesi için. Ajan doğru kararı verdi ama yanlış alternatifleri **eleyemedi** ise bu bir eğitim sinyalidir — trace dashboard'unda alternativesRejected boşsa prompt iyileştirilmelidir.
-
----
-
-## Katman 3 — Specialist Reasoning (pre/post-tool)
-
-**Prompt**: `Prompts/agents/<specialist>-agent.md`
-**Çıktı modeli**: `Models/SpecialistReasoning.cs`
-**Parser**: `Services/SpecialistReasoningParser.cs`
-
-Her specialist (ProductInquiry, Order, Complaint) tool çağrısı **etrafında** iki JSON bloğu üretir:
-
-### 3a — Pre-tool check
-
-**Amacı**: Tool çağrılmadan önce doğrulama. Eksik parametreyle yan-etkili tool çağırmayı engeller.
-
-```json
-{
-  "preToolCheck": {
-    "requiredParams": ["customer_id", "product_id", "quantity"],
-    "collectedParams": ["CUST-001", "Dell XPS 15"],
-    "missingParams": ["quantity"],
-    "canProceed": false,
-    "reasoning": "Adet belirtilmemiş, kullanıcıdan istenmeli.",
-    "confidence": 0.9
-  }
-}
-```
-
-`canProceed=false` ise specialist **tool çağırmaz**, `postToolReflection.status=needs_followup` üretip ResponseAgent'a geçer.
-
-### 3b — Post-tool reflection
-
-**Amacı**: Tool'un sonucunu değerlendirir, sonraki adımı önerir.
-
-```json
-{
-  "postToolReflection": {
-    "taskComplete": true,
-    "status": "done",
-    "handoffSuggestion": "ResponseAgent",
-    "handoffReason": "Sipariş başarıyla oluşturuldu.",
-    "missingContext": [],
-    "summary": "ORD-3 oluşturuldu, kullanıcıya iletildi."
-  }
-}
-```
-
-### `status` değerleri ve anlamı
-
-| Status | Anlamı | ChatManager davranışı |
-|---|---|---|
-| `done` | Görev tamamlandı | ResponseAgent'a geç |
-| `needs_followup` | Kullanıcıdan bilgi gerek | ResponseAgent (clarification) |
-| `needs_escalation` | İnsan desteği gerek | ResponseAgent (escalation mesajı) |
-| `failed` | Tool hatası | ResponseAgent (hata mesajı) |
-| `partial` | Kısmi sonuç (bulunamadı vb.) | ResponseAgent (not_found mesajı) |
-
-### Dinamik handoff
-
-`handoffSuggestion` başka bir specialist ismiyse ChatManager **ping-pong guard**'ını kontrol eder (aynı ajana max 2 handoff) ve yönlendirme yapar:
-
-```csharp
-CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs:127-144
-if (!string.IsNullOrWhiteSpace(reflection.HandoffSuggestion)
-    && !reflection.HandoffSuggestion.Equals("ResponseAgent", …))
-{
-    _handoffCounts.TryGetValue(targetName, out var count);
-    if (count < MaxHandoffsPerAgent)  // = 2
     {
-        _handoffCounts[targetName] = count + 1;
-        return target;
+      "order": 1,
+      "description": "Kullanıcı mesajında ORD-5 ID'si tespit edildi",
+      "action": "extract",
+      "grounding": "regex",
+      "confidence": 0.95
+    },
+    {
+      "order": 2,
+      "description": "Niyet: OrderInquiry (status sorgu)",
+      "action": "route",
+      "grounding": "session_state",
+      "confidence": 0.9
+    },
+    {
+      "order": 3,
+      "description": "OrderAgent'a yönlendirilmeli",
+      "action": "route",
+      "grounding": "derived",
+      "confidence": 0.85
     }
-    // Limit aşıldı → ResponseAgent fallback
+  ],
+  "intent": "OrderInquiry",
+  "confidenceScore": 0.9
 }
 ```
+
+Her step şunları içerir:
+- **action**: ne yapıldı (`extract` / `route` / `clarify` / `call_tool` / `verify` / `terminate`)
+- **grounding**: delil kaynağı (`regex` / `session_state` / `history` / `DB` / `derived` / `assumption`)
+- **confidence**: per-step güven 0-1
+
+### Neden grounding?
+
+```
+Tüm step'ler grounding=assumption → LLM havadan üretti → güvenilmez
+Çoğu step grounding=regex/DB/session_state → kanıta dayalı → güvenilir
+```
+
+`SanityChecker` (aşağıda) `assumption` oranı yüksekse Warn fırlatır.
+
+📁 Kod: [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md), `Prompts/services/reasoning-system.md`
 
 ---
 
-## Trace'e yansıma
+## 3. Self-Reflection / Sanity Check
 
-Tüm bu katmanların çıktıları tek bir `ReasoningTrace` nesnesinde birleştirilir:
+**Problem:** LLM kendiyle tutarsız çıkarsayabilir:
+- `confidence: 0.95` ama aynı zamanda `needsClarification: true` (çelişki)
+- `requiredInfo: ["order_id"]` derken `collectedInfo.order_id = "ORD-5"` (gereksiz tekrar)
+- Intent declared "Complaint" ama steps "OrderInquiry" gibi (uyumsuzluk)
 
-```csharp
-CustomerSupportBot.Domain/Model/ReasoningTrace.cs
-public class ReasoningTrace
-{
-    public string TraceId { get; set; }
-    public string SessionId { get; set; }
-    public string UserQuery { get; set; }
-    public DateTime StartedAt, CompletedAt;
+### Çözüm: SanityIssues array
 
-    public ReasoningResult? Reasoning { get; set; }              // Katman 1
-    public PlanningResult? Planning { get; set; }                // Katman 2
-    public List<SpecialistReasoning> SpecialistReasonings { … }  // Katman 3
-
-    public List<AgentVisit> AgentVisits { … }
-    public List<ToolInvocation> ToolCalls { … }
-    public string? TerminationReason { get; set; }
-    public string? FinalResponse { get; set; }
-    public int IterationCount { get; set; }
-}
-```
-
-Trace'e `GET /traces/{id}` veya `GET /traces/recent?count=20` ile erişilebilir (`CustomerSupportBot.Api/Endpoints/TraceEndpoints.cs`).
-
-### Aggregate stats
-
-`GET /traces/stats` — tüm trace'lerin istatistiği:
+ReasoningAgent **kendini denetler** — JSON çıkışına `sanityIssues[]` ekler:
 
 ```json
 {
-  "totalTraces": 234,
-  "completedCount": 228,
-  "errorCount": 6,
-  "avgDurationMs": 3420.5,
-  "avgIterationCount": 4.2,
-  "terminationReasons": {
-    "completed": 180,
-    "awaiting_user_input": 30,
-    "not_found": 12,
-    "escalation_needed": 4,
-    "repeated_tool_call_guard": 2,
-    "timeout": 0,
-    "error": 6
-  }
+  "sanityIssues": [
+    {
+      "code": "overconfident_clarification",
+      "severity": "Warn",
+      "message": "Yüksek güven (0.95) ile clarification gerek diyor — tutarsız",
+      "suggestedFix": "Ya güveni düşür ya clarification false yap"
+    }
+  ]
 }
 ```
 
----
+### Severity'ye göre davranış
 
-## Reasoning'in gerçek hayattaki etkisi (örnekler)
-
-### Örnek 1 — Clarification ping-pong önleme
-
-**Kullanıcı**: "Sipariş vermek istiyorum."
-
-**Naif sistem**: 3 tur
-
-1. "Hangi ürünü?" → kullanıcı "Dell XPS"
-2. "Kaç adet?" → kullanıcı "2"
-3. "Müşteri kimliğiniz?" → kullanıcı "CUST-001"
-
-**Bu sistem**: 1 tur (reasoning + planning + clarification)
-
-- Reasoning: `requiredInfo = ["müşteri_kimliği", "ürün_adı", "adet"]`
-- Planning hint'i okur, `clarificationQuestion`: "Sipariş için ürün adı, adet ve müşteri kimliğinizi birlikte paylaşır mısınız?"
-- Response: tek mesajda hepsini ister
-
-Ping-pong azaltır, kullanıcı deneyimi iyileşir, token tasarrufu sağlar.
-
-### Örnek 2 — Tool seçim önceliği
-
-**Kullanıcı**: "ORD-1 siparişim nerede?"
-
-**Naif sistem**: Ajan belki tool seçmekte karar verir, belki customer_id ister.
-
-**Bu sistem** — üç katmanlı tutarlılık:
-
-- `IdExtractor` → `order_id=ORD-1` deterministik olarak çıkarır
-- Hint mesajı: "order_id VAR → order_status_tool kullan, customer_id İSTEME"
-- Reasoning (o4-mini): `intent=sipariş_sorgulama, requiredInfo=[], nextAction=OrderAgent'e yönlendir`
-- Planning (gpt-4o): `selectedAgent=OrderAgent, needsClarification=false`
-- OrderAgent: `order_status_tool(ORD-1)` → direkt tool çağırır
-
-Ajan "hangi aracı seçmeliyim?" diye tereddüt etmez.
-
-### Örnek 3 — Hallucination yakalama
-
-**Specialist output**: "Sipariş bulunamadı." (`ORDER_NOT_FOUND`)
-
-ResponseAgent prompt'unda hallucination sıfır tolerans kuralı vardır: "Specialist çıktısında OLMAYAN veri/numara üretme. Uydurma sipariş/müşteri/ürün numarası YASAK." Bu kural sayesinde ResponseAgent doğrudan doğru yanıtı üretir:
-"Üzgünüm, 'ORD-1' numaralı siparişi sistemimizde bulamadım. Sipariş numarasını kontrol eder misiniz?"
-
----
-
-## Özet
-
-| Katman | Model | Girdi | Çıktı | Tetiklenme | Hata toleransı |
-|---|---|---|---|---|---|
-| Global Reasoning | o4-mini | Sorgu + history + state | `ReasoningResult` | Her istekte | Fallback boş sonuç |
-| Planning | gpt-4o | +Context +Hint +Entities | `PlanningResult` | Her istekte | Parser null → varsayılan fallback |
-| Specialist Pre/Post | gpt-4o | +Tool sonucu | `SpecialistReasoning` | Specialist aktivasyonunda | Pre-check fail → tool skip |
-
-Bu 3 katman birlikte çalışarak **explicit reasoning + kalite gates + izlenebilirlik** sağlar.
-
----
-
-# Enhanced Reasoning Pipeline
-
-> **Soru**: *"Bizim yaptığımız reasoning gerçek reasoning mi?"*
->
-> **Cevap**: Önceki hali *structured planning* idi — model tek çağrıda bir plan tarif ediyordu ama adımlar **yürütülmüyor**, **doğrulanmıyor**, alternatifler **aranmıyordu**. Bu eksikleri kapatmak için 4 geliştirme eklendi.
-
-## Yeni pipeline şeması
-
-```
-User query
-    ↓
-┌──────────────────────────────────────────────────────────────────┐
-│  Katman 0 — Entity Verification (deterministic, no LLM)          │
-│  Servis: EntityVerifier                                          │
-│  Input:  query + history + session state                         │
-│  Output: VerifiedEntities { OrderId, CustomerId, ComplaintId,    │
-│                              DerivedLastOrderId, ...}            │
-│  Amaç:   Query'deki ID'leri extract + DB ile doğrula; reasoning  │
-│          modelinin "zaten bilinen" alanları requiredInfo'ya      │
-│          eklemesini engelle.                                     │
-└──────────────────────┬───────────────────────────────────────────┘
-                       │ verifiedBlock → prompt'a enjekte
-                       ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Katman 1 — Global Reasoning (o4-mini)  [GENİŞLETİLDİ]           │
-│  Çıktı: ReasoningResult JSON + YAPILANDIRILMIŞ STEPS + SUB-TASKS │
-│    • steps[]: { order, description, action, premise, grounding,  │
-│                confidence, alternativeRejected }                  │
-│    • subTasks[]: { order, intent, targetAgent, entities, deps }  │
-└──────────────────────┬───────────────────────────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Katman 1.5 — Sanity Checker (deterministic, no LLM)  [YENİ]     │
-│  Servis: ReasoningSanityChecker                                  │
-│  Input:  ReasoningResult + VerifiedEntities                      │
-│  Output: List<ReasoningIssue> → result.SanityIssues              │
-│  Amaç:   Mantık tutarsızlıklarını yakala (8 kural)               │
-└──────────────────────┬───────────────────────────────────────────┘
-                       │ hint + issues → PlanningAgent
-                       ▼
-  [Mevcut 2-3. katmanlar: Planning → Specialist → Response]
-```
-
-## 1. Entity Grounding (ReAct-lite)
-
-**Dosyalar**:
-
-- `CustomerSupportBot.Domain/Model/VerifiedEntities.cs`
-- `CustomerSupportBot.Application/Services/EntityVerifier.cs`
-
-**Problem**: Reasoning modeli query'deki *"ORD-9999"* ifadesini gördüğünde, sadece formatın doğruluğuna bakıyordu — DB'de gerçekten var olup olmadığını kontrol etmiyordu. Bu *hallucination* kaynağıydı.
-
-**Çözüm**: `EntityVerifier`, reasoning LLM çağrısından **önce** çalışır:
-
-1. `IdExtractor.Extract(query)` — regex ile ID'leri çıkar
-2. History'deki önceki turlardan eksikleri tamamla
-3. `session.State.CustomerId` varsa onu da ekle
-4. Her entity için repository port'ları üzerinden lookup yap:
-   - `Verified` — format + DB'de var
-   - `NotFoundInDb` — format doğru ama DB'de yok
-   - `FormatOnly` — DB lookup uygulanmadı
-5. Türetilmiş alanları hesapla (ör. `customer_id` Verified ise `DerivedLastOrderId = GetLastOrder(customerId)`)
-
-### Prompt'a nasıl enjekte edilir?
-
-`Prompts/services/reasoning-system.md`'de `{{VERIFIED_ENTITIES}}` placeholder'ı yerine şu blok gelir:
-
-```
-[VERIFIED ENTITIES — session/DB ile doğrulandı]
-Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN, kullanıcıdan tekrar İSTEMEYİN.
-- order_id = "ORD-1" [VERIFIED, source=Query, status=Kargolandı, product=Dell XPS 15, customerId=1990]
-- customer_id = "CUST-1990" [VERIFIED, source=SessionState, has_orders=true]
-- last_order_id = "ORD-1" [derived: customer_id'nin en son siparişi]
-```
-
-Reasoning prompt'u ayrıca buna uygun **grounding kuralları** içerir:
-
-> **VERIFIED** entity için `requiredInfo`'ya ekleme — zaten elinde.
-> **NOT_FOUND_IN_DB** için `nextAction = "kullanıcıya doğrulat"`, `confidenceScore` düşür.
-> **Derived** alanlar VERIFIED kabul — kullanıcıya tekrar sorma.
-
-### Etkisi
-
-- Hallucination riski düşer (DB'den gelen değerler yazılı).
-- Gereksiz clarification'lar engellenir (VERIFIED alan zaten bilinir).
-- Sanity checker buna dayanarak `redundant_required_info` ve `not_found_ignored` kurallarını uygular.
-
----
-
-## 2. Structured Steps
-
-**Dosya**: `CustomerSupportBot.Domain/Model/ReasoningStep.cs`
-
-**Önceki hal**:
-
-```json
-"steps": ["Adım 1: order_id çıkardım", "Adım 2: OrderAgent'a yönlendirdim"]
-```
-
-**Yeni hal**:
-
-```json
-"steps": [
-  {
-    "order": 1,
-    "description": "order_id mesajdan regex ile çıkarıldı",
-    "action": "extract",
-    "premise": null,
-    "grounding": "regex",
-    "confidence": 0.95,
-    "alternativeRejected": null
-  },
-  {
-    "order": 2,
-    "description": "ORD-1 için OrderAgent'a yönlendir",
-    "action": "route",
-    "premise": "order_id mevcut ve VERIFIED",
-    "grounding": "DB",
-    "confidence": 0.92,
-    "alternativeRejected": "get_last_order_tool (spesifik ID var, gereksiz)"
-  }
-]
-```
-
-### Neden yararlı?
-
-- **`grounding` alanı** — her adımın kanıt kaynağını işaret eder. `assumption` değeri sanity checker için kırmızı bayrak.
-- **`confidence` per-step** — final `confidenceScore`'un bağımsız kontrolü; min/çarpım ile türetilebilir.
-- **`alternativeRejected`** — modelin niye o yolu seçmediğini yazar; daha iyi debuggable karar kayıtları.
-- **`premise`** — adımın önkoşulu explicit; ihlal olursa adım geçersiz.
-
-### Parser + geriye dönük uyumluluk
-
-`CustomerSupportBot.Application/Services/ReasoningService.cs:399-458` içindeki `ParseSteps` helper'ı **hem** object array hem legacy string array formatını destekler. Model eski tarz dönerse (`["Adım 1: ..."]`), her string otomatik olarak `ReasoningStep.Description`'a wrap edilir.
-
-### Frontend render
-
-`@wwwroot/js/chat-ui.js`:
-
-- `getStepText(step)` — text veya `description` çıkarımı (legacy/yeni dual-shape)
-- `renderStepInnerHtml(step)` — zengin chip'li HTML: `grounding` (normal/warn), `confidence` (yeşil %), `action` (mor monospace)
-
-CSS: `@wwwroot/css/styles.css` `.step-chip` ve türevleri.
-
----
-
-## 3. Sanity Checker (deterministic rules)
-
-**Dosya**: `CustomerSupportBot.Application/Services/ReasoningSanityChecker.cs`
-**Model**: `CustomerSupportBot.Domain/Model/ReasoningIssue.cs`
-
-Reasoning LLM çağrısından **sonra** deterministic kural tabanlı tarama. **Sıfır ekstra LLM çağrısı**. Bulunan her tutarsızlık `ReasoningIssue` olarak `result.SanityIssues` listesine eklenir ve trace'e yazılır.
-
-### 8 kural
-
-Her kural ayrı bir `IReasoningSanityRule` implementasyonudur (Strategy pattern). Yeni kural eklemek için sınıf yaz + `_rules` listesine ekle.
-
-| # | Kural sınıfı | Kod | Severity | Tetiklenme |
-|---|---|---|---|---|
-| 1 | `OverconfidentClarificationRule` | `overconfident_clarification` | warn | `confidenceScore >= 0.7` AMA `nextAction` clarification istiyor |
-| 2 | `RedundantRequiredInfoRule` | `redundant_required_info` | **error** | `requiredInfo`'da VERIFIED entity var (→ ping-pong) |
-| 3 | `IntentActionMismatchRule` | `intent_action_mismatch` | warn | Intent ile seçilen agent çelişiyor (ör. intent=şikayet + action=OrderAgent) |
-| 4 | `LowConfidenceNoMissingRule` | `low_confidence_no_missing` | info | `confidenceScore < 0.5` AMA `requiredInfo=[]` (neden düşük güven?) |
-| 5 | `AssumptionHeavyStepsRule` | `assumption_based_step` | info | Bir veya daha fazla step'te `grounding=assumption` |
-| 6 | `OverconfidentAssumptionsRule` | `overconfident_assumptions` | warn | `confidenceScore >= 0.8` AMA `assumptions.Count >= 3` |
-| 7 | `NotFoundIgnoredRule` | `not_found_ignored` | **error** | NOT_FOUND_IN_DB entity var AMA `nextAction` doğrulatmıyor (→ hallucination riski) |
-| 8 | `SubTasksIgnoredRule` | `subtasks_ignored` | warn | `subTasks.Count >= 2` (farklı agent'lar) AMA `nextAction` hepsinden bahsetmiyor |
-
-### Issue formatı
-
-```json
-{
-  "code": "redundant_required_info",
-  "severity": "error",
-  "message": "requiredInfo[0]='sipariş_numarası' ama order_id zaten VERIFIED — ping-pong olur.",
-  "field": "requiredInfo[0]",
-  "suggestedFix": "requiredInfo'dan 'sipariş_numarası' kaldır; order_id zaten elinde."
-}
-```
-
-### Frontend
-
-Chat UI reasoning panelinde ayrı bir "Tutarsızlık kontrolleri" bölümü:
-
-- `⛔ error` → kırmızı
-- `⚠️ warn` → sarı
-- `ℹ️ info` → mavi
-
-Her issue: kod badge + mesaj + *"→ suggestedFix"*.
-
-### İleri: otomatik düzeltme?
-
-Şu an **bilgilendirme modunda** — issues sadece işaretlenir, workflow akışı değişmez. Sonraki iterasyonda:
-
-- Severity=Error ise reasoning'i ikinci pass'te LLM critique'e gönder
-- Auto-downgrade: `overconfident_clarification` tespit edildiğinde confidence'ı kod tarafında düşür
-
----
-
-## 4. Sub-task Decomposition
-
-**Dosya**: `CustomerSupportBot.Domain/Model/SubTask.cs`
-
-### Problem
-
-Compound query: *"ORD-1 nerede ve ORD-2 için şikayet açmak istiyorum"*
-
-Eskiden: Reasoning tek intent seçiyor (örn. `şikayet`), ilk görev unutuluyor veya ping-pong oluyor.
-
-### Çözüm
-
-Reasoning modelinin `subTasks[]` alanında query'yi ayrıştırması:
-
-```json
-"subTasks": [
-  { "order": 1, "intent": "sipariş_sorgulama", "description": "ORD-1 için durum sorgula",
-    "targetAgent": "OrderAgent", "entities": { "order_id": "ORD-1" }, "dependencies": [] },
-  { "order": 2, "intent": "şikayet", "description": "ORD-2 için şikayet aç",
-    "targetAgent": "ComplaintAgent", "entities": { "order_id": "ORD-2" }, "dependencies": [] }
-]
-```
-
-### Decomposition kuralları (`Prompts/services/reasoning-system.md`)
-
-- Query tek niyetliyse `subTasks: []` (boş).
-- *" ve "*, *"sonra"*, *"ayrıca"*, iki farklı ID varsa → decompose et.
-- Aynı niyet içinde çoklu parametre (*"ORD-1 ve ORD-2'nin durumu"*) → decompose **etme**, tek görev.
-- `targetAgent` mutlaka 4 specialist'ten biri olmalı.
-
-### Workflow'a nasıl iletilir?
-
-`CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:607-621` — `BuildReasoningHint`, subTasks varsa PlanningAgent'a şu formatta enjekte eder:
-
-```
-- ⚠️ COMPOUND QUERY: 2 alt göreve ayrıştırıldı. PlanningAgent olarak her birini SIRAYLA aynı yanıtta yönlendir:
-    1. OrderAgent: ORD-1 için sipariş durumu sorgula [order_id=ORD-1]
-    2. ComplaintAgent: ORD-2 için şikayet aç [order_id=ORD-2]
-```
-
-PlanningAgent prompt'u (`Prompts/agents/planning-agent.md`) buna uygun davranacak şekilde güncellendi:
-
-- `taskDescription` tüm alt görevleri özetler
-- Routing bölümünde her alt görev için ayrı satır
-- `selectedAgent` = ilk alt görevin agent'ı (GroupChat sıralama için)
-
-ResponseAgent prompt'u (`Prompts/agents/response-agent.md`) compound query yanıtını **maddelenmiş** yazmakla yükümlü:
-
-> 1) ORD-1 için: ...
-> 2) ORD-2 için: ...
-
-### Compound query — Tam orkestrasyon (tamamlandı)
-
-MAF GroupChat native multi-agent sequential routing desteklemediği için orkestrasyon **kod katmanında** yapılır. `CustomerSupportTeam` compound query algıladığında her subtask için ayrı bir workflow run çalıştırır.
-
-#### Akış
-
-```
-RunAsync(query, reasoning)
-    │
-    ├─ ShouldDecompose(reasoning)?                       ← bool
-    │    reasoning.SubTasks.Count >= 2 AND
-    │    DistinctAgents(SubTasks) >= 2
-    │
-    ├─[false]→  Tek workflow run (mevcut akış)
-    │
-    └─[true]──→ RunDecomposedAsync
-                 │
-                 ├─ subTask #1
-                 │    ├─ subReasoning = DeriveSubReasoning(parent, subTask)
-                 │    │    (SubTasks=[] ← recursive loop koruması)
-                 │    ├─ subQuery = BuildSubQuery(subTask)  // desc + entities
-                 │    └─ RunAsync(subQuery, history, session, subReasoning)  // recursive
-                 │         └─ Tam planning + specialist + response döngüsü
-                 │
-                 ├─ subTask #2 (önceki response history'ye eklendi)
-                 │    └─ ...
-                 │
-                 └─ JoinAggregatedParts(results)
-                      └─ "**1) <desc>**\n\n<response>\n\n---\n\n**2) <desc>**\n\n<response>"
-```
-
-#### Helper'lar (`CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:912-1192`)
-
-| Helper | Amaç |
+| Severity | Davranış |
 |---|---|
-| `ShouldDecompose(ReasoningResult?)` | SubTasks ≥ 2 ve farklı agent'lar → true |
-| `DeriveSubReasoning(parent, subTask)` | Mini reasoning (SubTasks=[] → recursion safe) |
-| `BuildSubQuery(subTask)` | *"Description (entity1=val1, entity2=val2)"* |
-| `FormatSubResult(subTask, response)` | `**{order}) {desc}**\n\n{response}` |
-| `JoinAggregatedParts(parts)` | `\n\n---\n\n` ile birleştir |
-| `RunDecomposedAsync(...)` | Non-streaming orkestrasyon |
-| `RunDecomposedStreamingAsync(...)` | Streaming orkestrasyon — agent events forward + final aggregated response |
+| `Info` | Log'a yaz, devam et |
+| `Warn` | Log + telemetry, devam et |
+| `Error` | **Replan tetikle** — düşünceyi tekrar yaptır |
 
-#### Streaming davranışı
+Bu sayede LLM kendi hatasını fark edip düzeltir. Tek-shot bekleyip kötü output kabul etmek yerine.
 
-`RunStreamingAsync` da `ShouldDecompose` kontrolü yapar. Compound query'de:
-
-1. **Başlangıç**: `agent` event — `{ name: "Orchestrator", status: "decomposing", subTaskCount: N }`
-2. **Her subtask için**:
-   - `agent` event — `{ name: "SubTask#1", status: "running", description, targetAgent, order, total }`
-   - İç `RunStreamingAsync` consume edilir:
-     - Agent events → frontend'e forward
-     - Reasoning events → yutulur (subtask seviyesinde görünmesin)
-     - Response start/complete → yutulur (final aggregated'ta tek başına)
-     - Response delta → `subResponseBuilder`'a biriktirilir
-   - `agent` event — `{ name: "SubTask#1", status: "done", order }`
-3. **Son**:
-   - `agent` event — `{ name: "Orchestrator", status: "aggregating" }`
-   - `response_start` — `{ decomposed: true, subTaskCount: N }`
-   - `response_delta` chunk'ları (birleştirilmiş metin)
-   - `response_complete` — `{ text, decomposed: true, ... }`
-
-Böylece UI:
-
-- Her subtask için ayrı agent transition göstergesi görür
-- Tek bir birleştirilmiş yanıt bloğu render eder
-- `decomposed` flag'iyle compound badge ekleyebilir
-
-#### Maliyet
-
-| Senaryo | LLM çağrısı |
-|---|---|
-| Normal (tek görev) | 4 (reasoning + planning + specialist + response) |
-| 2 subtask compound | ~7 (1 reasoning + 2×planning + 2×specialist + 2×response) |
-| N subtask | ~1 + 3N |
-
-Üst düzey reasoning (compound algılayan) yalnızca **bir kere** çalışır. Sonraki her subtask kendi planning+specialist+response döngüsünü yapar. Bu, bir kerelik reasoning maliyetini amortize eder.
-
-#### Continuity
-
-Her subtask önceki subtask'ın sonucunu `conversationHistory`'ye ekli olarak görür:
-
-```csharp
-runningHistory.Add(new ChatMessage(ChatRole.User, subQuery));
-runningHistory.Add(new ChatMessage(ChatRole.Assistant, subResponse));
-```
-
-Böylece örneğin *"ORD-1'i sor, sonra ORD-2 için şikayet aç"* senaryosunda ikinci subtask ilk sonucu bilir ve *"ORD-1'in kargoda olduğunu gördük"* diye refere edebilir.
-
-### Frontend
-
-Reasoning panelinde "Alt görevler" section (subTasks.length ≥ 2 ise):
-
-- Her subtask: `#order` badge + `targetAgent` chip (mor) + `description` + entity chip'leri (yeşil)
-
-Streaming tarafında:
-
-- `agent` event'leri normal agent indicator'ları gibi render edilir (Orchestrator, SubTask#1, SubTask#2)
-- Final response bloğu tek bir yanıt olarak gelir — maddelenmiş markdown formatında
+📁 Kod: [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md) (`ReasoningIssue`)
 
 ---
 
-## Özet Tablo
+## 4. Confidence-Aware Routing
 
-| Katman | Tip | LLM? | Input | Output |
-|---|---|---|---|---|
-| **0. Entity Verify** | Deterministic | ❌ | query + history + state | `VerifiedEntities` |
-| **1. Global Reasoning** | LLM | ✅ o4-mini | + verified bloğu | `ReasoningResult` (structured steps + subTasks) |
-| **1.5 Sanity Check** | Deterministic | ❌ | result + verified | `List<ReasoningIssue>` |
-| 2. Planning | LLM | ✅ gpt-4o | + hint | `PlanningResult` |
-| 3. Specialist Pre/Post | LLM | ✅ gpt-4o | + tool | `SpecialistReasoning` |
+**Problem:** PlanningAgent emin değilse ne yapmalı? Yanlış agent seçince specialist hata fırlatır, kullanıcı kötü deneyim yaşar.
 
-**Toplam katman**: 5 (2 deterministic + 3 LLM)
-**LLM çağrı sayısı per request**: 4 (reasoning + planning + specialist + response)
-**Deterministic kontrol**: 2 (EntityVerifier + SanityChecker) — **sıfır ekstra API maliyeti**.
+### Çözüm: Confidence threshold + clarification fallback
 
-## "Gerçek reasoning" denkliği
+```
+PlanningAgent çıktısı:
+  IntentConfidence = 0.45
+       ↓
+  Threshold = 0.7
+       ↓
+  0.45 < 0.7 → specialist çağırma
+       ↓
+  NeedsClarification = true
+  ClarificationQuestion = "Siparişin numarası ORD-X formatında mı?"
+       ↓
+  ResponseAgent kullanıcıya soru sorar
+       ↓
+  Bir sonraki turn'de tekrar PlanningAgent (daha çok bağlam ile)
+```
 
-| Pattern | Öncesi | Sonrası |
+### Niçin clarification "asked > guessed"
+
+| Yaklaşım | Risk |
+|---|---|
+| Düşük confidence + tahmin et | Yanlış tool, yanlış data, kullanıcı şikayeti |
+| Düşük confidence + soru sor | +1 turn maliyeti ama doğruluk yüksek |
+
+Bu pattern özellikle ID'siz mesajlarda kritik:
+- "siparişim nerede" → hangi sipariş? sor
+- "iade istiyorum" → hangi ürün/sipariş için? sor
+
+📁 Kod: [`application/PlanningAgent`](application/README.md), `Prompts/agents/planning-agent.md`
+
+---
+
+## 5. ReAct (Reason + Act)
+
+Klasik **ReAct pattern**: agent önce düşünür, sonra hareket eder, sonra sonucu yorumlar.
+
+### Specialist agent'ın 3 fazı
+
+```
+1. PreToolCheck (Reason — tool çağırmadan önce)
+   ↓
+2. Tool call (Act)
+   ↓
+3. PostToolReflection (Reason — tool sonucundan sonra)
+```
+
+### Faz 1: PreToolCheck
+
+```json
+{
+  "requiredParams": ["order_id"],
+  "collectedParams": ["order_id"],
+  "missingParams": [],
+  "canProceed": true,
+  "reasoning": "ORD-5 mevcut, sorgu net",
+  "confidence": 0.9
+}
+```
+
+`canProceed = false` ise tool çağrılmaz — kullanıcıdan eksik bilgi istenir.
+
+### Faz 2: Tool call
+
+```
+order_status_tool(order_id = "ORD-5")
+   → ToolResult.Ok(data = { status: "Kargoda" })
+```
+
+### Faz 3: PostToolReflection
+
+```json
+{
+  "taskComplete": true,
+  "status": "done",
+  "summary": "Sipariş ORD-5 'Kargoda' durumunda",
+  "handoffSuggestion": null
+}
+```
+
+Eğer task tamamlanamadıysa `handoffSuggestion = "ComplaintAgent"` ile başka agent'a yönlendirilir.
+
+### Neden 3 faz?
+
+- **PreToolCheck:** Yanlış parametre ile tool çağırıp hata almaktansa, önce kontrol et
+- **PostToolReflection:** Tool sonucunu kullanıcıya ham vermek yerine yorumla
+- **Status normalizasyonu:** `done` / `needs_followup` / `needs_escalation` / `failed` / `partial` — workflow için tek tip karar
+
+📁 Kod: [`domain/Model-Specialist.md`](domain/Model-Specialist.md), `Prompts/agents/order-agent.md` (vb.)
+
+---
+
+## 6. Decomposition (Compound Query)
+
+**Problem:** Kullanıcı tek mesajda **birden fazla iş** ister:
+
+> "ORD-1'imi sor, ardından şikayet açmak istiyorum"
+
+Tek agent bunu yapamaz — iki ayrı domain (sorgu + şikayet).
+
+### Çözüm: SubTask array
+
+ReasoningAgent compound query'i **alt görevlere** böler:
+
+```json
+{
+  "subTasks": [
+    {
+      "order": 1,
+      "intent": "OrderInquiry",
+      "description": "ORD-1 siparişinin durumunu sor",
+      "targetAgent": "OrderAgent",
+      "entities": { "order_id": "ORD-1" },
+      "dependencies": []
+    },
+    {
+      "order": 2,
+      "intent": "Complaint",
+      "description": "Şikayet kaydı oluştur",
+      "targetAgent": "ComplaintAgent",
+      "entities": {},
+      "dependencies": [1]
+    }
+  ]
+}
+```
+
+### Execution strategy
+
+| SubTask özelliği | Davranış |
+|---|---|
+| `dependencies: []` | Hemen başla |
+| `dependencies: [1]` | Subtask 1 tamamlanmasını bekle |
+| Yan-etkisiz (Inquiry, ProductInfo) | **Paralel** çalıştırılabilir (`Task.WhenAll`) |
+| Yan-etkili (OrderPlacement, Complaint) | **Sıralı** — HITL gate'i bloklar |
+
+```
+Yan-etkisiz query: "ORD-1 ve ORD-2 durumu"
+  → 2 paralel subtask → p50 latency ÷ 2
+```
+
+📁 Kod: [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md) (`SubTask`), [`application/`](application/README.md)
+
+---
+
+## 7. Grounding (Delil-Tabanlı Akıl Yürütme)
+
+**Problem:** LLM her şeyi sallayabilir — "muhtemelen kargodadır" gibi. Saklayamadığı/bilmediği şeylere yatırım yapmaz.
+
+### Çözüm: Her step için `grounding` etiketi
+
+| Grounding | Anlamı | Güven |
 |---|---|---|
-| **Grounded reasoning (ReAct)** | ❌ Sadece regex format | ✅ DB lookup ile verified |
-| **Structured reasoning trace** | ⚠️ String listesi | ✅ Object array + grounding + confidence |
-| **Self-verification** | ⚠️ Yok | ✅ Deterministic sanity checker (reasoning'te) |
-| **Decomposition** | ❌ Tek intent | ✅ SubTasks (model + prompt + UI) |
-| **Iterative refinement** | ❌ | ✅ Compound query — her subtask için ayrı workflow run (orkestrasyon) |
-| **Self-consistency (N samples)** | ❌ | ❌ (maliyet — 3-5x LLM çağrısı) |
-| **Tree-of-Thoughts** | ❌ | ❌ (maliyet — derinlemesine arama) |
+| `regex` | IdExtractor match | ⭐⭐⭐⭐⭐ |
+| `DB` | Veritabanı sorgusu | ⭐⭐⭐⭐⭐ |
+| `session_state` | Session.CollectedInfo'dan | ⭐⭐⭐⭐ |
+| `history` | Önceki mesajlardan | ⭐⭐⭐ |
+| `derived` | Türetilmiş (örn. "müşterinin son siparişi") | ⭐⭐⭐ |
+| `assumption` | Varsayım (delil yok) | ⭐ |
 
-7/9 pattern kısmen veya tam olarak karşılanmış. Kalan Self-Consistency ve ToT açıkça maliyet nedeniyle dışarıda — production'da değer/maliyet oranı düşük.
+### Sanity rule
+
+Eğer `steps[]` içinde **çoğunluk assumption** ise:
+```
+SanityIssues += {
+  code: "grounding_missing",
+  severity: "Warn",
+  message: "Çoğu step delilsiz — model halüsinasyon riski yüksek"
+}
+```
+
+📁 Kod: [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md) (`ReasoningStep.Grounding`)
+
+---
+
+## 8. Dynamic Handoff (Runtime Agent Switching)
+
+**Problem:** PlanningAgent yanlış agent seçer:
+
+> Kullanıcı: "ORD-5 gelmedi, iade istiyorum"  
+> Planning: → OrderAgent  
+> OrderAgent tool çağırır → "kargoda" → ama kullanıcı **iade** istiyor
+
+### Çözüm: Specialist self-correction
+
+Specialist `PostToolReflection`'da handoff önerebilir:
+
+```json
+{
+  "taskComplete": false,
+  "status": "needs_followup",
+  "handoffSuggestion": "ComplaintAgent",
+  "handoffReason": "Kullanıcı iade istiyor ama OrderAgent sadece sorgu yapar"
+}
+```
+
+`AgentTeamCoordinator` bunu okur, runtime'da `ComplaintAgent`'a yönlendirir. **Planning hata yapsa bile** sistem düzeltir.
+
+📁 Kod: [`domain/Model-Specialist.md`](domain/Model-Specialist.md) (`PostToolReflection`)
+
+---
+
+## 9. Replan (Manuel Tekrar Düşün)
+
+**Problem:** Admin canlı izlerken botun yanlış yöne gittiğini görür. Sıfırdan reset yapmak konuşmayı bozar.
+
+### Çözüm: Replan flag + note
+
+Admin paneli "Yeniden Planla" butonu:
+
+```csharp
+state.Replan.ForceReplanNextTurn = true;
+state.Replan.ReplanRequestedBy = "admin-1";
+state.Replan.ReplanNote = "Kullanıcı VIP, escalation tercih etmeli";
+```
+
+Sonra `ReplanService.ExecuteAsync` tetiklenir:
+1. Session state + history okunur
+2. `effectiveQuery` = ReplanNote ?? lastUserMessage
+3. Full Reasoning + Planning pipeline yeniden çalışır
+4. ReplanNote LLM prompt'una **bağlam** olarak girer
+5. Yeni yanıt üretilir, `ForceReplanNextTurn = false` yapılır
+
+📁 Kod: [`application/ReplanService.md`](application/ReplanService.md), [`domain/Model-Session.md`](domain/Model-Session.md) (`ReplanControl`)
+
+---
+
+## 10. Reasoning Effort Tuning (o-series)
+
+**Problem:** OpenAI o1/o3 modelleri "extended thinking" yapar — daha derin reasoning ama yavaş + pahalı. Her use case için uygun değil.
+
+### Çözüm: `reasoning_effort` parametresi
+
+```json
+{
+  "AI": {
+    "OpenAI": {
+      "ReasoningModel": "o1-mini",
+      "ReasoningEffort": "medium"
+    }
+  }
+}
+```
+
+| Effort | Davranış | Kullanım |
+|---|---|---|
+| `low` | Hızlı, kısa düşünme | Basit sorgu, single-turn |
+| `medium` | Orta seviye | Default — çoğu senaryo |
+| `high` | Derin reasoning | Compound query, kritik karar |
+
+`ReasoningChatClient.ReasoningEffort` startup'ta belirlenir; ileride **dynamic** olarak senaryo karmaşıklığına göre değişebilir (örn. SubTasks ≥ 2 ise `high`).
+
+📁 Kod: [`adapters-ai/ChatClients.md`](adapters-ai/ChatClients.md) (`ReasoningChatClient`)
+
+---
+
+## 11. Few-Shot via Markdown Prompts
+
+**Problem:** Behavior değişikliği için kod deploy etmek yavaş.
+
+### Çözüm: External markdown prompt'lar
+
+```
+CustomerSupportBot.Api/Prompts/
+├── agents/
+│   ├── planning-agent.md      ← PlanningAgent system prompt
+│   ├── order-agent.md
+│   ├── complaint-agent.md
+│   └── ...
+└── services/
+    ├── reasoning-system.md    ← ReasoningAgent system prompt
+    ├── reasoning-hint.md      ← ID hint template
+    └── routing-rewrite-*.md
+```
+
+Her prompt:
+- Role tanımı ("Sen bir customer support botusun")
+- JSON schema (ne döneceği)
+- Few-shot örnekleri ("Örnek 1: kullanıcı X dedi → bot Y dedi")
+- Constraints ("Türkçe yanıt ver, JSON dışı text yazma")
+
+### Live update
+
+Markdown dosyaları `FileSystemPromptRepository` startup'ta cache'ler. Prompt değişince:
+1. Dosyayı düzenle
+2. Uygulamayı restart et (60s)
+3. Yeni davranış canlı — kod değişikliği yok
+
+📁 Kod: [`adapters-persistence/FileSystemAdapters.md`](adapters-persistence/FileSystemAdapters.md), `Prompts/README.md`
+
+---
+
+## Akış: Tam reasoning pipeline (örnek)
+
+Kullanıcı: **"ORD-5 ve ORD-7 durumu nedir?"**
+
+```
+[1] Deterministic preprocessing
+    IdExtractor → { OrderId: "ORD-5" } (ilki)
+    SessionStateExtractor → turnCount++, intent keyword: "durum" → OrderInquiry
+
+[2] ReasoningAgent (CoT + decomposition)
+    Output:
+      analysis: "Kullanıcı 2 farklı siparişin durumunu soruyor"
+      steps: [
+        { action: "extract", grounding: "regex", confidence: 0.95 },
+        { action: "route", grounding: "session_state", confidence: 0.9 }
+      ]
+      subTasks: [
+        { order: 1, intent: OrderInquiry, entities: { order_id: ORD-5 } },
+        { order: 2, intent: OrderInquiry, entities: { order_id: ORD-7 } }
+      ]
+      confidenceScore: 0.92
+      sanityIssues: []   ← temiz
+
+[3] PlanningAgent
+    Her subtask için → OrderAgent
+    intentConfidence: 0.92 → threshold OK, clarification yok
+
+[4] Specialist Agents (paralel — yan-etkisiz)
+    OrderAgent #1:
+      PreToolCheck → canProceed: true
+      Tool: order_status_tool(ORD-5) → "Kargoda"
+      PostToolReflection → status: done
+
+    OrderAgent #2:
+      PreToolCheck → canProceed: true
+      Tool: order_status_tool(ORD-7) → "Teslim Edildi"
+      PostToolReflection → status: done
+
+[5] ResponseAgent (synthesis)
+    Input: 2 subtask sonucu
+    Output: "Sipariş ORD-5 kargoda, ORD-7 ise teslim edildi."
+
+[6] Trace persistence
+    ReasoningTrace { steps, agents, tools, duration } → DB
+```
+
+---
+
+## Niçin bu kadar katman?
+
+**"Tek LLM çağrısı yapsak?"** sorusunun cevabı:
+
+| Tek LLM çağrı | Çok katmanlı reasoning |
+|---|---|
+| Halüsinasyon yüksek | Grounding ile minimize |
+| Tool seçimi yanlış olabilir | Confidence threshold + handoff koruması |
+| Debug imkansız | Steps + SanityIssues + AgentVisits trace |
+| Compound query yapılamaz | SubTask decomposition |
+| Self-correction yok | SanityIssues → Error → Replan |
+| Cost öngörülemez | Per-katman optimize edilebilir |
+
+---
+
+## Örnek Trace — Gerçek Bir Çalışmadan
+
+Aşağıdaki trace, S05 senaryosu (`"CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum"`) için sistemin **fiili davranışı**dır. `ReasoningTrace` formatında, HITL approval ile şikayet kaydı akışını gösterir.
+
+### Kullanıcı mesajı
+
+```
+CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum
+```
+
+### Tam trace (DB'den okunmuş)
+
+```jsonc
+{
+  "traceId": "trace_01HG8K2P3M9X4N7B5R",
+  "sessionId": "sess_8f3c1a2e",
+  "userQuery": "CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum",
+  "startedAt": "2026-05-24T10:00:12.450Z",
+  "completedAt": "2026-05-24T10:00:18.927Z",
+  "durationMs": 6477,
+  "iterationCount": 5,
+  "estimatedTokens": 2840,
+  "terminationReason": "completed",
+
+  // ─── 1. Deterministic preprocessing (LLM'siz) ───
+  // IdExtractor + SessionStateExtractor → reasoning öncesi
+  // Bu adım trace'e ayrı yazılmaz ama session.state'e yansır:
+  //   collectedInfo: { customer_id: "CUST-001", order_id: "ORD-1" }
+  //   currentIntent: "Complaint"    (keyword: "şikayet")
+  //   phase: "Action"
+
+  // ─── 2. ReasoningAgent (Chain-of-Thought) ───
+  "reasoning": {
+    "analysis": "Müşteri CUST-001, ORD-1 siparişi için 'hasarlı ürün' şikayeti açmak istiyor. Tüm gerekli ID'ler net biçimde verilmiş, niyet açık.",
+    "intent": "Complaint",
+    "confidence": "yüksek",
+    "confidenceScore": 0.95,
+    "requiredInfo": [],
+    "steps": [
+      {
+        "order": 1,
+        "description": "Kullanıcı mesajında CUST-001 ve ORD-1 ID'leri regex ile tespit edildi",
+        "action": "extract",
+        "grounding": "regex",
+        "confidence": 0.99
+      },
+      {
+        "order": 2,
+        "description": "'şikayet açmak' ifadesi → Complaint intent",
+        "action": "route",
+        "grounding": "session_state",
+        "confidence": 0.95
+      },
+      {
+        "order": 3,
+        "description": "Şikayet açıklaması 'hasarlı ürün' olarak alındı — yeterli detay",
+        "action": "verify",
+        "grounding": "regex",
+        "confidence": 0.85
+      },
+      {
+        "order": 4,
+        "description": "ComplaintAgent'a yönlendirilmeli; complaint_registration_tool yan-etkili → HITL approval gerekecek",
+        "action": "route",
+        "grounding": "derived",
+        "confidence": 0.95
+      }
+    ],
+    "subTasks": [],
+    "sanityIssues": [],
+    "sentiment": "negative",
+    "sentimentScore": 0.35
+  },
+
+  // ─── 3. PlanningAgent ───
+  "planning": {
+    "detectedIntent": "Complaint",
+    "intentConfidence": 0.95,
+    "supportingEvidence": [
+      "şikayet açmak istiyorum",
+      "hasarlı ürün"
+    ],
+    "selectedAgent": "ComplaintAgent",
+    "rationale": "Müşteri açıkça şikayet talebinde bulunuyor; ID'ler eksiksiz; alternatif agent gerekmiyor.",
+    "alternativesRejected": [
+      { "agent": "OrderAgent",          "reason": "Kullanıcı sipariş durumu sormuyor; iade/şikayet niyeti var" },
+      { "agent": "ProductInquiryAgent", "reason": "Ürün bilgisi sorulmuyor" }
+    ],
+    "needsClarification": false,
+    "taskDescription": "CUST-001 müşterisi için ORD-1 siparişinde 'hasarlı ürün' şikayeti kaydet"
+  },
+
+  // ─── 4. Specialist: ComplaintAgent ───
+  "specialistReasonings": [
+    {
+      "agentName": "ComplaintAgent",
+      "preToolCheck": {
+        "requiredParams": ["customer_id", "order_id", "description"],
+        "collectedParams": ["customer_id", "order_id", "description"],
+        "missingParams": [],
+        "canProceed": true,
+        "reasoning": "Tüm parametreler session.collectedInfo + kullanıcı mesajından elde edildi",
+        "confidence": 0.95
+      },
+      "resultConfidence": 0.9,
+      "resultNotes": "Approval onayı bekleniyor, sonra tool çağrılacak",
+      "postToolReflection": {
+        "taskComplete": true,
+        "status": "done",
+        "statusEnum": "Done",
+        "handoffSuggestion": null,
+        "missingContext": [],
+        "summary": "Şikayet CMP-7 olarak kaydedildi (CUST-001 / ORD-1)"
+      }
+    }
+  ],
+
+  // ─── 5. Agent timeline ───
+  "agentVisits": [
+    { "agentName": "ReasoningAgent",  "startedAt": "2026-05-24T10:00:12.500Z", "completedAt": "2026-05-24T10:00:13.880Z", "durationMs": 1380 },
+    { "agentName": "PlanningAgent",   "startedAt": "2026-05-24T10:00:13.910Z", "completedAt": "2026-05-24T10:00:14.620Z", "durationMs": 710 },
+    { "agentName": "ComplaintAgent",  "startedAt": "2026-05-24T10:00:14.650Z", "completedAt": "2026-05-24T10:00:18.450Z", "durationMs": 3800,
+      "output": "PreToolCheck → ApprovalGate (3.2s) → tool çağrısı → reflection"
+    },
+    { "agentName": "ResponseAgent",   "startedAt": "2026-05-24T10:00:18.480Z", "completedAt": "2026-05-24T10:00:18.927Z", "durationMs": 447 }
+  ],
+
+  // ─── 6. Tool çağrıları ───
+  "toolCalls": [
+    {
+      "toolName": "complaint_registration_tool",
+      "invokedAt": "2026-05-24T10:00:17.860Z",
+      "agentName": "ComplaintAgent",
+      "parametersSummary": "{ customer_id: \"CUST-001\", order_id: \"ORD-1\", description: \"hasarlı ürün\" }",
+      "resultSummary": "Success — { complaint_id: \"CMP-7\", status: \"Beklemede\" }",
+      "success": true,
+      "signature": "complaint_registration:CUST-001:ORD-1:hasarli_urun"
+    }
+  ],
+
+  // ─── 7. Approval (HITL) ───
+  // Tool çağrısı yapılmadan önce approval gate tetiklendi:
+  //   ApprovalRequest oluşturuldu (id: app_01HG8K2P5N)
+  //   3.2 saniye sonra admin "Onayla" tıkladı
+  //   Sonra tool çağrıldı ve sonuç döndü.
+
+  "finalResponse": "Şikayetiniz başarıyla kaydedildi. Şikayet numaranız: **CMP-7**. Müşteri hizmetleri ekibimiz en kısa sürede sizinle iletişime geçecektir."
+}
+```
+
+---
+
+### Bu trace'te hangi pattern'ler kullanıldı?
+
+| Pattern | Trace'te görünüm |
+|---|---|
+| **Deterministic preprocessing** | `regex` grounding'li step #1 — `CUST-001`, `ORD-1` LLM'siz çıkarıldı |
+| **Chain-of-Thought** | `reasoning.steps[]` — 4 adım, her biri action + grounding + confidence ile |
+| **Sanity check** | `sanityIssues: []` — bu örnekte temiz; uyumsuzluk olsaydı Replan tetiklenirdi |
+| **Confidence-aware routing** | `intentConfidence: 0.95` > 0.7 threshold → clarification yok, direkt specialist |
+| **Grounding** | `regex` (×2), `session_state`, `derived` — sadece 1 step `derived`, çoğunluk delilli |
+| **ReAct (3 faz)** | ComplaintAgent: `preToolCheck.canProceed=true` → tool call → `postToolReflection.status=done` |
+| **HITL approval gate** | `complaint_registration_tool` high-risk → 3.2 saniye admin onayı beklendi |
+| **Alternatives rejected** | Planning OrderAgent ve ProductInquiryAgent'ı **gerekçeli** elemiş (audit) |
+| **No handoff** | `handoffSuggestion: null` — doğru agent seçildi, dynamic re-route gerekmedi |
+| **Sentiment tracking** | `sentimentScore: 0.35` — negative (şikayet), `consecutiveNegativeTurns++` |
+
+### Latency dağılımı
+
+```
+ReasoningAgent   1380 ms  ████████████████████
+PlanningAgent     710 ms  ██████████
+ComplaintAgent   3800 ms  ████████████████████████████████████████████████████████
+  ├─ PreToolCheck  ~500 ms
+  ├─ Approval gate ~3200 ms  (admin reaksiyonu!)
+  ├─ Tool call      ~80 ms
+  └─ Reflection    ~20 ms
+ResponseAgent     447 ms  ██████
+────────────────────────
+Toplam            6477 ms
+```
+
+**Önemli:** Tool çağrısı + reflection sadece **100 ms** sürdü. Toplam latency'nin **%50'si admin'in onay vermesi**. Production'da SLA Guardian bu süreyi takip eder; threshold aşılırsa otomatik AutoReject veya öncelik boost tetiklenir.
+
+### Token kullanımı
+
+```
+ReasoningAgent prompt+response   ~1200 tokens  ($0.00018 @ gpt-4o-mini)
+PlanningAgent                     ~480 tokens  ($0.00007)
+ComplaintAgent                    ~720 tokens  ($0.00011)
+ResponseAgent                     ~440 tokens  ($0.00007)
+─────────────────────────────────────────────────────────
+Toplam (estimatedTokens)         ~2840 tokens  $0.00043
+```
+
+Tek konuşma turn'ü < yarım sentin altında. Bu deterministic preprocessing + structured prompting sayesinde — LLM'e gereksiz iş yaptırılmadı.
+
+---
+
+## İlgili dokümantasyon
+
+- **Implementation:**
+  - [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md) — ReasoningResult, ReasoningStep, SubTask, ReasoningIssue
+  - [`domain/Model-Specialist.md`](domain/Model-Specialist.md) — PreToolCheck, PostToolReflection
+  - [`domain/Services-Parsers.md`](domain/Services-Parsers.md) — LLM JSON parse mantığı
+  - [`domain/Services-IdExtractor.md`](domain/Services-IdExtractor.md) — Regex ID çıkarımı
+  - [`domain/Services-SessionStateExtractor.md`](domain/Services-SessionStateExtractor.md) — Deterministic state
+  - [`application/ReasoningAgent`](application/README.md), [`application/ReplanService.md`](application/ReplanService.md)
+  - [`adapters-ai/ChatClients.md`](adapters-ai/ChatClients.md) — ReasoningChatClient
+- **Patterns daha geniş:**
+  - [`agentic-patterns.md`](agentic-patterns.md) — Genel agentic design pattern reference
+  - [`intelligence.md`](intelligence.md) — Semantic memory + self-improvement döngüsü

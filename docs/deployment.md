@@ -187,6 +187,6 @@ volumes:
 ## Çapraz Referanslar
 
 - **Konfigürasyon detayları** → [operations.md](operations.md)
-- **Veritabanı yapısı** → [persistence.md](persistence.md)
+- **Veritabanı yapısı** → [adapters-persistence/](adapters-persistence/README.md)
 - **Güvenlik** → [security.md](security.md)
-- **Telemetri stack** → [telemetry.md](telemetry.md)
+- **Telemetri stack** → [adapters-telemetry/](adapters-telemetry/README.md)

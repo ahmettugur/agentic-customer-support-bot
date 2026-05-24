@@ -57,7 +57,7 @@ dotnet user-secrets set "AI:Anthropic:ApiKey"   "sk-ant-..."
 
 # Sunucu
 dotnet run --project CustomerSupportBot.Api
-# → http://localhost:5099
+# → http://localhost:5021
 ```
 
 **Build:**
@@ -512,7 +512,7 @@ app.MapAdminEndpoints();  // ← yeni
 **2. Çalıştır**:
 
 ```bash
-curl -X POST "http://localhost:5099/evaluation/run?file=docs/evaluation-scenarios.yaml" \
+curl -X POST "http://localhost:5021/evaluation/run?file=docs/evaluation-scenarios.yaml" \
   | jq '.results[] | select(.scenarioId == "billing-happy-path")'
 ```
 
@@ -617,7 +617,7 @@ Reasoning'i bu duruma sokacak bir evaluation senaryosu ekle:
       present: true
 ```
 
-Detay → [reasoning.md#sanity-checker-deterministic-rules](reasoning.md#sanity-checker-deterministic-rules).
+Detay → [domain/Model-Reasoning.md](domain/Model-Reasoning.md).
 
 ---
 
@@ -715,7 +715,7 @@ if (verified.CampaignId?.Verification == EntityVerification.Verified)
 - [ ] `reasoning-system.md` yeni entity tipi hakkında not ekleniyor (opsiyonel ama önerilir)
 - [ ] Evaluation senaryosu yazıldı
 
-Detay → [reasoning.md#entity-grounding](reasoning.md#1-entity-grounding-react-lite).
+Detay → [domain/Model-Reasoning.md](domain/Model-Tools.md).
 
 ---
 
@@ -755,7 +755,7 @@ Compound query orkestrasyonunun 2+ subtask'lı bir sorguda doğru çalıştığ�
 ```bash
 cd CustomerSupportBot
 dotnet run
-# → http://localhost:5099
+# → http://localhost:5021
 ```
 
 Chat UI'dan şu sorguyu deneyin:
@@ -786,12 +786,12 @@ Chat UI'dan şu sorguyu deneyin:
 
 ```bash
 # Son 5 trace'i al (her subtask ayrı trace)
-curl -s http://localhost:5099/traces/recent?count=5 \
+curl -s http://localhost:5021/traces/recent?count=5 \
   | jq '.[] | { traceId, userQuery, terminationReason }'
 
 # subTasks alanını gör
 # En son parent trace — kullanıcı query + reasoning
-curl -s http://localhost:5099/traces/recent?count=1 \
+curl -s http://localhost:5021/traces/recent?count=1 \
   | jq '.[0].reasoning.subTasks'
 ```
 
@@ -805,7 +805,7 @@ curl -s http://localhost:5099/traces/recent?count=1 \
 | Response final'da `TERMINATE` | yok (`JoinAggregatedParts` zaten temiz) |
 | Frontend'de `response_complete` event'inde `decomposed=true` | evet |
 
-Detay → [reasoning.md#compound-query](reasoning.md) ve [workflow.md#compound-query-orkestrasyonu](workflow.md#compound-query-orkestrasyonu).
+Detay → [domain/Model-Reasoning.md](domain/Model-Reasoning.md) ve [application/WorkflowExecutor.md](application/WorkflowExecutor.md).
 
 ---
 
@@ -821,7 +821,7 @@ Detay → [reasoning.md#compound-query](reasoning.md) ve [workflow.md#compound-q
 **Kontrol**:
 ```bash
 # Trace'i aç
-curl http://localhost:5099/traces/recent?count=5 | jq '.[0]'
+curl http://localhost:5021/traces/recent?count=5 | jq '.[0]'
 
 # Planning ve specialist reasoning'lere bak:
 .planning.needsClarification, .planning.clarificationQuestion
@@ -863,7 +863,7 @@ curl http://localhost:5099/traces/recent?count=5 | jq '.[0]'
 
 ```bash
 # En son trace'in reasoning'ine bak
-curl -s http://localhost:5099/traces/recent?count=1 \
+curl -s http://localhost:5021/traces/recent?count=1 \
   | jq '.[0].reasoning | { subTasks, sanityIssues }'
 ```
 
@@ -971,16 +971,16 @@ ResponseAgent'ın TERMINATE ile sonlandığını varsayar sistem. Başka "özel 
 
 ```bash
 # Son 5 trace'te kullanıcıya yansıyan termination reason dağılımı
-curl -s http://localhost:5099/traces/stats | jq .terminationReasons
+curl -s http://localhost:5021/traces/stats | jq .terminationReasons
 
 # Bir session'ın tüm trace'leri
-curl -s http://localhost:5099/traces/by-session/<SID> | jq '.[] | {traceId, userQuery, terminationReason}'
+curl -s http://localhost:5021/traces/by-session/<SID> | jq '.[] | {traceId, userQuery, terminationReason}'
 
 # Evaluation senaryolarını koş, sadece fail'leri göster
-curl -sX POST "http://localhost:5099/evaluation/run?file=docs/evaluation-scenarios.yaml" \
+curl -sX POST "http://localhost:5021/evaluation/run?file=docs/evaluation-scenarios.yaml" \
   | jq '.results[] | select(.passed == false)'
 ```
 
 ---
 
-Sorularınız olursa: [architecture.md](architecture.md), [reasoning.md](reasoning.md), [workflow.md](workflow.md), [agentic-patterns.md](agentic-patterns.md) dokümanlarını ilk uğrak olarak öneririz.
+Sorularınız olursa: [architecture.md](architecture.md), [domain/Model-Reasoning.md](domain/Model-Reasoning.md), [domain/Model-Workflow.md](domain/Model-Workflow.md), [agentic-patterns.md](agentic-patterns.md) dokümanlarını ilk uğrak olarak öneririz.

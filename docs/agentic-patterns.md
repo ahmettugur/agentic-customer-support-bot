@@ -78,7 +78,7 @@ User query → PlanningAgent (plan üret) → Specialist (tool çağır) → Res
 
 **Dosya**: `CustomerSupportBot.Api/Prompts/agents/planning-agent.md`
 
-**Confidence-aware routing**: `< 0.7` ise ResponseAgent'a düşür (clarification). Detay → [reasoning.md#katman-2](reasoning.md#katman-2--planning-reasoning-planningagent).
+**Confidence-aware routing**: `< 0.7` ise ResponseAgent'a düşür (clarification). Detay → [application/ReasoningPipeline.md](application/ReasoningPipeline.md).
 
 **Neden?** Belirsiz bir niyeti yanlış specialist'e yönlendirmek, kullanıcının sorusunu atlamaktan daha zararlı. Düşük confidence = "emin değilim, sor".
 
@@ -184,7 +184,7 @@ CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:121-140
 
 **Dosya**: `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`
 
-**Detay** → [workflow.md](workflow.md).
+**Detay** → [domain/Model-Workflow.md](domain/Model-Workflow.md).
 
 **Neden?** Tek bir ajan prompt'u tüm rolleri (router + 4 specialist + presenter) karıştırır → karmaşık + kırılgan. Group chat = rol ayrımı.
 
@@ -543,7 +543,7 @@ private async Task<string> RunDecomposedAsync(...)
 - **Recursion-safe** — derived reasoning'in `SubTasks=[]` olması sonsuz döngüyü engeller.
 - **Streaming uyumlu** — iç workflow event'leri forward edilir; sadece final response aggregated olarak yayın.
 
-**Neden?** MAF `GroupChatManager.SelectNextAgentAsync` bir turda tek next speaker seçer. Compound query için bu yetersiz. Kod katmanında orkestrasyon = *"N ayrı ama ilişkili konuşma = N workflow run"* modeli. Detay → [workflow.md#compound-query-orkestrasyonu](workflow.md#compound-query-orkestrasyonu).
+**Neden?** MAF `GroupChatManager.SelectNextAgentAsync` bir turda tek next speaker seçer. Compound query için bu yetersiz. Kod katmanında orkestrasyon = *"N ayrı ama ilişkili konuşma = N workflow run"* modeli. Detay → [application/WorkflowExecutor.md](application/WorkflowExecutor.md).
 
 ---
 
@@ -726,7 +726,7 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
 - **User feedback (thumbs up/down)** — post-hoc HITL, RLHF datası toplamak için. Trivial eklenebilir (`POST /feedback`).
 - **Admin authentication** — şu an `/approvals/*`, `/escalations/*` ve `/chat-sessions/*` endpoint'lerinde **hiçbir auth yok**. Production için JWT/role-based auth middleware eklenmeli.
 
-**Referans dokümantasyon**: [api.md](api.md#7-admin-endpoints-hitl).
+**Referans dokümantasyon**: [api/](api/Endpoints-Admin.md).
 
 ### 20.4 Admin Replan (one-shot planning override + auto bot turn)
 
