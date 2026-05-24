@@ -316,44 +316,271 @@
         <section class="tab-content @ActiveCls("analytics")">
             <div class="tab-header">
                 <h2>Conversation Analytics</h2>
-                <p class="muted">Genel istatistikler ve dağılımlar.</p>
+                <p class="muted">Oturum seçerek detaylı analiz görüntüleyin veya genel istatistikleri izleyin.</p>
             </div>
-            @if (_analytics is null)
-            {
-                <div class="empty-state">Yükleniyor…</div>
-            }
-            else
-            {
-                <div class="analytics-summary">
-                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.TotalSessions</div><div class="analytics-card-label">Toplam Oturum</div></div></div>
-                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.TotalMessages</div><div class="analytics-card-label">Toplam Mesaj</div></div></div>
-                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.AverageRating.ToString("F1")</div><div class="analytics-card-label">Ort. Puan (@_analytics.TotalRatings değ.)</div></div></div>
-                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.AverageMessagesPerSession.ToString("F1")</div><div class="analytics-card-label">Ort. Mesaj/Oturum</div></div></div>
-                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.AverageSentimentScore.ToString("F2")</div><div class="analytics-card-label">Ort. Duygu Skoru</div></div></div>
-                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.NegativeSessions</div><div class="analytics-card-label">Olumsuz Oturum</div></div></div>
-                    <div class="analytics-card"><div class="analytics-card-data"><div class="analytics-card-value">@_analytics.SentimentAlerts</div><div class="analytics-card-label">Duygu Uyarısı</div></div></div>
-                </div>
-                <div class="analytics-charts" style="margin-top:16px">
-                    @RenderDist("Puan Dağılımı", _analytics.RatingDistribution)
-                    @RenderDist("Duygu Dağılımı", _analytics.SentimentDistribution)
-                    @RenderDist("Intent Dağılımı", _analytics.IntentDistribution)
-                    @RenderDist("Faz Dağılımı", _analytics.PhaseDistribution)
-                </div>
-                @if (_analytics.RecentRatings?.Length > 0)
-                {
-                    <div class="analytics-chart-card" style="margin-top:16px">
-                        <h3>Son Değerlendirmeler</h3>
-                        @foreach (var r in _analytics.RecentRatings)
+
+            <div class="analytics-layout">
+                <!-- Session Selector Sidebar -->
+                <aside class="analytics-session-sidebar">
+                    <div class="analytics-sidebar-header">
+                        <h3>Oturumlar</h3>
+                        <button class="btn-all-analytics" @onclick="ShowAggregateAnalytics" title="Genel istatistikleri göster">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
+                            </svg>
+                            Genel
+                        </button>
+                    </div>
+                    <div class="analytics-session-list">
+                        @if (_analyticsSessions.Count == 0)
                         {
-                            <div class="card-row" style="font-size:12px">
-                                <code class="session-id">@ShortId(r.SessionId)</code>
-                                <span>@(new string('★', r.Stars).PadRight(5, '☆'))</span>
-                                <span class="muted">@r.Feedback</span>
-                            </div>
+                            <div class="empty-state small-empty">Henüz oturum yok.</div>
+                        }
+                        else
+                        {
+                            @foreach (var s in _analyticsSessions)
+                            {
+                                var sid = s.SessionId;
+                                <div class="analytics-session-item @(_analyticsSelectedSessionId == sid ? "active" : "")"
+                                     @onclick="() => SelectAnalyticsSessionAsync(sid)">
+                                    <div class="analytics-session-title">@(s.Title ?? "(boş)")</div>
+                                    <div class="analytics-session-meta">
+                                        <span>@s.MessageCount mesaj</span>
+                                        <span>•</span>
+                                        <span>@FmtRelative(s.LastActivity)</span>
+                                    </div>
+                                    <code class="analytics-session-id">@ShortId(s.SessionId)</code>
+                                </div>
+                            }
                         }
                     </div>
-                }
-            }
+                </aside>
+
+                <!-- Analytics Content -->
+                <div class="analytics-content">
+
+                    @if (!_showSessionAnalytics)
+                    {
+                        <!-- Aggregate View -->
+                        @if (_analytics is null)
+                        {
+                            <div class="empty-state">Yükleniyor…</div>
+                        }
+                        else
+                        {
+                            <!-- Summary Cards Row 1 -->
+                            <div class="analytics-summary">
+                                <div class="analytics-card">
+                                    <div class="analytics-card-icon sessions">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@_analytics.TotalSessions</div>
+                                        <div class="analytics-card-label">Toplam Oturum</div>
+                                    </div>
+                                </div>
+                                <div class="analytics-card">
+                                    <div class="analytics-card-icon messages">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@_analytics.TotalMessages</div>
+                                        <div class="analytics-card-label">Toplam Mesaj</div>
+                                    </div>
+                                </div>
+                                <div class="analytics-card">
+                                    <div class="analytics-card-icon rating">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@(_analytics.AverageRating > 0 ? $"{_analytics.AverageRating:F1} ★" : "—")</div>
+                                        <div class="analytics-card-label">Ortalama Puan (@_analytics.TotalRatings değerlendirme)</div>
+                                    </div>
+                                </div>
+                                <div class="analytics-card">
+                                    <div class="analytics-card-icon avg">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@_analytics.AverageMessagesPerSession.ToString("F1")</div>
+                                        <div class="analytics-card-label">Ort. Mesaj/Oturum</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Charts Row 1: Rating dist + Approval stats + Escalation stats -->
+                            <div class="analytics-charts">
+                                @RenderRatingDistribution(_analytics.RatingDistribution, _analytics.TotalRatings)
+                                @RenderApprovalStats(_analytics.ApprovalStats)
+                                @RenderEscalationStats(_analytics.EscalationStats)
+                            </div>
+
+                            <!-- Sentiment Summary Row -->
+                            <div class="analytics-summary analytics-summary-tight">
+                                <div class="analytics-card">
+                                    <div class="analytics-card-icon sentiment-icon">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@(_analytics.AverageSentimentScore > 0 ? $"{(int)(_analytics.AverageSentimentScore * 100)}%" : "—")</div>
+                                        <div class="analytics-card-label">Ort. Duygu Skoru</div>
+                                    </div>
+                                </div>
+                                <div class="analytics-card">
+                                    <div class="analytics-card-icon negative-icon">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@_analytics.NegativeSessions</div>
+                                        <div class="analytics-card-label">Olumsuz Oturum</div>
+                                    </div>
+                                </div>
+                                <div class="analytics-card">
+                                    <div class="analytics-card-icon alert-icon">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@_analytics.SentimentAlerts</div>
+                                        <div class="analytics-card-label">Duygu Uyarısı</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Charts Row 2: Distribution lists -->
+                            <div class="analytics-charts">
+                                @RenderDist("Duygu Dağılımı", _analytics.SentimentDistribution)
+                                @RenderDist("Niyet (Intent) Dağılımı", _analytics.IntentDistribution)
+                                @RenderDist("Faz Dağılımı", _analytics.PhaseDistribution)
+                            </div>
+
+                            <!-- Charts Row 3: Recent ratings -->
+                            <div class="analytics-charts">
+                                @RenderRecentRatings(_analytics.RecentRatings)
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <!-- Session View -->
+                        @if (_sessionAnalytics is null)
+                        {
+                            <div class="empty-state">Session analytics yükleniyor…</div>
+                        }
+                        else
+                        {
+                            var sa = _sessionAnalytics;
+                            var sentimentEmoji = sa.Sentiment switch { "positive" => "😊", "negative" => "😟", "angry" => "😡", _ => "😐" };
+                            <div class="session-analytics-header">
+                                <div class="session-analytics-title-row">
+                                    <div>
+                                        <h3>Oturum Detayı</h3>
+                                        <code class="session-id">@sa.SessionId</code>
+                                    </div>
+                                    <span class="sentiment-badge sentiment-@(sa.Sentiment ?? "neutral")">@sentimentEmoji @(sa.Sentiment ?? "neutral") (@((int)(sa.SentimentScore * 100))%)</span>
+                                </div>
+                                <div class="session-analytics-cards">
+                                    <div class="sa-card"><div class="sa-val">@sa.MessageCount</div><div class="sa-lbl">Mesaj</div></div>
+                                    <div class="sa-card"><div class="sa-val">@sa.TurnCount</div><div class="sa-lbl">Tur</div></div>
+                                    <div class="sa-card"><div class="sa-val">@(sa.Phase ?? "—")</div><div class="sa-lbl">Faz</div></div>
+                                    <div class="sa-card"><div class="sa-val">@(sa.CurrentIntent ?? "—")</div><div class="sa-lbl">Niyet</div></div>
+                                    @if (sa.CustomerId is not null)
+                                    {
+                                        <div class="sa-card"><div class="sa-val">@sa.CustomerId</div><div class="sa-lbl">Müşteri</div></div>
+                                    }
+                                    @if (sa.Rating is not null)
+                                    {
+                                        <div class="sa-card">
+                                            <div class="sa-val sa-stars">@(new string('★', sa.Rating.Stars))@(new string('☆', 5 - sa.Rating.Stars))</div>
+                                            <div class="sa-lbl">Puan</div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            <div class="session-analytics-body">
+                                @if (sa.SentimentTimeline.Count > 0)
+                                {
+                                    <div class="sa-section">
+                                        <h4>📈 Duygu Zaman Çizelgesi</h4>
+                                        @if (sa.ConsecutiveNegativeTurns >= 3)
+                                        {
+                                            <div class="sa-warn">⚠️ Ardışık @sa.ConsecutiveNegativeTurns olumsuz tur — otomatik eskalasyon tetiklenebilir</div>
+                                        }
+                                        <div class="st-chart">
+                                            @foreach (var e in sa.SentimentTimeline)
+                                            {
+                                                var barH   = Math.Max(8, (int)(e.Score * 100));
+                                                var barClr = e.Score >= 0.7 ? "#22c55e" : e.Score >= 0.4 ? "#eab308" : "#ef4444";
+                                                var barEmoji = e.Label switch { "positive" => "😊", "negative" => "😟", "angry" => "😡", _ => "😐" };
+                                                <div class="st-bar-wrap" title="Tur @e.Turn: @e.Label (@((int)(e.Score*100))%)">
+                                                    <div class="st-bar" style="height:@(barH)%;background:@barClr"></div>
+                                                    <span class="st-label">@barEmoji</span>
+                                                    <span class="st-turn">T@e.Turn</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                                @if (sa.Rating?.Feedback is not null)
+                                {
+                                    <div class="sa-section">
+                                        <h4>💬 Müşteri Yorumu</h4>
+                                        <div class="recent-rating-feedback">@sa.Rating.Feedback</div>
+                                    </div>
+                                }
+                                @if (sa.TotalApprovals > 0)
+                                {
+                                    <div class="sa-section">
+                                        <h4>✅ Onay Geçmişi (@sa.TotalApprovals)</h4>
+                                        <div class="sa-pills">
+                                            <span class="stat-pill approved sm"><span class="stat-pill-value">@sa.ApprovedCount</span><span class="stat-pill-label">Onay</span></span>
+                                            <span class="stat-pill rejected sm"><span class="stat-pill-value">@sa.RejectedCount</span><span class="stat-pill-label">Red</span></span>
+                                            <span class="stat-pill expired sm"><span class="stat-pill-value">@sa.ExpiredCount</span><span class="stat-pill-label">Timeout</span></span>
+                                        </div>
+                                        @foreach (var a in sa.ApprovalDetails)
+                                        {
+                                            <div class="sa-detail-item">
+                                                <code>@a.ToolName</code>
+                                                <span class="status-tag">@a.Status</span>
+                                                @if (a.DecidedBy is not null) { <span class="muted">by @a.DecidedBy</span> }
+                                                <time class="muted">@FmtRelative(a.RequestedAt)</time>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                @if (sa.TotalEscalations > 0)
+                                {
+                                    <div class="sa-section">
+                                        <h4>🚨 Eskalasyonlar (@sa.TotalEscalations)</h4>
+                                        @foreach (var esc in sa.EscalationDetails)
+                                        {
+                                            <div class="sa-detail-item">
+                                                <span>@esc.Reason</span>
+                                                <span class="status-tag">@esc.Status</span>
+                                                @if (esc.AgentName is not null) { <code>@esc.AgentName</code> }
+                                                @if (esc.Resolution is not null) { <span class="muted">→ @esc.Resolution</span> }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                @if (sa.CollectedInfo.Count > 0)
+                                {
+                                    <div class="sa-section">
+                                        <h4>📋 Toplanan Bilgiler</h4>
+                                        @foreach (var kvp in sa.CollectedInfo)
+                                        {
+                                            <div class="sa-info-row">
+                                                <span class="sa-info-key">@kvp.Key</span>
+                                                <span>@kvp.Value</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+
+                </div>
+            </div>
         </section>
 
         <!-- TAB: HISTORY -->
@@ -612,6 +839,10 @@
     private List<ChatHistoryMessage> _chatMessages       = [];
     private string                   _chatInput          = string.Empty;
     private AnalyticsDashboard?      _analytics;
+    private List<SessionSummary>     _analyticsSessions          = [];
+    private string?                  _analyticsSelectedSessionId;
+    private SessionAnalyticsModel?   _sessionAnalytics;
+    private bool                     _showSessionAnalytics;
     private List<LessonProposal>     _proposedLessons    = [];
     private List<LessonProposal>     _approvedLessons    = [];
     private bool                     _miningInProgress;
@@ -715,7 +946,13 @@
                         _chatMessages = await AdminApi.GetChatHistoryAsync(_openChatSession.SessionId);
                     break;
                 case "analytics":
-                    _analytics = await AnalyticsApi.GetDashboardAsync();
+                    var sessTask  = AdminApi.GetSessionsAsync();
+                    var dashTask  = AnalyticsApi.GetDashboardAsync();
+                    await Task.WhenAll(sessTask, dashTask);
+                    _analyticsSessions = sessTask.Result;
+                    _analytics         = dashTask.Result;
+                    if (_showSessionAnalytics && _analyticsSelectedSessionId is not null)
+                        _sessionAnalytics = await AnalyticsApi.GetSessionAnalyticsAsync(_analyticsSelectedSessionId);
                     break;
                 case "history":
                     _historyApprovals   = await AdminApi.GetRecentApprovalsAsync(50);
@@ -1008,6 +1245,100 @@
         </div>;
     }
 
+    private void ShowAggregateAnalytics()
+    {
+        _analyticsSelectedSessionId = null;
+        _showSessionAnalytics       = false;
+        _sessionAnalytics           = null;
+    }
+
+    private async Task SelectAnalyticsSessionAsync(string sid)
+    {
+        _analyticsSelectedSessionId = sid;
+        _showSessionAnalytics       = true;
+        _sessionAnalytics           = null;
+        StateHasChanged();
+        _sessionAnalytics = await AnalyticsApi.GetSessionAnalyticsAsync(sid);
+    }
+
+    private static RenderFragment RenderRatingDistribution(Dictionary<string, int>? dist, int total)
+    {
+        if (dist is null || total == 0)
+            return @<div class="analytics-chart-card"><h3>Puan Dağılımı</h3><div class="empty-state" style="padding:12px">Henüz değerlendirme yok.</div></div>;
+
+        var colors = new Dictionary<string, string> { ["1"]="#ef4444",["2"]="#f97316",["3"]="#eab308",["4"]="#22c55e",["5"]="#10b981" };
+        var labels = new Dictionary<string, string> { ["1"]="Çok Kötü",["2"]="Kötü",["3"]="Orta",["4"]="İyi",["5"]="Mükemmel" };
+        return @<div class="analytics-chart-card">
+            <h3>Puan Dağılımı</h3>
+            @foreach (var star in new[] { "5","4","3","2","1" })
+            {
+                var cnt = dist.TryGetValue(star, out var c) ? c : 0;
+                var pct = total > 0 ? (int)Math.Round(cnt * 100.0 / total) : 0;
+                <div class="rating-bar-row">
+                    <span class="rating-bar-label">@star ★ <small>@labels.GetValueOrDefault(star,star)</small></span>
+                    <div class="rating-bar-track">
+                        <div class="rating-bar-fill" style="width:@(pct)%;background:@colors.GetValueOrDefault(star,"#6366f1")"></div>
+                    </div>
+                    <span class="rating-bar-count">@cnt</span>
+                </div>
+            }
+        </div>;
+    }
+
+    private static RenderFragment RenderApprovalStats(ApprovalStats? stats)
+    {
+        if (stats is null || stats.Total == 0)
+            return @<div class="analytics-chart-card"><h3>Onay İstatistikleri</h3><div class="empty-state" style="padding:12px">Henüz onay işlemi yok.</div></div>;
+
+        return @<div class="analytics-chart-card">
+            <h3>Onay İstatistikleri</h3>
+            <div class="stat-pills">
+                <div class="stat-pill approved"><span class="stat-pill-value">@stats.Approved</span><span class="stat-pill-label">Onaylandı</span></div>
+                <div class="stat-pill rejected"><span class="stat-pill-value">@stats.Rejected</span><span class="stat-pill-label">Reddedildi</span></div>
+                <div class="stat-pill expired"><span class="stat-pill-value">@stats.TimedOut</span><span class="stat-pill-label">Timeout</span></div>
+            </div>
+            <div class="stat-total">Toplam: @stats.Total</div>
+        </div>;
+    }
+
+    private static RenderFragment RenderEscalationStats(EscalationStats? stats)
+    {
+        if (stats is null || stats.Total == 0)
+            return @<div class="analytics-chart-card"><h3>Eskalasyon İstatistikleri</h3><div class="empty-state" style="padding:12px">Henüz eskalasyon yok.</div></div>;
+
+        return @<div class="analytics-chart-card">
+            <h3>Eskalasyon İstatistikleri</h3>
+            <div class="stat-pills">
+                <div class="stat-pill resolved"><span class="stat-pill-value">@stats.Resolved</span><span class="stat-pill-label">Çözüldü</span></div>
+                <div class="stat-pill dismissed"><span class="stat-pill-value">@stats.Dismissed</span><span class="stat-pill-label">Dismiss</span></div>
+            </div>
+            <div class="stat-total">Toplam: @stats.Total</div>
+        </div>;
+    }
+
+    private static RenderFragment RenderRecentRatings(RecentRating[]? ratings)
+    {
+        if (ratings is null || ratings.Length == 0)
+            return @<div class="analytics-chart-card"><h3>Son Değerlendirmeler</h3><div class="empty-state" style="padding:12px">Henüz değerlendirme yok.</div></div>;
+
+        var ratingLabels = new Dictionary<int, string> { [1]="Çok Kötü",[2]="Kötü",[3]="Orta",[4]="İyi",[5]="Mükemmel" };
+        return @<div class="analytics-chart-card">
+            <h3>Son Değerlendirmeler</h3>
+            @foreach (var r in ratings)
+            {
+                <div class="recent-rating-item">
+                    <div class="recent-rating-header">
+                        <span class="recent-rating-stars">@(new string('★', r.Stars))@(new string('☆', 5 - r.Stars))</span>
+                        <span class="recent-rating-label">@ratingLabels.GetValueOrDefault(r.Stars, "")</span>
+                        <time class="muted">@FmtRelative(r.RatedAt)</time>
+                    </div>
+                    <div class="recent-rating-session"><code>@ShortId(r.SessionId)</code></div>
+                    @if (r.Feedback is not null) { <div class="recent-rating-feedback">@r.Feedback</div> }
+                </div>
+            }
+        </div>;
+    }
+
     // ── Timer ─────────────────────────────────────────────────────────────────
     private void StartAutoRefresh()
     {
@@ -1057,4 +1388,13 @@
     }
 
     private static string FmtTs(DateTimeOffset dt) => dt.LocalDateTime.ToString("HH:mm:ss");
+
+    private static string FmtRelative(DateTime dt)
+    {
+        var d = DateTime.UtcNow - dt.ToUniversalTime();
+        if (d.TotalSeconds < 60)  return $"{(int)d.TotalSeconds}s önce";
+        if (d.TotalMinutes < 60)  return $"{(int)d.TotalMinutes}dk önce";
+        if (d.TotalHours   < 24)  return $"{(int)d.TotalHours}sa önce";
+        return dt.ToLocalTime().ToShortDateString();
+    }
 }

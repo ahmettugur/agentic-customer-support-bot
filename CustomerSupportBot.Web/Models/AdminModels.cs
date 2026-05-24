@@ -74,7 +74,40 @@ public sealed record ApprovalStats(int Total, int Approved, int Rejected, int Ti
 public sealed record EscalationStats(int Total, int Resolved, int Dismissed);
 public sealed record RecentRating(string SessionId, int Stars, string? Feedback, DateTimeOffset RatedAt);
 
-public sealed record SessionSummary(string SessionId, DateTimeOffset LastActivity, int MessageCount);
+public sealed record SessionSummary(string SessionId, DateTimeOffset LastActivity, int MessageCount, string? Title = null);
+
+// ─── Session Analytics ──────────────────────────────────────────────────────
+
+public sealed record SessionAnalyticsModel(
+    string SessionId,
+    DateTime CreatedAt,
+    DateTime LastActivity,
+    int MessageCount,
+    int TurnCount,
+    string? CurrentIntent,
+    string? Phase,
+    string? CustomerId,
+    string? Sentiment,
+    double SentimentScore,
+    int ConsecutiveNegativeTurns,
+    List<SentimentTimelineItem> SentimentTimeline,
+    SessionRatingItem? Rating,
+    int TotalApprovals,
+    int ApprovedCount,
+    int RejectedCount,
+    int ExpiredCount,
+    List<ApprovalSummaryItem> ApprovalDetails,
+    int TotalEscalations,
+    int OpenEscalations,
+    int ResolvedEscalations,
+    List<EscalationSummaryItem> EscalationDetails,
+    Dictionary<string, string> CollectedInfo
+);
+
+public sealed record SentimentTimelineItem(int Turn, string Label, double Score, DateTime Timestamp);
+public sealed record SessionRatingItem(int Stars, string? Feedback, DateTime RatedAt);
+public sealed record ApprovalSummaryItem(string Id, string ToolName, string Status, DateTime RequestedAt, DateTime? DecidedAt, string? DecidedBy);
+public sealed record EscalationSummaryItem(string Id, string? AgentName, string Reason, string Status, DateTime CreatedAt, string? Resolution);
 
 // ─── Agents ──────────────────────────────────────────────────────────────────
 

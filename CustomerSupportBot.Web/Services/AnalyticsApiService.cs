@@ -21,11 +21,11 @@ public sealed class AnalyticsApiService(HttpClient http)
         }
     }
 
-    public async Task<object?> GetSessionAnalyticsAsync(string sessionId)
+    public async Task<SessionAnalyticsModel?> GetSessionAnalyticsAsync(string sessionId)
     {
         try
         {
-            return await http.GetFromJsonAsync<object>($"/analytics/session/{sessionId}");
+            return await http.GetFromJsonAsync<SessionAnalyticsModel>($"/analytics/session/{sessionId}");
         }
         catch
         {

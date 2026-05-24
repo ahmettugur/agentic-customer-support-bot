@@ -326,6 +326,7 @@
     private string?  _pendingHandoffReason;
     private System.Threading.Timer? _pendingHandoffTimer;
     private System.Threading.Timer? _ratingDelayTimer;
+    private System.Threading.Timer? _ratingAutoHideTimer;
     private string   _apiBase           = string.Empty;
     private DotNetObjectReference<Chat>? _dotNetRef;
 
@@ -629,7 +630,10 @@
         _currentBot  = null;
         var userMsgCount = _messages.Count(m => m.Role == "user");
         if (userMsgCount >= 2 && !_showRating && !_ratingSubmitted && !_humanMode)
+        {
             _showRating = true;
+            StartRatingAutoHideTimer();
+        }
         StateHasChanged();
         _ = ScrollBottomAsync();
     }
@@ -736,6 +740,7 @@
         _selectedRating      = null;
         _ratingFeedback      = string.Empty;
         _ratingSubmitted     = false;
+        ClearRatingAutoHideTimer();
         _agentName           = null;
         _agentStatus         = null;
         ClearPendingHandoffTimer();
@@ -810,6 +815,30 @@
         _ratingDelayTimer = null;
     }
 
+    private void StartRatingAutoHideTimer()
+    {
+        ClearRatingAutoHideTimer();
+        _ratingAutoHideTimer = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                await InvokeAsync(() =>
+                {
+                    if (_selectedRating.HasValue) return;
+                    _showRating = false;
+                    StateHasChanged();
+                });
+            }
+            catch { }
+        }, null, TimeSpan.FromSeconds(5), System.Threading.Timeout.InfiniteTimeSpan);
+    }
+
+    private void ClearRatingAutoHideTimer()
+    {
+        _ratingAutoHideTimer?.Dispose();
+        _ratingAutoHideTimer = null;
+    }
+
     private static string FriendlyAgentName(string id) => id switch
     {
         "PlanningAgent"      => "Planlama Ajanı",
@@ -832,6 +861,7 @@
     {
         ClearPendingHandoffTimer();
         ClearRatingDelayTimer();
+        ClearRatingAutoHideTimer();
         try { await JS.InvokeVoidAsync("__stopStream"); } catch { }
         if (_dotNetRef is not null)
         {
