@@ -131,6 +131,8 @@ Demo sipariş verisi (Dell XPS, iPhone, vs.) içerir. Üretimde Postgres gerekir
 | `Get(orderId)` | Tekil sipariş |
 | `GetByCustomer(customerId)` | Müşteriye ait siparişler |
 | `GetLast(customerId)` | Son sipariş |
+| `Cancel(orderId, reason)` | Siparişi iptal eder; `İşleniyor`/`Kargolandı` dışında `false` döner |
+| `RequestReturn(orderId, reason)` | İade talebi oluşturur; `Teslim Edildi` + 14 gün koşulu |
 
 ---
 

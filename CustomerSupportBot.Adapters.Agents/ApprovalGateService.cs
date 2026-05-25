@@ -110,6 +110,71 @@ public class ApprovalGateService
                 "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
     }
 
+    public AIFunction BuildOrderCancelTool()
+    {
+        return AIFunctionFactory.Create(
+            async (
+                [System.ComponentModel.Description("İptal edilecek sipariş numarası (zorunlu, ör. 'ORD-1')")] string orderId,
+                [System.ComponentModel.Description("İptal sebebi (zorunlu, en az 5 karakter)")] string reason,
+                CancellationToken ct) =>
+            {
+                var decision = await RequestApprovalAsync(
+                    toolName: WellKnown.ToolNames.OrderCancel,
+                    agentName: WellKnown.AgentNames.Order,
+                    parameters: new Dictionary<string, object?>
+                    {
+                        ["orderId"] = orderId,
+                        ["reason"] = reason
+                    },
+                    ct);
+
+                if (decision is { Approved: false } d)
+                {
+                    return ToolResult.ValidationError(
+                        $"{WellKnown.FallbackMessages.ApprovalRejected}: {d.Reason ?? WellKnown.ApprovalReasons.AdminRejected}");
+                }
+
+                return _tools.OrderCancelTool(orderId, reason);
+            },
+            name: WellKnown.ToolNames.OrderCancel,
+            description:
+                "Mevcut bir siparişi iptal eder. Sadece 'İşleniyor' veya 'Kargolandı' durumundaki siparişler iptal edilebilir. " +
+                "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
+    }
+
+    public AIFunction BuildReturnRequestTool()
+    {
+        return AIFunctionFactory.Create(
+            async (
+                [System.ComponentModel.Description("İade talep edilecek sipariş numarası (zorunlu, ör. 'ORD-2')")] string orderId,
+                [System.ComponentModel.Description("İade sebebi (zorunlu, en az 5 karakter)")] string reason,
+                CancellationToken ct) =>
+            {
+                var decision = await RequestApprovalAsync(
+                    toolName: WellKnown.ToolNames.ReturnRequest,
+                    agentName: WellKnown.AgentNames.Order,
+                    parameters: new Dictionary<string, object?>
+                    {
+                        ["orderId"] = orderId,
+                        ["reason"] = reason
+                    },
+                    ct);
+
+                if (decision is { Approved: false } d)
+                {
+                    return ToolResult.ValidationError(
+                        $"{WellKnown.FallbackMessages.ApprovalRejected}: {d.Reason ?? WellKnown.ApprovalReasons.AdminRejected}");
+                }
+
+                return _tools.ReturnRequestTool(orderId, reason);
+            },
+            name: WellKnown.ToolNames.ReturnRequest,
+            description:
+                "Teslim edilmiş bir sipariş için iade talebi oluşturur. Sadece 'Teslim Edildi' durumundaki " +
+                "ve 14 gün içindeki siparişler iade edilebilir. " +
+                "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
+    }
+
     private async Task<ApprovalDecisionResult> RequestApprovalAsync(
         string toolName,
         string agentName,

@@ -245,6 +245,91 @@ public sealed class CustomerSupportToolsService : ICustomerSupportToolsService
     }
 
     // ════════════════════════════════════════════════════════════════
+    // SİPARİŞ İPTAL
+    // ════════════════════════════════════════════════════════════════
+
+    [Description("Mevcut bir siparişi iptal eder. Sadece 'İşleniyor' veya 'Kargolandı' durumundaki " +
+                 "siparişler iptal edilebilir. Sonuç ToolResult olarak döner.")]
+    public ToolResult OrderCancelTool(
+        [Description("İptal edilecek sipariş numarası (zorunlu, ör. 'ORD-1')")] string orderId,
+        [Description("İptal sebebi (zorunlu, en az 5 karakter)")] string reason)
+    {
+        if (string.IsNullOrWhiteSpace(orderId))
+            return ToolResult.ValidationError("Sipariş numarası boş olamaz.", WellKnown.ToolParameterNames.OrderId);
+        if (string.IsNullOrWhiteSpace(reason) || reason.Length < 5)
+            return ToolResult.ValidationError("İptal sebebi en az 5 karakter olmalıdır.", WellKnown.ToolParameterNames.Reason);
+
+        var order = _orders.Get(orderId);
+        if (order is null)
+            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, $"'{orderId}' numaralı sipariş bulunamadı.");
+
+        if (order.Status == WellKnown.OrderStatuses.Cancelled)
+            return ToolResult.Conflict(
+                WellKnown.ToolErrorCodes.OrderAlreadyCancelled,
+                $"'{orderId}' numaralı sipariş zaten iptal edilmiş.");
+
+        var idemKey = ComputeKey("order_cancel", orderId, reason);
+        if (TryGetCached(idemKey, out var cached)) return cached;
+
+        if (!_orders.Cancel(orderId, reason))
+            return ToolResult.Conflict(
+                WellKnown.ToolErrorCodes.OrderNotCancellable,
+                $"'{orderId}' numaralı sipariş şu anki durumunda ({order.Status}) iptal edilemez. " +
+                "Sadece 'İşleniyor' veya 'Kargolandı' durumundaki siparişler iptal edilebilir.");
+
+        var result = ToolResult.Ok(
+            message: $"Sipariş {orderId} başarıyla iptal edildi.",
+            data: new { orderId, previousStatus = order.Status, newStatus = WellKnown.OrderStatuses.Cancelled, reason });
+        StoreResult(idemKey, result);
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // İADE TALEBİ
+    // ════════════════════════════════════════════════════════════════
+
+    [Description("Teslim edilmiş bir sipariş için iade talebi oluşturur. Sadece 'Teslim Edildi' durumundaki " +
+                 "ve 14 gün içindeki siparişler iade edilebilir. Sonuç ToolResult olarak döner.")]
+    public ToolResult ReturnRequestTool(
+        [Description("İade talep edilecek sipariş numarası (zorunlu, ör. 'ORD-2')")] string orderId,
+        [Description("İade sebebi (zorunlu, en az 5 karakter)")] string reason)
+    {
+        if (string.IsNullOrWhiteSpace(orderId))
+            return ToolResult.ValidationError("Sipariş numarası boş olamaz.", WellKnown.ToolParameterNames.OrderId);
+        if (string.IsNullOrWhiteSpace(reason) || reason.Length < 5)
+            return ToolResult.ValidationError("İade sebebi en az 5 karakter olmalıdır.", WellKnown.ToolParameterNames.Reason);
+
+        var order = _orders.Get(orderId);
+        if (order is null)
+            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, $"'{orderId}' numaralı sipariş bulunamadı.");
+
+        if (order.Status == WellKnown.OrderStatuses.ReturnRequested ||
+            order.Status == WellKnown.OrderStatuses.ReturnApproved)
+            return ToolResult.Conflict(
+                WellKnown.ToolErrorCodes.ReturnAlreadyRequested,
+                $"'{orderId}' numaralı sipariş için zaten bir iade talebi mevcut.");
+
+        var idemKey = ComputeKey("return_request", orderId, reason);
+        if (TryGetCached(idemKey, out var cached)) return cached;
+
+        if (!_orders.RequestReturn(orderId, reason))
+        {
+            var detail = order.Status != WellKnown.OrderStatuses.Delivered
+                ? $"Sipariş durumu '{order.Status}' — sadece 'Teslim Edildi' durumundaki siparişler iade edilebilir."
+                : "14 günlük iade süresi dolmuş olabilir.";
+            return ToolResult.Conflict(
+                WellKnown.ToolErrorCodes.ReturnNotEligible,
+                $"'{orderId}' numaralı sipariş iade edilemez. {detail}");
+        }
+
+        var result = ToolResult.Ok(
+            message: $"Sipariş {orderId} için iade talebi başarıyla oluşturuldu. Ücret iadesi 5–7 iş günü içinde yapılacaktır.",
+            data: new { orderId, product = order.Product, quantity = order.Quantity, reason, newStatus = WellKnown.OrderStatuses.ReturnRequested });
+        StoreResult(idemKey, result);
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════════
     // İNSAN TEMSİLCİ HANDOFF (yan etkisiz)
     // ════════════════════════════════════════════════════════════════
 

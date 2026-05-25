@@ -14,6 +14,8 @@ public static class WellKnown
         public const string OrderCreation = "sipariş_oluşturma";
         public const string OrderInquiry = "sipariş_sorgulama";
         public const string OrderListing = "sipariş_listeleme";
+        public const string OrderCancellation = "sipariş_iptali";
+        public const string ReturnRequest = "iade_talebi";
         public const string Complaint = "şikayet";
         public const string ProductInfo = "ürün_bilgisi";
         public const string General = "genel";
@@ -79,6 +81,8 @@ public static class WellKnown
         public const string ComplaintRegistration = "complaint_registration_tool";
         public const string GetLastOrder = "get_last_order_tool";
         public const string GetAllOrders = "get_all_orders_tool";
+        public const string OrderCancel = "order_cancel_tool";
+        public const string ReturnRequest = "return_request_tool";
         public const string HumanHandoff = "human_handoff_tool";
     }
 
@@ -89,6 +93,8 @@ public static class WellKnown
     public static readonly IReadOnlySet<string> HighRiskTools = new HashSet<string>
     {
         ToolNames.OrderPlacement,
+        ToolNames.OrderCancel,
+        ToolNames.ReturnRequest,
         ToolNames.ComplaintRegistration
     };
 
@@ -227,6 +233,8 @@ public static class WellKnown
         public const string Shipped = "Kargolandı";
         public const string Delivered = "Teslim Edildi";
         public const string Cancelled = "İptal Edildi";
+        public const string ReturnRequested = "İade Talep Edildi";
+        public const string ReturnApproved = "İade Onaylandı";
     }
 
     /// <summary>Şikayet durum etiketleri (Türkçe).</summary>
@@ -246,6 +254,10 @@ public static class WellKnown
         public const string StockInsufficient = "STOCK_INSUFFICIENT";
         public const string CustomerIdMismatch = "CUSTOMER_ID_MISMATCH";
         public const string NoOrdersForCustomer = "NO_ORDERS_FOR_CUSTOMER";
+        public const string OrderAlreadyCancelled = "ORDER_ALREADY_CANCELLED";
+        public const string OrderNotCancellable = "ORDER_NOT_CANCELLABLE";
+        public const string ReturnNotEligible = "RETURN_NOT_ELIGIBLE";
+        public const string ReturnAlreadyRequested = "RETURN_ALREADY_REQUESTED";
     }
 
     /// <summary>Tool parametre adları (snake_case) — validation MissingFields için.</summary>
@@ -266,6 +278,8 @@ public static class WellKnown
     public static readonly IReadOnlyList<(string Intent, string[] Keywords)> IntentKeywords =
     [
         (Intents.OrderCreation, ["sipariş ver", "almak istiyorum", "sipariş etmek"]),
+        (Intents.OrderCancellation, ["iptal", "siparişimi iptal", "iptal et", "vazgeçtim"]),
+        (Intents.ReturnRequest, ["iade", "iade etmek", "geri göndermek", "iade talebi", "ürünü iade"]),
         (Intents.OrderListing, ["son sipariş", "tüm sipariş", "siparişlerim"]),
         (Intents.Complaint, ["şikayet", "memnun değil", "sorun"]),
         (Intents.ProductInfo, ["ürün", "fiyat", "stok"]),

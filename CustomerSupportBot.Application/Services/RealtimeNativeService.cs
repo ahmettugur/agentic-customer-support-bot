@@ -375,7 +375,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                         reason = GetString(args, "reason") ?? "user_farewell"
                     }),
                 // HITL gerektiren tool'lar sesli modda bilinçli olarak engellidir.
-                "order_placement_tool" or "complaint_registration_tool" =>
+                "order_placement_tool" or "order_cancel_tool" or "return_request_tool" or "complaint_registration_tool" =>
                     ToolResult.SystemError("FORBIDDEN_IN_VOICE",
                         "Bu işlem güvenlik adımları gerektirir; yazılı sohbet üzerinden yapılmalıdır."),
                 _ => ToolResult.SystemError("UNKNOWN_TOOL", $"'{name}' bu modda mevcut değil.")

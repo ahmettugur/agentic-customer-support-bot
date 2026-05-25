@@ -60,4 +60,39 @@ public sealed class InMemoryOrderAdapter : IOrderRepository
 
         return entry.Key != null ? (entry.Key, entry.Value) : null;
     }
+
+    public bool Cancel(string orderId, string reason)
+    {
+        if (!_orders.TryGetValue(orderId, out var order))
+            return false;
+
+        // Sadece İşleniyor veya Kargolandı durumundaki siparişler iptal edilebilir
+        if (order.Status != WellKnown.OrderStatuses.Processing &&
+            order.Status != WellKnown.OrderStatuses.Shipped)
+            return false;
+
+        order.Status = WellKnown.OrderStatuses.Cancelled;
+        order.CancelledAt = DateTime.UtcNow;
+        order.CancelReason = reason;
+        return true;
+    }
+
+    public bool RequestReturn(string orderId, string reason)
+    {
+        if (!_orders.TryGetValue(orderId, out var order))
+            return false;
+
+        // Sadece Teslim Edildi durumundaki siparişler iade edilebilir
+        if (order.Status != WellKnown.OrderStatuses.Delivered)
+            return false;
+
+        // 14 gün iade süresi kontrolü
+        if ((DateTime.Now - order.OrderDate).TotalDays > 14)
+            return false;
+
+        order.Status = WellKnown.OrderStatuses.ReturnRequested;
+        order.ReturnRequestedAt = DateTime.UtcNow;
+        order.ReturnReason = reason;
+        return true;
+    }
 }

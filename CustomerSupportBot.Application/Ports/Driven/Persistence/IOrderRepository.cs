@@ -18,4 +18,10 @@ public interface IOrderRepository
 
     /// <summary>Müşterinin en son siparişi. Yoksa null döner.</summary>
     (string OrderId, OrderInfo Order)? GetLast(string customerId);
+
+    /// <summary>Siparişi iptal eder. Başarılıysa true döner; iptal edilemez durumdaysa false.</summary>
+    bool Cancel(string orderId, string reason);
+
+    /// <summary>Sipariş için iade talebi oluşturur. Başarılıysa true döner; iade uygun değilse false.</summary>
+    bool RequestReturn(string orderId, string reason);
 }

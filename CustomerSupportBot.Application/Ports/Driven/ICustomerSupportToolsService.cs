@@ -15,4 +15,6 @@ public interface ICustomerSupportToolsService
     ToolResult ComplaintRegistrationTool(string orderId, string complaintText, string? customerId);
     ToolResult GetLastOrderTool(string customerId);
     ToolResult GetAllOrdersTool(string customerId);
+    ToolResult OrderCancelTool(string orderId, string reason);
+    ToolResult ReturnRequestTool(string orderId, string reason);
 }

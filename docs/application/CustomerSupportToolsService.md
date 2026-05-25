@@ -6,7 +6,7 @@
 
 ## Ne yapar?
 
-Ajanların LLM üzerinden çağırabileceği 6 tool'un gerçek iş mantığını uygular. Her tool bir `ToolResult` döndürür — yapılandırılmış sonuç formatı. Repository port'ları üzerinden veri erişimi yapar; veritabanı implementasyonuna bağımlı değildir.
+Ajanların LLM üzerinden çağırabileceği 8 tool'un gerçek iş mantığını uygular. Her tool bir `ToolResult` döndürür — yapılandırılmış sonuç formatı. Repository port'ları üzerinden veri erişimi yapar; veritabanı implementasyonuna bağımlı değildir.
 
 ## Tool listesi
 
@@ -17,10 +17,12 @@ Ajanların LLM üzerinden çağırabileceği 6 tool'un gerçek iş mantığını
 | `GetLastOrderTool` | `get_last_order_tool` | Hayır | Hayır |
 | `GetAllOrdersTool` | `get_all_orders_tool` | Hayır | Hayır |
 | `OrderPlacementTool` | `order_placement_tool` | **Evet** | **Evet** |
+| `OrderCancelTool` | `order_cancel_tool` | **Evet** | **Evet** |
+| `ReturnRequestTool` | `return_request_tool` | **Evet** | **Evet** |
 | `ComplaintRegistrationTool` | `complaint_registration_tool` | **Evet** | **Evet** |
 | `HumanHandoffTool` (static) | `human_handoff_tool` | Hayır | Hayır |
 
-> `OrderPlacementTool` ve `ComplaintRegistrationTool` doğrudan çağrılmaz — `ApprovalGateService` bunları HITL kapısına sarar ve `AIFunction` olarak ajana verir. Bu sınıftaki metotlar yalnızca onay geldikten sonra çağrılır.
+> `OrderPlacementTool`, `OrderCancelTool`, `ReturnRequestTool` ve `ComplaintRegistrationTool` doğrudan çağrılmaz — `ApprovalGateService` bunları HITL kapısına sarar ve `AIFunction` olarak ajana verir. Bu sınıftaki metotlar yalnızca onay geldikten sonra çağrılır.
 
 ## `ToolResult` yapısı
 
@@ -74,6 +76,37 @@ Adımlar:
 6. Sonucu idempotency cache'e kaydet
 
 **Stok yetersizse:** `ToolResult.Conflict` → ajan müşteriye bildirir, yeni sipariş oluşturmaz.
+
+### `OrderCancelTool`
+
+**Yan etkilidir** — sipariş durumunu `İptal Edildi` olarak değiştirir.
+
+Adımlar:
+1. Parametre doğrulama (`orderId` zorunlu, `reason` min 5 karakter)
+2. Sipariş var mı?
+3. Zaten iptal edilmiş mi? → `ToolResult.Conflict(OrderAlreadyCancelled)`
+4. İdempotency cache kontrolü
+5. `IOrderRepository.Cancel(orderId, reason)` çağrısı
+6. İptal edilemez durumdaysa (`Delivered` vb.) → `ToolResult.Conflict(OrderNotCancellable)`
+
+**İptal edilebilir durumlar:** `İşleniyor`, `Kargolandı`  
+**İptal edilemez durumlar:** `Teslim Edildi`, `İptal Edildi`, `İade Talep Edildi`
+
+### `ReturnRequestTool`
+
+**Yan etkilidir** — sipariş durumunu `İade Talep Edildi` olarak değiştirir.
+
+Adımlar:
+1. Parametre doğrulama (`orderId` zorunlu, `reason` min 5 karakter)
+2. Sipariş var mı?
+3. Zaten iade talebi var mı? → `ToolResult.Conflict(ReturnAlreadyRequested)`
+4. İdempotency cache kontrolü
+5. `IOrderRepository.RequestReturn(orderId, reason)` çağrısı
+6. Uygun değilse → `ToolResult.Conflict(ReturnNotEligible)` (durum/süre)
+
+**İade edilebilir:** `Teslim Edildi` durumunda, **14 gün** içinde  
+**İade edilemez:** Diğer tüm durumlar veya süre aşımı  
+**Ücret iadesi:** Onay sonrası 5–7 iş günü aynı ödeme yöntemiyle
 
 ### `ComplaintRegistrationTool`
 

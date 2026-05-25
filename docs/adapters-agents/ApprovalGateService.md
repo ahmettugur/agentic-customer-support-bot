@@ -5,7 +5,7 @@
 
 ## Ne yapar?
 
-`ApprovalGateService`, **HITL (Human-in-the-Loop)** onay kapısını uygular. Yan etkili tool'lar (sipariş oluşturma, şikayet kaydı) çalışmadan önce bu servis üzerinden geçer ve admin onayı bekler.
+`ApprovalGateService`, **HITL (Human-in-the-Loop)** onay kapısını uygular. Yan etkili tool'lar (sipariş oluşturma, **sipariş iptali**, **iade talebi**, şikayet kaydı) çalışmadan önce bu servis üzerinden geçer ve admin onayı bekler.
 
 **Temel fikir:** LLM bir tool çağırmak istediğinde, o tool önce admin'e "Bu işlemi yapayım mı?" diye sorar. Admin onaylarsa tool gerçekten çalışır; reddederse kullanıcıya "işlem reddedildi" yanıtı döner.
 
@@ -50,6 +50,38 @@ Sipariş oluşturma tool'unu HITL kapısıyla sarmalar ve bir `AIFunction` olara
 1. `RequestApprovalAsync` çağrılır.
 2. Onay gelirse `_tools.OrderPlacementTool(productName, quantity, customerId)` çalıştırılır.
 3. Ret gelirse `ToolResult.ValidationError(...)` döndürülür ve ajan kullanıcıya ret mesajı iletir.
+
+## `BuildOrderCancelTool`
+
+Sipariş iptal tool'unu HITL kapısıyla sarmalar.
+
+**Tool parametreleri:**
+
+| Parametre | Tür | Açıklama |
+|-----------|-----|----------|
+| `orderId` | string | İptal edilecek sipariş numarası (zorunlu) |
+| `reason` | string | İptal sebebi (min 5 karakter, zorunlu) |
+
+**Çalışma şekli:**
+1. `RequestApprovalAsync` çağrılır.
+2. Onay gelirse `_tools.OrderCancelTool(orderId, reason)` çalıştırılır.
+3. Ret gelirse `ToolResult.ValidationError(...)` döndürülür.
+
+## `BuildReturnRequestTool`
+
+İade talebi tool'unu HITL kapısıyla sarmalar.
+
+**Tool parametreleri:**
+
+| Parametre | Tür | Açıklama |
+|-----------|-----|----------|
+| `orderId` | string | İade talep edilecek sipariş numarası (zorunlu) |
+| `reason` | string | İade sebebi (min 5 karakter, zorunlu) |
+
+**Çalışma şekli:**
+1. `RequestApprovalAsync` çağrılır.
+2. Onay gelirse `_tools.ReturnRequestTool(orderId, reason)` çalıştırılır.
+3. Ret gelirse `ToolResult.ValidationError(...)` döndürülür.
 
 ## `BuildComplaintRegistrationTool`
 
@@ -99,11 +131,13 @@ Bu metod, `needs_escalation` durumundaki trace'leri tespit eder ve escalation si
 
 ```json
 {
-  "Approval": {
+  "HumanInTheLoop": {
     "Enabled": true,
-    "TimeoutSeconds": 120,
+    "TimeoutSeconds": 60,
     "ToolsRequiringApproval": [
       "order_placement_tool",
+      "order_cancel_tool",
+      "return_request_tool",
       "complaint_registration_tool"
     ]
   }

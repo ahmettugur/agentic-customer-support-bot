@@ -13,4 +13,12 @@ public class OrderInfo
     public string CustomerId { get; set; } = "";
     public string Status { get; set; } = "";
     public DateTime OrderDate { get; set; } = DateTime.Now;
+
+    // ─── İptal bilgileri ───
+    public DateTime? CancelledAt { get; set; }
+    public string? CancelReason { get; set; }
+
+    // ─── İade bilgileri ───
+    public DateTime? ReturnRequestedAt { get; set; }
+    public string? ReturnReason { get; set; }
 }

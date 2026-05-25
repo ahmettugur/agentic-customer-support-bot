@@ -98,12 +98,14 @@ public class CustomerSupportTeam : IAgentTeamPort
             chatClient,
             instructions: _prompts.Get("agents/order-agent"),
             name: WellKnown.AgentNames.Order,
-            description: "Sipariş oluşturma ve sorgulama işlemlerini yürütür.",
+            description: "Sipariş oluşturma, sorgulama, iptal ve iade işlemlerini yürütür.",
             tools: [
                 _approvalGate.BuildOrderPlacementTool(),
                 AIFunctionFactory.Create(_tools.OrderStatusTool),
                 AIFunctionFactory.Create(_tools.GetLastOrderTool),
-                AIFunctionFactory.Create(_tools.GetAllOrdersTool)
+                AIFunctionFactory.Create(_tools.GetAllOrdersTool),
+                _approvalGate.BuildOrderCancelTool(),
+                _approvalGate.BuildReturnRequestTool()
             ]), sourceName);
 
         _complaintAgent = WrapWithTelemetry(new ChatClientAgent(

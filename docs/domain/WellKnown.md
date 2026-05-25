@@ -28,12 +28,14 @@ Magic string'ler kodun her yerine dağılırsa:
 public static class Intents
 {
     public const string Unknown = "Unknown";
-    public const string OrderCreation = "OrderCreation";
-    public const string OrderInquiry = "OrderInquiry";
-    public const string OrderListing = "OrderListing";
-    public const string Complaint = "Complaint";
-    public const string ProductInfo = "ProductInfo";
-    public const string General = "General";
+    public const string OrderCreation = "sipariş_oluşturma";
+    public const string OrderInquiry = "sipariş_sorgulama";
+    public const string OrderListing = "sipariş_listeleme";
+    public const string OrderCancellation = "sipariş_iptali";  // YENİ
+    public const string ReturnRequest = "iade_talebi";           // YENİ
+    public const string Complaint = "şikayet";
+    public const string ProductInfo = "ürün_bilgisi";
+    public const string General = "genel";
 }
 ```
 
@@ -98,8 +100,10 @@ public static class ToolNames
     public const string ProductInquiry = "product_inquiry_tool";
     public const string OrderPlacement = "order_placement_tool";
     public const string OrderStatus = "order_status_tool";
-    public const string OrdersByCustomer = "orders_by_customer_tool";
     public const string GetLastOrder = "get_last_order_tool";
+    public const string GetAllOrders = "get_all_orders_tool";
+    public const string OrderCancel = "order_cancel_tool";           // YENİ
+    public const string ReturnRequest = "return_request_tool";       // YENİ
     public const string ComplaintRegistration = "complaint_registration_tool";
     public const string HumanHandoff = "human_handoff_tool";
 }
@@ -107,6 +111,8 @@ public static class ToolNames
 public static readonly HashSet<string> HighRiskTools = new()
 {
     ToolNames.OrderPlacement,
+    ToolNames.OrderCancel,         // YENİ
+    ToolNames.ReturnRequest,       // YENİ
     ToolNames.ComplaintRegistration
 };
 ```
@@ -158,10 +164,12 @@ public static class EscalationActions
 ```csharp
 public static class OrderStatuses
 {
-    public const string Processing = "Hazırlanıyor";
-    public const string Shipped = "Kargoda";
+    public const string Processing = "İşleniyor";
+    public const string Shipped = "Kargolandı";
     public const string Delivered = "Teslim Edildi";
     public const string Cancelled = "İptal Edildi";
+    public const string ReturnRequested = "İade Talep Edildi";  // YENİ
+    public const string ReturnApproved = "İade Onaylandı";      // YENİ
 }
 ```
 
