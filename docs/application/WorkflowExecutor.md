@@ -65,6 +65,8 @@ Output buffer'a ekler. Birden fazla Respond step'i varsa aralarına satır sonu 
 
 **Yasak tool'lar (ForbiddenTools):**
 - `order_placement_tool`
+- `order_cancel_tool`
+- `return_request_tool`
 - `complaint_registration_tool`
 - `human_handoff_tool`
 

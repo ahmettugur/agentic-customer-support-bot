@@ -27,7 +27,7 @@ Magic string'ler kodun her yerine dağılırsa:
 ```csharp
 public static class Intents
 {
-    public const string Unknown = "Unknown";
+    public const string Unknown = "bilinmiyor";
     public const string OrderCreation = "sipariş_oluşturma";
     public const string OrderInquiry = "sipariş_sorgulama";
     public const string OrderListing = "sipariş_listeleme";
@@ -61,10 +61,10 @@ LLM hem "yüksek" hem "high" üretebilir; parser ikisini de tanır.
 ```csharp
 public static class Phases
 {
-    public const string Greeting = "Greeting";
-    public const string Inquiry = "Inquiry";
-    public const string Action = "Action";
-    public const string Resolution = "Resolution";
+    public const string Greeting = "greeting";
+    public const string Inquiry = "inquiry";
+    public const string Action = "action";
+    public const string Resolution = "resolution";
 }
 ```
 
@@ -140,10 +140,9 @@ public static class Termination
 {
     public const string Marker = "TERMINATE";
     public const string ReasonCompleted = "completed";
-    public const string ReasonMaxMessages = "max_messages";
+    public const string ReasonMaxMessages = "max_messages_reached";
+    public const string ReasonRepeatedToolCall = "repeated_tool_call_guard";
     public const string ReasonTimeout = "timeout";
-    public const string ReasonError = "error";
-    public const string ReasonTerminatedByRestart = "terminated_by_restart";
 }
 ```
 
@@ -154,9 +153,10 @@ LLM yanıtın sonuna `TERMINATE` yazınca workflow sonlanır.
 ```csharp
 public static class EscalationActions
 {
-    public const string Acknowledge = "Acknowledge";
-    public const string Resolve = "Resolve";
-    public const string Dismiss = "Dismiss";
+    public const string Acknowledge = "acknowledge";
+    public const string Ack = "ack";
+    public const string Resolve = "resolve";
+    public const string Dismiss = "dismiss";
 }
 ```
 
@@ -180,7 +180,7 @@ public static class OrderStatuses
 public static class ComplaintStatuses
 {
     public const string Pending = "Beklemede";
-    public const string InProgress = "İnceleniyor";
+    public const string InProgress = "İncelemede";
     public const string Resolved = "Çözüldü";
 }
 ```

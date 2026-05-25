@@ -213,27 +213,30 @@ PCM16 24kHz → base64 → JSON event. Browser SignalR/WS üzerinden parçalar h
 | Tool | Parametre | Amaç |
 |---|---|---|
 | `product_inquiry_tool` | `product_name` | Ürün fiyat/stok sorgu |
+| `product_list_tool` | `category?` | Katalog / kategori listeleme |
 | `order_status_tool` | `order_id` | Sipariş durumu |
 | `get_last_order_tool` | `customer_id` | Son sipariş |
 | `get_all_orders_tool` | `customer_id` | Tüm siparişler |
-| `end_conversation_tool` | `reason?` | Sohbeti sonlandır |
+| `end_conversation` | `reason?` | Sohbeti sonlandır |
 
 ### Yasak tool'lar
 
 Native mode'da **kayıt edilmemiştir**:
 - `order_placement_tool` — yeni sipariş (HITL gerektirir)
+- `order_cancel_tool` — sipariş iptali (HITL gerektirir)
+- `return_request_tool` — iade talebi (HITL gerektirir)
 - `complaint_registration_tool` — şikayet (HITL gerektirir)
 - `human_handoff_tool` — insan çağrısı (text chat'te işler)
 
 Sesli kanal hızlı yanıt için — HITL approval/escalation süreçleri ses akışını bloklar. Bu durumlar **text chat'e yönlendirilir** (system prompt'ta kullanıcıya söyler).
 
-### `end_conversation_tool` özel davranış
+### `end_conversation` özel davranış
 
 Kullanıcı veda ettiğinde model bu tool'u çağırır:
 
 ```
 Kullanıcı: "Teşekkürler, görüşürüz"
-Model: end_conversation_tool(reason: "user_farewell")
+Model: end_conversation(reason: "user_farewell")
 Model: (audio) "İyi günler!"
 Bridge: WebSocket close
 ```
@@ -285,7 +288,7 @@ OpenAI'a verilen sistem prompt'unun anahtarları:
   - Tool sonucunu yorumla, JSON'u olduğu gibi okuma
   - Eksik ID varsa kullanıcıdan iste
   - Sadece Türkçe
-  - Veda olmadan `end_conversation_tool` çağırma
+  - Veda olmadan `end_conversation` çağırma
 
 ---
 
