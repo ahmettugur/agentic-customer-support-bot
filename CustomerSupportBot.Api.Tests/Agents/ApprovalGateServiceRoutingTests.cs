@@ -1,6 +1,6 @@
 ﻿// Tests/Agents/ApprovalGateServiceRoutingTests.cs
-// Smart Routing entegrasyon testleri � ApprovalGateService ProcessPendingEscalations
-// �a�r�s� sonras� EscalationRequest'in routing alanlar�n�n do�ru dolduruldu�unu do�rular.
+// Smart Routing entegrasyon testleri — ApprovalGateService ProcessPendingEscalations
+// çağrısı sonrası EscalationRequest'in routing alanlarının doğru doldurulduğunu doğrular.
 
 using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Api.Models;
@@ -9,15 +9,23 @@ using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Application.Services.Routing;
 using CustomerSupportBot.Api.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 
+[Collection("PostgresCatalog")]
 public class ApprovalGateServiceRoutingTests
 {
+    private readonly PostgresCatalogFixture _fixture;
     private readonly InMemoryEscalationSink _sink = new(NullLogger<InMemoryEscalationSink>.Instance);
     private readonly ApprovalOptions _opts = new() { EscalationEnabled = true };
+
+    public ApprovalGateServiceRoutingTests(PostgresCatalogFixture fixture)
+    {
+        _fixture = fixture;
+    }
 
     private (ApprovalGateService svc, IHumanAgentRegistry registry, ICustomerProfileStore profiles, ISessionManager sessions)
         BuildWithRouting(RoutingOptions? routingOpts = null)
@@ -27,7 +35,7 @@ public class ApprovalGateServiceRoutingTests
         {
             IntentSkillMap = new(StringComparer.OrdinalIgnoreCase)
             {
-                ["�ikayet"] = new() { "complaint" }
+                ["şikayet"] = new() { "complaint" }
             },
             SeedAgents = new()
             {
@@ -53,7 +61,7 @@ public class ApprovalGateServiceRoutingTests
             Options.Create(_opts),
             _sink,
             new ApprovalContextAccessor(),
-            TestFactory.CreateToolsService(),
+            TestFactory.CreateToolsService(_fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo),
             new EscalationPolicyService(
                 _sink, Options.Create(_opts), router, registry, profiles, sessions));
 
@@ -84,10 +92,10 @@ public class ApprovalGateServiceRoutingTests
     {
         var (svc, registry, _, sessions) = BuildWithRouting();
         var session = sessions.GetOrCreate("s1");
-        session.State.CustomerId = "CUST-1";
+        session.State.CustomerId = "1001";
 
-        svc.ProcessPendingEscalations(TraceFor("s1", "�ikayet", WellKnown.AgentNames.Complaint),
-            "�ikayetim var", "yan�t");
+        svc.ProcessPendingEscalations(TraceFor("s1", "şikayet", WellKnown.AgentNames.Complaint),
+            "şikayetim var", "yanıt");
 
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
@@ -105,7 +113,7 @@ public class ApprovalGateServiceRoutingTests
     {
         var routingOpts = new RoutingOptions
         {
-            IntentSkillMap = new(StringComparer.OrdinalIgnoreCase) { ["�ikayet"] = new() { "complaint" } },
+            IntentSkillMap = new(StringComparer.OrdinalIgnoreCase) { ["şikayet"] = new() { "complaint" } },
             ProfileKeywordSkillMap = new(StringComparer.OrdinalIgnoreCase) { ["VIP"] = "vip" },
             SeedAgents = new()
             {
@@ -115,17 +123,17 @@ public class ApprovalGateServiceRoutingTests
         };
         var (svc, _, profiles, sessions) = BuildWithRouting(routingOpts);
         var session = sessions.GetOrCreate("s2");
-        session.State.CustomerId = "CUST-VIP";
+        session.State.CustomerId = "9011";
 
         profiles.Upsert(new CustomerSupportBot.Domain.Model.Memory.CustomerProfile
         {
-            CustomerId = "CUST-VIP",
+            CustomerId = "9011",
             PreferredLanguage = "tr",
-            AdminNote = "VIP m��teri"
+            AdminNote = "VIP müşteri"
         });
 
-        svc.ProcessPendingEscalations(TraceFor("s2", "�ikayet", WellKnown.AgentNames.Complaint),
-            "�ikayet", "yan�t");
+        svc.ProcessPendingEscalations(TraceFor("s2", "şikayet", WellKnown.AgentNames.Complaint),
+            "şikayet", "yanıt");
 
         var open = _sink.GetOpen();
         open[0].SuggestedAgentId.Should().Be("vip-handler");
@@ -135,12 +143,12 @@ public class ApprovalGateServiceRoutingTests
     [Fact]
     public void Routing_NoActiveAgents_SuggestedAgentIdIsNull()
     {
-        var routingOpts = new RoutingOptions { SeedAgents = new() }; // bo�
+        var routingOpts = new RoutingOptions { SeedAgents = new() }; // boş
         var (svc, _, _, sessions) = BuildWithRouting(routingOpts);
         sessions.GetOrCreate("s3").State.CustomerId = "C";
 
-        svc.ProcessPendingEscalations(TraceFor("s3", "�ikayet", WellKnown.AgentNames.Complaint),
-            "test", "yan�t");
+        svc.ProcessPendingEscalations(TraceFor("s3", "şikayet", WellKnown.AgentNames.Complaint),
+            "test", "yanıt");
 
         var open = _sink.GetOpen();
         open.Should().ContainSingle();

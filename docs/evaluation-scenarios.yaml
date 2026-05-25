@@ -24,7 +24,7 @@ scenarios:
     category: product_inquiry_simple
     query: "Dizüstü bilgisayarınız var mı?"
     expected_intent: "ürün_bilgisi"
-    expected_agents: [PlanningAgent, ProductInquiryAgent, ResponseAgent]
+    expected_agents: [PlanningAgent, ProductAgent, ResponseAgent]
     expected_tools: [product_inquiry_tool]
     success_criteria:
       - "response contains 'Dizüstü' OR 'laptop'"
@@ -33,7 +33,7 @@ scenarios:
 
   - id: S02
     category: order_status_with_id
-    query: "ORD-1 numaralı siparişimin durumu nedir?"
+    query: "1 numaralı siparişimin durumu nedir?"
     expected_intent: "sipariş_sorgulama"
     expected_agents: [PlanningAgent,  ResponseAgent]
     expected_tools: [order_status_tool]
@@ -43,7 +43,7 @@ scenarios:
 
   - id: S03
     category: last_order_by_customer
-    query: "CUST-002 son siparişim nedir?"
+    query: "002 son siparişim nedir?"
     expected_intent: "sipariş_sorgulama"
     expected_agents: [PlanningAgent,  ResponseAgent]
     expected_tools: [get_last_order_tool]
@@ -53,7 +53,7 @@ scenarios:
 
   - id: S04
     category: all_orders_listing
-    query: "CUST-001 tüm siparişlerimi listeler misin?"
+    query: "001 tüm siparişlerimi listeler misin?"
     expected_intent: "sipariş_sorgulama"
     expected_agents: [PlanningAgent,  ResponseAgent]
     expected_tools: [get_all_orders_tool]
@@ -63,7 +63,7 @@ scenarios:
 
   - id: S05
     category: complaint_with_all_info
-    query: "CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum"
+    query: "001 1 için hasarlı ürün şikayeti açmak istiyorum"
     expected_intent: "şikayet"
     expected_agents: [PlanningAgent, ComplaintAgent, ResponseAgent]
     expected_tools: [complaint_registration_tool]
@@ -125,9 +125,9 @@ scenarios:
 # ─── ÇOK ADIMLI / BAĞIMLI ───
   - id: S11
     category: compound_request
-    query: "Akıllı telefon stokta mı? Varsa 2 tane CUST-001 için sipariş ver"
+    query: "Akıllı telefon stokta mı? Varsa 2 tane 001 için sipariş ver"
     expected_intent: "sipariş_oluşturma"
-    expected_agents: [PlanningAgent, ProductInquiryAgent, OrderAgent, ResponseAgent]
+    expected_agents: [PlanningAgent, ProductAgent, OrderAgent, ResponseAgent]
     expected_tools: [product_inquiry_tool, order_placement_tool]
     success_criteria:
       - "stock checked before order"
@@ -137,8 +137,8 @@ scenarios:
   - id: S12
     category: followup_using_context
     turns:
-      - query: "CUST-001 müşterisiyim"
-        expected_state_update: {CustomerId: "CUST-001"}
+      - query: "001 müşterisiyim"
+        expected_state_update: {CustomerId: "001"}
       - query: "Son siparişim nedir?"
         expected_agents: [PlanningAgent,  ResponseAgent]
     success_criteria:
@@ -149,7 +149,7 @@ scenarios:
 # ─── EDGE CASES ───
   - id: S13
     category: nonexistent_order
-    query: "ORD-9999 siparişim nerede?"
+    query: "9999 siparişim nerede?"
     expected_intent: "sipariş_sorgulama"
     success_criteria:
       - "response indicates order not found"
@@ -158,7 +158,7 @@ scenarios:
 
   - id: S14
     category: nonexistent_customer
-    query: "CUST-9999 tüm siparişlerim"
+    query: "9999 tüm siparişlerim"
     success_criteria:
       - "response indicates no orders OR no customer"
       - "no hallucinated data"
@@ -172,7 +172,7 @@ scenarios:
 
   - id: S16
     category: very_long_query
-    query: "merhaba ben ahmet cust-001 müşterisiyim geçen hafta sipariş verdim ORD-1 ama hiç gelmedi kayıp mı oldu kargo şirketi aradı ama bulamadı acil olarak bu sorunu çözmek istiyorum çünkü doğum günü hediyesi yarın lazım ayrıca sipariş durumunu da görmek istiyorum şikayet de açalım mı acaba"
+    query: "merhaba ben ahmet cust-001 müşterisiyim geçen hafta sipariş verdim 1 ama hiç gelmedi kayıp mı oldu kargo şirketi aradı ama bulamadı acil olarak bu sorunu çözmek istiyorum çünkü doğum günü hediyesi yarın lazım ayrıca sipariş durumunu da görmek istiyorum şikayet de açalım mı acaba"
     expected_intent: "şikayet"
     expected_agents: [PlanningAgent,  ComplaintAgent, ResponseAgent]
     success_criteria:
@@ -191,7 +191,7 @@ scenarios:
 
   - id: S18
     category: wrong_language
-    query: "What is my order status? My customer id is CUST-001"
+    query: "What is my order status? My customer id is 001"
     success_criteria:
       - "responds in Turkish (system language)"
       - "order retrieved correctly"
@@ -206,7 +206,7 @@ scenarios:
 # ─── PERFORMANCE ───
   - id: S20
     category: latency_baseline
-    query: "CUST-001 son siparişim"
+    query: "001 son siparişim"
     success_criteria:
       - "first_token_latency_ms < 3000"
       - "total_latency_ms < 10000"
@@ -214,7 +214,7 @@ scenarios:
 
   - id: S21
     category: retry_on_empty_result
-    query: "ORD-999 durumu" # bulunmayan sipariş
+    query: "999 durumu" # bulunmayan sipariş
     success_criteria:
       - "no blind retry"
       - "graceful not_found response"
@@ -225,7 +225,7 @@ scenarios:
     turns:
       - query: "Son siparişim nerede?"
         expected_behavior: asks_for_customer_id
-      - query: "CUST-001"
+      - query: "001"
         expected_behavior: retrieves_order
         expected_tools: [get_last_order_tool]
     success_criteria:
@@ -235,10 +235,10 @@ scenarios:
   - id: S23
     category: complaint_after_inquiry
     turns:
-      - query: "CUST-001 ORD-1 durumu"
+      - query: "001 1 durumu"
       - query: "Bu siparişim için şikayet açmak istiyorum, ürün bozuk geldi"
     success_criteria:
-      - "context (ORD-1, CUST-001) carried over"
+      - "context (1, 001) carried over"
       - "no re-ask"
       - "complaint registered with correct IDs"
 

@@ -48,7 +48,7 @@ public class ReasoningSanityCheckerTests
         {
             OrderId = new VerifiedEntity
             {
-                Value = "ORD-1",
+                Value = "1030",
                 Verification = EntityVerification.Verified
             }
         };
@@ -182,7 +182,7 @@ public class ReasoningSanityCheckerTests
         {
             OrderId = new VerifiedEntity
             {
-                Value = "ORD-9999",
+                Value = "9999",
                 Verification = EntityVerification.NotFoundInDb
             }
         };
@@ -203,7 +203,7 @@ public class ReasoningSanityCheckerTests
         {
             OrderId = new VerifiedEntity
             {
-                Value = "ORD-9999",
+                Value = "9999",
                 Verification = EntityVerification.NotFoundInDb
             }
         };

@@ -4,7 +4,7 @@
 - `Model/SpecialistReasoning.cs`
 - `Model/TaskCompletionStatus.cs`
 
-Specialist agent'ların (OrderAgent, ComplaintAgent, ProductInquiryAgent, vb.) **tool çağrısından önce ve sonra** ne düşündüklerini yapılandıran modeller.
+Specialist agent'ların (OrderAgent, ComplaintAgent, ProductAgent, vb.) **tool çağrısından önce ve sonra** ne düşündüklerini yapılandıran modeller.
 
 ---
 
@@ -44,7 +44,7 @@ public sealed class PreToolCheck
     public List<string> CollectedParams { get; set; }  // ["order_id", "customer_id"]
     public List<string> MissingParams { get; set; }    // []
     public bool CanProceed { get; set; }               // true
-    public string Reasoning { get; set; }              // "ORD-1 elde, sorgu net"
+    public string Reasoning { get; set; }              // "1 elde, sorgu net"
     public double Confidence { get; set; }             // 0.0-1.0
 }
 ```
@@ -123,7 +123,7 @@ Specialist görevi tamamlayamazsa, **başka bir agent öner**ebilir:
 ## Akış örneği
 
 ```
-Kullanıcı: "ORD-5'i nerede"
+Kullanıcı: "5'i nerede"
 PlanningAgent → OrderAgent
 
 OrderAgent.PreToolCheck:
@@ -131,13 +131,13 @@ OrderAgent.PreToolCheck:
   collected = ["order_id"]  ← session.CollectedInfo'dan
   canProceed = true
   ↓
-OrderAgent.CallTool(order_status_tool, order_id="ORD-5")
+OrderAgent.CallTool(order_status_tool, order_id="5")
   → ToolResult: Success, Status="Kargoda"
   ↓
 OrderAgent.PostToolReflection:
   taskComplete = true
   status = "done"
-  summary = "Sipariş ORD-5 'Kargoda' durumunda"
+  summary = "Sipariş 5 'Kargoda' durumunda"
   ↓
 ResponseAgent kullanıcıya yanıt verir
 ```
@@ -145,7 +145,7 @@ ResponseAgent kullanıcıya yanıt verir
 ### Handoff örneği
 
 ```
-Kullanıcı: "ORD-5 hâlâ gelmedi, iade istiyorum"
+Kullanıcı: "5 hâlâ gelmedi, iade istiyorum"
 PlanningAgent → OrderAgent  (yanlış routing)
 
 OrderAgent.PreToolCheck:

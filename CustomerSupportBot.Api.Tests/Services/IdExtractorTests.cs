@@ -15,62 +15,63 @@ public class IdExtractorTests
     }
 
     [Fact]
-    public void Extract_OrderIdHyphen_Extracted()
+    public void Extract_OrderContext_ExtractsOrderId()
     {
-        var ids = IdExtractor.Extract("ORD-123 siparişimin durumu nedir?");
-        ids.OrderId.Should().Be("ORD-123");
-    }
-
-    [Fact]
-    public void Extract_OrderIdLowercase_NormalizedToUpper()
-    {
-        var ids = IdExtractor.Extract("ord-5 nerede?");
-        ids.OrderId.Should().Be("ORD-5");
-    }
-
-    [Fact]
-    public void Extract_ComplaintId_Extracted()
-    {
-        var ids = IdExtractor.Extract("CMP-42 hakkında bilgi");
-        ids.ComplaintId.Should().Be("CMP-42");
-    }
-
-    [Fact]
-    public void Extract_CustomerPrefixId_Extracted()
-    {
-        var ids = IdExtractor.Extract("CUST-1990 müşterisiyim");
-        ids.CustomerId.Should().Be("CUST-1990");
-    }
-
-    [Fact]
-    public void Extract_NumericInLongSentence_NotConfusedWithCustomerId()
-    {
-        var ids = IdExtractor.Extract(
-            "2025 yılında bir sipariş verdim ve bu sipariş hala bana ulaşmadı, çok bekledim ne yapmalıyım?");
+        var ids = IdExtractor.Extract("sipariş 1030 nerede?");
+        ids.OrderId.Should().Be("1030");
         ids.CustomerId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Extract_ComplaintContext_ExtractsComplaintId()
+    {
+        var ids = IdExtractor.Extract("şikayet 1001 hakkında bilgi");
+        ids.ComplaintId.Should().Be("1001");
+    }
+
+    [Fact]
+    public void Extract_CustomerContext_ExtractsCustomerId()
+    {
+        var ids = IdExtractor.Extract("müşteri 1008 son siparişi");
+        ids.CustomerId.Should().Be("1008");
     }
 
     [Fact]
     public void Extract_ShortQuery_NumericTreatedAsCustomerId()
     {
-        var ids = IdExtractor.Extract("12345");
-        ids.CustomerId.Should().Be("12345");
+        var ids = IdExtractor.Extract("1008");
+        ids.CustomerId.Should().Be("1008");
     }
 
     [Fact]
-    public void Extract_OrderIdAndCustomerId_BothExtracted()
+    public void Extract_LongSentenceNoContext_ReturnsNoIds()
     {
-        var ids = IdExtractor.Extract("ORD-1 müşteri 1990");
-        ids.OrderId.Should().Be("ORD-1");
-        ids.CustomerId.Should().Be("1990");
+        var ids = IdExtractor.Extract(
+            "2025 yılında bir işlem yaptım ve hala bekliyorum ne yapabilirim acaba?");
+        ids.HasAny.Should().BeFalse();
     }
 
     [Fact]
-    public void Extract_NumberInOrderIdNotMisreadAsCustomerId()
+    public void Extract_OrderAndCustomerInSameText_BothExtracted()
     {
-        var ids = IdExtractor.Extract("ORD-12345 ne zaman gelir");
-        ids.OrderId.Should().Be("ORD-12345");
+        var ids = IdExtractor.Extract("sipariş 1030 müşteri 1027 bilgisi");
+        ids.OrderId.Should().Be("1030");
+        ids.CustomerId.Should().Be("1027");
+    }
+
+    [Fact]
+    public void Extract_NumberInShortOrderQuery_ExtractsOrderId()
+    {
+        var ids = IdExtractor.Extract("sipariş 1042 iptal");
+        ids.OrderId.Should().Be("1042");
         ids.CustomerId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Extract_NoFourDigitNumber_ReturnsNoIds()
+    {
+        var ids = IdExtractor.Extract("sipariş numaram var ama hatırlamıyorum");
+        ids.HasAny.Should().BeFalse();
     }
 
     [Fact]
@@ -82,16 +83,16 @@ public class IdExtractorTests
     [Fact]
     public void BuildHintMessage_OrderId_GeneratesPriorityRule()
     {
-        var hint = IdExtractor.BuildHintMessage(new ExtractedIds { OrderId = "ORD-1" });
+        var hint = IdExtractor.BuildHintMessage(new ExtractedIds { OrderId = "1030" });
         hint.Should().NotBeNull();
-        hint.Should().Contain("ORD-1");
+        hint.Should().Contain("1030");
         hint.Should().Contain("order_status_tool");
     }
 
     [Fact]
     public void BuildHintMessage_OnlyCustomerId_GeneratesLastOrderHint()
     {
-        var hint = IdExtractor.BuildHintMessage(new ExtractedIds { CustomerId = "CUST-1" });
+        var hint = IdExtractor.BuildHintMessage(new ExtractedIds { CustomerId = "1008" });
         hint.Should().NotBeNull();
         hint.Should().Contain("get_last_order_tool");
     }

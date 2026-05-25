@@ -47,8 +47,8 @@ Task<string?> RenderAsync(string relativePath, Dictionary<string, string> vars, 
 
 ```
 "Merhaba {{NAME}}, sipariş {{ORDER_ID}}"
-+ vars: { "NAME": "Ahmet", "ORDER_ID": "ORD-123" }
-→ "Merhaba Ahmet, sipariş ORD-123"
++ vars: { "NAME": "Ahmet", "ORDER_ID": "123" }
+→ "Merhaba Ahmet, sipariş 123"
 ```
 
 ### Thread safety

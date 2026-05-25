@@ -47,13 +47,13 @@ public class ReasoningMessageBuilderTests
     {
         var builder = new ReasoningMessageBuilder(_prompts);
         var session = new AgentSession { SessionId = "s1" };
-        session.State.CustomerId = "CUST-1990";
+        session.State.CustomerId = "1027";
         var verified = new VerifiedEntities
         {
-            CustomerId = new VerifiedEntity { Value = "CUST-1990", Verification = EntityVerification.Verified }
+            CustomerId = new VerifiedEntity { Value = "1027", Verification = EntityVerification.Verified }
         };
 
         var msgs = builder.Build("soru", session, null, verified);
-        msgs[0].Text.Should().Contain("CUST-1990");
+        msgs[0].Text.Should().Contain("1027");
     }
 }

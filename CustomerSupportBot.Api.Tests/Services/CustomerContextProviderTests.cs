@@ -1,14 +1,18 @@
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Application.Services.Providers;
-using CustomerSupportBot.Api.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Infrastructure;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 
+[Collection("PostgresCatalog")]
 public class CustomerContextProviderTests
 {
-    private readonly CustomerContextProvider _provider = new(
-        TestFactory.CreateOrders(),
-        TestFactory.CreateComplaints());
+    private readonly CustomerContextProvider _provider;
+
+    public CustomerContextProviderTests(PostgresCatalogFixture fixture)
+    {
+        _provider = new CustomerContextProvider(fixture.OrderRepo, fixture.ComplaintRepo);
+    }
 
     [Fact]
     public void NameAndOrder_AreCorrect()
@@ -29,10 +33,10 @@ public class CustomerContextProviderTests
     public async Task KnownCustomer_IncludesOrdersAndComplaints()
     {
         var session = new AgentSession { SessionId = "s1" };
-        session.State.CustomerId = "CUST-1990";
+        session.State.CustomerId = "1008";
         var ctx = await _provider.GetContextAsync(session);
         ctx.Should().NotBeNull();
-        ctx.Should().Contain("CUST-1990");
+        ctx.Should().Contain("1008");
         ctx.Should().Contain("Toplam sipariş");
     }
 
@@ -40,7 +44,7 @@ public class CustomerContextProviderTests
     public async Task UnknownCustomer_NoOrdersBlock()
     {
         var session = new AgentSession { SessionId = "s1" };
-        session.State.CustomerId = "CUST-NOTEXIST";
+        session.State.CustomerId = "9999";
         var ctx = await _provider.GetContextAsync(session);
         ctx.Should().NotBeNull();
         ctx.Should().Contain("bulunamad");

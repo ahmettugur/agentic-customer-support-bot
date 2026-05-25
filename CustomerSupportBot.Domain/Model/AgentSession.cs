@@ -22,7 +22,7 @@ public class AgentSession
 /// </summary>
 public class SessionState
 {
-    /// <summary>Tanımlanan müşteri kimlik numarası (ör: "CUST-001").</summary>
+    /// <summary>Tanımlanan müşteri kimlik numarası (ör: "1001").</summary>
     public string? CustomerId { get; set; }
 
     /// <summary>Mevcut kullanıcı niyeti (ör: "sipariş_sorgulama", "ürün_bilgisi").</summary>

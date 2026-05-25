@@ -104,7 +104,7 @@ Parser'lar **defensive** yazılmıştır — bozuk girdi exception fırlatmaz, e
 
 Eski format:
 ```json
-"steps": ["Kullanıcı sipariş soruyor", "ORD-1'i bul"]
+"steps": ["Kullanıcı sipariş soruyor", "1'i bul"]
 ```
 
 Yeni format:
@@ -149,7 +149,7 @@ Specialist tool çağırmadan **önce** ne biliyor?
   "collectedParams": ["order_id"],
   "missingParams": [],
   "canProceed": true,
-  "reasoning": "ORD-1 mevcut, sorgu net",
+  "reasoning": "1 mevcut, sorgu net",
   "confidence": 0.9
 }
 ```
@@ -164,7 +164,7 @@ Specialist tool çağırdıktan **sonra** sonucu yorumlar:
   "status": "done",
   "handoffSuggestion": null,
   "missingContext": [],
-  "summary": "Sipariş ORD-1 'Kargoda' durumunda"
+  "summary": "Sipariş 1 'Kargoda' durumunda"
 }
 ```
 

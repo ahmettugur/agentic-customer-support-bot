@@ -25,7 +25,7 @@ Public chat — JWT yok, sadece IP-based rate limit.
 POST /chat/
 Content-Type: application/json
 
-{ "sessionId": "sess-123", "message": "ORD-5 nerede" }
+{ "sessionId": "sess-123", "message": "5 nerede" }
 ```
 
 **Akış:**
@@ -45,7 +45,7 @@ Content-Type: application/json
 ```json
 {
   "sessionId": "sess-123",
-  "reply": "Sipariş ORD-5 'Kargoda' durumunda...",
+  "reply": "Sipariş 5 'Kargoda' durumunda...",
   "traceId": "trace-abc"
 }
 ```
@@ -71,7 +71,7 @@ POST /chat/stream
 Content-Type: application/json
 Accept: text/event-stream
 
-{ "sessionId": "sess-123", "message": "ORD-5 nerede" }
+{ "sessionId": "sess-123", "message": "5 nerede" }
 ```
 
 **SSE event sırası (örnek):**
@@ -90,13 +90,13 @@ event: agentStarted
 data: { "name": "OrderAgent" }
 
 event: toolCall
-data: { "name": "order_status_tool", "args": { "order_id": "ORD-5" } }
+data: { "name": "order_status_tool", "args": { "order_id": "5" } }
 
 event: toolResult
 data: { "success": true, "data": { "status": "Kargoda" } }
 
 event: chunk
-data: { "text": "Sipariş ORD-5 " }
+data: { "text": "Sipariş 5 " }
 
 event: chunk
 data: { "text": "kargoda durumda..." }
@@ -270,7 +270,7 @@ GET /sessions/sess-123/messages
 [
   { "role": "user", "text": "Merhaba" },
   { "role": "bot", "text": "Merhaba, size nasıl yardımcı olabilirim?" },
-  { "role": "user", "text": "ORD-5 nerede" },
+  { "role": "user", "text": "5 nerede" },
   // ...
 ]
 ```
@@ -296,7 +296,7 @@ GET /sessions/sess-123/state
   "createdAt": "2026-05-24T10:00:00Z",
   "lastActivity": "2026-05-24T10:15:00Z",
   "state": {
-    "customerId": "CUST-1990",
+    "customerId": "1990",
     "currentIntent": "OrderInquiry",
     "phase": "Action",
     "turnCount": 5,
@@ -304,8 +304,8 @@ GET /sessions/sess-123/state
     "sentimentScore": 0.5,
     "consecutiveNegativeTurns": 0,
     "collectedInfo": {
-      "order_id": "ORD-5",
-      "customer_id": "CUST-1990"
+      "order_id": "5",
+      "customer_id": "1990"
     }
   }
 }

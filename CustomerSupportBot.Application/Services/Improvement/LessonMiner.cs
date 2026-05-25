@@ -175,7 +175,7 @@ public sealed class LessonMiner
         sb.AppendLine("Her trace'i analiz et ve sistemin gelecekte daha iyi olabilmesi için somut, uygulanabilir DERS'ler çıkar.");
         sb.AppendLine();
         sb.AppendLine("Yanıtın SADECE şu şemada JSON olmalı:");
-        sb.AppendLine("""{ "lessons": [ { "title": "...", "lesson": "X durumunda Y yap", "observation": "...", "suggestedAgent": "ProductInquiryAgent|null" } ] }""");
+        sb.AppendLine("""{ "lessons": [ { "title": "...", "lesson": "X durumunda Y yap", "observation": "...", "suggestedAgent": "ProductAgent|null" } ] }""");
         sb.AppendLine();
         sb.AppendLine("--- TRACE'LER ---");
 

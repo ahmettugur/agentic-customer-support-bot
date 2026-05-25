@@ -1,18 +1,24 @@
 // Tests/Services/EntityVerifierTests.cs
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 using SessionState = CustomerSupportBot.Domain.Model.SessionState;
 
 namespace CustomerSupportBot.Api.Tests.Services;
 
+[Collection("PostgresCatalog")]
 public class EntityVerifierTests
 {
-    private readonly EntityVerifier _verifier = new(
-        TestFactory.CreateOrders(),
-        TestFactory.CreateComplaints(),
-        NullLogger<EntityVerifier>.Instance);
+    private readonly EntityVerifier _verifier;
+
+    public EntityVerifierTests(PostgresCatalogFixture fixture)
+    {
+        _verifier = new EntityVerifier(
+            fixture.OrderRepo,
+            fixture.ComplaintRepo,
+            NullLogger<EntityVerifier>.Instance);
+    }
 
     private static AgentSession EmptySession() => new()
     {
@@ -30,7 +36,7 @@ public class EntityVerifierTests
     [Fact]
     public void Verify_KnownOrderId_VerifiedFromDb()
     {
-        var result = _verifier.Verify("ORD-1 nerede?", EmptySession());
+        var result = _verifier.Verify("sipariş 1030 nerede?", EmptySession());
         result.OrderId.Should().NotBeNull();
         result.OrderId!.Verification.Should().Be(EntityVerification.Verified);
         result.OrderId.Source.Should().Be(EntitySource.Query);
@@ -39,7 +45,7 @@ public class EntityVerifierTests
     [Fact]
     public void Verify_UnknownOrderId_NotFoundInDb()
     {
-        var result = _verifier.Verify("ORD-9999 nerede?", EmptySession());
+        var result = _verifier.Verify("sipariş 9999 nerede?", EmptySession());
         result.OrderId.Should().NotBeNull();
         result.OrderId!.Verification.Should().Be(EntityVerification.NotFoundInDb);
     }
@@ -47,7 +53,7 @@ public class EntityVerifierTests
     [Fact]
     public void Verify_KnownCustomerWithVerified_DerivesLastOrder()
     {
-        var result = _verifier.Verify("CUST-1990 son sipari�im?", EmptySession());
+        var result = _verifier.Verify("müşteri 1008 son siparişim?", EmptySession());
         result.CustomerId.Should().NotBeNull();
         result.CustomerId!.Verification.Should().Be(EntityVerification.Verified);
         result.DerivedLastOrderId.Should().NotBeNullOrEmpty();
@@ -58,9 +64,9 @@ public class EntityVerifierTests
     public void Verify_CustomerFromSession_UsesSessionState()
     {
         var session = EmptySession();
-        session.State.CustomerId = "CUST-1990";
+        session.State.CustomerId = "1008";
 
-        var result = _verifier.Verify("sipari�lerim?", session);
+        var result = _verifier.Verify("siparişlerim?", session);
 
         result.CustomerId.Should().NotBeNull();
         result.CustomerId!.Source.Should().Be(EntitySource.SessionState);
@@ -72,10 +78,10 @@ public class EntityVerifierTests
         var session = EmptySession();
         var history = new List<ConversationMessage>
         {
-            new(ConversationRoles.User, "ben CUST-1990 müşteriyim")
+            new(ConversationRoles.User, "müşteri numaram 1008")
         };
 
-        var result = _verifier.Verify("sipari�im?", session, history);
+        var result = _verifier.Verify("siparişim?", session, history);
 
         result.CustomerId.Should().NotBeNull();
         result.CustomerId!.Source.Should().Be(EntitySource.History);
@@ -94,13 +100,13 @@ public class EntityVerifierTests
         {
             OrderId = new VerifiedEntity
             {
-                Value = "ORD-1",
+                Value = "1030",
                 Verification = EntityVerification.Verified,
                 Source = EntitySource.Query
             }
         };
         var block = EntityVerifier.BuildPromptBlock(verified);
-        block.Should().Contain("ORD-1");
+        block.Should().Contain("1030");
         block.Should().Contain("VERIFIED");
     }
 
@@ -111,7 +117,7 @@ public class EntityVerifierTests
         {
             OrderId = new VerifiedEntity
             {
-                Value = "ORD-9999",
+                Value = "9999",
                 Verification = EntityVerification.NotFoundInDb
             }
         };

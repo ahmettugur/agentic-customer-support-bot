@@ -178,7 +178,7 @@ public enum ConfidenceLevel { Low, Medium, High }
 ## SubTask (Compound Decomposition)
 
 Bazı mesajlar **birden fazla iş** içerir:
-> "Sipariş ORD-1'imi sor, ardından şikayet açmak istiyorum"
+> "Sipariş 1'imi sor, ardından şikayet açmak istiyorum"
 
 ReasoningAgent bunu parçalara böler:
 
@@ -201,9 +201,9 @@ public sealed class SubTask
   {
     "order": 1,
     "intent": "OrderInquiry",
-    "description": "ORD-1 siparişinin durumunu sor",
+    "description": "1 siparişinin durumunu sor",
     "targetAgent": "OrderAgent",
-    "entities": { "order_id": "ORD-1" },
+    "entities": { "order_id": "1" },
     "dependencies": []
   },
   {

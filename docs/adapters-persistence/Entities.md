@@ -275,7 +275,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 | `Version` | `int` | Upsert'te otomatik artırılır |
 | `IsActive` | `bool` | |
 | `TriggerKeywordsJson` | `jsonb` | Tetikleyici anahtar kelimeler |
-| `InputPatternsJson` | `jsonb` | `{"orderId": "\\b(ORD-\\d+)\\b"}` |
+| `InputPatternsJson` | `jsonb` | `{"orderId": "\\b(\\d{4,})\\b"}` |
 | `StepsJson` | `jsonb` | `List<WorkflowStep>` |
 | `CreatedAt` | `timestamptz` | |
 | `UpdatedAt` | `timestamptz?` | |

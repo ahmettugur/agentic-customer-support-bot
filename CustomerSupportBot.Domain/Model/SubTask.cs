@@ -1,6 +1,6 @@
 // Models/SubTask.cs
 // Sub-task decomposition.
-// Compound query'lerde (ör. "ORD-1 nerede ve ORD-2 için şikayet açmak istiyorum")
+// Compound query'lerde (ör. "1030 siparişi nerede ve 1042 için şikayet açmak istiyorum")
 // Reasoning modelinin query'yi birden fazla alt göreve ayırmasını sağlar. Her alt
 // Görev kendi intent + targetAgent + entities ile yapılandırılmış olarak saklanır.
 //
@@ -37,7 +37,7 @@ public class SubTask
     public string TargetAgent { get; set; } = "";
 
     /// <summary>
-    /// Bu alt görevin ihtiyacı olan entity'ler (ör. { "order_id": "ORD-1" }).
+    /// Bu alt görevin ihtiyacı olan entity'ler (ör. { "order_id": "1030" }).
     /// Reasoning tarafı VerifiedEntities'ten türetir.
     /// </summary>
     public Dictionary<string, string> Entities { get; set; } = new();

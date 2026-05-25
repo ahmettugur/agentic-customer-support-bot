@@ -7,4 +7,4 @@ namespace CustomerSupportBot.Domain.Model;
 /// <summary>
 /// Ürün domain modeli.
 /// </summary>
-public record ProductInfo(decimal Price, int Stock, string Name = "");
+public record ProductInfo(decimal Price, int Stock, string Name = "", string Category = "");

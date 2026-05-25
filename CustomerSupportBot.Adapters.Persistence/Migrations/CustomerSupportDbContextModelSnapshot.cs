@@ -8,7 +8,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace CustomerSupportBot.Adapters.Persistence.EfCore.Migrations
+namespace CustomerSupportBot.Adapters.Persistence.Migrations
 {
     [DbContext(typeof(CustomerSupportDbContext))]
     partial class CustomerSupportDbContextModelSnapshot : ModelSnapshot
@@ -17,7 +17,7 @@ namespace CustomerSupportBot.Adapters.Persistence.EfCore.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.8")
+                .HasAnnotation("ProductVersion", "10.0.4")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -212,6 +212,168 @@ namespace CustomerSupportBot.Adapters.Persistence.EfCore.Migrations
                         .HasDatabaseName("ux_users_username");
 
                     b.ToTable("users", "auth");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.CategoryEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("categories", "catalog");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.ComplaintEntity", b =>
+                {
+                    b.Property<long>("Code")
+                        .HasColumnType("bigint")
+                        .HasColumnName("code");
+
+                    b.Property<string>("Complaint")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("complaint");
+
+                    b.Property<long>("CustomerId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("customer_id");
+
+                    b.Property<long>("OrderId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Code");
+
+                    b.HasIndex("CustomerId")
+                        .HasDatabaseName("ix_complaints_customer_id");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_complaints_order_id");
+
+                    b.ToTable("complaints", "catalog");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.OrderDetailEntity", b =>
+                {
+                    b.Property<long>("OrderCode")
+                        .HasColumnType("bigint")
+                        .HasColumnName("order_code");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.HasKey("OrderCode", "ProductId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("order_details", "catalog");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.OrderEntity", b =>
+                {
+                    b.Property<long>("Code")
+                        .HasColumnType("bigint")
+                        .HasColumnName("code");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("cancel_reason");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<long>("CustomerId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("customer_id");
+
+                    b.Property<DateTime>("OrderDate")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("order_date");
+
+                    b.Property<string>("ReturnReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("return_reason");
+
+                    b.Property<DateTime?>("ReturnRequestedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("return_requested_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Code");
+
+                    b.HasIndex("CustomerId")
+                        .HasDatabaseName("ix_orders_customer_id");
+
+                    b.ToTable("orders", "catalog");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.ProductEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("integer")
+                        .HasColumnName("category_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("price");
+
+                    b.Property<int>("Stock")
+                        .HasColumnType("integer")
+                        .HasColumnName("stock");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_products_name");
+
+                    b.ToTable("products", "catalog");
                 });
 
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat.ChatBridgeMessageEntity", b =>
@@ -963,6 +1125,36 @@ namespace CustomerSupportBot.Adapters.Persistence.EfCore.Migrations
                         .HasConstraintName("fk_refresh_tokens_user");
                 });
 
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.OrderDetailEntity", b =>
+                {
+                    b.HasOne("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.OrderEntity", "Order")
+                        .WithMany("Details")
+                        .HasForeignKey("OrderCode")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.ProductEntity", "Product")
+                        .WithMany("OrderDetails")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.ProductEntity", b =>
+                {
+                    b.HasOne("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.CategoryEntity", "Category")
+                        .WithMany("Products")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+                });
+
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat.MessageEntity", b =>
                 {
                     b.HasOne("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat.SessionEntity", null)
@@ -971,6 +1163,21 @@ namespace CustomerSupportBot.Adapters.Persistence.EfCore.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_messages_session");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.CategoryEntity", b =>
+                {
+                    b.Navigation("Products");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.OrderEntity", b =>
+                {
+                    b.Navigation("Details");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.ProductEntity", b =>
+                {
+                    b.Navigation("OrderDetails");
                 });
 #pragma warning restore 612, 618
         }

@@ -33,7 +33,7 @@ Her katman **farklı bir reasoning ihtiyacına** karşılık gelir — biri olma
 | **Self-Reflection / Sanity Check** | `ReasoningAgent` → `SanityIssues[]` | LLM kendi tutarsızlığını fark etsin |
 | **Confidence-Aware Routing** | `PlanningAgent` → `IntentConfidence` threshold | Belirsiz durumda specialist çağırma, soru sor |
 | **ReAct (Reason + Act)** | Specialist agents → `PreToolCheck` + Tool + `PostToolReflection` | Tool çağrısından önce doğrula, sonra yorumla |
-| **Decomposition** | `ReasoningResult.SubTasks[]` | Compound query'leri parçala (örn. "ORD-1 ve ORD-2") |
+| **Decomposition** | `ReasoningResult.SubTasks[]` | Compound query'leri parçala (örn. "1 ve 2") |
 | **Grounding** | `ReasoningStep.Grounding` | Her step'in kaynağı (regex/DB/history/assumption) |
 | **Dynamic Handoff** | `PostToolReflection.HandoffSuggestion` | Yanlış agent seçildiyse runtime'da düzelt |
 | **Replan** | `ReplanService` + `ChatSessionState.Replan` | Admin/agent tekrar düşünme talep eder |
@@ -49,14 +49,14 @@ Her katman **farklı bir reasoning ihtiyacına** karşılık gelir — biri olma
 ### Çözüm: LLM öncesi deterministic preprocessing
 
 ```
-Kullanıcı: "ORD-5 nerede"
+Kullanıcı: "5 nerede"
    ↓
 IdExtractor.Extract(query)                          ← Regex (mikrosaniye)
-   → ExtractedIds { OrderId = "ORD-5" }
+   → ExtractedIds { OrderId = "5" }
    ↓
 IdExtractor.BuildHintMessage(ids)                   ← Prompt'a inject
    → "[ID İPUCU]
-       - order_id: ORD-5
+       - order_id: 5
        [TOOL ÖNCELİĞİ]
        order_id mevcutsa order_status_tool kullan..."
    ↓
@@ -87,11 +87,11 @@ Aynı pattern `SessionStateExtractor`'da: turn count, intent keyword match, sent
 
 ```json
 {
-  "analysis": "Kullanıcı ORD-5 siparişinin durumunu soruyor",
+  "analysis": "Kullanıcı 5 siparişinin durumunu soruyor",
   "steps": [
     {
       "order": 1,
-      "description": "Kullanıcı mesajında ORD-5 ID'si tespit edildi",
+      "description": "Kullanıcı mesajında 5 ID'si tespit edildi",
       "action": "extract",
       "grounding": "regex",
       "confidence": 0.95
@@ -138,7 +138,7 @@ Tüm step'ler grounding=assumption → LLM havadan üretti → güvenilmez
 
 **Problem:** LLM kendiyle tutarsız çıkarsayabilir:
 - `confidence: 0.95` ama aynı zamanda `needsClarification: true` (çelişki)
-- `requiredInfo: ["order_id"]` derken `collectedInfo.order_id = "ORD-5"` (gereksiz tekrar)
+- `requiredInfo: ["order_id"]` derken `collectedInfo.order_id = "5"` (gereksiz tekrar)
 - Intent declared "Complaint" ama steps "OrderInquiry" gibi (uyumsuzluk)
 
 ### Çözüm: SanityIssues array
@@ -187,7 +187,7 @@ PlanningAgent çıktısı:
   0.45 < 0.7 → specialist çağırma
        ↓
   NeedsClarification = true
-  ClarificationQuestion = "Siparişin numarası ORD-X formatında mı?"
+  ClarificationQuestion = "Siparişin numarası 1030 formatında mı?"
        ↓
   ResponseAgent kullanıcıya soru sorar
        ↓
@@ -231,7 +231,7 @@ Klasik **ReAct pattern**: agent önce düşünür, sonra hareket eder, sonra son
   "collectedParams": ["order_id"],
   "missingParams": [],
   "canProceed": true,
-  "reasoning": "ORD-5 mevcut, sorgu net",
+  "reasoning": "5 mevcut, sorgu net",
   "confidence": 0.9
 }
 ```
@@ -241,7 +241,7 @@ Klasik **ReAct pattern**: agent önce düşünür, sonra hareket eder, sonra son
 ### Faz 2: Tool call
 
 ```
-order_status_tool(order_id = "ORD-5")
+order_status_tool(order_id = "5")
    → ToolResult.Ok(data = { status: "Kargoda" })
 ```
 
@@ -251,7 +251,7 @@ order_status_tool(order_id = "ORD-5")
 {
   "taskComplete": true,
   "status": "done",
-  "summary": "Sipariş ORD-5 'Kargoda' durumunda",
+  "summary": "Sipariş 5 'Kargoda' durumunda",
   "handoffSuggestion": null
 }
 ```
@@ -272,7 +272,7 @@ Eğer task tamamlanamadıysa `handoffSuggestion = "ComplaintAgent"` ile başka a
 
 **Problem:** Kullanıcı tek mesajda **birden fazla iş** ister:
 
-> "ORD-1'imi sor, ardından şikayet açmak istiyorum"
+> "1'imi sor, ardından şikayet açmak istiyorum"
 
 Tek agent bunu yapamaz — iki ayrı domain (sorgu + şikayet).
 
@@ -286,9 +286,9 @@ ReasoningAgent compound query'i **alt görevlere** böler:
     {
       "order": 1,
       "intent": "OrderInquiry",
-      "description": "ORD-1 siparişinin durumunu sor",
+      "description": "1 siparişinin durumunu sor",
       "targetAgent": "OrderAgent",
-      "entities": { "order_id": "ORD-1" },
+      "entities": { "order_id": "1" },
       "dependencies": []
     },
     {
@@ -313,7 +313,7 @@ ReasoningAgent compound query'i **alt görevlere** böler:
 | Yan-etkili (OrderPlacement, Complaint) | **Sıralı** — HITL gate'i bloklar |
 
 ```
-Yan-etkisiz query: "ORD-1 ve ORD-2 durumu"
+Yan-etkisiz query: "1 ve 2 durumu"
   → 2 paralel subtask → p50 latency ÷ 2
 ```
 
@@ -355,7 +355,7 @@ SanityIssues += {
 
 **Problem:** PlanningAgent yanlış agent seçer:
 
-> Kullanıcı: "ORD-5 gelmedi, iade istiyorum"  
+> Kullanıcı: "5 gelmedi, iade istiyorum"  
 > Planning: → OrderAgent  
 > OrderAgent tool çağırır → "kargoda" → ama kullanıcı **iade** istiyor
 
@@ -470,11 +470,11 @@ Markdown dosyaları `FileSystemPromptRepository` startup'ta cache'ler. Prompt de
 
 ## Akış: Tam reasoning pipeline (örnek)
 
-Kullanıcı: **"ORD-5 ve ORD-7 durumu nedir?"**
+Kullanıcı: **"5 ve 7 durumu nedir?"**
 
 ```
 [1] Deterministic preprocessing
-    IdExtractor → { OrderId: "ORD-5" } (ilki)
+    IdExtractor → { OrderId: "5" } (ilki)
     SessionStateExtractor → turnCount++, intent keyword: "durum" → OrderInquiry
 
 [2] ReasoningAgent (CoT + decomposition)
@@ -485,8 +485,8 @@ Kullanıcı: **"ORD-5 ve ORD-7 durumu nedir?"**
         { action: "route", grounding: "session_state", confidence: 0.9 }
       ]
       subTasks: [
-        { order: 1, intent: OrderInquiry, entities: { order_id: ORD-5 } },
-        { order: 2, intent: OrderInquiry, entities: { order_id: ORD-7 } }
+        { order: 1, intent: OrderInquiry, entities: { order_id: 5 } },
+        { order: 2, intent: OrderInquiry, entities: { order_id: 7 } }
       ]
       confidenceScore: 0.92
       sanityIssues: []   ← temiz
@@ -498,17 +498,17 @@ Kullanıcı: **"ORD-5 ve ORD-7 durumu nedir?"**
 [4] Specialist Agents (paralel — yan-etkisiz)
     OrderAgent #1:
       PreToolCheck → canProceed: true
-      Tool: order_status_tool(ORD-5) → "Kargoda"
+      Tool: order_status_tool(5) → "Kargoda"
       PostToolReflection → status: done
 
     OrderAgent #2:
       PreToolCheck → canProceed: true
-      Tool: order_status_tool(ORD-7) → "Teslim Edildi"
+      Tool: order_status_tool(7) → "Teslim Edildi"
       PostToolReflection → status: done
 
 [5] ResponseAgent (synthesis)
     Input: 2 subtask sonucu
-    Output: "Sipariş ORD-5 kargoda, ORD-7 ise teslim edildi."
+    Output: "Sipariş 5 kargoda, 7 ise teslim edildi."
 
 [6] Trace persistence
     ReasoningTrace { steps, agents, tools, duration } → DB
@@ -533,12 +533,12 @@ Kullanıcı: **"ORD-5 ve ORD-7 durumu nedir?"**
 
 ## Örnek Trace — Gerçek Bir Çalışmadan
 
-Aşağıdaki trace, S05 senaryosu (`"CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum"`) için sistemin **fiili davranışı**dır. `ReasoningTrace` formatında, HITL approval ile şikayet kaydı akışını gösterir.
+Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açmak istiyorum"`) için sistemin **fiili davranışı**dır. `ReasoningTrace` formatında, HITL approval ile şikayet kaydı akışını gösterir.
 
 ### Kullanıcı mesajı
 
 ```
-CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum
+001 1 için hasarlı ürün şikayeti açmak istiyorum
 ```
 
 ### Tam trace (DB'den okunmuş)
@@ -547,7 +547,7 @@ CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum
 {
   "traceId": "trace_01HG8K2P3M9X4N7B5R",
   "sessionId": "sess_8f3c1a2e",
-  "userQuery": "CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum",
+  "userQuery": "001 1 için hasarlı ürün şikayeti açmak istiyorum",
   "startedAt": "2026-05-24T10:00:12.450Z",
   "completedAt": "2026-05-24T10:00:18.927Z",
   "durationMs": 6477,
@@ -558,13 +558,13 @@ CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum
   // ─── 1. Deterministic preprocessing (LLM'siz) ───
   // IdExtractor + SessionStateExtractor → reasoning öncesi
   // Bu adım trace'e ayrı yazılmaz ama session.state'e yansır:
-  //   collectedInfo: { customer_id: "CUST-001", order_id: "ORD-1" }
+  //   collectedInfo: { customer_id: "001", order_id: "1" }
   //   currentIntent: "Complaint"    (keyword: "şikayet")
   //   phase: "Action"
 
   // ─── 2. ReasoningAgent (Chain-of-Thought) ───
   "reasoning": {
-    "analysis": "Müşteri CUST-001, ORD-1 siparişi için 'hasarlı ürün' şikayeti açmak istiyor. Tüm gerekli ID'ler net biçimde verilmiş, niyet açık.",
+    "analysis": "Müşteri 001, 1 siparişi için 'hasarlı ürün' şikayeti açmak istiyor. Tüm gerekli ID'ler net biçimde verilmiş, niyet açık.",
     "intent": "Complaint",
     "confidence": "yüksek",
     "confidenceScore": 0.95,
@@ -572,7 +572,7 @@ CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum
     "steps": [
       {
         "order": 1,
-        "description": "Kullanıcı mesajında CUST-001 ve ORD-1 ID'leri regex ile tespit edildi",
+        "description": "Kullanıcı mesajında 001 ve 1 ID'leri regex ile tespit edildi",
         "action": "extract",
         "grounding": "regex",
         "confidence": 0.99
@@ -617,10 +617,10 @@ CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum
     "rationale": "Müşteri açıkça şikayet talebinde bulunuyor; ID'ler eksiksiz; alternatif agent gerekmiyor.",
     "alternativesRejected": [
       { "agent": "OrderAgent",          "reason": "Kullanıcı sipariş durumu sormuyor; iade/şikayet niyeti var" },
-      { "agent": "ProductInquiryAgent", "reason": "Ürün bilgisi sorulmuyor" }
+      { "agent": "ProductAgent", "reason": "Ürün bilgisi sorulmuyor" }
     ],
     "needsClarification": false,
-    "taskDescription": "CUST-001 müşterisi için ORD-1 siparişinde 'hasarlı ürün' şikayeti kaydet"
+    "taskDescription": "001 müşterisi için 1 siparişinde 'hasarlı ürün' şikayeti kaydet"
   },
 
   // ─── 4. Specialist: ComplaintAgent ───
@@ -643,7 +643,7 @@ CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum
         "statusEnum": "Done",
         "handoffSuggestion": null,
         "missingContext": [],
-        "summary": "Şikayet CMP-7 olarak kaydedildi (CUST-001 / ORD-1)"
+        "summary": "Şikayet 7 olarak kaydedildi (001 / 1)"
       }
     }
   ],
@@ -664,10 +664,10 @@ CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum
       "toolName": "complaint_registration_tool",
       "invokedAt": "2026-05-24T10:00:17.860Z",
       "agentName": "ComplaintAgent",
-      "parametersSummary": "{ customer_id: \"CUST-001\", order_id: \"ORD-1\", description: \"hasarlı ürün\" }",
-      "resultSummary": "Success — { complaint_id: \"CMP-7\", status: \"Beklemede\" }",
+      "parametersSummary": "{ customer_id: \"001\", order_id: \"1\", description: \"hasarlı ürün\" }",
+      "resultSummary": "Success — { complaint_id: \"7\", status: \"Beklemede\" }",
       "success": true,
-      "signature": "complaint_registration:CUST-001:ORD-1:hasarli_urun"
+      "signature": "complaint_registration:001:1:hasarli_urun"
     }
   ],
 
@@ -677,7 +677,7 @@ CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum
   //   3.2 saniye sonra admin "Onayla" tıkladı
   //   Sonra tool çağrıldı ve sonuç döndü.
 
-  "finalResponse": "Şikayetiniz başarıyla kaydedildi. Şikayet numaranız: **CMP-7**. Müşteri hizmetleri ekibimiz en kısa sürede sizinle iletişime geçecektir."
+  "finalResponse": "Şikayetiniz başarıyla kaydedildi. Şikayet numaranız: **7**. Müşteri hizmetleri ekibimiz en kısa sürede sizinle iletişime geçecektir."
 }
 ```
 
@@ -687,14 +687,14 @@ CUST-001 ORD-1 için hasarlı ürün şikayeti açmak istiyorum
 
 | Pattern | Trace'te görünüm |
 |---|---|
-| **Deterministic preprocessing** | `regex` grounding'li step #1 — `CUST-001`, `ORD-1` LLM'siz çıkarıldı |
+| **Deterministic preprocessing** | `regex` grounding'li step #1 — `001`, `1` LLM'siz çıkarıldı |
 | **Chain-of-Thought** | `reasoning.steps[]` — 4 adım, her biri action + grounding + confidence ile |
 | **Sanity check** | `sanityIssues: []` — bu örnekte temiz; uyumsuzluk olsaydı Replan tetiklenirdi |
 | **Confidence-aware routing** | `intentConfidence: 0.95` > 0.7 threshold → clarification yok, direkt specialist |
 | **Grounding** | `regex` (×2), `session_state`, `derived` — sadece 1 step `derived`, çoğunluk delilli |
 | **ReAct (3 faz)** | ComplaintAgent: `preToolCheck.canProceed=true` → tool call → `postToolReflection.status=done` |
 | **HITL approval gate** | `complaint_registration_tool` high-risk → 3.2 saniye admin onayı beklendi |
-| **Alternatives rejected** | Planning OrderAgent ve ProductInquiryAgent'ı **gerekçeli** elemiş (audit) |
+| **Alternatives rejected** | Planning OrderAgent ve ProductAgent'ı **gerekçeli** elemiş (audit) |
 | **No handoff** | `handoffSuggestion: null` — doğru agent seçildi, dynamic re-route gerekmedi |
 | **Sentiment tracking** | `sentimentScore: 0.35` — negative (şikayet), `consecutiveNegativeTurns++` |
 

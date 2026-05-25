@@ -2,7 +2,6 @@
 // Oturum durumu çıkarma mantığı — hem InMemory hem Postgres adaptörleri tarafından kullanılır.
 // Tekrarlanan intent/sentiment/phase algılama kodunu tek doğruluk kaynağı olarak merkezîleştirir.
 
-using System.Text.RegularExpressions;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Domain.Services;
@@ -11,7 +10,7 @@ namespace CustomerSupportBot.Domain.Services;
 /// Kullanıcı ve bot mesajlarından oturum durumunu (intent, sentiment, phase, ID'ler) çıkarır.
 /// Saf domain servisi — hiçbir infrastructure bağımlılığı yoktur.
 /// </summary>
-public static partial class SessionStateExtractor
+public static class SessionStateExtractor
 {
     /// <summary>
     /// Bir konuşma turundaki user ve bot mesajlarından state bilgilerini günceller.
@@ -20,27 +19,19 @@ public static partial class SessionStateExtractor
     {
         state.TurnCount++;
 
-        // Müşteri kimlik numarası çıkarma (CUST-XXX formatı)
-        var custMatch = CustomerIdPattern().Match(userMessage);
-        if (custMatch.Success)
+        // ID çıkarma — IdExtractor üzerinden (Türkçe bağlam + 4+ haneli rakam)
+        var extracted = IdExtractor.Extract(userMessage);
+        if (!string.IsNullOrEmpty(extracted.CustomerId))
+            state.CustomerId = extracted.CustomerId;
+        else if (state.CustomerId is null)
         {
-            state.CustomerId = custMatch.Value;
-        }
-        else
-        {
-            custMatch = CustomerIdPattern().Match(botResponse);
-            if (custMatch.Success && state.CustomerId is null)
-            {
-                state.CustomerId = custMatch.Value;
-            }
+            var fromBot = IdExtractor.Extract(botResponse);
+            if (!string.IsNullOrEmpty(fromBot.CustomerId))
+                state.CustomerId = fromBot.CustomerId;
         }
 
-        // Sipariş numarası çıkarma (ORD-XXX formatı)
-        var orderMatch = OrderIdPattern().Match(userMessage);
-        if (orderMatch.Success)
-        {
-            state.CollectedInfo["LastMentionedOrderId"] = orderMatch.Value;
-        }
+        if (!string.IsNullOrEmpty(extracted.OrderId))
+            state.CollectedInfo["LastMentionedOrderId"] = extracted.OrderId;
 
         // Niyet tespiti
         state.CurrentIntent = DetectUserIntent(userMessage);
@@ -130,9 +121,4 @@ public static partial class SessionStateExtractor
         return (WellKnown.Sentiments.Neutral, 0.5);
     }
 
-    [GeneratedRegex(@"CUST-\d+", RegexOptions.IgnoreCase)]
-    private static partial Regex CustomerIdPattern();
-
-    [GeneratedRegex(@"ORD-\d+", RegexOptions.IgnoreCase)]
-    private static partial Regex OrderIdPattern();
 }

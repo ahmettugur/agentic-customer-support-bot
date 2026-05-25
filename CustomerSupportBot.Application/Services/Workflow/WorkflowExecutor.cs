@@ -31,6 +31,8 @@ public partial class WorkflowExecutor
     private static readonly HashSet<string> ForbiddenTools = new(StringComparer.OrdinalIgnoreCase)
     {
         WellKnown.ToolNames.OrderPlacement,
+        WellKnown.ToolNames.OrderCancel,
+        WellKnown.ToolNames.ReturnRequest,
         WellKnown.ToolNames.ComplaintRegistration,
         WellKnown.ToolNames.HumanHandoff
     };
@@ -212,6 +214,9 @@ public partial class WorkflowExecutor
             WellKnown.ToolNames.ProductInquiry =>
                 _tools.ProductInquiryTool(
                     GetStringParam(resolved, "productName") ?? GetStringParam(resolved, "product_name") ?? ""),
+            WellKnown.ToolNames.ProductList =>
+                _tools.ProductListTool(
+                    GetStringParam(resolved, "category")),
             WellKnown.ToolNames.OrderStatus =>
                 _tools.OrderStatusTool(
                     GetStringParam(resolved, "orderId") ?? GetStringParam(resolved, "order_id") ?? ""),

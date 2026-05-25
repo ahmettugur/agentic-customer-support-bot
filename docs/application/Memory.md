@@ -78,7 +78,7 @@ public Task WriteEpisodeAsync(
 
 ```
 Title: "Siparişim nerede?" (max 80 karakter, tek satır)
-Text:  "Soru: Siparişim nerede?\n\nYanıt: ORD-4821 kargoda..." (max 1200 karakter)
+Text:  "Soru: Siparişim nerede?\n\nYanıt: 4821 kargoda..." (max 1200 karakter)
 Tags:  { "intent": "order_inquiry", "rating": "5" }
 ```
 

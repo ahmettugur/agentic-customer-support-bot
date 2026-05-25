@@ -334,8 +334,8 @@ Hexagonal mimaride **domain modelleri** `CustomerSupportBot.Domain/Model/` altı
 | Adapter | Implements | Seed Veri |
 |---|---|---|
 | `InMemoryProductCatalogAdapter` | `IProductCatalogRepository` | 5 ürün (Dell XPS 15, iPhone 15 Pro, Sony WH-1000XM5, Galaxy Tab S9, MX Master 3S) |
-| `InMemoryOrderAdapter` | `IOrderRepository` | 2 seed sipariş (`ORD-1` → CUST-1990, `ORD-2` → CUST-2026) |
-| `InMemoryComplaintAdapter` | `IComplaintRepository` | 2 seed şikayet (`CMP-1`, `CMP-2`) |
+| `InMemoryOrderAdapter` | `IOrderRepository` | 2 seed sipariş (`1` → 1990, `2` → 2026) |
+| `InMemoryComplaintAdapter` | `IComplaintRepository` | 2 seed şikayet (`1`, `2`) |
 
 Thread-safety: `ConcurrentDictionary` ile sağlanır. Stok kontrolü `IOrderRepository.PlaceAsync` içinde `lock` altında yapılır.
 
@@ -400,7 +400,7 @@ Compound query decomposition parçası:
 - `Intent` — kanonik intent (üst düzey intent'ten farklı olabilir)
 - `Description` — açıklama
 - `TargetAgent` — "OrderAgent" vb.
-- `Entities` — `Dictionary<string, string>` (ör. `{"order_id": "ORD-1"}`)
+- `Entities` — `Dictionary<string, string>` (ör. `{"order_id": "1"}`)
 - `Dependencies` — `List<int>` — önce bitmesi gereken subtask sıra numaraları (şu an kullanılmıyor)
 
 `CustomerSupportTeam.ShouldDecompose` **2+ subtask ve 2+ farklı agent** varsa `RunDecomposedAsync` dalına geçer.
@@ -511,21 +511,27 @@ ChatManager `ShouldTerminateAsync` bu ayarları kullanır.
 
 ### `CustomerSupportToolsService` — `Application/Services/CustomerSupportToolsService.cs`
 
-**7 tool fonksiyonu**, hepsi `[Description]` attribute'u ile LLM'e açıklanır ve `AIFunctionFactory.Create()` ile MAF agent'larına bağlanır. Tümü `ToolResult` döner. `ICustomerSupportToolsService` interface'ini implemente eder ve DI ile kayıtlıdır.
+**10 tool fonksiyonu**, hepsi `[Description]` attribute'u ile LLM'e açıklanır ve `AIFunctionFactory.Create()` / `ApprovalGateService.Build*Tool()` ile MAF agent'larına bağlanır. Tümü `ToolResult` döner. `ICustomerSupportToolsService` interface'ini implemente eder ve DI ile kayıtlıdır.
 
 | Tool | İmza | Hangi agent | Side effect |
 |---|---|---|---|
-| `ProductInquiryTool` | `(productName)` | ProductInquiryAgent | ❌ read-only |
-| `OrderPlacementTool` | `(productName, quantity?, customerId)` | OrderAgent | ✅ `OrdersDb` + stok |
+| `ProductInquiryTool` | `(productName)` | ProductAgent | ❌ read-only |
+| `ProductListTool` | `(category?)` | ProductAgent | ❌ read-only |
+| `OrderPlacementTool` | `(productName, quantity?, customerId)` | OrderAgent | ✅ `OrdersDb` + stok — HITL |
 | `OrderStatusTool` | `(orderId)` | OrderAgent | ❌ |
-| `ComplaintRegistrationTool` | `(orderId, complaintText, customerId?)` | ComplaintAgent | ✅ `ComplaintsDb` |
 | `GetLastOrderTool` | `(customerId)` | OrderAgent | ❌ |
 | `GetAllOrdersTool` | `(customerId)` | OrderAgent | ❌ |
+| `OrderCancelTool` | `(orderId, reason)` | OrderAgent | ✅ sipariş durumu — HITL |
+| `ReturnRequestTool` | `(orderId, reason)` | OrderAgent | ✅ iade talebi — HITL |
+| `ComplaintRegistrationTool` | `(orderId, complaintText, customerId?)` | ComplaintAgent | ✅ `ComplaintsDb` — HITL |
 | `HumanHandoffTool` | `(reason, sessionId)` | HumanHandoffAgent | ✅ eskalasyon |
 
 **Özel davranışlar**:
 
+- `ProductListTool` — `category` opsiyonel; boş gelirse tüm katalog döner, doluysa kategori adı `LOWER()` karşılaştırmasıyla filtrelenir.
 - `OrderPlacementTool` — stok kontrolü **`lock (_stockLock)`** altında (race-safe). Eksik alan → `ValidationError`, ürün yok → `NotFound(WellKnown.ToolErrorCodes.ProductNotFound)`, stok yetersiz → `Conflict(WellKnown.ToolErrorCodes.StockInsufficient)`.
+- `OrderCancelTool` — yalnızca `"İşleniyor"` veya `"Kargolandı"` durumundaki siparişler iptal edilebilir. Diğer durumlarda → `Conflict(WellKnown.ToolErrorCodes.OrderNotCancellable)`.
+- `ReturnRequestTool` — yalnızca `"Teslim Edildi"` durumundaki ve 14 gün içindeki siparişler için iade talebi açılabilir. Zaten iade talebi varsa → `Conflict(WellKnown.ToolErrorCodes.ReturnAlreadyRequested)`.
 - `ComplaintRegistrationTool` — `customerId` opsiyonel; boşsa `OrdersDb[orderId].CustomerId`'den türetir. Verilen customerId order sahibiyle uyuşmuyorsa → `Conflict(WellKnown.ToolErrorCodes.CustomerIdMismatch)`.
 - Tool çıktıları her zaman `ToolResult` → LLM düz metin değil, yapılandırılmış sinyal görür.
 
@@ -543,7 +549,7 @@ Sistemdeki tüm magic string ve sabit değerlerin **tek merkezi kaynağı**. Yen
 | `Intents` | `OrderCreation`, `OrderInquiry`, `OrderListing`, `Complaint`, `ProductInfo`, `General`, `Unknown` | `SessionState.CurrentIntent`, planning routing |
 | `IntentKeywords` | `(Intent, string[] keywords)` tuple listesi | `InMemorySessionManager.DetectUserIntent` tablo tabanlı niyet algılama |
 | `Phases` | `Inquiry`, `Action`, `Resolution` | `SessionState.Phase` |
-| `AgentNames` | `Planning`, `ProductInquiry`, `Order`, `Complaint`, `Response`, + `Specialists[]`, `All[]` | Agent referansları, ChatManager routing |
+| `AgentNames` | `Planning`, `Product`, `Order`, `Complaint`, `Response`, + `Specialists[]`, `All[]` | Agent referansları, ChatManager routing |
 | `OrderStatuses` | `Processing`, `Shipped`, `Delivered`, `Cancelled` | `OrderInfo.Status`, InMemory seed veri |
 | `ComplaintStatuses` | `Pending`, `InProgress`, `Resolved` | `ComplaintInfo.Status` |
 | `ToolErrorCodes` | `MissingRequiredField`, `ProductNotFound`, `OrderNotFound`, `StockInsufficient`, `CustomerIdMismatch`, `NoOrdersForCustomer` | `ToolResult.NotFound/Conflict` |
@@ -651,7 +657,7 @@ Statik sınıf. YAML'daki `success_criteria` string listesini regex tabanlı par
 | `no extra tool calls` | | `actual.Count <= expected.Count` |
 | `no missing_param_tool error` | | SpecialistReasoning'de validation error yok |
 | `agent requests <field>` | | Response belirtilen alanı soruyor mu |
-| `complaint id returned` / `order id returned` | | Regex `CMP-\d` veya `ORD-\d` |
+| `complaint id returned` / `order id returned` | | Regex `\d{4,}` (4+ haneli rakam) |
 
 Tanımsız pattern → `manual_review` flag'i.
 

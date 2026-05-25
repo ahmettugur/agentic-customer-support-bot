@@ -67,7 +67,7 @@
             <h3>Test Çalıştır</h3>
             <div class="row">
                 <label>User input:</label>
-                <input type="text" class="input--flex" placeholder="ör. ORD-1 durumu nedir"
+                <input type="text" class="input--flex" placeholder="ör. sipariş 1030 durumu nedir"
                        @bind="_testInput" @bind:event="oninput" />
                 <button @onclick="RunTestAsync" disabled="@(_currentId is null)">▶ Test</button>
             </div>

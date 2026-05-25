@@ -84,7 +84,7 @@ public sealed class ReplanControl
 state.CollectedInfo = new()
 {
     ["customer_id"] = "12345",
-    ["order_id"] = "ORD-5",
+    ["order_id"] = "5",
     ["product_name"] = "Dell XPS 15"
 };
 ```

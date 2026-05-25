@@ -36,6 +36,7 @@ public sealed class RealtimeFunctionTools
     private static readonly string[] ToolNames =
     [
         "product_inquiry_tool",
+        "product_list_tool",
         "order_status_tool",
         "get_last_order_tool",
         "get_all_orders_tool",
@@ -62,6 +63,21 @@ public sealed class RealtimeFunctionTools
         new
         {
             type = "function",
+            name = "product_list_tool",
+            description = "Ürün kataloğunu listeler. Kategori belirtilirse sadece o kategorideki ürünleri, belirtilmezse tüm ürünleri döner. Yan etkisi yoktur.",
+            parameters = new
+            {
+                type = "object",
+                properties = new
+                {
+                    category = new { type = "string", description = "Filtrelenecek kategori adı (opsiyonel, örn. 'Elektronik', 'İçecek'). Boş bırakılırsa tüm katalog döner." }
+                },
+                required = Array.Empty<string>()
+            }
+        },
+        new
+        {
+            type = "function",
             name = "order_status_tool",
             description = "Belirli bir sipariş numarası için durum bilgisini döner. Yan etkisi yoktur.",
             parameters = new
@@ -69,7 +85,7 @@ public sealed class RealtimeFunctionTools
                 type = "object",
                 properties = new
                 {
-                    order_id = new { type = "string", description = "Sipariş numarası (örn. 'ORD-1', 'ORD-2')" }
+                    order_id = new { type = "string", description = "Sipariş numarası (örn. '1030', '1042')" }
                 },
                 required = new[] { "order_id" }
             }
@@ -84,7 +100,7 @@ public sealed class RealtimeFunctionTools
                 type = "object",
                 properties = new
                 {
-                    customer_id = new { type = "string", description = "Müşteri kimlik numarası (örn. 'CUST-1990')" }
+                    customer_id = new { type = "string", description = "Müşteri kimlik numarası (örn. '1008', '1027')" }
                 },
                 required = new[] { "customer_id" }
             }
@@ -99,7 +115,7 @@ public sealed class RealtimeFunctionTools
                 type = "object",
                 properties = new
                 {
-                    customer_id = new { type = "string", description = "Müşteri kimlik numarası (örn. 'CUST-1990')" }
+                    customer_id = new { type = "string", description = "Müşteri kimlik numarası (örn. '1008', '1027')" }
                 },
                 required = new[] { "customer_id" }
             }

@@ -111,11 +111,11 @@ public class SubTaskOrchestratorTests
         var sub = new SubTask
         {
             Description = "sipari� sor",
-            Entities = new() { ["order_id"] = "ORD-1" }
+            Entities = new() { ["order_id"] = "1030" }
         };
         var q = SubTaskOrchestrator.FormatSubTaskQuery(sub);
-        q.Should().Contain("sipari� sor");
-        q.Should().Contain("order_id=ORD-1");
+        q.Should().Contain("sipariş sor");
+        q.Should().Contain("order_id=1030");
     }
 
     [Fact]

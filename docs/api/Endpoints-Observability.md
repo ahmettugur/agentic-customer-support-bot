@@ -81,12 +81,12 @@ Reasoning trace audit — debug ve replay için.
 {
   "traceId": "trace-abc",
   "sessionId": "sess-123",
-  "userQuery": "ORD-5 nerede",
+  "userQuery": "5 nerede",
   "startedAt": "2026-05-24T10:00:00Z",
   "completedAt": "2026-05-24T10:00:02.5Z",
   "durationMs": 2500,
   "reasoning": {
-    "analysis": "Kullanıcı ORD-5 siparişinin durumunu soruyor",
+    "analysis": "Kullanıcı 5 siparişinin durumunu soruyor",
     "intent": "OrderInquiry",
     "confidence": "yüksek",
     "confidenceScore": 0.95
@@ -104,13 +104,13 @@ Reasoning trace audit — debug ve replay için.
     {
       "toolName": "order_status_tool",
       "agentName": "OrderAgent",
-      "parametersSummary": "{ order_id: ORD-5 }",
+      "parametersSummary": "{ order_id: 5 }",
       "resultSummary": "Success: Kargoda",
       "success": true
     }
   ],
   "terminationReason": "completed",
-  "finalResponse": "Sipariş ORD-5 'Kargoda' durumunda.",
+  "finalResponse": "Sipariş 5 'Kargoda' durumunda.",
   "iterationCount": 3,
   "estimatedTokens": 1234
 }
@@ -126,7 +126,7 @@ Sidebar — session başına özet:
 [
   {
     "sessionId": "sess-123",
-    "firstQuery": "ORD-5 nerede",
+    "firstQuery": "5 nerede",
     "traceCount": 5,
     "lastTraceAt": "..."
   }
@@ -293,7 +293,7 @@ YAML-based scenario testing.
 scenarios:
   - id: order-inquiry-basic
     title: "Basit sipariş sorgu"
-    user_query: "ORD-5 nerede"
+    user_query: "5 nerede"
     expected_intent: OrderInquiry
     expected_agents: [PlanningAgent, OrderAgent, ResponseAgent]
     expected_tools: [order_status_tool]

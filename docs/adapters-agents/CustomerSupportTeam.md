@@ -15,13 +15,13 @@
 | # | Ajan | İsim sabiti | Tool'lar |
 |---|------|-------------|---------|
 | 1 | PlanningAgent | `WellKnown.AgentNames.Planning` | Yok (yalnızca yönlendirme) |
-| 2 | ProductInquiryAgent | `WellKnown.AgentNames.ProductInquiry` | `product_inquiry_tool` |
-| 3 | OrderAgent | `WellKnown.AgentNames.Order` | `order_placement_tool` (HITL) + `order_status_tool` + `get_last_order_tool` + `get_all_orders_tool` |
+| 2 | ProductAgent | `WellKnown.AgentNames.Product` | `product_inquiry_tool` + `product_list_tool` |
+| 3 | OrderAgent | `WellKnown.AgentNames.Order` | `order_placement_tool` (HITL) + `order_status_tool` + `get_last_order_tool` + `get_all_orders_tool` + `order_cancel_tool` (HITL) + `return_request_tool` (HITL) |
 | 4 | ComplaintAgent | `WellKnown.AgentNames.Complaint` | `complaint_registration_tool` (HITL) |
 | 5 | HumanHandoffAgent | `WellKnown.AgentNames.HumanHandoff` | `human_handoff_tool` |
 | 6 | ResponseAgent | `WellKnown.AgentNames.Response` | Yok (yalnızca biçimlendirme) |
 
-> **HITL nedir?** `order_placement_tool` ve `complaint_registration_tool` direkt çalışmaz; önce `ApprovalGateService` üzerinden admin onayı bekler. Onay gelmezse tool reddedilir.
+> **HITL nedir?** `order_placement_tool`, `order_cancel_tool`, `return_request_tool` ve `complaint_registration_tool` direkt çalışmaz; önce `ApprovalGateService` üzerinden admin onayı bekler. Onay gelmezse tool reddedilir.
 
 ## Constructor bağımlılıkları
 
@@ -117,9 +117,9 @@ Agent'ın ürettiği yanıt `OrderAgent:`, `PlanningAgent:` gibi iç teknik ifad
 Reasoning aşaması sorgunun birden fazla alt göreve bölündüğünü tespit ettiğinde (`SubTaskOrchestrator.IsCompoundQuery` → true), team tek bir workflow çalıştırmak yerine her alt görevi ayrı ayrı işler.
 
 ```
-Kullanıcı: "ORD-1001'i iptal et ve iade başlat"
+Kullanıcı: "1001'i iptal et ve iade başlat"
     │
-    ├── SubTask#1 (OrderAgent): ORD-1001 iptal
+    ├── SubTask#1 (OrderAgent): 1001 iptal
     └── SubTask#2 (ComplaintAgent): iade başlat
 ```
 

@@ -146,8 +146,8 @@ public sealed record RatingInput(int Stars, string? Feedback);
 
 ```json
 {
-  "input": "ORD-5 nerede",
-  "variables": { "customer_id": "CUST-1990" }
+  "input": "5 nerede",
+  "variables": { "customer_id": "1990" }
 }
 ```
 
@@ -252,12 +252,12 @@ Content-Type: application/json
 
 {
   "name": "Sipariş Takibi",
-  "description": "ORD-X siparişinin durumunu sorgular",
+  "description": "1030 siparişinin durumunu sorgular",
   "version": 1,
   "isActive": true,
   "triggerKeywords": ["takip", "kargoda", "nerede"],
   "inputPatterns": {
-    "order_id": "ORD-\\d+"
+    "order_id": "\\d{4,}"
   },
   "steps": [
     {

@@ -105,7 +105,7 @@ PlanningResultParser.TryParse(lastMessage.Text)
 
 ## Strateji 3: `ReflectionRoutingStrategy`
 
-**Koşul:** Son mesaj bir Specialist ajanından (OrderAgent, ComplaintAgent, ProductInquiryAgent, HumanHandoffAgent) gelmiş.
+**Koşul:** Son mesaj bir Specialist ajanından (OrderAgent, ComplaintAgent, ProductAgent, HumanHandoffAgent) gelmiş.
 
 **Fikir:** Specialist ajan işini bitirdi ve `postToolReflection` alanında ne yapılacağını yazdı. Bu yansımayı oku ve sonraki adımı belirle.
 
@@ -165,7 +165,7 @@ Bu sabitler log mesajlarında `"Agent selected via {Branch}: {Agent}"` formatın
 ## Tam örnek akış
 
 ```
-Kullanıcı: "ORD-4821 nerede?"
+Kullanıcı: "4821 nerede?"
 
 Turn 1:
   history = [System, System, User]
@@ -187,7 +187,7 @@ Turn 3:
   → ReflectionRoutingStrategy: handoffSuggestion="ResponseAgent" → ResponseAgent seçildi [reflection_complete]
 
 ResponseAgent yanıtı:
-  "ORD-4821 numaralı siparişiniz kargoda. TERMINATE"
+  "4821 numaralı siparişiniz kargoda. TERMINATE"
 
 ShouldTerminateAsync → true → Workflow biter
 ```

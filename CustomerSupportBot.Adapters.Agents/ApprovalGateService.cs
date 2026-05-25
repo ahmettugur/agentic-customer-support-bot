@@ -114,7 +114,7 @@ public class ApprovalGateService
     {
         return AIFunctionFactory.Create(
             async (
-                [System.ComponentModel.Description("İptal edilecek sipariş numarası (zorunlu, ör. 'ORD-1')")] string orderId,
+                [System.ComponentModel.Description("İptal edilecek sipariş numarası (zorunlu, ör. '1030')")] string orderId,
                 [System.ComponentModel.Description("İptal sebebi (zorunlu, en az 5 karakter)")] string reason,
                 CancellationToken ct) =>
             {
@@ -146,7 +146,7 @@ public class ApprovalGateService
     {
         return AIFunctionFactory.Create(
             async (
-                [System.ComponentModel.Description("İade talep edilecek sipariş numarası (zorunlu, ör. 'ORD-2')")] string orderId,
+                [System.ComponentModel.Description("İade talep edilecek sipariş numarası (zorunlu, ör. '1042')")] string orderId,
                 [System.ComponentModel.Description("İade sebebi (zorunlu, en az 5 karakter)")] string reason,
                 CancellationToken ct) =>
             {

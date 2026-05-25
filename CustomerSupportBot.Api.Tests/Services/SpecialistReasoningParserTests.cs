@@ -58,7 +58,7 @@ public class SpecialistReasoningParserTests
                 "postToolReflection": {
                     "taskComplete": true,
                     "status": "done",
-                    "summary": "Order ORD-1 delivered"
+                    "summary": "Order 1030 delivered"
                 }
             }
             """;
@@ -103,7 +103,7 @@ public class SpecialistReasoningParserTests
             {"postToolReflection":{"handoffSuggestion":"OrderAgent","handoffReason":"order needed"}}
             """;
 
-        var result = SpecialistReasoningParser.TryParse(input, "ProductInquiryAgent");
+        var result = SpecialistReasoningParser.TryParse(input, "ProductAgent");
 
         result!.PostToolReflection!.HandoffSuggestion.Should().Be("OrderAgent");
         result.PostToolReflection.HandoffReason.Should().Be("order needed");

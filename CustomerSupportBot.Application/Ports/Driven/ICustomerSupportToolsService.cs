@@ -1,20 +1,11 @@
-using System.ComponentModel;
-using CustomerSupportBot.Domain.Model;
-
 namespace CustomerSupportBot.Application.Ports.Driven;
 
 /// <summary>
-/// Müşteri destek AI araçları port'u.
-/// Adapter'lar bu arayüz üzerinden tool fonksiyonlarına erişir.
+/// Müşteri destek AI araçlarının tamamını kapsayan facade port.
+/// Adapter'lar (CustomerSupportTeam, ApprovalGateService) bu arayüz üzerinden
+/// tüm tool fonksiyonlarına erişir.
 /// </summary>
 public interface ICustomerSupportToolsService
+    : IProductToolsService, IOrderToolsService, IComplaintToolsService
 {
-    ToolResult ProductInquiryTool(string productName);
-    ToolResult OrderPlacementTool(string productName, int? quantity, string customerId);
-    ToolResult OrderStatusTool(string orderId);
-    ToolResult ComplaintRegistrationTool(string orderId, string complaintText, string? customerId);
-    ToolResult GetLastOrderTool(string customerId);
-    ToolResult GetAllOrdersTool(string customerId);
-    ToolResult OrderCancelTool(string orderId, string reason);
-    ToolResult ReturnRequestTool(string orderId, string reason);
 }

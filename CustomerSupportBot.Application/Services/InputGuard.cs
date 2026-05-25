@@ -18,7 +18,7 @@ public sealed partial class InputGuard : IInputGuard
     /// <summary>Maksimum kullanıcı mesaj uzunluğu (karakter).</summary>
     public const int MaxInputLength = 2000;
 
-    /// <summary>Maksimum tek mesajda görünebilecek ID sayısı (ORD-/CMP-/CUST-).</summary>
+    /// <summary>Maksimum tek mesajda görünebilecek ID sayısı (4+ haneli rakamsal ID).</summary>
     public const int MaxIdMentions = 8;
 
     /// <summary>Tehlike sinyali — eşleşince mesaj reddedilir (LLM'e gitmez).</summary>
@@ -30,7 +30,7 @@ public sealed partial class InputGuard : IInputGuard
     /// <summary>HTML/script/img injection — admin paneline veya trace store'a sızma riski.</summary>
     private static readonly Regex HtmlScriptPattern = HtmlScriptRegex();
 
-    /// <summary>ID enumeration (cost bomb) — ORD-1 ORD-2 ... ORD-1000 tarzı.</summary>
+    /// <summary>ID enumeration (cost bomb) — 1030 1031 ... 2030 tarzı ardışık ID listesi.</summary>
     private static readonly Regex IdMentionPattern = IdMentionRegex();
 
     /// <summary>Zero-width / RTL override / bidi karakterler.</summary>
@@ -149,8 +149,8 @@ public sealed partial class InputGuard : IInputGuard
     private static partial Regex HtmlScriptRegex();
 
     [GeneratedRegex(
-        @"\b(ORD|CMP|CUST)-\d+\b",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        @"\b\d{4,}\b",
+        RegexOptions.CultureInvariant,
         matchTimeoutMilliseconds: 200)]
     private static partial Regex IdMentionRegex();
 

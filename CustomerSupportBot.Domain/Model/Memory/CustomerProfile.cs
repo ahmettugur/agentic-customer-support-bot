@@ -3,7 +3,7 @@
 // Her oturum sonunda heuristik olarak güncellenir; admin tetiklediğinde LLM
 // ile özetlenip "PreferredTone / Summary / Notes" alanları zenginleştirilir.
 //
-// Profilin amacı: kullanıcı CUST-XXX ile yeni bir oturum açtığında, ContextPipeline
+// Profilin amacı: kullanıcı 4+ haneli müşteri ID ile yeni bir oturum açtığında, ContextPipeline
 // tarafından context'e enjekte edilerek ajanların proaktif/kişiselleştirilmiş
 // davranmasını sağlamak (ör. "Bu müşteri kısa ve teknik dil tercih ediyor",
 // "Geçmişte iki kez Dell XPS 15 sipariş etti", "Son ortalama puan: 2/5").
@@ -12,7 +12,7 @@ namespace CustomerSupportBot.Domain.Model.Memory;
 
 public sealed class CustomerProfile
 {
-    /// <summary>Müşteri kimliği (ör. "CUST-1990") — primary key.</summary>
+    /// <summary>Müşteri kimliği (ör. "1027") — primary key.</summary>
     public string CustomerId { get; set; } = "";
 
     /// <summary>Konuşulan dil (ISO 639-1 — "tr" / "en"). Default = "tr".</summary>

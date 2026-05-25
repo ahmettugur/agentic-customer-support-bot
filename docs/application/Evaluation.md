@@ -119,12 +119,12 @@ public async Task<ScenarioResult> RunScenarioAsync(
 scenarios:
   - id: "order_inquiry_basic"
     category: "order"
-    query: "ORD-4821 nerede?"
+    query: "4821 nerede?"
     expected_intent: "order_inquiry"
     expected_agents: ["PlanningAgent", "OrderAgent", "ResponseAgent"]
     success_criteria:
       - type: response_contains
-        value: "ORD-4821"
+        value: "4821"
       - type: agent_visited
         value: "OrderAgent"
       - type: tool_called
@@ -167,7 +167,7 @@ public class ScenarioRunContext
 `EvaluationRunner` trace'den tool'ların çağrılıp çağrılmadığını `SpecialistReasoning.PreToolCheck.CanProceed` alanından anlar. Hangi ajan hangi tool'u çağırdığını aşağıdaki mapping ile türetir:
 
 ```csharp
-"ProductInquiryAgent" → "product_inquiry_tool"
+"ProductAgent" → "product_inquiry_tool"
 "OrderAgent"          → "order_status_tool"  // default — birden fazla tool var
 "ComplaintAgent"      → "complaint_registration_tool"
 ```
@@ -205,7 +205,7 @@ Yanıt:
 ```yaml
 - id: "complaint_registration_new"
   category: "complaint"
-  query: "ORD-1001 için ürün hasarlı geldi şikayet açmak istiyorum"
+  query: "1001 için ürün hasarlı geldi şikayet açmak istiyorum"
   expected_intent: "complaint"
   success_criteria:
     - type: agent_visited

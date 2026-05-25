@@ -15,7 +15,7 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 - **Per-Customer Personalization Memory** — Her müşteri için kalıcı profil (sık niyet, ürün ilgi alanları, dil/ton tercihi, son rating'ler). Heuristik güncelleme + admin tetikli LLM consolidate. Profil ContextPipeline üzerinden tüm ajanlara enjekte edilir.
 - **Smart Routing & Skills-Based Escalation** — Eskalasyon oluştuğunda intent + müşteri profili üzerinden gerekli skill tag'leri çıkarılır ve `IHumanAgentRegistry`'deki temsilciler arasında en iyi skill + dil + load match'iyle aday önerilir. Manuel re-route + load tracking + auto-decrement.
 - **Low-Code Workflow Designer** — Admin'in JSON tabanlı mini iş akışları (trigger keywords, regex extractor, respond/lookup/branch/setVariable adımları) tanımlayıp çalıştırabildiği deterministik (LLM-siz) "fast path" motoru. `wwwroot/workflow-designer.html` küçük UI.
-- **Parallel SubTask Execution** — Compound query'lerde (ör. "ORD-1 ve ORD-2 durumu") yan-etkisiz alt görevler (Product/OrderInquiry) `Task.WhenAll` ile paralel çalışır; yan-etkili olanlar (OrderPlacement/Complaint) HITL gate'i nedeniyle sıralı kalır. p50 latency düşer.
+- **Parallel SubTask Execution** — Compound query'lerde (ör. "1030 ve 1042 durumu") yan-etkisiz alt görevler (Product/OrderInquiry) `Task.WhenAll` ile paralel çalışır; yan-etkili olanlar (OrderPlacement/Complaint) HITL gate'i nedeniyle sıralı kalır. p50 latency düşer.
 - **SLA / Response Time Guardian** — Bekleyen onay ve açık eskalasyonları periyodik tarayan `BackgroundService`. Eşik aşılan onaylar `AutoReject`, eskalasyonların önceliği otomatik **bir kademe yükseltilir** (Low→Normal→High→Critical). Admin `/sla/status` ve `/sla/events` endpoint'lerinden görür.
 - **Sesli Konuşma Modu (Realtime) — çift kanal** — OpenAI Realtime API (`gpt-realtime-1.5`) üzerinden iki ayrı sesli mod:
   - **🎤 Sesli Asistan (köprü)** — model sadece STT/TTS köprüsü; **text chat ile aynı** 7-ajanlı MAF pipeline'ı (reasoning, HITL, tool routing) çalışır. Tüm tool'lar (sipariş aç, şikayet, vb.) destekli.
@@ -127,8 +127,8 @@ Temel yetenekler:
 | Ajan | Rol | Tool'lar | Yapılandırılmış Çıktı |
 |------|-----|----------|-----------------------|
 | **PlanningAgent** | Niyet tespiti ve yönlendirme | — | `PlanningResult` |
-| **ProductInquiryAgent** | Ürün sorgusu (salt-okunur) | `product_inquiry_tool` | `SpecialistReasoning` |
-| **OrderAgent** | Sipariş oluşturma (HITL) + durum sorgusu | `order_placement_tool`, `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool` | `SpecialistReasoning` |
+| **ProductAgent** | Ürün sorgusu + katalog listeleme (salt-okunur) | `product_inquiry_tool`, `product_list_tool` | `SpecialistReasoning` |
+| **OrderAgent** | Sipariş oluşturma, sorgulama, iptal ve iade (HITL) | `order_placement_tool`, `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`, `order_cancel_tool`, `return_request_tool` | `SpecialistReasoning` |
 | **ComplaintAgent** | Şikayet kaydı | `complaint_registration_tool` | `SpecialistReasoning` |
 | **HumanHandoffAgent** | İnsan temsilciye aktarım | `human_handoff_tool` | `SpecialistReasoning` |
 | **ResponseAgent** | Nihai yanıt + self-critique | — | `ResponseCritique` |
@@ -196,7 +196,7 @@ API `http://localhost:5021` adresinde başlar ve chat arayüzü `CustomerSupport
 ```bash
 curl -X POST http://localhost:5021/chat/ \
   -H "Content-Type: application/json" \
-  -d '{"query": "ORD-1 siparişim nerede?", "sessionId": null}'
+  -d '{"query": "sipariş 1030 nerede?", "sessionId": null}'
 ```
 
 ---

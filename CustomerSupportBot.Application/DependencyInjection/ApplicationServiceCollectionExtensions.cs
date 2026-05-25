@@ -77,6 +77,12 @@ public static class ApplicationServiceCollectionExtensions
 
     private static void AddChatServices(this IServiceCollection services)
     {
+        services.AddSingleton<ProductToolsService>();
+        services.AddSingleton<IProductToolsService>(sp => sp.GetRequiredService<ProductToolsService>());
+        services.AddSingleton<OrderToolsService>();
+        services.AddSingleton<IOrderToolsService>(sp => sp.GetRequiredService<OrderToolsService>());
+        services.AddSingleton<ComplaintToolsService>();
+        services.AddSingleton<IComplaintToolsService>(sp => sp.GetRequiredService<ComplaintToolsService>());
         services.AddSingleton<CustomerSupportToolsService>();
         services.AddSingleton<ICustomerSupportToolsService>(sp => sp.GetRequiredService<CustomerSupportToolsService>());
         services.AddSingleton<SubTaskOrchestrator>();

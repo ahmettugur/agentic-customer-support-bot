@@ -59,13 +59,13 @@ public class PlanningResultParserTests
     public void TryParse_PlainJson_ParsesCorrectly()
     {
         var input = """
-            {"selectedAgent":"ProductInquiryAgent","intentConfidence":0.9,"detectedIntent":"product_info"}
+            {"selectedAgent":"ProductAgent","intentConfidence":0.9,"detectedIntent":"product_info"}
             """;
 
         var plan = PlanningResultParser.TryParse(input);
 
         plan.Should().NotBeNull();
-        plan.SelectedAgent.Should().Be("ProductInquiryAgent");
+        plan.SelectedAgent.Should().Be("ProductAgent");
         plan.IntentConfidence.Should().Be(0.9);
     }
 
@@ -118,7 +118,7 @@ public class PlanningResultParserTests
                 "selectedAgent": "OrderAgent",
                 "alternativesRejected": [
                     {"agent": "ComplaintAgent", "reason": "no complaint signal"},
-                    {"agent": "ProductInquiryAgent", "reason": "no product context"}
+                    {"agent": "ProductAgent", "reason": "no product context"}
                 ]
             }
             """;

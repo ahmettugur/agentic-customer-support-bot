@@ -99,6 +99,23 @@ HandleEventsAsync    → event işleme + tool dispatch
 WatchInactivityAsync → 60 saniye sessizlik → konuşmayı sonlandır
 ```
 
+### Tool şemaları — `RealtimeFunctionTools`
+
+**Dosya:** `CustomerSupportBot.Adapters.AI/Realtime/RealtimeFunctionTools.cs`
+
+`session.update` payload'ında OpenAI'ye gönderilen JSON Schema tanımları. Model yalnızca burada tanımlı tool'ları görebilir ve çağırabilir — tanımsız tool'lar modele görünmez.
+
+| Tool | Zorunlu parametre | Opsiyonel parametre |
+|------|-------------------|---------------------|
+| `product_inquiry_tool` | `product_name` | — |
+| `product_list_tool` | — | `category` |
+| `order_status_tool` | `order_id` | — |
+| `get_last_order_tool` | `customer_id` | — |
+| `get_all_orders_tool` | `customer_id` | — |
+| `end_conversation` | — | `reason` |
+
+HITL gerektiren tool'lar (`order_placement_tool`, `order_cancel_tool`, `return_request_tool`, `complaint_registration_tool`) şema listesine **dahil edilmez** — model bu tool'ların varlığından haberdar olmaz, dolayısıyla çağıramaz.
+
 ### Tool dispatch
 
 `DispatchTool(name, argumentsJson)` metodu:
@@ -106,11 +123,14 @@ WatchInactivityAsync → 60 saniye sessizlik → konuşmayı sonlandır
 | Tool | Aksiyon |
 |------|--------|
 | `product_inquiry_tool` | `_tools.ProductInquiryTool(...)` |
+| `product_list_tool` | `_tools.ProductListTool(...)` |
 | `order_status_tool` | `_tools.OrderStatusTool(...)` |
 | `get_last_order_tool` | `_tools.GetLastOrderTool(...)` |
 | `get_all_orders_tool` | `_tools.GetAllOrdersTool(...)` |
 | `end_conversation` | `_endRequested = true`, sonlandırma sinyali |
 | `order_placement_tool` | **FORBIDDEN** — `FORBIDDEN_IN_VOICE` hatası |
+| `order_cancel_tool` | **FORBIDDEN** — `FORBIDDEN_IN_VOICE` hatası |
+| `return_request_tool` | **FORBIDDEN** — `FORBIDDEN_IN_VOICE` hatası |
 | `complaint_registration_tool` | **FORBIDDEN** — `FORBIDDEN_IN_VOICE` hatası |
 
 Tool sonuçları `IRealtimeVoiceTransport.SendToolResultsAsync` ile modele iletilir; model yanıtlamaya devam eder.

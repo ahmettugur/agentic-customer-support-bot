@@ -81,7 +81,7 @@ Saf veri tipleri. Sınıflar (mutable state için: `AgentSession`), record'lar (
 ### 2. Services (6 dosya)
 Domain logic'i — altyapıya bağlı olmayan algoritmalar:
 - **EscalationStates**: State Pattern (Open → Acknowledged → Resolved/Dismissed)
-- **IdExtractor**: Regex ile ORD-N, CMP-N, CUST-N çıkar
+- **IdExtractor**: Regex ile Türkçe bağlam kelimesiyle 4+ haneli ID çıkar
 - **3 Parser**: LLM JSON çıktısını domain modeline çevir
 - **SessionStateExtractor**: User+Bot mesajından session state türet (intent, phase, sentiment)
 

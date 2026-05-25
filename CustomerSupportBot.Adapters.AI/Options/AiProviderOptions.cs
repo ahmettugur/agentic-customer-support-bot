@@ -44,8 +44,8 @@ public sealed class RealtimeOptions
     public string TranscriptionModel { get; set; } = "gpt-4o-transcribe";
     public string? TranscriptionLanguage { get; set; } = "tr";
     public string TranscriptionPrompt { get; set; } =
-        "Müşteri destek görüşmesi. Sipariş numarası (ORD-1, ORD-2 gibi), müşteri kodu " +
-        "(CUST-1990 gibi), ürün adları (Apple iPhone, Sony WH-1000XM5, Dell XPS), " +
+        "Müşteri destek görüşmesi. Sipariş numarası (1030, 1042 gibi 4+ haneli rakam), müşteri numarası " +
+        "(1008, 1027 gibi 4+ haneli rakam), ürün adları (Coffee, Laptop, Smartphone, Dell XPS), " +
         "kargo, iade, şikayet, sipariş durumu konuları geçer. Türkçe konuşulur.";
 }
 

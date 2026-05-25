@@ -63,15 +63,15 @@ public class InMemorySessionManagerTests
     [Fact]
     public void ExtractAndUpdateState_CapturesCustomerId()
     {
-        _mgr.AddExchange("s1", "ben CUST-1990 m��teriyim", "merhaba");
+        _mgr.AddExchange("s1", "müşteri numaram 1027", "merhaba");
         var s = _mgr.Get("s1");
-        s!.State.CustomerId.Should().Be("CUST-1990");
+        s!.State.CustomerId.Should().Be("1027");
     }
 
     [Fact]
     public void ExtractAndUpdateState_CapturesOrderId()
     {
-        _mgr.AddExchange("s1", "ORD-1 nerede?", "sipari�iniz yolda");
+        _mgr.AddExchange("s1", "sipariş 1030 nerede?", "siparişiniz yolda");
         var s = _mgr.Get("s1");
         s!.State.CollectedInfo.Should().ContainKey("LastMentionedOrderId");
     }

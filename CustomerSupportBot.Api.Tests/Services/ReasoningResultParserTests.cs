@@ -24,7 +24,7 @@ public class ReasoningResultParserTests
                 "analysis": "Kullanıcı sipariş durumu sormuş.",
                 "intent": "sipariş_sorgulama",
                 "confidenceScore": 0.92,
-                "rationale": "ORD-1 mevcut",
+                "rationale": "1030 mevcut",
                 "nextAction": "OrderAgent'e yönlendir",
                 "requiredInfo": []
             }

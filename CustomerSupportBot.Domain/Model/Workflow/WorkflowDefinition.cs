@@ -32,7 +32,7 @@ public class WorkflowDefinition
     /// <summary>
     /// Input'tan değişken çıkarmak için regex desenleri.
     /// Key = değişken adı, Value = .NET regex (named-group ya da ilk capture group).
-    /// Örn: { "orderId": "(ORD-\\d+)" }
+    /// Örn: { "orderId": "(\\d{4,})" }
     /// </summary>
     public Dictionary<string, string> InputPatterns { get; set; } = new();
 

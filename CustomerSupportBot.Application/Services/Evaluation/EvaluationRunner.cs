@@ -166,7 +166,7 @@ public class EvaluationRunner : IEvaluationPort
         var simple = SimplifyAgentName(agentName);
         return simple switch
         {
-            "ProductInquiryAgent" => "product_inquiry_tool",
+            "ProductAgent" => "product_inquiry_tool",
             "OrderAgent" => "order_status_tool", // Birden fazla tool var; inquiry default
             "ComplaintAgent" => "complaint_registration_tool",
             _ => simple.ToLowerInvariant()

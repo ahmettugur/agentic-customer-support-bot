@@ -11,6 +11,7 @@ using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Api.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Infrastructure;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -19,9 +20,17 @@ using EntityVerifier = CustomerSupportBot.Application.Services.EntityVerifier;
 
 namespace CustomerSupportBot.Api.Tests.Evaluation;
 
+[Collection("PostgresCatalog")]
 public class EvaluationRunnerTests
 {
-    private static EvaluationRunner BuildRunner()
+    private readonly PostgresCatalogFixture _fixture;
+
+    public EvaluationRunnerTests(PostgresCatalogFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    private EvaluationRunner BuildRunner()
     {
         var chatClient = Substitute.For<IChatClient>();
         var prompts = new FileSystemPromptRepository(NullLogger<FileSystemPromptRepository>.Instance);
@@ -33,7 +42,7 @@ public class EvaluationRunnerTests
         var queue = new InMemoryApprovalQueue(
             Options.Create(approvalOpts), NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
-        var tools = TestFactory.CreateToolsService();
+        var tools = TestFactory.CreateToolsService(_fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo);
         var escalationPolicy = new EscalationPolicyService(
             sink, Options.Create(approvalOpts));
         var approvalGate = new ApprovalGateService(
@@ -48,8 +57,8 @@ public class EvaluationRunnerTests
 
         var reasoningClient = new ReasoningChatClient(chatClient, "gpt-test", "low");
         var entityVerifier = new EntityVerifier(
-            TestFactory.CreateOrders(),
-            TestFactory.CreateComplaints(),
+            _fixture.OrderRepo,
+            _fixture.ComplaintRepo,
             NullLogger<EntityVerifier>.Instance);
         var sanityChecker = new ReasoningSanityChecker(NullLogger<ReasoningSanityChecker>.Instance);
         var reasoningService = new ReasoningService(

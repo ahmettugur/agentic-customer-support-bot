@@ -47,7 +47,7 @@ public class ReasoningResult
     public string Rationale { get; set; } = "";
 
     /// <summary>
-    /// Reasoning sırasında yapılan varsayımlar (ör. "CUST-001'in aktif müşteri olduğu",
+    /// Reasoning sırasında yapılan varsayımlar (ör. "1001'in aktif müşteri olduğu",
     /// "kullanıcının TC vatandaşı olduğu"). Transparency için kritik.
     /// </summary>
     public List<string> Assumptions { get; set; } = new();

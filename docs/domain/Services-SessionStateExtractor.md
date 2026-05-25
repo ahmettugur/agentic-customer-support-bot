@@ -124,9 +124,9 @@ Saf static fonksiyon:
 
 ```csharp
 var state = new ChatSessionState();
-SessionStateExtractor.ExtractAndApply(state, "ORD-5 nerede", "Sipariş kargoda", 1);
+SessionStateExtractor.ExtractAndApply(state, "5 nerede", "Sipariş kargoda", 1);
 Assert.Equal("OrderInquiry", state.CurrentIntent);
-Assert.Equal("ORD-5", state.CollectedInfo["order_id"]);
+Assert.Equal("5", state.CollectedInfo["order_id"]);
 Assert.Equal("Resolution", state.Phase);   // "başarıyla" yok ama bot yanıt verdi → kontrol et
 ```
 

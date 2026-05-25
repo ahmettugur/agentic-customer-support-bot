@@ -36,11 +36,11 @@ ASP.NET Core 8+ `IExceptionHandler` interface'ini implement eder. Middleware pip
   "type": "https://tools.ietf.org/html/rfc7231#section-6.5.4",
   "title": "Resource not found",
   "status": 404,
-  "detail": "Sipariş ORD-5 bulunamadı",
+  "detail": "Sipariş 5 bulunamadı",
   "extensions": {
     "code": "ORDER_NOT_FOUND",
     "entityType": "Order",
-    "entityId": "ORD-5",
+    "entityId": "5",
     "traceId": "00-abc..."
   }
 }
@@ -308,7 +308,7 @@ YAML'da `snake_case`, C#'ta `PascalCase`:
 ```yaml
 scenarios:
   - id: order-inquiry-basic
-    user_query: "ORD-5 nerede"
+    user_query: "5 nerede"
     expected_intent: OrderInquiry
     expected_agents: [PlanningAgent, OrderAgent, ResponseAgent]
     known_failure_modes: []

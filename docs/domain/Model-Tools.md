@@ -188,7 +188,7 @@ Verified entity için ek bilgi:
 
 ```csharp
 new VerifiedEntity {
-    Value = "ORD-5",
+    Value = "5",
     Source = EntitySource.SessionState,
     Verification = EntityVerification.Verified,
     Attributes = {
@@ -206,18 +206,18 @@ Bu sayede specialist tool çağırmadan bile özet bilgiyi yanıtta kullanabilir
 ## Akış
 
 ```
-Kullanıcı: "ORD-5 nerede"
+Kullanıcı: "5 nerede"
    ↓
 IdExtractor.Extract()
-   → ExtractedIds { OrderId="ORD-5" }  (FormatOnly)
+   → ExtractedIds { OrderId="5" }  (FormatOnly)
    ↓
 PlanningAgent → OrderAgent
    ↓
 OrderAgent (Specialist):
-   - VerifiedEntities oluştur (DB'de ORD-5 var mı?)
+   - VerifiedEntities oluştur (DB'de 5 var mı?)
    - Verified ise Attributes'ı doldur
    ↓
-OrderAgent.CallTool(order_status_tool, order_id="ORD-5")
+OrderAgent.CallTool(order_status_tool, order_id="5")
    → ToolResult.Ok(data: orderInfo, message: "Sipariş kargoda")
    ↓
 PostToolReflection → ResponseAgent → kullanıcı

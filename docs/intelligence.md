@@ -191,8 +191,8 @@ POST /improvements/{id}/reject           # body: { decidedBy?, reason? }
   "lessons": [
     {
       "title": "Sipariş ID hatalı formatta verildiyse netleştirme sor",
-      "lesson": "Kullanıcı 'ORD-X' yerine sadece sayı girdiğinde, doğrudan order_status_tool çağırmadan önce 'ORD-' önekiyle teyit iste.",
-      "observation": "ORD-12 yerine '12' girilen 3 trace'te ProductInquiryAgent yanlışlıkla devreye girdi.",
+      "lesson": "Kullanıcı '1030' yerine sadece sayı girdiğinde, doğrudan order_status_tool çağırmadan önce sipariş ID doğrulaması yap.",
+      "observation": "12 yerine '12' girilen 3 trace'te ProductAgent yanlışlıkla devreye girdi.",
       "suggestedAgent": "OrderAgent"
     }
   ]

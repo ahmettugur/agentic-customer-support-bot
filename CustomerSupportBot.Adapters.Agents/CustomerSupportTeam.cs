@@ -4,7 +4,7 @@
 //
 // Mimari:
 // 1. PlanningAgent       → Yönlendirme (araç yok)
-// 2. ProductInquiryAgent → product_inquiry_tool
+// 2. ProductAgent         → product_inquiry_tool + product_list_tool
 // 3. OrderAgent          → order_placement_tool (HITL) + order_status_tool + get_last_order_tool + get_all_orders_tool
 // 4. ComplaintAgent      → complaint_registration_tool (HITL approval gate)
 // 5. HumanHandoffAgent   → human_handoff_tool
@@ -36,7 +36,7 @@ namespace CustomerSupportBot.Adapters.Agents;
 public class CustomerSupportTeam : IAgentTeamPort
 {
     private readonly AIAgent _planningAgent;
-    private readonly AIAgent _productInquiryAgent;
+    private readonly AIAgent _productAgent;
     private readonly AIAgent _orderAgent;
     private readonly AIAgent _complaintAgent;
     private readonly AIAgent _humanHandoffAgent;
@@ -87,12 +87,15 @@ public class CustomerSupportTeam : IAgentTeamPort
             name: WellKnown.AgentNames.Planning,
             description: "Müşteri destek görevlerini planlayan ve uygun ajanlara yönlendiren bir ajandır."), sourceName);
 
-        _productInquiryAgent = WrapWithTelemetry(new ChatClientAgent(
+        _productAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
-            instructions: _prompts.Get("agents/product-inquiry-agent"),
-            name: WellKnown.AgentNames.ProductInquiry,
+            instructions: _prompts.Get("agents/product-agent"),
+            name: WellKnown.AgentNames.Product,
             description: "Ürün sorgularını yanıtlar.",
-            tools: [AIFunctionFactory.Create(_tools.ProductInquiryTool)]), sourceName);
+            tools: [
+                AIFunctionFactory.Create(_tools.ProductInquiryTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.ProductInquiry }),
+                AIFunctionFactory.Create(_tools.ProductListTool,    new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.ProductList })
+            ]), sourceName);
 
         _orderAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
@@ -101,9 +104,9 @@ public class CustomerSupportTeam : IAgentTeamPort
             description: "Sipariş oluşturma, sorgulama, iptal ve iade işlemlerini yürütür.",
             tools: [
                 _approvalGate.BuildOrderPlacementTool(),
-                AIFunctionFactory.Create(_tools.OrderStatusTool),
-                AIFunctionFactory.Create(_tools.GetLastOrderTool),
-                AIFunctionFactory.Create(_tools.GetAllOrdersTool),
+                AIFunctionFactory.Create(_tools.OrderStatusTool,  new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.OrderStatus }),
+                AIFunctionFactory.Create(_tools.GetLastOrderTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.GetLastOrder }),
+                AIFunctionFactory.Create(_tools.GetAllOrdersTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.GetAllOrders }),
                 _approvalGate.BuildOrderCancelTool(),
                 _approvalGate.BuildReturnRequestTool()
             ]), sourceName);
@@ -120,7 +123,7 @@ public class CustomerSupportTeam : IAgentTeamPort
             instructions: _prompts.Get("agents/human-handoff-agent"),
             name: WellKnown.AgentNames.HumanHandoff,
             description: "Kullanıcının açıkça insan temsilcisiyle görüşme talebini karşılar.",
-            tools: [AIFunctionFactory.Create(CustomerSupportToolsService.HumanHandoffTool)]), sourceName);
+            tools: [AIFunctionFactory.Create(CustomerSupportToolsService.HumanHandoffTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.HumanHandoff })]), sourceName);
 
         _responseAgent = WrapWithTelemetry(new ChatClientAgent(
             chatClient,
@@ -147,7 +150,7 @@ public class CustomerSupportTeam : IAgentTeamPort
             })
             .AddParticipants(
                 _planningAgent,
-                _productInquiryAgent,
+                _productAgent,
                 _orderAgent,
                 _complaintAgent,
                 _humanHandoffAgent,

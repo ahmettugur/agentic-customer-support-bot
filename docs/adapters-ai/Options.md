@@ -175,7 +175,7 @@ Startup'ta hangi sağlayıcı seçilmişse onun alanları kontrol edilir. Yanlı
       "VadSilenceMs": 600,
       "ReasoningEffort": "low",
       "TranscriptionLanguage": "tr",
-      "TranscriptionPrompt": "Müşteri destek konuşması. Sipariş ID'leri ORD-XXX formatında..."
+      "TranscriptionPrompt": "Müşteri destek konuşması. Sipariş ID'leri 1042 formatında..."
     }
   }
 }

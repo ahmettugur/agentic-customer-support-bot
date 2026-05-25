@@ -160,7 +160,7 @@ CustomerSupportBot.Api/Prompts/
 [Description("Sipariş için iade süreci başlatır. orderId ve reason zorunlu. " +
              "Sonuç ToolResult olarak döner.")]
 public ToolResult RefundInitiateTool(
-    [Description("İade edilecek sipariş numarası (ör. 'ORD-1')")] string orderId,
+    [Description("İade edilecek sipariş numarası (ör. '1')")] string orderId,
     [Description("İade sebebi (en az 10 karakter)")] string reason)
 {
     // 1) Validation — parametre adları için WellKnown.ToolParameterNames kullan
@@ -229,7 +229,7 @@ var complaintAgent = new ChatClientAgent(
 # docs/evaluation-scenarios.yaml
 - id: "refund-happy-path"
   category: "şikayet"
-  query: "ORD-1 için iade açmak istiyorum, ürün arızalı geldi."
+  query: "1 için iade açmak istiyorum, ürün arızalı geldi."
   expected_tools: ["refund_initiate_tool"]
   success_criteria:
     - type: "response_contains"
@@ -311,7 +311,7 @@ _workflow = AgentWorkflowBuilder
     .CreateGroupChatBuilderWith(...)
     .AddParticipants(
         planningAgent,
-        productInquiryAgent,
+        productAgent,
         orderAgent,
         complaintAgent,
         billingAgent,  // ← yeni
@@ -323,7 +323,7 @@ _workflow = AgentWorkflowBuilder
 
 ```md
 MEVCUT AJANLAR:
-  - ProductInquiryAgent : Ürün soruları
+  - ProductAgent : Ürün soruları
   - OrderAgent          : Sipariş oluşturma + durum/geçmişi
   - ComplaintAgent      : Şikayet kaydı
   - BillingAgent        : Fatura sorguları ← yeni
@@ -336,7 +336,7 @@ MEVCUT AJANLAR:
 // CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs
 private static readonly string[] SpecialistPrefixes =
 {
-    "ProductInquiryAgent",
+    "ProductAgent",
     "OrderAgent",
     "ComplaintAgent",
     "BillingAgent"  // ← eklendi
@@ -496,7 +496,7 @@ app.MapAdminEndpoints();  // ← yeni
 ```yaml
 - id: "billing-happy-path"
   category: "fatura"
-  query: "ORD-1 için faturamı gönderir misiniz?"
+  query: "1 için faturamı gönderir misiniz?"
   expected_intent: "fatura"
   expected_agents: ["PlanningAgent", "BillingAgent", "ResponseAgent"]
   expected_tools: ["fetch_invoice_tool"]
@@ -732,7 +732,7 @@ Compound query orkestrasyonunun 2+ subtask'lı bir sorguda doğru çalıştığ�
 ```yaml
 - id: "compound-order-and-complaint"
   category: "compound"
-  query: "ORD-1 siparişim nerede ve ORD-2 için şikayet açmak istiyorum, ürün arızalı geldi"
+  query: "1 siparişim nerede ve 2 için şikayet açmak istiyorum, ürün arızalı geldi"
   expected_intent: "compound"
   expected_agents: ["PlanningAgent", "OrderAgent", "ResponseAgent", 
                     "PlanningAgent", "ComplaintAgent", "ResponseAgent"]
@@ -760,7 +760,7 @@ dotnet run
 
 Chat UI'dan şu sorguyu deneyin:
 
-> *"ORD-1 nerede ve ORD-2 için şikayet açmak istiyorum"*
+> *"1 nerede ve 2 için şikayet açmak istiyorum"*
 
 **3. Gözlemler**:
 
@@ -780,7 +780,7 @@ Chat UI'dan şu sorguyu deneyin:
   SubTask#2 (done)
   Orchestrator (aggregating)
   ```
-- **Final yanıt** maddelenmiş biçimde olmalı: *"**1) ORD-1 için ...**\n\n...\n\n---\n\n**2) ORD-2 için ...**"*.
+- **Final yanıt** maddelenmiş biçimde olmalı: *"**1) 1 için ...**\n\n...\n\n---\n\n**2) 2 için ...**"*.
 
 **4. Trace inceleme**:
 

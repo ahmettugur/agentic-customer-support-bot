@@ -331,7 +331,7 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
 
         YAPABİLDİKLERİN (function calling ile):
         - Ürün katalog sorgusu (fiyat/stok)
-        - Sipariş durumu sorgulama (ORD-X numarasıyla)
+        - Sipariş durumu sorgulama (4+ haneli sipariş numarasıyla)
         - Bir müşterinin son siparişi
         - Bir müşterinin tüm siparişlerinin listesi
 

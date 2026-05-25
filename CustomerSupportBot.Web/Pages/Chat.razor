@@ -56,11 +56,11 @@
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
                             Sipariş ver
                         </button>
-                        <button class="example-chip" @onclick='() => SendChipMessage("ORD-1 numaralı siparişimin durumu nedir?")'>
+                        <button class="example-chip" @onclick='() => SendChipMessage("1030 numaralı siparişimin durumu nedir?")'>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><path d="m7.5 4.27 9 5.15"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" x2="12" y1="22" y2="12"/><path d="m17 13 5 5m-5 0 5-5"/></svg>
                             Sipariş durumu
                         </button>
-                        <button class="example-chip" @onclick='() => SendChipMessage("ORD-2 siparişim çok geç geldi, şikayet etmek istiyorum")'>
+                        <button class="example-chip" @onclick='() => SendChipMessage("1042 siparişim çok geç geldi, şikayet etmek istiyorum")'>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             Şikayet bildirimi
                         </button>
@@ -842,7 +842,7 @@
     private static string FriendlyAgentName(string id) => id switch
     {
         "PlanningAgent"      => "Planlama Ajanı",
-        "ProductInquiryAgent"=> "Ürün Ajanı",
+        "ProductAgent"=> "Ürün Ajanı",
         "OrderAgent"         => "Sipariş Ajanı",
         "ComplaintAgent"     => "Şikayet Ajanı",
         "ResponseAgent"      => "Yanıt Ajanı",

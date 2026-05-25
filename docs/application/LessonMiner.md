@@ -57,7 +57,7 @@ En yeni 8 aday seçilir (token bütçesi sınırı). Her trace için şu bilgile
       "title": "Kısa başlık",
       "lesson": "X durumunda Y yapılmalıdır",
       "observation": "Gözlemlenen sorun açıklaması",
-      "suggestedAgent": "ProductInquiryAgent | null"
+      "suggestedAgent": "ProductAgent | null"
     }
   ]
 }

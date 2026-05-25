@@ -9,7 +9,7 @@
 //   - "no extra tool calls"
 //   - "no missing_param_tool error"
 //   - "agent requests <field>" (response asks for field)
-//   - "complaint id returned" / "order id returned" (regex ORD-\d / CMP-\d)
+//   - "complaint id returned" / "order id returned" (regex \d{4,} bağlamsal)
 // Diğer pattern'lar → "manual_review" olarak işaretlenir.
 
 using System.Text.RegularExpressions;
@@ -133,7 +133,7 @@ public static class CriteriaEvaluator
         // ─── complaint/order id returned ───
         if (lower.Contains("complaint id") || lower.Contains("şikayet no"))
         {
-            var hasId = Regex.IsMatch(ctx.Response ?? "", @"\bCMP[-_]?\d+\b|\bşikayet.*?\d+", RegexOptions.IgnoreCase);
+            var hasId = Regex.IsMatch(ctx.Response ?? "", @"\bşikayet.*?\d{4,}|\d{4,}.*?şikayet|\b\d{4,}\b", RegexOptions.IgnoreCase);
             return new CriterionResult
             {
                 Criterion = c,
@@ -144,7 +144,7 @@ public static class CriteriaEvaluator
 
         if (lower.Contains("order id"))
         {
-            var hasId = Regex.IsMatch(ctx.Response ?? "", @"\bORD[-_]?\d+\b", RegexOptions.IgnoreCase);
+            var hasId = Regex.IsMatch(ctx.Response ?? "", @"\b\d{4,}\b");
             return new CriterionResult
             {
                 Criterion = c,

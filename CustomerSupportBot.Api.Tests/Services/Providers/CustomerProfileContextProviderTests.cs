@@ -28,7 +28,7 @@ public class CustomerProfileContextProviderTests
         var store = new InMemoryCustomerProfileStore();
         var provider = Build(store);
 
-        var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "CUST-1" } };
+        var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1001" } };
         var ctx = await provider.GetContextAsync(session);
         ctx.Should().BeNull();
     }
@@ -37,10 +37,10 @@ public class CustomerProfileContextProviderTests
     public async Task EmptyProfile_ZeroTurns_ReturnsNull()
     {
         var store = new InMemoryCustomerProfileStore();
-        store.Upsert(new CustomerProfile { CustomerId = "CUST-1", TotalTurns = 0 });
+        store.Upsert(new CustomerProfile { CustomerId = "1001", TotalTurns = 0 });
 
         var provider = Build(store);
-        var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "CUST-1" } };
+        var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1001" } };
         var ctx = await provider.GetContextAsync(session);
         ctx.Should().BeNull();
     }
@@ -51,8 +51,8 @@ public class CustomerProfileContextProviderTests
         var store = new InMemoryCustomerProfileStore();
         store.Upsert(new CustomerProfile
         {
-            CustomerId = "CUST-1990",
-            Summary = "Dell XPS 15 m��terisi",
+            CustomerId = "1027",
+            Summary = "Dell XPS 15 müşterisi",
             PreferredLanguage = "tr",
             PreferredTone = "concise",
             TotalSessions = 3,
@@ -65,16 +65,16 @@ public class CustomerProfileContextProviderTests
             },
             ProductInterests = new List<string> { "Dell XPS 15", "Apple iPhone 15 Pro" },
             RecentRatings = new List<int> { 4, 5, 3 },
-            AdminNote = "VIP m��teri"
+            AdminNote = "VIP müşteri"
         });
 
         var provider = Build(store);
-        var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "CUST-1990" } };
+        var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1027" } };
         var ctx = await provider.GetContextAsync(session);
 
         ctx.Should().NotBeNull();
         ctx.Should().Contain("Profili")
-                  .And.Contain("CUST-1990")
+                  .And.Contain("1027")
                   .And.Contain("Dell XPS 15")
                   .And.Contain("VIP")
                   .And.Contain("order_inquiry")

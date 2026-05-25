@@ -118,7 +118,7 @@ public class CriteriaEvaluatorMoreTests
                     PreToolCheck = new()
                     {
                         CanProceed = true,
-                        CollectedParams = new List<string> { "customer_id=CUST-1990" }
+                        CollectedParams = new List<string> { "customer_id=1027" }
                     }
                 }
             }

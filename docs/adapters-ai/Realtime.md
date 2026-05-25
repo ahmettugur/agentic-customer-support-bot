@@ -255,7 +255,7 @@ new
         type = "object",
         properties = new
         {
-            order_id = new { type = "string", description = "Sipariş ID, örn: ORD-1" }
+            order_id = new { type = "string", description = "Sipariş ID, örn: 1" }
         },
         required = new[] { "order_id" },
         additionalProperties = false

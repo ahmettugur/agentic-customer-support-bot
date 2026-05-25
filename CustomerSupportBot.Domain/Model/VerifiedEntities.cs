@@ -1,7 +1,7 @@
 // Models/VerifiedEntities.cs
 // Entity grounding / ReAct-lite.
-// IdExtractor sadece regex formatını doğrular ("ORD-1" mi?).
-// EntityVerifier ise bunun DB'de var olduğunu da doğrular ("ORD-1" gerçekten bir sipariş mi?)
+// IdExtractor sadece regex formatını doğrular ("1030" mi?).
+// EntityVerifier ise bunun DB'de var olduğunu da doğrular ("1030" gerçekten bir sipariş mi?)
 // Ve reasoning modeline verilen prompt'a "doğrulanmış bağlam" olarak enjekte eder.
 // Amaç: hallucination'ı düşürmek ve requiredInfo'nun zaten bilinen alanları istememesini
 // Garanti altına almak.
@@ -14,13 +14,13 @@ namespace CustomerSupportBot.Domain.Model;
 /// </summary>
 public class VerifiedEntities
 {
-    /// <summary>Doğrulanmış sipariş ID'si (ör. ORD-1).</summary>
+    /// <summary>Doğrulanmış sipariş ID'si (ör. 1030).</summary>
     public VerifiedEntity? OrderId { get; set; }
 
-    /// <summary>Doğrulanmış müşteri ID'si (ör. CUST-1990" veya CUST-001).</summary>
+    /// <summary>Doğrulanmış müşteri ID'si (ör. 1027" veya 1001).</summary>
     public VerifiedEntity? CustomerId { get; set; }
 
-    /// <summary>Doğrulanmış şikayet ID'si (ör. CMP-1).</summary>
+    /// <summary>Doğrulanmış şikayet ID'si (ör. 1001).</summary>
     public VerifiedEntity? ComplaintId { get; set; }
 
     /// <summary>
@@ -51,7 +51,7 @@ public class VerifiedEntities
 /// </summary>
 public class VerifiedEntity
 {
-    /// <summary>Entity değeri (ör. "ORD-1").</summary>
+    /// <summary>Entity değeri (ör. "1030").</summary>
     public string Value { get; set; } = "";
 
     /// <summary>Bu değer nereden elde edildi?</summary>
@@ -62,7 +62,7 @@ public class VerifiedEntity
 
     /// <summary>
     /// Verified ise entity'nin DB'den çekilmiş kısa özet attribute'ları.
-    /// Ör. order için { "status": "Kargolandı", "product": "Dell XPS 15", "customerId": "CUST-1990"" }.
+    /// Ör. order için { "status": "Kargolandı", "product": "Dell XPS 15", "customerId": "1027" }.
     /// </summary>
     public Dictionary<string, string>? Attributes { get; set; }
 }

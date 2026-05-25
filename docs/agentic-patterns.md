@@ -92,8 +92,8 @@ User query → PlanningAgent (plan üret) → Specialist (tool çağır) → Res
 
 ```
 Reason   → preToolCheck JSON  {canProceed: true, reasoning: "...", confidence: 0.9}
-Act      → order_placement_tool(CUST-001, "Dell XPS 15", 2)
-Observe  → ToolResult {success: true, data: {orderId: "ORD-3"}}
+Act      → order_placement_tool(001, "Dell XPS 15", 2)
+Observe  → ToolResult {success: true, data: {orderId: "3"}}
 Reason   → postToolReflection {status: "done", handoffSuggestion: "ResponseAgent"}
 ```
 
@@ -268,11 +268,11 @@ public class ContextPipeline
 Sonuç tek bir system message olarak workflow'un başına eklenir:
 
 ```
-[Müşteri Bağlamı — CUST-001]
+[Müşteri Bağlamı — 001]
 Toplam sipariş: 3
-  - ORD-1: Dell XPS 15 x1, Durum: Kargolandı, Tarih: ...
+  - 1: Dell XPS 15 x1, Durum: Kargolandı, Tarih: ...
 [Konuşma Özeti]
-Kullanıcı ORD-1 hakkında daha önce...
+Kullanıcı 1 hakkında daha önce...
 ```
 
 **Neden?** Tüm history her prompt'a koyulursa token maliyeti patlar. Provider tabanlı yaklaşımla sadece ilgili bağlam seçilir, Order ile önceliklendirilir, yeni context türleri (ör. CRM, user preferences) kolay eklenir.
@@ -309,9 +309,9 @@ session.State.ConversationSummary = summary;
 
 ```csharp
 CustomerSupportBot.Domain/Services/IdExtractor.cs
-OrderIdPattern = \bORD[-_\s]?(\d+)\b               // ORD-1, ORD_1
-ComplaintIdPattern = \bCMP[-_\s]?(\d+)\b           // CMP-1
-CustomerIdPrefixPattern = \bCUST[-_\s]?(\d+)\b     // CUST-001
+OrderIdPattern = \bORD[-_\s]?(\d+)\b               // 1, ORD_1
+ComplaintIdPattern = \bCMP[-_\s]?(\d+)\b           // 1
+CustomerIdPrefixPattern = \bCUST[-_\s]?(\d+)\b     // 001
 NumericOnlyPattern = (?<![\w-])(\d{3,5})(?![\w-])  // 1990" (fallback)
 ```
 
@@ -319,15 +319,15 @@ NumericOnlyPattern = (?<![\w-])(\d{3,5})(?![\w-])  // 1990" (fallback)
 
 ```
 [ENTITY EXTRACTION — deterministik regex ile çıkarıldı]
-- order_id = "ORD-1"
-- customer_id = "CUST-1990"
+- order_id = "1"
+- customer_id = "1990"
 
 SİPARİŞ SORGUSU ÖNCELİK KURALI:
   - order_id MEVCUT → 'order_status_tool' kullan
   - customer_id TEKRAR SORMA; order_id tek başına yeterlidir.
 ```
 
-**Neden?** "ORD-1" ile "CUST-1990" yan yana geldiğinde LLM bazen customer_id'yi order_id sanabiliyor. Regex ile eşleştirme deterministik; sonra LLM'e dikte edilir.
+**Neden?** "1" ile "1990" yan yana geldiğinde LLM bazen customer_id'yi order_id sanabiliyor. Regex ile eşleştirme deterministik; sonra LLM'e dikte edilir.
 
 ---
 
@@ -396,7 +396,7 @@ public string Render(string key, IDictionary<string, string?>? vars);
 ```yaml
 - id: "order-inquiry-with-id"
   category: "sipariş_sorgulama"
-  query: "ORD-1 siparişim nerede?"
+  query: "1 siparişim nerede?"
   expected_intent: "sipariş_sorgulama"
   expected_agents: ["PlanningAgent", "OrderAgent", "ResponseAgent"]
   expected_tools: ["order_status_tool"]
@@ -433,9 +433,9 @@ public VerifiedEntities Verify(string query, AgentSession? session, IList<ChatMe
 ```
 [VERIFIED ENTITIES — session/DB ile doğrulandı]
 Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN.
-- order_id = "ORD-1" [VERIFIED, status=Kargolandı, product=Dell XPS 15]
-- customer_id = "CUST-1990" [VERIFIED, has_orders=true]
-- last_order_id = "ORD-1" [derived]
+- order_id = "1" [VERIFIED, status=Kargolandı, product=Dell XPS 15]
+- customer_id = "1990" [VERIFIED, has_orders=true]
+- last_order_id = "1" [derived]
 ```
 
 **Dosya**:
@@ -445,7 +445,7 @@ Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN.
 
 **Literatürdeki yeri**: Klasik [ReAct](https://arxiv.org/abs/2210.03629)'ın "Observe" adımı normalde model tarafından tool çağrısıyla yapılır. Biz bu adımı **LLM'den önce, kodda deterministik** yapıyoruz — sıfır latency + sıfır LLM maliyeti. Bu yaklaşım *grounded prompting* veya *entity grounding* olarak da anılır.
 
-**Neden?** Model *"ORD-9999 bulunabilir"* diye halusine ederse kullanıcı *"siparişiniz kargoda"* gibi yanlış yanıt alabilir. Verified bir entity → güvenli karar zemini.
+**Neden?** Model *"9999 bulunabilir"* diye halusine ederse kullanıcı *"siparişiniz kargoda"* gibi yanlış yanıt alabilir. Verified bir entity → güvenli karar zemini.
 
 ---
 
@@ -487,10 +487,10 @@ Tespit edilen her issue `result.SanityIssues` listesine eklenir, trace'e yazıl�
 
 ```json
 "subTasks": [
-  { "order": 1, "intent": "sipariş_sorgulama", "description": "ORD-1 için durum sorgula",
-    "targetAgent": "OrderAgent", "entities": { "order_id": "ORD-1" }, "dependencies": [] },
-  { "order": 2, "intent": "şikayet", "description": "ORD-2 için şikayet aç",
-    "targetAgent": "ComplaintAgent", "entities": { "order_id": "ORD-2" }, "dependencies": [] }
+  { "order": 1, "intent": "sipariş_sorgulama", "description": "1 için durum sorgula",
+    "targetAgent": "OrderAgent", "entities": { "order_id": "1" }, "dependencies": [] },
+  { "order": 2, "intent": "şikayet", "description": "2 için şikayet aç",
+    "targetAgent": "ComplaintAgent", "entities": { "order_id": "2" }, "dependencies": [] }
 ]
 ```
 
@@ -498,7 +498,7 @@ Tespit edilen her issue `result.SanityIssues` listesine eklenir, trace'e yazıl�
 
 - Query tek niyetliyse `subTasks: []` (boş).
 - *" ve "*, *"sonra"*, *"ayrıca"*, iki farklı ID → decompose et.
-- Aynı niyet çoklu parametre (*"ORD-1 ve ORD-2'nin durumu"*) → decompose **etme**, tek görev.
+- Aynı niyet çoklu parametre (*"1 ve 2'nin durumu"*) → decompose **etme**, tek görev.
 - `targetAgent` mutlaka 4 specialist'ten biri.
 
 **Dosya**:

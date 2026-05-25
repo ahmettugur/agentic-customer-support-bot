@@ -192,12 +192,12 @@ await memory.SearchAsync(
     minScore: 0.75f,
     tagFilter: new Dictionary<string, string>
     {
-        ["customer_id"] = "CUST-1990",
+        ["customer_id"] = "1990",
         ["_kind"] = "Episodic"
     });
 ```
 
-Bu sorgu sadece CUST-1990'ın episodic anılarını arar — global memory'den karışmaz.
+Bu sorgu sadece 1990'ın episodic anılarını arar — global memory'den karışmaz.
 
 ### Graceful error
 

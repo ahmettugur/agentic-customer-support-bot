@@ -1,6 +1,6 @@
 // Models/SpecialistReasoning.cs
-// Specialist ajanların (ProductInquiry, OrderPlacement, Order,
-// Complaint) tool çağrısı öncesi/sonrası ürettiği yapılandırılmış reasoning.
+// Specialist ajanların (Product, Order, Complaint) tool çağrısı öncesi/sonrası
+// ürettiği yapılandırılmış reasoning.
 // Pre-tool check: parametre validasyonu ve karar gerekçesi.
 // Post-tool result: sonucun güven skoru ve notları.
 
@@ -25,8 +25,8 @@ public class SpecialistReasoning
     public double? ResultConfidence { get; set; }
 
     /// <summary>
-    /// Sonucun kısa özeti (ör. "ORD-1 found, status: delivered"
-    /// Veya "no match for CUST-999").
+    /// Sonucun kısa özeti (ör. "1030 found, status: delivered"
+    /// Veya "no match for 9999").
     /// </summary>
     public string? ResultNotes { get; set; }
 
@@ -70,7 +70,7 @@ public class PostToolReflection
     /// <summary>
     /// Dinamik handoff önerisi — bir başka specialist ajana devredilmeli mi?
     /// Null veya "ResponseAgent" ise akış normal yönde (ResponseAgent'a) devam eder.
-    /// Geçerli değerler: "ProductInquiryAgent", "OrderAgent",
+    /// Geçerli değerler: "ProductAgent", "OrderAgent",
     /// "ComplaintAgent", "ResponseAgent".
     /// </summary>
     public string? HandoffSuggestion { get; set; }

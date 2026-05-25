@@ -8,7 +8,7 @@ public class CriteriaEvaluatorTests
     [Fact]
     public void ResponseContains_Matches_Pass()
     {
-        var ctx = new ScenarioRunContext { Response = "Sipariş ORD-1 teslim edildi." };
+        var ctx = new ScenarioRunContext { Response = "Sipariş 1030 teslim edildi." };
         var r = CriteriaEvaluator.Evaluate("response contains 'teslim edildi'", ctx);
         r.Passed.Should().BeTrue();
     }
@@ -99,7 +99,7 @@ public class CriteriaEvaluatorTests
     [Fact]
     public void OrderIdInResponse_Match_Pass()
     {
-        var ctx = new ScenarioRunContext { Response = "Sipariş ORD-42 oluşturuldu." };
+        var ctx = new ScenarioRunContext { Response = "Sipariş 1042 oluşturuldu." };
         var r = CriteriaEvaluator.Evaluate("order id returned", ctx);
         r.Passed.Should().BeTrue();
     }
@@ -107,7 +107,7 @@ public class CriteriaEvaluatorTests
     [Fact]
     public void ComplaintIdInResponse_Match_Pass()
     {
-        var ctx = new ScenarioRunContext { Response = "Şikayet CMP-7 alındı." };
+        var ctx = new ScenarioRunContext { Response = "Şikayet 1001 alındı." };
         var r = CriteriaEvaluator.Evaluate("complaint id returned", ctx);
         r.Passed.Should().BeTrue();
     }

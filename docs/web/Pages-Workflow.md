@@ -50,7 +50,7 @@ Low-code workflow editor — LLM'siz deterministic akışların admin tarafında
 
         <div class="tester-section">
             <h3>Test Et</h3>
-            <input @bind="_testInput" placeholder="Örn: ORD-1 durumu nedir" />
+            <input @bind="_testInput" placeholder="Örn: 1 durumu nedir" />
             <button @onclick="TestAsync">▶ Çalıştır</button>
 
             @if (_testResult != null)
@@ -147,14 +147,14 @@ private async Task TestAsync()
 {
   "workflowId": "siparis-takibi",
   "success": true,
-  "finalResponse": "Sipariş ORD-1 durumu: Kargoda",
+  "finalResponse": "Sipariş 1 durumu: Kargoda",
   "durationMs": 12,
   "stepTraces": [
     { "stepId": "0", "type": "Branch", "skipped": false, "output": "..." },
     { "stepId": "1", "type": "Lookup", "skipped": false, "output": "..." },
-    { "stepId": "2", "type": "Respond", "skipped": false, "output": "Sipariş ORD-1 durumu: Kargoda" }
+    { "stepId": "2", "type": "Respond", "skipped": false, "output": "Sipariş 1 durumu: Kargoda" }
   ],
-  "finalVariables": { "order_id": "ORD-1", "status": "Kargoda" }
+  "finalVariables": { "order_id": "1", "status": "Kargoda" }
 }
 ```
 

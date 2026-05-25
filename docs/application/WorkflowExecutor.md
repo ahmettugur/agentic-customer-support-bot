@@ -164,7 +164,7 @@ public class WorkflowExecutionResult
   "name": "Sipariş Sorgula",
   "isActive": true,
   "inputPatterns": {
-    "orderId": "\\b(ORD-\\d+)\\b"
+    "orderId": "\\b(\\d{4,})\\b"
   },
   "steps": [
     {

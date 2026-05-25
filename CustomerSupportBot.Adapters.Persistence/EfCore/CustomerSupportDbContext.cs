@@ -4,6 +4,7 @@
 
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Analytics;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Improvement;
@@ -54,6 +55,13 @@ public sealed class CustomerSupportDbContext : DbContext
 
     // ─── analytics schema (sla) ───
     public DbSet<SlaEventEntity> SlaEvents => Set<SlaEventEntity>();
+
+    // ─── catalog schema ───
+    public DbSet<CategoryEntity> Categories => Set<CategoryEntity>();
+    public DbSet<OrderEntity> Orders => Set<OrderEntity>();
+    public DbSet<OrderDetailEntity> OrderDetails => Set<OrderDetailEntity>();
+    public DbSet<ProductEntity> Products => Set<ProductEntity>();
+    public DbSet<ComplaintEntity> Complaints => Set<ComplaintEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

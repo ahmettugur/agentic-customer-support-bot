@@ -74,7 +74,7 @@ public static class Phases
 public static class AgentNames
 {
     public const string Planning = "PlanningAgent";
-    public const string ProductInquiry = "ProductInquiryAgent";
+    public const string Product = "ProductAgent";
     public const string Order = "OrderAgent";
     public const string Complaint = "ComplaintAgent";
     public const string HumanHandoff = "HumanHandoffAgent";
@@ -82,12 +82,12 @@ public static class AgentNames
 
     public static readonly HashSet<string> ReadOnly = new()
     {
-        ProductInquiry  // approval gerektirmez
+        Product  // approval gerektirmez
     };
 
     public static readonly string[] Specialists =
     {
-        ProductInquiry, Order, Complaint, HumanHandoff
+        Product, Order, Complaint, HumanHandoff
     };
 }
 ```
@@ -98,6 +98,7 @@ public static class AgentNames
 public static class ToolNames
 {
     public const string ProductInquiry = "product_inquiry_tool";
+    public const string ProductList = "product_list_tool";
     public const string OrderPlacement = "order_placement_tool";
     public const string OrderStatus = "order_status_tool";
     public const string GetLastOrder = "get_last_order_tool";

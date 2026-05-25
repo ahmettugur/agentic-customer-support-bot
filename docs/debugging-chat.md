@@ -273,11 +273,11 @@ await _sse.WriteAsync("done", new { sessionId }, ct);
 
 ### S2. "Bot kullanıcıyı tekrar tekrar soruyor"
 
-**Belirti:** Kullanıcı ORD-1 verdi ama bot hala "sipariş numaranız nedir?" diyor.
+**Belirti:** Kullanıcı 1 verdi ama bot hala "sipariş numaranız nedir?" diyor.
 
 **İzlenecek yol:**
 1. `SessionStateExtractor.ExtractAndApply` → `session.State.CollectedInfo` doluyor mu?
-2. `IdExtractor.Extract` → ORD-1 yakalıyor mu? (regex match)
+2. `IdExtractor.Extract` → 1 yakalıyor mu? (regex match)
 3. `ReasoningResult.RequiredInfo` — gereksiz tekrar mı? (SanityIssues'da `redundant_required_info` arar)
 4. PreToolCheck → `CollectedParams`'a ekleniyor mu?
 

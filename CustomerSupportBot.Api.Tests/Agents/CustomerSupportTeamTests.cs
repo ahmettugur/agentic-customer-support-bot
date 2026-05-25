@@ -8,6 +8,7 @@ using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Api.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Infrastructure;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -16,9 +17,17 @@ using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 
+[Collection("PostgresCatalog")]
 public class CustomerSupportTeamTests
 {
-    private static CustomerSupportTeam BuildTeam(IChatClient? chatClient = null)
+    private readonly PostgresCatalogFixture _fixture;
+
+    public CustomerSupportTeamTests(PostgresCatalogFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    private CustomerSupportTeam BuildTeam(IChatClient? chatClient = null)
     {
         chatClient ??= Substitute.For<IChatClient>();
 
@@ -42,7 +51,7 @@ public class CustomerSupportTeamTests
             Options.Create(approvalOpts),
             NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
-        var tools = TestFactory.CreateToolsService();
+        var tools = TestFactory.CreateToolsService(_fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo);
         var escalationPolicy = new EscalationPolicyService(
             sink, Options.Create(approvalOpts));
         var approvalGate = new ApprovalGateService(
@@ -161,7 +170,7 @@ public class CustomerSupportTeamTests
             "BuildWorkflowMessagesAsync", BindingFlags.Instance | BindingFlags.NonPublic);
         if (method == null) return;
 
-        var task = (Task)method.Invoke(team, new object?[] { "Sipari�im ORD-12345 nerede?", null, null, null })!;
+        var task = (Task)method.Invoke(team, new object?[] { "sipariş 1030 nerede?", null, null, null })!;
         await task.ConfigureAwait(true);
         var messages = (task.GetType().GetProperty("Result")!.GetValue(task) as List<ChatMessage>)!;
 

@@ -2,15 +2,23 @@ using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 
+[Collection("PostgresCatalog")]
 public class ApprovalGateServiceEscalationTests
 {
+    private readonly PostgresCatalogFixture _fixture;
     private readonly InMemoryEscalationSink _sink = new(NullLogger<InMemoryEscalationSink>.Instance);
     private readonly ApprovalOptions _opts = new() { EscalationEnabled = true };
+
+    public ApprovalGateServiceEscalationTests(PostgresCatalogFixture fixture)
+    {
+        _fixture = fixture;
+    }
 
     private ApprovalGateService BuildService()
     {
@@ -24,7 +32,7 @@ public class ApprovalGateServiceEscalationTests
             Options.Create(_opts),
             _sink,
             new ApprovalContextAccessor(),
-            TestFactory.CreateToolsService(),
+            TestFactory.CreateToolsService(_fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo),
             escalationPolicy);
     }
 
@@ -70,7 +78,7 @@ public class ApprovalGateServiceEscalationTests
                 }
             }
         };
-        svc.ProcessPendingEscalations(trace, "soru", "yan�t");
+        svc.ProcessPendingEscalations(trace, "soru", "yanıt");
         _sink.GetOpen().Should().BeEmpty();
     }
 
@@ -96,7 +104,7 @@ public class ApprovalGateServiceEscalationTests
             }
         };
 
-        svc.ProcessPendingEscalations(trace, "soru", "yan�t");
+        svc.ProcessPendingEscalations(trace, "soru", "yanıt");
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
         open[0].Reason.Should().Be("manuel inceleme");
@@ -125,7 +133,7 @@ public class ApprovalGateServiceEscalationTests
         };
 
         svc.ProcessPendingEscalations(trace, "q", "r");
-        // �kinci �a�r� session zaten a��k oldu�u i�in skip etmeli
+        // İkinci çağrı session zaten açık olduğu için skip etmeli
         var trace2 = new ReasoningTrace
         {
             SessionId = "s1",

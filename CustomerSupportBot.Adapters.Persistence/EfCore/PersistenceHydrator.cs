@@ -9,9 +9,11 @@
 // İşlemler idempotent. Hata olursa uygulama durmaz, sadece loglanır.
 
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
 using CustomerSupportBot.Adapters.Persistence.Postgres;
 using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -79,6 +81,37 @@ public sealed class PersistenceHydrator : IHostedService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Hydrator] Default agent seed başarısız.");
+        }
+
+        // Catalog — tablolar boşsa demo verilerini seed et.
+        try { await SeedDefaultCategoriesAsync(cancellationToken); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Hydrator] Category seed başarısız.");
+        }
+
+        try { await SeedDefaultProductsAsync(cancellationToken); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Hydrator] Product seed başarısız.");
+        }
+
+        try { await SeedDefaultOrdersAsync(cancellationToken); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Hydrator] Order seed başarısız.");
+        }
+
+        try { await SeedDefaultOrderDetailsAsync(cancellationToken); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Hydrator] OrderDetail seed başarısız.");
+        }
+
+        try { await SeedDefaultComplaintsAsync(cancellationToken); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Hydrator] Complaint seed başarısız.");
         }
 
         _logger.LogInformation("[Hydrator] Startup recovery tamam.");
@@ -186,6 +219,86 @@ public sealed class PersistenceHydrator : IHostedService
         _logger.LogWarning(
             "[Hydrator] 2 default human agent + kullanıcı hesabı seed edildi " +
             "(john.doe / jane.smith). ÜRETİMDE Auth:DefaultAgentPassword'u rotate edin.");
+    }
+
+    private async Task SeedDefaultCategoriesAsync(CancellationToken ct)
+    {
+        var dbFactory = GetService<IDbContextFactory<CustomerSupportDbContext>>();
+        if (dbFactory is null) return;
+
+        await using var ctx = await dbFactory.CreateDbContextAsync(ct);
+        if (await ctx.Categories.AnyAsync(ct)) return;
+
+        ctx.Categories.AddRange(NorthwindSeedData.Categories());
+        await ctx.SaveChangesAsync(ct);
+        _logger.LogInformation("[Hydrator] {Count} kategori seed edildi.", NorthwindSeedData.Categories().Length);
+    }
+
+    private async Task SeedDefaultProductsAsync(CancellationToken ct)
+    {
+        var dbFactory = GetService<IDbContextFactory<CustomerSupportDbContext>>();
+        if (dbFactory is null) return;
+
+        await using var ctx = await dbFactory.CreateDbContextAsync(ct);
+        if (await ctx.Products.AnyAsync(ct)) return;
+
+        ctx.Products.AddRange(NorthwindSeedData.Products());
+        await ctx.SaveChangesAsync(ct);
+
+        await ctx.Database.ExecuteSqlRawAsync(
+            "SELECT setval(pg_get_serial_sequence('catalog.products','id'), (SELECT MAX(id) FROM catalog.products))",
+            ct);
+
+        _logger.LogInformation("[Hydrator] {Count} Northwind ürünü seed edildi.", NorthwindSeedData.Products().Length);
+    }
+
+    private async Task SeedDefaultOrdersAsync(CancellationToken ct)
+    {
+        var dbFactory = GetService<IDbContextFactory<CustomerSupportDbContext>>();
+        if (dbFactory is null) return;
+
+        await using var ctx = await dbFactory.CreateDbContextAsync(ct);
+        if (await ctx.Orders.AnyAsync(ct)) return;
+
+        ctx.Orders.AddRange(NorthwindSeedData.Orders());
+        await ctx.SaveChangesAsync(ct);
+
+        await ctx.Database.ExecuteSqlRawAsync(
+            "SELECT setval('catalog.order_seq', (SELECT COALESCE(MAX(code), 1081) FROM catalog.orders))",
+            ct);
+
+        _logger.LogInformation("[Hydrator] {Count} Northwind siparişi seed edildi.", NorthwindSeedData.Orders().Length);
+    }
+
+    private async Task SeedDefaultOrderDetailsAsync(CancellationToken ct)
+    {
+        var dbFactory = GetService<IDbContextFactory<CustomerSupportDbContext>>();
+        if (dbFactory is null) return;
+
+        await using var ctx = await dbFactory.CreateDbContextAsync(ct);
+        if (await ctx.OrderDetails.AnyAsync(ct)) return;
+
+        ctx.OrderDetails.AddRange(NorthwindSeedData.OrderDetails());
+        await ctx.SaveChangesAsync(ct);
+        _logger.LogInformation("[Hydrator] {Count} sipariş detayı seed edildi.", NorthwindSeedData.OrderDetails().Length);
+    }
+
+    private async Task SeedDefaultComplaintsAsync(CancellationToken ct)
+    {
+        var dbFactory = GetService<IDbContextFactory<CustomerSupportDbContext>>();
+        if (dbFactory is null) return;
+
+        await using var ctx = await dbFactory.CreateDbContextAsync(ct);
+        if (await ctx.Complaints.AnyAsync(ct)) return;
+
+        ctx.Complaints.AddRange(NorthwindSeedData.Complaints());
+        await ctx.SaveChangesAsync(ct);
+
+        await ctx.Database.ExecuteSqlRawAsync(
+            "SELECT setval('catalog.complaint_seq', (SELECT COALESCE(MAX(code), 1005) FROM catalog.complaints))",
+            ct);
+
+        _logger.LogInformation("[Hydrator] {Count} demo şikayet seed edildi.", NorthwindSeedData.Complaints().Length);
     }
 
     private T? GetService<T>() =>

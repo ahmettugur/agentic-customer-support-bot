@@ -102,7 +102,7 @@ public enum MemoryKind
 
 | Kind | Kaynak | Ne için kullanılır |
 |---|---|---|
-| `Episodic` | Konuşma sonu | "Müşteri ORD-5 hakkında konuştu" |
+| `Episodic` | Konuşma sonu | "Müşteri 5 hakkında konuştu" |
 | `Lesson` | LessonMiner | "Stok kontrolünden önce ürün adı doğrulanmalı" |
 | `Knowledge` | KB dosyaları (.md/.pdf) | Ürün dokümantasyonu, politikalar |
 
@@ -189,8 +189,8 @@ LessonMiner default `take=8` (en fazla 8 trace) ile çalışır — büyük data
 ## Tüm akış (memory döngüsü)
 
 ```
-Konuşma 1: Müşteri ORD-5 sordu → Episodic kayıt
-Konuşma 2: Müşteri başka soru sordu → embed search → ORD-5 episodic hit → bot bağlam taşıyor
+Konuşma 1: Müşteri 5 sordu → Episodic kayıt
+Konuşma 2: Müşteri başka soru sordu → embed search → 5 episodic hit → bot bağlam taşıyor
 
 Trace analizi (haftalık):
    → LessonMiner → Lesson: "Stok kontrolü önce ürün adını doğrulamalı"
@@ -199,7 +199,7 @@ Admin Approve
    → VectorStore'a Knowledge olarak eklenir
    ↓
 Sonraki konuşma:
-   → ProductInquiryAgent prompt → semantic search → Lesson hit → daha iyi yanıt
+   → ProductAgent prompt → semantic search → Lesson hit → daha iyi yanıt
 ```
 
 ---

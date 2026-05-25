@@ -104,7 +104,7 @@ MaxIdMentions = 8
 Pattern: \b(ORD|CMP|CUST)-\d+\b
 ```
 
-Tek mesajda 8'den fazla ID (ORD-xxx / CMP-xxx / CUST-xxx) varsa:
+Tek mesajda 8'den fazla ID (1030 / 1001 / 1027) varsa:
 ```
 flags: ["too_many_ids:<sayı>"]
 msg: "Tek mesajda en fazla 8 sipariş/şikayet numarası işleyebilirim."

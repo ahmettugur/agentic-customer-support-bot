@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Agents;
+using CustomerSupportBot.Api.Tests.Infrastructure;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Tests.Helpers;
@@ -9,13 +10,17 @@ using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 
+[Collection("PostgresCatalog")]
 public class ApprovalGateServiceToolBuilderTests
 {
-    private static readonly InMemoryProductCatalogAdapter _products = new();
-    private static readonly InMemoryOrderAdapter _orders = new();
-    private static readonly InMemoryComplaintAdapter _complaints = new();
+    private readonly PostgresCatalogFixture _fixture;
 
-    private static ApprovalGateService Build(ApprovalOptions opts, IApprovalQueue? queue = null)
+    public ApprovalGateServiceToolBuilderTests(PostgresCatalogFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    private ApprovalGateService Build(ApprovalOptions opts, IApprovalQueue? queue = null)
     {
         queue ??= new InMemoryApprovalQueue(
             Options.Create(opts),
@@ -28,7 +33,7 @@ public class ApprovalGateServiceToolBuilderTests
             Options.Create(opts),
             sink,
             new ApprovalContextAccessor(),
-            TestFactory.CreateToolsService(_products, _orders, _complaints),
+            TestFactory.CreateToolsService(_fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo),
             escalationPolicy);
     }
 
@@ -55,13 +60,13 @@ public class ApprovalGateServiceToolBuilderTests
         var svc = Build(opts);
         var fn = svc.BuildOrderPlacementTool();
 
-        var product = _products.GetAll().First().Name;
+        var product = _fixture.ProductRepo.GetAll().First().Name;
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
             ["productName"] = product,
             ["quantity"] = 1,
-            ["customerId"] = $"CUST-AGS-{Guid.NewGuid():N}"
+            ["customerId"] = $"9007"
         }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
@@ -77,13 +82,13 @@ public class ApprovalGateServiceToolBuilderTests
         };
         var svc = Build(opts);
         var fn = svc.BuildOrderPlacementTool();
-        var product = _products.GetAll().First().Name;
+        var product = _fixture.ProductRepo.GetAll().First().Name;
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
             ["productName"] = product,
             ["quantity"] = 1,
-            ["customerId"] = $"CUST-BYPASS-{Guid.NewGuid():N}"
+            ["customerId"] = $"9008"
         }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
@@ -109,13 +114,13 @@ public class ApprovalGateServiceToolBuilderTests
 
         var svc = Build(opts, queue);
         var fn = svc.BuildOrderPlacementTool();
-        var product = _products.GetAll().First().Name;
+        var product = _fixture.ProductRepo.GetAll().First().Name;
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
             ["productName"] = product,
             ["quantity"] = 1,
-            ["customerId"] = $"CUST-REJ-{Guid.NewGuid():N}"
+            ["customerId"] = $"9009"
         }), TestContext.Current.CancellationToken);
         var (success, message) = ParseResult(result);
         success.Should().BeFalse();
@@ -141,13 +146,13 @@ public class ApprovalGateServiceToolBuilderTests
 
         var svc = Build(opts, queue);
         var fn = svc.BuildOrderPlacementTool();
-        var product = _products.GetAll().First().Name;
+        var product = _fixture.ProductRepo.GetAll().First().Name;
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
             ["productName"] = product,
             ["quantity"] = 1,
-            ["customerId"] = $"CUST-APR-{Guid.NewGuid():N}"
+            ["customerId"] = $"9010"
         }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
@@ -173,9 +178,9 @@ public class ApprovalGateServiceToolBuilderTests
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
-            ["orderId"] = "ORD-1",
+            ["orderId"] = "1042",
             ["complaintText"] = "yeterli uzunlukta bir şikayet metni var burada",
-            ["customerId"] = "CUST-1990"
+            ["customerId"] = "1027"
         }), TestContext.Current.CancellationToken);
         var (success, message) = ParseResult(result);
         success.Should().BeFalse();
@@ -191,9 +196,9 @@ public class ApprovalGateServiceToolBuilderTests
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
-            ["orderId"] = "ORD-1",
-            ["complaintText"] = $"�ikayet metni unique {Guid.NewGuid()} buraya yaz�ld�",
-            ["customerId"] = "CUST-1990"
+            ["orderId"] = "1030",
+            ["complaintText"] = $"şikayet metni unique {Guid.NewGuid()} buraya yazıldı",
+            ["customerId"] = "1027"
         }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();

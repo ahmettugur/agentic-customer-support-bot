@@ -17,7 +17,7 @@ public class InputGuardTests
     [Fact]
     public void Inspect_NormalMessage_Allowed()
     {
-        var r = _guard.Inspect("ORD-1 siparişimin durumu nedir?");
+        var r = _guard.Inspect("1030 siparişimin durumu nedir?");
         r.Verdict.Should().Be(InputGuardVerdict.Allow);
         r.RejectionReason.Should().BeNull();
     }
@@ -59,7 +59,7 @@ public class InputGuardTests
     [Fact]
     public void Inspect_TooManyIds_Rejected()
     {
-        var input = "ORD-1 ORD-2 ORD-3 ORD-4 ORD-5 ORD-6 ORD-7 ORD-8 ORD-9 ORD-10";
+        var input = "1030 1031 1032 1033 1034 1035 1036 1037 1038 1039";
         var r = _guard.Inspect(input);
         r.Verdict.Should().Be(InputGuardVerdict.Reject);
         r.Flags.Any(f => f.StartsWith("too_many_ids")).Should().BeTrue();
@@ -68,7 +68,7 @@ public class InputGuardTests
     [Fact]
     public void Inspect_FewIds_Allowed()
     {
-        var r = _guard.Inspect("ORD-1 ve ORD-2 hakkında bilgi");
+        var r = _guard.Inspect("1030 ve 1042 hakkında bilgi");
         r.Verdict.Should().Be(InputGuardVerdict.Allow);
     }
 

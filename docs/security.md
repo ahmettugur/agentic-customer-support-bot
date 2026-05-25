@@ -241,7 +241,7 @@ appsettings.Production.json
 
 ## 7. Entity Verification (Grounded Reasoning)
 
-`EntityVerifier` kullanıcı sorgusundaki ID'leri (ORD-1, CST-001 gibi) regex ile çıkarır ve repository port'ları üzerinden doğrular. Bu sayede:
+`EntityVerifier` kullanıcı sorgusundaki ID'leri (1, CST-001 gibi) regex ile çıkarır ve repository port'ları üzerinden doğrular. Bu sayede:
 
 - LLM'in uydurduğu (hallucinated) ID'ler tespit edilir
 - Doğrulanmış entity'ler reasoning'e `VerifiedEntities` olarak geçilir

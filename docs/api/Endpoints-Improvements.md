@@ -204,7 +204,7 @@ CustomerProfile yönetimi.
 ```json
 [
   {
-    "customerId": "CUST-1990",
+    "customerId": "1990",
     "preferredLanguage": "tr",
     "preferredTone": "formal",
     "totalSessions": 12,
@@ -220,7 +220,7 @@ LastInteractionAt DESC sıralı — en yeni müşteri en üstte.
 
 ```json
 {
-  "customerId": "CUST-1990",
+  "customerId": "1990",
   "preferredLanguage": "tr",
   "preferredTone": "formal",
   "summary": "VIP müşteri, sıkça iPhone ürünleri alır, kibar tonlu yanıt tercih eder",
@@ -239,7 +239,7 @@ LastInteractionAt DESC sıralı — en yeni müşteri en üstte.
 ### `POST /customers/{id}/profile/refresh`
 
 ```http
-POST /customers/CUST-1990/profile/refresh
+POST /customers/1990/profile/refresh
 ```
 
 **Akış:**
@@ -258,7 +258,7 @@ CustomerProfileService.ConsolidateAsync(customerId)
 ### `PUT /customers/{id}/profile/note`
 
 ```http
-PUT /customers/CUST-1990/profile/note
+PUT /customers/1990/profile/note
 Content-Type: application/json
 
 { "note": "VIP müşteri, premium destek hattı kullanmalı" }
@@ -268,7 +268,7 @@ Content-Type: application/json
 
 ```
 [Müşteri profili]
-- Müşteri: CUST-1990
+- Müşteri: 1990
 - Dil: tr, Ton: formal
 - Admin Notu: VIP müşteri, premium destek hattı kullanmalı
 ```
@@ -318,7 +318,7 @@ Request body: `WorkflowRequest` ([Models.md](Models.md) detayı).
   "name": "Sipariş Takibi",
   "description": "Tek tıkla sipariş durumu",
   "triggerKeywords": ["takip", "nerede"],
-  "inputPatterns": { "order_id": "ORD-\\d+" },
+  "inputPatterns": { "order_id": "\\d{4,}" },
   "steps": [
     { "type": "Branch", "condition": "order_id missing", "skipNext": 99 },
     { "type": "Lookup", "tool": "order_status_tool", "parameters": { "order_id": "{order_id}" }, "storeAs": "status" },
@@ -336,7 +336,7 @@ POST /workflows/siparis-takibi/test
 Content-Type: application/json
 
 {
-  "input": "ORD-5 nerede",
+  "input": "5 nerede",
   "variables": {}
 }
 ```
@@ -356,14 +356,14 @@ WorkflowExecutor.Execute(definition, input, variables)
 {
   "workflowId": "siparis-takibi",
   "success": true,
-  "finalResponse": "Sipariş ORD-5 durumu: Kargoda",
+  "finalResponse": "Sipariş 5 durumu: Kargoda",
   "durationMs": 12,
   "stepTraces": [
-    { "stepId": "0", "type": "Branch", "label": "order_id var mı?", "skipped": false, "output": "Condition met (order_id=ORD-5)" },
+    { "stepId": "0", "type": "Branch", "label": "order_id var mı?", "skipped": false, "output": "Condition met (order_id=5)" },
     { "stepId": "1", "type": "Lookup", "label": "Sipariş durumu", "output": "{ status: 'Kargoda' }" },
-    { "stepId": "2", "type": "Respond", "output": "Sipariş ORD-5 durumu: Kargoda" }
+    { "stepId": "2", "type": "Respond", "output": "Sipariş 5 durumu: Kargoda" }
   ],
-  "finalVariables": { "order_id": "ORD-5", "status": "Kargoda" }
+  "finalVariables": { "order_id": "5", "status": "Kargoda" }
 }
 ```
 

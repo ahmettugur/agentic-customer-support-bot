@@ -179,7 +179,7 @@ window.__chatSetup = function (ref, apiBase) {
         },
         _friendlyAgent: function (id) {
             var m = {
-                PlanningAgent: 'Planlama Ajanı', ProductInquiryAgent: 'Ürün Ajanı',
+                PlanningAgent: 'Planlama Ajanı', ProductAgent: 'Ürün Ajanı',
                 OrderAgent: 'Sipariş Ajanı', ComplaintAgent: 'Şikayet Ajanı',
                 ResponseAgent: 'Yanıt Ajanı', Orchestrator: 'Orkestratör'
             };

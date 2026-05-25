@@ -19,7 +19,7 @@ public class PlanningResult
     /// <summary>Niyetin dayandığı kanıtlar (kullanıcı metninden alıntılar).</summary>
     public List<string> SupportingEvidence { get; set; } = new();
 
-    /// <summary>Seçilen ajan (ör. "ProductInquiryAgent").</summary>
+    /// <summary>Seçilen ajan (ör. "ProductAgent").</summary>
     public string SelectedAgent { get; set; } = "";
 
     /// <summary>Bu ajanın seçilme gerekçesi.</summary>

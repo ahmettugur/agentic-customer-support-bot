@@ -221,7 +221,7 @@ public sealed class IntentActionMismatchRule : IReasoningSanityRule
 
         if (intent.Contains(WellKnown.Intents.ProductInfo) &&
             (action.Contains("complaintagent") || action.Contains("orderagent")))
-            return (true, WellKnown.AgentNames.ProductInquiry);
+            return (true, WellKnown.AgentNames.Product);
 
         return (false, "");
     }

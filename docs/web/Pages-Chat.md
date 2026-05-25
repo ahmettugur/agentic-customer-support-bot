@@ -252,7 +252,7 @@ Yanıt akarken hangi agent çalışıyor görüntüsü:
         "PlanningAgent" => "Planlama Ajanı",
         "OrderAgent" => "Sipariş Ajanı",
         "ComplaintAgent" => "Şikayet Ajanı",
-        "ProductInquiryAgent" => "Ürün Ajanı",
+        "ProductAgent" => "Ürün Ajanı",
         "HumanHandoffAgent" => "Yönlendirme Ajanı",
         "ResponseAgent" => "Yanıt Ajanı",
         _ => name

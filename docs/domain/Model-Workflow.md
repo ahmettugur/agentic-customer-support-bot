@@ -15,7 +15,7 @@ LLM esnek ama:
 
 Bazı senaryolar **deterministic** ve **sık**:
 - "Şube saatleri nedir?" → sabit yanıt
-- "Sipariş takip et: ORD-X" → tek tool çağrısı + yanıt
+- "Sipariş takip et: 1030" → tek tool çağrısı + yanıt
 - "İade politikası" → sabit yanıt
 
 Bu durumlarda LLM gereksiz. Workflow ile **regex + tool + template** → mikrosaniyede yanıt.
@@ -54,12 +54,12 @@ Mesajdan değişken çıkarır:
 
 ```csharp
 InputPatterns = {
-    ["order_id"] = "ORD-\\d+",
-    ["customer_id"] = "CUST-\\d+"
+    ["order_id"] = "\\d{4,}",
+    ["customer_id"] = "\\d{4,}"
 }
 
-Mesaj: "ORD-5 nerede"
-→ variables = { ["order_id"] = "ORD-5" }
+Mesaj: "5 nerede"
+→ variables = { ["order_id"] = "5" }
 ```
 
 ---
@@ -159,7 +159,7 @@ new WorkflowStep {
   "isActive": true,
   "triggerKeywords": ["takip", "nerede", "kargoda"],
   "inputPatterns": {
-    "order_id": "ORD-\\d+"
+    "order_id": "\\d{4,}"
   },
   "steps": [
     {

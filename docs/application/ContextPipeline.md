@@ -60,16 +60,16 @@ Birleşik çıktı örneği:
 
 ```
 [Konuşma Özeti]
-Müşteri ORD-4821'in durumunu sormuş, asistan "kargoda" cevabı vermiş.
+Müşteri 4821'in durumunu sormuş, asistan "kargoda" cevabı vermiş.
 
 ## 👤 Müşteri Profili
-- ID: CUST-12
+- ID: 12
 - Tercih edilen dil: tr, ton: formal
 ...
 
-[Müşteri Bağlamı — CUST-12]
+[Müşteri Bağlamı — 12]
 Toplam sipariş: 3
-  - ORD-4821: Laptop x1, Durum: shipped, Tarih: ...
+  - 4821: Laptop x1, Durum: shipped, Tarih: ...
   ...
 ```
 

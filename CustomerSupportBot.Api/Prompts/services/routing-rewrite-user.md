@@ -25,11 +25,11 @@ Aşağıdaki örnekler, farklı türde dahili mesajların kullanıcıya nasıl y
 
 ### Örnek 2 — Agent yönlendirmesi (bilgi yeterli)
 
-**Müşteri sorusu:** ORD-4821 numaralı siparişim ne zaman gelecek?
+**Müşteri sorusu:** 1042 numaralı siparişim ne zaman gelecek?
 
-**Dahili mesaj:** `OrderAgent: route to order inquiry, order_id=ORD-4821 verified`
+**Dahili mesaj:** `OrderAgent: route to order inquiry, order_id=1042 verified`
 
-**Beklenen yanıt:** ORD-4821 numaralı siparişinizin teslimat bilgilerini hemen kontrol ediyorum.
+**Beklenen yanıt:** 1042 numaralı siparişinizin teslimat bilgilerini hemen kontrol ediyorum.
 
 ---
 
@@ -47,7 +47,7 @@ Aşağıdaki örnekler, farklı türde dahili mesajların kullanıcıya nasıl y
 
 **Müşteri sorusu:** Bu ürün su geçirmez mi?
 
-**Dahili mesaj:** `ProductInquiryAgent: route to product info, no entity needed`
+**Dahili mesaj:** `ProductAgent: route to product info, no entity needed`
 
 **Beklenen yanıt:** Ürünün su geçirmezlik özelliğini sizin için araştırıyorum.
 
@@ -55,8 +55,8 @@ Aşağıdaki örnekler, farklı türde dahili mesajların kullanıcıya nasıl y
 
 ### Örnek 5 — Çoklu görev (compound query)
 
-**Müşteri sorusu:** ORD-1001 siparişimi iptal et ve iade sürecini başlat.
+**Müşteri sorusu:** 1030 numaralı siparişimi iptal et ve iade sürecini başlat.
 
-**Dahili mesaj:** `OrderAgent: cancel ORD-1001 → ComplaintAgent: initiate refund for ORD-1001`
+**Dahili mesaj:** `OrderAgent: cancel 1030 → ComplaintAgent: initiate refund for 1030`
 
-**Beklenen yanıt:** ORD-1001 numaralı siparişinizin iptal ve iade işlemlerini başlatıyorum; her iki adımı sırasıyla tamamlayacağım.
+**Beklenen yanıt:** 1030 numaralı siparişinizin iptal ve iade işlemlerini başlatıyorum; her iki adımı sırasıyla tamamlayacağım.

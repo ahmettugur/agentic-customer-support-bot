@@ -8,7 +8,7 @@
 
 Reasoning aşaması kullanıcının sorgusunun birden fazla bağımsız göreve bölünebileceğini tespit ettiğinde (compound query), `SubTaskOrchestrator` bu alt görevlerin nasıl sıralanacağına ve hangilerinin paralel çalışabileceğine karar verir.
 
-**Temel fikir:** "ORD-1001'i iptal et ve iade başlat" gibi sorgular tek bir workflow run'ı değil, bağımsız iki görev içerir. Her görevi ayrı workflow run'ı olarak işlemek daha temiz sonuç üretir.
+**Temel fikir:** "1001'i iptal et ve iade başlat" gibi sorgular tek bir workflow run'ı değil, bağımsız iki görev içerir. Her görevi ayrı workflow run'ı olarak işlemek daha temiz sonuç üretir.
 
 ## `IsCompoundQuery`
 
@@ -34,10 +34,10 @@ Sıralı subtask listesini **ardışık aynı türdeki** görevleri gruplar.
 
 ```
 Örnek subtask'lar:
-  1. OrderAgent:  ORD-1001 durum sorgula  [read-only]
-  2. OrderAgent:  ORD-2002 durum sorgula  [read-only]
+  1. OrderAgent:  1001 durum sorgula  [read-only]
+  2. OrderAgent:  2002 durum sorgula  [read-only]
   3. ComplaintAgent: Şikayet kaydet       [write]
-  4. OrderAgent:  ORD-3003 durum sorgula  [read-only]
+  4. OrderAgent:  3003 durum sorgula  [read-only]
 
 Partition çıktısı:
   Grup 1: [1, 2]  → Parallel=true   (ikisi aynı türde ard arda)
@@ -66,8 +66,8 @@ public static string FormatSubTaskQuery(SubTask subTask)
 Subtask'ı downstream workflow'a gönderilecek kullanıcı sorgusu formatına çevirir:
 
 ```
-Input:  SubTask { Description="ORD-1001 iptal et", Entities={"order_id":"ORD-1001"} }
-Output: "ORD-1001 iptal et (order_id=ORD-1001)"
+Input:  SubTask { Description="1001 iptal et", Entities={"order_id":"1001"} }
+Output: "1001 iptal et (order_id=1001)"
 ```
 
 ## `FormatSubTaskResult`
@@ -79,7 +79,7 @@ public static string FormatSubTaskResult(SubTask subTask, string subResponse)
 Her subtask sonucuna numaralı başlık ekler:
 
 ```
-**1) ORD-1001 iptal et**
+**1) 1001 iptal et**
 
 Siparişiniz başarıyla iptal edilmiştir.
 ```
@@ -93,7 +93,7 @@ public static string AggregateSubTaskResults(IReadOnlyList<string> parts)
 Tüm subtask sonuçlarını `---` ayırıcısıyla birleştirir:
 
 ```
-**1) ORD-1001 iptal et**
+**1) 1001 iptal et**
 
 Siparişiniz başarıyla iptal edilmiştir.
 
@@ -142,12 +142,12 @@ public record SubTaskGroup(bool Parallel, IReadOnlyList<SubTask> Items);
 ## Bütünleşik akış örneği
 
 ```
-Kullanıcı: "ORD-1001 ve ORD-2002'nin durumunu öğren, sonra ORD-1001'i iptal et"
+Kullanıcı: "1001 ve 2002'nin durumunu öğren, sonra 1001'i iptal et"
 
 Reasoning → SubTasks:
-  1. OrderAgent: ORD-1001 durum sorgula [intent: inquiry]
-  2. OrderAgent: ORD-2002 durum sorgula [intent: inquiry]
-  3. OrderAgent: ORD-1001 iptal          [intent: cancel]
+  1. OrderAgent: 1001 durum sorgula [intent: inquiry]
+  2. OrderAgent: 2002 durum sorgula [intent: inquiry]
+  3. OrderAgent: 1001 iptal          [intent: cancel]
 
 Partition:
   Grup 1: [1, 2] Parallel=true

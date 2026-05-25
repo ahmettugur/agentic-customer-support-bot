@@ -33,7 +33,7 @@ Kullanıcı sorgusu
 
 ### Görevi
 
-Kullanıcı sorgusundan ve konuşma geçmişinden `ORD-xxx`, `CMP-xxx`, `CUST-xxx` formatındaki ID'leri çıkarır; bunları DB'de doğrular; türetilmiş alanları hesaplar. Çıktısı `VerifiedEntities` nesnesidir.
+Kullanıcı sorgusundan ve konuşma geçmişinden `1030`, `1001`, `1027` formatındaki ID'leri çıkarır; bunları DB'de doğrular; türetilmiş alanları hesaplar. Çıktısı `VerifiedEntities` nesnesidir.
 
 ### Öncelik sırası
 
@@ -51,7 +51,7 @@ Query > History (yeni mesajdan eskiye) > SessionState.CustomerId
 
 ### Müşteri doğrulaması (özel durum)
 
-`CUST-xxx` için ayrı müşteri tablosu yoktur. Müşteriye ait en az bir sipariş veya şikayet varsa `Verified` kabul edilir; yoksa `FormatOnly` kalır. Böylece yeni kayıt müşteriler için false-negative önlenir.
+`1027` için ayrı müşteri tablosu yoktur. Müşteriye ait en az bir sipariş veya şikayet varsa `Verified` kabul edilir; yoksa `FormatOnly` kalır. Böylece yeni kayıt müşteriler için false-negative önlenir.
 
 ### Türetilmiş alanlar
 
@@ -72,9 +72,9 @@ public static string? BuildPromptBlock(VerifiedEntities verified)
 ```
 [VERIFIED ENTITIES — session/DB ile doğrulandı]
 Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN, kullanıcıdan tekrar İSTEMEYİN.
-- order_id = "ORD-4821" [VERIFIED, source=Query, status=shipped, product=Laptop, ...]
-- customer_id = "CUST-12" [FORMAT_ONLY, source=SessionState]
-⚠️ UYARI: Şu entity'ler DB'de bulunamadı: order_id=ORD-9999. Kullanıcıya kibarca doğrulatın.
+- order_id = "4821" [VERIFIED, source=Query, status=shipped, product=Laptop, ...]
+- customer_id = "12" [FORMAT_ONLY, source=SessionState]
+⚠️ UYARI: Şu entity'ler DB'de bulunamadı: order_id=9999. Kullanıcıya kibarca doğrulatın.
 ```
 
 ---

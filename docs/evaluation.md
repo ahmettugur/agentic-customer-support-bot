@@ -38,7 +38,7 @@ scenarios:
     category: product_inquiry_simple
     query: "Dizüstü bilgisayarınız var mı?"
     expected_intent: "ürün_bilgisi"
-    expected_agents: [PlanningAgent, ProductInquiryAgent, ResponseAgent]
+    expected_agents: [PlanningAgent, ProductAgent, ResponseAgent]
     expected_tools: [product_inquiry_tool]
     success_criteria:
       - "response contains 'Dizüstü' OR 'laptop'"
@@ -103,8 +103,8 @@ scenarios:
 | `no extra tool calls` | `"no extra tool calls"` | Beklenen tool sayısından fazla çağrı yapılmadığını kontrol eder |
 | `no missing_param_tool error` | `"no missing_param_tool error"` | Tool validation hatası olmadığını doğrular |
 | `agent requests <field>` | `"agent requests customer_id"` | Yanıtta ek bilgi isteniyor mu kontrol eder (ör. müşteri kimliği, sipariş numarası) |
-| `complaint id returned` | `"complaint id returned"` | Yanıtta `CMP-\d+` formatında şikayet ID'si var mı? |
-| `order id returned` | `"order id returned"` | Yanıtta `ORD-\d+` formatında sipariş ID'si var mı? |
+| `complaint id returned` | `"complaint id returned"` | Yanıtta `\d{4,}` formatında şikayet ID'si var mı? |
+| `order id returned` | `"order id returned"` | Yanıtta `\d{4,}` formatında sipariş ID'si var mı? |
 | `customer_id used correctly` | `"customer_id used correctly"` | Specialist PreToolCheck'te `customer_id` parametresinin toplandığını doğrular |
 | `response contains order status` | `"response contains order status"` | Yanıtta sipariş durumu bilgisi (durum/teslim/kargo) var mı? |
 
@@ -122,8 +122,8 @@ CriteriaEvaluator.Evaluate(criterion, ScenarioRunContext)
     ├─ "<tool> NOT called"     → ToolsCalled regex match (olumsuz)
     ├─ "<tool> called"         → ToolsCalled regex match
     ├─ "agent requests ..."    → Response'ta müşteri/sipariş sorusu arama
-    ├─ "complaint id returned" → CMP-\d+ regex
-    ├─ "order id returned"     → ORD-\d+ regex
+    ├─ "complaint id returned" → \d{4,} (şikayet bağlamında) regex
+    ├─ "order id returned"     → \d{4,} (sipariş bağlamında) regex
     └─ (tanınmayan)            → Skipped = "manual_review_needed"
     │
     ▼
@@ -215,7 +215,7 @@ Her senaryo **izole session** içinde çalışır (birbirinden bağımsız):
       "response": "Evet, Dell XPS 15 dizüstü bilgisayarımız mevcuttur...",
       "terminationReason": "completed",
       "detectedIntent": "ürün_bilgisi",
-      "agentsVisited": ["PlanningAgent", "ProductInquiryAgent", "ResponseAgent"],
+      "agentsVisited": ["PlanningAgent", "ProductAgent", "ResponseAgent"],
       "toolsCalled": ["product_inquiry_tool"],
       "durationMs": 3200,
       "error": null

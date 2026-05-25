@@ -47,7 +47,7 @@ public static class WellKnown
     public static class AgentNames
     {
         public const string Planning = "PlanningAgent";
-        public const string ProductInquiry = "ProductInquiryAgent";
+        public const string Product = "ProductAgent";
         public const string Order = "OrderAgent";
         public const string Complaint = "ComplaintAgent";
         public const string HumanHandoff = "HumanHandoffAgent";
@@ -56,19 +56,19 @@ public static class WellKnown
         /// <summary>Yan-etkisiz (read-only) specialist ajanlar — paralel sub-task çalıştırması için.</summary>
         public static readonly IReadOnlySet<string> ReadOnly = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            ProductInquiry
+            Product
         };
 
         /// <summary>Specialist ajanlar (Planning ve Response hariç).</summary>
         public static readonly string[] Specialists =
         [
-            ProductInquiry, Order, Complaint, HumanHandoff
+            Product, Order, Complaint, HumanHandoff
         ];
 
         /// <summary>Tüm ajanlar.</summary>
         public static readonly string[] All =
         [
-            Planning, ProductInquiry, Order, Complaint, HumanHandoff, Response
+            Planning, Product, Order, Complaint, HumanHandoff, Response
         ];
     }
 
@@ -76,6 +76,7 @@ public static class WellKnown
     public static class ToolNames
     {
         public const string ProductInquiry = "product_inquiry_tool";
+        public const string ProductList = "product_list_tool";
         public const string OrderPlacement = "order_placement_tool";
         public const string OrderStatus = "order_status_tool";
         public const string ComplaintRegistration = "complaint_registration_tool";
@@ -162,7 +163,7 @@ public static class WellKnown
         public const string LiveTakeoverResolution = "Canlı sohbet üzerinden çözüldü (Live Takeover).";
         public const string ReplanResolution = "Admin sohbeti yeniden planlattı; bot kontrolünde devam ediyor.";
         public const string ReplanCustomerNotice = "ℹ️ Talebinizi tekrar değerlendiriyoruz. Lütfen ne ile ilgili yardım istediğinizi kısaca yazar mısınız?";
-        public const string ReplanPlanningHint = "🔄 ADMIN OVERRİDE — Müşteri temsilcisi sohbeti gözden geçirip yeniden planlama talep etti. BU TURDAKİ USER mesajı doğrudan müşteriden DEĞİL; temsilcinin müşterinin gerçek talebini özetlediği bir nottur. USER mesajını müşterinin ÖNCELİKLİ ve KESİN talebi olarak kabul et ve doğru specialist agent'a yönlendir (örn. iade/şikayet → ComplaintAgent, sipariş → OrderAgent, ürün → ProductInquiryAgent). Önceki TOOL çağrılarını ve specialist kararlarını geçersiz say. Ancak history'deki müşteri-temsilci yazışmalarındaki bağlamı (verilen sözler, paylaşılan ID'ler/numaralar, temsilcinin seçtiği rota) AYNEN KORU. Tekrar eskale ETME — admin zaten karar verdi.";
+        public const string ReplanPlanningHint = "🔄 ADMIN OVERRİDE — Müşteri temsilcisi sohbeti gözden geçirip yeniden planlama talep etti. BU TURDAKİ USER mesajı doğrudan müşteriden DEĞİL; temsilcinin müşterinin gerçek talebini özetlediği bir nottur. USER mesajını müşterinin ÖNCELİKLİ ve KESİN talebi olarak kabul et ve doğru specialist agent'a yönlendir (örn. iade/şikayet → ComplaintAgent, sipariş → OrderAgent, ürün → ProductAgent). Önceki TOOL çağrılarını ve specialist kararlarını geçersiz say. Ancak history'deki müşteri-temsilci yazışmalarındaki bağlamı (verilen sözler, paylaşılan ID'ler/numaralar, temsilcinin seçtiği rota) AYNEN KORU. Tekrar eskale ETME — admin zaten karar verdi.";
     }
 
     /// <summary>Bot yanıtında fazı tespit etmek için kullanılan anahtar kelimeler.</summary>

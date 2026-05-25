@@ -6,7 +6,7 @@ using CustomerSupportBot.Domain.Services;
 //   1) Query'den extract et (IdExtractor)
 //   2) History'den eksik olanları tamamla (önceki turlardaki entity'leri hatırla)
 //   3) SessionState'ten tamamla (session.State.CustomerId)
-//   4) DB ile varlık doğrulaması yap (FakeDatabase.OrdersDb/ComplaintsDb lookup)
+//   4) DB ile varlık doğrulaması yap (IOrderRepository / IComplaintRepository üzerinden)
 //   5) Türetilmiş alanları hesapla (ör. customer_id'den last_order_id)
 //
 // Çıktı VerifiedEntities olarak reasoning prompt'una enjekte edilir.
@@ -20,7 +20,7 @@ namespace CustomerSupportBot.Application.Services;
 
 /// <summary>
 /// Query + history + session state üzerinde deterministic entity çıkarımı yapar
-/// Ve FakeDatabase ile doğrulayarak yapılandırılmış bir sonuç döner.
+/// Ve repository port'ları ile doğrulayarak yapılandırılmış bir sonuç döner.
 /// Hiçbir LLM çağrısı yapmaz — tamamen deterministik.
 /// </summary>
 public class EntityVerifier

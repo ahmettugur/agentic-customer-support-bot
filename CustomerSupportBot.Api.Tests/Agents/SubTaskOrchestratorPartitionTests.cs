@@ -25,11 +25,11 @@ public class SubTaskOrchestratorPartitionTests
     [Fact]
     public void Partition_AllReadOnly_SingleParallelGroup()
     {
-        // �u an tek read-only agent: ProductInquiry
+        // Tek read-only agent: Product
         var subs = new[]
         {
-            Sub(1, WellKnown.AgentNames.ProductInquiry),
-            Sub(2, WellKnown.AgentNames.ProductInquiry)
+            Sub(1, WellKnown.AgentNames.Product),
+            Sub(2, WellKnown.AgentNames.Product)
         };
 
         var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
@@ -60,9 +60,9 @@ public class SubTaskOrchestratorPartitionTests
         // read, write, read � 3 grup: [P] (parallel-1), [O] (serial), [P] (parallel-1)
         var subs = new[]
         {
-            Sub(1, WellKnown.AgentNames.ProductInquiry),
+            Sub(1, WellKnown.AgentNames.Product),
             Sub(2, WellKnown.AgentNames.Order),
-            Sub(3, WellKnown.AgentNames.ProductInquiry)
+            Sub(3, WellKnown.AgentNames.Product)
         };
 
         var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
@@ -81,8 +81,8 @@ public class SubTaskOrchestratorPartitionTests
     {
         var subs = new[]
         {
-            Sub(1, WellKnown.AgentNames.ProductInquiry),
-            Sub(2, WellKnown.AgentNames.ProductInquiry)
+            Sub(1, WellKnown.AgentNames.Product),
+            Sub(2, WellKnown.AgentNames.Product)
         };
 
         var opts = new ParallelExecutionOptions { Enabled = false };
@@ -98,8 +98,8 @@ public class SubTaskOrchestratorPartitionTests
     {
         var subs = new[]
         {
-            Sub(3, WellKnown.AgentNames.ProductInquiry),
-            Sub(1, WellKnown.AgentNames.ProductInquiry),
+            Sub(3, WellKnown.AgentNames.Product),
+            Sub(1, WellKnown.AgentNames.Product),
             Sub(2, WellKnown.AgentNames.Complaint)
         };
 
@@ -127,7 +127,7 @@ public class SubTaskOrchestratorPartitionTests
     [Fact]
     public void IsReadOnly_CaseInsensitive_True()
     {
-        DefaultOpts.IsReadOnly(Sub(1, "productinquiryagent")).Should().BeTrue();
+        DefaultOpts.IsReadOnly(Sub(1, "productagent")).Should().BeTrue();
     }
 
     [Fact]

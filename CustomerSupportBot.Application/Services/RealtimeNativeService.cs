@@ -365,6 +365,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
             result = name switch
             {
                 "product_inquiry_tool" => _tools.ProductInquiryTool(GetString(args, "product_name") ?? ""),
+                "product_list_tool"    => _tools.ProductListTool(GetString(args, "category")),
                 "order_status_tool"    => _tools.OrderStatusTool(GetString(args, "order_id") ?? ""),
                 "get_last_order_tool"  => _tools.GetLastOrderTool(GetString(args, "customer_id") ?? ""),
                 "get_all_orders_tool"  => _tools.GetAllOrdersTool(GetString(args, "customer_id") ?? ""),

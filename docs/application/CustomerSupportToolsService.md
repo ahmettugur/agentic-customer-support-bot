@@ -6,13 +6,14 @@
 
 ## Ne yapar?
 
-Ajanların LLM üzerinden çağırabileceği 8 tool'un gerçek iş mantığını uygular. Her tool bir `ToolResult` döndürür — yapılandırılmış sonuç formatı. Repository port'ları üzerinden veri erişimi yapar; veritabanı implementasyonuna bağımlı değildir.
+Ajanların LLM üzerinden çağırabileceği 10 tool'un gerçek iş mantığını uygular. Her tool bir `ToolResult` döndürür — yapılandırılmış sonuç formatı. Repository port'ları üzerinden veri erişimi yapar; veritabanı implementasyonuna bağımlı değildir.
 
 ## Tool listesi
 
 | Metot | Tool adı | Yan etkisi var mı? | HITL gerekir mi? |
 |-------|---------|-------------------|-----------------|
 | `ProductInquiryTool` | `product_inquiry_tool` | Hayır | Hayır |
+| `ProductListTool` | `product_list_tool` | Hayır | Hayır |
 | `OrderStatusTool` | `order_status_tool` | Hayır | Hayır |
 | `GetLastOrderTool` | `get_last_order_tool` | Hayır | Hayır |
 | `GetAllOrdersTool` | `get_all_orders_tool` | Hayır | Hayır |
@@ -44,6 +45,14 @@ ToolResult.Conflict(errorCode, message)     // İş kuralı ihlali (stok yok, m�
 - Tam eşleşme → `confidence = 1.0`
 - Kısmi eşleşme → `confidence = 0.85`
 - Ürün yoksa → `ToolResult.NotFound`
+
+### `ProductListTool`
+
+Tüm katalogu veya belirli bir kategoriye ait ürünleri listeler (`IProductCatalogRepository.GetAll` / `GetByCategory`).
+
+- `category` opsiyoneldir; boş gelirse tüm ürünler döner
+- Kategori karşılaştırması `LOWER()` ile yapılır — büyük/küçük harf duyarsız
+- Hiç ürün yoksa → `ToolResult.NotFound`
 
 ### `OrderStatusTool`
 

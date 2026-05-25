@@ -2,21 +2,30 @@ using RedisOptions = CustomerSupportBot.Adapters.Redis.RedisOptions;
 using CustomerSupportBot.Application.Ports.Driven.AI;
 using CustomerSupportBot.Application.Services.Personalization;
 using CustomerSupportBot.Api.Tests.Helpers;
+using CustomerSupportBot.Api.Tests.Infrastructure;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Services.Personalization;
 
+[Collection("PostgresCatalog")]
 public class CustomerProfileServiceTests
 {
-    private static (CustomerProfileService Service, InMemoryCustomerProfileStore Store, FakeChat Chat) Build()
+    private readonly PostgresCatalogFixture _fixture;
+
+    public CustomerProfileServiceTests(PostgresCatalogFixture fixture)
+    {
+        _fixture = fixture;
+    }
+
+    private (CustomerProfileService Service, InMemoryCustomerProfileStore Store, FakeChat Chat) Build()
     {
         var store = new InMemoryCustomerProfileStore();
         var chat = new FakeChat();
         var lockOptions = Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 });
         var distributedLock = new InMemoryDistributedLock(lockOptions);
-        var svc = new CustomerProfileService(store, chat, distributedLock, new InMemoryProductCatalogAdapter(), NullLogger<CustomerProfileService>.Instance);
+        var svc = new CustomerProfileService(store, chat, distributedLock, _fixture.ProductRepo, NullLogger<CustomerProfileService>.Instance);
         return (svc, store, chat);
     }
 

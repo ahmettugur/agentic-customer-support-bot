@@ -112,4 +112,4 @@ Tüm tool'lar `{ success, confidence, message, data, error }` döner.
 | `STOCK_INSUFFICIENT` — stok yetersiz | `failed` | `ResponseAgent` |
 | Ödeme/sistem sorunu | `needs_escalation` | `ResponseAgent` |
 | Kullanıcı sipariş sonrası şikayet bildirdi | — | `ComplaintAgent` |
-| Kullanıcı sipariş sonrası ürün bilgisi sordu | — | `ProductInquiryAgent` |
+| Kullanıcı sipariş sonrası ürün bilgisi sordu | — | `ProductAgent` |
