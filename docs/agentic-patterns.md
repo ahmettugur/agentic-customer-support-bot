@@ -101,7 +101,7 @@ Reason   → postToolReflection {status: "done", handoffSuggestion: "ResponseAge
 
 - Prompt'lar: `Prompts/agents/{product,order-placement,order-inquiry,complaint}-agent.md`
 - Model: `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`
-- Parser: `CustomerSupportBot.Application/Services/SpecialistReasoningParser.cs`
+- Parser: `CustomerSupportBot.Domain/Services/SpecialistReasoningParser.cs`
 
 **Neden?** Tool'un doğru/yanlış kullanıldığını sonradan kanıtlamak/eğitmek için explicit trace gerek. Ayrıca `canProceed=false` erken çıkışı, eksik parametreyle yan etkili tool çağırmayı önler.
 
@@ -906,9 +906,9 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
 
 | Pattern | Dosyalar |
 |---|---|
-| Planner-Executor, Router | `CustomerSupportBot.Api/Prompts/agents/planning-agent.md`, `CustomerSupportBot.Domain/Model/PlanningResult.cs`, `CustomerSupportBot.Application/Services/PlanningResultParser.cs` |
-| ReAct | `CustomerSupportBot.Api/Prompts/agents/{product,order-placement,order-inquiry,complaint}-agent.md`, `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`, `CustomerSupportBot.Application/Services/SpecialistReasoningParser.cs` |
-| Self-Reflection | `CustomerSupportBot.Api/Prompts/agents/{specialist}-agent.md`, `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`, `CustomerSupportBot.Application/Services/SpecialistReasoningParser.cs` |
+| Planner-Executor, Router | `CustomerSupportBot.Api/Prompts/agents/planning-agent.md`, `CustomerSupportBot.Domain/Model/PlanningResult.cs`, `CustomerSupportBot.Domain/Services/PlanningResultParser.cs` |
+| ReAct | `CustomerSupportBot.Api/Prompts/agents/{product,order-placement,order-inquiry,complaint}-agent.md`, `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`, `CustomerSupportBot.Domain/Services/SpecialistReasoningParser.cs` |
+| Self-Reflection | `CustomerSupportBot.Api/Prompts/agents/{specialist}-agent.md`, `CustomerSupportBot.Domain/Model/SpecialistReasoning.cs`, `CustomerSupportBot.Domain/Services/SpecialistReasoningParser.cs` |
 | Group Chat + Guardrails | `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`, `CustomerSupportBot.Application/Ports/Driven/WorkflowGuardOptions.cs` |
 | Tool Use + Validation | `CustomerSupportBot.Application/Services/CustomerSupportToolsService.cs`, `CustomerSupportBot.Domain/Model/ToolResult.cs` |
 | Dynamic Handoff | `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs SelectNextAgentAsync` (L108-153) |

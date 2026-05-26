@@ -311,6 +311,34 @@ Statik sınıf. Specialist ajan çıktısından `SpecialistReasoning` çıkarır
 
 ---
 
+### `ReplanService` — `Application/Services/ReplanService.cs`
+
+Replan use case'inin (Yeniden Planlama) ana yürütücüsüdür. `IReplanService` driving port arayüzünü implemente eder. Admin canlı sohbette veya eskalasyonda "Yeniden Planla" butonuna bastığında tetiklenir:
+- Oturumun en son kullanıcı mesajını alır (veya opsiyonel olarak admin notunu effective query olarak kullanır).
+- `SessionState.ForceReplanNextTurn` one-shot flag'ini aktif eder.
+- Arka planda `ReasoningService` ve `AgentTeam` koşturumunu başlatarak, admin notunu da hesaba katarak yeni bir rota ve bot yanıtı üretir.
+- Üretilen yanıtı chat geçmişine yazar ve `IChatBridge` üzerinden gerçek zamanlı olarak müşteriye push'lar.
+
+---
+
+### `NoopContextProvider` — `Application/Services/Providers/NoopContextProvider.cs`
+
+Semantic Memory / RAG altyapısı pasif olduğunda (`SemanticMemory:Enabled = false`) DI motorunda `IContextProvider` interface'ine bağlı no-op (boş işlem) Null Object implementasyonudur. `GetContextAsync` çağrılarında daima `null` döner.
+
+---
+
+### `DisabledSemanticMemoryIngestor` + `ISemanticMemoryIngestor` — `Application/Services/Memory/DisabledSemanticMemoryIngestor.cs`
+
+Semantic memory pasifken (`SemanticMemory:Enabled = false`) startup ingestion hosted service'inin (`KnowledgeBaseIngestor`) ve lesson mining akışlarının hata vermeden geçebilmesi için kullanılan Null Object fallback sınıfıdır. `EnsureCollectionsAsync` ve `UpsertManyAsync` çağrılarını no-op olarak yutar.
+
+---
+
+### `SemanticMemoryService` — `Application/Services/Memory/SemanticMemoryService.cs`
+
+Semantic memory'nin cephesidir (facade). Episodik bellek (`cs_episodic`), admin onaylı dersler (`cs_lessons`) ve statik bilgi bankası (`cs_knowledge`) olmak üzere üç collection üzerinde vektör okuma/yazma/arama operasyonlarını `IVectorMemoryPort` ve `IEmbeddingPort` üzerinden yönetir.
+
+---
+
 ## 3. Domain Modelleri
 
 ### Entity POCO'lar

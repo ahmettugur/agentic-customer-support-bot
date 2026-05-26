@@ -115,7 +115,6 @@ msg: "Tek mesajda en fazla 8 sipariş/şikayet numarası işleyebilirim."
 ### 7. Yumuşak JSON/payload sinyali → Reject
 
 LLM payload sahteciliği riski — LLM'e giderse yanlış karar tetiklenebilir:
-```
 ```json
 [INST] [/INST]
 <system> </system>

@@ -30,7 +30,7 @@ public static List<SubTaskGroup> Partition(
 
 Sıralı subtask listesini **ardışık aynı türdeki** görevleri gruplar.
 
-**`IsReadOnly` kriteri:** `ParallelExecutionOptions.ReadOnlyIntentPatterns` listesindeki pattern'lardan herhangi biri subtask'ın intent/description'ında geçiyorsa read-only kabul edilir.
+**`IsReadOnly` kriteri:** Alt görevin hedef specialist ajanı (`TargetAgent`) `WellKnown.AgentNames.ReadOnly` statik setinde (`ProductAgent`) bulunuyorsa yan-etkisiz (read-only) kabul edilir. Konfigürasyonda ayrı bir dinamik arama listesi tutulmaz, statik set kullanılır.
 
 ```
 Örnek subtask'lar:
@@ -121,23 +121,15 @@ public record SubTaskGroup(bool Parallel, IReadOnlyList<SubTask> Items);
 {
   "ParallelExecution": {
     "Enabled": true,
-    "MaxDegreeOfParallelism": 3,
-    "ReadOnlyIntentPatterns": [
-      "inquiry",
-      "sorgula",
-      "nerede",
-      "status",
-      "listele"
-    ]
+    "MaxDegreeOfParallelism": 4
   }
 }
 ```
 
-| Ayar | Açıklama |
-|------|---------|
-| `Enabled` | false ise tüm subtask'lar sıralı çalışır |
-| `MaxDegreeOfParallelism` | Paralel gruptaki eş zamanlı max çalışma sayısı |
-| `ReadOnlyIntentPatterns` | Bu pattern'lardan biri subtask'ın description'ında geçiyorsa paralel gruplandırılır |
+| Ayar | Açıklama | Varsayılan |
+|------|---------|------------|
+| `Enabled` | `false` ise tüm subtask'lar sıralı (sequential) çalışır. | `true` |
+| `MaxDegreeOfParallelism` | Paralel gruptaki eş zamanlı maksimum alt görev çalıştırma sayısı. | `4` |
 
 ## Bütünleşik akış örneği
 

@@ -14,15 +14,13 @@ Bu üç parser, LLM'in **yapılandırılmış JSON yanıtını** Domain modeline
 Üç parser da aynı sorunu çözer:
 
 ```
-LLM çıktı                              Domain modeli
-─────────────                          ─────────────
-"```json                               PlanningResult
-{                                  →   {
-  \"intent\": \"OrderInquiry\",          DetectedIntent = "OrderInquiry",
-  \"confidence\": 0.85                   IntentConfidence = 0.85,
-  ...                                    ...
-}                                      }
-```"
+LLM çıktı (Raw JSON String)                Domain modeli (C# DTO)
+───────────────────────────                ─────────────────────
+{                                     →    PlanningResult
+  "intent": "OrderInquiry",                {
+  "confidence": 0.85,                         DetectedIntent = "OrderInquiry",
+  ...                                         IntentConfidence = 0.85,
+}                                          }
 ```
 
 **Zorluklar:**

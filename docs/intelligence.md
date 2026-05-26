@@ -70,7 +70,7 @@ Bu doküman, bot'un dört "akıllı" katmanını detaylı anlatır:
 ```json
 "SemanticMemory": {
   "Enabled": true,
-  "Qdrant": { "Host": "localhost", "Port": 6334, "UseHttps": false, "ApiKey": "" },
+  "VectorStore": { "Host": "localhost", "Port": 7334, "UseHttps": false, "ApiKey": "" },
   "Embedding": { "Model": "text-embedding-3-large", "Dimension": 3072 },
   "Collections": {
     "Episodic":  "cs_episodic",

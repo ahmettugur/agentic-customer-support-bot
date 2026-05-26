@@ -164,14 +164,20 @@ Default seçim: `text-embedding-3-small` (1536). Yeterli kaliteye sahip ve 6x uc
 {
   "SemanticMemory": {
     "Enabled": true,
-    "Embedding": {
-      "Model": "text-embedding-3-small",
-      "Dimension": 1536
-    },
-    "Qdrant": {
+    "VectorStore": {
       "Host": "localhost",
-      "Port": 6334,
-      "CollectionName": "csbot_memory"
+      "Port": 7334,
+      "UseHttps": false,
+      "ApiKey": ""
+    },
+    "Embedding": {
+      "Model": "text-embedding-3-large",
+      "Dimension": 3072
+    },
+    "Collections": {
+      "Episodic": "cs_episodic",
+      "Lessons": "cs_lessons",
+      "Knowledge": "cs_knowledge"
     }
   }
 }

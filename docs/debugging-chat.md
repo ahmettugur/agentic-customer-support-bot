@@ -302,7 +302,7 @@ await _sse.WriteAsync("done", new { sessionId }, ct);
 
 **İzlenecek yol:**
 1. Log'da `[ReasoningResultParser] JSON parse failed` var mı?
-2. `rawJson` değişkenine bak — LLM ` ```json ` fence'siz veya bozuk format mı döndü?
+2. `rawJson` değişkenine bak — LLM `` ```json `` fence'siz veya bozuk format mı döndü?
 3. `ReasoningResultParser.ExtractJsonBlock` — fence'siz JSON'u yakalamayı dener
 4. Anthropic kullanıyorsan → `max_tokens` çok düşük olabilir → JSON kesiliyor
 
