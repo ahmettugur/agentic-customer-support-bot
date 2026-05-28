@@ -1,7 +1,7 @@
 using CustomerSupportBot.Api.Endpoints;
 using CustomerSupportBot.Api.Extensions;
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Application.Ports.Driven;
+using CustomerSupportBot.Application.Ports.Outbound;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);

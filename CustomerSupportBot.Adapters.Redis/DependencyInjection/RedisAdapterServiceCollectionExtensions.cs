@@ -9,8 +9,8 @@
 
 using CustomerSupportBot.Adapters.Redis.Locking;
 using CustomerSupportBot.Adapters.Redis.Messaging;
-using CustomerSupportBot.Application.Ports.Driven.Locking;
-using CustomerSupportBot.Application.Ports.Driven.Messaging;
+using CustomerSupportBot.Application.Ports.Outbound.Locking;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

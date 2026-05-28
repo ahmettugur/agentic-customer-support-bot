@@ -1,6 +1,5 @@
 using CustomerSupportBot.Adapters.Telemetry.Chat;
 using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
-using CustomerSupportBot.Application.Ports.Driven.Observability;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using ChatResponse = Microsoft.Extensions.AI.ChatResponse;

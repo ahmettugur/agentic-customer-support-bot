@@ -1,5 +1,4 @@
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
-using CustomerSupportBot.Application.Services;
+using CustomerSupportBot.Application.Services.Tools;
 
 namespace CustomerSupportBot.Api.Tests.Helpers;
 

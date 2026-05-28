@@ -1,6 +1,5 @@
 // Tests/Services/Routing/InMemoryHumanAgentRegistryTests.cs
 
-using CustomerSupportBot.Application.Services.Routing;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Options;
 

@@ -24,7 +24,7 @@
 // Production'da bu endpoint'lerin önüne auth (admin role) gelmelidir.
 
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;

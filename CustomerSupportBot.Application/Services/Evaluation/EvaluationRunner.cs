@@ -2,10 +2,10 @@
 // Evaluation-scenarios'daki senaryoları sistem üzerinde otomatik çalıştırır.
 // Her senaryo için reasoning + workflow + critique akışını koşturur, trace üzerinden doğrular.
 
-using CustomerSupportBot.Application.Ports.Driven;
-using CustomerSupportBot.Application.Ports.Driven.Observability;
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Ports.Outbound.Observability;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
+using CustomerSupportBot.Application.Ports.Inbound;
 
 namespace CustomerSupportBot.Application.Services.Evaluation;
 

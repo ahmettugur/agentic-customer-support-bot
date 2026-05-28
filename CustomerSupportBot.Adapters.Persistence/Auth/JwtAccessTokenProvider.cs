@@ -5,7 +5,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;

@@ -5,7 +5,7 @@
 // - POST /eval/run/{id}           : Tek senaryoyu koşturur
 
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;

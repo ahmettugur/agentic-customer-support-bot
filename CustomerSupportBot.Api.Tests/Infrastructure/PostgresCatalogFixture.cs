@@ -1,5 +1,4 @@
 using CustomerSupportBot.Adapters.Persistence.EfCore;
-using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog;
 using CustomerSupportBot.Adapters.Persistence.Postgres;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;

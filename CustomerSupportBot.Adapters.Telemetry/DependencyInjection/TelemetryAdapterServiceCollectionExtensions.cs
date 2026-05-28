@@ -3,7 +3,7 @@
 // TelemetryOptions (Options/TelemetryOptions.cs) kullanır — TelemetryAdapterOptions kaldırıldı.
 
 using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
-using CustomerSupportBot.Application.Ports.Driven.Observability;
+using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using global::OpenTelemetry.Exporter;

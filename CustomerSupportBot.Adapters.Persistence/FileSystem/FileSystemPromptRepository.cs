@@ -8,7 +8,7 @@
 
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Application.Ports.Driven;
+using CustomerSupportBot.Application.Ports.Outbound;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

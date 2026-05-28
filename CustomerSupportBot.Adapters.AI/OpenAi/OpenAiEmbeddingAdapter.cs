@@ -4,9 +4,7 @@
 
 using System.ClientModel;
 using Azure.AI.OpenAI;
-using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Domain.Model.Memory;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI;

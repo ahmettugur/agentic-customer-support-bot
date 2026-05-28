@@ -9,11 +9,9 @@
 // İşlemler idempotent. Hata olursa uygulama durmaz, sadece loglanır.
 
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
-using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
 using CustomerSupportBot.Adapters.Persistence.Postgres;
-using CustomerSupportBot.Application.Ports.Driven.Auth;
-using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;

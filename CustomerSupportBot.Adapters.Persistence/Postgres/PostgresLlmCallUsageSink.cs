@@ -1,6 +1,5 @@
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability;
-using CustomerSupportBot.Application.Ports.Driven.Observability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 

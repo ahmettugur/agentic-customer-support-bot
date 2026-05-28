@@ -2,7 +2,7 @@
 // IMessageBusPort Redis implementasyonu.
 // StackExchange.Redis pub/sub üzerinden pod'lar arası mesajlaşma sağlar.
 
-using CustomerSupportBot.Application.Ports.Driven.Messaging;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;
 

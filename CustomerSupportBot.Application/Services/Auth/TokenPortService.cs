@@ -3,8 +3,8 @@
 // Refresh token lifecycle orkestrasyonu Application core'da; JWT imzalama IJwtAccessTokenProvider driven port'u üzerinden.
 
 using System.Security.Cryptography;
-using CustomerSupportBot.Application.Ports.Driven.Auth;
-using CustomerSupportBot.Application.Ports.Driving.Auth;
+using CustomerSupportBot.Application.Ports.Outbound.Auth;
+using CustomerSupportBot.Application.Ports.Inbound.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
 using Microsoft.Extensions.Options;
 

@@ -1,7 +1,7 @@
 // Endpoints/SessionEndpoints.cs
 // Oturum yönetimi endpoint'leri — sidebar/debug kullanımı için.
 
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;

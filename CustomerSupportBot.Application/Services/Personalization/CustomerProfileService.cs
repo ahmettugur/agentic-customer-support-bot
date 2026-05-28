@@ -19,10 +19,10 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Application.Ports.Driven;
-using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Application.Ports.Driven.Locking;
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Outbound.Locking;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Logging;

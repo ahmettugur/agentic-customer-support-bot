@@ -27,9 +27,8 @@
 
 using System.Security.Claims;
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
 
 namespace CustomerSupportBot.Api.Endpoints;
 

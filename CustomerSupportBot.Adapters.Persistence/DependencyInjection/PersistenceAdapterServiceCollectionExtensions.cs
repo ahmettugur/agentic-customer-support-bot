@@ -2,14 +2,9 @@ using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Adapters.Persistence.Postgres;
-using CustomerSupportBot.Application.Ports.Driven;
-using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Application.Ports.Driven.Auth;
-using CustomerSupportBot.Application.Ports.Driven.Messaging;
-using CustomerSupportBot.Application.Ports.Driven.Observability;
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
-using CustomerSupportBot.Application.Services;
-using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 

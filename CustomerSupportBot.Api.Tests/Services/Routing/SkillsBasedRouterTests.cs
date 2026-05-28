@@ -2,7 +2,6 @@
 
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
-using CustomerSupportBot.Application.Services.Routing;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Services.Routing;

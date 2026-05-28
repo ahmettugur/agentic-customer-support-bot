@@ -4,7 +4,7 @@
 
 using System.Net.WebSockets;
 using System.Text.Json;
-using CustomerSupportBot.Application.Ports.Driven;
+using CustomerSupportBot.Application.Ports.Outbound;
 
 namespace CustomerSupportBot.Api.Infrastructure;
 

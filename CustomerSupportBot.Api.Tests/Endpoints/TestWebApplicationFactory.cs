@@ -6,7 +6,7 @@ using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
 using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Api.Tests.Helpers;
-using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;

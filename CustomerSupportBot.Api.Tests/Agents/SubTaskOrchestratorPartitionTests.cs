@@ -1,8 +1,6 @@
 // Agents/SubTaskOrchestratorPartitionTests.cs
 // Paralel sub-task gruplama testleri (#E).
 
-using CustomerSupportBot.Adapters.Agents;
-using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Tests.Agents;

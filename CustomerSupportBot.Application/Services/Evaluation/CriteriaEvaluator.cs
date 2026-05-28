@@ -13,7 +13,7 @@
 // Diğer pattern'lar → "manual_review" olarak işaretlenir.
 
 using System.Text.RegularExpressions;
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Services.Evaluation;

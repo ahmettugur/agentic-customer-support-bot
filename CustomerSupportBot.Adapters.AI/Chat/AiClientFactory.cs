@@ -5,7 +5,6 @@
 using System.ClientModel;
 using Anthropic;
 using Azure.AI.OpenAI;
-using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 using OpenAI;
 

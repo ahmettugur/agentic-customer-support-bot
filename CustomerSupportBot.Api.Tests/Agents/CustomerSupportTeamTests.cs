@@ -4,7 +4,6 @@
 
 using System.Reflection;
 using CustomerSupportBot.Adapters.Agents;
-using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Api.Tests.Helpers;

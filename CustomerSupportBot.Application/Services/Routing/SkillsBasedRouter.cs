@@ -12,8 +12,8 @@
 //   tie-break: yüksek loadFactor + Priority + son atama eskiliği
 
 
-using CustomerSupportBot.Application.Ports.Driven;
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Options;

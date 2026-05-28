@@ -4,9 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using CustomerSupportBot.Adapters.Persistence.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
-using CustomerSupportBot.Api.Models.Auth;
-using CustomerSupportBot.Application.Ports.Driving.Auth;
-using CustomerSupportBot.Domain.Model.Auth;
+using CustomerSupportBot.Application.Ports.Inbound.Auth;
 
 namespace CustomerSupportBot.Api.Tests.Endpoints;
 

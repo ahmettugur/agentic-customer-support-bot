@@ -1,5 +1,4 @@
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Api.Tests.Infrastructure;
 
 namespace CustomerSupportBot.Api.Tests.Services;

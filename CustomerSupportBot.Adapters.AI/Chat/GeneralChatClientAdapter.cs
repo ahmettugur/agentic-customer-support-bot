@@ -2,7 +2,7 @@
 // IGeneralChatClient implementasyonu — IChatClient'ı port sınırında sarar.
 // ConversationMessage ↔ ChatMessage dönüşümünü burada yapar; core temiz kalır.
 
-using CustomerSupportBot.Application.Ports.Driven.AI;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 

@@ -3,12 +3,8 @@
 using CustomerSupportBot.Adapters.AI.Chat;
 using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Application.Ports.Driving;
 using CustomerSupportBot.Application.Services.Evaluation;
-using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
-using CustomerSupportBot.Application.Services;
-using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Api.Tests.Helpers;
 using CustomerSupportBot.Api.Tests.Infrastructure;
@@ -16,7 +12,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using EntityVerifier = CustomerSupportBot.Application.Services.EntityVerifier;
+using EntityVerifier = CustomerSupportBot.Application.Services.Reasoning.EntityVerifier;
 
 namespace CustomerSupportBot.Api.Tests.Evaluation;
 

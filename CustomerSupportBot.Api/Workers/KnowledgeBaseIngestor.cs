@@ -3,10 +3,8 @@
 // Use-case mantığı (chunking, change-detection, orkestrasyonu) Application katmanındadır
 // (Application/Services/Memory/KnowledgeBaseIngestionService).
 
-using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Application.Ports.Driving;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Inbound;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Workers;

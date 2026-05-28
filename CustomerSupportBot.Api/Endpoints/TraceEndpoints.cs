@@ -1,7 +1,7 @@
 // Endpoints/TraceEndpoints.cs
 // Reasoning trace'leri gözlemlemek için endpoint'ler.
 
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Inbound;
 
 namespace CustomerSupportBot.Api.Endpoints;
 

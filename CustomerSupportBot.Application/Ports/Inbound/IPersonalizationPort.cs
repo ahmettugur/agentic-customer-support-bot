@@ -1,0 +1,15 @@
+using CustomerSupportBot.Domain.Model.Memory;
+
+namespace CustomerSupportBot.Application.Ports.Inbound;
+
+/// <summary>
+/// Müşteri profili CRUD ve konsolidasyon için primary (driving) port.
+/// </summary>
+public interface IPersonalizationPort
+{
+    (int Count, IReadOnlyList<CustomerProfile> Items) GetProfiles(int take = 100);
+    CustomerProfile? GetProfile(string customerId);
+    Task<CustomerProfile?> RefreshProfileAsync(string customerId, CancellationToken ct = default);
+    CustomerProfile SetAdminNote(string customerId, string? note);
+    bool DeleteProfile(string customerId);
+}

@@ -1,7 +1,7 @@
 // Endpoints/PersonalizationEndpoints.cs
 // Per-customer profil yönetim API'si — admin scope.
 
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Inbound;
 
 namespace CustomerSupportBot.Api.Endpoints;
 

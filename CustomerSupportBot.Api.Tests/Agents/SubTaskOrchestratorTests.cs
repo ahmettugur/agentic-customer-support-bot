@@ -1,4 +1,3 @@
-using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Tests.Agents;

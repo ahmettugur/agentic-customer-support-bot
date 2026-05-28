@@ -2,7 +2,6 @@ using System.Text.Json;
 using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Api.Tests.Infrastructure;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Tests.Helpers;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;

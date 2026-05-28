@@ -11,8 +11,8 @@ using CustomerSupportBot.Adapters.AI.DependencyInjection;
 using CustomerSupportBot.Adapters.Telemetry;
 using CustomerSupportBot.Adapters.Telemetry.Chat;
 using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
-using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Application.Ports.Driven.Observability;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 

@@ -1,7 +1,7 @@
 // Adapters.Persistence/EfCore/Auth/EfUserAuthRepository.cs
 // IUserAuthRepository → EF Core implementation.
 
-using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
 using Microsoft.EntityFrameworkCore;
 

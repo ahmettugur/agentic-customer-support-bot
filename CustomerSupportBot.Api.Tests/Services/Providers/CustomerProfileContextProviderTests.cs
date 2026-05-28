@@ -1,6 +1,5 @@
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
-using CustomerSupportBot.Application.Services.Providers;
 using Microsoft.Extensions.Logging.Abstractions;
 using SessionState = CustomerSupportBot.Domain.Model.SessionState;
 

@@ -1,9 +1,6 @@
-using CustomerSupportBot.Application.Ports.Driven.Locking;
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Outbound.Locking;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Services.Sla;
-using CustomerSupportBot.Domain.Model;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Workers;

@@ -9,10 +9,10 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
-using CustomerSupportBot.Application.Ports.Driven.Observability;
+using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using LlmCallRecord = CustomerSupportBot.Application.Ports.Driven.Observability.LlmCallRecord;
+using LlmCallRecord = CustomerSupportBot.Application.Ports.Outbound.Observability.LlmCallRecord;
 
 namespace CustomerSupportBot.Adapters.Telemetry.Chat;
 

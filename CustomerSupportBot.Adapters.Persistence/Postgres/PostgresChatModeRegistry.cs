@@ -15,7 +15,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
-using CustomerSupportBot.Application.Ports.Driven.Messaging;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

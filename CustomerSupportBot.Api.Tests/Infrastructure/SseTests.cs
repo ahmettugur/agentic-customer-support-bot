@@ -1,6 +1,5 @@
 using System.Text;
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Domain.Model;
 using Microsoft.AspNetCore.Http;
 
 namespace CustomerSupportBot.Api.Tests.Infrastructure;

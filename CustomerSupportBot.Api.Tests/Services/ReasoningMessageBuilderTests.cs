@@ -1,6 +1,5 @@
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
-using CustomerSupportBot.Application.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Api.Tests.Services;

@@ -3,11 +3,8 @@
 // çağrısı sonrası EscalationRequest'in routing alanlarının doğru doldurulduğunu doğrular.
 
 using CustomerSupportBot.Adapters.Agents;
-using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Redis;
-using CustomerSupportBot.Api.Services;
-using CustomerSupportBot.Application.Services.Routing;
 using CustomerSupportBot.Api.Tests.Helpers;
 using CustomerSupportBot.Api.Tests.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;

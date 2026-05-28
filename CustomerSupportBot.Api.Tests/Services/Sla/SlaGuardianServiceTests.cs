@@ -3,11 +3,9 @@
 // öncelik yükseltmesi. SlaPortService (Application katmanı) doğrudan test edilir;
 // SlaGuardianService artık ince bir tetikleyici olduğundan ayrıca test edilmez.
 
-using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Services.Sla;

@@ -1,7 +1,6 @@
 // Tests/Services/Workflow/InMemoryWorkflowDefinitionStoreTests.cs
 
 using CustomerSupportBot.Domain.Model.Workflow;
-using CustomerSupportBot.Application.Services.Workflow;
 
 namespace CustomerSupportBot.Api.Tests.Services.Workflow;
 

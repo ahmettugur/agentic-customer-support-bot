@@ -1,7 +1,7 @@
 // Adapters.Persistence/EfCore/Auth/EfRefreshTokenRepository.cs
 // IRefreshTokenRepository → EF Core implementation.
 
-using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
 using Microsoft.EntityFrameworkCore;

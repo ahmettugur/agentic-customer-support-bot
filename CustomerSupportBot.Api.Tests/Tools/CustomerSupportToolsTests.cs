@@ -1,5 +1,6 @@
 using CustomerSupportBot.Api.Tests.Helpers;
 using CustomerSupportBot.Api.Tests.Infrastructure;
+using CustomerSupportBot.Application.Services.Tools;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Tests.Tools;

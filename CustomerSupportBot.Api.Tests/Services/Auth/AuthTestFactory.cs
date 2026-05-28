@@ -4,10 +4,9 @@
 using CustomerSupportBot.Adapters.Persistence.Auth;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
-using CustomerSupportBot.Application.Ports.Driven.Auth;
-using CustomerSupportBot.Application.Ports.Driving.Auth;
+using CustomerSupportBot.Application.Ports.Outbound.Auth;
+using CustomerSupportBot.Application.Ports.Inbound.Auth;
 using CustomerSupportBot.Application.Services.Auth;
-using CustomerSupportBot.Domain.Model.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;

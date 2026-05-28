@@ -1,5 +1,4 @@
 using CustomerSupportBot.Adapters.Persistence.EfCore;
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

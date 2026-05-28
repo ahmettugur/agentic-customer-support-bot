@@ -1,7 +1,5 @@
 using System.Text;
-using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;

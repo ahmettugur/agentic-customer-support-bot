@@ -1,5 +1,5 @@
 using RedisOptions = CustomerSupportBot.Adapters.Redis.RedisOptions;
-using CustomerSupportBot.Application.Ports.Driven.AI;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Application.Services.Personalization;
 using CustomerSupportBot.Api.Tests.Helpers;
 using CustomerSupportBot.Api.Tests.Infrastructure;

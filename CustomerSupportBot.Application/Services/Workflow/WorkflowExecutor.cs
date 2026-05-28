@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using CustomerSupportBot.Application.Services.Tools;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Workflow;
 using Microsoft.Extensions.Logging;

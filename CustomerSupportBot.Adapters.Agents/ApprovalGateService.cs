@@ -2,9 +2,9 @@
 // HITL — Human-in-the-Loop approval gate + escalation sink servisleri.
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Application.Ports.Driven;
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
 using CustomerSupportBot.Application.Services;
+using CustomerSupportBot.Application.Services.Approval;
+using CustomerSupportBot.Application.Services.Escalation;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

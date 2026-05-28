@@ -1,5 +1,5 @@
-using CustomerSupportBot.Application.Ports.Driven.Auth;
-using CustomerSupportBot.Application.Ports.Driving.Auth;
+using CustomerSupportBot.Application.Ports.Outbound.Auth;
+using CustomerSupportBot.Application.Ports.Inbound.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
 using Microsoft.Extensions.Logging;
 

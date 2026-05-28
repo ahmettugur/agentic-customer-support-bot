@@ -1,7 +1,7 @@
 // Endpoints/AgentsEndpoints.cs
 // Smart Routing & Skills-Based Escalation — Admin endpoints for human agent registry.
 
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;

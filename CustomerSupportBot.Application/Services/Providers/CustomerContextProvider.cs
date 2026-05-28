@@ -3,7 +3,7 @@
 
 using System.Text;
 
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Services.Providers;

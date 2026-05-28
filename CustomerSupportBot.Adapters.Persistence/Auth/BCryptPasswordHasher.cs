@@ -2,7 +2,7 @@
 // IPasswordHasher'ın BCrypt.Net implementasyonu.
 // WorkFactor=11 — üretim ortamı için yeterli maliyet, test ortamında düşürülebilir.
 
-using CustomerSupportBot.Application.Ports.Driven.Auth;
+using CustomerSupportBot.Application.Ports.Outbound.Auth;
 
 namespace CustomerSupportBot.Adapters.Persistence.Auth;
 

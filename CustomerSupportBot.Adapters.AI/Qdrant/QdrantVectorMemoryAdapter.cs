@@ -3,7 +3,7 @@
 // Her MemoryKind ayrı koleksiyona yazılır → SearchAsync filter'a ihtiyaç duymaz.
 
 using System.Globalization;
-using CustomerSupportBot.Application.Ports.Driven.AI;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

@@ -2,7 +2,7 @@
 // Reasoning model (o-series) için IReasoningChatClient implementasyonu.
 // IChatClient'ı port sınırında sararak ConversationMessage ↔ ChatMessage dönüşümü yapar.
 
-using CustomerSupportBot.Application.Ports.Driven.AI;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
 

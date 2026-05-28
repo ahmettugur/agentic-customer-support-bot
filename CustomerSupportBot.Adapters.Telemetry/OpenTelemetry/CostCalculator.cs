@@ -2,8 +2,7 @@
 // DRIVEN ADAPTER — ICostCalculatorPort → TelemetryOptions.Pricing tabanlı maliyet hesaplama.
 // Model adına göre USD/1K token fiyatlandırması yapar.
 
-using CustomerSupportBot.Application.Ports.Driven.Observability;
-using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;

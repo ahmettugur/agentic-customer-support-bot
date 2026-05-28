@@ -2,7 +2,7 @@
 // DRIVEN ADAPTER — IAppDistributedLock → Redis (Medallion RedLock) implementasyonu.
 // Core bu adapter'ı bilmez; sadece IAppDistributedLock'a bağımlıdır.
 
-using CustomerSupportBot.Application.Ports.Driven.Locking;
+using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using Medallion.Threading.Redis;
 using Microsoft.Extensions.Logging;
 using StackExchange.Redis;

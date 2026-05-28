@@ -4,8 +4,7 @@
 // Chunking algoritması ve change-detection orkestrasyonu burada kapsüllenir.
 
 using System.Text;
-using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

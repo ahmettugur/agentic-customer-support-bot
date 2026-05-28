@@ -5,8 +5,7 @@
 using CustomerSupportBot.Adapters.AI.OpenAi;
 using CustomerSupportBot.Adapters.AI.Qdrant;
 using CustomerSupportBot.Adapters.AI.Realtime;
-using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Domain.Model.Memory;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 

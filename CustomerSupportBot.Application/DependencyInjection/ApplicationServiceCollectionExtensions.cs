@@ -1,20 +1,26 @@
 // Application/DependencyInjection/ApplicationServiceCollectionExtensions.cs
 // Application katmanı servis kayıtları — driving port implementasyonları ve use case servisleri.
 
-using CustomerSupportBot.Application.Ports.Driven;
-using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
-using CustomerSupportBot.Application.Ports.Driving;
-using CustomerSupportBot.Application.Services;
+using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Services.Approval;
+using CustomerSupportBot.Application.Services.Chat;
+using CustomerSupportBot.Application.Services.Escalation;
+using CustomerSupportBot.Application.Services.Reasoning;
+using CustomerSupportBot.Application.Services.Realtime;
+using CustomerSupportBot.Application.Services.Telemetry;
+using CustomerSupportBot.Application.Services.Tools;
 using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Application.Services.Memory;
+using CustomerSupportBot.Application.Services.Personalization;
+using CustomerSupportBot.Application.Services.Improvement;
 using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Application.Services.Routing;
 using CustomerSupportBot.Application.Services.Sla;
-using CustomerSupportBot.Domain.Model.Memory;
+using CustomerSupportBot.Application.Services.Workflow;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.DependencyInjection;
 
@@ -113,12 +119,12 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IEvaluationPort>(sp => sp.GetRequiredService<EvaluationRunner>());
         services.AddSingleton<InputGuard>();
         services.AddSingleton<IInputGuard>(sp => sp.GetRequiredService<InputGuard>());
-        services.AddSingleton<Services.Improvement.LessonMiner>();
-        services.AddSingleton<Services.Personalization.CustomerProfileService>();
-        services.AddSingleton<ICustomerProfileService>(sp => sp.GetRequiredService<Services.Personalization.CustomerProfileService>());
-        services.AddSingleton<ISkillsBasedRouter, Services.Routing.SkillsBasedRouter>();
+        services.AddSingleton<CustomerSupportBot.Application.Services.Improvement.LessonMiner>();
+        services.AddSingleton<CustomerSupportBot.Application.Services.Personalization.CustomerProfileService>();
+        services.AddSingleton<ICustomerProfileService>(sp => sp.GetRequiredService<CustomerSupportBot.Application.Services.Personalization.CustomerProfileService>());
+        services.AddSingleton<ISkillsBasedRouter, CustomerSupportBot.Application.Services.Routing.SkillsBasedRouter>();
         services.AddSingleton<EscalationPolicyService>();
-        services.AddSingleton<Services.Workflow.WorkflowExecutor>();
+        services.AddSingleton<CustomerSupportBot.Application.Services.Workflow.WorkflowExecutor>();
     }
 
     private static void AddMemoryServices(this IServiceCollection services, IConfiguration configuration)

@@ -6,7 +6,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using CustomerSupportBot.Application.Ports.Driven.Observability;
+using CustomerSupportBot.Application.Ports.Outbound.Observability;
 
 namespace CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 

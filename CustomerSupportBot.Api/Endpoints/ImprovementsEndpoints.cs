@@ -1,7 +1,7 @@
 // Endpoints/ImprovementsEndpoints.cs
 // Self-improving loop için admin endpoint'leri.
 
-using CustomerSupportBot.Application.Ports.Driving;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Improvement;
 

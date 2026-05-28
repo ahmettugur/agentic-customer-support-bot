@@ -13,9 +13,9 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using CustomerSupportBot.Application.Ports.Driven.AI;
-using CustomerSupportBot.Application.Ports.Driven.Observability;
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Outbound.Observability;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Improvement;

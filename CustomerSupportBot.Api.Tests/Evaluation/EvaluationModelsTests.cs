@@ -1,7 +1,5 @@
 // Tests/Evaluation/EvaluationModelsTests.cs
 
-using CustomerSupportBot.Application.Ports.Driving;
-
 namespace CustomerSupportBot.Api.Tests.Evaluation;
 
 public class EvaluationModelsTests

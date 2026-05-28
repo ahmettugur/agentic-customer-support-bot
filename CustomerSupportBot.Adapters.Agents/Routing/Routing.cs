@@ -1,7 +1,6 @@
 // Adapters.Agents/Routing/Routing.cs
 // CustomerSupportChatManager için Strategy pattern altyapısı.
 
-using CustomerSupportBot.Application.Ports.Driven;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using Microsoft.Agents.AI;

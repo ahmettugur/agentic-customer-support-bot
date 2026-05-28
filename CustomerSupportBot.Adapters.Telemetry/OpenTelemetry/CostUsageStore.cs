@@ -6,7 +6,7 @@
 // pratik bir çözümdür.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Application.Ports.Driven.Observability;
+using CustomerSupportBot.Application.Ports.Outbound.Observability;
 
 namespace CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 

@@ -4,7 +4,7 @@
 // Subscribe edilen handler'lar lokal Publish çağrısında tetiklenir.
 
 using System.Collections.Concurrent;
-using CustomerSupportBot.Application.Ports.Driven.Messaging;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 
 namespace CustomerSupportBot.Adapters.Persistence.InMemory;
 

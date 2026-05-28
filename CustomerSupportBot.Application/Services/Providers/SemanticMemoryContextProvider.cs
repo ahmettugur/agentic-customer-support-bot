@@ -4,7 +4,7 @@
 
 using System.Text;
 
-using CustomerSupportBot.Application.Ports.Driven.Persistence;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
