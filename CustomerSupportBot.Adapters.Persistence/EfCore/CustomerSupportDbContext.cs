@@ -58,6 +58,7 @@ public sealed class CustomerSupportDbContext : DbContext
 
     // ─── catalog schema ───
     public DbSet<CategoryEntity> Categories => Set<CategoryEntity>();
+    public DbSet<CustomerEntity> Customers => Set<CustomerEntity>();
     public DbSet<OrderEntity> Orders => Set<OrderEntity>();
     public DbSet<OrderDetailEntity> OrderDetails => Set<OrderDetailEntity>();
     public DbSet<ProductEntity> Products => Set<ProductEntity>();

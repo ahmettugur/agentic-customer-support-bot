@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model;
@@ -11,9 +12,13 @@ namespace CustomerSupportBot.Application.Services.Tools;
 public sealed class ProductToolsService : IProductToolsService
 {
     private readonly IProductCatalogRepository _products;
+    private readonly IUiHintEmitter _uiHint;
 
-    public ProductToolsService(IProductCatalogRepository products)
-        => _products = products;
+    public ProductToolsService(IProductCatalogRepository products, IUiHintEmitter uiHint)
+    {
+        _products = products;
+        _uiHint = uiHint;
+    }
 
     [Description("Ürün kataloğundan ürün bilgisi sorgular. Ürün adı veya kısmi adı ile arama yapar. " +
                  "Sonuç yapılandırılmış ToolResult olarak döner (success, confidence, data, error).")]
@@ -38,22 +43,28 @@ public sealed class ProductToolsService : IProductToolsService
             confidence: isExact ? 1.0 : 0.85);
     }
 
-    [Description("Ürün kataloğunu listeler. Kategori belirtilirse yalnızca o kategoriye ait ürünleri, " +
-                 "belirtilmezse tüm ürünleri kategori bilgisiyle birlikte döndürür.")]
+    [Description("Ürün kataloğunu listeler. Kategori belirtilirse yalnızca o kategoriye ait ürünleri döndürür. " +
+                 "Kategori belirtilmezse kullanıcıya kategori seçim ekranı gösterilir; " +
+                 "bu durumda kullanıcının bir kategori seçmesini bekle ve seçilen kategoriyle tekrar çağır.")]
     public ToolResult ProductListTool(
-        [Description("Filtrelenecek kategori adı (opsiyonel). Boş bırakılırsa tüm ürünler listelenir.")] string? category = null)
+        [Description("Filtrelenecek kategori adı (opsiyonel). Boş bırakılırsa kategori seçim ekranı gösterilir.")] string? category = null)
     {
-        var products = string.IsNullOrWhiteSpace(category)
-            ? _products.GetAll()
-            : _products.GetByCategory(category);
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            var categories = _products.GetCategories();
+            _uiHint.Emit(new StreamEvent(StreamEventTypes.UiHint,
+                new { kind = "category_picker", categories }));
+            return ToolResult.Ok(
+                message: "Kategori seçim ekranı kullanıcıya gösterildi. Kullanıcı bir kategori seçtiğinde " +
+                         "product_list_tool'u seçilen kategoriyle tekrar çağır.",
+                data: new { kind = "category_picker", categories });
+        }
+
+        var products = _products.GetByCategory(category);
 
         if (products.Count == 0)
-        {
-            var msg = string.IsNullOrWhiteSpace(category)
-                ? "Katalogda hiç ürün bulunmamaktadır."
-                : $"'{category}' kategorisinde ürün bulunmamaktadır.";
-            return ToolResult.NotFound(WellKnown.ToolErrorCodes.ProductNotFound, msg);
-        }
+            return ToolResult.NotFound(WellKnown.ToolErrorCodes.ProductNotFound,
+                $"'{category}' kategorisinde ürün bulunmamaktadır.");
 
         var lines = products.Select((p, i) =>
             $"{i + 1}. [{p.Category}] {p.Name} — ${p.Price}, Stok: {p.Stock} adet");
@@ -63,7 +74,7 @@ public sealed class ProductToolsService : IProductToolsService
             data: new
             {
                 totalCount = products.Count,
-                category = string.IsNullOrWhiteSpace(category) ? null : category,
+                category,
                 products = products.Select(p => new
                 {
                     name     = p.Name,

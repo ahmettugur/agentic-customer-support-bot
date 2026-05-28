@@ -138,6 +138,22 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "customers",
+                schema: "catalog",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    full_name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
+                    phone = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_customers", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "escalations",
                 schema: "hitl",
                 columns: table => new
@@ -232,7 +248,8 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                 schema: "catalog",
                 columns: table => new
                 {
-                    code = table.Column<long>(type: "bigint", nullable: false),
+                    code = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     customer_id = table.Column<long>(type: "bigint", nullable: false),
                     status = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     order_date = table.Column<DateTime>(type: "timestamptz", nullable: false),
@@ -529,6 +546,12 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                 descending: new bool[0]);
 
             migrationBuilder.CreateIndex(
+                name: "ix_customers_full_name",
+                schema: "catalog",
+                table: "customers",
+                column: "full_name");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_escalations_session_open",
                 schema: "hitl",
                 table: "escalations",
@@ -697,6 +720,10 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
             migrationBuilder.DropTable(
                 name: "customer_profiles",
                 schema: "personalization");
+
+            migrationBuilder.DropTable(
+                name: "customers",
+                schema: "catalog");
 
             migrationBuilder.DropTable(
                 name: "escalations",

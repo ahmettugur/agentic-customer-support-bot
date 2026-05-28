@@ -1717,6 +1717,101 @@ body {
 }
 
 /* ═══════════════════════════════════════════════
+   CATEGORY PICKER
+   ═══════════════════════════════════════════════ */
+.category-picker {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+}
+
+.category-picker-label {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.category-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--space-2);
+}
+
+.category-card {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-surface);
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text);
+    text-align: left;
+    line-height: 1.3;
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.category-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, var(--color-primary-light) 0%, transparent 100%);
+    opacity: 0;
+    transition: opacity var(--transition);
+    border-radius: inherit;
+}
+
+.category-card:hover,
+.category-card:focus-visible {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(37,99,235,.08), var(--shadow-sm);
+    background: var(--color-primary-subtle);
+}
+
+.category-card:hover::before,
+.category-card:focus-visible::before {
+    opacity: 1;
+}
+
+.category-card:active {
+    box-shadow: none;
+}
+
+.category-card:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.category-card-icon {
+    font-size: 1.1rem;
+    line-height: 1;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+}
+
+.category-card-name {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
+}
+
+/* ═══════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════ */
 @media (max-width: 768px) {

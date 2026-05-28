@@ -18,4 +18,7 @@ public interface IProductCatalogRepository
 
     /// <summary>Belirli kategorideki ürünleri döner.</summary>
     IReadOnlyList<ProductInfo> GetByCategory(string category);
+
+    /// <summary>Katalogdaki tüm benzersiz kategori adlarını sıralı döner.</summary>
+    IReadOnlyList<string> GetCategories();
 }

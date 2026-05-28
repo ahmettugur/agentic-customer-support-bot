@@ -154,6 +154,24 @@
                                         @RenderMd(msg.Content)
                                     }
                                 </div>
+                                @if (msg.CategoryPicker is { Count: > 0 })
+                                {
+                                    <div class="category-picker">
+                                        <span class="category-picker-label">Kategori seçin</span>
+                                        <div class="category-picker-grid">
+                                            @foreach (var cat in msg.CategoryPicker)
+                                            {
+                                                var catCapture = cat;
+                                                <button class="category-card"
+                                                        @onclick='() => SendChipMessage($"{catCapture} kategorisindeki ürünleri göster")'
+                                                        aria-label="@catCapture kategorisini seç">
+                                                    <span class="category-card-icon">@GetCategoryIcon(catCapture)</span>
+                                                    <span class="category-card-name">@catCapture</span>
+                                                </button>
+                                            }
+                                        </div>
+                                    </div>
+                                }
                             </div>
                         </div>
                     }
@@ -303,6 +321,7 @@
         public string ReasoningText { get; set; } = "";
         public JsonElement? ReasoningData { get; set; }
         public bool   IsStreaming   { get; set; }
+        public List<string>? CategoryPicker { get; set; }
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -610,6 +629,19 @@
                 ClearPendingHandoffTimer();
                 _pendingHandoff = false;
                 break;
+            case "ui_hint":
+                if (_currentBot is not null
+                    && jd.TryGetProperty("kind", out var hintKind)
+                    && hintKind.GetString() == "category_picker"
+                    && jd.TryGetProperty("categories", out var cats)
+                    && cats.ValueKind == JsonValueKind.Array)
+                {
+                    _currentBot.CategoryPicker = cats.EnumerateArray()
+                        .Select(c => c.GetString() ?? "")
+                        .Where(c => c.Length > 0)
+                        .ToList();
+                }
+                break;
             case "error":
                 _currentBot.Content    = jd.TryGetProperty("message", out var err) ? err.GetString() ?? "Hata oluştu." : "Hata oluştu.";
                 _currentBot.IsStreaming = false;
@@ -837,6 +869,24 @@
     {
         _ratingAutoHideTimer?.Dispose();
         _ratingAutoHideTimer = null;
+    }
+
+    private static string GetCategoryIcon(string category)
+    {
+        var lower = category.ToLowerInvariant();
+        if (lower.Contains("elektronik") || lower.Contains("electronic") || lower.Contains("bilgisayar") || lower.Contains("computer")) return "💻";
+        if (lower.Contains("telefon") || lower.Contains("phone") || lower.Contains("mobil") || lower.Contains("mobile")) return "📱";
+        if (lower.Contains("giyim") || lower.Contains("clothes") || lower.Contains("kıyafet") || lower.Contains("tekstil")) return "👗";
+        if (lower.Contains("kitap") || lower.Contains("book") || lower.Contains("yayın")) return "📚";
+        if (lower.Contains("gıda") || lower.Contains("yiyecek") || lower.Contains("food") || lower.Contains("içecek") || lower.Contains("drink")) return "🛒";
+        if (lower.Contains("spor") || lower.Contains("sport") || lower.Contains("fitness")) return "🏋️";
+        if (lower.Contains("oyun") || lower.Contains("game") || lower.Contains("oyuncak") || lower.Contains("toy")) return "🎮";
+        if (lower.Contains("ev") || lower.Contains("home") || lower.Contains("mobilya") || lower.Contains("furniture")) return "🏠";
+        if (lower.Contains("güzellik") || lower.Contains("beauty") || lower.Contains("kozmetik") || lower.Contains("sağlık") || lower.Contains("health")) return "💄";
+        if (lower.Contains("araç") || lower.Contains("oto") || lower.Contains("car") || lower.Contains("motor")) return "🚗";
+        if (lower.Contains("müzik") || lower.Contains("music") || lower.Contains("ses") || lower.Contains("audio")) return "🎵";
+        if (lower.Contains("fotoğraf") || lower.Contains("photo") || lower.Contains("kamera") || lower.Contains("camera")) return "📷";
+        return "🏷️";
     }
 
     private static string FriendlyAgentName(string id) => id switch

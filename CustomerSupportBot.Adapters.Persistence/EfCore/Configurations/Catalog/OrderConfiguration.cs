@@ -14,7 +14,7 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<OrderEntity>
 
         builder.Property(e => e.Code)
             .HasColumnName("code")
-            .ValueGeneratedNever()
+            .UseIdentityByDefaultColumn()
             .IsRequired();
 
         builder.Property(e => e.CustomerId)

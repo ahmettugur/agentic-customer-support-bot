@@ -49,7 +49,9 @@ public class EvaluationRunnerTests
             Options.Create(new WorkflowGuardOptions()),
             Options.Create(new ParallelExecutionOptions()),
             traceStore,
-            prompts, approvalGate, tools, NullLoggerFactory.Instance);
+            prompts, approvalGate, tools,
+            new CustomerSupportBot.Application.Services.UiHint.UiHintEmitter(new ApprovalContextAccessor()),
+            NullLoggerFactory.Instance);
 
         var reasoningClient = new ReasoningChatClient(chatClient, "gpt-test", "low");
         var entityVerifier = new EntityVerifier(

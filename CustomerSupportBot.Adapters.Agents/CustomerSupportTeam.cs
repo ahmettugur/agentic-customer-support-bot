@@ -14,6 +14,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Application.Services.Approval;
 using CustomerSupportBot.Application.Services.Chat;
@@ -50,6 +51,7 @@ public class CustomerSupportTeam : IAgentTeamPort
     private readonly IPromptRepository _prompts;
     private readonly ApprovalGateService _approvalGate;
     private readonly ICustomerSupportToolsService _tools;
+    private readonly IUiHintEmitter _uiHint;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ISemanticMemoryWriter? _semanticMemory;
     private readonly ICustomerProfileService? _profileService;
@@ -64,6 +66,7 @@ public class CustomerSupportTeam : IAgentTeamPort
         IPromptRepository prompts,
         ApprovalGateService approvalGate,
         ICustomerSupportToolsService tools,
+        IUiHintEmitter uiHint,
         ILoggerFactory loggerFactory,
         ISemanticMemoryWriter? semanticMemory = null,
         ICustomerProfileService? profileService = null)
@@ -74,6 +77,7 @@ public class CustomerSupportTeam : IAgentTeamPort
         _prompts = prompts;
         _approvalGate = approvalGate;
         _tools = tools;
+        _uiHint = uiHint;
         _loggerFactory = loggerFactory;
         _semanticMemory = semanticMemory;
         _profileService = profileService;
@@ -211,6 +215,7 @@ public class CustomerSupportTeam : IAgentTeamPort
         ReasoningResult? reasoning = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        var sessionId = session?.SessionId ?? string.Empty;
         if (SubTaskOrchestrator.IsCompoundQuery(reasoning))
         {
             await foreach (var evt in RunDecomposedStreamingAsync(
@@ -321,6 +326,10 @@ public class CustomerSupportTeam : IAgentTeamPort
                     workflowError = errorEvt.Exception?.Message ?? "workflow error";
                     break;
             }
+
+            // Tool çağrıları sırasında biriken UI ipuçlarını (ör. category_picker) hemen yayınla
+            foreach (var hint in _uiHint.DrainPending(sessionId))
+                yield return hint;
 
             if (workflowError != null) break;
         }

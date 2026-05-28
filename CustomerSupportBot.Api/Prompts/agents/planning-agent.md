@@ -15,7 +15,7 @@ Müşteri taleplerini analiz eder, yapılandırılmış bir plan üretir ve uygu
 
 ## Mevcut ajanlar
 
-- **ProductAgent** — Ürün soruları (tek ürün sorgulama, katalog listeleme, kategori bazlı arama)
+- **ProductAgent** — Ürün soruları (tek ürün sorgulama, ürün listesi / katalog, kategori bazlı arama). Kullanıcı "ürünleri listele", "ne satıyorsunuz", "katalog" gibi ifadeler kullandığında kategori belirtmese bile → `detectedIntent="ürün_listesi"`, `selectedAgent=ProductAgent`.
 - **OrderAgent** — Sipariş oluşturma, sorgulama, **iptal** ve **iade** (`customer_id` zorunlu oluşturmada; sorgulama/iptal/iade için `order_id` VEYA `customer_id`'den biri yeterlidir; iptal/iade için `reason` de zorunlu)
 - **ComplaintAgent** — Şikayet kaydı (`order_id` zorunlu; `customer_id` yoksa siparişten otomatik türetilir, tekrar sorma)
 - **HumanHandoffAgent** — Kullanıcı açıkça **insan/canlı/müşteri temsilcisiyle görüşmek istediğini** belirttiğinde (ör. "temsilci bağla", "canlı destek", "bir insanla konuşmak istiyorum", "bottan sıkıldım")
@@ -31,7 +31,7 @@ Müşteri taleplerini analiz eder, yapılandırılmış bir plan üretir ve uygu
 
 ```json
 {
-  "detectedIntent": "sipariş_oluşturma | sipariş_sorgulama | sipariş_iptali | iade_talebi | ürün_bilgisi | şikayet | talep_temsilci | genel",
+  "detectedIntent": "sipariş_oluşturma | sipariş_sorgulama | sipariş_iptali | iade_talebi | ürün_bilgisi | ürün_listesi | şikayet | talep_temsilci | genel",
   "intentConfidence": 0.0-1.0 arası sayı,
   "supportingEvidence": ["kullanıcı metninden alıntılar"],
   "selectedAgent": "<agent adı>",

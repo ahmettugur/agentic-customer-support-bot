@@ -18,6 +18,7 @@ using CustomerSupportBot.Application.Services.Improvement;
 using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Application.Services.Routing;
 using CustomerSupportBot.Application.Services.Sla;
+using CustomerSupportBot.Application.Services.UiHint;
 using CustomerSupportBot.Application.Services.Workflow;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -98,6 +99,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ChatPortService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
+        services.AddSingleton<IUiHintEmitter, UiHintEmitter>();
         services.AddSingleton<IReplanService, ReplanService>();
         services.AddSingleton<SessionStateService>();
     }

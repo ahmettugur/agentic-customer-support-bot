@@ -70,4 +70,11 @@ public static class StreamEventTypes
     public const string SentimentUpdate = "sentiment_update";
     /// <summary>Duygu skoru kritik eşiğin altına düştü. Payload: { sentiment, score, consecutive, sessionId }.</summary>
     public const string SentimentAlert = "sentiment_alert";
+
+    // ─── UI hint events ───
+    /// <summary>
+    /// Tool çıktısına bağlı frontend UI bileşeni. Payload: { kind, ...data }.
+    /// kind="category_picker" → { categories: string[] }
+    /// </summary>
+    public const string UiHint = "ui_hint";
 }

@@ -73,4 +73,14 @@ public sealed class ProductCatalogRepository : IProductCatalogRepository
             .Select(p => new ProductInfo(p.Price, p.Stock, p.Name, p.Category.Name))
             .ToList();
     }
+
+    public IReadOnlyList<string> GetCategories()
+    {
+        using var ctx = _dbFactory.CreateDbContext();
+        return ctx.Categories
+            .AsNoTracking()
+            .OrderBy(c => c.Name)
+            .Select(c => c.Name)
+            .ToList();
+    }
 }

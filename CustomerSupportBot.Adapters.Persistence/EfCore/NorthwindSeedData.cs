@@ -206,6 +206,39 @@ public static class NorthwindSeedData
         new() { OrderCode=1081, ProductId=24, Quantity=  1 }, // Ravioli
     ];
 
+    public static CustomerEntity[] Customers() =>
+    [
+        new() { Id = 1001, FullName = "Maria Anders",         Email = "maria.anders@example.com",       Phone = "+49-030-0074321"  },
+        new() { Id = 1002, FullName = "Ana Trujillo",         Email = "ana.trujillo@example.com",       Phone = "+52-5-555-4729"   },
+        new() { Id = 1003, FullName = "Antonio Moreno",       Email = "antonio.moreno@example.com",     Phone = "+52-5-555-3932"   },
+        new() { Id = 1004, FullName = "Thomas Hardy",         Email = "thomas.hardy@example.com",       Phone = "+44-171-555-7788" },
+        new() { Id = 1005, FullName = "Christina Berglund",   Email = "christina.berglund@example.com", Phone = "+46-0921-12 34 65"},
+        new() { Id = 1006, FullName = "Hanna Moos",           Email = "hanna.moos@example.com",         Phone = "+49-0621-08460"   },
+        new() { Id = 1007, FullName = "Frederique Citeaux",   Email = "frederique.citeaux@example.com", Phone = "+33-88.60.15.31"  },
+        new() { Id = 1008, FullName = "Martin Sommer",        Email = "martin.sommer@example.com",      Phone = "+34-91 745 6200"  },
+        new() { Id = 1009, FullName = "Laurence Lebihan",     Email = "laurence.lebihan@example.com",   Phone = "+33-91.24.45.40"  },
+        new() { Id = 1010, FullName = "Elizabeth Lincoln",    Email = "elizabeth.lincoln@example.com",  Phone = "+1-604-555-4729"  },
+        new() { Id = 1011, FullName = "Victoria Ashworth",    Email = "victoria.ashworth@example.com",  Phone = "+44-171-555-1212" },
+        new() { Id = 1012, FullName = "Patricio Simpson",     Email = "patricio.simpson@example.com",   Phone = "+54-1-135-5555"   },
+        new() { Id = 1013, FullName = "Francisco Chang",      Email = "francisco.chang@example.com",    Phone = "+52-5-555-3392"   },
+        new() { Id = 1014, FullName = "Yang Wang",            Email = "yang.wang@example.com",          Phone = "+41-0452-076545"  },
+        new() { Id = 1015, FullName = "Pedro Afonso",         Email = "pedro.afonso@example.com",       Phone = "+55-21-555-9857"  },
+        new() { Id = 1016, FullName = "Elizabeth Brown",      Email = "elizabeth.brown@example.com",    Phone = "+44-171-555-2282" },
+        new() { Id = 1017, FullName = "Sven Ottlieb",         Email = "sven.ottlieb@example.com",       Phone = "+49-0241-02460"   },
+        new() { Id = 1018, FullName = "Janine Labrune",       Email = "janine.labrune@example.com",     Phone = "+33-40.67.88.88"  },
+        new() { Id = 1019, FullName = "Ann Devon",            Email = "ann.devon@example.com",          Phone = "+44-171-555-0297" },
+        new() { Id = 1020, FullName = "Roland Mendel",        Email = "roland.mendel@example.com",      Phone = "+43-7675-3425"    },
+        new() { Id = 1021, FullName = "Aria Cruz",            Email = "aria.cruz@example.com",          Phone = "+55-11-555-9857"  },
+        new() { Id = 1022, FullName = "Diego Roel",           Email = "diego.roel@example.com",         Phone = "+34-91 745 6210"  },
+        new() { Id = 1023, FullName = "Martine Rance",        Email = "martine.rance@example.com",      Phone = "+46-0695-34 67 21"},
+        new() { Id = 1024, FullName = "Maria Larsson",        Email = "maria.larsson@example.com",      Phone = "+46-0695-34 67 22"},
+        new() { Id = 1025, FullName = "Peter Franken",        Email = "peter.franken@example.com",      Phone = "+49-089-0877310"  },
+        new() { Id = 1026, FullName = "Carine Schmitt",       Email = "carine.schmitt@example.com",     Phone = "+33-99.74.44.60"  },
+        new() { Id = 1027, FullName = "Paolo Accorti",        Email = "paolo.accorti@example.com",      Phone = "+39-011-4988260"  },
+        new() { Id = 1028, FullName = "Lino Rodriguez",       Email = "lino.rodriguez@example.com",     Phone = "+351-2-202346"    },
+        new() { Id = 1029, FullName = "Eduardo Saavedra",     Email = "eduardo.saavedra@example.com",   Phone = "+34-93-203 4560"  },
+    ];
+
     public static ComplaintEntity[] Complaints() =>
     [
         new() { Code=1001, OrderId=1033, CustomerId=1008, Complaint="Ürün hasarlı paketlenmiş olarak geldi.",                  Status=WellKnown.ComplaintStatuses.Resolved   },

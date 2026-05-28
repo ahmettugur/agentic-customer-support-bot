@@ -271,6 +271,39 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     b.ToTable("complaints", "catalog");
                 });
 
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.CustomerEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("phone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FullName")
+                        .HasDatabaseName("ix_customers_full_name");
+
+                    b.ToTable("customers", "catalog");
+                });
+
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.OrderDetailEntity", b =>
                 {
                     b.Property<long>("OrderCode")
@@ -295,8 +328,11 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.OrderEntity", b =>
                 {
                     b.Property<long>("Code")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("bigint")
                         .HasColumnName("code");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Code"));
 
                     b.Property<string>("CancelReason")
                         .HasMaxLength(512)

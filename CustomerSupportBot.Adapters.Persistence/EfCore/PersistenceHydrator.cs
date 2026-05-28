@@ -88,6 +88,12 @@ public sealed class PersistenceHydrator : IHostedService
             _logger.LogError(ex, "[Hydrator] Category seed başarısız.");
         }
 
+        try { await SeedDefaultCustomersAsync(cancellationToken); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Hydrator] Customer seed başarısız.");
+        }
+
         try { await SeedDefaultProductsAsync(cancellationToken); }
         catch (Exception ex)
         {
@@ -232,6 +238,25 @@ public sealed class PersistenceHydrator : IHostedService
         _logger.LogInformation("[Hydrator] {Count} kategori seed edildi.", NorthwindSeedData.Categories().Length);
     }
 
+    private async Task SeedDefaultCustomersAsync(CancellationToken ct)
+    {
+        var dbFactory = GetService<IDbContextFactory<CustomerSupportDbContext>>();
+        if (dbFactory is null) return;
+
+        await using var ctx = await dbFactory.CreateDbContextAsync(ct);
+        if (await ctx.Customers.AnyAsync(ct)) return;
+
+        ctx.Customers.AddRange(NorthwindSeedData.Customers());
+        await ctx.SaveChangesAsync(ct);
+
+        // Identity sequence'ını seed verilerinin üstüne çek
+        await ctx.Database.ExecuteSqlRawAsync(
+            "SELECT setval(pg_get_serial_sequence('catalog.customers', 'id'), COALESCE((SELECT MAX(id) FROM catalog.customers), 1029))",
+            ct);
+
+        _logger.LogInformation("[Hydrator] {Count} müşteri seed edildi.", NorthwindSeedData.Customers().Length);
+    }
+
     private async Task SeedDefaultProductsAsync(CancellationToken ct)
     {
         var dbFactory = GetService<IDbContextFactory<CustomerSupportDbContext>>();
@@ -261,8 +286,9 @@ public sealed class PersistenceHydrator : IHostedService
         ctx.Orders.AddRange(NorthwindSeedData.Orders());
         await ctx.SaveChangesAsync(ct);
 
+        // Identity sequence'ını seed verilerinin üstüne çek
         await ctx.Database.ExecuteSqlRawAsync(
-            "SELECT setval('catalog.order_seq', (SELECT COALESCE(MAX(code), 1081) FROM catalog.orders))",
+            "SELECT setval(pg_get_serial_sequence('catalog.orders', 'code'), COALESCE((SELECT MAX(code) FROM catalog.orders), 1081))",
             ct);
 
         _logger.LogInformation("[Hydrator] {Count} Northwind siparişi seed edildi.", NorthwindSeedData.Orders().Length);

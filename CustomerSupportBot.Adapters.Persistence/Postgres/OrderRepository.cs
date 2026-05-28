@@ -22,30 +22,28 @@ public sealed class OrderRepository : IOrderRepository
     public string Create(OrderInfo order)
     {
         using var ctx = _dbFactory.CreateDbContext();
-        var seq = ctx.Database
-            .SqlQuery<long>($"SELECT nextval('catalog.order_seq') AS \"Value\"")
-            .AsEnumerable()
-            .First();
 
         var product = ctx.Products.First(p => p.Name == order.Product);
 
-        ctx.Orders.Add(new OrderEntity
+        var orderEntity = new OrderEntity
         {
-            Code = seq,
             CustomerId = long.Parse(order.CustomerId),
             Status = order.Status,
             OrderDate = order.OrderDate.Kind == DateTimeKind.Utc
                 ? order.OrderDate
                 : DateTime.SpecifyKind(order.OrderDate, DateTimeKind.Utc)
-        });
+        };
+        ctx.Orders.Add(orderEntity);
+        ctx.SaveChanges(); // Code DB tarafından üretilir, EF geri okur
+
         ctx.OrderDetails.Add(new OrderDetailEntity
         {
-            OrderCode = seq,
+            OrderCode = orderEntity.Code,
             ProductId = product.Id,
             Quantity = order.Quantity
         });
         ctx.SaveChanges();
-        return seq.ToString();
+        return orderEntity.Code.ToString();
     }
 
     public OrderInfo? Get(string orderId)
