@@ -19,7 +19,7 @@ CustomerSupportBot.Adapters.Agents/
 ├── ApprovalGateService.cs          # HITL onay kapısı — yan etkili tool'lar buradan geçer
 ├── WorkflowResponseExtractor.cs    # MAF çıktısından anlamlı veri çıkarma yardımcısı
 ├── ExceptionTranslator.cs          # Framework exception → Domain exception dönüşümü
-├── PortAliases.cs                  # Global using alias'lar
+├── PortAliases.cs                  # Global using direktifleri (proje geneli namespace kısayolları)
 │
 ├── Routing/
 │   └── Routing.cs                  # Strategy pattern — 3 routing stratejisi + RoutingContext
@@ -27,6 +27,18 @@ CustomerSupportBot.Adapters.Agents/
 └── DependencyInjection/
     └── AgentsAdapterServiceCollectionExtensions.cs  # DI kaydı
 ```
+
+### PortAliases.cs
+
+`global using` direktifleri ile proje genelindeki tüm `.cs` dosyalarına otomatik namespace import sağlar:
+
+```csharp
+global using CustomerSupportBot.Application.Ports.Outbound.Persistence;
+global using CustomerSupportBot.Application.Ports.Outbound.Observability;
+global using CustomerSupportBot.Application.Ports.Outbound;
+```
+
+Bu sayede adapter içindeki sınıflar outbound port namespace'lerini her dosyada tekrar tekrar `using` ile belirtmek zorunda kalmaz. Port alias'ları (interface aliasing) kaldırılmıştır; dosya yalnızca `global using` import'larını içerir.
 
 ## Bileşenler arası ilişki
 

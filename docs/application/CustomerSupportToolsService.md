@@ -1,12 +1,20 @@
 # CustomerSupportToolsService
 
-**Dosya:** `CustomerSupportBot.Application/Services/CustomerSupportToolsService.cs`  
+**Dosya:** `CustomerSupportBot.Application/Services/Tools/CustomerSupportToolsService.cs`  
 **Implements:** `ICustomerSupportToolsService`  
 **Yaşam döngüsü:** Singleton
 
 ## Ne yapar?
 
-Ajanların LLM üzerinden çağırabileceği 10 tool'un gerçek iş mantığını uygular. Her tool bir `ToolResult` döndürür — yapılandırılmış sonuç formatı. Repository port'ları üzerinden veri erişimi yapar; veritabanı implementasyonuna bağımlı değildir.
+`ICustomerSupportToolsService` için **facade** implementasyonu. Tüm tool çağrılarını üç alt servise delege eder:
+
+- `ProductToolsService` → `IProductToolsService`
+- `OrderToolsService` → `IOrderToolsService`
+- `ComplaintToolsService` → `IComplaintToolsService`
+
+Her sub-servis kendi repository bağımlılıklarını taşır; `CustomerSupportToolsService` hiçbir repository'ye doğrudan erişmez — sadece iletir.
+
+Her tool bir `ToolResult` döndürür — yapılandırılmış sonuç formatı.
 
 ## Tool listesi
 
@@ -161,13 +169,22 @@ Parametreler küçük harfe çevrilip birleştirildikten sonra SHA256 hash'i al�
 
 **Önemli:** Cache Singleton servis içinde bellekte tutulur. Pod restart veya yeni pod başlatıldığında sıfırlanır — çok kısa aralıklı pod restart'larında teorik duplicate işlem riski vardır.
 
+## Sub-servis bağımlılıkları
+
+| Sub-servis | Bağımlılıklar |
+|-----------|---------------|
+| `ProductToolsService` | `IProductCatalogRepository`, `IUiHintEmitter` |
+| `OrderToolsService` | `IOrderRepository`, `IProductCatalogRepository`, `ICustomerRepository` |
+| `ComplaintToolsService` | `IComplaintRepository`, `IOrderRepository` |
+
 ## Yeni tool eklemek
 
-1. `ICustomerSupportToolsService` arayüzüne metot ekleyin.
-2. Bu sınıfta implement edin. `[Description("...")]` attribute'u LLM'nin tool'u ne zaman çağıracağını belirler — açıklayıcı yazın.
-3. Yan etkisi varsa idempotency cache ekleyin.
-4. HITL gerektiriyorsa `ApprovalGateService`'de yeni bir `Build___Tool()` metodu yazın ve `appsettings.json`'da `ToolsRequiringApproval` listesine ekleyin.
-5. `CustomerSupportTeam` constructor'ında ilgili ajana tool olarak atayın.
+1. Uygun sub-servis arayüzüne (`IProductToolsService`, `IOrderToolsService`, `IComplaintToolsService`) metot ekleyin.
+2. İlgili sub-serviste implement edin. `[Description("...")]` attribute'u LLM'nin tool'u ne zaman çağıracağını belirler.
+3. `ICustomerSupportToolsService` arayüzüne metot ekleyin ve `CustomerSupportToolsService` facade'ında sub-servise delege edin.
+4. Yan etkisi varsa ilgili sub-serviste idempotency cache ekleyin.
+5. HITL gerektiriyorsa `ApprovalGateService`'de yeni bir `Build___Tool()` metodu yazın ve `appsettings.json`'da `ToolsRequiringApproval` listesine ekleyin.
+6. `CustomerSupportTeam` constructor'ında ilgili ajana tool olarak atayın.
 
 ## Parametre isim sabitleri
 

@@ -18,25 +18,23 @@ Pending approval queue yönetimi.
 | `/approvals/pending` | GET | Bekleyen approval'lar |
 | `/approvals/recent?count=50` | GET | Son N karar |
 | `/approvals/{id}` | GET | Tek approval |
-| `/approvals/{id}/approve` | POST | Onayla |
-| `/approvals/{id}/reject` | POST | Reddet |
+| `/approvals/{id}/approve` | POST | Onayla (body: `{ decidedBy?, reason? }`) |
+| `/approvals/{id}/reject` | POST | Reddet (body: `{ decidedBy?, reason? }`) |
 
 ### High-risk tool kuralı
 
-`order_placement_tool` ve `complaint_registration_tool` için **reason zorunlu**:
+`WellKnown.HighRiskTools` listesindeki tool'lar için **reason zorunlu**:
 
 ```csharp
-adminGroup.MapPost("/approvals/{id}/approve", async (string id, ApprovalDecisionInput input) =>
+if (WellKnown.HighRiskTools.Contains(req.ToolName) &&
+    string.IsNullOrWhiteSpace(body?.Reason))
 {
-    var approval = await _approval.GetAsync(id);
-    if (_approvalOptions.ToolsRequiringApproval.Contains(approval.ToolName))
+    return Results.BadRequest(new
     {
-        if (string.IsNullOrWhiteSpace(input.Reason))
-            return Results.BadRequest("High-risk tool için reason zorunlu");
-    }
-    await _approval.DecideAsync(id, approved: true, decidedBy, input.Reason);
-    return Results.NoContent();
-});
+        error = "approval_reason_required",
+        message = $"'{req.ToolName}' yüksek riskli bir işlem; onay için gerekçe zorunludur."
+    });
+}
 ```
 
 Audit trail için kritik — yüksek riskli işlem neden onaylandı?
@@ -57,8 +55,7 @@ Authorization: Bearer <admin-jwt>
     "agentName": "OrderAgent",
     "parameters": { "product": "iPhone 15", "quantity": 1 },
     "userQuery": "iPhone 15 alabilir miyim?",
-    "createdAt": "2026-05-24T10:00:00Z",
-    "timeoutSeconds": 300
+    "requestedAt": "2026-05-24T10:00:00Z"
   }
 ]
 ```
@@ -82,12 +79,9 @@ Open escalation queue yönetimi.
 ### `acknowledge` davranışı
 
 ```csharp
-adminGroup.MapPost("/escalations/{id}/acknowledge", async (string id, AckInput input) =>
-{
-    await _escalation.AcknowledgeAsync(id, agentId: input.AgentId);
-    await _chatSession.PublishSystemMessage(esc.SessionId,
-        $"{input.HumanAgent} adlı temsilci sohbetinize bağlanıyor...");
-});
+escalations.Decide(id, WellKnown.EscalationActions.Acknowledge, assignedTo: body?.AssignedTo);
+chatSessions.PublishSystemMessage(esc.SessionId,
+    $"ℹ️ {agentLabel} talebinizi üstlendi ve sizinle daha sonra iletişime geçecek.");
 ```
 
 Müşteriye sistem mesajı düşülür — "biri size geliyor" bilgisi.
@@ -95,13 +89,13 @@ Müşteriye sistem mesajı düşülür — "biri size geliyor" bilgisi.
 ### `replan` davranışı
 
 ```csharp
-adminGroup.MapPost("/escalations/{id}/replan", async (string id, ReplanInput input) =>
+app.MapPost("/escalations/{id}/replan", (string id, ReplanInput? body, IChatSessionPort chatSessions) =>
 {
-    await _escalation.ReplanAsync(id);
+    var result = chatSessions.ReplanEscalation(id, requestedBy, note);
     // 1. Escalation'ı resolve et
     // 2. ChatMode'u Bot'a döndür (Release)
-    // 3. ForceReplanNextTurn = true (session.state)
-    // 4. ReplanService.ExecuteAsync arka planda tetikle
+    // 3. Replan use-case'ini kuyruğa al
+    return Results.Json(new { id, sessionId, status = "replan_queued", requestedBy, releasedFromHuman });
 });
 ```
 
@@ -135,14 +129,15 @@ Content-Type: application/json
 { "humanAgent": "Ali Demir" }
 ```
 
-**Akış:**
+`IChatSessionPort.TakeOver(sid, agent, agent)` çağrılır. Başarılı döner:
 
-```
-IChatSessionPort.TakeOverAsync(sessionId, agentId, humanAgent)
-   ├── IChatModeRegistry.SetMode(sessionId, ChatMode.Human, agentId)
-   ├── IEscalationSink.AcknowledgeEscalationsForSession(sessionId)
-   ├── IHumanAgentRegistry.IncrementLoad(agentId)
-   └── IChatBridge.PublishSystemMessage(...)
+```json
+{
+  "sessionId": "sess-123",
+  "mode": "human",
+  "humanAgent": "Ali Demir",
+  "escalationsAcknowledged": 1
+}
 ```
 
 ### `subscribe` — admin live view
@@ -154,14 +149,14 @@ GET /chat-sessions/sess-123/subscribe?access_token=...
 Accept: text/event-stream
 ```
 
-Server `IChatBridge.SubscribeToAdminAsync(sessionId)` üzerinden mesaj akıtır.
+Server `IChatSessionPort.SubscribeToAdminAsync(sessionId)` üzerinden mesaj akıtır.
 
 ```
-event: userMessage
-data: { "id": "msg-1", "text": "Sorun çözülmedi", "at": "..." }
+event: session
+data: { "sessionId": "sess-123" }
 
-event: botMessage
-data: { "id": "msg-2", "text": "Anlıyorum, alternatifler...", "at": "..." }
+event: bridge_message
+data: { "id": "msg-1", "sessionId": "...", "sender": "user", "text": "...", "timestamp": "..." }
 ```
 
 Admin canlı izler — gerekirse `takeover` yapar.
@@ -175,12 +170,11 @@ GET /chat-sessions/sess-123/sentiment
 ```json
 {
   "sentiment": "negative",
-  "sentimentScore": 0.25,
-  "consecutiveNegativeTurns": 2,
+  "score": 0.25,
+  "consecutiveNegative": 2,
   "history": [
     { "turn": 1, "label": "neutral", "score": 0.5 },
-    { "turn": 2, "label": "negative", "score": 0.3 },
-    { "turn": 3, "label": "negative", "score": 0.25 }
+    { "turn": 2, "label": "negative", "score": 0.3 }
   ]
 }
 ```
@@ -191,30 +185,48 @@ Negatif trend → admin proaktif takeover yapabilir.
 
 ## AgentPanelEndpoints — `/agent/*`
 
-Insan agent (Role=Agent) paneli. Admin'in subset'i + agent-spesifik filtreleme.
+Insan agent (Role=Agent veya Admin) paneli. Admin'in subset'i + agent-spesifik filtreleme. `AdminOrAgent` policy ile korunur.
 
 ### JWT claim okuması
 
 ```csharp
-agentGroup.MapGet("/escalations/my", async (HttpContext ctx) =>
-{
-    var linkedAgentId = ctx.User.FindFirst("linked_agent_id")?.Value;
-    if (string.IsNullOrEmpty(linkedAgentId))
-        return Results.Forbid();   // Bağlı agent kaydı yoksa erişim yok
-    return await _escalation.GetAssignedToAsync(linkedAgentId);
-});
+private static string? GetLinkedAgentId(HttpContext ctx) =>
+    ctx.User.FindFirstValue("linked_agent_id");
 ```
 
 `linked_agent_id` JWT claim'i — UserInfo.LinkedAgentId'den gelir.
 
-### Endpoint farkları (admin vs agent)
+### Escalation endpoint'leri
 
-| Aksiyon | Admin | Agent |
+| Route | Method | Açıklama |
 |---|---|---|
-| Tüm pending'leri görme | ✅ | Sadece kendine atananlar + uygun olanlar |
-| Acknowledge | Herhangi birini | Sadece kendine veya boş olanları |
-| Approve/Reject | ✅ | ✅ |
-| Agent registry CRUD | ✅ | ❌ |
+| `/agent/escalations/my` | GET | `linked_agent_id`'ye atanmış eskalasyonlar |
+| `/agent/escalations/open` | GET | Boş veya bu agent'a atananlar |
+| `/agent/escalations/{id}/acknowledge` | POST | Üstlen + müşteriye bildir |
+| `/agent/escalations/{id}/resolve` | POST | Çöz + `DecrementLoad` |
+| `/agent/escalations/{id}/dismiss` | POST | Reddet |
+| `/agent/escalations/{id}/replan` | POST | Replan tetikle |
+
+### Approval endpoint'leri
+
+| Route | Method | Açıklama |
+|---|---|---|
+| `/agent/approvals/pending` | GET | Tüm pending |
+| `/agent/approvals/{id}/approve` | POST | Onayla (high-risk için reason zorunlu) |
+| `/agent/approvals/{id}/reject` | POST | Reddet |
+
+### Chat session endpoint'leri (Live Takeover)
+
+| Route | Method | Açıklama |
+|---|---|---|
+| `/agent/chat-sessions/active` | GET | Human modda session'lar |
+| `/agent/chat-sessions/{sid}/takeover` | POST | Sohbete katıl |
+| `/agent/chat-sessions/{sid}/release` | POST | Bırak (Bot moda dön) |
+| `/agent/chat-sessions/{sid}/messages` | POST | Müşteriye mesaj |
+| `/agent/chat-sessions/{sid}/history` | GET | Geçmiş |
+| `/agent/chat-sessions/{sid}/sentiment` | GET | Sentiment (read-only) |
+| `/agent/chat-sessions/{sid}/subscribe` | GET | SSE — müşteri mesajlarını dinle |
+| `/agent/chat-sessions/{sid}/replan` | POST | Replan tetikle |
 
 ### `/agent/profile`
 
@@ -230,20 +242,29 @@ Authorization: Bearer <agent-jwt>
   "skills": ["complaint", "tr", "vip"],
   "languages": ["tr"],
   "maxConcurrentLoad": 5,
-  "currentLoad": 2,
   "priority": 1
 }
 ```
 
-Agent kendi profile bilgilerini görür.
+Agent kendi profil bilgilerini görür. `linked_agent_id` claim yoksa 400 döner.
+
+### Endpoint farkları (admin vs agent)
+
+| Aksiyon | Admin (`/`) | Agent (`/agent/`) |
+|---|---|---|
+| Tüm pending'leri görme | ✅ | ✅ (atanmamış + kendine ait) |
+| Escalation acknowledge | Herhangi birini | Herhangi birini (load increment yapılır) |
+| Approve/Reject | ✅ | ✅ |
+| Agent registry CRUD | ✅ | ❌ |
+| Profil görme | Herhangi biri | Sadece kendi |
 
 ### Load tracking
 
 ```
-Acknowledge → IHumanAgentRegistry.IncrementLoad
-Resolve     → IHumanAgentRegistry.DecrementLoad
-TakeOver    → IncrementLoad
-Release     → DecrementLoad
+Acknowledge → IHumanAgentPort.IncrementLoad
+Resolve     → IHumanAgentPort.DecrementLoad
+TakeOver    → IncrementLoad (zımni)
+Release     → DecrementLoad (zımni)
 ```
 
 `CurrentLoad` agent'ın eş zamanlı konuşma sayısı — `MaxConcurrentLoad`'a yaklaşınca SkillsBasedRouter agent'a düşük score verir.
@@ -254,7 +275,7 @@ Release     → DecrementLoad
 
 | Route | Method | Açıklama |
 |---|---|---|
-| `/agents` | GET | Tüm agent'lar |
+| `/agents` | GET | Tüm agent'lar (registry + auth-linked merged) |
 | `/agents` | POST | Yeni agent oluştur |
 | `/agents/{id}` | GET | Tek agent |
 | `/agents/{id}` | PUT | Güncelle |
@@ -293,12 +314,11 @@ Skills router otomatik seçim yaptı ama admin manuel override edebilir.
 
 ### Merge logic
 
-`/agents` GET endpoint **iki kaynak**'tan agent'ları birleştirir:
+`GET /agents` endpoint **iki kaynak**'tan agent'ları birleştirir:
 
-1. `IHumanAgentRegistry.GetAll()` — Agent registry
-2. `IUserAuthRepository.FindByRole("Agent")` — Login yapan agent kullanıcılar
+1. `IHumanAgentPort.GetAllMergedAsync(ct)` — registry + auth-linked user merge
 
-Bazı agent'lar registry'de var ama user yok (ör. eski kayıt). Bazıları user var ama LinkedAgentId set edilmemiş. Admin paneli ikisini görüp eşleştirir.
+Bazı agent'lar registry'de var ama user yok. Bazıları user var ama LinkedAgentId set edilmemiş. `GetAllMergedAsync` ikisini birleştirir; response `{ id, displayName, isActive }` içerir.
 
 ---
 

@@ -80,15 +80,20 @@ public static class AgentNames
     public const string HumanHandoff = "HumanHandoffAgent";
     public const string Response = "ResponseAgent";
 
-    public static readonly HashSet<string> ReadOnly = new()
+    public static readonly IReadOnlySet<string> ReadOnly = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         Product  // approval gerektirmez
     };
 
     public static readonly string[] Specialists =
-    {
+    [
         Product, Order, Complaint, HumanHandoff
-    };
+    ];
+
+    public static readonly string[] All =
+    [
+        Planning, Product, Order, Complaint, HumanHandoff, Response
+    ];
 }
 ```
 
@@ -130,6 +135,17 @@ public static class TaskStatuses
     public const string NeedsEscalation = "needs_escalation";
     public const string Failed = "failed";
     public const string Partial = "partial";
+
+    // NormalizeStatus tarafından kabul edilen alias'lar
+    public const string Completed = "completed";
+    public const string Complete = "complete";
+    public const string Success = "success";
+    public const string Followup = "followup";
+    public const string Escalation = "escalation";
+    public const string Escalate = "escalate";
+    public const string Error = "error";
+    public const string Fail = "fail";
+    public const string Incomplete = "incomplete";
 }
 ```
 
@@ -190,15 +206,24 @@ public static class ComplaintStatuses
 ```csharp
 public static class FallbackMessages
 {
-    public const string ReasoningUnavailable = "Şu anda analiz yapamıyorum, lütfen tekrar deneyin.";
-    public const string RoutingRewrite = "Sorunuzu daha iyi anlayabilmek için biraz daha ayrıntı verir misiniz?";
-    public const string ApprovalRejected = "Bu işlem için onay alınamadı.";
-    public const string SystemError = "Sistem geçici bir hata yaşıyor.";
-    // ...
+    public const string ReasoningUnavailable = "Reasoning şu anda kullanılamıyor.";
+    public const string ReasoningIncomplete = "Reasoning tamamlanamadı.";
+    public const string AnalysisParseFailed = "(Analiz üretilemedi; JSON çıktısı bozuk)";
+    public const string RoutingRewrite = "Talebinizi inceliyorum. Lütfen müşteri kimlik numaranızı paylaşır mısınız?";
+    public const string ApprovalRejected = "İşlem onaylanmadı";
+    public const string ComplaintRejected = "Şikayet kaydı onaylanmadı";
+    public const string RequestCancelled = "İstek iptal edildi (timeout veya bağlantı koptu)";
+    public const string NewChat = "Yeni sohbet";
+    public const string HumanJoined = "Müşteri temsilcisi {0} sohbete katıldı.";
+    public const string HumanLeft = "Müşteri temsilcisi sohbeti sonlandırdı. Bot moduna dönüldü.";
+    public const string LiveTakeoverResolution = "Canlı sohbet üzerinden çözüldü (Live Takeover).";
+    public const string ReplanResolution = "Admin sohbeti yeniden planlattı; bot kontrolünde devam ediyor.";
+    public const string ReplanCustomerNotice = "ℹ️ Talebinizi tekrar değerlendiriyoruz.";
+    public const string ReplanPlanningHint = "🔄 ADMIN OVERRİDE — ...";  // PlanningAgent'a iletilen hint
 }
 ```
 
-LLM 500/timeout aldığında bu mesajlar kullanılır — kullanıcı boş yanıt almaz.
+LLM 500/timeout aldığında bu mesajlar kullanılır — kullanıcı boş yanıt almaz. `HumanJoined` ve `HumanLeft` runtime'da `string.Format` ile doldurulur.
 
 ### ResponseKeywords
 
@@ -218,13 +243,96 @@ public static class ResponseKeywords
 public static class ToolErrorCodes
 {
     public const string MissingRequiredField = "MISSING_REQUIRED_FIELD";
-    public const string OrderNotFound = "ORDER_NOT_FOUND";
-    public const string CustomerNotFound = "CUSTOMER_NOT_FOUND";
     public const string ProductNotFound = "PRODUCT_NOT_FOUND";
+    public const string CustomerNotFound = "CUSTOMER_NOT_FOUND";
+    public const string OrderNotFound = "ORDER_NOT_FOUND";
     public const string StockInsufficient = "STOCK_INSUFFICIENT";
-    public const string ComplaintDuplicate = "COMPLAINT_DUPLICATE";
-    public const string OperationNotAllowed = "OPERATION_NOT_ALLOWED";
-    public const string SystemUnavailable = "SYSTEM_UNAVAILABLE";
+    public const string CustomerIdMismatch = "CUSTOMER_ID_MISMATCH";
+    public const string NoOrdersForCustomer = "NO_ORDERS_FOR_CUSTOMER";
+    public const string OrderAlreadyCancelled = "ORDER_ALREADY_CANCELLED";
+    public const string OrderNotCancellable = "ORDER_NOT_CANCELLABLE";
+    public const string ReturnNotEligible = "RETURN_NOT_ELIGIBLE";
+    public const string ReturnAlreadyRequested = "RETURN_ALREADY_REQUESTED";
+}
+```
+
+### ReasoningEffort
+
+```csharp
+public static class ReasoningEffort
+{
+    public const string PropertyKey = "reasoning_effort";
+}
+```
+
+O-series modeller için reasoning effort seviyesi anahtar adı.
+
+### ChatModes
+
+```csharp
+public static class ChatModes
+{
+    public const string Human = "human";
+    public const string Bot = "bot";
+}
+```
+
+JSON serialization için chat mod etiketleri.
+
+### JsonProperties
+
+```csharp
+public static class JsonProperties
+{
+    public const string PreToolCheck = "preToolCheck";
+    public const string ResultConfidence = "resultConfidence";
+    public const string PostToolReflection = "postToolReflection";
+    public const string SelfCritique = "selfCritique";
+    public const string SelectedAgent = "selectedAgent";
+    public const string Steps = "steps";
+    public const string Analysis = "analysis";
+    public const string Intent = "intent";
+}
+```
+
+LLM çıktı parse işlemleri için JSON property adları.
+
+### SystemExecutorPrefixes
+
+```csharp
+public static class SystemExecutorPrefixes
+{
+    public static readonly string[] Values =
+    [
+        "GroupChatHost",
+        "GroupChatManager",
+        "RoundRobinGroupChatManager",
+        "StartExecutor",
+        "EndExecutor"
+    ];
+}
+```
+
+MAF sistem executor önekleri — kullanıcıya gösterilmez; `WorkflowResponseExtractor` bunları filtreler.
+
+### ApprovalReasons
+
+```csharp
+public static class ApprovalReasons
+{
+    public const string AutoApproveTimeout = "Timeout — otomatik onaylandı";
+    public const string TimeoutExpired = "Onay süresi doldu (admin karar vermedi)";
+    public const string AdminRejected = "admin reddetti";
+    public const string AgentWantsToCall = "{0} bu tool'u çağırmak istiyor.";
+}
+```
+
+### Evaluation
+
+```csharp
+public static class Evaluation
+{
+    public const string ScenarioFileName = "evaluation-scenarios.yaml";
 }
 ```
 

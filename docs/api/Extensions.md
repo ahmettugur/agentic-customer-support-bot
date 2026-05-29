@@ -8,7 +8,7 @@ DI kayıtlarının modüler dağılımı. `Program.cs` her birini çağırır.
 |---|---|
 | `AddTelemetryServices` | OpenTelemetry pipeline |
 | `AddAiServices` | IChatClient + telemetry wrap + IGeneralChatClient + IReasoningChatClient |
-| `AddRedisServices` | Distributed lock + message bus |
+| `AddRedisServices` | Distributed lock + message bus adapter'ları |
 | `AddPersistenceServices` | EF Core / InMemory provider |
 | `AddApplicationServices` | Port servisleri + CORS + rate limit + hosted services |
 | `AddAuthenticationServices` | JWT + policies |
@@ -23,15 +23,13 @@ DI kayıtlarının modüler dağılımı. `Program.cs` her birini çağırır.
 public static IServiceCollection AddTelemetryServices(
     this IServiceCollection services,
     IConfiguration configuration)
-{
-    return services.AddTelemetryAdapters(
+    => services.AddTelemetryAdapters(
         configuration,
-        activitySourceName: TelemetryConstants.ActivitySourceName,
-        meterName: TelemetryConstants.MeterName);
-}
+        activitySourceName: CustomerSupportTelemetry.ActivitySourceName,
+        meterName: CustomerSupportTelemetry.MeterName);
 ```
 
-`Adapters.Telemetry.AddTelemetryAdapters` ince bir wrapper. ActivitySource/Meter isimleri `TelemetryConstants` static class'ından (uygulamadaki tüm telemetry kodu bunu kullanır).
+`Adapters.Telemetry.AddTelemetryAdapters` ince bir wrapper. ActivitySource/Meter isimleri `CustomerSupportTelemetry` static class'ından alınır.
 
 ---
 
@@ -44,30 +42,25 @@ public static IServiceCollection AddAiServices(
     this IServiceCollection services,
     IConfiguration configuration)
 {
-    services.AddAiAdapters(configuration);   // Embedding, Vector, Realtime kayıt
+    services.AddAiAdapters(configuration);   // AI adapter'ları kayıt
 
-    // IChatClient: factory + telemetry wrap
+    // Standart IChatClient + telemetry wrap
     services.AddSingleton<IChatClient>(sp =>
     {
-        var aiOptions = sp.GetRequiredService<IOptions<AiOptions>>().Value;
-        var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-        IChatClient inner = AiClientFactory.CreateStandardChatClient(aiOptions, loggerFactory);
-
-        var telemetryEnabled = configuration.GetValue<bool>("Telemetry:Enabled", true);
-        if (!telemetryEnabled) return inner;
-
-        return new TelemetryChatClient(
-            inner,
-            sp.GetRequiredService<ICostCalculatorPort>(),
-            sp.GetRequiredService<CostUsageStore>(),
-            modelHint: ResolveModelHint(aiOptions),
-            provider: aiOptions.Provider.ToString().ToLowerInvariant(),
-            sp.GetRequiredService<ILogger<TelemetryChatClient>>(),
-            sp.GetService<ILlmCallPersistencePort>());
+        var options = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+        var inner = AiClientFactory.CreateStandardChatClient(options);
+        return WrapWithTelemetry(sp, inner, ResolveStandardModel(options), options.Provider.ToString());
     });
 
-    // ReasoningChatClient: aynı pattern
-    services.AddSingleton<IReasoningChatClient>(sp => /* ... */);
+    // ReasoningChatClient (ayrı model/config)
+    services.AddSingleton<ReasoningChatClient>(sp =>
+    {
+        var options = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+        return AiClientFactory.CreateReasoningChatClient(options, inner =>
+            WrapWithTelemetry(sp, inner, ResolveReasoningModel(options), options.Provider.ToString()));
+    });
+    services.AddSingleton<IReasoningChatClient>(sp =>
+        sp.GetRequiredService<ReasoningChatClient>());
 
     // IGeneralChatClient: IChatClient'ı adapte eder
     services.AddSingleton<IGeneralChatClient>(sp =>
@@ -77,17 +70,36 @@ public static IServiceCollection AddAiServices(
 }
 ```
 
-### Model hint resolution
-
-`ResolveModelHint(aiOptions)` provider'a göre default modeli döner:
+### Telemetry wrap
 
 ```csharp
-AiProvider.OpenAI      → aiOptions.OpenAI.Model
-AiProvider.AzureOpenAI → aiOptions.AzureOpenAI.Deployment
-AiProvider.Anthropic   → aiOptions.Anthropic.Model
+private static IChatClient WrapWithTelemetry(
+    IServiceProvider sp, IChatClient inner, string modelHint, string provider)
+{
+    var telemetryOptions = sp.GetRequiredService<IOptions<TelemetryOptions>>().Value;
+    if (!telemetryOptions.Enabled) return inner;
+
+    return new TelemetryChatClient(
+        inner,
+        sp.GetRequiredService<ICostCalculatorPort>(),
+        sp.GetRequiredService<CostUsageStore>(),
+        modelHint, provider,
+        sp.GetRequiredService<ILogger<TelemetryChatClient>>(),
+        sp.GetService<ILlmCallPersistencePort>());
+}
 ```
 
-Telemetry bu hint'i `ai.model` tag'i olarak kullanır.
+### Model hint resolution
+
+Provider'a göre default model adı:
+
+```
+AiProvider.OpenAI      → options.OpenAI.Model
+AiProvider.AzureOpenAI → options.AzureOpenAI.Deployment
+AiProvider.Anthropic   → options.Anthropic.Model
+```
+
+Reasoning model için `ReasoningDeployment` / `ReasoningModel` öncelikli, yoksa standart model fallback.
 
 ---
 
@@ -97,12 +109,10 @@ Telemetry bu hint'i `ai.model` tag'i olarak kullanır.
 public static IServiceCollection AddRedisServices(
     this IServiceCollection services,
     IConfiguration configuration)
-{
-    return services.AddRedisAdapters(configuration);
-}
+    => services.AddRedisAdapters(configuration);
 ```
 
-İnce wrapper — sadece `Adapters.Redis`'i çağırır. Burada `IAppDistributedLock`, `IMessageBusPort` kayıt edilir.
+İnce wrapper — `Adapters.Redis.AddRedisAdapters` çağırır. `IAppDistributedLock`, `IMessageBusPort` kayıt edilir.
 
 ---
 
@@ -112,12 +122,10 @@ public static IServiceCollection AddRedisServices(
 public static IServiceCollection AddPersistenceServices(
     this IServiceCollection services,
     IConfiguration configuration)
-{
-    return services.AddPersistenceAdapters(configuration);
-}
+    => services.AddPersistenceAdapters(configuration);
 ```
 
-Aynı şekilde ince wrapper. Provider seçimi (InMemory/Postgres) `Adapters.Persistence` içinde yapılır.
+İnce wrapper. Provider seçimi (InMemory/Postgres) `Adapters.Persistence` içinde yapılır.
 
 ---
 
@@ -128,7 +136,7 @@ Bu en kalın extension — birkaç sorumluluk birleştirir:
 ### 1. Application port'ları
 
 ```csharp
-services.AddApplicationDrivingPorts();
+services.AddApplicationDrivingPorts(configuration);
 ```
 
 Application katmanındaki `IApprovalPort`, `IChatSessionPort`, `IAnalyticsPort`, vb. driving port'ları kaydeder.
@@ -136,17 +144,18 @@ Application katmanındaki `IApprovalPort`, `IChatSessionPort`, `IAnalyticsPort`,
 ### 2. CORS
 
 ```csharp
-var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+var allowedOrigins = configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>();
+
 services.AddCors(options =>
-{
-    options.AddDefaultPolicy(builder =>
+    options.AddDefaultPolicy(p =>
     {
-        if (allowedOrigins.Length > 0)
-            builder.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+        if (allowedOrigins is { Length: > 0 })
+            p.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader();
         else
-            builder.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();    // ⚠️ Dev mode
-    });
-});
+            p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();    // ⚠️ Dev mode
+    }));
 ```
 
 `Cors:AllowedOrigins` boşsa `AllowAnyOrigin` — sadece dev. Production'da whitelist olmalı.
@@ -154,11 +163,9 @@ services.AddCors(options =>
 ### 3. JSON serialization
 
 ```csharp
-services.ConfigureHttpJsonOptions(opts =>
-{
-    opts.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-    opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-});
+services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.Converters.Add(
+        new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase)));
 ```
 
 Enum'lar camelCase string olarak serialize edilir: `IssueSeverity.Warn` → `"warn"`.
@@ -166,33 +173,25 @@ Enum'lar camelCase string olarak serialize edilir: `IssueSeverity.Warn` → `"wa
 ### 4. Rate limiting
 
 ```csharp
-services.AddRateLimiter(opts =>
+services.AddRateLimiter(options =>
 {
-    opts.AddFixedWindowLimiter("chat", o =>
-    {
-        o.PermitLimit = 20;
-        o.Window = TimeSpan.FromMinutes(1);
-        o.PartitionKey = httpCtx => httpCtx.Connection.RemoteIpAddress?.ToString();
-    });
-    opts.AddFixedWindowLimiter("general", o =>
-    {
-        o.PermitLimit = 60;
-        o.Window = TimeSpan.FromMinutes(1);
-    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("chat", ...);      // 20/dakika/IP
+    options.AddPolicy("general", ...);  // 60/dakika/IP
 });
 ```
 
 | Policy | Limit | Kullanan endpoint'ler |
 |---|---|---|
-| `chat` | 20/dakika/IP | `/chat`, `/chat/stream` |
+| `chat` | 20/dakika/IP | `/chat/`, `/chat/stream` |
 | `general` | 60/dakika/IP | `/sessions/.../rating` (anon) |
 
-429 Too Many Requests aşılınca döner.
+`QueueLimit = 0` — kuyruk yok, aşınca hemen 429.
 
 ### 5. Agent ekibi + ChatEventOrchestrator
 
 ```csharp
-services.AddAgentsAdapters();    // CustomerSupportTeam, ApprovalGateService
+services.AddAgentsAdapter();                         // CustomerSupportTeam, ApprovalGateService
 services.AddScoped<ChatEventOrchestrator>();
 ```
 
@@ -211,33 +210,36 @@ services.AddHostedService<KnowledgeBaseStartupService>();
 
 ```csharp
 services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(opts =>
+    .AddJwtBearer(options =>
     {
-        opts.TokenValidationParameters = new TokenValidationParameters
+        options.RequireHttpsMetadata = false;   // Development için
+        options.SaveToken = true;
+        options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
+            ValidIssuer = jwtOptions.Issuer,
             ValidateAudience = true,
-            ValidateLifetime = true,
+            ValidAudience = jwtOptions.Audience,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwt.Issuer,
-            ValidAudience = jwt.Audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Secret)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
+            ValidateLifetime = true,
             ClockSkew = TimeSpan.FromSeconds(30)
         };
 
-        // Query string token desteği
-        opts.Events = new JwtBearerEvents
+        // Query string token desteği (SSE / WebSocket)
+        options.Events = new JwtBearerEvents
         {
-            OnMessageReceived = context =>
+            OnMessageReceived = ctx =>
             {
-                var token = context.Request.Query["access_token"].FirstOrDefault();
-                if (!string.IsNullOrEmpty(token))
-                    context.Token = token;
+                var token = ctx.Request.Query["access_token"].ToString();
+                if (!string.IsNullOrEmpty(token)) ctx.Token = token;
                 return Task.CompletedTask;
             }
         };
     });
 ```
+
+`SigningKey` boşsa `new string('x', 32)` placeholder — `JwtAccessTokenProvider` boot sırasında throw eder.
 
 ### Neden query string token?
 
@@ -247,70 +249,64 @@ services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 | EventSource (SSE) | ❌ Custom header eklenemez | ✅ `?access_token=...` |
 | WebSocket | ❌ Browser API header'ı limitli | ✅ `?access_token=...` |
 
-Query string güvenliği:
-- HTTPS şart (URL şifreli)
-- Log'larda görünür (production'da `?access_token=` filter'ı log'da uygula)
-- Refresh token değil — sadece kısa ömürlü access token
+Query string güvenliği: HTTPS şart; log'larda `?access_token=` mask edilmeli.
 
 ### Policies
 
 ```csharp
-services.AddAuthorization(opts =>
+services.AddAuthorization(options =>
 {
-    opts.AddPolicy("Admin",         p => p.RequireRole("Admin"));
-    opts.AddPolicy("Agent",         p => p.RequireRole("Agent"));
-    opts.AddPolicy("AdminOrAgent",  p => p.RequireRole("Admin", "Agent"));
+    options.AddPolicy("Admin",        p => p.RequireRole("Admin"));
+    options.AddPolicy("Agent",        p => p.RequireRole("Agent"));
+    options.AddPolicy("AdminOrAgent", p => p.RequireRole("Admin", "Agent"));
 });
 ```
-
-Endpoint mapping'de `.RequireAuthorization("Admin")` ile kullanılır.
 
 ### Auth port'ları
 
 ```csharp
-services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
+services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
 services.AddScoped<IJwtAccessTokenProvider, JwtAccessTokenProvider>();
 services.AddScoped<ITokenService, TokenPortService>();
-services.AddScoped<IUserService, UserService>();
+services.AddScoped<IUserService, Application.Services.Auth.UserService>();
 ```
 
 ---
 
 ## HealthCheckExtensions
 
+### `AddAppHealthChecks`
+
 ```csharp
-public static IServiceCollection AddAppHealthChecks(
-    this IServiceCollection services,
-    IConfiguration configuration)
+if (persistence.Provider == PersistenceProvider.Postgres)
 {
-    var hcBuilder = services.AddHealthChecks();
-
-    if (configuration["Persistence:Provider"] == "Postgres")
-    {
-        hcBuilder.AddCheck<PostgresHealthCheck>("postgres", tags: new[] { "db", "ready" });
-    }
-
-    hcBuilder.AddCheck<RedisHealthCheck>("redis", tags: new[] { "cache", "ready" });
-
-    return services;
+    builder.Add(new HealthCheckRegistration(
+        "postgresql",
+        sp => new PostgresHealthCheck(sp.GetRequiredService<IDbContextFactory<CustomerSupportDbContext>>()),
+        HealthStatus.Unhealthy,
+        ["db", "ready"]));
 }
 
-public static WebApplication MapAppHealthChecks(this WebApplication app)
+builder.Add(new HealthCheckRegistration(
+    "redis",
+    sp => new RedisHealthCheck(sp.GetRequiredService<IConnectionMultiplexer>()),
+    HealthStatus.Unhealthy,
+    ["cache", "ready"]));
+```
+
+### `MapAppHealthChecks`
+
+```csharp
+app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }))
+   .AllowAnonymous();
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
 {
-    app.MapHealthChecks("/health/live", new HealthCheckOptions
-    {
-        Predicate = _ => false   // Sadece process alive check, downstream check yok
-    });
+    Predicate = hc => hc.Tags.Contains("ready"),
+    // ...
+}).AllowAnonymous();
 
-    app.MapHealthChecks("/health/ready", new HealthCheckOptions
-    {
-        Predicate = c => c.Tags.Contains("ready")
-    });
-
-    app.MapHealthChecks("/health");   // Tüm check'ler
-
-    return app;
-}
+app.MapHealthChecks("/health", ...).AllowAnonymous();
 ```
 
 ### Endpoint'ler
@@ -321,13 +317,7 @@ public static WebApplication MapAppHealthChecks(this WebApplication app)
 | `/health/ready` | DB + Redis ulaşılabilir mi? | readiness probe |
 | `/health` | Tüm check'ler | Monitoring |
 
-### Tag ayrımı
-
-| Tag | Anlamı |
-|---|---|
-| `ready` | Trafik almaya hazır olmak için bu check geçmeli |
-| `db` | Veritabanı bağımlılığı |
-| `cache` | Redis bağımlılığı |
+JSON response: `{ status, totalMs, checks: [{name, status, description, durationMs, error}] }`
 
 ---
 
@@ -339,16 +329,17 @@ public static WebApplication MapAppHealthChecks(this WebApplication app)
 public static async Task MigrateIfDevelopmentAsync(this WebApplication app)
 {
     if (!app.Environment.IsDevelopment()) return;
-    if (app.Configuration["Persistence:Provider"] != "Postgres") return;
+    var opts = app.Services.GetRequiredService<IOptions<PersistenceOptions>>().Value;
+    if (opts.Provider != PersistenceProvider.Postgres) return;
 
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<CustomerSupportDbContext>();
-    await db.Database.MigrateAsync();
-    app.Logger.LogInformation("[Migration] Applied EF Core migrations (dev mode)");
+    await using var scope = app.Services.CreateAsyncScope();
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CustomerSupportDbContext>>();
+    await using var ctx = await factory.CreateDbContextAsync();
+    await ctx.Database.MigrateAsync();
 }
 ```
 
-Sadece **development + Postgres** kombinasyonunda migration uygula. Production deploy'unda CI/CD pipeline ayrı bir adımda `dotnet ef database update` çalıştırır.
+Sadece **development + Postgres** kombinasyonunda migration uygula. Production deploy'unda CI/CD pipeline ayrı adımda `dotnet ef database update` çalıştırır.
 
 ---
 

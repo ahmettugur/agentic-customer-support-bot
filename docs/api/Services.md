@@ -1,6 +1,6 @@
-# ChatEventOrchestrator
+# Services — ChatEventOrchestrator
 
-**Dosya:** `Services/ChatEventOrchestrator.cs`  
+**Dosya:** `Services/ChatEventOrchestrator.cs`
 **Yaşam döngüsü:** Scoped (her request başına yeni instance)
 
 `/chat/events/{sessionId}` endpoint'inin arkasındaki orkestratör — per-session, **uzun ömürlü SSE bağlantısı** kurar ve birden fazla event kaynağını tek stream'e birleştirir.
@@ -9,7 +9,7 @@
 
 ## Neden var?
 
-Browser bir chat session'ına bağlanmak istediğinde **birden fazla event tipini** dinlemek ister:
+Browser bir chat session'ına bağlandığında **birden fazla event tipini** dinlemek ister:
 
 - Bot yazıyor göstergesi
 - Admin'in canlı takeover mesajları
@@ -20,28 +20,44 @@ Bu event'ler farklı port'lardan (`IChatSessionPort`, `IHitlEventPort`) gelir. H
 
 ---
 
+## Constructor injection
+
+```csharp
+public sealed class ChatEventOrchestrator(
+    IChatSessionPort chatSession,
+    IHitlEventPort hitlEvents,
+    IHostApplicationLifetime appLifetime,
+    ILogger<ChatEventOrchestrator> logger)
+```
+
+`IHostApplicationLifetime` — uygulama shutdown anında orphan escalation temizliği yapılmaması için kontrol edilir.
+
+---
+
 ## `ExecuteAsync`
 
 ```csharp
 public async Task ExecuteAsync(string sessionId, SseForwarder sse, CancellationToken ct)
 {
     // 1. İlk session event'i
-    await sse.WriteSessionAsync(sessionId, ct);
+    await sse.WriteSessionAsync(sessionId);
 
     // 2. Mevcut HITL state snapshot'ı
-    await SendInitialHitlStateAsync(sessionId, sse, ct);
+    await SendInitialStateAsync(sessionId, sse);
 
     // 3. HITL event'lere abone ol
-    using var subscription = _hitlEventPort.SubscribeToSession(sessionId, evt =>
-    {
-        _ = sse.WriteAsync(MapEventType(evt), evt, ct);
-    });
+    using var subscription = hitlEvents.SubscribeToChatEvents(
+        sessionId,
+        (eventType, data) => sse.WriteAsync(eventType, data));
 
     // 4. Bridge mesajlarını drain et
     await ProcessBridgeMessagesAsync(sessionId, sse, ct);
 
-    // 5. Disconnect → orphan escalation temizliği
-    await _chatSession.DismissOrphanedEscalations(sessionId);
+    // 5. Disconnect → orphan escalation temizliği (shutdown değilse)
+    if (!appLifetime.ApplicationStopping.IsCancellationRequested)
+    {
+        var dismissed = chatSession.DismissOrphanedEscalations(sessionId);
+    }
 }
 ```
 
@@ -57,31 +73,35 @@ data: { "sessionId": "abc-123" }
 ### 2. Initial HITL state
 
 Browser bağlandığında **zaten devam eden bir state** olabilir:
-- Bir insan agent zaten chat'e katılmış (HumanJoined)
-- Pending bir handoff var (HandoffPending)
 
 ```csharp
-private async Task SendInitialHitlStateAsync(string sessionId, SseForwarder sse, CancellationToken ct)
+private async Task SendInitialStateAsync(string sessionId, SseForwarder sse)
 {
-    var state = await _chatSession.GetStateAsync(sessionId);
+    var state = chatSession.GetStateOrDefault(sessionId);
+
     if (state.Mode == ChatMode.Human)
     {
         await sse.WriteAsync(StreamEventTypes.HumanJoined, new
         {
-            enteredAt = state.EnteredAt,
-            humanAgent = state.HumanAgent
-        }, ct);
+            sessionId,
+            humanAgent = state.HumanAgent ?? WellKnown.Defaults.Admin,
+            enteredAt = state.EnteredAt
+        });
     }
-
-    var pendingEscalation = await _escalation.GetPendingForSessionAsync(sessionId);
-    if (pendingEscalation != null)
+    else
     {
-        await sse.WriteAsync(StreamEventTypes.HandoffPending, new
+        var pending = chatSession.GetOpenEscalations()
+            .FirstOrDefault(e => e.SessionId == sessionId);
+
+        if (pending != null)
         {
-            escalationId = pendingEscalation.Id,
-            reason = pendingEscalation.Reason,
-            createdAt = pendingEscalation.CreatedAt
-        }, ct);
+            await sse.WriteAsync(StreamEventTypes.HandoffPending, new
+            {
+                escalationId = pending.Id,
+                reason = pending.Reason,
+                createdAt = pending.CreatedAt
+            });
+        }
     }
 }
 ```
@@ -90,46 +110,33 @@ Bu sayede yeni bağlanan browser **eski olayları kaçırmaz** — server'ın bi
 
 ### 3. HITL subscription
 
-`IHitlEventPort.SubscribeToSession(sessionId, callback)` — session'a özel event dinleyicisi:
-
-```csharp
-using var subscription = _hitlEventPort.SubscribeToSession(sessionId, evt =>
-{
-    var eventType = evt switch
-    {
-        HumanJoinedEvent _      => StreamEventTypes.HumanJoined,
-        HumanLeftEvent _        => StreamEventTypes.HumanLeft,
-        HandoffPendingEvent _   => StreamEventTypes.HandoffPending,
-        HandoffClearedEvent _   => StreamEventTypes.HandoffCleared,
-        _                       => "unknown"
-    };
-    _ = sse.WriteAsync(eventType, evt, ct);
-});
-```
-
-`using` bloğu — endpoint sona erince subscription'dan unsubscribe (memory leak önlenir).
+`IHitlEventPort.SubscribeToChatEvents(sessionId, callback)` — session'a özel event dinleyicisi. `using` bloğu — endpoint sona erince subscription'dan unsubscribe (memory leak önlenir).
 
 ### 4. Bridge mesajları
 
-`ProcessBridgeMessagesAsync` user-facing kanaldan gelen mesajları akıtır:
-
 ```csharp
-await foreach (var msg in _chatSession.SubscribeToUserAsync(sessionId).WithCancellation(ct))
+private async Task ProcessBridgeMessagesAsync(string sessionId, SseForwarder sse, CancellationToken ct)
 {
-    if (msg.Sender == ChatBridgeSender.BotTyping)
+    await foreach (var msg in chatSession.SubscribeToUserAsync(sessionId, ct))
     {
-        await sse.WriteAsync(StreamEventTypes.BotTyping, new { on = msg.Text == "on" }, ct);
-    }
-    else
-    {
+        if (msg.Sender == ChatBridgeSender.BotTyping)
+        {
+            await sse.WriteAsync(StreamEventTypes.BotTyping, new
+            {
+                sessionId,
+                on = string.Equals(msg.Text, "on", StringComparison.OrdinalIgnoreCase)
+            });
+            continue;
+        }
+
         await sse.WriteAsync(StreamEventTypes.HumanMessage, new
         {
             id = msg.Id,
             from = msg.Sender.ToString().ToLowerInvariant(),
-            humanAgent = msg.Metadata?["humanAgent"],
+            humanAgent = msg.HumanAgent,
             text = msg.Text,
-            timestamp = msg.At
-        }, ct);
+            timestamp = msg.Timestamp
+        });
     }
 }
 ```
@@ -138,16 +145,15 @@ await foreach (var msg in _chatSession.SubscribeToUserAsync(sessionId).WithCance
 
 ### 5. Orphan escalation temizliği
 
-Browser disconnect olduğunda bekleyen escalation'lar **otomatik dismiss edilir**:
+Browser disconnect olduğunda bekleyen escalation'lar **otomatik dismiss edilir** (uygulama shutdown değilse):
 
 ```csharp
-finally
-{
-    await _chatSession.DismissOrphanedEscalations(sessionId);
-}
+var dismissed = chatSession.DismissOrphanedEscalations(sessionId);
+if (dismissed > 0)
+    logger.LogInformation("... {Count} eskalasyon otomatik kapatıldı. session={Session}", dismissed, sessionId);
 ```
 
-Niye? Browser kullanıcı kapattıysa müşteri muhtemelen meşgul — admin paneline pending escalation göstermek anlamsız. Otomatik temizlik.
+Müşteri oturumu kapattıysa admin paneline pending escalation göstermek anlamsız.
 
 ---
 
@@ -156,39 +162,11 @@ Niye? Browser kullanıcı kapattıysa müşteri muhtemelen meşgul — admin pan
 | Event type | Trigger | Payload |
 |---|---|---|
 | `session` | Bağlantı kuruldu | `{ sessionId }` |
-| `humanJoined` | İnsan agent TakeOver yaptı | `{ enteredAt, humanAgent }` |
-| `humanLeft` | İnsan agent Release yaptı | `{ leftAt, humanAgent }` |
-| `handoffPending` | Escalation oluşturuldu | `{ escalationId, reason, createdAt }` |
-| `handoffCleared` | Escalation çözüldü/dismiss edildi | `{ escalationId }` |
-| `botTyping` | Bot yazıyor sinyali | `{ on: bool }` |
-| `humanMessage` | Kullanıcı kanalına mesaj | `{ id, from, humanAgent?, text, timestamp }` |
-| `done` | Bağlantı kapatıldı | `{ sessionId }` |
-
----
-
-## Akış örneği
-
-```
-Browser    ────GET /chat/events/sess-123────→  Api endpoint
-                                                  ↓
-                                            ChatEventOrchestrator.ExecuteAsync()
-                                                  ↓
-   ← event: session {sessionId:"sess-123"}
-   ← event: humanJoined {humanAgent:"Ali"}      ← initial state
-
-      (insan Ali yazıyor)
-   ← event: humanMessage {from:"admin", text:"Merhaba..."}
-
-      (Ali ayrıldı)
-   ← event: humanLeft {leftAt:...}
-
-      (bot otomatik yanıt)
-   ← event: botTyping {on:true}
-   ← event: humanMessage {from:"bot", text:"Yanıt..."}
-
-   Browser ──disconnect──→
-                                            DismissOrphanedEscalations()
-```
+| `human_joined` | Human mode aktif (initial state) | `{ sessionId, humanAgent, enteredAt }` |
+| `handoff_pending` | Pending escalation var (initial state) | `{ escalationId, reason, createdAt }` |
+| `bot_typing` | Bot yazıyor sinyali | `{ sessionId, on: bool }` |
+| `human_message` | Bridge mesajı | `{ id, from, humanAgent?, text, timestamp }` |
+| HITL event'ler | `IHitlEventPort` subscription | Dynamic (humanJoined, humanLeft, vb.) |
 
 ---
 
@@ -200,27 +178,43 @@ services.AddScoped<ChatEventOrchestrator>();
 
 Her request kendi instance'ını alır. Bu instance request boyunca yaşar — uzun süreli SSE bağlantısı boyunca.
 
-Eğer Singleton olsaydı:
-- Birden fazla browser farklı session ID'lerle bağlanır
-- Tek instance state'i karıştırır
-
-Scoped DI hem encapsulation hem cleanup sağlar (request bitince dispose edilir).
+Singleton olsaydı birden fazla browser farklı session ID'lerle bağlanır, tek instance state'i karıştırır. Scoped DI hem encapsulation hem cleanup sağlar (request bitince dispose edilir).
 
 ---
 
 ## CancellationToken kullanımı
 
-```csharp
-public async Task ExecuteAsync(string sessionId, SseForwarder sse, CancellationToken ct)
-```
-
 `ct` request'in `HttpContext.RequestAborted` token'ı — browser disconnect olunca cancel olur.
 
-- `await foreach (msg in ...) .WithCancellation(ct)` — IAsyncEnumerable durur
-- `sse.WriteAsync(...)` — yazım bitirilir
+- `await foreach (msg in ...).WithCancellation(ct)` — IAsyncEnumerable durur
+- `OperationCanceledException` yakalanır, debug log yazılır
 - `finally` bloğu (orphan temizliği) çalışır
 
-Düzgün cleanup için her await `ct` taşıması kritik.
+---
+
+## Akış örneği
+
+```
+Browser    ────GET /chat/events/sess-123────→  Api endpoint
+                                                  ↓
+                                            ChatEventOrchestrator.ExecuteAsync()
+                                                  ↓
+   ← event: session {sessionId:"sess-123"}
+   ← event: human_joined {humanAgent:"Ali"}      ← initial state
+
+      (insan Ali yazıyor)
+   ← event: human_message {from:"admin", text:"Merhaba..."}
+
+      (Ali ayrıldı — HITL subscription event)
+   ← event: humanLeft {leftAt:...}
+
+      (bot otomatik yanıt)
+   ← event: bot_typing {on:true}
+   ← event: human_message {from:"bot", text:"Yanıt..."}
+
+   Browser ──disconnect──→
+                                            DismissOrphanedEscalations()
+```
 
 ---
 

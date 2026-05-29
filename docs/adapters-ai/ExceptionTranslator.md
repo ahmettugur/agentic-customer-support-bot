@@ -30,36 +30,45 @@ API katmanı → HTTP 502 + Türkçe mesaj
 ## `Translate`
 
 ```csharp
-public static DomainException Translate(Exception ex, string? context = null)
+internal static DomainException Translate(Exception ex, string? context = null)
 {
     return ex switch
     {
-        ClientResultException cre => TranslateClientResult(cre, context),
-        HttpRequestException => new ExternalServiceException("AI",
-            context ?? "Yapay zeka servisine ulaşılamıyor.", ex),
-        TaskCanceledException { InnerException: TimeoutException } => new ExternalServiceException("AI",
-            context ?? "Yapay zeka servisi zaman aşımına uğradı.", ex),
-        OperationCanceledException => new ExternalServiceException("AI",
-            context ?? "İşlem iptal edildi.", ex),
+        ClientResultException { Status: 429 } =>
+            new ExternalServiceException("AI", context ?? "AI servisine çok fazla istek gönderildi (rate limit).", ex),
+        ClientResultException { Status: 401 or 403 } =>
+            new ExternalServiceException("AI", context ?? "AI servisine yetkilendirme başarısız.", ex),
+        ClientResultException { Status: >= 500 } =>
+            new ExternalServiceException("AI", context ?? "AI servisi geçici olarak kullanılamıyor.", ex),
+        ClientResultException { Status: 408 } =>
+            new ExternalServiceException("AI", context ?? "AI servis isteği zaman aşımına uğradı.", ex),
+        HttpRequestException =>
+            new ExternalServiceException("AI", context ?? "AI servisine bağlantı kurulamadı.", ex),
+        TaskCanceledException { InnerException: TimeoutException } =>
+            new ExternalServiceException("AI", context ?? "AI servis isteği zaman aşımına uğradı.", ex),
+        OperationCanceledException =>
+            new ExternalServiceException("AI", context ?? "AI servis isteği iptal edildi.", ex),
         Grpc.Core.RpcException rpc => TranslateGrpc(rpc, context),
-        _ => new ExternalServiceException("AI", context ?? "Yapay zeka servisi başarısız oldu.", ex)
+        _ => new ExternalServiceException("AI", context ?? "AI servisi hatası oluştu.", ex)
     };
 }
 ```
+
+HTTP status pattern matching `ClientResultException` üzerinde doğrudan yapılır — ayrı `TranslateClientResult` metodu yoktur.
 
 ---
 
 ## HTTP eşleme (`ClientResultException`)
 
-OpenAI/Azure SDK her HTTP hatasında `ClientResultException` fırlatır:
+OpenAI/Azure SDK her HTTP hatasında `ClientResultException` fırlatır. Status kodu doğrudan pattern matching ile eşlenir:
 
-| HTTP status | Domain exception | Mesaj |
+| HTTP status | Domain exception | Türkçe mesaj |
 |---|---|---|
-| `429` | `ExternalServiceException("AI", ...)` | "Yapay zeka rate limit aşıldı, kısa süre sonra dene" |
-| `401`, `403` | `ExternalServiceException("AI", ...)` | "Yapay zeka kimlik doğrulama başarısız" |
-| `408` | `ExternalServiceException("AI", ...)` | "Yapay zeka servisi zaman aşımına uğradı" |
-| `≥500` | `ExternalServiceException("AI", ...)` | "Yapay zeka servisi şu an kullanılamıyor" |
-| Diğer | `ExternalServiceException("AI", ...)` | Generic |
+| `429` | `ExternalServiceException("AI", ...)` | "AI servisine çok fazla istek gönderildi (rate limit)." |
+| `401`, `403` | `ExternalServiceException("AI", ...)` | "AI servisine yetkilendirme başarısız." |
+| `408` | `ExternalServiceException("AI", ...)` | "AI servis isteği zaman aşımına uğradı." |
+| `≥500` | `ExternalServiceException("AI", ...)` | "AI servisi geçici olarak kullanılamıyor." |
+| Diğer | `ExternalServiceException("AI", ...)` | "AI servisi hatası oluştu." |
 
 **Önemli not:** Bu translator **retry yapmaz** — sadece çevirir. Retry için circuit breaker veya `Polly` middleware başka katmanda olmalı (örn. `HttpClient.AddPolicyHandler`).
 

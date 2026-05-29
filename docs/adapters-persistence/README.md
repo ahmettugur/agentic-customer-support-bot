@@ -99,10 +99,10 @@ CustomerSupportBot.Adapters.Persistence/
 | `IChatModeRegistry` | `InMemoryChatModeRegistry` | `PostgresChatModeRegistry` |
 | `IEscalationSink` | `InMemoryEscalationSink` | `PostgresEscalationSink` |
 | `IHumanAgentRegistry` | `InMemoryHumanAgentRegistry` | `PostgresHumanAgentRegistry` |
-| `IOrderRepository` | `InMemoryOrderAdapter` | `OrderRepository` |
+| `IOrderRepository` | — | `OrderRepository` |
 | `ICustomerRepository` | — | `CustomerRepository` |
-| `IComplaintRepository` | `InMemoryComplaintAdapter` | `ComplaintRepository` |
-| `IProductCatalogRepository` | `InMemoryProductCatalogAdapter` | `ProductCatalogRepository` |
+| `IComplaintRepository` | — | `ComplaintRepository` |
+| `IProductCatalogRepository` | — | `ProductCatalogRepository` |
 | `IRatingStore` | `InMemoryRatingStore` | `PostgresRatingStore` |
 | `IReasoningTraceStore` | `InMemoryReasoningTraceStore` | `PostgresReasoningTraceStore` |
 | `ISlaEventSink` | `InMemorySlaEventSink` | `PostgresSlaEventSink` |

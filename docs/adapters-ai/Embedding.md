@@ -25,11 +25,10 @@ Semantic memory (Qdrant) **cosine similarity** ile arama yapar. Metni doğrudan 
 
 ```csharp
 public int Dimension { get; }        // 1536 (text-embedding-3-small) veya 3072 (large)
-public string Model { get; }         // "text-embedding-3-small"
 public bool IsConfigured { get; }    // _client null değil
 ```
 
-`Dimension` ve `Model` `SemanticMemoryOptions.Embedding`'den gelir; Qdrant collection bu dimension'a göre yaratılır.
+`Dimension` `SemanticMemoryOptions.Embedding.Dimension`'dan gelir; Qdrant collection bu dimension'a göre yaratılır. Model adı `SemanticMemoryOptions.Embedding.Model`'dan client oluşturulurken kullanılır ama ayrı bir property olarak expose edilmez.
 
 ---
 
@@ -73,25 +72,19 @@ Hiçbir provider yapılandırılmamışsa:
 ```csharp
 public async Task<float[]> EmbedAsync(string text, CancellationToken ct = default)
 {
-    if (!IsConfigured) return Array.Empty<float>();
-    if (string.IsNullOrWhiteSpace(text)) return Array.Empty<float>();
+    if (_client is null)
+        throw new InvalidOperationException("Embedding client yapılandırılmadı (OpenAI/AzureOpenAI ApiKey eksik).");
+    if (string.IsNullOrWhiteSpace(text))
+        return new float[Dimension];
 
-    try
-    {
-        var result = await _client.GenerateEmbeddingAsync(text, cancellationToken: ct);
-        return result.Vector.ToArray();
-    }
-    catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-    catch (Exception ex)
-    {
-        throw ExceptionTranslator.Translate(ex, "Embedding generation failed");
-    }
+    var result = await _client.GenerateEmbeddingAsync(text, cancellationToken: ct).ConfigureAwait(false);
+    return result.Value.ToFloats().ToArray();
 }
 ```
 
-- Boş metin → boş array (API çağrısı yapma, ücretsiz)
-- Configured değilse → boş array (memory zaten kapalı)
-- Hata → `ExternalServiceException`
+- Boş/whitespace metin → `Dimension` boyutunda sıfır dolu array döner (API çağrısı yapılmaz)
+- `_client` null ise → `InvalidOperationException` fırlatır (memory etkinken ApiKey eksik yapılandırma hatası)
+- Hata → exception caller'a yayılır
 
 ---
 
@@ -99,16 +92,16 @@ public async Task<float[]> EmbedAsync(string text, CancellationToken ct = defaul
 
 ```csharp
 public async Task<IReadOnlyList<float[]>> EmbedBatchAsync(
-    IEnumerable<string> texts,
+    IReadOnlyList<string> texts,
     CancellationToken ct = default)
 ```
 
-Toplu embedding — büyük dataset (KB ingestion, lesson archive) için.
+Toplu embedding — büyük dataset (KB ingestion, lesson archive) için. `IReadOnlyList<string>` alır.
 
 ### Batch sınırı
 
 ```csharp
-const int MaxBatchSize = 64;
+const int batchSize = 64;
 ```
 
 OpenAI API tek istekte ~2048 input kabul eder ama:
@@ -118,14 +111,15 @@ OpenAI API tek istekte ~2048 input kabul eder ama:
 İç döngü:
 
 ```csharp
-foreach (var batch in texts.Chunk(MaxBatchSize))
+for (int i = 0; i < texts.Count; i += batchSize)
 {
-    var batchResult = await _client.GenerateEmbeddingsAsync(batch, ...);
-    results.AddRange(batchResult.Select(r => r.Vector.ToArray()));
+    var slice = texts.Skip(i).Take(batchSize).ToList();
+    var resp = await _client.GenerateEmbeddingsAsync(slice, cancellationToken: ct).ConfigureAwait(false);
+    output.AddRange(resp.Value.Select(e => e.ToFloats().ToArray()));
 }
 ```
 
-Sequential — paralel değil. Rate limit dostu.
+Sequential — paralel değil. Rate limit dostu. Boş liste → `Array.Empty<float[]>()` döner; `_client` null ise → `InvalidOperationException`.
 
 ### Kullanım
 

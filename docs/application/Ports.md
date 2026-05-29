@@ -43,21 +43,27 @@ Application katmanı bu arayüzleri kullanır. Implementasyonlar Adapter projele
 |--------|-----------------|---------|
 | `IAgentTeamPort` | `CustomerSupportTeam` (Adapters.Agents) | Ajan workflow çalıştırma |
 | `IContextPipeline` | `ContextPipeline` | Context provider zinciri |
-| `IPromptRepository` | `PromptService` (Api) | Prompt dosyaları okuyucu |
-| `ICustomerSupportToolsService` | `CustomerSupportToolsService` | Tool implementasyonları |
+| `IPromptRepository` | `FileSystemPromptRepository` (Adapters.Persistence) | Prompt dosyaları okuyucu |
+| `ICustomerSupportToolsService` | `CustomerSupportToolsService` | Genel tool orchestrator |
+| `IComplaintToolsService` | `ComplaintToolsService` | Şikayet tool implementasyonları |
+| `IOrderToolsService` | `OrderToolsService` | Sipariş tool implementasyonları |
+| `IProductToolsService` | `ProductToolsService` | Ürün tool implementasyonları |
 | `IApprovalContextAccessor` | `ApprovalContextAccessor` | AsyncLocal HITL context |
 | `ICustomerProfileService` | `CustomerProfileService` | Müşteri profil güncelleme |
 | `ISemanticMemoryWriter` | `SemanticMemoryService` | Episodik bellek yazma |
 | `ISkillsBasedRouter` | `SkillsBasedRouter` | Eskalasyon routing kararı |
+| `IUiHintEmitter` | `UiHintEmitter` | Tool → streaming pipeline UI ipuçları |
+| `IBrowserChannel` | `WebSocketBrowserChannel` (Api) | WebSocket kanal abstraction |
 
 ### Persistence
 
 | Arayüz | Implementasyon | Açıklama |
 |--------|---------------|---------|
 | `ISessionManager` | Postgres/InMemory | Session CRUD + geçmiş |
-| `IOrderRepository` | Postgres/InMemory | Sipariş CRUD |
-| `IComplaintRepository` | Postgres/InMemory | Şikayet CRUD |
-| `IProductCatalogRepository` | Postgres/InMemory | Ürün kataloğu |
+| `ICustomerRepository` | Postgres | Müşteri kayıt sorgulama |
+| `IOrderRepository` | Postgres | Sipariş CRUD |
+| `IComplaintRepository` | Postgres | Şikayet CRUD |
+| `IProductCatalogRepository` | Postgres | Ürün kataloğu |
 | `IApprovalQueue` | Postgres/InMemory | HITL approval kuyruğu |
 | `IChatBridge` | Redis/InMemory | HITL live-chat köprüsü |
 | `IChatModeRegistry` | Postgres/InMemory | Bot/Human mod kaydı |
@@ -104,22 +110,14 @@ Application katmanı bu arayüzleri kullanır. Implementasyonlar Adapter projele
 
 ## Yeni driven port eklemek
 
-1. `Ports/Driven/` altında arayüz dosyası oluşturun.
+1. `Ports/Outbound/` altında arayüz dosyası oluşturun.
 2. İlgili adapter projesinde implementasyonu yazın.
 3. Adapter'ın DI extension metoduna kaydı ekleyin.
 4. `PortAliases.cs` dosyasına global using ekleyin (gerekiyorsa).
 
-```csharp
-// Ports/Driven/IYeniPort.cs
-public interface IYeniPort
-{
-    Task<SonucTipi> YapAsync(GirdiTipi girdi, CancellationToken ct = default);
-}
-```
-
 ## Yeni driving port eklemek
 
-1. `Ports/Driving/` altında arayüz dosyası oluşturun.
+1. `Ports/Inbound/` altında arayüz dosyası oluşturun.
 2. `Services/` altında implementasyonu yazın.
-3. `ApplicationServiceCollectionExtensions.AddDrivingPorts()` içine kaydedin.
+3. `ApplicationServiceCollectionExtensions` içine kaydedin.
 4. `Api` projesinde endpoint oluşturun.

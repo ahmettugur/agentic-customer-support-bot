@@ -118,28 +118,29 @@ service.name=AnotherService                ← başka uygulama
 
 ## TelemetryChatClient kaydı (bu extension dışı!)
 
-**Önemli:** `TelemetryChatClient` bu extension'da kayıt edilmez. Onun kaydı `Adapters.AI` katmanında yapılır — çünkü hangi `IChatClient`'ı sarmaladığı orada bilinir.
+**Önemli:** `TelemetryChatClient` bu extension'da kayıt edilmez. Onun kaydı **Composition Root** (`Api/Program.cs` veya `AiServicesExtensions.cs`) katmanında yapılır — çünkü hangi `IChatClient`'ı sarmaladığı ancak orada bilinir. `Adapters.AI` sadece asıl client'ı oluşturur; `Adapters.Telemetry` decorator sınıfını sağlar; ikisini birleştirme sorumluluğu Api katmanındadır.
 
 Tipik kayıt:
 
 ```csharp
-// Adapters.AI'da
+// Api/Program.cs (Composition Root)
 services.AddSingleton<IChatClient>(sp =>
 {
-    var innerClient = new OpenAIChatClient(...);  // Asıl client
+    var aiOptions = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+    IChatClient inner = AiClientFactory.CreateStandardChatClient(aiOptions);
     return new TelemetryChatClient(
-        inner: innerClient,
+        inner: inner,
         costCalculator: sp.GetRequiredService<ICostCalculatorPort>(),
         usageStore: sp.GetRequiredService<CostUsageStore>(),
-        modelHint: "gpt-4o-mini",
-        provider: "openai",
+        modelHint: ResolveModelHint(aiOptions),
+        provider: aiOptions.Provider.ToString().ToLowerInvariant(),
         logger: sp.GetRequiredService<ILogger<TelemetryChatClient>>(),
         persistence: sp.GetService<ILlmCallPersistencePort>()  // Optional
     );
 });
 ```
 
-`Adapters.Telemetry` kütüphaneyi sağlar; `Adapters.AI` onu kullanır.
+`Adapters.Telemetry` kütüphaneyi sağlar; `Adapters.AI` asıl client'ı üretir; Api katmanı ikisini birleştirir.
 
 ---
 

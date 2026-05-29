@@ -108,7 +108,7 @@ CustomerSupport.slnx
 │
 ├── CustomerSupportBot.Application/      ← Katman 2: Uygulama çekirdeği (sadece Domain'e bağımlı)
 │   ├── Ports/
-│   │   ├── Driving/                     # PRIMARY (inbound) portlar — dışarıdan çağrılır (17 port)
+│   │   ├── Inbound/                     # PRIMARY (driving) portlar — dışarıdan çağrılır (20 port)
 │   │   │   ├── IChatPort.cs             # Chat işleme port'u
 │   │   │   ├── ISessionPort.cs          # Oturum yönetimi port'u
 │   │   │   ├── IReasoningPort.cs        # Reasoning pipeline port'u
@@ -125,91 +125,130 @@ CustomerSupport.slnx
 │   │   │   ├── IWorkflowPort.cs         # Low-code workflow port'u
 │   │   │   ├── ISlaPort.cs              # SLA izleme port'u
 │   │   │   ├── IMemoryPort.cs           # Semantic memory port'u
-│   │   │   ├── IReplanPort.cs           # Yeniden planlama port'u
-│   │   │   ├── ChatRequest.cs / ChatResponse.cs / StreamEvent.cs  # DTO'lar
-│   │   │   └── IInputGuard.cs / IEvaluationPort.cs
-│   │   └── Driven/                      # SECONDARY (outbound) portlar — adaptörlere bağlıdır
-│   │       ├── Persistence/             # 14 repository interface'i
+│   │   │   ├── IEvaluationPort.cs       # Senaryo değerlendirme port'u
+│   │   │   ├── IRealtimeBridge.cs       # Realtime ses köprüsü port'u
+│   │   │   ├── IInputGuard.cs           # Girdi güvenlik filtresi port'u
+│   │   │   ├── ChatRequest.cs / ChatResponse.cs / StreamEvent.cs / EvaluationModels.cs
+│   │   │   └── Auth/                    # ITokenService, IUserService, AuthResponse
+│   │   └── Outbound/                    # SECONDARY (driven) portlar — adaptörlere bağlıdır
+│   │       ├── Persistence/             # 15 repository interface'i
 │   │       │   ├── ISessionManager.cs / IApprovalQueue.cs
 │   │       │   ├── IEscalationSink.cs / IChatBridge.cs
 │   │       │   ├── IChatModeRegistry.cs / IOrderRepository.cs
 │   │       │   ├── IProductCatalogRepository.cs / IComplaintRepository.cs
-│   │       │   ├── IRatingStore.cs / IHumanAgentRegistry.cs
-│   │       │   ├── ICustomerProfileStore.cs / ILessonStore.cs
-│   │       │   ├── ISlaEventSink.cs / IWorkflowDefinitionStore.cs
-│   │       │   └── (toplam 14 interface)
+│   │       │   ├── ICustomerRepository.cs / IRatingStore.cs
+│   │       │   ├── IHumanAgentRegistry.cs / ICustomerProfileStore.cs
+│   │       │   ├── ILessonStore.cs / ISlaEventSink.cs / IWorkflowDefinitionStore.cs
+│   │       │   └── (toplam 15 interface)
 │   │       ├── AI/                      # AI sağlayıcı interface'leri
 │   │       │   ├── IReasoningChatClient.cs / IGeneralChatClient.cs
 │   │       │   ├── IEmbeddingPort.cs / IVectorMemoryPort.cs
-│   │       │   └── IKnowledgeBaseIngestor.cs / ISemanticMemoryIngestor.cs
+│   │       │   ├── IKnowledgeBaseSource.cs / IRealtimeVoiceTransport.cs
+│   │       │   └── RealtimeModels.cs / SemanticMemoryOptions.cs
 │   │       ├── Locking/                 # IAppDistributedLock
 │   │       ├── Messaging/               # IMessageBusPort (pub/sub soyutlaması)
-│   │       ├── Observability/           # ICostCalculatorPort, ICostUsageStorePort, IReasoningTraceStore
-│   │       ├── Auth/                    # IUserAuthRepository, IRefreshTokenRepository
+│   │       ├── Observability/           # ICostCalculatorPort, ICostUsageStorePort, IReasoningTraceStore, TelemetryConstants
+│   │       ├── Auth/                    # IJwtAccessTokenProvider, IPasswordHasher, IUserAuthRepository, IRefreshTokenRepository, JwtOptions
 │   │       ├── IAgentTeamPort.cs        # Ajan takımı port'u (driven — Agents adapter implemente eder)
 │   │       ├── IPromptRepository.cs     # Prompt dosyası okuma port'u
-│   │       ├── IContextProvider.cs      # Context provider arayüzü
+│   │       ├── IBrowserChannel.cs       # WebSocket kanal soyutlaması
 │   │       ├── IApprovalContextAccessor.cs
 │   │       ├── ISkillsBasedRouter.cs    # İnsan temsilci yönlendirme port'u
 │   │       ├── IContextPipeline.cs      # Context pipeline soyutlaması
-│   │       ├── ICustomerSupportToolsService.cs  # AI tool servisi port'u
+│   │       ├── ICustomerSupportToolsService.cs  # Tool orkestratör port'u
+│   │       ├── IComplaintToolsService.cs / IOrderToolsService.cs / IProductToolsService.cs
 │   │       ├── ISemanticMemoryWriter.cs # Episodik bellek yazma port'u
 │   │       ├── ICustomerProfileService.cs # Müşteri profil servisi port'u
-│   │       ├── ApprovalOptions.cs       # HITL onay yapılandırması
-│   │       ├── WorkflowGuardOptions.cs  # Workflow guard ayarları
-│   │       └── ParallelExecutionOptions.cs # Paralel yürütme ayarları
+│   │       ├── IUiHintEmitter.cs        # Tool → streaming UI ipucu yayıcı
+│   │       ├── ApprovalOptions.cs / WorkflowGuardOptions.cs / ParallelExecutionOptions.cs
+│   │       └── IContextProvider.cs      # Context provider arayüzü (Services/Providers'da impl)
 │   └── Services/                        # Use case implementasyonları
-│       ├── ReasoningService.cs          # Reasoning pipeline (Katman 1 + 1.5)
-│       ├── EntityVerifier.cs            # Katman 0 — entity extract + port lookup
-│       ├── ReasoningSanityChecker.cs    # Katman 1.5 — IReasoningSanityRule × 8
-│       ├── CustomerSupportToolsService.cs # AI tool implementasyonları (ICustomerSupportToolsService impl)
-│       ├── ContextPipeline.cs           # IContextPipeline implementasyonu
-│       ├── EscalationPolicyService.cs   # Eskalasyon routing politikası (ApprovalGateService'den extract)
-│       ├── InputGuard.cs                # Girdi güvenlik filtresi
-│       ├── SessionPortService.cs / ChatPortService.cs / ApprovalPortService.cs
+│       ├── Reasoning/                   # ReasoningService, EntityVerifier, ReasoningSanityChecker
+│       │   ├── ReasoningService.cs      # Reasoning pipeline (Katman 1 + 1.5)
+│       │   ├── EntityVerifier.cs        # Katman 0 — entity extract + port lookup
+│       │   ├── ReasoningSanityChecker.cs # Katman 1.5 — sanity rule'lar
+│       │   ├── SubTaskOrchestrator.cs   # Compound query decomposition
+│       │   └── ReplanService.cs         # Admin override replan mekanizması
+│       ├── Chat/                        # ChatPortService, InputGuard, SessionPortService, ContextPipeline
+│       ├── Escalation/                  # EscalationPortService, EscalationPolicyService, HitlEventPortService
+│       ├── Approval/                    # ApprovalPortService, ApprovalContextAccessor
+│       ├── Auth/                        # TokenPortService, UserService
+│       ├── Tools/                       # Tool implementasyonları (3 alt servis + facade)
+│       │   ├── CustomerSupportToolsService.cs # Facade — alt servislere delege eder
+│       │   ├── ProductToolsService.cs   # IProductToolsService impl
+│       │   ├── OrderToolsService.cs     # IOrderToolsService impl
+│       │   └── ComplaintToolsService.cs # IComplaintToolsService impl
+│       ├── UiHint/                      # UiHintEmitter (IUiHintEmitter impl)
 │       ├── Providers/                   # IContextProvider implementasyonları
 │       │   ├── CustomerContextProvider.cs        # müşteri geçmişi (Order=10)
 │       │   ├── ConversationSummaryProvider.cs    # 8+ mesaj → LLM özet (Order=5)
 │       │   ├── SemanticMemoryContextProvider.cs  # Qdrant RAG (Order=20)
 │       │   └── CustomerProfileContextProvider.cs # Per-customer profil (Order=15)
-│       ├── Memory/                      # Semantic memory facade + Qdrant
+│       ├── Memory/                      # Semantic memory facade + KnowledgeBaseIngestionService
 │       ├── Improvement/                 # Self-improving loop (LessonMiner)
 │       ├── Personalization/             # Per-customer profil yönetimi
-│       ├── Routing/                     # Skills-based eskalasyon
-│       ├── Sla/                         # SlaGuardianService (BackgroundService)
-│       ├── Workflow/                    # WorkflowExecutor + subtask orchestration
-│       └── Evaluation/                  # CriteriaEvaluator / EvaluationRunner
+│       ├── Routing/                     # SkillsBasedRouter + RoutingOptions
+│       ├── Sla/                         # SlaPortService, SlaPolicyEvaluator, SlaOptions
+│       ├── Telemetry/                   # AnalyticsPortService, TelemetryPortService, TracePortService
+│       ├── Workflow/                    # WorkflowExecutor, WorkflowPortService
+│       ├── Realtime/                    # RealtimeBridgeService, RealtimeNativeService
+│       └── Evaluation/                  # CriteriaEvaluator, EvaluationRunner
 │
 ├── CustomerSupportBot.Adapters.Agents/  ← Katman 3a: MAF ajan adaptörü
 │   ├── CustomerSupportTeam.cs           # 6 agent + workflow builder + streaming pump (IOptions<T> ile yapılandırılır)
 │   ├── CustomerSupportChatManager.cs    # GroupChatManager türevi — seçim + terminasyon
 │   ├── ApprovalGateService.cs           # HITL approval gate (routing'i EscalationPolicyService'e delege eder)
 │   ├── WorkflowResponseExtractor.cs     # Workflow çıktı temizleme
+│   ├── PortAliases.cs                   # Global using direktifleri
+│   ├── ExceptionTranslator.cs           # MAF → Domain exception çevirici
+│   ├── DependencyInjection/             # AgentsAdapterServiceCollectionExtensions
 │   └── Routing/                         # Ajan seçim stratejileri
 │
 ├── CustomerSupportBot.Adapters.Persistence/  ← Katman 3b: Veritabanı adaptörü
 │   ├── EfCore/                          # EF Core 10 bağlam + entity'ler
-│   │   ├── CustomerSupportDbContext.cs  # 10+ DbSet
-│   │   ├── Entities/                    # Auth, Chat, Hitl, Analytics, Observability
-│   │   ├── Configurations/              # EF fluent config'ler
-│   │   └── Migrations/                  # Code-first migration'lar
-│   ├── Postgres/                        # PostgreSQL implementasyonları
-│   │   ├── PostgresChatModeRegistry.cs  # IChatModeRegistry → IMessageBusPort pub/sub
-│   │   ├── PostgresChatBridge.cs        # IChatBridge → pub/sub
-│   │   ├── PostgresEscalationSink.cs    # IEscalationSink
-│   │   ├── PostgresApprovalQueue.cs     # IApprovalQueue
-│   │   └── ...diğer Postgres adaptörleri
-│   ├── InMemory/                        # InMemory fallback implementasyonları
-│   │   ├── InMemorySessionManager.cs    # ISessionManager
-│   │   ├── InMemoryMessageBusAdapter.cs # IMessageBusPort (lokal pub/sub)
-│   │   ├── InMemoryProductCatalogAdapter.cs # IProductCatalogRepository (seed data dahil)
-│   │   ├── InMemoryOrderAdapter.cs      # IOrderRepository
-│   │   └── ...diğer InMemory adaptörler
+│   │   ├── CustomerSupportDbContext.cs  # Tüm DbSet'ler (Chat, Auth, Hitl, Analytics, Catalog, Observability, Workflow, Personalization)
+│   │   ├── Entities/
+│   │   │   ├── Analytics/              # RatingEntity, SlaEventEntity
+│   │   │   ├── Auth/                   # UserEntity, RefreshTokenEntity
+│   │   │   ├── Catalog/                # CategoryEntity, CustomerEntity, OrderEntity, OrderDetailEntity, ProductEntity, ComplaintEntity
+│   │   │   ├── Chat/                   # SessionEntity, MessageEntity, ChatBridgeMessageEntity, ChatSessionModeEntity
+│   │   │   ├── Hitl/                   # ApprovalRequestEntity, EscalationEntity, HumanAgentEntity
+│   │   │   ├── Improvement/            # LessonEntity
+│   │   │   ├── Observability/          # LlmCallUsageEntity, ReasoningTraceEntity
+│   │   │   ├── Personalization/        # CustomerProfileEntity
+│   │   │   └── Workflow/               # WorkflowDefinitionEntity
+│   │   ├── Configurations/             # EF fluent config'ler (her entity için)
+│   │   ├── NorthwindSeedData.cs        # Demo veri (Catalog tabloları için)
+│   │   ├── PersistenceHydrator.cs      # Startup kurtarma (IHostedService)
+│   │   ├── PersistenceOptions.cs       # InMemory/Postgres seçimi
+│   │   ├── Schemas.cs                  # Şema sabitleri
+│   │   └── Migrations/                 # Code-first migration'lar
+│   ├── Postgres/                        # PostgreSQL implementasyonları (17 adapter)
+│   │   ├── PostgresSessionManager.cs / PostgresApprovalQueue.cs / PostgresChatBridge.cs
+│   │   ├── PostgresChatModeRegistry.cs / PostgresEscalationSink.cs / PostgresHumanAgentRegistry.cs
+│   │   ├── PostgresLessonStore.cs / PostgresRatingStore.cs / PostgresReasoningTraceStore.cs
+│   │   ├── PostgresSlaEventSink.cs / PostgresWorkflowDefinitionStore.cs / PostgresCustomerProfileStore.cs
+│   │   ├── PostgresLlmCallUsageSink.cs # ILlmCallPersistencePort
+│   │   ├── CustomerRepository.cs       # ICustomerRepository
+│   │   ├── OrderRepository.cs          # IOrderRepository
+│   │   ├── ComplaintRepository.cs      # IComplaintRepository
+│   │   └── ProductCatalogRepository.cs # IProductCatalogRepository
+│   ├── InMemory/                        # InMemory fallback implementasyonları (13 adapter)
+│   │   ├── InMemorySessionManager.cs / InMemoryApprovalQueue.cs / InMemoryChatBridge.cs
+│   │   ├── InMemoryChatModeRegistry.cs / InMemoryEscalationSink.cs / InMemoryHumanAgentRegistry.cs
+│   │   ├── InMemoryLessonStore.cs / InMemoryRatingStore.cs / InMemoryReasoningTraceStore.cs
+│   │   ├── InMemorySlaEventSink.cs / InMemoryWorkflowDefinitionStore.cs / InMemoryCustomerProfileStore.cs
+│   │   └── InMemoryMessageBusAdapter.cs # IMessageBusPort (lokal pub/sub)
+│   │   # ⚠️ IOrderRepository, IComplaintRepository, IProductCatalogRepository, ICustomerRepository
+│   │   #    sadece Postgres implementasyonuna sahip — InMemory versiyonu yok
 │   ├── FileSystem/
 │   │   ├── FileSystemPromptRepository.cs # IPromptRepository → disk'ten MD yükleme
+│   │   ├── FileSystemKnowledgeBaseSource.cs # IKnowledgeBaseSource
 │   │   └── PromptOptions.cs             # Prompts:RootPath yapılandırması
-│   ├── Auth/                            # JWT kullanıcı yönetimi
-│   └── HealthChecks/                    # Postgres sağlık kontrolleri
+│   ├── Auth/                            # BCryptPasswordHasher, JwtAccessTokenProvider, TokenService
+│   │   ├── EfCore/Auth/                 # EfUserAuthRepository, EfRefreshTokenRepository
+│   │   └── (HealthChecks → PostgresHealthCheck)
+│   └── PortAliases.cs / ExceptionTranslator.cs
 │
 ├── CustomerSupportBot.Adapters.Redis/   ← Katman 3c: Redis adaptörü
 │   ├── Locking/                         # RedisDistributedLock → IAppDistributedLock
@@ -237,30 +276,42 @@ CustomerSupport.slnx
 ├── CustomerSupportBot.Api/              ← Katman 4: Composition Root + HTTP yüzeyi
 │   ├── Program.cs                       # DI bağlama + middleware + endpoint mapping
 │   ├── appsettings.json                 # Tüm yapılandırma (AI, Persistence, Jwt, ...)
-│   ├── Endpoints/                       # HTTP endpoint'leri (Minimal API)
+│   ├── Endpoints/                       # HTTP endpoint'leri — 16 dosya (Minimal API)
 │   │   ├── ChatEndpoints.cs             # POST /chat + /chat/stream (SSE) + GET /chat/events
 │   │   ├── AuthEndpoints.cs             # /auth/login + /auth/refresh + /auth/logout
 │   │   ├── RealtimeEndpoints.cs         # WS /chat/realtime + /chat/realtime-native
 │   │   ├── SessionEndpoints.cs          # GET /sessions/... (debug + sidebar)
 │   │   ├── TraceEndpoints.cs            # GET /traces/... (dashboard + replay)
 │   │   ├── AdminEndpoints.cs            # HITL approvals + escalations + chat takeover
-│   │   ├── EvaluationEndpoints.cs       # POST /evaluation/run
+│   │   ├── AgentPanelEndpoints.cs       # /agent/* — insan agent (live takeover) paneli
+│   │   ├── AgentsEndpoints.cs           # /agents — temsilci registry CRUD
+│   │   ├── AnalyticsEndpoints.cs        # /analytics/dashboard + /sessions/.../rating
+│   │   ├── EvaluationEndpoints.cs       # /eval/scenarios + /eval/run
 │   │   ├── MemoryEndpoints.cs           # /memory/stats|search|ingest (admin)
 │   │   ├── ImprovementsEndpoints.cs     # /improvements/* (admin self-improve loop)
+│   │   ├── PersonalizationEndpoints.cs  # /customers — CustomerProfile CRUD
 │   │   ├── WorkflowEndpoints.cs         # /workflows CRUD + test (admin)
-│   │   ├── SlaEndpoints.cs              # /sla/status + events (admin)
-│   │   └── ...diğer endpoint dosyaları
-│   ├── Extensions/                      # DI kayıt modülleri (composition root)
-│   │   ├── AiServicesExtensions.cs      # AI client + semantic memory
-│   │   ├── ApplicationServicesExtensions.cs # domain servisleri + context providers
-│   │   └── AuthServicesExtensions.cs    # JWT Bearer + Admin policy
+│   │   ├── SlaEndpoints.cs              # /sla/status + /sla/events (admin)
+│   │   └── TelemetryEndpoints.cs        # /telemetry/cost (admin)
+│   ├── Extensions/                      # DI kayıt modülleri (composition root) — 8 dosya
+│   │   ├── AiServicesExtensions.cs      # AI client + semantic memory + telemetry wrap
+│   │   ├── ApplicationServicesExtensions.cs # application servisleri + context providers
+│   │   ├── AuthServicesExtensions.cs    # JWT Bearer + Admin/Agent policy
+│   │   ├── PersistenceServicesExtensions.cs # InMemory/Postgres adapter seçimi
+│   │   ├── RedisServicesExtensions.cs   # Redis bağlantısı + locking + pub/sub
+│   │   ├── TelemetryExtensions.cs       # OTLP exporter + activity source
+│   │   ├── HealthCheckExtensions.cs     # Postgres + Redis health check'ler
+│   │   └── WebApplicationExtensions.cs  # Middleware + endpoint mapping
 │   ├── Services/                        # API katmanına özgü servisler
-│   │   ├── ChatStreamOrchestrator.cs    # SSE streaming chat akışı
-│   │   ├── ChatEventOrchestrator.cs     # SSE persistent event stream
-│   │   └── HitlStreamSubscription.cs   # HITL approval/escalation event subscription
+│   │   └── ChatEventOrchestrator.cs     # Per-session persistent SSE event stream
+│   ├── Workers/                         # Background hosted service'ler
+│   │   ├── KnowledgeBaseIngestor.cs     # Startup'ta KB embed işlemi
+│   │   └── SlaGuardianService.cs        # Periyodik SLA tarama (IOptionsMonitor hot reload)
 │   ├── Models/                          # HTTP kontrat modelleri
-│   │   ├── EndpointModels.cs            # ChatRequest / ChatResponse DTO
-│   │   └── AdminModels.cs               # Admin panel DTO'ları
+│   │   ├── EndpointModels.cs            # ChatRequest / ChatResponse + diğer DTO'lar
+│   │   ├── AdminModels.cs               # Admin panel DTO'ları
+│   │   ├── WorkflowRequest.cs           # Workflow create/update DTO
+│   │   └── Auth/AuthDtos.cs             # Login/refresh token DTO'ları
 │   ├── Prompts/                         # LLM prompt dosyaları (MD)
 │   │   ├── agents/                      # 6 ajan instruction'ı
 │   │   └── services/                    # Service-level prompt'lar
@@ -286,7 +337,23 @@ CustomerSupport.slnx
     └── Evaluation/                      # Senaryo değerlendirme testleri
 
 └── CustomerSupportBot.Web/              ← Blazor WASM frontend (bağımsız proje)
-    └── (Detay → web/)            # Backend'e HTTP/SSE bağlantısı, ProjectReference yok
+    ├── Program.cs                       # DI + HttpClient kaydı (6 API service)
+    ├── Services/                        # Backend API client sınıfları
+    │   ├── AdminApiService.cs           # /approvals, /escalations, /chat-sessions, /agents
+    │   ├── AnalyticsApiService.cs       # /analytics
+    │   ├── ChatApiService.cs            # /chat, /sessions
+    │   ├── TracesApiService.cs          # /traces
+    │   ├── SlaApiService.cs             # /sla
+    │   ├── WorkflowApiService.cs        # /workflows
+    │   ├── AuthService.cs               # Login/logout/refresh
+    │   ├── AppAuthStateProvider.cs      # Blazor AuthenticationStateProvider
+    │   ├── AuthTokenStore.cs            # localStorage token yönetimi
+    │   └── AuthorizedHttpClientHandler # JWT auto-inject DelegatingHandler
+    ├── Models/                          # Web katmanına özgü view model'lar
+    │   ├── AdminModels.cs               # Admin panel record'ları
+    │   ├── TraceDetailModels.cs         # Trace replay model'ları
+    │   └── WorkflowModels.cs            # Workflow designer model'ları
+    └── Pages/WorkflowDefaults.cs        # Workflow editor varsayılan şablonu
 ```
 
 **Bağımlılık kuralı:**

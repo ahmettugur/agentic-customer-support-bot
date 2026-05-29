@@ -143,8 +143,8 @@ Telemetry__Otlp__Headers=x-honeycomb-team=abc123
 
 ---
 
-## TelemetryAdapterOptions (legacy)
+## TelemetryAdapterOptions (`Models/TelemetryAdapterOptions.cs`)
 
-`Models/TelemetryAdapterOptions.cs` projede mevcut ama **kullanılmıyor**. `TelemetryAdapterServiceCollectionExtensions` `TelemetryOptions`'ı kullanır.
+`Models/TelemetryAdapterOptions.cs` projede mevcut bir sınıftır. `TelemetryAdapterServiceCollectionExtensions` bu sınıfı DI bağlaması için **kullanmaz** — `Options/TelemetryOptions.cs` kullanılır. Her iki sınıfın yapısı (Enabled, TracingEnabled, MetricsEnabled, ServiceName, ServiceVersion, Otlp, Pricing) aynıdır.
 
-Bu dosya muhtemelen ileride silinecek; şimdilik temizlik bekliyor. Yeni kod yazarken `TelemetryOptions`'ı tercih et.
+**DI bağlaması için her zaman `TelemetryOptions`'ı tercih et.** `TelemetryAdapterOptions` doğrudan tüketilmemelidir; ileride kaldırılabilir.

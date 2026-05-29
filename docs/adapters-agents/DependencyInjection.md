@@ -69,6 +69,8 @@ Zorunlu:
   IReasoningTraceStore           → Persistence adapter
   IPromptRepository              → PromptService (Api projesi)
   ICustomerSupportToolsService   → Application services
+  ApprovalGateService            → Bu extension tarafından kayıtlı
+  IUiHintEmitter                 → Application services (UI ipucu yayıcı)
   IApprovalQueue                 → Application/Persistence
   IOptions<ApprovalOptions>      → appsettings.json "Approval:" bölümü
   IEscalationSink                → Persistence adapter
@@ -96,11 +98,13 @@ Opsiyonel:
     "MaxDegreeOfParallelism": 3,
     "ReadOnlyIntentPatterns": ["inquiry", "sorgula", "nerede"]
   },
-  "Approval": {
+  "HumanInTheLoop": {
     "Enabled": true,
     "TimeoutSeconds": 120,
     "ToolsRequiringApproval": [
       "order_placement_tool",
+      "order_cancel_tool",
+      "return_request_tool",
       "complaint_registration_tool"
     ]
   }

@@ -7,21 +7,23 @@
 - `Endpoints/SlaEndpoints.cs` — `/sla`
 - `Endpoints/EvaluationEndpoints.cs` — `/eval`
 
-Tüm endpoint'ler **Admin** scope (Evaluation ve public rating hariç).
+Tüm endpoint'ler **Admin** scope (public rating ve Evaluation hariç).
 
 ---
 
-## TelemetryEndpoints — `/telemetry/cost`
+## TelemetryEndpoints — `/telemetry`
 
 LLM kullanım ve maliyet snapshot'ı.
 
-| Route | Method | Açıklama |
-|---|---|---|
-| `/telemetry/cost` | GET | Per-model token + USD snapshot |
-| `/telemetry/cost/models` | GET | Bilinen modeller listesi |
-| `/telemetry/cost/reset` | POST | Snapshot'ı sıfırla |
+| Route | Method | Auth | Açıklama |
+|---|---|---|---|
+| `/telemetry/cost` | GET | Admin | Per-model token + USD snapshot |
+| `/telemetry/cost/models` | GET | Admin | Bilinen modeller listesi |
+| `/telemetry/cost/reset` | POST | Admin | Snapshot'ı sıfırla |
 
 ### `GET /telemetry/cost`
+
+`ITelemetryPort.GetCostSnapshot()` döner.
 
 ```json
 {
@@ -43,19 +45,17 @@ LLM kullanım ve maliyet snapshot'ı.
 }
 ```
 
-`CostUsageStore.GetUsageSnapshot()` döner. En pahalı model üstte.
-
 ### `GET /telemetry/cost/models`
 
 ```json
-["gpt-4o-mini", "gpt-4o", "claude-haiku-4", "default"]
+{ "knownModels": ["gpt-4o-mini", "gpt-4o", "claude-haiku-4", "default"] }
 ```
 
-`CostCalculator.KnownModels` — pricing tablosundaki key'ler. UI dropdown için.
+`ITelemetryPort.GetKnownModels()` — pricing tablosundaki key'ler. UI dropdown için.
 
 ### `POST /telemetry/cost/reset`
 
-`CostUsageStore.Reset()` — in-memory toplamları sıfırlar. Günlük/oturum bazlı rapor için.
+`ITelemetryPort.ResetCostSnapshot()` — in-memory toplamları sıfırlar. Günlük/oturum bazlı rapor için.
 
 ⚠️ Production'da kalıcı toplam için `analytics.llm_call_usages` tablosu kullanılmalı.
 
@@ -65,7 +65,7 @@ Detay: [Adapters.Telemetry CostUsageStore](../adapters-telemetry/CostUsageStore.
 
 ## TraceEndpoints — `/traces`
 
-Reasoning trace audit — debug ve replay için.
+Reasoning trace audit — debug ve replay için. Admin scope.
 
 | Route | Method | Açıklama |
 |---|---|---|
@@ -85,20 +85,11 @@ Reasoning trace audit — debug ve replay için.
   "startedAt": "2026-05-24T10:00:00Z",
   "completedAt": "2026-05-24T10:00:02.5Z",
   "durationMs": 2500,
-  "reasoning": {
-    "analysis": "Kullanıcı 5 siparişinin durumunu soruyor",
-    "intent": "OrderInquiry",
-    "confidence": "yüksek",
-    "confidenceScore": 0.95
-  },
-  "planning": {
-    "detectedIntent": "OrderInquiry",
-    "selectedAgent": "OrderAgent"
-  },
+  "reasoning": { "analysis": "...", "intent": "OrderInquiry", "confidence": "yüksek" },
+  "planning": { "detectedIntent": "OrderInquiry", "selectedAgent": "OrderAgent" },
   "agentVisits": [
     { "agentName": "PlanningAgent", "durationMs": 230 },
-    { "agentName": "OrderAgent", "durationMs": 1400 },
-    { "agentName": "ResponseAgent", "durationMs": 180 }
+    { "agentName": "OrderAgent", "durationMs": 1400 }
   ],
   "toolCalls": [
     {
@@ -112,11 +103,11 @@ Reasoning trace audit — debug ve replay için.
   "terminationReason": "completed",
   "finalResponse": "Sipariş 5 'Kargoda' durumunda.",
   "iterationCount": 3,
-  "estimatedTokens": 1234
+  "wasRevised": false
 }
 ```
 
-Reasoning admin paneli her trace'i bu detay seviyesinde gösterir.
+Trace bulunamazsa 404 döner.
 
 ### `GET /traces/sessions`
 
@@ -126,14 +117,15 @@ Sidebar — session başına özet:
 [
   {
     "sessionId": "sess-123",
-    "firstQuery": "5 nerede",
+    "title": "5 nerede",
     "traceCount": 5,
+    "messageCount": 12,
     "lastTraceAt": "..."
   }
 ]
 ```
 
-`TracePortService.GetSessionsSummary` — trace'leri session'a göre grupla.
+`ITracePort.GetSessionsSummary()` — trace'leri session'a göre grupla.
 
 ### `GET /traces/stats`
 
@@ -142,16 +134,10 @@ Sidebar — session başına özet:
   "totalTraces": 1234,
   "averageDurationMs": 1850,
   "successRate": 0.96,
-  "topAgents": [
-    { "name": "OrderAgent", "visits": 600 }
-  ],
-  "topTools": [
-    { "name": "order_status_tool", "calls": 450 }
-  ]
+  "topAgents": [{ "name": "OrderAgent", "visits": 600 }],
+  "topTools": [{ "name": "order_status_tool", "calls": 450 }]
 }
 ```
-
-Son 500 trace'in aggregate'i.
 
 ---
 
@@ -159,13 +145,13 @@ Son 500 trace'in aggregate'i.
 
 Dashboard + kullanıcı rating'i.
 
-| Route | Method | Auth | Rate limit |
-|---|---|---|---|
-| `/analytics/dashboard` | GET | Admin | — |
-| `/analytics/session/{sid}` | GET | Admin | — |
-| `/sessions/{sid}/rating` | POST | Anonymous | `general` (60/dak) |
-| `/sessions/{sid}/rating` | GET | Anonymous | `general` |
-| `/analytics/ratings/recent?count=20` | GET | Admin | — |
+| Route | Method | Auth | Rate limit | Açıklama |
+|---|---|---|---|---|
+| `/analytics/dashboard` | GET | Admin | — | Tüm istatistikler |
+| `/analytics/session/{sid}` | GET | Admin | — | Tek session analytics |
+| `/sessions/{sid}/rating` | POST | Anonymous | `general` (60/dak) | Rating gönder |
+| `/sessions/{sid}/rating` | GET | Anonymous | `general` | Rating getir |
+| `/analytics/ratings/recent?count=20` | GET | Admin | — | Son N rating |
 
 ### `GET /analytics/dashboard`
 
@@ -174,20 +160,20 @@ Dashboard + kullanıcı rating'i.
   "totalSessions": 1234,
   "totalMessages": 5678,
   "averageRating": 4.2,
+  "totalRatings": 800,
+  "averageMessagesPerSession": 4.6,
+  "averageSentimentScore": 0.68,
+  "negativeSessions": 234,
+  "sentimentAlerts": 12,
   "ratingDistribution": { "1": 5, "2": 12, "3": 50, "4": 200, "5": 800 },
-  "intentDistribution": {
-    "OrderInquiry": 450,
-    "Complaint": 200,
-    "ProductInfo": 150
-  },
   "sentimentDistribution": { "positive": 600, "neutral": 400, "negative": 234 },
-  "openEscalations": 3,
-  "pendingApprovals": 1,
-  "activeHumanAgents": 5
+  "intentDistribution": { "OrderInquiry": 450, "Complaint": 200 },
+  "phaseDistribution": { "Action": 300, "Clarification": 100 },
+  "approvalStats": { "total": 50, "approved": 40, "rejected": 5, "timedOut": 5 },
+  "escalationStats": { "total": 30, "resolved": 25, "dismissed": 5 },
+  "recentRatings": [{ "sessionId": "...", "stars": 5, "feedback": "...", "ratedAt": "..." }]
 }
 ```
-
-4 farklı port'tan veri aggregate'i: rating, session, approval, escalation.
 
 ### `POST /sessions/{sid}/rating` (anonymous)
 
@@ -198,16 +184,7 @@ Content-Type: application/json
 { "stars": 5, "feedback": "Çok yardımcı oldu, teşekkürler!" }
 ```
 
-**Validation:** `stars` 1-5 arası olmalı.
-
-**429 Response (rate limit):**
-
-```
-HTTP/1.1 429 Too Many Requests
-Retry-After: 30
-```
-
-Rate limit IP bazlı — spam önleme. Anonymous endpoint olduğu için JWT yok.
+**Validation:** `stars` 1-5 arası olmalı. Session bulunamazsa 404. Rate limit aşılırsa 429.
 
 ### `GET /analytics/ratings/recent?count=20`
 
@@ -228,109 +205,116 @@ Düşük rating'li session'lar `LessonMiner` için **candidate**.
 
 ## SlaEndpoints — `/sla`
 
-SLA Guardian metric/event'leri.
+SLA Guardian metric/event'leri. Admin scope.
 
 | Route | Method | Açıklama |
 |---|---|---|
-| `/sla/events` | GET | Son N warn/breach event |
+| `/sla/events?count=100` | GET | Son N warn/breach event |
 | `/sla/status` | GET | Mevcut kuyruk + max yaş + breach sayısı |
 
 ### `GET /sla/events?count=100`
 
-```json
-[
-  {
-    "id": "sla-abc",
-    "timestamp": "2026-05-24T10:00:00Z",
-    "kind": "approval",
-    "severity": "breach",
-    "targetId": "app-xxx",
-    "ageSeconds": 320,
-    "action": "AutoReject",
-    "note": "Pending > 300s threshold"
-  }
-]
-```
-
-`ISlaEventSink.GetRecent(count)` döner.
-
-### `GET /sla/status`
+`ISlaPort.GetRecentEvents(count)` döner.
 
 ```json
 {
-  "pendingApprovals": {
-    "count": 5,
-    "maxAgeSeconds": 240,
-    "breachCount": 1
+  "count": 2,
+  "items": [
+    {
+      "timestamp": "2026-05-24T10:00:00Z",
+      "kind": "approval",
+      "severity": "breach",
+      "targetId": "app-xxx",
+      "action": "AutoReject",
+      "ageSeconds": 320,
+      "note": "Pending > 300s threshold"
+    }
+  ]
+}
+```
+
+### `GET /sla/status`
+
+`ISlaPort.GetStatus()` döner — anlık snapshot:
+
+```json
+{
+  "enabled": true,
+  "pollIntervalSeconds": 30,
+  "approvals": {
+    "pendingCount": 5,
+    "oldestSeconds": 240.0,
+    "warnAfter": 60,
+    "breachAfter": 300,
+    "onBreach": "AutoReject",
+    "breachCountRecent": 1
   },
-  "openEscalations": {
-    "count": 3,
-    "maxAgeSeconds": 180,
-    "breachCount": 0
+  "escalations": {
+    "openCount": 3,
+    "oldestSeconds": 180.0,
+    "warnAfter": 120,
+    "breachAfter": 600,
+    "boostPriorityOnBreach": true,
+    "breachCountRecent": 0
   }
 }
 ```
 
-Anlık snapshot — admin dashboard widget.
+Admin dashboard widget için.
 
 ---
 
 ## EvaluationEndpoints — `/eval`
 
-YAML-based scenario testing.
+YAML-based scenario testing. Admin scope.
 
 | Route | Method | Auth | Açıklama |
 |---|---|---|---|
-| `/eval/scenarios` | GET | Anonymous | YAML'dan senaryo listesi |
-| `/eval/run?limit=N` | POST | Anonymous | Tümünü veya N tane çalıştır |
-| `/eval/run/{id}` | POST | Anonymous | Tek senaryo |
+| `/eval/scenarios` | GET | Admin | YAML'dan senaryo listesi |
+| `/eval/run?limit=N` | POST | Admin | Tümünü veya N tane çalıştır |
+| `/eval/run/{id}` | POST | Admin | Tek senaryo |
 
 ### `GET /eval/scenarios`
 
-`docs/evaluation-scenarios.yaml` dosyasını okur:
+`ScenarioLoader.LoadScenarios(path)` ile YAML okunur. `docs/evaluation-scenarios.yaml` (veya üst `docs/`) aranır.
 
-```yaml
-scenarios:
-  - id: order-inquiry-basic
-    title: "Basit sipariş sorgu"
-    user_query: "5 nerede"
-    expected_intent: OrderInquiry
-    expected_agents: [PlanningAgent, OrderAgent, ResponseAgent]
-    expected_tools: [order_status_tool]
-    known_failure_modes: []
+```json
+{
+  "version": "1.0",
+  "totalScenarios": 10,
+  "scenarios": [
+    {
+      "Id": "order-inquiry-basic",
+      "Category": "order",
+      "Query": "5 nerede",
+      "ExpectedIntent": "OrderInquiry",
+      "ExpectedBehavior": "...",
+      "ExpectedAgents": ["PlanningAgent", "OrderAgent"],
+      "ExpectedTools": ["order_status_tool"],
+      "criteriaCount": 3,
+      "KnownFailureMode": null
+    }
+  ]
+}
 ```
 
 ### `POST /eval/run?limit=10`
 
-Senaryoları çalıştırır, her birinin sonucunu döner:
+`IEvaluationPort.RunAsync(scenarios, ct)` çalıştırır.
 
-```json
-[
-  {
-    "scenarioId": "order-inquiry-basic",
-    "passed": true,
-    "actualIntent": "OrderInquiry",
-    "actualAgents": ["PlanningAgent", "OrderAgent", "ResponseAgent"],
-    "durationMs": 1850,
-    "issues": []
-  },
-  {
-    "scenarioId": "complaint-with-refund",
-    "passed": false,
-    "actualIntent": "Complaint",
-    "expectedIntent": "Complaint",
-    "actualAgents": ["PlanningAgent", "OrderAgent"],
-    "expectedAgents": ["PlanningAgent", "ComplaintAgent"],
-    "issues": ["Wrong agent selected: OrderAgent (expected ComplaintAgent)"]
-  }
-]
+### `POST /eval/run/{id}`
+
+`IEvaluationPort.RunScenarioAsync(scenario, ct)` tek senaryo. Bulunamazsa 404.
+
+### YAML path çözümü
+
+```csharp
+var candidates = new[]
+{
+    Path.Combine(env.ContentRootPath, "docs", WellKnown.Evaluation.ScenarioFileName),
+    Path.Combine(env.ContentRootPath, "..", "docs", WellKnown.Evaluation.ScenarioFileName),
+};
 ```
-
-Regression testing için — CI/CD pipeline'a entegre edilebilir.
-
-### Neden anonymous?
-
-Eval senaryoları **production data içermez** — hardcoded test query'leri. Public erişimin sakıncası yok. Production'da `RequireAuthorization` eklenebilir.
 
 ---
 
@@ -343,3 +327,4 @@ Eval senaryoları **production data içermez** — hardcoded test query'leri. Pu
 - [Adapters.Telemetry CostUsageStore](../adapters-telemetry/CostUsageStore.md)
 - [Infrastructure ScenarioLoader](Infrastructure.md#scenarioloader)
 - [Domain Model-Trace](../domain/Model-Trace.md)
+- [Workers.md](Workers.md) — SlaGuardianService

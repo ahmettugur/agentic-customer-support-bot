@@ -97,16 +97,16 @@ public sealed class RealtimeOptions
 {
     public bool Enabled { get; set; } = true;
     public string Model { get; set; } = "gpt-realtime-2";
-    public string? ApiKey { get; set; }                   // Boşsa OpenAiOptions.ApiKey
-    public string Voice { get; set; }                     // zorunlu
+    public string? ApiKey { get; set; }                     // Boşsa OpenAiOptions.ApiKey
+    public string Voice { get; set; } = null!;              // zorunlu — appsettings'te belirtilmeli
     public int VadSilenceMs { get; set; } = 600;
     public string ReasoningEffort { get; set; } = "low";
     public int MaxResponseTokens { get; set; } = 4096;
 
     // Transcription
     public string TranscriptionModel { get; set; } = "gpt-4o-transcribe";
-    public string? TranscriptionLanguage { get; set; } = "tr";
-    public string TranscriptionPrompt { get; set; } = "...";
+    public string? TranscriptionLanguage { get; set; } = "tr";  // null = dil algılama
+    public string TranscriptionPrompt { get; set; } = "Müşteri destek görüşmesi..."; // domain terimlerini öğretir
 }
 ```
 

@@ -23,43 +23,51 @@ Domain modelleri (ör. `WorkflowDefinition`) iş kuralları ve invariant'lar ta�
 
 DTO ↔ Domain dönüşümü endpoint içinde manuel yapılır (mapper kütüphanesi yok — basit ve görünür).
 
+`PortAliases.cs` global using ile `CustomerSupportBot.Api.Models` tüm endpoint dosyalarında erişilebilir:
+
+```csharp
+global using CustomerSupportBot.Api.Models;
+```
+
 ---
 
 ## AdminModels.cs
 
 ```csharp
-public sealed record ChatTakeoverInput(string? HumanAgent);
-public sealed record ChatAdminMessageInput(string Text, string? HumanAgent);
-public sealed record ReplanInput(string? RequestedBy, string? Note);
+public record ChatTakeoverInput(string? HumanAgent);
+public record ChatAdminMessageInput(string Text, string? HumanAgent);
+public record ReplanInput(string? RequestedBy, string? Note);
 ```
 
 ### `ChatTakeoverInput`
 
-`POST /chat-sessions/{sid}/takeover`
+`POST /chat-sessions/{sid}/takeover` ve `POST /agent/chat-sessions/{sid}/takeover`
 
 ```json
 { "humanAgent": "Ali Demir" }
 ```
 
-`HumanAgent` opsiyonel — null ise JWT'den çıkarılır.
+`HumanAgent` opsiyonel — null ise JWT claim veya default admin adı kullanılır.
 
 ### `ChatAdminMessageInput`
 
-`POST /chat-sessions/{sid}/messages`
+`POST /chat-sessions/{sid}/messages` ve `POST /agent/chat-sessions/{sid}/messages`
 
 ```json
 { "text": "Merhaba, size nasıl yardımcı olabilirim?", "humanAgent": "Ali Demir" }
 ```
 
+`text` zorunlu, eksikse 400 döner.
+
 ### `ReplanInput`
 
-`POST /chat-sessions/{sid}/replan`
+`POST /escalations/{id}/replan`, `POST /chat-sessions/{sid}/replan` ve agent panel karşılıkları
 
 ```json
-{ "requestedBy": "admin-abc", "note": "Müşteri farklı bir agent istiyor, OrderAgent'a yönlendir" }
+{ "requestedBy": "admin-abc", "note": "Müşteri farklı bir agent istiyor" }
 ```
 
-`Note` LLM prompt'una eklenir — admin'in manuel yönlendirme isteği reasoning aşamasına girer.
+`Note` LLM prompt'una eklenir — admin'in yönlendirme isteği reasoning aşamasına girer. Müşteriye gösterilmez.
 
 ---
 
@@ -80,21 +88,6 @@ Content-Type: application/json
 { "username": "admin", "password": "..." }
 ```
 
-Response:
-```json
-{
-  "accessToken": "eyJ...",
-  "refreshToken": "abc-xyz-...",
-  "accessTokenExpiry": "2026-05-24T11:00:00Z",
-  "user": {
-    "id": "u1",
-    "username": "admin",
-    "role": "Admin",
-    "linkedAgentId": null
-  }
-}
-```
-
 ### Refresh flow
 
 ```http
@@ -103,8 +96,6 @@ Content-Type: application/json
 
 { "refreshToken": "abc-xyz-..." }
 ```
-
-Eski token revoke, yenisi döner. Rotation chain için detay: [Adapters.Persistence AuthAdapters](../adapters-persistence/AuthAdapters.md).
 
 ### Logout flow
 
@@ -116,8 +107,6 @@ Content-Type: application/json
 { "refreshToken": "abc-xyz-..." }
 ```
 
-Refresh token revoke edilir; access token JWT olduğu için süresi dolana kadar geçerli — kısa süreli (60 dakika) tutulur.
-
 ---
 
 ## EndpointModels.cs
@@ -125,10 +114,30 @@ Refresh token revoke edilir; access token JWT olduğu için süresi dolana kadar
 Çeşitli endpoint'lerin input DTO'ları:
 
 ```csharp
-public sealed record RerouteInput(string? AgentId, string? Reason);
-public sealed record TestRunInput(string? Input, Dictionary<string, string>? Variables);
-public sealed record ImprovementDecision(string? DecidedBy, string Reason);
-public sealed record AdminNoteInput(string? Note);
+// AgentsEndpoints
+public class RerouteInput
+{
+    public string? AgentId { get; set; }
+    public string? Reason { get; set; }
+}
+
+// WorkflowEndpoints
+public class TestRunInput
+{
+    public string? Input { get; set; }
+    public Dictionary<string, string>? Variables { get; set; }
+}
+
+// ImprovementsEndpoints
+public sealed record ImprovementDecision(string? DecidedBy, string? Reason);
+
+// PersonalizationEndpoints
+public sealed class AdminNoteInput
+{
+    public string? Note { get; set; }
+}
+
+// AnalyticsEndpoints
 public sealed record RatingInput(int Stars, string? Feedback);
 ```
 
@@ -145,10 +154,7 @@ public sealed record RatingInput(int Stars, string? Feedback);
 `POST /workflows/{id}/test` — workflow'u test verisiyle çalıştır.
 
 ```json
-{
-  "input": "5 nerede",
-  "variables": { "customer_id": "1990" }
-}
+{ "input": "5 nerede", "variables": { "customer_id": "1990" } }
 ```
 
 ### `ImprovementDecision`
@@ -159,6 +165,8 @@ public sealed record RatingInput(int Stars, string? Feedback);
 { "decidedBy": "admin-abc", "reason": "Faydalı bir ders, KB'ye eklensin" }
 ```
 
+`Reason` her iki DTO'da da opsiyonel (`string?`).
+
 ### `AdminNoteInput`
 
 `PUT /customers/{id}/profile/note` — müşteri profiline manuel not.
@@ -166,8 +174,6 @@ public sealed record RatingInput(int Stars, string? Feedback);
 ```json
 { "note": "VIP müşteri, hızlı yanıt vermeli" }
 ```
-
-`Note` `CustomerProfile.AdminNote` field'ına yazılır; agent prompt'unda görünür.
 
 ### `RatingInput`
 
@@ -188,8 +194,8 @@ Workflow create/update için **detaylı** DTO:
 ```csharp
 public sealed class WorkflowRequest
 {
-    public string Name { get; set; }
-    public string? Description { get; set; }
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
     public int Version { get; set; } = 1;
     public bool IsActive { get; set; } = true;
     public List<string> TriggerKeywords { get; set; } = new();
@@ -202,22 +208,14 @@ public sealed class WorkflowStepRequest
     public string? Id { get; set; }
     public string Type { get; set; } = "Respond";    // Respond | Lookup | Branch | SetVariable
     public string? Label { get; set; }
-
-    // Respond
-    public string? Template { get; set; }
-
-    // Lookup
-    public string? Tool { get; set; }
-    public Dictionary<string, string>? Parameters { get; set; }
-    public string? StoreAs { get; set; }
-
-    // Branch
-    public string? Condition { get; set; }
-    public int SkipNext { get; set; } = 1;
-
-    // SetVariable
-    public string? VariableName { get; set; }
-    public string? VariableValue { get; set; }
+    public string? Template { get; set; }             // Respond
+    public string? Tool { get; set; }                 // Lookup
+    public Dictionary<string, string> Parameters { get; set; } = new();
+    public string? StoreAs { get; set; }              // Lookup
+    public string? Condition { get; set; }            // Branch
+    public int SkipNext { get; set; } = 1;            // Branch
+    public string? VariableName { get; set; }         // SetVariable
+    public string? VariableValue { get; set; }        // SetVariable
 }
 ```
 
@@ -226,22 +224,10 @@ public sealed class WorkflowStepRequest
 `WorkflowDefinition` (Domain) tipi `WorkflowStepType` enum kullanır. HTTP'de string olarak geliyor — DTO bunu string olarak tutar, endpoint'te dönüştürülür:
 
 ```csharp
-var domain = new WorkflowDefinition
-{
-    Name = request.Name,
-    Steps = request.Steps.Select(s => new WorkflowStep
-    {
-        Type = Enum.Parse<WorkflowStepType>(s.Type),
-        Template = s.Template,
-        // ...
-    }).ToList()
-};
+Type = Enum.TryParse<WorkflowStepType>(s.Type, true, out var t) ? t : WorkflowStepType.Respond,
 ```
 
-Bu sayede:
-- API consumer'ları string enum gönderir (daha kolay)
-- Domain enum strict tip korur
-- Yeni step tipi eklemek Domain'i etkilemez (DTO `string`, parse hata verirse 400 döner)
+Parse başarısız olursa `Respond` default. Bu sayede yeni step tipi eklemek Domain'i etkilemez.
 
 ### Request örneği
 
@@ -256,27 +242,12 @@ Content-Type: application/json
   "version": 1,
   "isActive": true,
   "triggerKeywords": ["takip", "kargoda", "nerede"],
-  "inputPatterns": {
-    "order_id": "\\d{4,}"
-  },
+  "inputPatterns": { "order_id": "\\d{4,}" },
   "steps": [
-    {
-      "type": "Branch",
-      "label": "order_id var mı?",
-      "condition": "order_id missing",
-      "skipNext": 99
-    },
-    {
-      "type": "Lookup",
-      "label": "Sipariş durumu",
-      "tool": "order_status_tool",
-      "parameters": { "order_id": "{order_id}" },
-      "storeAs": "status"
-    },
-    {
-      "type": "Respond",
-      "template": "Sipariş {order_id} durumu: {status}"
-    }
+    { "type": "Branch", "label": "order_id var mı?", "condition": "order_id missing", "skipNext": 99 },
+    { "type": "Lookup", "label": "Sipariş durumu", "tool": "order_status_tool",
+      "parameters": { "orderId": "$order_id" }, "storeAs": "lookup" },
+    { "type": "Respond", "template": "Sipariş {order_id} durumu: {lookup}" }
   ]
 }
 ```
@@ -293,7 +264,7 @@ Detay: [Domain Model-Workflow](../domain/Model-Workflow.md).
 | Null safety (`string?`) | Optional field'lar açıkça belirtilir |
 | Default değer | Forward-compat (yeni field eklenince eski client patlamaz) |
 | Domain tipini doğrudan input alma | Domain invariant'ları bozulur |
-| Validation endpoint'te | Açık ve görünür (FluentValidation gibi gizli katman yok) |
+| Validation endpoint'te | Açık ve görünür |
 
 ---
 
@@ -301,5 +272,5 @@ Detay: [Domain Model-Workflow](../domain/Model-Workflow.md).
 
 - [Endpoints-Auth.md](Endpoints-Auth.md) — Login/Refresh akışı
 - [Endpoints-Admin.md](Endpoints-Admin.md) — AdminModels kullanımı
-- [Endpoints-Improvements.md](Endpoints-Improvements.md) — Workflow CRUD
+- [Endpoints-Improvements.md](Endpoints-Improvements.md) — Workflow CRUD, Memory, Personalization
 - [Domain Model-Workflow](../domain/Model-Workflow.md)

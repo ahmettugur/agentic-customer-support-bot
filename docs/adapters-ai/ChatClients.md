@@ -9,63 +9,65 @@
 
 ## AiClientFactory
 
-**Sorumluluk:** `AiProvider` enum'unu okur, doğru sağlayıcı SDK'sından `IChatClient` üretir.
+**Sorumluluk:** `AiProvider` enum'unu okur, doğru sağlayıcı SDK'sından `IChatClient` üretir.  
+**Tür:** `public static class`
 
 ### `CreateStandardChatClient`
 
 ```csharp
-public static IChatClient CreateStandardChatClient(AiOptions options, ILoggerFactory loggerFactory)
+public static IChatClient CreateStandardChatClient(AiOptions options)
 ```
 
 Üç dal:
 
 | Provider | İç implementasyon |
 |---|---|
-| `OpenAI` | `new OpenAIClient(apiKey).AsChatClient(model)` |
-| `AzureOpenAI` | `new AzureOpenAIClient(endpoint, apiKey).AsChatClient(deployment)` |
-| `Anthropic` | `new AnthropicClient(apiKey).AsChatClient(model, maxTokens)` |
+| `OpenAI` | `new OpenAIClient(apiKey).GetChatClient(model).AsIChatClient()` |
+| `AzureOpenAI` | `new AzureOpenAIClient(endpoint, apiKey).GetChatClient(deployment).AsIChatClient()` |
+| `Anthropic` | `new AnthropicClient { ApiKey = apiKey }.AsIChatClient(model, maxTokens)` |
 
 `Microsoft.Extensions.AI.IChatClient` ortak arayüz — üç SDK'nın native client'ı bu interface'e adapte edilir.
 
 ### `CreateReasoningChatClient`
 
 ```csharp
-public static IReasoningChatClient CreateReasoningChatClient(
+public static ReasoningChatClient CreateReasoningChatClient(
     AiOptions options,
-    ILoggerFactory loggerFactory,
-    Func<IChatClient, IChatClient>? innerWrapper = null)
+    Func<IChatClient, IChatClient>? decorate = null)
 ```
 
 Standart client'a ek:
-- `ReasoningModel` yoksa `Model`'a düşer
-- `ReasoningEffort` parametresi `ChatOptions.AdditionalProperties`'e konur
-- `innerWrapper` ile telemetry decorator inject edilebilir
+- `ReasoningModel` / `ReasoningDeployment` yoksa standart model/deployment'a düşer
+- `decorate` parametresi ile telemetri decorator inject edilebilir; `null` ise iç client doğrudan kullanılır
+- Oluşturulan `ReasoningChatClient` içinde `ModelName` ve `ReasoningEffort` saklanır
 
-### `innerWrapper` parametresi
+**Anthropic özel davranışı:** Anthropic Messages API `reasoning_effort` parametresini desteklemez. `ReasoningChatClient` bu değeri OpenAI o-series'e özgü header olarak gönderir; Anthropic sessizce ignore eder — API hatası oluşmaz. Bu nedenle Anthropic provider'da standart ve reasoning model davranışı özdeştir; derin düşünme için "extended thinking" destekli bir model kullanılmalıdır.
+
+### `decorate` parametresi
 
 Composition Root telemetri decorator inject etmek için:
 
 ```csharp
 var reasoningClient = AiClientFactory.CreateReasoningChatClient(
     options,
-    loggerFactory,
-    innerWrapper: rawClient => new TelemetryChatClient(rawClient, ...));
+    decorate: rawClient => new TelemetryChatClient(rawClient, ...));
 ```
 
-`rawClient` parametresi factory'nin az önce yarattığı provider client'ı; wrapper TelemetryChatClient ile sarmalar. Sonuç ReasoningChatClient içinde tutulur.
+`rawClient` parametresi factory'nin az önce yarattığı provider client'ı; wrapper TelemetryChatClient ile sarmalar. Sonuç `ReasoningChatClient` içinde tutulur.
 
 ### Require() helper
 
 ```csharp
-static string Require(string? value, string keyName)
+private static string Require(string? value, string key)
 {
-    if (string.IsNullOrWhiteSpace(value))
-        throw new InvalidOperationException($"AI configuration eksik: {keyName}");
-    return value;
+    if (!string.IsNullOrWhiteSpace(value))
+        return value!;
+    throw new InvalidOperationException(
+        $"{key} yapılandırması bulunamadı (appsettings.json'da boş veya tanımsız).");
 }
 ```
 
-Eksik config tespiti — `Require(options.OpenAI.ApiKey, "AI:OpenAI:ApiKey")` gibi kullanılır.
+Eksik config tespiti — `Require(options.OpenAI.ApiKey, "AI:OpenAI:ApiKey")` gibi kullanılır. Startup'ta fail-fast davranışı sağlar.
 
 ---
 
@@ -75,26 +77,28 @@ Eksik config tespiti — `Require(options.OpenAI.ApiKey, "AI:OpenAI:ApiKey")` gi
 
 Genel amaçlı LLM completion — reasoning değil, basit prompt → response.
 
+### Constructor
+
+```csharp
+public GeneralChatClientAdapter(IChatClient client)
+```
+
+DI tarafından sağlanan `IChatClient` (TelemetryChatClient decorator ile sarılmış) ile oluşturulur.
+
 ### `CompleteAsync`
 
 ```csharp
 public async Task<string> CompleteAsync(
-    IEnumerable<ConversationMessage> messages,
+    IReadOnlyList<ConversationMessage> messages,
     CancellationToken ct = default)
 {
     var chatMessages = messages.Select(m => new ChatMessage(RoleFor(m.Role), m.Text)).ToList();
-    try
-    {
-        var response = await _client.GetResponseAsync(chatMessages, options: null, ct);
-        return response.Text ?? string.Empty;
-    }
-    catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-    catch (Exception ex)
-    {
-        throw ExceptionTranslator.Translate(ex, "General chat completion failed");
-    }
+    var response = await _client.GetResponseAsync(chatMessages, cancellationToken: ct);
+    return response.Text ?? "";
 }
 ```
+
+`IReadOnlyList<ConversationMessage>` alır; domain tiplerini `ChatMessage`'a çevirir; `IChatClient.GetResponseAsync` çağırır.
 
 ### Role mapping
 
@@ -122,7 +126,15 @@ Bu sayede iptal ile gerçek hata ayırt edilir.
 
 **Port:** `IReasoningChatClient`
 
-OpenAI o-series modelleri için — derin düşünme (chain-of-thought) yapan modeller.
+OpenAI o-series modelleri (veya Anthropic extended thinking) için — derin düşünme modeli wrapper'ı.
+
+### Constructor
+
+```csharp
+public ReasoningChatClient(IChatClient client, string modelName, string reasoningEffort)
+```
+
+`AiClientFactory.CreateReasoningChatClient` tarafından oluşturulur; doğrudan `new` ile çağrılmaz.
 
 ### Property'ler
 
@@ -131,39 +143,42 @@ public string ModelName { get; }
 public string ReasoningEffort { get; }   // "low", "medium", "high"
 ```
 
-Constructor'da alınır, kullanıcıya gösterilebilir (admin paneli).
+Constructor'da alınır, kullanıcıya gösterilebilir (admin paneli). `ModelName` gerçek model/deployment adıdır (ReasoningModel veya fallback).
 
 ### `CompleteAsync` — non-streaming
 
 ```csharp
-public async Task<string> CompleteAsync(IEnumerable<ConversationMessage> messages, CancellationToken ct)
+public async Task<string> CompleteAsync(
+    IReadOnlyList<ConversationMessage> messages,
+    CancellationToken ct = default)
 {
-    var chatMessages = messages.Select(...).ToList();
+    var chatMessages = Map(messages);
     var options = BuildOptions();
     var response = await _client.GetResponseAsync(chatMessages, options, ct);
-    return response.Text ?? string.Empty;
+    return response.Text ?? "";
 }
 ```
+
+`IReadOnlyList<ConversationMessage>` alır.
 
 ### `StreamAsync` — streaming
 
 ```csharp
 public async IAsyncEnumerable<string> StreamAsync(
-    IEnumerable<ConversationMessage> messages,
+    IReadOnlyList<ConversationMessage> messages,
     [EnumeratorCancellation] CancellationToken ct = default)
-{
-    var chatMessages = messages.Select(...).ToList();
-    var options = BuildOptions();
-
-    await foreach (var update in _client.GetStreamingResponseAsync(chatMessages, options, ct))
-    {
-        if (!string.IsNullOrEmpty(update.Text))
-            yield return update.Text;
-    }
-}
 ```
 
-Boş/null text update'leri filtrelenir — sadece anlamlı text chunk'ları yield edilir.
+Streaming başlatma bloğu `try/catch` içinde sarılmıştır; ardından `await foreach` ile update'ler yield edilir. Boş/null text update'leri filtrelenir — sadece anlamlı text chunk'ları yield edilir.
+
+### `Map` (internal static)
+
+```csharp
+internal static IList<ChatMessage> Map(IReadOnlyList<ConversationMessage> messages)
+    => messages.Select(m => new ChatMessage(RoleFor(m.Role), m.Text)).ToList();
+```
+
+Test amacıyla `internal` olarak açıktır.
 
 ### `BuildOptions`
 
@@ -224,15 +239,16 @@ Application SignalR/WebSocket → Browser
 
 ## Exception handling
 
-Üç adapter de `ExceptionTranslator` kullanır:
+Her iki adapter de `ExceptionTranslator` kullanır:
 
 ```csharp
-catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-catch (Exception ex)
+catch (Exception ex) when (ex is not OperationCanceledException || ct.IsCancellationRequested is false)
 {
     throw ExceptionTranslator.Translate(ex, "context message");
 }
 ```
+
+Bu `when` koşulu gerçek kullanıcı iptalleri (`ct.IsCancellationRequested == true`) için translation yapmayı atlar. Böylece kullanıcı isteği ile gerçek servis hatası ayırt edilir.
 
 - HTTP 429 → `ExternalServiceException("AI", "rate limit")`
 - HTTP 401/403 → `ExternalServiceException("AI", "authorization failed")`

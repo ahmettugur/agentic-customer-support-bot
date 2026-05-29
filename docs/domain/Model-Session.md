@@ -15,12 +15,12 @@ Session ve sohbet ile ilgili tüm core domain modeller.
 ## AgentSession
 
 ```csharp
-public sealed class AgentSession
+public class AgentSession
 {
-    public string SessionId { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public DateTime LastActivity { get; set; }
-    public ChatSessionState State { get; set; } = new();
+    public string SessionId { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime LastActivity { get; set; } = DateTime.Now;
+    public SessionState State { get; set; } = new();
 }
 ```
 
@@ -33,50 +33,40 @@ Bir kullanıcının **bir oturumu**. `ISessionManager` bu nesnelerin kalıcılı
 
 ---
 
-## ChatSessionState
+## SessionState
 
-Session'ın **türetilmiş durumu** — `SessionStateExtractor` günceller.
+Session'ın **türetilmiş durumu** — `SessionStateExtractor` günceller, ajanlar arası paylaşılan bağlam.
 
 ```csharp
-public sealed class ChatSessionState
+public class SessionState
 {
     // Kimlik & sayaçlar
     public string? CustomerId { get; set; }
     public int TurnCount { get; set; }
+    public string? ConversationSummary { get; set; }
 
     // Niyet & faz
     public string? CurrentIntent { get; set; }
-    public string Phase { get; set; } = "Greeting";  // ConversationPhase enum string'i
-
-    // Sentiment takibi
-    public string Sentiment { get; set; } = "neutral";
-    public double SentimentScore { get; set; } = 0.5;
-    public int ConsecutiveNegativeTurns { get; set; }
-    public List<SentimentTimelineEntry> SentimentHistory { get; set; } = new();
+    public string Phase { get; set; } = WellKnown.Phases.Greeting;
 
     // Toplanan bilgiler (extracted entities)
     public Dictionary<string, string> CollectedInfo { get; set; } = new();
 
-    // Manuel müdahale (admin)
-    public ReplanControl Replan { get; set; } = new();
-}
-```
+    // Sentiment takibi
+    public string Sentiment { get; set; } = WellKnown.Sentiments.Neutral;
+    public double SentimentScore { get; set; } = 0.5;
+    public List<SentimentEntry> SentimentHistory { get; set; } = new();
+    public int ConsecutiveNegativeTurns { get; set; }
 
-### ReplanControl
-
-Admin panelinden "bu session'ı tekrar planla" tetiklemek için:
-
-```csharp
-public sealed class ReplanControl
-{
+    // Manuel müdahale (admin replan)
     public bool ForceReplanNextTurn { get; set; }
-    public string? ReplanRequestedBy { get; set; }   // admin user id
-    public string? ReplanNote { get; set; }          // admin notu, prompt'a eklenir
+    public string? ReplanRequestedBy { get; set; }
     public DateTime? ReplanRequestedAt { get; set; }
+    public string? ReplanNote { get; set; }
 }
 ```
 
-`IReplanService.ExecuteAsync` bu flag'i okur, işlem sonrası temizler.
+`IReplanService.ExecuteAsync` `ForceReplanNextTurn` flag'ini okur, işlem sonrası temizler.
 
 ### CollectedInfo örnek
 
@@ -90,6 +80,38 @@ state.CollectedInfo = new()
 ```
 
 Specialist agent'lar bu Dict'i okur, tool parametresi olarak kullanır.
+
+### SentimentEntry
+
+```csharp
+public class SentimentEntry
+{
+    public int Turn { get; set; }
+    public string Label { get; set; } = WellKnown.Sentiments.Neutral;
+    public double Score { get; set; } = 0.5;
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+}
+```
+
+---
+
+## ChatSessionState
+
+**HITL Live Takeover snapshot'ı** — bir session'ın mod durumunu temsil eder. Admin UI "Aktif Sohbetler" listesinde render edilir.
+
+```csharp
+public class ChatSessionState
+{
+    public string SessionId { get; set; } = "";
+    public ChatMode Mode { get; set; } = ChatMode.Bot;
+    public string? HumanAgent { get; set; }       // Human modda devralan temsilci
+    public DateTime? EnteredAt { get; set; }       // Human moda geçiş anı
+    public DateTime? LastActivityAt { get; set; }  // Son mesaj zaman damgası
+    public int MessageCount { get; set; }          // Köprüdeki toplam mesaj sayısı
+}
+```
+
+> ⚠️ `ChatSessionState`, oturum durum bilgilerini (intent, sentiment, collected info) **taşımaz** — bunlar `SessionState` sınıfında tutulur.
 
 ---
 

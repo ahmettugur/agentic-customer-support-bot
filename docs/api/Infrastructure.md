@@ -7,8 +7,8 @@ HTTP boundary'sini koruyan altyapı sınıfları — exception handler, SSE writ
 | Dosya | Sorumluluk |
 |---|---|
 | `DomainExceptionHandler.cs` | DomainException → HTTP status + ProblemDetails |
-| `SseWriter.cs` | Server-Sent Events format |
-| `SseForwarder.cs` | Thread-safe SSE wrapper |
+| `SseWriter.cs` | Server-Sent Events format (static helper) |
+| `SseForwarder.cs` | Thread-safe SSE wrapper (disposable) |
 | `WebSocketBrowserChannel.cs` | WebSocket ↔ IBrowserChannel port |
 | `ScenarioLoader.cs` | YAML deserialization helper |
 
@@ -16,7 +16,7 @@ HTTP boundary'sini koruyan altyapı sınıfları — exception handler, SSE writ
 
 ## DomainExceptionHandler
 
-ASP.NET Core 8+ `IExceptionHandler` interface'ini implement eder. Middleware pipeline'da en başta çalışır.
+ASP.NET Core `IExceptionHandler` interface'ini implement eder (`internal sealed`). Middleware pipeline'da en başta çalışır.
 
 ### Mapping tablosu
 
@@ -24,75 +24,65 @@ ASP.NET Core 8+ `IExceptionHandler` interface'ini implement eder. Middleware pip
 |---|---|---|---|
 | `EntityNotFoundException` | `404 Not Found` | Information | ✅ Evet (entityType, entityId) |
 | `ConcurrencyConflictException` | `409 Conflict` | Warning | ✅ Evet |
-| `ExternalServiceException` | `503 Service Unavailable` | Error | ❌ Hayır (service adı verir) |
+| `ExternalServiceException` | `503 Service Unavailable` | Error | ❌ Hayır (sadece service adı) |
 | `PersistenceException` | `503 Service Unavailable` | Error | ❌ Hayır |
 | Diğer `DomainException` | `400 Bad Request` | Warning | ✅ Evet |
-| `Exception` (yakalanmamış) | `500 Internal Server Error` | Error | ❌ Hayır |
+| `Exception` değil (yakalanmamış) | — | — | `false` döner, 500 handler devreye girer |
 
 ### ProblemDetails formatı
 
 ```json
 {
-  "type": "https://tools.ietf.org/html/rfc7231#section-6.5.4",
-  "title": "Resource not found",
   "status": 404,
-  "detail": "Sipariş 5 bulunamadı",
+  "title": "ENTITY_NOT_FOUND",
+  "detail": "Order '5' bulunamadı.",
   "extensions": {
-    "code": "ORDER_NOT_FOUND",
+    "code": "ENTITY_NOT_FOUND",
     "entityType": "Order",
-    "entityId": "5",
-    "traceId": "00-abc..."
+    "entityId": "5"
   }
 }
 ```
 
-RFC 7807 standardı — modern istemciler bunu otomatik parse eder.
-
-### `HasStarted` koruması
-
-```csharp
-if (httpContext.Response.HasStarted)
-{
-    _logger.LogWarning(ex, "Response already started — cannot translate exception");
-    return false;   // Diğer middleware'e devret
-}
-```
-
-SSE veya WebSocket akışı **zaten başlamışsa** response'a yazamayız. Bu durumda exception loglanır ama HTTP'ye yansımaz — istemci stream'de hata fark eder.
-
-### Service identifier yansıması
-
-`ExternalServiceException` için sadece **servis adı** verilir:
+`ExternalServiceException` için:
 
 ```json
 {
   "status": 503,
-  "title": "External service unavailable",
-  "detail": "Yapay zeka servisi şu an kullanılamıyor.",
+  "title": "EXTERNAL_SERVICE_UNAVAILABLE",
+  "detail": "Servis şu anda isteği işleyemiyor; lütfen daha sonra tekrar deneyin.",
   "extensions": {
+    "code": "EXTERNAL_SERVICE_UNAVAILABLE",
     "service": "AI"
   }
 }
 ```
 
-Düşük seviye detay (stack trace, provider error code) **production'da gizli** — log'da tutulur.
+5xx'te iç bağlam (stack trace, provider error code) **production'da gizli** — log'da tutulur.
+
+### `HasStarted` koruması
+
+```csharp
+if (httpContext.Response.HasStarted)
+    return false;
+```
+
+SSE veya WebSocket akışı **zaten başlamışsa** response'a yazamayız. Exception loglanır ama HTTP'ye yansımaz.
 
 ---
 
 ## SseWriter
 
-Server-Sent Events protokolünü implement eder. Tek istemciye sürekli event akışı.
+Server-Sent Events protokolünü implement eder (`internal static`). Tek istemciye sürekli event akışı.
 
 ### SSE header'ları
 
 ```csharp
-response.Headers["Content-Type"]     = "text/event-stream";
-response.Headers["Cache-Control"]    = "no-cache, no-transform";
+response.Headers["Content-Type"]      = "text/event-stream";
+response.Headers["Cache-Control"]     = "no-cache, no-transform";
 response.Headers["X-Accel-Buffering"] = "no";   // nginx buffer'ı kapat
-response.Headers["Connection"]       = "keep-alive";
+response.Headers["Connection"]        = "keep-alive";
 ```
-
-`X-Accel-Buffering: no` reverse proxy'lerde (nginx) bufferı kapatır — event'ler anında istemciye akar.
 
 ### Event formatı
 
@@ -102,17 +92,24 @@ data: JSON_PAYLOAD\n
 \n
 ```
 
-İki newline event sonunu işaretler. Boş satır olmadan istemci event'i bitmiş saymaz.
-
 ### `WriteEventAsync`
 
 ```csharp
-public async Task WriteEventAsync(string eventType, object data, CancellationToken ct)
+public static async Task WriteEventAsync(
+    HttpResponse response,
+    string eventType,
+    object? data,
+    CancellationToken ct)
 {
-    var json = JsonSerializer.Serialize(data, _jsonOptions);
-    var bytes = Encoding.UTF8.GetBytes($"event: {eventType}\ndata: {json}\n\n");
-    await _response.Body.WriteAsync(bytes, ct);
-    await _response.Body.FlushAsync(ct);   // Buffer'a yazmayı bekleme, hemen gönder
+    if (ct.IsCancellationRequested) return;
+
+    var json = data != null ? JsonSerializer.Serialize(data, SseJsonOptions) : "{}";
+    var sb = new StringBuilder();
+    sb.Append("event: ").Append(eventType).Append('\n');
+    sb.Append("data: ").Append(json).Append("\n\n");
+
+    await response.WriteAsync(sb.ToString(), ct);
+    await response.Body.FlushAsync(ct);
 }
 ```
 
@@ -121,162 +118,165 @@ public async Task WriteEventAsync(string eventType, object data, CancellationTok
 ### JSON serialization
 
 ```csharp
-_jsonOptions = new JsonSerializerOptions
+private static readonly JsonSerializerOptions SseJsonOptions = new()
 {
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
 };
 ```
 
-`UnsafeRelaxedJsonEscaping` Türkçe karakterleri escape etmez (`ç`, `ğ`, vb.). UTF-8 native gönderim.
+`UnsafeRelaxedJsonEscaping` — Türkçe karakterleri escape etmez (`ç`, `ğ`, vb.).
 
 ### Anonymous payload helper
 
 ```csharp
-public static string? GetTextFromAnon(object obj)
+public static string GetTextFromAnon(object data)
 {
-    var prop = obj.GetType().GetProperty("text");
-    return prop?.GetValue(obj) as string;
+    var prop = data.GetType().GetProperty("text");
+    return prop?.GetValue(data) as string ?? "";
 }
 ```
 
-Anonymous type'lardan reflection ile "text" property çıkarır — endpoint kodunda DTOcum oluşturmak yerine inline anon kullanmaya izin verir.
+Reflection ile anonymous type'lardan "text" property okur.
 
 ---
 
 ## SseForwarder
 
-`SseWriter`'ın thread-safe sarmalı. Birden fazla kaynak (HITL events + bot response) aynı stream'e yazıyorsa lock gerek.
+`SseWriter`'ın thread-safe sarmalı (`public sealed`, `IDisposable`). Birden fazla kaynak (HITL events + bot response) aynı stream'e yazıyorsa lock gerek.
+
+### Constructor
 
 ```csharp
-public sealed class SseForwarder
-{
-    private readonly SseWriter _writer;
-    private readonly SemaphoreSlim _lock = new(1, 1);
-
-    public async Task WriteAsync(string eventType, object data, CancellationToken ct)
-    {
-        await _lock.WaitAsync(ct);
-        try
-        {
-            await _writer.WriteEventAsync(eventType, data, ct);
-        }
-        catch (OperationCanceledException) { /* client disconnect */ }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "SSE write failed");
-        }
-        finally
-        {
-            _lock.Release();
-        }
-    }
-}
+public SseForwarder(HttpResponse response, CancellationToken cancellationToken)
 ```
 
-### Yardımcı metodlar
+`SemaphoreSlim(1,1)` ile concurrent write'lar serialize edilir.
+
+### Metodlar
 
 | Metod | Event tipi | İçerik |
 |---|---|---|
-| `WriteSessionAsync(sessionId)` | `session` | `{ sessionId }` |
 | `WriteAsync(type, data)` | Custom | Custom |
+| `WriteSessionAsync(sessionId)` | `session` | `{ sessionId }` |
 | `WriteDoneAsync(sessionId)` | `done` | `{ sessionId }` — stream sonu |
 | `WriteErrorAsync(message)` | `error` | `{ message }` |
 
 ### Exception swallow
 
-Client disconnect olursa `OperationCanceledException` veya `IOException` fırlar. Bu **normal akış** — exception olarak yansıtılmaz, sadece debug log.
+```csharp
+catch (OperationCanceledException) { /* Client disconnected */ }
+catch (Exception) { /* Write failures are expected in SSE */ }
+```
+
+Client disconnect olursa normal akış — exception olarak yansıtılmaz.
+
+### `Dispose`
+
+```csharp
+public void Dispose()
+{
+    if (_disposed) return;
+    _disposed = true;
+    _lock.Dispose();
+}
+```
+
+`using` ile kullanılır — endpoint sona erince semaphore release edilir.
 
 ---
 
 ## WebSocketBrowserChannel
 
-`IBrowserChannel` driven port'unun WebSocket implementasyonu. Browser ↔ Application veri akışını WS frame'lerine çevirir.
+`IBrowserChannel` driven port'unun WebSocket implementasyonu (`internal sealed`). Browser ↔ Application veri akışını WS frame'lerine çevirir.
 
 ### `IBrowserChannel` arayüzü
 
 ```csharp
-public interface IBrowserChannel
-{
-    bool IsOpen { get; }
-    IAsyncEnumerable<BrowserMessage> ReceiveAsync(CancellationToken ct);
-    Task SendJsonAsync<T>(T payload, CancellationToken ct);
-    Task SendBinaryAsync(ReadOnlyMemory<byte> bytes, CancellationToken ct);
-    Task CloseAsync(string reason, CancellationToken ct);
-}
-
-public sealed record BrowserMessage(BrowserMessageKind Kind, ReadOnlyMemory<byte> Payload);
-public enum BrowserMessageKind { Binary, Text, Closed }
+bool IsOpen { get; }
+IAsyncEnumerable<BrowserMessage> ReceiveMessagesAsync(CancellationToken ct);
+Task SendJsonAsync(object payload, CancellationToken ct);
+Task SendBinaryAsync(byte[] data, CancellationToken ct);
+Task CloseAsync(string reason, CancellationToken ct);
 ```
 
-### Frame okuma (binary protocol)
+### Frame okuma
 
 ```csharp
-public async IAsyncEnumerable<BrowserMessage> ReceiveAsync([EnumeratorCancellation] CancellationToken ct)
+public async IAsyncEnumerable<BrowserMessage> ReceiveMessagesAsync(CancellationToken ct)
 {
     var buffer = new byte[16 * 1024];
     var ms = new MemoryStream();
 
-    while (_socket.State == WebSocketState.Open)
+    while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
     {
-        var result = await _socket.ReceiveAsync(buffer, ct);
-        if (result.MessageType == WebSocketMessageType.Close)
+        ms.SetLength(0);
+        WebSocketReceiveResult result;
+        do
         {
-            yield return new BrowserMessage(BrowserMessageKind.Closed, ReadOnlyMemory<byte>.Empty);
-            yield break;
+            result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                yield return new BrowserMessage(BrowserMessageKind.Closed, null);
+                yield break;
+            }
+            ms.Write(buffer, 0, result.Count);
         }
+        while (!result.EndOfMessage);
 
-        ms.Write(buffer, 0, result.Count);
-        if (result.EndOfMessage)
-        {
-            var kind = result.MessageType == WebSocketMessageType.Binary
-                ? BrowserMessageKind.Binary
-                : BrowserMessageKind.Text;
-            yield return new BrowserMessage(kind, ms.ToArray());
-            ms.SetLength(0);
-        }
+        var kind = result.MessageType == WebSocketMessageType.Binary
+            ? BrowserMessageKind.Binary
+            : BrowserMessageKind.Text;
+
+        yield return new BrowserMessage(kind, ms.ToArray());
     }
 }
 ```
 
 - 16 KB buffer her receive call'da
 - `EndOfMessage` false ise tek frame'in parçası — MemoryStream'de biriktir
-- `EndOfMessage` true → tam mesaj yield et, stream'i sıfırla
 - Close frame → `Closed` mesajı yield et, enumeration biter
 
 ### Send
 
 ```csharp
-public async Task SendJsonAsync<T>(T payload, CancellationToken ct)
+public async Task SendJsonAsync(object payload, CancellationToken ct)
 {
-    if (!IsOpen) return;
-    var json = JsonSerializer.Serialize(payload, _jsonOptions);
-    var bytes = Encoding.UTF8.GetBytes(json);
-    await _socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, ct);
+    if (_ws.State != WebSocketState.Open) return;
+    var bytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOpts);
+    await _ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
 }
 
-public async Task SendBinaryAsync(ReadOnlyMemory<byte> bytes, CancellationToken ct)
+public async Task SendBinaryAsync(byte[] data, CancellationToken ct)
 {
-    if (!IsOpen) return;
-    await _socket.SendAsync(bytes, WebSocketMessageType.Binary, endOfMessage: true, ct);
+    if (_ws.State != WebSocketState.Open) return;
+    await _ws.SendAsync(data, WebSocketMessageType.Binary, true, ct);
 }
 ```
 
-`endOfMessage: true` — tek frame'de bütün mesaj gönderilir (fragmentation yok).
+`endOfMessage: true` — tek frame'de bütün mesaj, fragmentation yok.
+
+### Close
+
+```csharp
+public async Task CloseAsync(string reason, CancellationToken ct)
+{
+    if (_ws.State != WebSocketState.Open) return;
+    try { await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, reason, ct); }
+    catch { /* best effort */ }
+}
+```
 
 ### Kullanım
 
-`RealtimeBridgeService` ve `RealtimeNativeService` (Application) bu adapter'ı kullanır:
+`RealtimeEndpoints` bu adapter'ı oluşturur; `IRealtimeBridge` veya `IRealtimeNativeBridge` (Application) bunu tüketir:
 
 ```
 Browser ──WS──→ Api/Realtime endpoint
                    ↓
                 WebSocketBrowserChannel oluştur
                    ↓
-                IRealtimeBridge.RunAsync(channel, sessionId)
-                   ├── channel.ReceiveAsync()           ← mikrofon
-                   ├── channel.SendBinaryAsync(audio)   ← asistan sesi
-                   └── channel.SendJsonAsync(event)     ← transcript, durum
+                IRealtimeBridge.RunAsync(channel, sessionId, ct)
 ```
 
 ---
@@ -288,49 +288,36 @@ YAML eval senaryolarını okur — `evaluation-scenarios.yaml`.
 ```csharp
 public static class ScenarioLoader
 {
-    private static readonly IDeserializer _deserializer = new DeserializerBuilder()
-        .WithNamingConvention(UnderscoredNamingConvention.Instance)
-        .IgnoreUnmatchedProperties()
-        .Build();
-
-    public static ScenarioFile Load(string path)
+    public static ScenarioFile LoadScenarios(string yamlPath)
     {
-        var yaml = File.ReadAllText(path);
-        return _deserializer.Deserialize<ScenarioFile>(yaml);
+        var yaml = File.ReadAllText(yamlPath);
+        var deserializer = new DeserializerBuilder()
+            .WithNamingConvention(UnderscoredNamingConvention.Instance)
+            .IgnoreUnmatchedProperties()
+            .Build();
+        return deserializer.Deserialize<ScenarioFile>(yaml);
     }
 }
 ```
 
 ### Naming convention
 
-YAML'da `snake_case`, C#'ta `PascalCase`:
+YAML'da `snake_case` → C#'ta `PascalCase` (UnderscoredNamingConvention):
 
 ```yaml
 scenarios:
   - id: order-inquiry-basic
-    user_query: "5 nerede"
+    query: "5 nerede"
     expected_intent: OrderInquiry
-    expected_agents: [PlanningAgent, OrderAgent, ResponseAgent]
-    known_failure_modes: []
-```
-
-```csharp
-public sealed class Scenario
-{
-    public string Id { get; set; }
-    public string UserQuery { get; set; }        // snake → Pascal
-    public string ExpectedIntent { get; set; }
-    public List<string> ExpectedAgents { get; set; }
-    public List<string> KnownFailureModes { get; set; }
-}
+    expected_agents: [PlanningAgent, OrderAgent]
 ```
 
 `IgnoreUnmatchedProperties` — YAML'da fazla alan varsa hata fırlatmaz (forward compat).
 
 ### Kullanan endpoint
 
-`/eval/scenarios` — senaryo listesi  
-`/eval/run` — tüm/N senaryo çalıştır  
+`/eval/scenarios` — senaryo listesi
+`/eval/run` — tüm/N senaryo çalıştır
 `/eval/run/{id}` — tek senaryo
 
 Detay: [Endpoints-Observability.md](Endpoints-Observability.md).

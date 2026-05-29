@@ -4,323 +4,428 @@
 
 API endpoint'lerini wrap eden client sınıfları. Sayfalar (Razor) bunları `@inject` ile alır, doğrudan `HttpClient` kullanmaz.
 
-| Service | Endpoint prefix | Sayfa |
+| Service | Endpoint prefix | Kullanım |
 |---|---|---|
-| `AdminApiService` | `/approvals`, `/escalations`, `/chat-sessions`, `/improvements`, `/agents` | Admin |
-| `ChatApiService` | `/chat`, `/sessions` | Chat |
-| `AnalyticsApiService` | `/analytics` | Admin (Analytics tab) |
-| `TracesApiService` | `/traces`, `/chat-sessions/.../history` | Traces, Replay |
-| `SlaApiService` | `/sla` | Sla |
+| `AdminApiService` | `/approvals`, `/escalations`, `/chat-sessions`, `/improvements`, `/agents`, `/sessions` | Admin panel |
+| `AnalyticsApiService` | `/analytics` | Admin panel (Analytics tab) |
+| `ChatApiService` | `/chat`, `/sessions` | Chat sayfası |
+| `TracesApiService` | `/traces`, `/chat-sessions/.../history`, `/approvals`, `/escalations` | Traces, Replay |
+| `SlaApiService` | `/sla` | SLA sayfası |
 | `WorkflowApiService` | `/workflows` | WorkflowDesigner |
 
-Hepsi `AuthorizedHttpClientHandler` ile JWT token otomatik inject eder.
-
----
-
-## Genel pattern
-
-```csharp
-public sealed class SomeApiService
-{
-    private readonly HttpClient _http;
-    private readonly ILogger<SomeApiService> _logger;
-
-    public SomeApiService(HttpClient http, ILogger<SomeApiService> logger)
-    {
-        _http = http;
-        _logger = logger;
-    }
-
-    public async Task<TResponse?> SomeMethodAsync(...)
-    {
-        try
-        {
-            var resp = await _http.GetFromJsonAsync<TResponse>("/some/endpoint");
-            return resp;
-        }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogError(ex, "API call failed");
-            throw;
-        }
-    }
-}
-```
-
-**Konvansiyonlar:**
-- `HttpClient` constructor injection (DI'dan)
-- JSON serialization → `System.Net.Http.Json` extensions
-- Exception loglanır, caller'a yükselir
-- Cancellation token ekstra parametre
+`AuthorizedHttpClientHandler` JWT token otomatik inject eder.
+`AuthService` hariç — refresh döngüsünü önlemek için ham `HttpClient` kullanır.
 
 ---
 
 ## AdminApiService
 
-Admin paneli'nin tüm endpoint çağrıları. **Role-aware prefix** alır:
+Admin panelinin tüm endpoint çağrıları. **Role-aware prefix** — `AppAuthStateProvider`'dan role okuyarak `/agent` veya `""` prefix seçer:
 
 ```csharp
-public sealed class AdminApiService
+private async Task<string> PrefixAsync()
 {
-    // Approvals
-    public async Task<List<ApprovalRequest>> GetPendingApprovalsAsync(string prefix)
-        => await _http.GetFromJsonAsync<List<ApprovalRequest>>($"{prefix}/approvals/pending");
-
-    public async Task ApproveAsync(string prefix, string id, string? reason)
-        => await _http.PostAsJsonAsync($"{prefix}/approvals/{id}/approve", new { reason });
-
-    public async Task RejectAsync(string prefix, string id, string? reason)
-        => await _http.PostAsJsonAsync($"{prefix}/approvals/{id}/reject", new { reason });
-
-    // Escalations
-    public async Task<List<EscalationRequest>> GetOpenEscalationsAsync(string prefix);
-    public async Task<List<EscalationRequest>> GetRecentEscalationsAsync(string prefix, int count = 50);
-    public async Task AcknowledgeEscalationAsync(string prefix, string id, string? agentId, string? humanAgent);
-    public async Task ResolveEscalationAsync(string prefix, string id, string? reason);
-    public async Task DismissEscalationAsync(string prefix, string id);
-    public async Task ReplanEscalationAsync(string prefix, string id, string? note, string? requestedBy);
-
-    // Chat sessions
-    public async Task<List<ActiveChatSession>> GetActiveChatsAsync(string prefix);
-    public async Task<List<ChatHistoryMessage>> GetSessionHistoryAsync(string prefix, string sessionId, int take = 50);
-    public async Task<SentimentInfo> GetSentimentAsync(string prefix, string sessionId);
-    public async Task TakeoverAsync(string prefix, string sessionId, string humanAgent);
-    public async Task ReleaseAsync(string prefix, string sessionId);
-    public async Task SendChatMessageAsync(string prefix, string sessionId, string text, string humanAgent);
-    public async Task ReplanSessionAsync(string prefix, string sessionId, string? note, string? requestedBy);
-
-    // Agents
-    public async Task<List<AgentInfo>> GetAgentsAsync();
-
-    // Improvements (lessons)
-    public async Task<List<LessonProposal>> GetProposedLessonsAsync();
-    public async Task<List<LessonProposal>> GetApprovedLessonsAsync();
-    public async Task MineLessonsAsync();
-    public async Task ApproveLessonAsync(string id, string? reason);
-    public async Task RejectLessonAsync(string id, string? reason);
+    var state = await authState.GetAuthenticationStateAsync();
+    var role = state.User.FindFirst(ClaimTypes.Role)?.Value;
+    return role == "Agent" ? "/agent" : string.Empty;
 }
 ```
 
-### Prefix kullanımı
+### Approvals
 
 ```csharp
-// Admin role'lü kullanıcı
-var prefix = "";
-var pending = await Admin.GetPendingApprovalsAsync(prefix);
-// → GET /approvals/pending
+Task<List<ApprovalRequest>> GetPendingApprovalsAsync()
+    // → GET {prefix}/approvals/pending
 
-// Agent role'lü kullanıcı
-var prefix = "/agent";
-var pending = await Admin.GetPendingApprovalsAsync(prefix);
-// → GET /agent/approvals/pending
+Task<List<ApprovalRequest>> GetRecentApprovalsAsync(int count = 50)
+    // → GET {prefix}/approvals/recent?count={count}
+
+Task ApproveAsync(string id, string? reason, string decidedBy = "admin")
+    // → POST {prefix}/approvals/{id}/approve
+
+Task RejectAsync(string id, string? reason, string decidedBy = "admin")
+    // → POST {prefix}/approvals/{id}/reject
 ```
 
-Server farklı endpoint set'leri sunar:
-- `/approvals/*` (admin) — tüm pending'leri görür
-- `/agent/approvals/*` — sadece kendine atananları görür
-
----
-
-## ChatApiService
-
-Müşteri chat akışı + rating + session metadata.
+### Escalations
 
 ```csharp
-public sealed class ChatApiService
-{
-    // Rating (anonim endpoint)
-    public async Task SubmitRatingAsync(string sessionId, int stars, string? feedback)
-        => await _http.PostAsJsonAsync($"/sessions/{sessionId}/rating", new { stars, feedback });
+Task<List<EscalationRequest>> GetOpenEscalationsAsync()
+    // → GET {prefix}/escalations/open
 
-    public async Task<ConversationRating?> GetRatingAsync(string sessionId)
-        => await _http.GetFromJsonAsync<ConversationRating>($"/sessions/{sessionId}/rating");
+Task<List<EscalationRequest>> GetRecentEscalationsAsync(int count = 50)
+    // → GET {prefix}/escalations/recent?count={count}
 
-    // Session metadata
-    public async Task<List<SessionSummary>> GetSessionsAsync()
-        => await _http.GetFromJsonAsync<List<SessionSummary>>("/sessions/");
+Task AcknowledgeAsync(string id, string assignedTo)
+    // → POST {prefix}/escalations/{id}/acknowledge
 
-    public async Task<List<ConversationMessage>> GetSessionMessagesAsync(string sessionId)
-        => await _http.GetFromJsonAsync<List<ConversationMessage>>($"/sessions/{sessionId}/messages");
-}
+Task ResolveEscalationAsync(string id, string resolution, string assignedTo = "admin")
+    // → POST {prefix}/escalations/{id}/resolve
+
+Task DismissAsync(string id, string resolution)
+    // → POST {prefix}/escalations/{id}/dismiss
+
+Task ReplanEscalationAsync(string id, string? note, string requestedBy = "admin")
+    // → POST {prefix}/escalations/{id}/replan
 ```
 
-`/chat/stream` SSE çağrısı **service'te değil** — JavaScript'te (`chat-bridge.js`). Service sadece JSON-based endpoint'ler.
+### Chat Sessions
+
+```csharp
+Task<List<ActiveChatSession>> GetActiveChatsAsync()
+    // → GET {prefix}/chat-sessions/active
+
+Task<List<ChatHistoryMessage>> GetChatHistoryAsync(string sessionId, int take = 200)
+    // → GET {prefix}/chat-sessions/{sessionId}/history?take={take}
+
+Task TakeoverAsync(string sessionId, string humanAgent)
+    // → POST {prefix}/chat-sessions/{sessionId}/takeover
+
+Task ReleaseAsync(string sessionId)
+    // → POST {prefix}/chat-sessions/{sessionId}/release
+
+Task SendChatMessageAsync(string sessionId, string text)
+    // → POST {prefix}/chat-sessions/{sessionId}/messages
+
+Task ReplanChatAsync(string sessionId, string? note = null, string requestedBy = "admin")
+    // → POST {prefix}/chat-sessions/{sessionId}/replan
+
+Task<ChatSentiment?> GetSentimentAsync(string sessionId)
+    // → GET {prefix}/chat-sessions/{sessionId}/sentiment
+```
+
+### Agents
+
+```csharp
+Task<List<AgentInfo>> GetAgentsAsync()
+    // → GET /agents (merged list)
+```
+
+`AgentListResponse(int Count, List<AgentInfo> Items)` ile deserialize edilir.
+
+### Sessions
+
+```csharp
+Task<List<SessionSummary>> GetSessionsAsync()
+    // → GET /sessions/
+```
+
+### Improvements (Lessons)
+
+```csharp
+Task<List<LessonProposal>> GetLessonsAsync(string status)
+    // → GET /improvements?status={status}
+
+Task<(int Candidates, int Proposed, string? Error)> MineImprovementsAsync()
+    // → POST /improvements/mine
+
+Task ApproveLessonAsync(string id, string? reason = null)
+    // → POST /improvements/{id}/approve
+
+Task RejectLessonAsync(string id, string? reason = null)
+    // → POST /improvements/{id}/reject
+```
+
+`MineImprovementsAsync` yanıt JSON'undan `candidates`, `proposedLessons`, `error` field'larını okur.
+
+### Yardımcı tip
+
+```csharp
+public sealed record ChatSentiment(string? Sentiment, double Score);
+```
 
 ---
 
 ## AnalyticsApiService
 
 ```csharp
-public sealed class AnalyticsApiService
-{
-    public async Task<AnalyticsDashboard> GetDashboardAsync()
-        => await _http.GetFromJsonAsync<AnalyticsDashboard>("/analytics/dashboard");
-
-    public async Task<SessionAnalytics?> GetSessionAnalyticsAsync(string sessionId)
-        => await _http.GetFromJsonAsync<SessionAnalytics>($"/analytics/session/{sessionId}");
-
-    public async Task<List<ConversationRating>> GetRecentRatingsAsync(int count = 20)
-        => await _http.GetFromJsonAsync<List<ConversationRating>>($"/analytics/ratings/recent?count={count}");
-}
+public sealed class AnalyticsApiService(HttpClient http)
 ```
 
-Admin paneli "Analytics" tab'ı bu service'i kullanır.
+```csharp
+Task<AnalyticsDashboard?> GetDashboardAsync()
+    // → GET /analytics/dashboard
+
+Task<SessionAnalyticsModel?> GetSessionAnalyticsAsync(string sessionId)
+    // → GET /analytics/session/{sessionId}
+```
+
+Admin paneli "Analytics" tab'ı bu service'i kullanır. Hata durumunda `null` döner.
+
+---
+
+## ChatApiService
+
+```csharp
+public sealed class ChatApiService(HttpClient http)
+```
+
+```csharp
+Task<RatingResponse?> SubmitRatingAsync(string sessionId, int stars, string? feedback)
+    // → POST /sessions/{sessionId}/rating
+
+Task<RatingResponse?> GetRatingAsync(string sessionId)
+    // → GET /sessions/{sessionId}/rating
+
+Task<List<SessionInfo>> GetSessionsAsync()
+    // → GET /sessions/
+
+Task<List<SessionMessage>> GetSessionMessagesAsync(string sessionId)
+    // → GET /sessions/{sessionId}/messages
+```
+
+### Yardımcı tipler
+
+```csharp
+public sealed record RatingResponse(int Stars, string? Feedback);
+public sealed record SessionInfo(string SessionId, DateTimeOffset LastActivity, int MessageCount);
+public sealed record SessionMessage(string Role, string Content, DateTimeOffset Timestamp);
+```
+
+`/chat/stream` SSE çağrısı **service'te değil** — JavaScript'te (`chat-bridge.js`). Service sadece JSON-based endpoint'ler.
 
 ---
 
 ## TracesApiService
 
 ```csharp
-public sealed class TracesApiService
-{
-    public async Task<List<TraceSession>> GetSessionsAsync()
-        => await _http.GetFromJsonAsync<List<TraceSession>>("/traces/sessions");
-
-    public async Task<TraceDetail?> GetTraceAsync(string traceId)
-        => await _http.GetFromJsonAsync<TraceDetail>($"/traces/{traceId}");
-
-    public async Task<List<TraceDetail>> GetBySessionAsync(string sessionId)
-        => await _http.GetFromJsonAsync<List<TraceDetail>>($"/traces/by-session/{sessionId}");
-
-    public async Task<List<TraceDetail>> GetRecentAsync(int count = 20)
-        => await _http.GetFromJsonAsync<List<TraceDetail>>($"/traces/recent?count={count}");
-
-    // Bridge history — escalation transcript modal için
-    public async Task<List<ChatHistoryMessage>> GetBridgeHistoryAsync(string sessionId, int take = 50);
-
-    // Session detay — admin paneli için
-    public async Task<List<ApprovalRequest>> GetApprovalsBySessionAsync(string sessionId);
-    public async Task<List<EscalationRequest>> GetEscalationsBySessionAsync(string sessionId);
-}
+public sealed class TracesApiService(HttpClient http)
 ```
 
-`TraceDetail` modeli ([Models.md](Models.md)) trace'in tam içeriğini taşır — reasoning, planning, agent visits, tool calls.
+Trace dashboard API servisi. `/traces/sessions` ve `/traces/{traceId}` endpoint'lerinin Blazor karşılığı.
+
+### Lokal tipler (dosya içinde)
+
+```csharp
+public sealed record TraceSession(
+    string SessionId, string? Title, int TraceCount, int MessageCount, DateTimeOffset LastTraceAt);
+
+public sealed record SessionChatMessage(string Role, string Text);
+
+public sealed record BridgeChatMessage(
+    string Sender, string Text, string? HumanAgent, DateTime Timestamp);
+```
+
+### Metodlar
+
+```csharp
+Task<List<TraceSession>> GetSessionsAsync()
+    // → GET /traces/sessions
+
+Task<TraceDetail?> GetTraceAsync(string traceId)
+    // → GET /traces/{traceId} (URI encoded)
+
+Task<List<TraceDetail>> GetBySessionAsync(string sessionId)
+    // → GET /traces/by-session/{sessionId}
+
+Task<List<TraceDetail>> GetRecentAsync(int count = 50)
+    // → GET /traces/recent?count={count}
+
+Task<List<BridgeChatMessage>> GetBridgeHistoryAsync(string sessionId, int take = 100)
+    // → GET /chat-sessions/{sessionId}/history?take={take}
+
+Task<List<ApprovalRequest>> GetApprovalsBySessionAsync(string sessionId)
+    // → GET /approvals/recent?count=200 + filter by SessionId
+
+Task<List<EscalationRequest>> GetEscalationsBySessionAsync(string sessionId)
+    // → GET /escalations/recent?count=200 + filter by SessionId
+```
+
+`ApprovalRequest` ve `EscalationRequest` için `AdminModels.cs` tiplerini kullanır.
 
 ---
 
 ## SlaApiService
 
 ```csharp
-public sealed class SlaApiService
-{
-    public async Task<SlaStatus> GetStatusAsync()
-        => await _http.GetFromJsonAsync<SlaStatus>("/sla/status");
-
-    public async Task<List<SlaEvent>> GetEventsAsync(int count = 50)
-        => await _http.GetFromJsonAsync<List<SlaEvent>>($"/sla/events?count={count}");
-}
+public sealed class SlaApiService(HttpClient http)
 ```
 
-`Sla.razor` 5 saniyede bir polling — bu service'i kullanır.
+```csharp
+Task<SlaStatus?> GetStatusAsync()
+    // → GET /sla/status
+
+Task<List<SlaEvent>> GetEventsAsync(int count = 100)
+    // → GET /sla/events?count={count}
+```
+
+`SlaEventsResponse(int TotalCount, List<SlaEvent> Items)` ile deserialize edilir, `Items` döndürülür. Hata durumunda `null`/`[]` döner.
 
 ---
 
 ## WorkflowApiService
 
 ```csharp
-public sealed class WorkflowApiService
-{
-    public async Task<List<WorkflowSummary>> GetListAsync()
-    {
-        var resp = await _http.GetFromJsonAsync<WorkflowListResponse>("/workflows");
-        return resp?.Items ?? new();
-    }
+public sealed class WorkflowApiService(HttpClient http)
+```
 
-    // GetRawAsync — JSON'u pretty-print formatla
-    public async Task<string> GetRawAsync(string id)
-    {
-        var json = await _http.GetStringAsync($"/workflows/{id}");
-        return PrettyPrint(json);
-    }
+```csharp
+Task<List<WorkflowListEntry>> GetListAsync()
+    // → GET /workflows (WorkflowListResponse → Items)
 
-    public async Task SaveAsync(string? id, string rawJson)
-    {
-        var content = new StringContent(rawJson, Encoding.UTF8, "application/json");
-        if (string.IsNullOrEmpty(id))
-            await _http.PostAsync("/workflows", content);
-        else
-            await _http.PutAsync($"/workflows/{id}", content);
-    }
+Task<string?> GetRawAsync(string id)
+    // → GET /workflows/{id} → JsonElement pretty-print
 
-    public async Task DeleteAsync(string id)
-        => await _http.DeleteAsync($"/workflows/{id}");
+Task<(bool Ok, string? Error, string? SavedId)> SaveAsync(string? id, string rawJson)
+    // id=null → POST /workflows
+    // id=... → PUT /workflows/{id}
 
-    public async Task<WorkflowExecutionResult> TestAsync(string id, string input, Dictionary<string, string>? variables)
-    {
-        var resp = await _http.PostAsJsonAsync($"/workflows/{id}/test", new { input, variables });
-        return await resp.Content.ReadFromJsonAsync<WorkflowExecutionResult>() ?? throw new Exception("Boş yanıt");
-    }
+Task<(bool Ok, string? Error)> DeleteAsync(string id)
+    // → DELETE /workflows/{id}
 
-    private static string PrettyPrint(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        return JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
-    }
-}
+Task<string> TestAsync(string id, string input)
+    // → POST /workflows/{id}/test
+    //   body: { input }
+    //   Response: JsonElement → pretty-print string
 ```
 
 ### Neden raw JSON?
 
-WorkflowDesigner JSON editor kullanıyor — kullanıcı yazdığı stringi olduğu gibi POST/PUT etmek istiyoruz. Strongly-typed DTO'ya parse etmek:
-- Schema değişikliklerine karşı kırılgan
-- Editor'da ek bilgileri (yorum, formatlama) kaybeder
-- "Server side ne kabul ederse al" pattern'i daha esnek
+WorkflowDesigner JSON editor kullanıyor. `SaveAsync` raw string'i `JsonSerializer.Deserialize<JsonElement>` ile parse eder, `JsonContent.Create(body)` ile gönderir. Parse hatası → `(false, "JSON hatası: ...", null)` döner.
 
-PrettyPrint olarak okur — kullanıcı düzenler — raw string olarak yazar.
+### Pretty-print ayarı
+
+```csharp
+private static readonly JsonSerializerOptions _pretty = new()
+{
+    WriteIndented = true,
+    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+};
+```
+
+`GetRawAsync` ve `TestAsync` bu ayarla format eder.
 
 ---
 
-## Exception handling pattern
+## AuthService
 
-Service'ler exception fırlatır — sayfa katmanı yakalar:
+`Services/AuthService.cs` — Backend `/auth` endpoint'leriyle iletişim.
 
 ```csharp
-// Razor sayfada
-private async Task LoadAsync()
+public sealed class AuthService(HttpClient http, AuthTokenStore store)
+```
+
+```csharp
+Task<AuthTokenData> LoginAsync(string username, string password)
+    // → POST /auth/login
+    // Başarılı: AuthTokenStore.WriteAsync(data)
+    // Başarısız: InvalidOperationException fırlatır
+
+Task LogoutAsync()
+    // → POST /auth/logout (refresh token ile)
+    // AuthTokenStore.WriteAsync(null)
+
+Task<AuthTokenData?> TryRefreshAsync()
+    // → POST /auth/refresh
+    // Parallel çağrıları birleştirir (_refreshTask)
+    // Başarısız: store null, null döner
+```
+
+**Refresh parallel coalescing:**
+
+```csharp
+private Task? _refreshTask;
+
+public async Task<AuthTokenData?> TryRefreshAsync()
 {
-    try
+    var current = await store.ReadAsync();
+    if (current?.RefreshToken is null) return null;
+
+    if (_refreshTask is not null)
     {
-        _data = await Admin.GetPendingApprovalsAsync(_apiPrefix);
+        await _refreshTask;
+        return await store.ReadAsync();
     }
-    catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
-    {
-        // Token expired veya geçersiz
-        var refreshed = await Auth.TryRefreshAsync();
-        if (refreshed != null) await LoadAsync();   // Retry
-        else Nav.NavigateTo("/login");
-    }
-    catch (Exception ex)
-    {
-        _error = ex.Message;
-    }
-    finally
-    {
-        _loading = false;
-    }
+
+    var tcs = new TaskCompletionSource();
+    _refreshTask = tcs.Task;
+    // ... DoRefreshAsync
+    finally { _refreshTask = null; tcs.SetResult(); }
 }
 ```
 
-Bu pattern her sayfada tekrarlanır. Centralized 401 handling için custom DelegatingHandler eklenebilir ama şimdilik per-page tercih edildi (görünür ve esnek).
+Birden fazla 401 aynı anda gelirse tek refresh request gönderilir.
 
 ---
 
-## Cancellation token kullanımı
+## AuthTokenStore
 
-Çoğu service method **CancellationToken parametresi almıyor** — Blazor WASM tek-thread olduğu için iptal pratik değil. Sayfa unload olunca:
-- HttpClient otomatik dispose olur
-- Pending request'ler implicit cancel olur
-
-İhtiyaç olursa eklenir:
+`Services/AuthTokenStore.cs` — localStorage token yönetimi.
 
 ```csharp
-public async Task<List<X>> GetAsync(CancellationToken ct = default)
-    => await _http.GetFromJsonAsync<List<X>>("/endpoint", ct);
+public sealed class AuthTokenStore(IJSRuntime js)
 ```
+
+| Metod | İşlem |
+|---|---|
+| `ReadAsync()` | `localStorage.getItem("cs.auth")` → `AuthTokenData?` |
+| `WriteAsync(data)` | data≠null → `localStorage.setItem`; null → `localStorage.removeItem` |
+| `GetAccessTokenAsync()` | `ReadAsync()?.AccessToken` |
+
+```csharp
+public sealed record AuthTokenData(
+    string AccessToken, string RefreshToken, string Username, string Role);
+```
+
+JSON camelCase policy ile serialize/deserialize edilir.
+
+---
+
+## AppAuthStateProvider
+
+`Services/AppAuthStateProvider.cs` — Blazor auth state.
+
+```csharp
+public sealed class AppAuthStateProvider(AuthTokenStore store) : AuthenticationStateProvider
+```
+
+```csharp
+public override async Task<AuthenticationState> GetAuthenticationStateAsync()
+{
+    var token = await store.ReadAsync();
+    if (token is null || string.IsNullOrWhiteSpace(token.AccessToken))
+        return Anonymous;
+
+    var identity = new ClaimsIdentity(
+    [
+        new Claim(ClaimTypes.Name, token.Username),
+        new Claim(ClaimTypes.Role, token.Role)
+    ], "jwt");
+
+    return new AuthenticationState(new ClaimsPrincipal(identity));
+}
+
+public void NotifyStateChanged()
+    => NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
+```
+
+JWT decode yapmaz — login response'taki `Username`/`Role` field'larını kullanır. `NotifyStateChanged` → `CascadingAuthenticationState` tüm component'lere yeni state yayar.
+
+---
+
+## AuthorizedHttpClientHandler
+
+`Services/AuthorizedHttpClientHandler.cs` — DelegatingHandler.
+
+```csharp
+public sealed class AuthorizedHttpClientHandler(
+    AuthTokenStore store, AuthService authService,
+    NavigationManager nav, AppAuthStateProvider authState) : DelegatingHandler
+```
+
+**Akış:**
+
+1. `/auth/*` endpoint'lerine token ekleme (refresh döngüsünü önler)
+2. `store.GetAccessTokenAsync()` → `Authorization: Bearer <token>`
+3. Response 401 değilse döner
+4. 401 → `authService.TryRefreshAsync()`
+5. Refresh başarısızsa `authState.NotifyStateChanged()` + `/login?return=...` yönlendirme
+6. Refresh başarılıysa request clone'lanır, yeni token ile tekrar gönderilir
 
 ---
 
 ## Bağlantılar
 
-- [Auth.md](Auth.md) — AuthorizedHttpClientHandler nasıl token ekler
+- [Auth.md](Auth.md) — auth bileşenleri detayı
 - [Api projesi](../api/README.md) — server tarafı endpoint dokümantasyonu
 - [Models.md](Models.md) — service'lerin döndürdüğü tipler

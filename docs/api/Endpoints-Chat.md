@@ -1,15 +1,13 @@
 # Endpoints — Chat & Realtime & Session
 
 **Dosyalar:**
-- `Endpoints/ChatEndpoints.cs` — Text chat (anonymous)
+- `Endpoints/ChatEndpoints.cs` — Text chat (rate-limited)
 - `Endpoints/RealtimeEndpoints.cs` — Voice (WebSocket)
-- `Endpoints/SessionEndpoints.cs` — Session history (debug)
+- `Endpoints/SessionEndpoints.cs` — Session history (sidebar/debug)
 
 ---
 
 ## ChatEndpoints
-
-Public chat — JWT yok, sadece IP-based rate limit.
 
 | Route | Method | Auth | Rate limit | Açıklama |
 |---|---|---|---|---|
@@ -25,38 +23,29 @@ Public chat — JWT yok, sadece IP-based rate limit.
 POST /chat/
 Content-Type: application/json
 
-{ "sessionId": "sess-123", "message": "5 nerede" }
+{ "sessionId": "sess-123", "query": "5 nerede" }
 ```
 
 **Akış:**
 
 ```
-1. IInputGuard.Inspect(message)
-   - 7 kural (length, injection, ID enumeration, vb.)
-   - Reddet → 400 Bad Request
-2. IChatPort.HandleAsync(sessionId, message)
+1. IInputGuard.Inspect(query)
+   - Kural setleri (length, injection, ID enumeration, vb.)
+   - Verdict=Reject → 400 Bad Request (error, message, flags)
+   - Flags varsa → LogWarning + devam
+2. IChatPort.HandleAsync(safeRequest)
    - WorkflowExecutor dene (regex match)
    - Eşleşme yoksa → Reasoning + AgentTeam pipeline
 3. Response döner
-```
-
-**200 Response:**
-
-```json
-{
-  "sessionId": "sess-123",
-  "reply": "Sipariş 5 'Kargoda' durumunda...",
-  "traceId": "trace-abc"
-}
 ```
 
 **400 Response (InputGuard reject):**
 
 ```json
 {
-  "status": 400,
-  "title": "Input rejected",
-  "detail": "Mesaj çok kısa veya geçersiz karakterler içeriyor"
+  "error": "input_blocked",
+  "message": "Mesaj kabul edilemiyor.",
+  "flags": ["injection_pattern"]
 }
 ```
 
@@ -71,7 +60,7 @@ POST /chat/stream
 Content-Type: application/json
 Accept: text/event-stream
 
-{ "sessionId": "sess-123", "message": "5 nerede" }
+{ "sessionId": "sess-123", "query": "5 nerede" }
 ```
 
 **SSE event sırası (örnek):**
@@ -96,10 +85,7 @@ event: toolResult
 data: { "success": true, "data": { "status": "Kargoda" } }
 
 event: chunk
-data: { "text": "Sipariş 5 " }
-
-event: chunk
-data: { "text": "kargoda durumda..." }
+data: { "text": "Sipariş 5 kargoda durumda..." }
 
 event: done
 data: { "sessionId": "sess-123" }
@@ -122,28 +108,29 @@ event: chunk
 data: { "text": "Siparişiniz oluşturuldu..." }
 ```
 
-Veya escalation:
+HITL subscription, session event'inden session ID alındıktan sonra `IHitlEventPort.Subscribe(resolvedSessionId, callback)` ile kurulur. Akış bitince subscription dispose edilir.
+
+InputGuard reject ederse:
 
 ```
-event: escalationCreated
-data: { "escalationId": "esc-yyy", "reason": "Bot çözemiyor" }
+event: session
+data: { "sessionId": "unknown" }
 
-event: humanJoined
-data: { "humanAgent": "Ali", "enteredAt": "..." }
+event: response_complete
+data: { "content": "Mesaj kabul edilemedi.", "blocked": true, "flags": ["..."] }
 ```
 
 ### Disconnect handling
 
 Client kapatırsa `HttpContext.RequestAborted` cancel olur — endpoint cleanup yapar:
-- LLM çağrısı iptal edilir (downstream cancellation)
-- DB write'lar tamamlanır
-- Orphan escalation dismiss edilir
+- HITL subscription dispose edilir
+- `sse.WriteDoneAsync(resolvedSessionId)` çağrılır
 
 ---
 
 ### `GET /chat/events/{sessionId}`
 
-**Persistent SSE** — bir kez bağlan, oturum boyu açık kal. ChatEventOrchestrator orkestre eder.
+**Persistent SSE** — bir kez bağlan, oturum boyu açık kal. `ChatEventOrchestrator` orkestre eder.
 
 ```http
 GET /chat/events/sess-123?access_token=eyJ...
@@ -152,7 +139,7 @@ Accept: text/event-stream
 
 JWT query string ile (EventSource header gönderemez).
 
-**Event tipleri:** `session`, `humanJoined`, `humanLeft`, `handoffPending`, `handoffCleared`, `botTyping`, `humanMessage`, `done`.
+**Event tipleri:** `session`, `human_joined`, `handoff_pending`, `bot_typing`, `human_message`, `done`.
 
 Detay: [Services.md](Services.md) (ChatEventOrchestrator).
 
@@ -167,18 +154,18 @@ WebSocket — sesli sohbet.
 | `/chat/realtime/{sessionId?}` | WS | Anonymous | Bridge — agent pipeline + TTS |
 | `/chat/realtime-native/{sessionId?}` | WS | Anonymous | Native — OpenAI direkt yanıt |
 
+WebSocket olmayan isteğe 400 döner. Her iki route da `WebSocketBrowserChannel` oluşturur ve ilgili bridge servisine delege eder.
+
 ### Bağlantı
 
 ```javascript
 const ws = new WebSocket('wss://api.example.com/chat/realtime/sess-123');
 ```
 
-Server WS upgrade'i kabul eder, `WebSocketBrowserChannel` oluşturur, ilgili bridge servisine teslim eder.
-
 ### Bridge mode (`/chat/realtime/`)
 
 ```
-Browser ──audio─→ Api ──→ RealtimeBridgeService (Application)
+Browser ──audio─→ Api ──→ IRealtimeBridge.RunAsync (Application)
                               ↓
                         OpenAI Realtime (STT only)
                               ↓ transcript
@@ -189,36 +176,29 @@ Browser ──audio─→ Api ──→ RealtimeBridgeService (Application)
                         Browser ←─audio──
 ```
 
-Avantaj: Full HITL pipeline (approval, escalation çalışır).  
+Avantaj: Full HITL pipeline (approval, escalation çalışır).
 Dezavantaj: Latency yüksek (~1-2 saniye round-trip).
 
 ### Native mode (`/chat/realtime-native/`)
 
 ```
-Browser ──audio─→ Api ──→ RealtimeNativeService
+Browser ──audio─→ Api ──→ IRealtimeNativeBridge.RunAsync
                               ↓
                         OpenAI Realtime (STT + LLM + TTS, tool dispatch)
                               ↓ audio
                         Browser ←─audio──
 ```
 
-Avantaj: Düşük latency (~500ms).  
+Avantaj: Düşük latency (~500ms).
 Dezavantaj: Sadece read-only tool'lar (sipariş oluşturma, şikayet → text chat'e yönlendir).
 
 ### SessionId opsiyonel
 
-`sessionId` URL'de yoksa server yeni session ID oluşturur. Browser ilk binding event'inden öğrenir:
-
-```json
-{ "type": "session.created", "sessionId": "sess-abc" }
-```
+`sessionId` URL'de yoksa server `Guid.NewGuid().ToString()` ile oluşturur.
 
 ### Disconnect
 
-Browser veya server kapatırsa:
-- `WebSocketBrowserChannel.IsOpen = false`
-- `IRealtimeVoiceTransport.CloseAsync` (OpenAI WS kapat)
-- Bridge servisi cleanup yapar
+Browser veya server kapatırsa `CloseGracefullyAsync` çalışır — `WebSocketCloseStatus.NormalClosure` gönderilir.
 
 ---
 
@@ -230,7 +210,7 @@ Sidebar/debug — session geçmişi ve state göster.
 |---|---|---|---|
 | `/sessions/` | GET | Anonymous | Tüm session'lar (metadata) |
 | `/sessions/{sessionId}/messages` | GET | Anonymous | Mesaj history |
-| `/sessions/{sessionId}/state` | GET | Anonymous | Session state (intent, phase, sentiment) |
+| `/sessions/{sessionId}/state` | GET | Anonymous | Session state (createdAt, lastActivity, state) |
 
 ---
 
@@ -240,21 +220,7 @@ Sidebar/debug — session geçmişi ve state göster.
 GET /sessions/
 ```
 
-**200 Response:**
-
-```json
-[
-  {
-    "sessionId": "sess-123",
-    "createdAt": "2026-05-24T10:00:00Z",
-    "lastActivity": "2026-05-24T10:15:00Z",
-    "messageCount": 12
-  },
-  // ...
-]
-```
-
-Sidebar UI için — son aktivite sırasına göre liste.
+`ISessionPort.GetAllSessions()` döner.
 
 ---
 
@@ -269,16 +235,13 @@ GET /sessions/sess-123/messages
 ```json
 [
   { "role": "user", "text": "Merhaba" },
-  { "role": "bot", "text": "Merhaba, size nasıl yardımcı olabilirim?" },
-  { "role": "user", "text": "5 nerede" },
-  // ...
+  { "role": "bot", "text": "Merhaba, size nasıl yardımcı olabilirim?" }
 ]
 ```
 
 `ConversationMessage.Role` mapping:
-- `user` → `"user"`
-- `assistant` → `"bot"`
-- `system` → atlanır (kullanıcıya gösterilmez)
+- `User` → `"user"`
+- diğer → `"bot"`
 
 ---
 
@@ -295,38 +258,11 @@ GET /sessions/sess-123/state
   "sessionId": "sess-123",
   "createdAt": "2026-05-24T10:00:00Z",
   "lastActivity": "2026-05-24T10:15:00Z",
-  "state": {
-    "customerId": "1990",
-    "currentIntent": "OrderInquiry",
-    "phase": "Action",
-    "turnCount": 5,
-    "sentiment": "neutral",
-    "sentimentScore": 0.5,
-    "consecutiveNegativeTurns": 0,
-    "collectedInfo": {
-      "order_id": "5",
-      "customer_id": "1990"
-    }
-  }
+  "state": { ... }
 }
 ```
 
-Debug için faydalı — bot'un session hakkında ne bildiğini görmek.
-
----
-
-## Anonymous neden?
-
-Public chat — kayıt olmadan kullanılabilir. SessionId browser tarafında üretilir (LocalStorage). Auth gerek yok çünkü:
-
-- Sıfır friction (login zorunluluğu UX'i bozar)
-- Session ID public/random — başkasının session'ına erişmek zor (32+ karakter)
-- Rate limit IP başına — abuse engellenir
-
-**Sınırlar:**
-- Aynı browser farklı session açabilir (LocalStorage temizlenirse kayıp)
-- Cross-device sync yok
-- Admin paneli session ID gözlemleyebilir ama içeriği değişiklik için JWT lazım
+Session bulunamazsa 404 döner.
 
 ---
 

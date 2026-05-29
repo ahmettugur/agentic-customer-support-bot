@@ -66,13 +66,16 @@ public sealed class ToolError
 ### Error code listesi (`WellKnown.ToolErrorCodes`)
 
 - `MISSING_REQUIRED_FIELD`
-- `ORDER_NOT_FOUND`
-- `CUSTOMER_NOT_FOUND`
 - `PRODUCT_NOT_FOUND`
+- `CUSTOMER_NOT_FOUND`
+- `ORDER_NOT_FOUND`
 - `STOCK_INSUFFICIENT`
-- `COMPLAINT_DUPLICATE`
-- `OPERATION_NOT_ALLOWED`
-- `SYSTEM_UNAVAILABLE`
+- `CUSTOMER_ID_MISMATCH`
+- `NO_ORDERS_FOR_CUSTOMER`
+- `ORDER_ALREADY_CANCELLED`
+- `ORDER_NOT_CANCELLABLE`
+- `RETURN_NOT_ELIGIBLE`
+- `RETURN_ALREADY_REQUESTED`
 
 ---
 
@@ -81,36 +84,41 @@ public sealed class ToolError
 ### OrderInfo
 
 ```csharp
-public sealed class OrderInfo
+public class OrderInfo
 {
-    public string OrderId { get; set; }
-    public string Product { get; set; }
+    public string Product { get; set; } = "";
     public int Quantity { get; set; }
-    public string CustomerId { get; set; }
-    public string Status { get; set; }              // WellKnown.OrderStatuses
-    public DateTime OrderDate { get; set; }
+    public string CustomerId { get; set; } = "";
+    public string Status { get; set; } = "";        // WellKnown.OrderStatuses
+    public DateTime OrderDate { get; set; } = DateTime.Now;
+
+    // İptal bilgileri
+    public DateTime? CancelledAt { get; set; }
+    public string? CancelReason { get; set; }
+
+    // İade bilgileri
+    public DateTime? ReturnRequestedAt { get; set; }
+    public string? ReturnReason { get; set; }
 }
 ```
 
 ### ProductInfo
 
 ```csharp
-public sealed record ProductInfo(decimal Price, int Stock, string Name);
+public record ProductInfo(decimal Price, int Stock, string Name = "", string Category = "");
 ```
 
-Hafif DTO — sadece ürün arama sonucu.
+Hafif DTO — ürün arama sonucu. `Category` Postgres Catalog'dan gelir.
 
 ### ComplaintInfo
 
 ```csharp
-public sealed class ComplaintInfo
+public class ComplaintInfo
 {
-    public string ComplaintId { get; set; }
-    public string OrderId { get; set; }
-    public string CustomerId { get; set; }
-    public string Complaint { get; set; }
-    public string Status { get; set; }              // WellKnown.ComplaintStatuses
-    public DateTime CreatedAt { get; set; }
+    public string OrderId { get; set; } = "";
+    public string CustomerId { get; set; } = "";
+    public string Complaint { get; set; } = "";
+    public string Status { get; set; } = "";        // WellKnown.ComplaintStatuses
 }
 ```
 
@@ -119,13 +127,16 @@ public sealed class ComplaintInfo
 ## ExtractedIds (IdExtractor çıktısı)
 
 ```csharp
-public sealed record ExtractedIds(
-    string? OrderId,
-    string? CustomerId,
-    string? ComplaintId
-)
+public class ExtractedIds
 {
-    public bool HasAny => OrderId is not null || CustomerId is not null || ComplaintId is not null;
+    public string? OrderId { get; set; }
+    public string? CustomerId { get; set; }
+    public string? ComplaintId { get; set; }
+
+    public bool HasAny =>
+        !string.IsNullOrEmpty(OrderId) ||
+        !string.IsNullOrEmpty(CustomerId) ||
+        !string.IsNullOrEmpty(ComplaintId);
 }
 ```
 

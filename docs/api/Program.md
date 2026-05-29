@@ -19,6 +19,7 @@ Uygulamanın **Composition Root**'u. Tüm DI kayıtları, middleware pipeline'ı
 8. AddPersistenceServices(config)       ← EF Core veya InMemory
 9. AddApplicationServices(config)       ← Port servisleri, CORS, rate limiting, hosted services
 10. AddAuthenticationServices(config)   ← JWT + role policies
+11. AddAppHealthChecks(config)          ← Postgres + Redis health checks
 ```
 
 ### Neden bu sıra?
@@ -28,25 +29,29 @@ Uygulamanın **Composition Root**'u. Tüm DI kayıtları, middleware pipeline'ı
 | Telemetry | Hiçbiri — diğerlerini instrument eder |
 | AI | Telemetry (TelemetryChatClient decorator) |
 | Redis | — |
-| Persistence | Redis (PostgresAdapters distributed lock kullanır) |
+| Persistence | Redis |
 | Application | Persistence + Redis (port'lar adapter'ları kullanır) |
 | Auth | — (sonda olur ki UserService gibi port'lar mevcut olsun) |
+| HealthChecks | Persistence + Redis (bağımlılıkları kontrol eder) |
 
 ---
 
 ## HITL guard log
 
 ```csharp
-var approvalEnabled = config.GetValue<bool>("Approval:Enabled", true);
-if (!approvalEnabled && !env.IsDevelopment())
+if (!app.Environment.IsDevelopment())
 {
-    logger.LogCritical(
-        "[HITL] Approval gate is DISABLED in non-development environment. " +
-        "High-risk tools will execute without human approval.");
+    var approvalOpts = app.Services.GetRequiredService<IOptions<ApprovalOptions>>().Value;
+    if (!approvalOpts.Enabled)
+    {
+        startupLogger.LogCritical(
+            "[HITL] ApprovalOptions.Enabled=false — yan etkili tool'lar (sipariş/şikayet) " +
+            "onaysız çalışıyor. Production ortamında kasıtlı mı?");
+    }
 }
 ```
 
-Production'da `Approval:Enabled = false` ise **kritik uyarı** — `order_placement` ve `complaint_registration` tool'ları onaysız çalışır. Bu config kazara unutulursa loglardan görülür.
+Production'da `Approval:Enabled = false` ise **kritik uyarı** — `order_placement` ve `complaint_registration` tool'ları onaysız çalışır.
 
 ---
 
@@ -59,7 +64,7 @@ Sıra çok önemli — ASP.NET Core her middleware'i sırayla execute eder.
 2. MapAppHealthChecks()          ← /health/live, /health/ready, /health
 3. UseCors()
 4. UseRateLimiter()
-5. UseWebSockets()               ← Auth'tan önce — WS upgrade Authorization header taşıyabilsin
+5. UseWebSockets()               ← Auth'tan önce — WS upgrade
 6. MapOpenApi() (dev only)
 7. UseHttpsRedirection()
 8. UseAuthentication()
@@ -69,57 +74,51 @@ Sıra çok önemli — ASP.NET Core her middleware'i sırayla execute eder.
 
 ### Neden ExceptionHandler en başta?
 
-Sonraki herhangi bir middleware exception fırlatırsa burada yakalanır. Endpoint kodunda `try/catch` yazmaya gerek yok — `DomainException` türetenler otomatik HTTP'ye çevrilir.
+Sonraki herhangi bir middleware exception fırlatırsa burada yakalanır. `DomainException` türetenler otomatik HTTP'ye çevrilir.
 
 ### Neden UseWebSockets() auth'tan önce?
 
-WebSocket upgrade `HTTP 101 Switching Protocols` cevabını verir. Bu cevap üretilmeden auth çalışırsa, `Authorization: Bearer ...` header'ı `ws://` URL'den taşınması zor. Bu yüzden:
-- `UseWebSockets()` upgrade'i hazırlar
-- Endpoint handler içinde `?access_token=...` query param'dan JWT alınır
-- AuthServicesExtensions `OnMessageReceived` event'i bunu okur
+WebSocket upgrade `HTTP 101 Switching Protocols` cevabını verir. Token `?access_token=...` query param'dan alınır (AuthServicesExtensions `OnMessageReceived` event'i).
 
 ---
 
 ## Endpoint gruplandırma
 
 ```csharp
-// Public — anonim
+// Public — rate-limited, anonim veya JWT opsiyonel
 app.MapAuthEndpoints();
 app.MapChatEndpoints();
 app.MapRealtimeEndpoints();
 app.MapSessionEndpoints();
-app.MapAnalyticsEndpoints();    // /sessions/{sid}/rating public
+app.MapAnalyticsEndpoints();    // /sessions/{sid}/rating public; /analytics/dashboard Admin
 
 // Admin scope (JWT + role=Admin)
-app.MapAdminEndpoints();
-app.MapTraceEndpoints();
-app.MapEvaluationEndpoints();
-app.MapMemoryEndpoints();
-app.MapImprovementsEndpoints();
-app.MapTelemetryEndpoints();
-app.MapPersonalizationEndpoints();
-app.MapAgentsEndpoints();
-app.MapWorkflowEndpoints();
-app.MapSlaEndpoints();
+var adminScope = app.MapGroup("").RequireAuthorization("Admin");
+adminScope.MapAdminEndpoints();
+adminScope.MapTraceEndpoints();
+adminScope.MapEvaluationEndpoints();
+adminScope.MapMemoryEndpoints();
+adminScope.MapImprovementsEndpoints();
+adminScope.MapTelemetryEndpoints();
+adminScope.MapPersonalizationEndpoints();
+adminScope.MapAgentsEndpoints();
+adminScope.MapWorkflowEndpoints();
+adminScope.MapSlaEndpoints();
 
 // AdminOrAgent scope
-app.MapAgentPanelEndpoints();   // /agent/*
+var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent");
+agentScope.MapAgentPanelEndpoints();   // /agent/*
 ```
 
-Endpoint dosyalarının her biri kendi `MapXxxEndpoints` extension method'unu içerir.
+Her endpoint dosyasının kendi `MapXxxEndpoints` extension method'u vardır.
 
----
+### Analytics neden ayrı?
 
-## OpenAPI (dev only)
+`AnalyticsEndpoints` içinde hem Admin hem Anonymous endpoint'ler var:
+- `GET /analytics/dashboard` → `.RequireAuthorization("Admin")`
+- `POST /sessions/{sid}/rating` → `.RequireRateLimiting("general")` (anonim)
 
-```csharp
-if (env.IsDevelopment())
-{
-    app.MapOpenApi();
-}
-```
-
-Development'ta `/openapi/v1.json` ile Swagger UI / Scalar bağlanabilir. Production'da kapalı — endpoint listesi sızdırılmaz.
+Bu yüzden admin group içine alınmayıp doğrudan `app.MapAnalyticsEndpoints()` ile ekleniyor; her endpoint kendi auth kuralını kendi tanımlıyor.
 
 ---
 
@@ -130,42 +129,21 @@ await app.MigrateIfDevelopmentAsync();
 ```
 
 `WebApplicationExtensions.MigrateIfDevelopmentAsync`:
-- `Persistence:Provider = Postgres` ise
-- `env.IsDevelopment()` ise
-- `DbContext.Database.MigrateAsync()` çağırır
+- `env.IsDevelopment()` ve `Persistence:Provider = Postgres` ise
+- `IDbContextFactory<CustomerSupportDbContext>` ile `MigrateAsync()` çağırır
 
-Production'da migration **ayrı deploy adımı** olmalı — uygulama her start'ta migration yürütmesi tehlikeli (lock, downtime, sıralı deploy).
+Production'da migration **ayrı deploy adımı** olmalı.
 
 ---
 
-## Kullanım sırası
+## OpenAPI (dev only)
 
 ```csharp
-var builder = WebApplication.CreateBuilder(args);
-
-// DI registration (8 katman)
-builder.Services.AddOpenApi();
-builder.Services.AddLogging();
-// ...
-builder.Services.AddAuthenticationServices(builder.Configuration);
-
-var app = builder.Build();
-
-// Migration (dev only)
-await app.MigrateIfDevelopmentAsync();
-
-// Middleware pipeline
-app.UseExceptionHandler();
-app.MapAppHealthChecks();
-// ...
-app.UseAuthorization();
-
-// Endpoint mapping
-app.MapAuthEndpoints();
-// ...
-
-app.Run();
+if (app.Environment.IsDevelopment())
+    app.MapOpenApi();
 ```
+
+Development'ta `/openapi/v1.json` — Swagger UI / Scalar bağlanabilir. Production'da kapalı.
 
 ---
 

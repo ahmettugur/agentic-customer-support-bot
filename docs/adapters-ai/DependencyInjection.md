@@ -73,10 +73,9 @@ Bu sayede:
 services.AddSingleton<IChatClient>(sp =>
 {
     var aiOptions = sp.GetRequiredService<IOptions<AiOptions>>().Value;
-    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
 
     // 1) Asıl client (provider-spesifik)
-    IChatClient inner = AiClientFactory.CreateStandardChatClient(aiOptions, loggerFactory);
+    IChatClient inner = AiClientFactory.CreateStandardChatClient(aiOptions);
 
     // 2) Telemetry decorator
     var costCalc = sp.GetRequiredService<ICostCalculatorPort>();
@@ -93,14 +92,13 @@ services.AddSingleton<IChatClient>(sp =>
         persistence);
 });
 
-// Aynısı reasoning client için
+// Reasoning client için (decorate parametresi ile telemetri)
 services.AddSingleton<IReasoningChatClient>(sp =>
 {
     var aiOptions = sp.GetRequiredService<IOptions<AiOptions>>().Value;
     return AiClientFactory.CreateReasoningChatClient(
         aiOptions,
-        sp.GetRequiredService<ILoggerFactory>(),
-        innerWrapper: inner => new TelemetryChatClient(inner, ...));
+        decorate: inner => new TelemetryChatClient(inner, ...));
 });
 
 services.AddSingleton<IGeneralChatClient>(sp =>

@@ -30,28 +30,7 @@ POST /improvements/mine
 Authorization: Bearer <admin-jwt>
 ```
 
-**Akış:**
-
-```
-LessonMiner.MineAsync()
-   - Düşük rating ≤ 2 olan trace'ler
-   - Error veya sanity Error olan trace'ler
-   - Timeout olan trace'ler
-   ↓
-   Max 8 candidate trace seç
-   ↓
-   LLM ile JSON schema kullanarak analiz
-   ↓
-   Lesson { Status=Proposed } DB'ye yaz
-```
-
-**202 Response (async):**
-
-```json
-{ "status": "started", "candidateCount": 5 }
-```
-
-İşlem arka planda devam eder — `/improvements/proposed` ile sonuçlar görülür.
+`IImprovementsPort.MineAsync(ct)` çağrılır. Sonuç JSON olarak döner.
 
 ### `GET /improvements/?status=Proposed`
 
@@ -60,12 +39,11 @@ LessonMiner.MineAsync()
   {
     "id": "lesson-abc",
     "title": "ID yokken specialist çağrılmamalı",
-    "lessonText": "PlanningAgent ID yoksa önce kullanıcıdan iste, specialist'i çağırma",
-    "observation": "Trace #X'te order_id olmadan OrderAgent çağrıldı, kullanıcı şikayet etti",
+    "lessonText": "PlanningAgent ID yoksa önce kullanıcıdan iste",
+    "observation": "Trace #X'te order_id olmadan OrderAgent çağrıldı",
     "suggestedAgent": "PlanningAgent",
-    "sourceTraceIds": ["trace-1", "trace-2", "trace-3"],
-    "status": "Proposed",
-    "createdAt": "2026-05-24T10:00:00Z"
+    "sourceTraceIds": ["trace-1", "trace-2"],
+    "status": "Proposed"
   }
 ]
 ```
@@ -81,20 +59,7 @@ Content-Type: application/json
 { "decidedBy": "admin-1", "reason": "Net bir kural, KB'ye eklensin" }
 ```
 
-**Akış:**
-
-```
-ImprovementsPortService.ApproveAsync(id, decidedBy, reason)
-   ├── LessonStore.UpdateStatus(id, Approved, decidedBy, reason)
-   └── VectorMemoryAdapter.UpsertAsync(memoryDoc)
-       - Kind = MemoryKind.Knowledge
-       - Tags = { "lessonId": "lesson-abc" }
-       - Embedding üretilir
-   ↓
-   Lesson.VectorMemoryId set edilir
-```
-
-Onaylanan lesson **Knowledge** memory'e gider — sonraki specialist prompt'larında semantic search ile bulunabilir.
+`IImprovementsPort.ApproveAsync(id, decidedBy, reason, ct)` çağrılır. Onaylanan lesson Knowledge memory'e gider.
 
 ### `POST /improvements/{id}/reject`
 
@@ -102,7 +67,7 @@ Onaylanan lesson **Knowledge** memory'e gider — sonraki specialist prompt'lar�
 { "decidedBy": "admin-1", "reason": "Geçersiz; LLM yanlış genelleme yaptı" }
 ```
 
-Status=Rejected, VectorStore'a eklenmez. Audit için tutulur (silinmez).
+`IImprovementsPort.Reject(id, decidedBy, reason)`. Status=Rejected, VectorStore'a eklenmez. Audit için tutulur.
 
 ---
 
@@ -118,24 +83,24 @@ Semantic memory (Qdrant) admin operasyonları.
 
 ### `GET /memory/stats`
 
+`IMemoryPort.Enabled` false ise `{ "enabled": false }` döner. Aksi halde:
+
 ```json
 {
   "enabled": true,
-  "embedding": {
-    "model": "text-embedding-3-small",
+  "collections": {
+    "episodic": 1234,
+    "lessons": 56,
+    "knowledge": 89
+  },
+  "config": {
+    "embeddingModel": "text-embedding-3-small",
     "dimension": 1536,
     "topK": 5,
     "minScore": 0.7
-  },
-  "counts": {
-    "episodic": 1234,
-    "lesson": 56,
-    "knowledge": 89
   }
 }
 ```
-
-Qdrant'taki belge sayıları kind bazında.
 
 ### `GET /memory/search`
 
@@ -143,15 +108,7 @@ Qdrant'taki belge sayıları kind bazında.
 GET /memory/search?q=sipariş iade&kind=knowledge&topK=5
 ```
 
-**Akış:**
-
-```
-OpenAiEmbeddingAdapter.EmbedAsync(query)
-   ↓ 1536-dim vector
-QdrantVectorMemoryAdapter.SearchAsync(vector, topK=5, tagFilter={_kind: "knowledge"})
-   ↓ ScoredPoint'ler
-HydrateDocument → MemoryDocument[]
-```
+`kind` query param: `episodic` | `lesson` | `knowledge` (default: `knowledge`). Geçersiz kind → 400.
 
 **Response:**
 
@@ -159,31 +116,23 @@ HydrateDocument → MemoryDocument[]
 [
   {
     "score": 0.89,
-    "document": {
-      "id": "doc-1",
+    "doc": {
+      "Id": "doc-1",
       "kind": "Knowledge",
-      "title": "İade Politikası",
+      "Title": "İade Politikası",
+      "Source": "policies.md",
+      "SessionId": null,
       "text": "14 gün içinde...",
-      "source": "policies.md",
-      "tags": { "category": "policy" },
-      "createdAt": "2026-05-20T..."
+      "CreatedAt": "2026-05-20T...",
+      "Tags": { "category": "policy" }
     }
   }
 ]
 ```
 
-`kind` query param default `knowledge`. `episodic` veya `lesson` da geçilebilir.
-
 ### `POST /memory/ingest`
 
-```http
-POST /memory/ingest
-Authorization: Bearer <admin-jwt>
-```
-
-`IMemoryPort.IngestAsync` çağrılır — `FileSystemKnowledgeBaseSource` değişen dosyaları embed eder.
-
-**Use case:** Yeni KB dosyası eklediniz, KnowledgeBaseIngestor startup'ta çalışmadı (auto-ingest kapalı) → manuel tetikle.
+`IMemoryPort.IngestAsync(ct)` — `FileSystemKnowledgeBaseSource` değişen dosyaları embed eder. `{ "status": "ok" }` döner.
 
 ---
 
@@ -196,64 +145,22 @@ CustomerProfile yönetimi.
 | `/customers/?take=100` | GET | Profil listesi |
 | `/customers/{id}/profile` | GET | Tek profile |
 | `/customers/{id}/profile/refresh` | POST | LLM consolidate tetikle |
-| `/customers/{id}/profile/note` | PUT | Admin not ekle |
+| `/customers/{id}/profile/note` | PUT | Admin not ekle/güncelle |
 | `/customers/{id}/profile` | DELETE | Profile sil |
 
 ### `GET /customers/?take=100`
 
-```json
-[
-  {
-    "customerId": "1990",
-    "preferredLanguage": "tr",
-    "preferredTone": "formal",
-    "totalSessions": 12,
-    "totalTurns": 87,
-    "lastInteractionAt": "2026-05-23T..."
-  }
-]
-```
-
-LastInteractionAt DESC sıralı — en yeni müşteri en üstte.
+`IPersonalizationPort.GetProfiles(take)` döner. Response: `{ count, items }`.
 
 ### `GET /customers/{id}/profile`
 
-```json
-{
-  "customerId": "1990",
-  "preferredLanguage": "tr",
-  "preferredTone": "formal",
-  "summary": "VIP müşteri, sıkça iPhone ürünleri alır, kibar tonlu yanıt tercih eder",
-  "adminNote": "VIP — hızlı yanıt",
-  "intentFrequency": { "OrderInquiry": 30, "Complaint": 5 },
-  "productInterests": ["iPhone", "Dell XPS"],
-  "recentRatings": [
-    { "stars": 5, "feedback": "Harika", "ratedAt": "..." }
-  ],
-  "totalSessions": 12,
-  "totalTurns": 87,
-  "lastConsolidatedAt": "2026-05-20T..."
-}
-```
+`IPersonalizationPort.GetProfile(id)` — null ise `{ customerId, found: false }` ile 404.
 
 ### `POST /customers/{id}/profile/refresh`
 
-```http
-POST /customers/1990/profile/refresh
-```
+`IPersonalizationPort.RefreshProfileAsync(id, ct)` — LLM konsolidasyonu tetikler. Profile null ise 404.
 
-**Akış:**
-
-```
-CustomerProfileService.ConsolidateAsync(customerId)
-   - Tüm session history + sayaçlar LLM'e ver
-   - LLM Summary + PreferredTone üretir
-   - Profile update + LastConsolidatedAt = now
-```
-
-**202 Async:** İşlem arka planda — admin yenileyince güncel veriyi görür.
-
-⚠️ LLM maliyeti var — sık çalıştırılmamalı. Default deterministic update her turn'de ücretsiz yapılır.
+⚠️ LLM maliyeti var — sık çalıştırılmamalı.
 
 ### `PUT /customers/{id}/profile/note`
 
@@ -264,18 +171,11 @@ Content-Type: application/json
 { "note": "VIP müşteri, premium destek hattı kullanmalı" }
 ```
 
-`AdminNote` field'ı specialist agent prompt'una eklenir — bot bilinçli davranır:
-
-```
-[Müşteri profili]
-- Müşteri: 1990
-- Dil: tr, Ton: formal
-- Admin Notu: VIP müşteri, premium destek hattı kullanmalı
-```
+`IPersonalizationPort.SetAdminNote(id, input?.Note)` — `AdminNote` field'ı specialist agent prompt'una eklenir.
 
 ### `DELETE /customers/{id}/profile`
 
-GDPR / right to be forgotten için. Profile silinir; ama ilgili session'lar kalır (audit).
+`IPersonalizationPort.DeleteProfile(id)` → 204 veya 404. GDPR / right to be forgotten için.
 
 ---
 
@@ -285,29 +185,12 @@ Low-code DSL — deterministic akış tanımları.
 
 | Route | Method | Açıklama |
 |---|---|---|
-| `/workflows` | GET | Tüm workflow'lar |
+| `/workflows` | GET | Tüm workflow'lar `{ count, items }` |
 | `/workflows/{id}` | GET | Tek workflow |
 | `/workflows` | POST | Oluştur |
 | `/workflows/{id}` | PUT | Güncelle |
 | `/workflows/{id}` | DELETE | Sil |
 | `/workflows/{id}/test` | POST | Test verisiyle çalıştır |
-
-### `GET /workflows`
-
-```json
-{
-  "count": 3,
-  "items": [
-    {
-      "id": "siparis-takibi",
-      "name": "Sipariş Takibi",
-      "version": 1,
-      "isActive": true,
-      "triggerKeywords": ["takip", "nerede"]
-    }
-  ]
-}
-```
 
 ### `POST /workflows`
 
@@ -317,6 +200,7 @@ Request body: `WorkflowRequest` ([Models.md](Models.md) detayı).
 {
   "name": "Sipariş Takibi",
   "description": "Tek tıkla sipariş durumu",
+  "isActive": true,
   "triggerKeywords": ["takip", "nerede"],
   "inputPatterns": { "order_id": "\\d{4,}" },
   "steps": [
@@ -327,7 +211,15 @@ Request body: `WorkflowRequest` ([Models.md](Models.md) detayı).
 }
 ```
 
-**Slugify:** `Name` → `Id` (yoksa). Türkçe karakter normalize edilir.
+`ClaimsPrincipal.Identity?.Name` `createdBy` olarak saklanır.
+
+### `PUT /workflows/{id}`
+
+Body `WorkflowRequest`. `def.Id = id` set edilerek mevcut kayıt güncellenir.
+
+### `DELETE /workflows/{id}`
+
+204 (silindi) veya 404 (bulunamadı).
 
 ### `POST /workflows/{id}/test`
 
@@ -335,56 +227,27 @@ Request body: `WorkflowRequest` ([Models.md](Models.md) detayı).
 POST /workflows/siparis-takibi/test
 Content-Type: application/json
 
-{
-  "input": "5 nerede",
-  "variables": {}
-}
+{ "input": "5 nerede", "variables": {} }
 ```
 
-**Akış:**
+`IWorkflowPort.Test(id, input, variables)` döner. Hata varsa `{ error }` ile 404 veya doğrudan hata mesajı.
 
-```
-WorkflowExecutor.Execute(definition, input, variables)
-   - InputPatterns regex match → variables zenginleştir
-   - Steps çalıştır
-   - StepTraces logla
-```
-
-**Response:**
-
-```json
-{
-  "workflowId": "siparis-takibi",
-  "success": true,
-  "finalResponse": "Sipariş 5 durumu: Kargoda",
-  "durationMs": 12,
-  "stepTraces": [
-    { "stepId": "0", "type": "Branch", "label": "order_id var mı?", "skipped": false, "output": "Condition met (order_id=5)" },
-    { "stepId": "1", "type": "Lookup", "label": "Sipariş durumu", "output": "{ status: 'Kargoda' }" },
-    { "stepId": "2", "type": "Respond", "output": "Sipariş 5 durumu: Kargoda" }
-  ],
-  "finalVariables": { "order_id": "5", "status": "Kargoda" }
-}
-```
-
-Deploy etmeden önce **canlı verisiz** test — admin panelinde "Test Et" butonu.
-
-### Forbidden tools
+### WorkflowRequest → WorkflowDefinition dönüşümü
 
 ```csharp
-public static readonly HashSet<string> ForbiddenTools = new()
+private static WorkflowDefinition MapToDefinition(WorkflowRequest req) => new()
 {
-    "order_placement_tool",
-    "complaint_registration_tool",
-    "human_handoff_tool"
+    Name = req.Name,
+    Steps = req.Steps.Select(s => new WorkflowStep
+    {
+        Id = s.Id ?? Guid.NewGuid().ToString("N")[..6],
+        Type = Enum.TryParse<WorkflowStepType>(s.Type, true, out var t) ? t : WorkflowStepType.Respond,
+        // ...
+    }).ToList()
 };
 ```
 
-Workflow Lookup step bu tool'ları çağıramaz. **Runtime guard** — admin yazsa bile execute fail eder:
-
-```
-Error: Tool 'order_placement_tool' is forbidden in workflows. HITL gerekir.
-```
+Parse başarısız olursa `Respond` default. Domain modeli doğrudan API sınırına maruz kalmaz.
 
 ---
 

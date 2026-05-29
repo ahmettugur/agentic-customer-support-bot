@@ -28,17 +28,16 @@ public QdrantVectorMemoryAdapter(
     IOptions<SemanticMemoryOptions> options,
     ILogger<QdrantVectorMemoryAdapter> logger)
 {
-    var qdrant = options.Value.Qdrant;
-    _client = new QdrantClient(
-        host: qdrant.Host,
-        port: qdrant.Port,
-        https: qdrant.UseHttps,
-        apiKey: qdrant.ApiKey);   // Opsiyonel
-    _collectionName = qdrant.CollectionName;
+    var q = options.Value.VectorStore;
+    _client = string.IsNullOrWhiteSpace(q.ApiKey)
+        ? new QdrantClient(q.Host, q.Port, q.UseHttps)
+        : new QdrantClient(q.Host, q.Port, q.UseHttps, q.ApiKey);
 }
 ```
 
-`QdrantClient` thread-safe, internal connection pool yönetir. Singleton güvenli.
+`QdrantClient` thread-safe, internal connection pool yönetir. Singleton güvenli. ApiKey opsiyonel — boşsa kimlik doğrulamasız bağlanır.
+
+Bu adapter **koleksiyon adını constructor'da sabitlemez**; her metod çağrısında `collection` parametresi alır. Bu sayede aynı adapter birden fazla koleksiyon için kullanılabilir (Episodic, Lessons, Knowledge).
 
 ---
 
@@ -64,34 +63,16 @@ Reserved alanlar `_` prefix'iyle — kullanıcı tag'leriyle çakışmaz.
 ## `EnsureCollectionAsync`
 
 ```csharp
-public async Task EnsureCollectionAsync(int dimension, CancellationToken ct = default)
-{
-    var collections = await _client.ListCollectionsAsync(ct);
-    if (collections.Contains(_collectionName))
-    {
-        // Dimension match kontrolü
-        var info = await _client.GetCollectionInfoAsync(_collectionName, ct);
-        var existingDim = info.Config.Params.VectorsConfig.Params.Size;
-        if (existingDim != (ulong)dimension)
-        {
-            _logger.LogWarning("Dimension mismatch ({Existing} vs {New}), recreating", existingDim, dimension);
-            await _client.DeleteCollectionAsync(_collectionName, cancellationToken: ct);
-            await CreateCollection(dimension, ct);
-        }
-    }
-    else
-    {
-        await CreateCollection(dimension, ct);
-    }
-}
+public async Task EnsureCollectionAsync(string collection, int dimension, CancellationToken ct = default)
+```
 
-private async Task CreateCollection(int dimension, CancellationToken ct)
-{
-    await _client.CreateCollectionAsync(
-        _collectionName,
-        new VectorParams { Size = (ulong)dimension, Distance = Distance.Cosine },
-        cancellationToken: ct);
-}
+Koleksiyon adını ve hedef dimension'ı parametre olarak alır.
+
+```
+1. collection var mı? → GetCollectionInfoAsync ile dim kontrol et
+2. Dim uyuşuyor → return (zaten doğru)
+3. Dim uyuşmuyor → DELETE + CREATE (dev-friendly mismatch handling)
+4. collection yok → CREATE (Cosine distance, belirtilen dimension)
 ```
 
 ### Dev-friendly mismatch handling
@@ -110,21 +91,12 @@ Startup'ta `MemoryPortService.IngestAsync` bu metodu çağırır.
 
 ```csharp
 public async Task UpsertAsync(
-    IEnumerable<(MemoryDocument Document, float[] Vector)> items,
+    string collection,
+    IReadOnlyList<(MemoryDocument Doc, float[] Vector)> items,
     CancellationToken ct = default)
-{
-    var points = items.Select(item => new PointStruct
-    {
-        Id = ToPointId(item.Document.Id),
-        Vectors = item.Vector,
-        Payload = { /* payload Dict */ }
-    }).ToList();
-
-    await _client.UpsertAsync(_collectionName, points, cancellationToken: ct);
-}
 ```
 
-Batch upsert — N item tek HTTP gRPC call'da yazılır.
+Koleksiyon adını parametre olarak alır. Boş liste → erken dönüş (Qdrant çağrısı yok). Batch upsert — N item tek gRPC call'da yazılır. Exception'lar `ExceptionTranslator.Translate` ile domain exception'a çevrilir.
 
 ### `ToPointId` — string ID dönüşümü
 
@@ -154,12 +126,15 @@ private static PointId ToPointId(string id)
 
 ```csharp
 public async Task<IReadOnlyList<MemorySearchHit>> SearchAsync(
+    string collection,
     float[] query,
     int topK,
-    float minScore = 0f,
+    float minScore,
     IReadOnlyDictionary<string, string>? tagFilter = null,
     CancellationToken ct = default)
 ```
+
+Koleksiyon adını ve `minScore` eşiğini zorunlu parametre olarak alır (default yok).
 
 ### Filter oluşturma
 
@@ -216,63 +191,34 @@ Search hata verirse **boş liste** döner — semantic memory critical değil, f
 ## `DeleteAsync`
 
 ```csharp
-public async Task DeleteAsync(string id, CancellationToken ct = default)
-{
-    var pointId = ToPointId(id);
-    await _client.DeleteAsync(_collectionName, new[] { pointId }, cancellationToken: ct);
-}
+public async Task DeleteAsync(string collection, string id, CancellationToken ct = default)
 ```
 
-Tek point silme. Lesson reddedildiğinde veya episodic memory expire olduğunda kullanılır.
+Koleksiyon adını ve silinecek doküman ID'sini alır. Tek point silme. Lesson reddedildiğinde veya episodic memory expire olduğunda kullanılır. Exception'lar `ExceptionTranslator.Translate` ile çevrilir.
 
 ---
 
 ## `CountAsync`
 
 ```csharp
-public async Task<long> CountAsync(CancellationToken ct = default)
-{
-    try
-    {
-        var info = await _client.GetCollectionInfoAsync(_collectionName, ct);
-        return (long)info.PointsCount;
-    }
-    catch
-    {
-        return 0;
-    }
-}
+public async Task<long> CountAsync(string collection, CancellationToken ct = default)
 ```
 
-Admin paneli "memory'de kaç doküman var?" görseli için. Hata → 0 (cosmetic data, fail etmemeli).
+Koleksiyon adını parametre olarak alır. Admin paneli "memory'de kaç doküman var?" görseli için. Hata → 0 (cosmetic data, fail etmemeli).
 
 ---
 
 ## `HydrateDocument` — payload → domain
 
 ```csharp
-private MemoryDocument HydrateDocument(ScoredPoint point)
-{
-    var payload = point.Payload;
-    var tags = payload
-        .Where(kv => !kv.Key.StartsWith("_"))
-        .ToDictionary(kv => kv.Key, kv => kv.Value.StringValue);
-
-    return new MemoryDocument
-    {
-        Id = payload["_docId"].StringValue,
-        Kind = Enum.Parse<MemoryKind>(payload["_kind"].StringValue),
-        Text = payload["_text"].StringValue,
-        Title = payload.GetValueOrDefault("_title")?.StringValue,
-        Source = payload.GetValueOrDefault("_source")?.StringValue,
-        SessionId = payload.GetValueOrDefault("_sessionId")?.StringValue,
-        CreatedAt = DateTime.Parse(payload["_createdAt"].StringValue),
-        Tags = tags
-    };
-}
+private static MemoryDocument HydrateDocument(IDictionary<string, Value> payload)
 ```
 
-Reserved alanlar `_` ayıklanır, kalanı `Tags` Dict'e gider — kullanıcı eklediği custom tag'ler korunur.
+`ScoredPoint.Payload` sözlüğünden `MemoryDocument` oluşturur:
+- `_` prefix'li alanlar rezerve — ID, text, title, source, sessionId, kind, createdAt
+- Diğer tüm payload key'leri `Tags` sözlüğüne kopyalanır (custom tag'ler korunur)
+- `_kind` enum parse edilir; başarısız olursa default `MemoryKind` değeri kalır
+- `_createdAt` ISO 8601 parse edilir; başarısız olursa `DateTime.UtcNow` değil field default'u kalır
 
 ---
 

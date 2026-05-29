@@ -18,7 +18,7 @@ CustomerSupportBot.Adapters.Telemetry/
 │   └── TelemetryAdapterServiceCollectionExtensions.cs
 ├── HealthChecks/                      (yok)
 ├── Models/
-│   └── TelemetryAdapterOptions.cs    ← (legacy — kullanılmıyor)
+│   └── TelemetryAdapterOptions.cs    ← (DI'da kullanılmıyor; TelemetryOptions tercih edilir)
 ├── OpenTelemetry/
 │   ├── CostCalculator.cs             ← ICostCalculatorPort
 │   ├── CostUsageStore.cs             ← ICostUsageStorePort

@@ -65,27 +65,31 @@ Bu tool'lar approval gerektirir; `WellKnown.ToolNames`'teki diğerleri (read-onl
 Bot bir konuyu çözemediğinde veya kullanıcı insan istediğinde oluşturulan **eskalasyon kaydı**:
 
 ```csharp
-public sealed class EscalationRequest
+public class EscalationRequest
 {
-    public string Id { get; init; }
-    public string SessionId { get; init; }
-    public string UserQuery { get; init; }
-    public string Reason { get; init; }
-    public List<string> MissingContext { get; init; } = new();
-    public DateTime CreatedAt { get; init; }
+    public string Id { get; set; } = Guid.NewGuid().ToString("N")[..12];
+    public string? SessionId { get; set; }
+    public string? TraceId { get; set; }
+    public string? AgentName { get; set; }
+    public string UserQuery { get; set; } = "";
+    public string Reason { get; set; } = "";
+    public List<string> MissingContext { get; set; } = new();
+    public string? ResponseSummary { get; set; }
 
-    // Durum
-    public EscalationStatus Status { get; set; }
-    public DateTime? DecidedAt { get; set; }
-    public string? AssignedTo { get; set; }            // HumanAgent id
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? AcknowledgedAt { get; set; }
+    public DateTime? ResolvedAt { get; set; }
+
+    public EscalationStatus Status { get; set; } = EscalationStatus.Open;
+    public string? AssignedTo { get; set; }
     public string? Resolution { get; set; }
 
     // Skills-based routing
-    public List<string> RequiredSkills { get; init; } = new();   // ["complaint", "vip", "tr"]
-    public EscalationPriority Priority { get; init; } = EscalationPriority.Normal;
-    public string? SuggestedAgentId { get; set; }     // Router'ın önerdiği
+    public List<string> RequiredSkills { get; set; } = new();
+    public EscalationPriority Priority { get; set; } = EscalationPriority.Normal;
+    public string? SuggestedAgentId { get; set; }
     public string? SuggestedAgentName { get; set; }
-    public double MatchScore { get; set; }             // Router skor
+    public double MatchScore { get; set; }
     public string? RoutingNote { get; set; }
 }
 
@@ -96,6 +100,22 @@ public enum EscalationPriority { Low = 0, Normal = 1, High = 2, Critical = 3 }
 ### Yaşam döngüsü
 
 `Open → Acknowledged → Resolved` (veya `Dismissed`). Geçişler `EscalationStateFactory` ile yönetilir (bkz. [Services-EscalationStates.md](Services-EscalationStates.md)).
+
+`DecidedAt` field'ı kaldırıldı — yerine `AcknowledgedAt` (acknowledge anı) ve `ResolvedAt` (çözüm anı) ayrı ayrı izleniyor.
+
+### EscalationDecisionInput
+
+```csharp
+public class EscalationDecisionInput
+{
+    /// <summary>"acknowledge" | "resolve" | "dismiss"</summary>
+    public string Action { get; set; } = "resolve";
+    public string? AssignedTo { get; set; }
+    public string? Resolution { get; set; }
+}
+```
+
+Admin endpoint'i `/escalations/{id}/decide` bu modeli alır.
 
 ### RequiredSkills ne işe yarar?
 

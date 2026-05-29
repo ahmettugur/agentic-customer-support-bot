@@ -69,21 +69,17 @@ public IReadOnlyList<string> NativeToolNames { get; }
 ```csharp
 public async Task<bool> TryConnectAsync(CancellationToken ct)
 {
-    var apiKey = _realtimeOptions.ApiKey ?? _openAiOptions.ApiKey;
-    var url = $"wss://api.openai.com/v1/realtime?model={Uri.EscapeDataString(_realtimeOptions.Model)}";
-
-    _socket = new ClientWebSocket();
-    _socket.Options.SetRequestHeader("Authorization", $"Bearer {apiKey}");
-    _socket.Options.SetRequestHeader("OpenAI-Beta", "realtime=v1");
-
-    await _socket.ConnectAsync(new Uri(url), ct);
+    _ws = new ClientWebSocket();
+    _ws.Options.SetRequestHeader("Authorization", $"Bearer {_apiKey}");
+    var url = OpenAiRealtimeUrl + Uri.EscapeDataString(_options.Model);
+    await _ws.ConnectAsync(new Uri(url), ct);
     return true;
 }
 ```
 
-- Auth: Bearer token (Realtime için ayrı key kullanılabilir, yoksa OpenAI key)
-- `OpenAI-Beta: realtime=v1` header zorunlu (API hâlâ beta)
-- Başarısızlık → `false` döner; caller fallback davranışı uygular
+- `_apiKey`: `RealtimeOptions.ApiKey` dolu ise onu, boş ise `OpenAiOptions.ApiKey`'i kullanır
+- `OpenAiRealtimeUrl = "wss://api.openai.com/v1/realtime?model="`
+- Başarısızlık → `false` döner (exception log'a yazılır); caller fallback davranışı uygular
 
 ---
 
@@ -95,12 +91,19 @@ public async Task<bool> TryConnectAsync(CancellationToken ct)
 {
   "type": "session.update",
   "session": {
-    "input_audio_format": "pcm16",
-    "input_audio_transcription": { "model": "gpt-4o-transcribe", "language": "tr" },
-    "turn_detection": {
-      "type": "semantic_vad",
-      "eagerness": "medium",
-      "create_response": false      // ← AUTO-RESPONSE KAPALI
+    "output_modalities": ["audio"],
+    "audio": {
+      "input": {
+        "format": { "type": "audio/pcm", "rate": 24000 },
+        "transcription": { "model": "gpt-4o-transcribe", "language": "tr" },
+        "turn_detection": {
+          "type": "semantic_vad",
+          "eagerness": "medium",
+          "create_response": false,    // ← AUTO-RESPONSE KAPALI
+          "interrupt_response": true
+        }
+      },
+      "output": { "format": { "type": "audio/pcm", "rate": 24000 }, "voice": "alloy" }
     },
     "instructions": "Sağlanan metni Türkçe doğal sesle oku..."
   }
@@ -120,16 +123,23 @@ OpenAI bu modda kendiliğinden cevap vermez (`create_response=false`).
 {
   "type": "session.update",
   "session": {
-    "input_audio_format": "pcm16",
-    "input_audio_transcription": { ... },
-    "turn_detection": {
-      "type": "semantic_vad",
-      "eagerness": "medium",
-      "create_response": true       // ← OTOMATIK YANIT
+    "output_modalities": ["audio"],
+    "audio": {
+      "input": {
+        "format": { "type": "audio/pcm", "rate": 24000 },
+        "transcription": { "model": "gpt-4o-transcribe", "language": "tr" },
+        "turn_detection": {
+          "type": "semantic_vad",
+          "eagerness": "medium",
+          "create_response": true,     // ← OTOMATIK YANIT
+          "interrupt_response": true
+        }
+      },
+      "output": { "format": { "type": "audio/pcm", "rate": 24000 }, "voice": "alloy" }
     },
     "tools": [ /* read-only tools */ ],
     "tool_choice": "auto",
-    "instructions": "Customer support assistant in Turkish..."
+    "instructions": "Müşteri destek asistanı..."
   }
 }
 ```
@@ -167,21 +177,9 @@ WebSocket'ten gelen ham frame → JSON parse → `RealtimeServerEvent` enum'una 
 ```csharp
 public async IAsyncEnumerable<RealtimeServerEvent> ReceiveEventsAsync(
     [EnumeratorCancellation] CancellationToken ct = default)
-{
-    var buffer = new byte[32 * 1024];
-    while (_socket.State == WebSocketState.Open && !ct.IsCancellationRequested)
-    {
-        var result = await _socket.ReceiveAsync(buffer, ct);
-        if (result.MessageType == WebSocketMessageType.Close) yield break;
-
-        var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-        var evt = ParseEvent(json);
-        if (evt != null) yield return evt;
-    }
-}
 ```
 
-32 KB buffer — büyük JSON event'leri de tek frame'de okur. Async enumerable sayesinde caller event'leri **gelir gelmez** işleyebilir (memory dostu).
+32 KB buffer kullanır; büyük JSON event'leri çok parçalı frame'de biriktirir ve `EndOfMessage` işaretinde işler. `TryReadFrameAsync` özel metoduna delegelerek `yield` ve `try/catch` arasındaki C# kısıtlamasını aşar. Async enumerable sayesinde caller event'leri **gelir gelmez** işleyebilir (memory dostu). `OperationCanceledException` veya `WebSocketException` → `ConnectionClosed` eventi yayıp akış durur.
 
 ---
 
@@ -190,15 +188,11 @@ public async IAsyncEnumerable<RealtimeServerEvent> ReceiveEventsAsync(
 ### Browser → OpenAI (mikrofon)
 
 ```csharp
-public async Task SendAudioChunkAsync(ReadOnlyMemory<byte> pcm, CancellationToken ct)
-{
-    var base64 = Convert.ToBase64String(pcm.Span);
-    var json = $"{{\"type\":\"input_audio_buffer.append\",\"audio\":\"{base64}\"}}";
-    await _socket.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct);
-}
+public async Task SendAudioChunkAsync(byte[] pcm16, CancellationToken ct)
+    => await SendJsonAsync(new { type = "input_audio_buffer.append", audio = Convert.ToBase64String(pcm16) }, ct);
 ```
 
-PCM16 24kHz → base64 → JSON event. Browser SignalR/WS üzerinden parçalar halinde yollar (~50ms chunk'lar).
+`byte[]` (PCM16 24kHz) → base64 → `input_audio_buffer.append` JSON event. Browser WebSocket üzerinden parçalar halinde yollar (~50ms chunk'lar).
 
 ### OpenAI → Browser (asistan sesi)
 
@@ -294,14 +288,9 @@ OpenAI'a verilen sistem prompt'unun anahtarları:
 
 ## Exception handling
 
-```csharp
-catch (OperationCanceledException) { await CloseAsync(); }
-catch (WebSocketException) { await CloseAsync(); }
-catch (JsonException) { /* parse hata, atla */ }
-```
-
-- İptal/WS hatası → graceful close, error event yayma
-- JSON parse hatası → bir event drop, akış devam (OpenAI bazen tanımsız event type döndürebilir)
+- `OperationCanceledException` veya `WebSocketException` → `TryReadFrameAsync` `(true, null)` döner → `ConnectionClosed` eventi yield edilir, akış durur
+- JSON parse hatası → `ParseEvent` `null` döner → o event drop edilir, akış devam eder (OpenAI bazen tanımsız event type döndürebilir)
+- `CloseAsync` / `DisposeAsync` → best-effort `NormalClosure` WebSocket kapat; exception yutulur
 
 ---
 

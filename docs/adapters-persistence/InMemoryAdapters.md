@@ -119,45 +119,6 @@ Open → Dismissed    (DismissOrphaned)
 
 ---
 
-## InMemoryOrderAdapter
-
-**Port:** `IOrderRepository`
-
-Demo sipariş verisi (Dell XPS, iPhone, vs.) içerir. Üretimde Postgres gerekirse bağlantı eklenir.
-
-| Metod | Açıklama |
-|-------|---------|
-| `Create(...)` | Yeni sipariş, artan ID |
-| `Get(orderId)` | Tekil sipariş |
-| `GetByCustomer(customerId)` | Müşteriye ait siparişler |
-| `GetLast(customerId)` | Son sipariş |
-| `Cancel(orderId, reason)` | Siparişi iptal eder; `İşleniyor`/`Kargolandı` dışında `false` döner |
-| `RequestReturn(orderId, reason)` | İade talebi oluşturur; `Teslim Edildi` + 14 gün koşulu |
-
----
-
-## InMemoryComplaintAdapter
-
-**Port:** `IComplaintRepository`
-
-Demo şikayet verisi. Create/Get/GetByOrder/GetByCustomer.
-
----
-
-## InMemoryProductCatalogAdapter
-
-**Port:** `IProductCatalogRepository`
-
-Demo ürün kataloğu (Dell XPS 15, iPhone 15 Pro, vb.).
-
-| Metod | Açıklama |
-|-------|---------|
-| `FindProduct(name)` | Partial match (case-insensitive) |
-| `TryDeductStock(productId, qty)` | Lock ile stok düşürme |
-| `GetAll()` | Tüm ürünler |
-
----
-
 ## InMemoryRatingStore
 
 **Port:** `IRatingStore`
@@ -170,7 +131,6 @@ Demo ürün kataloğu (Dell XPS 15, iPhone 15 Pro, vb.).
 | `GetBySession(sessionId)` | Nullable |
 | `GetAll()` | Timestamp DESC sıralı |
 | `GetRecent(count)` | Son N |
-| `GetSummary()` | Count + Average + Distribution |
 
 ---
 
@@ -246,7 +206,7 @@ Ring buffer: 500.
 | `Get(id)` | Tekil |
 | `Update(lesson)` | Güncelle |
 | `GetByStatus(status)` | Status filtreli |
-| `GetAll()` | `CreatedAt` DESC sıralı |
+| `GetAll(int limit = 200)` | `CreatedAt` DESC sıralı, ilk N |
 
 ---
 
@@ -256,8 +216,3 @@ Ring buffer: 500.
 
 İşlem-içi pub/sub. `Action<T>` handler'larla abone olma, `Publish(channel, message)` ile yayın.
 
----
-
-## InMemorySlaEventSink (SLA)
-
-Bkz. yukarıda. Ring buffer + `LastEmittedAt` duplicate koruması.

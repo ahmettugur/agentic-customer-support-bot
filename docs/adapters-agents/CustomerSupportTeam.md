@@ -35,12 +35,14 @@ public CustomerSupportTeam(
     IPromptRepository prompts,                 // Prompt dosyaları okuyucu
     ApprovalGateService approvalGate,          // HITL onay kapısı
     ICustomerSupportToolsService tools,        // Tool implementasyonları
+    IUiHintEmitter uiHint,                     // UI ipuçları yayıcı (kategori seçici vb.)
     ILoggerFactory loggerFactory,
     ISemanticMemoryWriter? semanticMemory = null, // Opsiyonel: episodik bellek (semantic search)
     ICustomerProfileService? profileService = null) // Opsiyonel: müşteri profili güncelleyici
 ```
 
 > `ISemanticMemoryWriter` ve `ICustomerProfileService` opsiyoneldir — null gelirse özellik sessizce atlanır.
+> `IUiHintEmitter` zorunludur — tool çağrıları sırasında biriken UI ipuçlarını (örn. `category_picker`) streaming event olarak yayınlamak için kullanılır.
 
 ## Ana metodlar
 
@@ -79,10 +81,13 @@ public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(
 | Tip | Ne zaman? | Payload |
 |-----|-----------|---------|
 | `Agent` | Her ajan başladığında/bittiğinde | `{ name, status: "running"\|"done" }` |
+| `UiHint` | Tool çağrısı sırasında UI ipucu biriktiğinde | `{ hintType, ... }` (örn. `category_picker`) |
 | `ResponseStart` | Son yanıt akışı başlamadan önce | `{ terminationReason }` |
 | `ResponseDelta` | Yanıt metni parça parça gönderilirken | `{ text }` |
 | `ResponseComplete` | Tüm yanıt gönderildikten sonra | `{ text, terminationReason }` |
 | `Error` | Timeout veya workflow hatasında | `{ message }` |
+
+Her workflow event döngüsünde `_uiHint.DrainPending(sessionId)` çağrılır ve biriken UI ipuçları anında yield edilir.
 
 **Timeout koruması:**
 

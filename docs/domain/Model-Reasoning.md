@@ -17,7 +17,7 @@
 PlanningAgent'ın seçtiği agent ve gerekçeleri:
 
 ```csharp
-public sealed class PlanningResult
+public class PlanningResult
 {
     public string DetectedIntent { get; set; }            // "OrderInquiry"
     public double IntentConfidence { get; set; }          // 0.0-1.0
@@ -33,7 +33,11 @@ public sealed class PlanningResult
     public string TaskDescription { get; set; }           // Seçilen agent'a verilecek görev
 }
 
-public sealed record RejectedAlternative(string Agent, string Reason);
+public class RejectedAlternative
+{
+    public string Agent { get; set; } = "";
+    public string Reason { get; set; } = "";
+}
 ```
 
 ### NeedsClarification flow
@@ -78,8 +82,29 @@ public sealed class ReasoningResult
     public string Sentiment { get; set; }                 // "angry"/"negative"/"neutral"/"positive"
     public double SentimentScore { get; set; }
 
-    // Helper computed
-    public ConfidenceLevel Level => ConfidenceLevel.FromScore(ConfidenceScore);
+    // Helper computed — type-safe enum karşılığı
+    public ConfidenceLevel ConfidenceLevel => ConfidenceScore switch
+    {
+        >= 0.75 => ConfidenceLevel.High,
+        >= 0.5 => ConfidenceLevel.Medium,
+        _ => ConfidenceLevel.Low
+    };
+
+    // Static yardımcılar
+    public static string ScoreToString(double score) => score switch
+    {
+        >= 0.75 => WellKnown.Confidence.High,
+        >= 0.5 => WellKnown.Confidence.Medium,
+        _ => WellKnown.Confidence.Low
+    };
+
+    public static double StringToScore(string? s) => (s ?? "").Trim().ToLowerInvariant() switch
+    {
+        "yüksek" or "high" => 0.85,
+        "orta" or "medium" => 0.6,
+        "düşük" or "low" => 0.3,
+        _ => 0.5
+    };
 }
 ```
 
@@ -171,7 +196,7 @@ public enum ConfidenceLevel { Low, Medium, High }
 | `Medium` | `0.5 - 0.75` |
 | `High` | `≥ 0.75` |
 
-`FromScore(double)` static metoduyla hesaplanır. UI'da renkli badge için kullanılır.
+`ReasoningResult.ConfidenceLevel` computed property'sinden türetilir. UI'da renkli badge için kullanılır.
 
 ---
 

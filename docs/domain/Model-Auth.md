@@ -17,8 +17,9 @@ public sealed record UserInfo(
     string PasswordHash,
     string Role,
     string? LinkedAgentId,
-    bool IsActive
-);
+    bool IsActive,
+    DateTime CreatedAt,
+    DateTime? LastLoginAt);
 ```
 
 | Alan | Açıklama |
@@ -29,6 +30,8 @@ public sealed record UserInfo(
 | `Role` | `"Admin"`, `"Agent"`, `"User"` |
 | `LinkedAgentId` | Eğer kullanıcı bir `HumanAgent`'a bağlıysa, agent'ın ID'si |
 | `IsActive` | `false` ise login engellenir |
+| `CreatedAt` | Hesap oluşturma tarihi |
+| `LastLoginAt` | Son başarılı giriş tarihi (nullable) |
 
 ### LinkedAgentId nedir?
 
@@ -55,9 +58,9 @@ public sealed record RefreshTokenInfo(
     string UserId,
     string TokenHash,
     DateTime ExpiresAt,
+    DateTime CreatedAt,
     DateTime? RevokedAt,
-    string? ReplacedByTokenHash
-);
+    string? ReplacedByTokenHash);
 ```
 
 | Alan | Açıklama |
@@ -66,6 +69,7 @@ public sealed record RefreshTokenInfo(
 | `UserId` | Sahibi kullanıcı |
 | `TokenHash` | **SHA-256(plain token)** — plain DB'ye gitmez |
 | `ExpiresAt` | Son kullanma (default: 30 gün) |
+| `CreatedAt` | Token oluşturma tarihi |
 | `RevokedAt` | Logout veya rotation'da set edilir |
 | `ReplacedByTokenHash` | Token rotation zinciri — eski token hangi yeniyle değiştirildi |
 

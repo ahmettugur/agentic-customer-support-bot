@@ -17,41 +17,48 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// Configuration: API base URL (appsettings.json'dan)
-var apiBase = builder.Configuration["Api:BaseUrl"] ?? "https://localhost:7095";
+if (builder.HostEnvironment.IsDevelopment())
+    builder.Logging.SetMinimumLevel(LogLevel.Debug);
 
-// Auth state altyapısı
-builder.Services.AddSingleton<AuthTokenStore>();
-builder.Services.AddScoped<AppAuthStateProvider>();
-builder.Services.AddScoped<AuthenticationStateProvider>(sp =>
-    sp.GetRequiredService<AppAuthStateProvider>());
-builder.Services.AddAuthorizationCore();
-
-// Auth service — DelegatingHandler kullanmaz (refresh loop önleme)
-builder.Services.AddHttpClient<AuthService>(client =>
+TaskScheduler.UnobservedTaskException += (_, args) =>
 {
-    client.BaseAddress = new Uri(apiBase);
+    Console.Error.WriteLine($"[UnobservedTaskException] {args.Exception}");
+    args.SetObserved();
+};
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+builder.Services.AddAuthorizationCore();
+builder.Services.AddScoped<AuthTokenStore>();
+builder.Services.AddScoped<AppAuthStateProvider>();
+builder.Services.AddScoped<AuthenticationStateProvider>(
+    sp => sp.GetRequiredService<AppAuthStateProvider>());
+
+// ── HTTP ─────────────────────────────────────────────────────────────────────
+builder.Services.AddScoped<AuthorizedHttpClientHandler>();
+
+builder.Services.AddScoped(sp =>
+{
+    var handler = sp.GetRequiredService<AuthorizedHttpClientHandler>();
+    handler.InnerHandler = new HttpClientHandler();
+    return new HttpClient(handler)
+    {
+        BaseAddress = new Uri("https://localhost:7095")
+    };
 });
 
-// AuthorizedHttpClientHandler — diğer tüm HttpClient'lar için
-builder.Services.AddTransient<AuthorizedHttpClientHandler>();
+// AuthService ham HttpClient'e ihtiyaç duyar (refresh döngüsünü önlemek için)
+builder.Services.AddScoped(sp => new AuthService(
+    new HttpClient { BaseAddress = new Uri("https://localhost:7095") },
+    sp.GetRequiredService<AuthTokenStore>()
+));
 
-// API service'leri
-builder.Services.AddHttpClient<AdminApiService>(c => c.BaseAddress = new Uri(apiBase))
-    .AddHttpMessageHandler<AuthorizedHttpClientHandler>();
-builder.Services.AddHttpClient<ChatApiService>(c => c.BaseAddress = new Uri(apiBase))
-    .AddHttpMessageHandler<AuthorizedHttpClientHandler>();
-builder.Services.AddHttpClient<TracesApiService>(...).AddHttpMessageHandler<AuthorizedHttpClientHandler>();
-builder.Services.AddHttpClient<SlaApiService>(...).AddHttpMessageHandler<AuthorizedHttpClientHandler>();
-builder.Services.AddHttpClient<AnalyticsApiService>(...).AddHttpMessageHandler<AuthorizedHttpClientHandler>();
-builder.Services.AddHttpClient<WorkflowApiService>(...).AddHttpMessageHandler<AuthorizedHttpClientHandler>();
-
-// Hata observability
-TaskScheduler.UnobservedTaskException += (_, e) =>
-{
-    Console.Error.WriteLine($"[UnobservedTaskException] {e.Exception}");
-    e.SetObserved();
-};
+// ── API Servisleri ────────────────────────────────────────────────────────────
+builder.Services.AddScoped<AdminApiService>();
+builder.Services.AddScoped<AnalyticsApiService>();
+builder.Services.AddScoped<ChatApiService>();
+builder.Services.AddScoped<TracesApiService>();
+builder.Services.AddScoped<SlaApiService>();
+builder.Services.AddScoped<WorkflowApiService>();
 
 await builder.Build().RunAsync();
 ```
@@ -62,32 +69,74 @@ await builder.Build().RunAsync();
 
 | Service | Lifetime | Sebep |
 |---|---|---|
-| `AuthTokenStore` | **Singleton** | localStorage tek doğruluk kaynağı |
+| `AuthTokenStore` | Scoped | localStorage — tek kullanıcı, tek tab |
 | `AppAuthStateProvider` | Scoped | Component tree boyunca state |
-| `AuthService` | Scoped (via AddHttpClient) | Standalone HttpClient — DelegatingHandler yok |
-| `AuthorizedHttpClientHandler` | Transient | Her HttpClient çağrısında yeni instance |
-| Diğer API service'ler | Scoped (via AddHttpClient) | İçinde state yok, HttpClient inject |
+| `AuthService` | Scoped (ham HttpClient) | DelegatingHandler yok — refresh döngüsü önlenir |
+| `AuthorizedHttpClientHandler` | Scoped | Diğer HttpClient'larla paylaşılır |
+| `HttpClient` (authorized) | Scoped | AuthorizedHttpClientHandler ile sarılı |
+| Diğer API service'ler | Scoped | İçinde state yok, authorize HttpClient inject |
 
-> ⚠️ **Blazor WASM "Scoped"** = uygulama yaşam döngüsü kadar (tek user, tek tab). Server-side'daki request scope'tan farklı.
+> **Blazor WASM "Scoped"** = uygulama yaşam döngüsü kadar (tek user, tek tab). Server-side Scoped'tan farklı.
 
 ### Neden AuthService DelegatingHandler kullanmıyor?
 
 ```csharp
-builder.Services.AddHttpClient<AuthService>(client => { client.BaseAddress = new Uri(apiBase); });
-// AddHttpMessageHandler<AuthorizedHttpClientHandler>() YOK!
+// AuthService için: new HttpClient { BaseAddress = ... }  ← ham, handler YOK
+// Diğerleri için: handler.InnerHandler = new HttpClientHandler() ← handler VAR
 ```
 
-`AuthService` refresh token endpoint'ini çağırır. Eğer `AuthorizedHttpClientHandler` ile sarılı olsaydı:
+Eğer `AuthorizedHttpClientHandler` ile sarılı olsaydı:
 
 ```
-HttpClient.Send → AuthorizedHandler → Bearer token ekle (expired token!)
-   → 401 unauthorized
-   → AuthService.TryRefreshAsync() çağrılır
-   → HttpClient.Send → AuthorizedHandler → Bearer token (yine expired!)
-   → 401 → refresh → 401 → refresh → SONSUZ DÖNGÜ
+401 → TryRefreshAsync → POST /auth/refresh (handler'lı) → token expired → 401 → SONSUZ DÖNGÜ
 ```
 
 Bu yüzden `AuthService` **raw HttpClient** kullanır — token interception yok.
+
+### API BaseAddress
+
+`Program.cs` hardcode `https://localhost:7095`. Production için:
+
+```csharp
+// Seçenek: builder.Configuration["Api:BaseUrl"] ?? "https://localhost:7095"
+```
+
+`wwwroot/appsettings.json`:
+
+```json
+{ "Api": { "BaseUrl": "https://localhost:7095" } }
+```
+
+Production'da `appsettings.Production.json` ile override.
+
+---
+
+## Kayıtlı API Service'leri
+
+| Service | Sorumluluk |
+|---|---|
+| `AdminApiService` | Admin panel HITL + escalation + agent operasyonları |
+| `AnalyticsApiService` | Dashboard + session analytics |
+| `ChatApiService` | Chat rating + session metadata |
+| `TracesApiService` | Trace dashboard + replay |
+| `SlaApiService` | SLA status + events |
+| `WorkflowApiService` | Workflow CRUD + test |
+
+Tümü aynı authorize `HttpClient`'ı DI'dan alır — `AuthorizedHttpClientHandler` Bearer token ekler.
+
+---
+
+## Hata observability
+
+```csharp
+TaskScheduler.UnobservedTaskException += (_, args) =>
+{
+    Console.Error.WriteLine($"[UnobservedTaskException] {args.Exception}");
+    args.SetObserved();
+};
+```
+
+Fire-and-forget task exception'larını browser console'a yazar, uygulamanın crash etmesini önler.
 
 ---
 
@@ -107,7 +156,6 @@ Root component — routing + auth state cascade.
                     <p>Yetkilendiriliyor…</p>
                 </Authorizing>
             </AuthorizeRouteView>
-            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
         </Found>
         <NotFound>
             <LayoutView Layout="@typeof(EmptyLayout)">
@@ -118,158 +166,12 @@ Root component — routing + auth state cascade.
 </CascadingAuthenticationState>
 ```
 
-### Önemli parçalar
-
 | Element | Görev |
 |---|---|
 | `CascadingAuthenticationState` | `AuthenticationState`'i tüm component tree'ye yayar |
 | `AuthorizeRouteView` | `[Authorize]` route'ları kontrol eder |
 | `NotAuthorized` | Yetki yoksa `RedirectToLogin` |
 | `Authorizing` | Token check ederken kısa loading state |
-| `FocusOnNavigate` | Erişilebilirlik — sayfa değişince `h1`'e focus |
-
-### ErrorBoundary
-
-```razor
-<ErrorBoundary>
-    <ChildContent>
-        @* asıl içerik *@
-    </ChildContent>
-    <ErrorContent>
-        <div>Bir hata oluştu. <button onclick="...">Tekrar dene</button></div>
-    </ErrorContent>
-</ErrorBoundary>
-```
-
-Component throw ederse kullanıcıya hata sayfası gösterilir — uygulama crash etmez.
-
----
-
-## _Imports.razor
-
-Tüm Razor dosyalarına otomatik dahil edilen `using`'ler:
-
-```razor
-@using System.Net.Http
-@using System.Net.Http.Json
-@using System.Text.Json
-@using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.AspNetCore.Components.Forms
-@using Microsoft.AspNetCore.Components.Routing
-@using Microsoft.AspNetCore.Components.Web
-@using Microsoft.AspNetCore.Components.WebAssembly.Http
-@using Microsoft.JSInterop
-
-@using CustomerSupportBot.Web
-@using CustomerSupportBot.Web.Layout
-@using CustomerSupportBot.Web.Components
-@using CustomerSupportBot.Web.Services
-@using CustomerSupportBot.Web.Models
-```
-
-Her Razor dosyasında bu using'leri tekrar yazmaya gerek yok.
-
----
-
-## wwwroot/index.html
-
-Blazor WASM bootstrap.
-
-```html
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="utf-8" />
-    <title>Müşteri Destek Botu</title>
-    <base href="/" />
-
-    <!-- Google Fonts: Inter -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
-
-    <!-- Global stiller -->
-    <link rel="stylesheet" href="css/app.css" />
-    <link rel="stylesheet" href="CustomerSupportBot.Web.styles.css" />
-</head>
-<body>
-    <div id="app">
-        <!-- Loading spinner (Blazor yüklenene kadar) -->
-        <svg class="spinner">...</svg>
-    </div>
-
-    <!-- Blazor framework -->
-    <script src="_framework/blazor.webassembly.js"></script>
-
-    <!-- Dynamic script loader (chat ve admin sayfaları için) -->
-    <script>
-        window.loadScript = function(src, id) {
-            return new Promise((resolve, reject) => {
-                if (id && document.getElementById(id)) return resolve();
-                const s = document.createElement('script');
-                s.src = src;
-                if (id) s.id = id;
-                s.onload = resolve;
-                s.onerror = reject;
-                document.head.appendChild(s);
-            });
-        };
-    </script>
-</body>
-</html>
-```
-
-### `window.loadScript` neden?
-
-JS dosyaları **lazy load** — sadece ihtiyaç olunca yüklenir:
-
-```csharp
-// Chat.razor.cs
-protected override async Task OnAfterRenderAsync(bool firstRender)
-{
-    if (firstRender)
-    {
-        await JS.InvokeVoidAsync("loadScript", "/js/chat-bridge.js", "chat-bridge");
-        await JS.InvokeVoidAsync("loadScript", "/js/realtime-client.js", "realtime-client");
-    }
-}
-```
-
-Bu sayede `/admin` sayfasını ziyaret eden user gereksiz `realtime-client.js` (PCM audio code) yüklemez. Initial bundle küçük kalır.
-
-### `<base href="/" />`
-
-Blazor routing'in çalışması için zorunlu. Tüm relative URL'ler bu base'e göre çözülür.
-
----
-
-## Configuration
-
-`wwwroot/appsettings.json`:
-
-```json
-{
-  "Api": {
-    "BaseUrl": "https://localhost:7095"
-  }
-}
-```
-
-Production'da `appsettings.Production.json`:
-
-```json
-{
-  "Api": {
-    "BaseUrl": "https://api.musteridestek.com"
-  }
-}
-```
-
-`Program.cs`:
-
-```csharp
-var apiBase = builder.Configuration["Api:BaseUrl"] ?? "https://localhost:7095";
-```
-
-Blazor WASM standalone deploy edilirse appsettings static dosya olarak fetch edilir (build sırasında env'e göre yer değiştirir).
 
 ---
 

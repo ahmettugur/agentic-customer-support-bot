@@ -38,7 +38,7 @@ public sealed class ReasoningTrace
     public string? TerminationReason { get; set; }      // "completed", "max_messages", "timeout", "terminated_by_restart"
     public string? FinalResponse { get; set; }
     public int IterationCount { get; set; }
-    public int EstimatedTokens { get; set; }
+    public long EstimatedTokens { get; set; }
     public string? Error { get; set; }
 }
 ```
@@ -108,34 +108,74 @@ public sealed class ToolInvocation
 Bir session için **özet metrikler** — admin dashboard için.
 
 ```csharp
-public sealed class SessionAnalytics
+public class SessionAnalytics
 {
-    public string SessionId { get; init; }
-    public DateTime CreatedAt { get; init; }
-    public DateTime LastActivity { get; init; }
+    public string SessionId { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime LastActivity { get; set; }
 
     public int MessageCount { get; set; }
     public int TurnCount { get; set; }
 
-    public string? Intent { get; set; }
+    public string? CurrentIntent { get; set; }
     public string? Phase { get; set; }
     public string? CustomerId { get; set; }
 
-    public string Sentiment { get; set; } = "neutral";
+    public string? Sentiment { get; set; }
+    public double SentimentScore { get; set; }
     public int ConsecutiveNegativeTurns { get; set; }
     public List<SentimentTimelineEntry> SentimentTimeline { get; set; } = new();
 
     public SessionRatingInfo? Rating { get; set; }
-    public List<ApprovalSummary> Approvals { get; set; } = new();
-    public List<EscalationSummary> Escalations { get; set; } = new();
+
+    public int TotalApprovals { get; set; }
+    public int ApprovedCount { get; set; }
+    public int RejectedCount { get; set; }
+    public int ExpiredCount { get; set; }
+    public List<ApprovalSummary> ApprovalDetails { get; set; } = new();
+
+    public int TotalEscalations { get; set; }
+    public int OpenEscalations { get; set; }
+    public int ResolvedEscalations { get; set; }
+    public List<EscalationSummary> EscalationDetails { get; set; } = new();
 
     public Dictionary<string, string> CollectedInfo { get; set; } = new();
 }
 
-public sealed record SentimentTimelineEntry(int Turn, string Label, double Score, DateTime At);
-public sealed record SessionRatingInfo(int Stars, string? Feedback, DateTime RatedAt);
-public sealed record ApprovalSummary(string Id, string Status, string ToolName, DateTime CreatedAt);
-public sealed record EscalationSummary(string Id, string Status, string Reason, DateTime CreatedAt);
+public class SentimentTimelineEntry
+{
+    public int Turn { get; set; }
+    public string Label { get; set; } = "";
+    public double Score { get; set; }
+    public DateTime Timestamp { get; set; }
+}
+
+public class SessionRatingInfo
+{
+    public int Stars { get; set; }
+    public string? Feedback { get; set; }
+    public DateTime RatedAt { get; set; }
+}
+
+public class ApprovalSummary
+{
+    public string Id { get; set; } = "";
+    public string ToolName { get; set; } = "";
+    public string Status { get; set; } = "";
+    public DateTime RequestedAt { get; set; }
+    public DateTime? DecidedAt { get; set; }
+    public string? DecidedBy { get; set; }
+}
+
+public class EscalationSummary
+{
+    public string Id { get; set; } = "";
+    public string? AgentName { get; set; }
+    public string Reason { get; set; } = "";
+    public string Status { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public string? Resolution { get; set; }
+}
 ```
 
 `TracePortService.GetSessionsSummary` bu nesneleri üretir — 4 farklı port'tan (session, rating, approval, escalation) veriyi birleştirir.
@@ -147,19 +187,42 @@ public sealed record EscalationSummary(string Id, string Status, string Reason, 
 Global metrikler — `IRatingStore`, `ISessionManager`, `IApprovalQueue`, `IEscalationSink`'ten aggregate edilir:
 
 ```csharp
-public sealed class AnalyticsDashboard
+public class AnalyticsDashboard
 {
+    // Genel
     public int TotalSessions { get; set; }
     public int TotalMessages { get; set; }
+    public double AverageSessionMessages { get; set; }
+
+    // Rating
     public double AverageRating { get; set; }
-    public Dictionary<int, int> RatingDistribution { get; set; } = new(); // 1-5 stars
+    public int TotalRatings { get; set; }
+    public Dictionary<int, int> RatingDistribution { get; set; } = new();
+    public List<ConversationRating> RecentRatings { get; set; } = new();
 
-    public Dictionary<string, int> IntentDistribution { get; set; } = new();
-    public Dictionary<string, int> SentimentDistribution { get; set; } = new();
+    // Approvals
+    public int TotalApprovals { get; set; }
+    public int ApprovedCount { get; set; }
+    public int RejectedCount { get; set; }
+    public int ExpiredCount { get; set; }
+    public int PendingCount { get; set; }
 
+    // Escalations
+    public int TotalEscalations { get; set; }
     public int OpenEscalations { get; set; }
-    public int PendingApprovals { get; set; }
-    public int ActiveHumanAgents { get; set; }
+    public int AcknowledgedEscalations { get; set; }
+    public int ResolvedEscalations { get; set; }
+    public int DismissedEscalations { get; set; }
+
+    // Intent & Faz dağılımı
+    public Dictionary<string, int> IntentDistribution { get; set; } = new();
+    public Dictionary<string, int> PhaseDistribution { get; set; } = new();
+
+    // Duygu analizi
+    public double AverageSentimentScore { get; set; }
+    public Dictionary<string, int> SentimentDistribution { get; set; } = new();
+    public int NegativeSessionCount { get; set; }
+    public int SentimentAlertCount { get; set; }
 }
 ```
 
@@ -172,12 +235,13 @@ public sealed class AnalyticsDashboard
 Konuşma sonunda kullanıcının yıldız + feedback verdiği kayıt.
 
 ```csharp
-public sealed class ConversationRating
+public class ConversationRating
 {
-    public string SessionId { get; init; }
-    public int Stars { get; init; }                      // 1-5
-    public string? Feedback { get; init; }
-    public DateTime RatedAt { get; init; }
+    public string Id { get; set; } = Guid.NewGuid().ToString("N")[..12];
+    public string SessionId { get; set; } = "";
+    public int Stars { get; set; }                       // 1-5
+    public string? Feedback { get; set; }
+    public DateTime RatedAt { get; set; } = DateTime.UtcNow;
 }
 ```
 
@@ -204,7 +268,7 @@ public sealed class SlaEvent
     public string Kind { get; init; }                    // "approval" | "escalation"
     public string Severity { get; init; }                // "warn" | "breach"
     public string TargetId { get; init; }                // Approval/Escalation ID
-    public long AgeSeconds { get; init; }
+    public int AgeSeconds { get; set; }
     public string? Action { get; init; }                 // "AutoReject", "AutoApprove", "PriorityBoost"
     public string? Note { get; init; }
 }
