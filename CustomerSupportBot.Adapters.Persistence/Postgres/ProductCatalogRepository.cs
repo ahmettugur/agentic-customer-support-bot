@@ -18,32 +18,21 @@ public sealed class ProductCatalogRepository : IProductCatalogRepository
         _logger = logger;
     }
 
-    public ProductInfo? FindProduct(string nameOrPartial)
+    public ProductInfo? FindProduct(string productName)
     {
         using var ctx = _dbFactory.CreateDbContext();
-
-        var normalized = nameOrPartial.ToLower();
-
-        // Önce tam eşleşme (case-insensitive), sonra substring — tek context, iki query
-        var exact = ctx.Products.AsNoTracking()
+        
+        var product = ctx.Products.AsNoTracking()
             .Include(p => p.Category)
-            .FirstOrDefault(p => p.Name.ToLower() == normalized);
-        if (exact is not null)
-            return new ProductInfo(exact.Price, exact.Stock, exact.Name, exact.Category.Name);
+            .FirstOrDefault(p => p.Name == productName);
 
-        var partial = ctx.Products.AsNoTracking()
-            .Include(p => p.Category)
-            .OrderBy(p => p.Name)
-            .FirstOrDefault(p => p.Name.ToLower().Contains(normalized));
-
-        return partial is null ? null : new ProductInfo(partial.Price, partial.Stock, partial.Name, partial.Category.Name);
+        return product is null ? null : new ProductInfo(product.Price, product.Stock, product.Name, product.Category.Name);
     }
 
     public bool TryDeductStock(string productName, int quantity)
     {
         using var ctx = _dbFactory.CreateDbContext();
 
-        // Atomik: WHERE stock >= quantity kontrolü ile tek UPDATE
         var affected = ctx.Products
             .Where(p => p.Name == productName && p.Stock >= quantity)
             .ExecuteUpdate(s => s.SetProperty(p => p.Stock, p => p.Stock - quantity));
@@ -65,10 +54,17 @@ public sealed class ProductCatalogRepository : IProductCatalogRepository
     public IReadOnlyList<ProductInfo> GetByCategory(string category)
     {
         using var ctx = _dbFactory.CreateDbContext();
+
+        // Name kolonu collation ile tanımlı — == operatörü case+accent insensitive eşleşir.
+        var matched = ctx.Categories.AsNoTracking()
+            .FirstOrDefault(c => c.Name == category);
+
+        if (matched is null) return [];
+
         return ctx.Products
             .AsNoTracking()
             .Include(p => p.Category)
-            .Where(p => p.Category.Name.ToLower() == category.ToLower())
+            .Where(p => p.CategoryId == matched.Id)
             .OrderBy(p => p.Name)
             .Select(p => new ProductInfo(p.Price, p.Stock, p.Name, p.Category.Name))
             .ToList();
@@ -83,4 +79,5 @@ public sealed class ProductCatalogRepository : IProductCatalogRepository
             .Select(c => c.Name)
             .ToList();
     }
+    
 }

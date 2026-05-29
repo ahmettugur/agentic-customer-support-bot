@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CustomerSupportBot.Adapters.Persistence.Migrations
 {
     [DbContext(typeof(CustomerSupportDbContext))]
-    [Migration("20260528182050_InitialCreate")]
+    [Migration("20260528211503_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -230,7 +230,8 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
-                        .HasColumnName("name");
+                        .HasColumnName("name")
+                        .UseCollation("und-u-ks-level1");
 
                     b.HasKey("Id");
 
@@ -394,7 +395,8 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
-                        .HasColumnName("name");
+                        .HasColumnName("name")
+                        .UseCollation("und-u-ks-level1");
 
                     b.Property<decimal>("Price")
                         .HasColumnType("numeric(10,2)")

@@ -45,6 +45,7 @@ public static class PersistenceAdapterServiceCollectionExtensions
         services.AddSingleton<ISlaEventSink, PostgresSlaEventSink>();
 
         services.AddSingleton<IOrderRepository, OrderRepository>();
+        services.AddSingleton<ICustomerRepository, CustomerRepository>();
         services.AddSingleton<IProductCatalogRepository, ProductCatalogRepository>();
         services.AddSingleton<IComplaintRepository, ComplaintRepository>();
 

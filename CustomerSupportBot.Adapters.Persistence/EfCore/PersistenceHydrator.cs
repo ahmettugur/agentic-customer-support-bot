@@ -318,10 +318,6 @@ public sealed class PersistenceHydrator : IHostedService
         ctx.Complaints.AddRange(NorthwindSeedData.Complaints());
         await ctx.SaveChangesAsync(ct);
 
-        await ctx.Database.ExecuteSqlRawAsync(
-            "SELECT setval('catalog.complaint_seq', (SELECT COALESCE(MAX(code), 1005) FROM catalog.complaints))",
-            ct);
-
         _logger.LogInformation("[Hydrator] {Count} demo şikayet seed edildi.", NorthwindSeedData.Complaints().Length);
     }
 

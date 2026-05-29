@@ -8,7 +8,7 @@ namespace CustomerSupportBot.Application.Ports.Outbound.Persistence;
 public interface IProductCatalogRepository
 {
     /// <summary>Tam eşleşme veya fuzzy match ile ürün bulur. Bulunamazsa null döner.</summary>
-    ProductInfo? FindProduct(string nameOrPartial);
+    ProductInfo? FindProduct(string productName);
 
     /// <summary>Stok azaltır. Yetersiz stokta false döner.</summary>
     bool TryDeductStock(string productName, int quantity);

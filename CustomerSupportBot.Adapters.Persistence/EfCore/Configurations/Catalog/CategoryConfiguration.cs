@@ -19,6 +19,7 @@ internal sealed class CategoryConfiguration : IEntityTypeConfiguration<CategoryE
         builder.Property(e => e.Name)
             .HasColumnName("name")
             .HasMaxLength(256)
+            .UseCollation("und-u-ks-level1")  // Postgres ICU: case-insensitive + accent-insensitive
             .IsRequired();
     }
 }

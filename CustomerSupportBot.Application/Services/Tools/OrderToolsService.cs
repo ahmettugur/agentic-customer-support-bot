@@ -12,11 +12,13 @@ public sealed class OrderToolsService : IOrderToolsService
 {
     private readonly IOrderRepository _orders;
     private readonly IProductCatalogRepository _products;
+    private readonly ICustomerRepository _customers;
 
-    public OrderToolsService(IOrderRepository orders, IProductCatalogRepository products)
+    public OrderToolsService(IOrderRepository orders, IProductCatalogRepository products, ICustomerRepository customers)
     {
         _orders = orders;
         _products = products;
+        _customers = customers;
     }
 
     [Description("Yeni sipariş oluşturur. Ürün adı, adet ve müşteri kimlik numarası zorunludur. " +
@@ -34,6 +36,12 @@ public sealed class OrderToolsService : IOrderToolsService
             return ToolResult.ValidationError(
                 $"Sipariş için şu bilgiler gerekli: {string.Join(", ", missing)}.",
                 missing.ToArray());
+
+        if (!long.TryParse(customerId, out var customerIdLong)
+            || !_customers.Exists(customerIdLong))
+            return ToolResult.NotFound(
+                WellKnown.ToolErrorCodes.CustomerNotFound,
+                $"'{customerId}' kimlik numaralı müşteri sistemde kayıtlı değil. Lütfen müşteri numaranızı kontrol edin.");
 
         var product = _products.FindProduct(productName);
         if (product is null)

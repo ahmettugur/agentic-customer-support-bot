@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,6 +12,13 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // "und-u-ks-level1" collation'ı ICU provider ile oluştur.
+            // Tablo oluşturulmadan önce çalışmalı; IF NOT EXISTS idempotent yapar.
+            migrationBuilder.Sql("""
+                CREATE COLLATION IF NOT EXISTS "und-u-ks-level1"
+                    (provider = icu, locale = 'und-u-ks-level1', deterministic = false);
+                """);
+
             migrationBuilder.EnsureSchema(
                 name: "hitl");
 
@@ -90,7 +97,7 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                 {
                     id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false)
+                    name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false, collation: "und-u-ks-level1")
                 },
                 constraints: table =>
                 {
@@ -408,7 +415,7 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                 {
                     id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false, collation: "und-u-ks-level1"),
                     price = table.Column<decimal>(type: "numeric(10,2)", nullable: false),
                     stock = table.Column<int>(type: "integer", nullable: false),
                     category_id = table.Column<int>(type: "integer", nullable: false)
