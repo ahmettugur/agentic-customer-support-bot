@@ -30,7 +30,7 @@ CustomerSupportBot.Adapters.Persistence/
 │   └── PersistenceAdapterServiceCollectionExtensions.cs  ← Ana DI giriş noktası
 │
 ├── EfCore/
-│   ├── CustomerSupportDbContext.cs     ← EF Core DbContext (8 şema)
+│   ├── CustomerSupportDbContext.cs     ← EF Core DbContext (9 şema)
 │   ├── PersistenceHydrator.cs          ← Startup kurtarma (IHostedService)
 │   ├── PersistenceOptions.cs           ← InMemory/Postgres seçimi
 │   ├── PersistenceServiceCollectionExtensions.cs
@@ -44,13 +44,17 @@ CustomerSupportBot.Adapters.Persistence/
 │   ├── InMemorySessionManager.cs
 │   ├── InMemoryApprovalQueue.cs
 │   ├── InMemoryChatBridge.cs
-│   └── ... (14 adapter)
+│   └── ... (13 adapter)
 │
 ├── Postgres/                           ← Üretim (Hybrid cache+DB+Redis)
 │   ├── PostgresSessionManager.cs
 │   ├── PostgresApprovalQueue.cs
 │   ├── PostgresChatBridge.cs
-│   └── ... (13 adapter)
+│   ├── OrderRepository.cs
+│   ├── ComplaintRepository.cs
+│   ├── ProductCatalogRepository.cs
+│   ├── CustomerRepository.cs
+│   └── ... (17 adapter)
 │
 ├── Auth/                               ← BCrypt, JWT
 │   ├── BCryptPasswordHasher.cs
@@ -95,9 +99,10 @@ CustomerSupportBot.Adapters.Persistence/
 | `IChatModeRegistry` | `InMemoryChatModeRegistry` | `PostgresChatModeRegistry` |
 | `IEscalationSink` | `InMemoryEscalationSink` | `PostgresEscalationSink` |
 | `IHumanAgentRegistry` | `InMemoryHumanAgentRegistry` | `PostgresHumanAgentRegistry` |
-| `IOrderRepository` | `InMemoryOrderAdapter` | — (InMemory only) |
-| `IComplaintRepository` | `InMemoryComplaintAdapter` | — (InMemory only) |
-| `IProductCatalogRepository` | `InMemoryProductCatalogAdapter` | — (InMemory only) |
+| `IOrderRepository` | `InMemoryOrderAdapter` | `OrderRepository` |
+| `ICustomerRepository` | — | `CustomerRepository` |
+| `IComplaintRepository` | `InMemoryComplaintAdapter` | `ComplaintRepository` |
+| `IProductCatalogRepository` | `InMemoryProductCatalogAdapter` | `ProductCatalogRepository` |
 | `IRatingStore` | `InMemoryRatingStore` | `PostgresRatingStore` |
 | `IReasoningTraceStore` | `InMemoryReasoningTraceStore` | `PostgresReasoningTraceStore` |
 | `ISlaEventSink` | `InMemorySlaEventSink` | `PostgresSlaEventSink` |

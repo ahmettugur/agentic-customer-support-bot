@@ -11,9 +11,9 @@
 
 ## CustomerSupportDbContext
 
-**Base:** `DbContext` (EF Core 9 + Npgsql)
+**Base:** `DbContext` (EF Core 10 + Npgsql)
 
-8 PostgreSQL şemasında 16 tablo barındırır. Tüm entity konfigürasyonları `assembly.GetTypes()` ile otomatik uygulanır — yeni entity eklendiğinde DbContext dosyasına dokunmak gerekmez.
+9 PostgreSQL şemasında 22 tablo barındırır. Tüm entity konfigürasyonları `assembly.GetTypes()` ile otomatik uygulanır — yeni entity eklendiğinde DbContext dosyasına dokunmak gerekmez.
 
 ### DbSet'ler
 
@@ -23,7 +23,7 @@
 | `Messages` | `chat` | `messages` |
 | `ChatBridgeMessages` | `chat` | `bridge_messages` |
 | `ChatSessionModes` | `chat` | `session_modes` |
-| `ApprovalRequests` | `hitl` | `approval_requests` |
+| `Approvals` | `hitl` | `approval_requests` |
 | `Escalations` | `hitl` | `escalations` |
 | `HumanAgents` | `hitl` | `human_agents` |
 | `ReasoningTraces` | `observability` | `reasoning_traces` |
@@ -35,6 +35,12 @@
 | `CustomerProfiles` | `personalization` | `customer_profiles` |
 | `Lessons` | `improvement` | `lessons` |
 | `WorkflowDefinitions` | `workflow` | `workflow_definitions` |
+| `Categories` | `catalog` | `categories` |
+| `Customers` | `catalog` | `customers` |
+| `Orders` | `catalog` | `orders` |
+| `OrderDetails` | `catalog` | `order_details` |
+| `Products` | `catalog` | `products` |
+| `Complaints` | `catalog` | `complaints` |
 
 ---
 
@@ -51,6 +57,7 @@ public static class Schemas
     public const string Personalization = "personalization";
     public const string Improvement    = "improvement";
     public const string Workflow       = "workflow";
+    public const string Catalog        = "catalog";
 }
 ```
 
@@ -116,7 +123,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<CustomerSu
 **Migration oluşturmak için:**
 ```bash
 cd CustomerSupportBot.Adapters.Persistence
-dotnet ef migrations add <MigrationName> --project . --startup-project ../CustomerSupportBot.Api
+dotnet ef migrations add <MigrationName> --project . --startup-project ../CustomerSupportBot.Web
 dotnet ef database update
 ```
 

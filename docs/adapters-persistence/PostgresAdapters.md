@@ -162,3 +162,64 @@ await db.SaveChangesAsync();
 Exception swallow: logging yapar, exception'ı yutar — telemetry kaybı kabul edilebilir.
 
 **InMemory karşılığı yoktur** — `ILlmCallPersistencePort` sadece Postgres modunda anlamlıdır.
+
+---
+
+## OrderRepository
+
+**Port:** `IOrderRepository`
+
+EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yaratır.
+
+| Metod | Açıklama |
+|-------|---------|
+| `Create(order)` | Yeni sipariş + detay INSERT; `Code` DB tarafından üretilir |
+| `Get(orderId)` | Tekil sipariş (Include: Details + Product) |
+| `GetByCustomer(customerId)` | Müşteriye ait tüm siparişler (OrderDate DESC) |
+| `GetLast(customerId)` | Son sipariş |
+| `Cancel(orderId, reason)` | İptal — sadece `Processing`/`Shipped` durumunda |
+| `RequestReturn(orderId, reason)` | İade talebi — sadece `Delivered` + 14 gün süresi |
+
+---
+
+## ComplaintRepository
+
+**Port:** `IComplaintRepository`
+
+| Metod | Açıklama |
+|-------|---------|
+| `Create(complaint)` | Yeni şikayet; `catalog.complaint_seq` sequence'tan ID alır |
+| `Get(complaintId)` | Tekil şikayet |
+| `GetByOrder(orderId)` | Siparişe ait şikayetler |
+| `GetByCustomer(customerId)` | Müşteriye ait şikayetler |
+
+> **Not:** `Create` metodu `catalog.complaint_seq` sequence kullanır. Bu sequence migration'da tanımlı olmalıdır.
+
+---
+
+## ProductCatalogRepository
+
+**Port:** `IProductCatalogRepository`
+
+| Metod | Açıklama |
+|-------|---------|
+| `FindProduct(name)` | İsme göre ürün arama (exact match) |
+| `TryDeductStock(name, qty)` | Atomic stok düşürme (`ExecuteUpdate` ile) |
+| `GetAll()` | Tüm ürünler (kategori dahil, Name sıralı) |
+| `GetByCategory(category)` | Kategoriye göre ürünler |
+| `GetCategories()` | Tüm kategori isimleri |
+
+**Stok düşürme:** `ExecuteUpdate` ile tek SQL — lock gerekmez, `WHERE stock >= qty` koşulu race condition önler.
+
+---
+
+## CustomerRepository
+
+**Port:** `ICustomerRepository`
+
+| Metod | Açıklama |
+|-------|---------|
+| `Exists(customerId)` | Müşteri var mı kontrolü |
+
+Minimal adapter — müşteri doğrulama için kullanılır.
+

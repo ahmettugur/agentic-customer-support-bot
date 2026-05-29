@@ -51,13 +51,13 @@ Restart sırasında aktif olan reasoning akışları tamamlanmadan kesilmiştir.
 
 ```
 auth.users
-WHERE username = 'admin'
+WHERE username = @username  (varsayılan: 'admin')
 
 → yoksa INSERT:
-   username='admin', passwordHash=BCrypt('admin'), role='Admin', is_active=true
+   username='admin', passwordHash=BCrypt('Admin123!'), role='Admin', is_active=true
 ```
 
-İlk kurulumda admin kullanıcısı otomatik oluşturulur. Şifre üretimde değiştirilmelidir.
+Kullanıcı adı `Auth:DefaultAdminUsername`, şifre `Auth:DefaultAdminPassword` konfigürasyonundan okunur. Tanımlı değilse varsayılanlar: `admin` / `Admin123!`.
 
 ---
 
@@ -65,25 +65,83 @@ WHERE username = 'admin'
 
 ```
 hitl.human_agents
-→ yoksa INSERT demo agent'lar (RoutingOptions.DefaultAgents'tan)
+→ tablo boşsa 2 demo agent INSERT:
+   - agent-jdoe (John Doe, john.doe@example.com, skills: complaint/refund/vip)
+   - agent-jsmith (Jane Smith, jane.smith@example.com, skills: order/product/enterprise)
 
 auth.users
-→ her agent için linked user oluştur (username=agent.Id, password='agent123')
+→ her agent için linked user oluştur
+   username = email.Split('@')[0]  (john.doe, jane.smith)
+   password = Auth:DefaultAgentPassword ?? 'Agent123!'
+   role = 'Agent', linked_agent_id = agent.Id
 ```
 
 Demo ve geliştirme ortamında oturum açıp agent panelini test etmek için hazır temsilci hesapları oluşturulur.
 
 ---
 
+### 5. Categories seed
+
+```
+catalog.categories
+→ tablo boşsa 21 demo kategori INSERT (NorthwindSeedData)
+```
+
+---
+
+### 6. Customers seed
+
+```
+catalog.customers
+→ tablo boşsa 29 demo müşteri INSERT (NorthwindSeedData)
+→ sequence reset: setval(pg_get_serial_sequence('catalog.customers', 'id'), MAX(id))
+```
+
+---
+
+### 7. Products seed
+
+```
+catalog.products
+→ tablo boşsa 36 demo ürün INSERT (NorthwindSeedData)
+→ sequence reset: setval(pg_get_serial_sequence('catalog.products', 'id'), MAX(id))
+```
+
+---
+
+### 8. Orders + OrderDetails seed
+
+```
+catalog.orders
+→ tablo boşsa 48 demo sipariş INSERT (NorthwindSeedData)
+→ sequence reset: setval(pg_get_serial_sequence('catalog.orders', 'code'), MAX(code))
+
+catalog.order_details
+→ tablo boşsa sipariş detayları INSERT (NorthwindSeedData)
+```
+
+---
+
+### 9. Complaints seed
+
+```
+catalog.complaints
+→ tablo boşsa 5 demo şikayet INSERT (NorthwindSeedData)
+```
+
+Complaints tablosu `ValueGeneratedNever()` kullanır — `Code` alanı seed verilerinde açıkça atanır, sequence yoktur.
+
+---
+
 ## Neden sadece Postgres?
 
-InMemory adaptörler her restart'ta sıfırlanır — "kalan kayıt" kavramı yoktur. Hydrator yalnızca Postgres modunda anlamlıdır; `AddPersistenceHydrator()` yalnızca `Provider == "Postgres"` ise çağrılır.
+InMemory adaptörler her restart'ta sıfırlanır — "kalan kayıt" kavramı yoktur. Hydrator yalnızca Postgres modunda anlamlıdır; `AddPersistenceAdapters()` çağrısında `PersistenceHydrator` otomatik kayıt edilir.
 
 ---
 
 ## Güvenlik notu
 
 Üretimde ilk başlatmadan sonra:
-1. `admin` kullanıcısının şifresini değiştirin
-2. Demo agent kullanıcı şifrelerini güncelleyin (`agent123` varsayılan)
-3. İstenirse seed davranışını `PersistenceOptions.SeedDefaults = false` ile kapatın
+1. `Auth:DefaultAdminPassword` yapılandırma değerini değiştirin (varsayılan: `Admin123!`)
+2. `Auth:DefaultAgentPassword` yapılandırma değerini değiştirin (varsayılan: `Agent123!`)
+3. Agent kullanıcı adları: `john.doe`, `jane.smith`

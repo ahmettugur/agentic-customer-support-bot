@@ -5,10 +5,10 @@
 ## Giriş noktası
 
 ```csharp
-services.AddPersistenceAdapter(configuration);
+services.AddPersistenceAdapters(configuration);
 ```
 
-Bu tek çağrı, `Persistence.Provider` ayarına göre InMemory veya Postgres backend'i seçerek tüm persistence servislerini kaydeder.
+Bu tek çağrı tüm persistence servislerini kaydeder: EF Core DbContext, Postgres adaptörler, auth altyapısı, dosya sistemi ve startup hydrator.
 
 ---
 
@@ -16,64 +16,55 @@ Bu tek çağrı, `Persistence.Provider` ayarına göre InMemory veya Postgres ba
 
 ```json
 {
-  "Persistence": {
-    "Provider": "Postgres",
-    "ConnectionString": "Host=localhost;Database=csbot;Username=csbot;Password=..."
+  "ConnectionStrings": {
+    "PostgreSQL": "Host=localhost;Database=csbot;Username=csbot;Password=..."
   }
 }
 ```
-
-| Değer | Açıklama |
-|-------|---------|
-| `"InMemory"` | Geliştirme ve test — kalıcılık yok |
-| `"Postgres"` | Üretim — EF Core + Npgsql + opsiyonel Redis |
 
 ---
 
 ## Kayıt akışı
 
 ```
-AddPersistenceAdapter(configuration)
+AddPersistenceAdapters(configuration)
     │
-    ├── Provider == "Postgres"?
-    │   ├── AddEfCorePersistence(configuration)   ← DbContext + DbContextFactory
-    │   ├── AddPostgresAdapters()                 ← 13 Postgres adapter
-    │   └── AddPersistenceHydrator()              ← IHostedService startup kurtarma
+    ├── AddCustomerSupportPersistence()     ← DbContext + DbContextFactory
+    ├── AddHostedService<PersistenceHydrator>()  ← Startup kurtarma
     │
-    ├── Provider == "InMemory"?
-    │   └── AddInMemoryAdapters()                 ← 14 InMemory adapter
+    ├── Postgres adaptörler (Singleton)
+    │   ├── IReasoningTraceStore → PostgresReasoningTraceStore
+    │   ├── ILlmCallPersistencePort → PostgresLlmCallUsageSink
+    │   ├── IApprovalQueue → PostgresApprovalQueue
+    │   ├── IEscalationSink → PostgresEscalationSink
+    │   ├── IChatModeRegistry → PostgresChatModeRegistry
+    │   ├── IChatBridge → PostgresChatBridge
+    │   ├── ISessionManager → PostgresSessionManager
+    │   ├── IRatingStore → PostgresRatingStore
+    │   ├── IHumanAgentRegistry → PostgresHumanAgentRegistry
+    │   ├── ICustomerProfileStore → PostgresCustomerProfileStore
+    │   ├── ILessonStore → PostgresLessonStore
+    │   ├── IWorkflowDefinitionStore → PostgresWorkflowDefinitionStore
+    │   └── ISlaEventSink → PostgresSlaEventSink
     │
-    ├── AddAuthAdapters()                         ← BCrypt + JWT (her iki backend'de)
-    ├── AddFileSystemAdapters(configuration)      ← Prompt + KB dosyaları
-    └── AddHealthChecks() (Postgres ise)
+    ├── Catalog adaptörler (Singleton)
+    │   ├── IOrderRepository → OrderRepository
+    │   ├── ICustomerRepository → CustomerRepository
+    │   ├── IProductCatalogRepository → ProductCatalogRepository
+    │   └── IComplaintRepository → ComplaintRepository
+    │
+    ├── Auth adaptörler (Scoped)
+    │   ├── IUserAuthRepository → EfUserAuthRepository
+    │   └── IRefreshTokenRepository → EfRefreshTokenRepository
+    │
+    └── FileSystem adaptörler (Singleton)
+        ├── IPromptRepository → FileSystemPromptRepository
+        └── IKnowledgeBaseSource → FileSystemKnowledgeBaseSource
 ```
 
 ---
 
-## `AddInMemoryAdapters`
-
-| Port | Implementasyon | Yaşam döngüsü |
-|------|---------------|--------------|
-| `ISessionManager` | `InMemorySessionManager` | Singleton |
-| `IApprovalQueue` | `InMemoryApprovalQueue` | Singleton |
-| `IChatBridge` | `InMemoryChatBridge` | Singleton |
-| `IChatModeRegistry` | `InMemoryChatModeRegistry` | Singleton |
-| `IEscalationSink` | `InMemoryEscalationSink` | Singleton |
-| `IHumanAgentRegistry` | `InMemoryHumanAgentRegistry` | Singleton |
-| `IOrderRepository` | `InMemoryOrderAdapter` | Singleton |
-| `IComplaintRepository` | `InMemoryComplaintAdapter` | Singleton |
-| `IProductCatalogRepository` | `InMemoryProductCatalogAdapter` | Singleton |
-| `IRatingStore` | `InMemoryRatingStore` | Singleton |
-| `IReasoningTraceStore` | `InMemoryReasoningTraceStore` | Singleton |
-| `ISlaEventSink` | `InMemorySlaEventSink` | Singleton |
-| `ILessonStore` | `InMemoryLessonStore` | Singleton |
-| `IWorkflowDefinitionStore` | `InMemoryWorkflowDefinitionStore` | Singleton |
-| `ICustomerProfileStore` | `InMemoryCustomerProfileStore` | Singleton |
-| `IMessageBusPort` | `InMemoryMessageBusAdapter` | Singleton |
-
----
-
-## `AddPostgresAdapters`
+## Postgres Adaptörler
 
 | Port | Implementasyon | Yaşam döngüsü |
 |------|---------------|--------------|
@@ -90,28 +81,23 @@ AddPersistenceAdapter(configuration)
 | `IWorkflowDefinitionStore` | `PostgresWorkflowDefinitionStore` | Singleton |
 | `ICustomerProfileStore` | `PostgresCustomerProfileStore` | Singleton |
 | `ILlmCallPersistencePort` | `PostgresLlmCallUsageSink` | Singleton |
-| `IOrderRepository` | `InMemoryOrderAdapter` | Singleton (demo data) |
-| `IComplaintRepository` | `InMemoryComplaintAdapter` | Singleton (demo data) |
-| `IProductCatalogRepository` | `InMemoryProductCatalogAdapter` | Singleton (demo data) |
-
-> Sipariş/şikayet/ürün katalog adaptörleri Postgres modunda da InMemory kalır — demo verisi içerdiğinden.
-
----
-
-## `AddAuthAdapters`
-
-Her iki backend için ortak:
-
-| Port | Implementasyon |
-|------|---------------|
-| `IPasswordHasher` | `BCryptPasswordHasher` |
-| `IJwtAccessTokenProvider` | `JwtAccessTokenProvider` |
-| `IRefreshTokenRepository` | `EfRefreshTokenRepository` |
-| `IUserAuthRepository` | `EfUserAuthRepository` |
+| `IOrderRepository` | `OrderRepository` | Singleton |
+| `ICustomerRepository` | `CustomerRepository` | Singleton |
+| `IProductCatalogRepository` | `ProductCatalogRepository` | Singleton |
+| `IComplaintRepository` | `ComplaintRepository` | Singleton |
 
 ---
 
-## `AddFileSystemAdapters`
+## Auth Adaptörler
+
+| Port | Implementasyon | Yaşam döngüsü |
+|------|---------------|--------------|
+| `IUserAuthRepository` | `EfUserAuthRepository` | Scoped |
+| `IRefreshTokenRepository` | `EfRefreshTokenRepository` | Scoped |
+
+---
+
+## FileSystem Adaptörler
 
 | Port | Implementasyon |
 |------|---------------|
@@ -120,7 +106,7 @@ Her iki backend için ortak:
 
 ---
 
-## `AddEfCorePersistence`
+## EF Core Persistence
 
 ```csharp
 services.AddDbContext<CustomerSupportDbContext>(opts =>
@@ -139,8 +125,8 @@ Singleton servisler `IDbContextFactory<T>` kullanır (Scoped DbContext alamazlar
 ```csharp
 builder.Services.AddAiServices(configuration);               // 1. IChatClient
 builder.Services.AddApplicationDrivingPorts(configuration);  // 2. Application
-builder.Services.AddPersistenceAdapter(configuration);       // 3. Persistence ← bu
+builder.Services.AddPersistenceAdapters(configuration);      // 3. Persistence ← bu
 builder.Services.AddAgentsAdapter();                         // 4. MAF agents
 ```
 
-`AddPersistenceAdapter`, `IChatClient` veya Application servislerine bağımlı değildir — sıra esnektir.
+`AddPersistenceAdapters`, `IChatClient` veya Application servislerine bağımlı değildir — sıra esnektir.

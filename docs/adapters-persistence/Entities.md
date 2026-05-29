@@ -134,12 +134,15 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 | `CompletedAt` | `timestamptz?` | |
 | `TerminationReason` | `varchar?` | `completed` / `timeout` / `error` / `max_iterations` |
 | `FinalResponse` | `text?` | |
+| `FirstDraftResponse` | `text?` | Revizyon öncesi ilk taslak yanıt |
+| `WasRevised` | `bool` | Yanıt revize edildi mi? |
 | `IterationCount` | `int` | |
 | `Error` | `text?` | |
-| `EstimatedTokens` | `int?` | |
+| `EstimatedTokens` | `long` | |
 | `ReasoningJson` | `jsonb` | `ReasoningResult` tam içeriği |
 | `PlanningJson` | `jsonb` | `PlanningResult` |
 | `SpecialistReasoningsJson` | `jsonb` | `List<SpecialistReasoning>` |
+| `FinalCritiqueJson` | `jsonb` | `ResponseCritique` — yanıt değerlendirmesi |
 | `AgentVisitsJson` | `jsonb` | `List<AgentVisit>` |
 | `ToolCallsJson` | `jsonb` | Çağrılan tool listesi |
 
@@ -152,10 +155,10 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 | `Id` | `bigint` identity PK | |
 | `Model` | `varchar` | `gpt-4o`, `o3-mini`, vb. |
 | `Provider` | `varchar` | `openai`, `azure` |
-| `InputTokens` | `int` | |
-| `OutputTokens` | `int` | |
+| `InputTokens` | `long` | |
+| `OutputTokens` | `long` | |
 | `CostUsd` | `decimal` | |
-| `DurationMs` | `long` | |
+| `DurationMs` | `double` | |
 | `CalledAt` | `timestamptz` | |
 
 ---
@@ -280,3 +283,82 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 | `CreatedAt` | `timestamptz` | |
 | `UpdatedAt` | `timestamptz?` | |
 | `UpdatedBy` | `varchar?` | |
+
+---
+
+## `catalog` şeması
+
+### `CategoryEntity` → `catalog.categories`
+
+| Sütun | Tür | Açıklama |
+|-------|-----|---------|
+| `Id` | `int` PK | |
+| `Name` | `varchar` | Kategori adı |
+
+Navigation: `Products` → `List<ProductEntity>`
+
+---
+
+### `CustomerEntity` → `catalog.customers`
+
+| Sütun | Tür | Açıklama |
+|-------|-----|---------|
+| `Id` | `bigint` identity PK | Otomatik artan |
+| `FullName` | `varchar` | Müşteri adı soyadı |
+| `Email` | `varchar?` | |
+| `Phone` | `varchar?` | |
+
+---
+
+### `ProductEntity` → `catalog.products`
+
+| Sütun | Tür | Açıklama |
+|-------|-----|---------|
+| `Id` | `int` identity PK | |
+| `Name` | `varchar` | Ürün adı |
+| `Price` | `decimal` | Fiyat |
+| `Stock` | `int` | Stok miktarı |
+| `CategoryId` | `int` FK→categories | Kategori referansı |
+
+Navigation: `Category` → `CategoryEntity`, `OrderDetails` → `List<OrderDetailEntity>`
+
+---
+
+### `OrderEntity` → `catalog.orders`
+
+| Sütun | Tür | Açıklama |
+|-------|-----|---------|
+| `Code` | `bigint` identity PK | Sipariş kodu |
+| `CustomerId` | `bigint` FK→customers | |
+| `Status` | `varchar` | Sipariş durumu |
+| `OrderDate` | `timestamptz` | |
+| `CancelledAt` | `timestamptz?` | İptal zamanı |
+| `CancelReason` | `text?` | İptal sebebi |
+| `ReturnRequestedAt` | `timestamptz?` | İade talep zamanı |
+| `ReturnReason` | `text?` | İade sebebi |
+
+Navigation: `Details` → `List<OrderDetailEntity>`
+
+---
+
+### `OrderDetailEntity` → `catalog.order_details`
+
+| Sütun | Tür | Açıklama |
+|-------|-----|---------|
+| `OrderCode` | `bigint` FK→orders (composite PK) | |
+| `ProductId` | `int` FK→products (composite PK) | |
+| `Quantity` | `int` | Adet |
+
+Navigation: `Order` → `OrderEntity`, `Product` → `ProductEntity`
+
+---
+
+### `ComplaintEntity` → `catalog.complaints`
+
+| Sütun | Tür | Açıklama |
+|-------|-----|---------|
+| `Code` | `bigint` PK | ValueGeneratedNever — açıkça atanır |
+| `OrderId` | `bigint` FK→orders | İlgili sipariş |
+| `CustomerId` | `bigint` FK→customers | İlgili müşteri |
+| `Complaint` | `varchar(2048)` | Şikayet metni |
+| `Status` | `varchar(64)` | Şikayet durumu |
