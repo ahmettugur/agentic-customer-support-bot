@@ -90,7 +90,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         try
         {
             await Task.WhenAny(browserPump, eventPump, inactivityWatcher);
-            linked.Cancel();
+            await linked.CancelAsync();
             await Task.WhenAll(browserPump, eventPump, inactivityWatcher)
                 .ContinueWith(_ => { }, TaskScheduler.Default);
         }
