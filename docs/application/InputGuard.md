@@ -101,10 +101,10 @@ msg: "Mesajınızda izin verilmeyen içerik tespit edildi."
 
 ```
 MaxIdMentions = 8
-Pattern: \b(ORD|CMP|CUST)-\d+\b
+Pattern: \b\d{4,}\b
 ```
 
-Tek mesajda 8'den fazla ID (1030 / 1001 / 1027) varsa:
+Tek mesajda 8'den fazla 4+ haneli sayısal ID (örn. 1030, 1001, 1027...) varsa:
 ```
 flags: ["too_many_ids:<sayı>"]
 msg: "Tek mesajda en fazla 8 sipariş/şikayet numarası işleyebilirim."

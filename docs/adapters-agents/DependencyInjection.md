@@ -67,7 +67,7 @@ Zorunlu:
   IOptions<WorkflowGuardOptions> → appsettings.json "Workflow:" bölümü
   IOptions<ParallelExecutionOptions> → appsettings.json "ParallelExecution:" bölümü
   IReasoningTraceStore           → Persistence adapter
-  IPromptRepository              → PromptService (Api projesi)
+  IPromptRepository              → FileSystemPromptRepository (Adapters.Persistence, Api projesi tarafından kayıtlı)
   ICustomerSupportToolsService   → Application services
   ApprovalGateService            → Bu extension tarafından kayıtlı
   IUiHintEmitter                 → Application services (UI ipucu yayıcı)

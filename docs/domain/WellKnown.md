@@ -108,22 +108,22 @@ public static class ToolNames
     public const string OrderStatus = "order_status_tool";
     public const string GetLastOrder = "get_last_order_tool";
     public const string GetAllOrders = "get_all_orders_tool";
-    public const string OrderCancel = "order_cancel_tool";           // YENİ
-    public const string ReturnRequest = "return_request_tool";       // YENİ
+    public const string OrderCancel = "order_cancel_tool";
+    public const string ReturnRequest = "return_request_tool";
     public const string ComplaintRegistration = "complaint_registration_tool";
     public const string HumanHandoff = "human_handoff_tool";
 }
 
-public static readonly HashSet<string> HighRiskTools = new()
+public static readonly IReadOnlySet<string> HighRiskTools = new HashSet<string>
 {
     ToolNames.OrderPlacement,
-    ToolNames.OrderCancel,         // YENİ
-    ToolNames.ReturnRequest,       // YENİ
+    ToolNames.OrderCancel,
+    ToolNames.ReturnRequest,
     ToolNames.ComplaintRegistration
 };
 ```
 
-**HighRiskTools:** Approval + justification zorunlu. `WorkflowExecutor` bunları çağıramaz (`ForbiddenTools`).
+**HighRiskTools:** Admin approve etmek için gerekçe (reason) zorunludur — audit trail için. `AdminEndpoints` bu listeyi approve request'te gerekçe validasyonu için kullanır.
 
 ### TaskStatuses
 
@@ -141,6 +141,7 @@ public static class TaskStatuses
     public const string Complete = "complete";
     public const string Success = "success";
     public const string Followup = "followup";
+    public const string NeedsFollowupNoUnderscore = "needsfollowup";
     public const string Escalation = "escalation";
     public const string Escalate = "escalate";
     public const string Error = "error";
@@ -361,26 +362,29 @@ Tool parametrelerinin standart isimleri — `CollectedInfo` Dict'iyle uyumlu.
 ```csharp
 public static readonly IReadOnlyList<(string Intent, string[] Keywords)> IntentKeywords =
 [
-    (Intents.OrderCreation, new[] { "sipariş ver", "satın al", "ürün al" }),
-    (Intents.OrderInquiry,  new[] { "sipariş durumu", "kargoda mı", "nerede" }),
-    (Intents.Complaint,     new[] { "şikayet", "memnun değil", "iade", "ürün bozuk" }),
-    (Intents.ProductInfo,   new[] { "ürün bilgisi", "fiyat", "stok" }),
-    // ...
+    (Intents.OrderCreation,     ["sipariş ver", "almak istiyorum", "sipariş etmek"]),
+    (Intents.OrderCancellation, ["iptal", "siparişimi iptal", "iptal et", "vazgeçtim"]),
+    (Intents.ReturnRequest,     ["iade", "iade etmek", "geri göndermek", "iade talebi", "ürünü iade"]),
+    (Intents.OrderListing,      ["son sipariş", "tüm sipariş", "siparişlerim"]),
+    (Intents.Complaint,         ["şikayet", "memnun değil", "sorun"]),
+    (Intents.ProductInfo,       ["ürün", "fiyat", "stok"]),
 ];
 ```
 
-`SessionStateExtractor` ve `WorkflowExecutor` bu tabloyu kullanır.
+Sıra önemlidir — ilk eşleşen intent seçilir. `SessionStateExtractor` bu tabloyu kullanır.
 
 ### SentimentKeywords
 
 ```csharp
-public static readonly IReadOnlyList<(string Label, double Score, string[] Keywords)> SentimentKeywords =
+public static readonly IReadOnlyList<(string Sentiment, double Score, string[] Keywords)> SentimentKeywords =
 [
-    ("angry",    0.10, new[] { "berbat", "rezalet", "çileden çıkardın" }),
-    ("negative", 0.25, new[] { "kötü", "memnun değil", "yetersiz" }),
-    ("positive", 0.85, new[] { "harika", "teşekkür", "süper", "mükemmel" }),
+    (Sentiments.Angry,    0.1,  ["rezalet", "skandal", "saçmalık", "berbat", "iğrenç", ...]),
+    (Sentiments.Negative, 0.25, ["memnun değil", "kötü", "sorun", "problem", "hata", ...]),
+    (Sentiments.Positive, 0.85, ["teşekkür", "sağol", "harika", "mükemmel", "süper", ...]),
 ];
 ```
+
+Sıra: angry → negative → positive. Eşleşme yoksa `neutral`.
 
 ### SentimentThresholds
 

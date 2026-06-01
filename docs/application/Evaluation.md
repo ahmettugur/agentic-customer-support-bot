@@ -96,22 +96,24 @@ public async Task<ScenarioResult> RunScenarioAsync(
 
 **Tür:** `public static class`
 
-### Desteklenen kriter türleri
+`SuccessCriteria` alanı `List<string>` tipindedir — her kriter sade İngilizce metin cümlesidir. `CriteriaEvaluator.Evaluate(criterion, ctx)` regex + pattern matching ile bu metinleri yorumlar.
 
-| Kriter | Kontrol |
+### Desteklenen kriter metinleri
+
+| Kriter metni (örnek) | Kontrol |
 |--------|---------|
-| `response_contains` | Bot yanıtı belirtilen metni içeriyor mu? |
-| `response_not_contains` | Bot yanıtı belirtilen metni **içermiyor** mu? |
-| `intent_is` | Tespit edilen intent beklenenle eşleşiyor mu? |
-| `agent_visited` | Beklenen agent ziyaret edildi mi? |
-| `agent_not_visited` | Belirtilen agent ziyaret **edilmedi** mi? |
-| `tool_called` | Beklenen tool çağrıldı mı? |
-| `termination_reason` | Workflow beklenen nedenle sonlandı mı? |
-| `max_iterations` | İterasyon sayısı limiti aşılmadı mı? |
-| `confidence_above` | Reasoning confidence skoru eşiğin üstünde mi? |
-| `no_sanity_errors` | Sanity check'te Error seviyesinde sorun yok mu? |
-| `preToolCheck_passed` | Specialist'in `preToolCheck.canProceed=true` oldu mu? |
-| `response_language` | Yanıt belirtilen dilde mi? |
+| `response contains '<metin>'` | Bot yanıtı belirtilen metni içeriyor mu? (OR desteği: `A OR B`) |
+| `turn_count <= N` / `turn_count == N` / `turn_count < N` | Workflow iterasyon sayısı koşulu |
+| `no extra tool calls` | Çağrılan tool sayısı beklenen tool listesini aşmıyor mu? |
+| `no missing_param_tool error` | Tool parametre validasyon hatası yok mu? |
+| `<tool_name>_tool called` | Belirtilen tool çağrıldı mı? (örn. `order_status_tool called`) |
+| `<tool_name>_tool NOT called` | Belirtilen tool çağrılmadı mı? |
+| `agent requests customer_id` | Yanıt, ek bilgi (customer_id / order_id) talep ediyor mu? |
+| `complaint id returned` / `order id returned` | Yanıtta yeni oluşturulan ID var mı? |
+| `customer_id used correctly` | Specialist preToolCheck'te customer_id parametre olarak geçildi mi? |
+| `response contains order status` | Yanıtta sipariş durumu bilgisi (durum/kargo/teslim) var mı? |
+
+Tanımsız kriter metinleri `CriterionResult.Skipped = "manual_review_needed"` ile işaretlenir — otomatik değerlendirme atlanır.
 
 ### Kriter tanımı örneği (YAML)
 
@@ -122,18 +124,13 @@ scenarios:
     query: "4821 nerede?"
     expected_intent: "order_inquiry"
     expected_agents: ["PlanningAgent", "OrderAgent", "ResponseAgent"]
+    expected_tools: ["order_status_tool"]
     success_criteria:
-      - type: response_contains
-        value: "4821"
-      - type: agent_visited
-        value: "OrderAgent"
-      - type: tool_called
-        value: "order_status_tool"
-      - type: termination_reason
-        value: "completed"
-      - type: max_iterations
-        value: 10
-      - type: no_sanity_errors
+      - "response contains '4821'"
+      - "order_status_tool called"
+      - "response contains order status"
+      - "turn_count <= 10"
+      - "no extra tool calls"
 ```
 
 Senaryo dosyaları `docs/evaluation-scenarios.yaml` altında tutulur.
@@ -147,18 +144,20 @@ Senaryo dosyaları `docs/evaluation-scenarios.yaml` altında tutulur.
 ```csharp
 public class ScenarioRunContext
 {
-    public string Response { get; init; }
-    public string? TerminationReason { get; init; }
-    public string? DetectedIntent { get; init; }
-    public int IterationCount { get; init; }
-    public List<string> ToolsCalled { get; init; }
-    public List<string> AgentsVisited { get; init; }
-    public List<string> ExpectedTools { get; init; }
-    public List<SpecialistReasoning> SpecialistReasonings { get; init; }
-    public ReasoningResult? Reasoning { get; init; }
-    public PlanningResult? Planning { get; init; }
+    public string? Response { get; set; }
+    public string? TerminationReason { get; set; }
+    public string? DetectedIntent { get; set; }
+    public int IterationCount { get; set; }
+    public List<string> ToolsCalled { get; set; } = new();
+    public List<string> AgentsVisited { get; set; } = new();
+    public List<string> ExpectedTools { get; set; } = new();
+    public List<SpecialistReasoning> SpecialistReasonings { get; set; } = new();
+    public ReasoningResult? Reasoning { get; set; }
+    public PlanningResult? Planning { get; set; }
 }
 ```
+
+Tüm alanlar mutable set property'lere sahiptir — `init` yerine `set` kullanılır.
 
 ---
 
@@ -179,11 +178,10 @@ Yeni ajan eklendiğinde bu mapping'i güncellemeyi unutmayın.
 ## API üzerinden çalıştırma
 
 ```http
-POST /evaluation/run
-Content-Type: application/json
-
-{ "scenarioFile": "docs/evaluation-scenarios.yaml" }
+POST /eval/run
 ```
+
+Senaryo dosyasının konumu otomatik çözülür (`ContentRoot/docs/evaluation-scenarios.yaml`). İsteğe bağlı sorgu parametresi: `?limit=N` (ilk N senaryoyu çalıştır). Tekil senaryo için: `POST /eval/run/{id}`
 
 Yanıt:
 ```json
@@ -207,12 +205,12 @@ Yanıt:
   category: "complaint"
   query: "1001 için ürün hasarlı geldi şikayet açmak istiyorum"
   expected_intent: "complaint"
+  expected_agents: ["PlanningAgent", "ComplaintAgent", "ResponseAgent"]
+  expected_tools: ["complaint_registration_tool"]
   success_criteria:
-    - type: agent_visited
-      value: "ComplaintAgent"
-    - type: response_contains
-      value: "şikayet"
-    - type: no_sanity_errors
+    - "complaint_registration_tool called"
+    - "response contains 'şikayet'"
+    - "complaint id returned"
 ```
 
-Kod değişikliği gerekmez — senaryo dosyası runtime'da okunur.
+Kod değişikliği gerekmez — senaryo dosyası runtime'da okunur. `success_criteria` her zaman düz İngilizce metin satırı olmalıdır; `type:` / `value:` alanlarına sahip YAML nesneleri desteklenmez.

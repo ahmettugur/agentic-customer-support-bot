@@ -72,7 +72,7 @@ dotnet build CustomerSupport.slnx -nologo -v q
 - `POST /chat/` → non-streaming chat
 - `POST /chat/stream` → SSE streaming
 - `GET /traces/recent` → son trace'ler
-- `POST /evaluation/run?file=docs/evaluation-scenarios.yaml` → senaryoları koştur
+- `POST /eval/run` → senaryoları koştur (`GET /eval/scenarios` ile mevcut senaryolar listelenir)
 
 ---
 
@@ -229,11 +229,11 @@ var complaintAgent = new ChatClientAgent(
 # docs/evaluation-scenarios.yaml
 - id: "refund-happy-path"
   category: "şikayet"
-  query: "1 için iade açmak istiyorum, ürün arızalı geldi."
+  query: "1001 için iade açmak istiyorum, ürün arızalı geldi."
   expected_tools: ["refund_initiate_tool"]
   success_criteria:
-    - type: "response_contains"
-      value: "iade"
+    - "response contains 'iade'"
+    - "refund_initiate_tool called"
 ```
 
 ### Dikkat edilecekler
@@ -496,29 +496,30 @@ app.MapAdminEndpoints();  // ← yeni
 ```yaml
 - id: "billing-happy-path"
   category: "fatura"
-  query: "1 için faturamı gönderir misiniz?"
+  query: "1001 için faturamı gönderir misiniz?"
   expected_intent: "fatura"
   expected_agents: ["PlanningAgent", "BillingAgent", "ResponseAgent"]
   expected_tools: ["fetch_invoice_tool"]
   success_criteria:
-    - type: "response_contains"
-      value: "fatura"
-    - type: "termination_reason"
-      value: "completed"
-    - type: "tool_called"
-      value: "fetch_invoice_tool"
+    - "response contains 'fatura'"
+    - "fetch_invoice_tool called"
+    - "turn_count <= 10"
 ```
+
+`success_criteria` değerleri düz İngilizce metin satırlarıdır — `type:`/`value:` içeren YAML nesneleri desteklenmez. `CriteriaEvaluator.Evaluate` bu metinleri regex ile yorumlar.
 
 **2. Çalıştır**:
 
 ```bash
-curl -X POST "http://localhost:5021/evaluation/run?file=docs/evaluation-scenarios.yaml" \
+curl -X POST "http://localhost:5021/eval/run" \
   | jq '.results[] | select(.scenarioId == "billing-happy-path")'
 ```
 
-### Desteklenen criterion tipleri
+Tekil senaryo çalıştırmak için: `POST /eval/run/billing-happy-path`
 
-`CustomerSupportBot.Application/Services/Evaluation/CriteriaEvaluator.cs` okuyarak mevcut tiplere bakabilirsiniz. Yeni criterion tipi eklemek için `CriteriaEvaluator.Evaluate` içinde bir `case` eklenir.
+### Desteklenen criterion metinleri
+
+`CustomerSupportBot.Application/Services/Evaluation/CriteriaEvaluator.cs` okuyarak desteklenen metin kalıplarına bakabilirsiniz. Yeni kalıp eklemek için `CriteriaEvaluator.Evaluate` metoduna yeni bir `if`/`else` bloğu eklenir.
 
 ---
 
@@ -612,10 +613,10 @@ Reasoning'i bu duruma sokacak bir evaluation senaryosu ekle:
 - id: "sanity-check-overconfident-no-evidence"
   query: "..."   # reasoning'i yukarıdaki duruma sokacak input
   success_criteria:
-    - type: "trace_field"
-      path: "reasoning.sanityIssues[?code=='confident_without_evidence']"
-      present: true
+    - "response contains 'bilgi'"   # manuel doğrulama gerektirir
 ```
+
+Not: `trace_field` tipi mevcut `CriteriaEvaluator`'da desteklenmez. Sanity issue tespiti için `EvaluationRunner.RunScenarioAsync` metodunu genişletmek veya doğrudan trace API'sini (`GET /traces/recent`) kontrol etmek gerekir.
 
 Detay → [domain/Model-Reasoning.md](domain/Model-Reasoning.md).
 
@@ -693,10 +694,10 @@ if (!string.IsNullOrWhiteSpace(ids.CampaignId))
 }
 ```
 
-**4. `BuildVerifiedBlock` — prompt enjeksiyonuna ekle**:
+**4. `BuildPromptBlock` — prompt enjeksiyonuna ekle**:
 
 ```csharp
-// EntityVerifier.BuildVerifiedBlock yardımcısı
+// EntityVerifier.BuildPromptBlock yardımcısı
 if (verified.CampaignId?.Verification == EntityVerification.Verified)
 {
     var meta = string.Join(", ", verified.CampaignId.Metadata.Select(kv => $"{kv.Key}={kv.Value}"));
@@ -711,7 +712,7 @@ if (verified.CampaignId?.Verification == EntityVerification.Verified)
 - [ ] `IdExtractor` regex eklendi
 - [ ] `VerifiedEntities` modelı güncellendi
 - [ ] `EntityVerifier.Verify` DB lookup yapıyor
-- [ ] `BuildVerifiedBlock` prompt'a enjekte ediyor
+- [ ] `BuildPromptBlock` prompt'a enjekte ediyor
 - [ ] `reasoning-system.md` yeni entity tipi hakkında not ekleniyor (opsiyonel ama önerilir)
 - [ ] Evaluation senaryosu yazıldı
 
@@ -738,16 +739,11 @@ Compound query orkestrasyonunun 2+ subtask'lı bir sorguda doğru çalıştığ�
                     "PlanningAgent", "ComplaintAgent", "ResponseAgent"]
   expected_tools: ["order_status_tool", "complaint_registration_tool"]
   success_criteria:
-    - type: "response_contains"
-      value: "1)"                     # maddelenmiş format
-    - type: "response_contains"
-      value: "2)"
-    - type: "trace_field"
-      path: "reasoning.subTasks"
-      min_count: 2
-    - type: "trace_field"
-      path: "reasoning.sanityIssues[?code=='subtasks_ignored']"
-      absent: true                      # sanity check temiz olmalı
+    - "response contains '1)'"         # maddelenmiş format
+    - "response contains '2)'"
+    - "order_status_tool called"
+    - "complaint_registration_tool called"
+    - "turn_count <= 15"
 ```
 
 **2. Local test**:
@@ -879,26 +875,28 @@ curl -s http://localhost:5021/traces/recent?count=1 \
 - `sanityIssues[?code=='redundant_required_info']` var mı?
 - Reasoning'in system prompt'una bakarak `[VERIFIED ENTITIES]` bloğu gerçekten enjekte edilmiş mi?
 
-**Çözüm**: `EntityVerifier.BuildVerifiedBlock` çıktısını log'la (veya trace'e ekle); prompt'a gerçekten varıp varmadığını teyit et. `reasoning-system.md`'deki "VERIFIED entity'yi requiredInfo'ya EKLEMEYİN" kuralını daha belirgin yaz.
+**Çözüm**: `EntityVerifier.BuildPromptBlock` çıktısını log'la (veya trace'e ekle); prompt'a gerçekten varıp varmadığını teyit et. `reasoning-system.md`'deki "VERIFIED entity'yi requiredInfo'ya EKLEMEYİN" kuralını daha belirgin yaz.
 
 ---
 
 ## Yaygın tuzaklar
 
-### 🕳️ `ISessionManager` ve `IConversationStore` ayrı singleton'lar sanmak
+### 🕳️ `InMemorySessionManager` için iki ayrı singleton kaydı yapmak
+
+`ISessionManager` tek interface olarak hem session yönetimi hem konuşma geçmişini barındırır. InMemory kullanımda `InMemorySessionManager` somut tip önce kaydedilmeli, `ISessionManager` bu instance'a forward edilmelidir.
 
 **Yanlış**:
 ```csharp
 builder.Services.AddSingleton<ISessionManager, InMemorySessionManager>();
-builder.Services.AddSingleton<IConversationStore, InMemorySessionManager>();
+// Başka yerde tekrar:
+builder.Services.AddSingleton<ISessionManager, InMemorySessionManager>();
 // → İKİ farklı instance! Oturum verisi bölünür.
 ```
 
-**Doğru** (`@Program.cs:59-61`):
+**Doğru** (DI kaydı):
 ```csharp
 builder.Services.AddSingleton<InMemorySessionManager>();
 builder.Services.AddSingleton<ISessionManager>(sp => sp.GetRequiredService<InMemorySessionManager>());
-builder.Services.AddSingleton<IConversationStore>(sp => sp.GetRequiredService<InMemorySessionManager>());
 ```
 
 ### 🕳️ Inline prompt yazmak
@@ -977,7 +975,7 @@ curl -s http://localhost:5021/traces/stats | jq .terminationReasons
 curl -s http://localhost:5021/traces/by-session/<SID> | jq '.[] | {traceId, userQuery, terminationReason}'
 
 # Evaluation senaryolarını koş, sadece fail'leri göster
-curl -sX POST "http://localhost:5021/evaluation/run?file=docs/evaluation-scenarios.yaml" \
+curl -sX POST "http://localhost:5021/eval/run" \
   | jq '.results[] | select(.passed == false)'
 ```
 

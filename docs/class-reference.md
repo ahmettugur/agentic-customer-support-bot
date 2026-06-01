@@ -25,9 +25,9 @@ Sistemin merkezi orkestratörü. **6 MAF `ChatClientAgent`**'ı (Planning + 4 sp
 - **`RunAsync(query, history?, session?, reasoning?)`** — non-streaming. Compound query algılayıp `RunDecomposedAsync`'a ayrılabilir. Final string response döner, ResponseAgent TERMINATE marker'ı temizlenmiş.
 - **`RunStreamingAsync(...)`** — SSE için event stream üretir (`agent`, `response_start`, `response_delta`, `response_complete`). Compound query'de `RunDecomposedStreamingAsync`'a düşer.
 
-**Compound query helper'ları** (`CustomerSupportTeam.cs:912-1192`): `ShouldDecompose`, `RunDecomposedAsync`, `RunDecomposedStreamingAsync`, `DeriveSubReasoning`, `BuildSubQuery`, `FormatSubResult`, `JoinAggregatedParts`, `ExtractTextFromDelta` — her subtask ayrı workflow run'ı olarak koşturulur ve sonuçlar `JoinAggregatedParts` ile `\n\n---\n\n` ayırıcılı birleştirilir.
+**Compound query helper'ları**: `RunDecomposedAsync`, `RunDecomposedStreamingAsync` — `SubTaskOrchestrator.Partition` ile gruplandırılmış alt görevler çalıştırılır. Paralel gruplar `Task.WhenAll` + `SemaphoreSlim` ile sınırlandırılır, sıralı gruplar biri bitmeden diğeri başlamaz. Sonuçlar `SubTaskOrchestrator.AggregateSubTaskResults` ile birleştirilir.
 
-**Bağımlılıklar**: `IChatClient`, `ReasoningChatClient`, `PromptService`, `IContextPipeline`, `IOptions<WorkflowGuardOptions>`, `IOptions<ParallelExecutionOptions>`, `ICustomerSupportToolsService`, `ISemanticMemoryWriter?`, `ICustomerProfileService?`, `CustomerSupportChatManager`, `IReasoningTraceStore`.
+**Bağımlılıklar**: `IChatClient`, `IContextPipeline`, `IOptions<WorkflowGuardOptions>`, `IOptions<ParallelExecutionOptions>`, `IReasoningTraceStore`, `IPromptRepository`, `ApprovalGateService`, `ICustomerSupportToolsService`, `IUiHintEmitter`, `ILoggerFactory`, `ISemanticMemoryWriter?`, `ICustomerProfileService?`.
 
 ---
 
@@ -39,13 +39,13 @@ MAF `GroupChatManager` türevi. Bir workflow iterasyonunda **"hangi agent konuş
   1. PlanningAgent mesajı geldi → `selectedAgent` JSON alanına bak
   2. Specialist mesajı geldi → `postToolReflection.handoffSuggestion` var mı?
   3. Fallback → LLM routing veya pozisyon tabanlı varsayılan (ResponseAgent)
-- **`ShouldTerminateAsync`** — 3 koşul:
-  1. ResponseAgent TERMINATE marker üretti
-  2. `WorkflowGuardOptions.MaxIterations` aşıldı
-  3. `DetectRepeatedToolCall` — aynı tool+param imzası `MaxDuplicateToolCalls`'ı aştı
-- **`ExtractResultAsync`** — workflow bitince final string'i çıkarır.
+- **`ShouldTerminateAsync`** — 2 koşul:
+  1. Son mesaj `WellKnown.Termination.Marker` (`"TERMINATE"`) içeriyorsa
+  2. `DetectRepeatedToolCall` — son 10 mesajda aynı tool+param imzası `MaxDuplicateToolCalls`'ı aştıysa
 
-Ayrıca **ping-pong guard** mantığı ve `TerminationReason` etiketleme burada.
+  MaxIterations sınırı `CustomerSupportTeam` tarafından timeout ile korunur, `ShouldTerminateAsync`'da değil.
+
+Ayrıca **handoff limit guard** (`EnforceHandoffLimit`) burada — belirli bir ajana `MaxHandoffsPerAgent` kez yönlendirme yapıldıktan sonra `ResponseAgent`'a çevrilir.
 
 ---
 
@@ -60,14 +60,13 @@ Reasoning pipeline'ın ana beyni. Workflow **öncesinde** çalışır. O-series 
 - **`ReasonAsync(query, session?, history?)`** — senkron, non-streaming.
 - **`ReasonStreamingAsync(...)`** — SSE için `reasoning_start`, `reasoning_delta`, `reasoning_complete` event'leri.
 
-İç akış (`ReasoningService.cs:287-396`):
+İç akış:
 
 1. `EntityVerifier.Verify(...)` → `VerifiedEntities` üretir (Katman 0).
-2. `reasoning-system.md` + `reasoning-user.md` prompt'larını `VERIFIED_ENTITIES` placeholder ile render eder.
-3. LLM'e gönderir, JSON çıktısını parse eder.
-4. `ParseSteps` + `ParseSubTasks` ile structured step ve subtask'ları çıkarır.
-5. `ReasoningSanityChecker.Check(...)` → `SanityIssues` doldurur (Katman 1.5).
-6. Fallback: LLM hata verirse `CreateFallbackResult` minimal bir `ReasoningResult` döner.
+2. `ReasoningMessageBuilder.Build(...)` ile prompt mesaj listesi hazırlanır.
+3. `IReasoningChatClient.CompleteAsync(messages)` ile LLM'e gönderir, JSON çıktısını `ReasoningResultParser.Parse` ile parse eder.
+4. `ReasoningSanityChecker.Check(...)` → `SanityIssues` doldurur (Katman 1.5).
+5. Fallback: LLM hata verirse confidence=0.3 ile minimal `ReasoningResult` döner.
 
 ---
 
@@ -81,7 +80,7 @@ Reasoning pipeline'ın ana beyni. Workflow **öncesinde** çalışır. O-series 
   3. Her entity için repository port'ları üzerinden lookup (`IOrderRepository`, `IProductCatalogRepository`, `IComplaintRepository`)
   4. Sonuç: `Verified` | `NotFoundInDb` | `FormatOnly`
   5. `customer_id Verified` ise `DerivedLastOrderId` ve `DerivedOrderCount` türetir
-- **`BuildVerifiedBlock(verified)` → string** — reasoning prompt'una enjekte edilecek `[VERIFIED ENTITIES]` bloğunu oluşturur.
+- **`BuildPromptBlock(verified)` → string** — reasoning prompt'una enjekte edilecek `[VERIFIED ENTITIES]` bloğunu oluşturur.
 
 ---
 
@@ -132,11 +131,13 @@ README/NOTES adlı .md dosyaları atlanır (insanlara yönelik dokümantasyon ol
 
 Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
-- **Pattern'lar** — `ORD[-_\s]?N`, `CMP[-_\s]?N`, `CUST[-_\s]?N`, saf 3-5 haneli sayı.
-- **`Extract(text)` → `ExtractedIds`** — `OrderId`, `CustomerId`, `ComplaintId`. "2025 yılında" gibi yanlış yakalamaları önlemek için numeric fallback **sadece** başka anchor ID varsa veya query ≤4 token ise aktive olur.
-- **`BuildHintMessage(ids)` → string?** — planning prompt'una eklenen sipariş sorgu öncelik kuralı:
-  - `order_id VAR` → `order_status_tool` (customer_id ISTEME)
-  - `customer_id VAR` → `get_last_order_tool` (order_id ISTEME)
+- **Pattern** — `\b(\d{4,})\b` (4+ haneli sayı). Prefix (`ORD-`, `CMP-`) yoktur.
+- **Bağlam belirleme** — sayıdan ±60 karakter penceredeki Türkçe anahtar kelime (sipariş → `order_id`, şikayet → `complaint_id`, müşteri/numaram → `customer_id`). Bağlam yoksa mesaj ≤5 token ise `customer_id` varsayılır.
+- **`Extract(text)` → `ExtractedIds`** — `OrderId`, `CustomerId`, `ComplaintId` string alanları (`null` gelilebilir).
+- **`BuildHintMessage(ids)` → string?** — planning prompt'una eklenen `[ENTITY EXTRACTION]` bloğu + sipariş sorgu öncelik kuralı:
+  - `order_id VAR` → `order_status_tool` kullan (customer_id tekrar sorma)
+  - `customer_id VAR` → `get_last_order_tool` kullan (order_id tekrar sorma)
+  - Hiç ID yoksa `null` döner.
 
 `EntityVerifier` bu servisi ilk adım olarak kullanır.
 
@@ -150,9 +151,9 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
 ---
 
-### `CustomerContextProvider` — `Services/Providers/CustomerContextProvider.cs`
+### `CustomerContextProvider` — `Application/Services/Providers/CustomerContextProvider.cs`
 
-`Order=10`. Oturumdaki `State.CustomerId` varsa `IOrderRepository.GetAllAsync` + `IComplaintRepository.QueryAsync` ile müşterinin son 5 siparişi + son 3 şikayet hakkında metin üretir. Format: `[Müşteri Bağlamı — {id}] Toplam sipariş: N ... Toplam şikayet: M ...`.
+`Order=10`. Oturumdaki `State.CustomerId` varsa `IOrderRepository.GetByCustomer` + `IComplaintRepository.GetByCustomer` ile müşterinin siparişleri ve şikayetleri hakkında metin üretir. Format: `[Müşteri Bağlamı — {id}] ...`.
 
 ---
 
@@ -162,29 +163,23 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
 ---
 
-### `ISessionManager` + `InMemorySessionManager` — `Application/Ports/Driven/Persistence/ISessionManager.cs`, `Adapters.Persistence/InMemory/InMemorySessionManager.cs`
+### `ISessionManager` + `InMemorySessionManager` — `Application/Ports/Outbound/Persistence/ISessionManager.cs`, `Adapters.Persistence/InMemory/InMemorySessionManager.cs`
 
-**Interface `ISessionManager : IConversationStore`** — oturum yönetimi + mesaj geçmişi birleşik sözleşme:
+**Interface `ISessionManager`** — oturum yönetimi + mesaj geçmişi birleşik sözleşme:
 
-- `GetOrCreateSession(sessionId?)` → `AgentSession`
-- `GetSession(id)` → `AgentSession?`
-- `UpdateSession(session)` → void
-- `ExtractAndUpdateState(sessionId, userMsg, botResp)` — CustomerId/OrderId regex çıkarımı + intent detection + state update
-
-**`InMemorySessionManager`** iki `ConcurrentDictionary` kullanır: `_sessions` (state) ve `_messageHistory` (mesajlar). Thread-safe. Postgres implementasyonu (`PostgresSessionManager`) da mevcuttur — `Persistence:Provider` ayarına göre seçilir.
-
----
-
-### `IConversationStore` — `Application/Ports/Driven/Persistence/IConversationStore.cs`
-
-**Interface `IConversationStore`** — sadece mesaj geçmişi:
-
-- `GetHistory(sessionId)` → `List<ChatMessage>`
-- `AddExchange(sessionId, userQuery, assistantResponse)` — mesaj çifti ekler
+- `GetOrCreate(sessionId?)` → `AgentSession`
+- `Get(sessionId)` → `AgentSession?`
+- `Update(session)` → void
+- `GetAll()` → `IReadOnlyList<AgentSession>`
+- `MutateStateAsync(sessionId, mutator, ct)` — atomic state mutasyonu
+- `GetHistory(sessionId)` → `List<ConversationMessage>`
+- `AddExchange(sessionId, userMsg, botResp)` — kullanıcı + asistan mesajı ekler
+- `AppendAssistantMessage` / `AppendUserMessage` — tekli mesaj ekler
 - `ClearSession(sessionId)` — geçmişi sil
 - `GetAllSessions()` → `List<SessionInfo>` (sidebar için)
+- `ExtractAndUpdateState(sessionId, userMsg, botResp)` — `SessionStateExtractor` ile state türetir, günceller
 
-`IConversationStore` ayrı bir implementasyona sahip değildir — `InMemorySessionManager` (ve `PostgresSessionManager`) her iki interface'i (`ISessionManager` + `IConversationStore`) birden uygular. DI'da aynı instance'a bind edilir — bkz. [architecture.md](architecture.md#dependency-injection-haritası).
+**`InMemorySessionManager`** iki `ConcurrentDictionary` kullanır: `_sessions` (state) ve `_messageHistory` (mesajlar). Thread-safe. Postgres implementasyonu (`PostgresSessionManager`) da mevcuttur — `Persistence:Provider` ayarına göre seçilir.
 
 ---
 
@@ -227,7 +222,7 @@ HITL approval gate. Yan etkili tool lambda'larını sararak `HumanInTheLoop.Enab
 
 ---
 
-### `EscalationPolicyService` — `Application/Services/EscalationPolicyService.cs`
+### `EscalationPolicyService` — `Application/Services/Escalation/EscalationPolicyService.cs`
 
 Eskalasyon routing iş politikası. `ApprovalGateService`'den extract edilerek Application katmanına taşınmıştır. Sorumlulukları:
 - Pending eskalasyonları işleme (dedup, priority elevation)
@@ -236,15 +231,15 @@ Eskalasyon routing iş politikası. `ApprovalGateService`'den extract edilerek A
 
 ---
 
-### `SlaGuardianService` — `Application/Services/Sla/SlaGuardianService.cs`
+### `SlaGuardianService` — `CustomerSupportBot.Api/Workers/SlaGuardianService.cs`
 
 `BackgroundService`. Periyodik olarak bekleyen onay ve açık eskalasyonları tarar. Breach durumunda onayları reddeder, eskalasyon önceliğini yükseltir.
 
 ---
 
-### `CustomerProfileService` — `Services/Personalization/CustomerProfileService.cs`
+### `CustomerProfileService` — `Application/Services/Personalization/CustomerProfileService.cs`
 
-Per-customer profil yönetimi. `RecordInteraction` (LLM-siz heuristik, her turda) + `ConsolidateAsync` (admin tetikli LLM özet + ton çıkarımı).
+Per-customer profil yönetimi. `RecordInteractionAsync` (LLM-siz heuristik, her turda) + `ConsolidateAsync` (admin tetikli LLM özet + ton çıkarımı).
 
 ---
 

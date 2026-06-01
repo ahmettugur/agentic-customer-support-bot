@@ -31,29 +31,29 @@ public static ExtractedIds Extract(string userQuery)
 
 ## ID format tanıma
 
-| Tip | Pattern | Eşleşmeler |
-|---|---|---|
-| Order | `ORD[-_ ]?N` | `1`, `ORD_1`, `ord-001`, `"ORD 1"` |
-| Complaint | `CMP[-_ ]?N` | `1`, `cmp_5` |
-| Customer (prefixed) | `CUST[-_ ]?N` | `123`, `cust-7` |
-| Customer (numeric fallback) | `\b\d{3,5}\b` | `12345` (3-5 hane) |
+ID'ler prefix (`ORD-`, `CMP-`) olmadan sadece **4 veya daha fazla haneli sayı** olarak tanınır. Hangi entity türüne ait olduğu, sayının yakın bağlamındaki Türkçe anahtar kelimelere göre belirlenir:
 
-**Tüm pattern'ler case-insensitive.**
+| Entity | Regex deseni | Bağlam kelimesi |
+|---|---|---|
+| `order_id` | `\b(\d{4,})\b` | `sipari[sş]` (sipariş) |
+| `complaint_id` | `\b(\d{4,})\b` | `şikayet` |
+| `customer_id` | `\b(\d{4,})\b` | `mü[sş]teri` veya `numaram` |
+
+Sayı ile bağlam kelimesi arasındaki pencere ±60 karakterdir.
+
+**Tüm kelime desenleri case-insensitive.**
 
 ---
 
-## Numeric customer fallback heuristik
+## Numeric fallback heuristik
 
-Sadece `3-5 haneli sayı` görünce hemen customer ID demek tehlikeli — sipariş tutarı, tarih, miktar olabilir. Bu yüzden:
-
-**Sadece** şu koşullarda `customer_id` olarak yorumla:
-1. Mesajda zaten bir anchor ID var (1030 veya 1001) **VEYA**
-2. Mesaj çok kısa (≤4 token) — örn. `"sipariş 12345"` → büyük olasılıkla bir ID
+Mesajda bağlam kelimesi yoksa sayı türü belirsizdir. `customer_id` olarak yorumlanması için mesajın **≤5 token** uzunluğunda olması gerekir; daha uzun bağlamlarda sayı atanmaz.
 
 ```
-"Sipariş 12345 nerede?"          → customer_id = null  (ambiguous)
-"1 siparişimi 12345 hesaba"  → customer_id = 12345 (anchor 1 var)
-"12345"                          → customer_id = 12345 (kısa mesaj)
+"siparişim 4821 nerede?"   → order_id = "4821"   (sipariş bağlamı)
+"şikayet 1003 durumu"      → complaint_id = "1003" (şikayet bağlamı)
+"1027"                     → customer_id = "1027" (kısa mesaj ≤5 token)
+"2024 yılında aldım"       → hiçbiri               (kısa değil, bağlam yok)
 ```
 
 ---
@@ -61,18 +61,21 @@ Sadece `3-5 haneli sayı` görünce hemen customer ID demek tehlikeli — sipari
 ## `BuildHintMessage`
 
 ```csharp
-public static string BuildHintMessage(ExtractedIds ids)
+public static string? BuildHintMessage(ExtractedIds ids)
 ```
 
-Çıkarılan ID'leri **prompt hint** olarak formatlar; PlanningAgent ve Specialist'ler bunu görür:
+Çıkarılan ID'leri **prompt hint** olarak formatlar; PlanningAgent ve Specialist'ler bunu görür. Hiç ID çıkarılamamışsa `null` döner.
 
 ```
-[ID İPUCU]
-- order_id: 1
-- customer_id: 12345
+[ENTITY EXTRACTION — deterministik regex ile çıkarıldı]
+Kullanıcı mesajından aşağıdaki ID'ler otomatik çıkarıldı. Bu bilgileri KULLAN, tekrar kullanıcıya sorma:
+- order_id = "4821"
 
-[TOOL ÖNCELİĞİ]
-order_id mevcutsa order_status_tool kullan; get_last_order_tool gerek yok.
+SİPARİŞ SORGUSU ÖNCELİK KURALI:
+  - order_id MEVCUT → 'order_status_tool' kullan (order_id ile sorgula).
+  - customer_id TEKRAR SORMA; order_id tek başına yeterlidir.
+
+Not: Ekstraksiyon yanlış görünüyorsa kullanıcıya doğrulat.
 ```
 
 Bu hint mesajı LLM çağrısının başına eklenir — model'in deterministic bilgiyi tekrar çıkarmaya çalışıp halüsinasyona düşmesini engeller.
@@ -82,13 +85,13 @@ Bu hint mesajı LLM çağrısının başına eklenir — model'in deterministic 
 ## Akış
 
 ```
-Kullanıcı: "5 nerede"
+Kullanıcı: "4821 siparişim nerede"
    ↓
 IdExtractor.Extract(query)
-   → ExtractedIds { OrderId="5", CustomerId=null, ComplaintId=null }
+   → ExtractedIds { OrderId="4821", CustomerId=null, ComplaintId=null }
    ↓
 IdExtractor.BuildHintMessage(ids)
-   → "[ID İPUCU]\n- order_id: 5\n..."
+   → "[ENTITY EXTRACTION...]\n- order_id = \"4821\"\n..."
    ↓
 PlanningAgent prompt'una eklenir
    ↓
@@ -102,7 +105,10 @@ LLM agent seçimi yapar, hint'i kullanır
 Saf static fonksiyon, dış bağımlılık yok:
 
 ```csharp
-var ids = IdExtractor.Extract("3 siparişim teslim edilmedi");
-Assert.Equal("3", ids.OrderId);
+var ids = IdExtractor.Extract("4821 siparişim teslim edilmedi");
+Assert.Equal("4821", ids.OrderId);
 Assert.Null(ids.CustomerId);
+
+var ids2 = IdExtractor.Extract("şikayet 1003 durumu");
+Assert.Equal("1003", ids2.ComplaintId);
 ```

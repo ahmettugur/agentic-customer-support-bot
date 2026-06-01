@@ -389,7 +389,7 @@ public string Render(string key, IDictionary<string, string?>? vars);
 - **YAML**: `@docs/evaluation-scenarios.yaml` — 20+ senaryo; her birinde `query`, `expected_intent`, `expected_agents`, `expected_tools`, `success_criteria`.
 - **Runner**: `@Evaluation/EvaluationRunner.cs` — her senaryoyu izole session'da koşturur, trace ile karşılaştırır.
 - **Evaluator**: `CriteriaEvaluator` — criterion tipi başına pass/fail üretir.
-- **Endpoint**: `POST /evaluation/run?file=...`
+- **Endpoint**: `POST /eval/run` (tüm senaryolar) / `POST /eval/run/{id}` (tekil)
 
 **Senaryo örneği**:
 
@@ -401,8 +401,7 @@ public string Render(string key, IDictionary<string, string?>? vars);
   expected_agents: ["PlanningAgent", "OrderAgent", "ResponseAgent"]
   expected_tools: ["order_status_tool"]
   success_criteria:
-    - type: "response_contains"
-      value: "Kargolandı"
+    - "response contains 'Kargolandı'"
 ```
 
 **Neden?** Prompt değişikliği yaptığınızda bot 5 regression gösterebilir — manuel test bulmaz. YAML senaryoları + CI entegrasyonu = "prompt update önce eval koş".
@@ -421,7 +420,7 @@ public VerifiedEntities Verify(string query, AgentSession? session, IList<ChatMe
 {
     var ids = IdExtractor.Extract(query);        // regex
     // history + session state'ten eksikleri doldur
-    // Her entity için repository port'ları (IOrderRepository.TryGetAsync / IProductCatalogRepository / IComplaintRepository)
+    // Her entity için repository port'ları (IOrderRepository.Get / IProductCatalogRepository.FindProduct / IComplaintRepository.Get)
     //   → Verified / NotFoundInDb / FormatOnly
     // customer_id Verified ise DerivedLastOrderId hesaplanır
     return verified;
@@ -701,7 +700,7 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
 
 **Mod değişim kanalı**: `ModeChanged` event'i, açık duran user `/chat/stream` SSE bağlantısını da koparır → `human_left` + `done` gönderilir, akış normal Bot moduna düşer (bir sonraki user mesajı tekrar workflow tetikler).
 
-**Admin mesajının session geçmişine yazılması**: `POST /chat-sessions/{sid}/messages` artık `ISessionManager.AppendAssistantMessage()` ile admin mesajını LLM-facing session history'sine **assistant turu** olarak yazıyor. Bot moduna dönüldüğünde (release veya replan) `PlanningAgent` admin'in vaatlerini/yönlendirmelerini görür ve onları göz ardı etmez. `IConversationStore` ve `InMemorySessionManager` her ikisi de "son boş assistant turunu doldur, yoksa yeni tur ekle" mantığını uygular.
+**Admin mesajının session geçmişine yazılması**: `POST /chat-sessions/{sid}/messages` artık `ISessionManager.AppendAssistantMessage()` ile admin mesajını LLM-facing session history'sine **assistant turu** olarak yazıyor. Bot moduna dönüldüğünde (release veya replan) `PlanningAgent` admin'in vaatlerini/yönlendirmelerini görür ve onları göz ardı etmez. `ISessionManager` ve `InMemorySessionManager` her ikisi de "son boş assistant turunu doldur, yoksa yeni tur ekle" mantığını uygular.
 
 **Karakteristikleri**:
 
