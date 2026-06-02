@@ -337,15 +337,33 @@ public sealed class PersistenceHydrator : IHostedService
         var store    = GetService<IWorkflowDefinitionStore>();
         if (dbFactory is null || store is null) return;
 
-        await using var ctx = await dbFactory.CreateDbContextAsync(ct);
-        if (await ctx.WorkflowDefinitions.AnyAsync(ct)) return;
-
-        var now = DateTime.UtcNow;
+        var now     = DateTime.UtcNow;
         var samples = BuildSampleWorkflows(now);
-        foreach (var wf in samples)
-            store.Upsert(wf, "system");
 
-        _logger.LogInformation("[Hydrator] {Count} örnek workflow seed edildi.", samples.Length);
+        // Sistem workflow'larını her zaman upsert et (emoji/encoding düzeltmeleri için).
+        // Admin'in değiştirdiği workflow'lara dokunmaz çünkü Upsert UpdatedBy'ı korur;
+        // sadece "system" tarafından son güncellenenleri yeniler.
+        await using var ctx = await dbFactory.CreateDbContextAsync(ct);
+        var systemIds = samples.Select(s => s.Id).ToList();
+        var existingBySystem = await ctx.WorkflowDefinitions
+            .Where(w => systemIds.Contains(w.Id) && w.UpdatedBy == "system")
+            .Select(w => w.Id)
+            .ToListAsync(ct);
+
+        int upserted = 0;
+        foreach (var wf in samples)
+        {
+            // Yeni kayıt veya sistem tarafından son kaydedilmiş kayıt → güncelle
+            if (!await ctx.WorkflowDefinitions.AnyAsync(w => w.Id == wf.Id, ct)
+                || existingBySystem.Contains(wf.Id))
+            {
+                store.Upsert(wf, "system");
+                upserted++;
+            }
+        }
+
+        if (upserted > 0)
+            _logger.LogInformation("[Hydrator] {Count} sistem workflow'u seed/güncellendi.", upserted);
     }
 
     private static WorkflowDefinition[] BuildSampleWorkflows(DateTime now)
@@ -409,7 +427,7 @@ public sealed class PersistenceHydrator : IHostedService
                         Id       = "r2",
                         Type     = WorkflowStepType.Respond,
                         Label    = "Sonucu göster",
-                        Template = "📦 Sipariş #{orderId} durumu:\n\n{siparis}"
+                        Template = "Sipariş #{orderId} durumu:\n\n{siparis}"
                     }
                 ]
             },
@@ -470,7 +488,7 @@ public sealed class PersistenceHydrator : IHostedService
                         Id       = "r2",
                         Type     = WorkflowStepType.Respond,
                         Label    = "Listeyi göster",
-                        Template = "🛍️ {category} kategorisindeki ürünlerimiz:\n\n{liste}"
+                        Template = "{category} kategorisindeki ürünlerimiz:\n\n{liste}"
                     }
                 ]
             },
@@ -539,7 +557,7 @@ public sealed class PersistenceHydrator : IHostedService
                         Id       = "r_ok",
                         Type     = WorkflowStepType.Respond,
                         Label    = "Ürün bilgisini göster",
-                        Template = "🔍 Ürün Bilgisi:\n\n{urun}"
+                        Template = "Urun Bilgisi:\n\n{urun}"
                     }
                 ]
             }

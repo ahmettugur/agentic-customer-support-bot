@@ -3,8 +3,15 @@ using CustomerSupportBot.Api.Extensions;
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Outbound;
 using Microsoft.Extensions.Options;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.ConfigureHttpJsonOptions(o =>
+{
+    o.SerializerOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
+});
 
 builder.Services.AddOpenApi();
 builder.Services.AddLogging();

@@ -22,7 +22,10 @@ public sealed partial class PostgresWorkflowDefinitionStore : IWorkflowDefinitio
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
 
-    private static readonly JsonSerializerOptions _json = new();
+    private static readonly JsonSerializerOptions _json = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
 
     public PostgresWorkflowDefinitionStore(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
