@@ -155,3 +155,23 @@
     background: #f3f4f6;
     color: #6b7280;
 }
+
+/* ── Dark mode ────────────────────────────────── */
+[data-theme="dark"] .sla-card               { background: #1e293b; border-color: #334155; }
+[data-theme="dark"] .sla-card h3            { border-bottom-color: #334155; color: #f1f5f9; }
+[data-theme="dark"] .sla-stat-row .label    { color: #94a3b8; }
+[data-theme="dark"] .sla-stat-row .value    { color: #f1f5f9; }
+[data-theme="dark"] .sla-stat-row .value.warn   { color: #fbbf24; }
+[data-theme="dark"] .sla-stat-row .value.breach { color: #f87171; }
+[data-theme="dark"] .sla-event-list         { border-color: #334155; background: #1e293b; }
+[data-theme="dark"] .sla-event              { border-bottom-color: #273344; }
+[data-theme="dark"] .sla-event .ts          { color: #64748b; }
+[data-theme="dark"] .sla-event .kind        { color: #f1f5f9; }
+[data-theme="dark"] .sla-event .severity.warn   { background: #422006; color: #fcd34d; }
+[data-theme="dark"] .sla-event .severity.breach { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .sla-event .target      { color: #cbd5e1; }
+[data-theme="dark"] .sla-event .age         { color: #64748b; }
+[data-theme="dark"] .sla-event .note        { color: #94a3b8; }
+[data-theme="dark"] .sla-empty              { color: #64748b; }
+[data-theme="dark"] .pill.ok                { background: #052e16; color: #86efac; }
+[data-theme="dark"] .pill.off               { background: #273344; color: #64748b; }

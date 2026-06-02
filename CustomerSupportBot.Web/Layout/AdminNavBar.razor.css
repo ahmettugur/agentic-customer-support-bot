@@ -75,9 +75,36 @@
 @media (max-width: 720px) {
     .csb-topnav {
         flex-wrap: wrap;
+        gap: 2px;
+        padding: 6px 10px;
     }
 
     .csb-topnav-brand {
         width: 100%;
+        margin-right: 0;
+        padding-bottom: 4px;
+        border-bottom: 1px solid #374151;
+        margin-bottom: 2px;
     }
+
+    ::deep .csb-topnav-link {
+        padding: 5px 8px;
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    ::deep .csb-topnav-link span { display: none; }
+}
+
+/* Toggle buton dark navbar üzerinde — global .csb-theme-toggle'ı override eder */
+.csb-theme-toggle {
+    border-color: #4b5563;
+    color: #9ca3af;
+}
+
+.csb-theme-toggle:hover {
+    background: #374151;
+    border-color: #6b7280;
+    color: #f9fafb;
 }

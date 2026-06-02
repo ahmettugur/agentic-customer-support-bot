@@ -419,3 +419,71 @@
     font-family: ui-monospace, monospace;
     font-size: 12px;
 }
+
+/* ═══════════════════════════════════════════════
+   DARK MODE
+   ═══════════════════════════════════════════════ */
+[data-theme="dark"] .replay-layout           { background: #0f172a; }
+[data-theme="dark"] .replay-header           { background: #1e293b; border-bottom-color: #334155; }
+[data-theme="dark"] .replay-header-info h1   { color: #f1f5f9; }
+[data-theme="dark"] .replay-header-info p    { color: #94a3b8; }
+[data-theme="dark"] .replay-input            { background: #273344; border-color: #334155; color: #f1f5f9; }
+[data-theme="dark"] .replay-input:focus      { border-color: #818cf8; }
+[data-theme="dark"] .replay-controls         { background: #1e293b; border-bottom-color: #334155; }
+[data-theme="dark"] .replay-step-label       { background: #273344; color: #94a3b8; }
+[data-theme="dark"] .replay-speed            { color: #94a3b8; }
+[data-theme="dark"] .replay-speed select     { background: #273344; border-color: #334155; color: #f1f5f9; }
+
+/* Timeline */
+[data-theme="dark"] .replay-timeline-pane    { border-right-color: #334155; background: #1e293b; }
+[data-theme="dark"] .replay-timeline-pane h3 { color: #64748b; }
+[data-theme="dark"] .replay-timeline li:hover  { background: #273344; }
+[data-theme="dark"] .replay-timeline li.passed { background: #1e293b; color: #64748b; }
+[data-theme="dark"] .step-meta               { color: #64748b; }
+
+/* Kind pills */
+[data-theme="dark"] .kind-init      { background: #334155; color: #94a3b8; }
+[data-theme="dark"] .kind-planning  { background: #422006; color: #fcd34d; }
+[data-theme="dark"] .kind-agent     { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .kind-tool      { background: #052e16; color: #86efac; }
+[data-theme="dark"] .kind-reasoning { background: #3b0764; color: #d8b4fe; }
+[data-theme="dark"] .kind-final     { background: #450a0a; color: #fca5a5; }
+
+/* Chat pane */
+[data-theme="dark"] .replay-chat-pane        { background: #0f172a; }
+
+/* Avatars */
+[data-theme="dark"] .rp-avatar-user          { background: #1e3a5f; }
+[data-theme="dark"] .rp-avatar-bot           { background: #052e16; }
+
+/* Bubbles */
+[data-theme="dark"] .rp-bubble-bot           { background: #1e293b; color: #f1f5f9; border-color: #334155; box-shadow: none; }
+[data-theme="dark"] .rp-bubble-bot .rp-bubble-label { color: #34d399; }
+[data-theme="dark"] .rp-error-badge          { color: #f87171; background: #450a0a; }
+[data-theme="dark"] .rp-term-badge           { background: #273344; color: #94a3b8; }
+
+/* Inner cards */
+[data-theme="dark"] .rp-card                 { border-color: #334155; background: #1e293b; }
+[data-theme="dark"] .rp-card-header          { border-bottom-color: #334155; }
+[data-theme="dark"] .rp-card-reasoning .rp-card-header { background: #1a1033; color: #d8b4fe; }
+[data-theme="dark"] .rp-card-planning .rp-card-header  { background: #2d1a00; color: #fcd34d; }
+[data-theme="dark"] .rp-card-agent .rp-card-header     { background: #0c1a3d; color: #93c5fd; }
+[data-theme="dark"] .rp-card-tool .rp-card-header      { background: #052e16; color: #86efac; }
+[data-theme="dark"] .rp-card-time            { color: #64748b; }
+
+/* Internals */
+[data-theme="dark"] .rp-kv-key               { color: #94a3b8; }
+[data-theme="dark"] .rp-pill                 { background: #273344; color: #cbd5e1; }
+[data-theme="dark"] .rp-conf-bar             { background: #334155; }
+[data-theme="dark"] .rp-conf-pct             { color: #94a3b8; }
+[data-theme="dark"] .rp-text                 { color: #cbd5e1; background: #273344; }
+[data-theme="dark"] .rp-clarification        { color: #fcd34d; background: #422006; }
+[data-theme="dark"] .rp-route-badge          { background: #0c1a3d; border-color: #1e3a5f; }
+[data-theme="dark"] .rp-route-badge code     { color: #93c5fd; }
+[data-theme="dark"] .rp-agent-output         { color: #cbd5e1; background: #273344; }
+[data-theme="dark"] .rp-duration-badge       { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .rp-success-badge.ok     { background: #052e16; color: #86efac; }
+[data-theme="dark"] .rp-success-badge.fail   { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .rp-field-list           { background: #273344; border-color: #334155; }
+[data-theme="dark"] .rp-field-val            { color: #cbd5e1; }
+[data-theme="dark"] .replay-empty code       { background: #273344; }

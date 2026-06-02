@@ -45,6 +45,10 @@ builder.Services.AddScoped(sp => new AuthService(
     sp.GetRequiredService<AuthTokenStore>()
 ));
 
+// ── UI Servisleri ────────────────────────────────────────────────────────────
+builder.Services.AddScoped<ToastService>();
+builder.Services.AddScoped<ThemeService>();
+
 // ── API Servisleri ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<AdminApiService>();
 builder.Services.AddScoped<AnalyticsApiService>();

@@ -145,3 +145,31 @@
 
 .pill.ok  { background: #d1fae5; color: #065f46; }
 .pill.off { background: var(--color-surface-alt); color: var(--color-text-muted); }
+
+@media (max-width: 700px) {
+    .sla-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .sla-toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-2);
+    }
+
+    .sla-event {
+        grid-template-columns: 70px 60px 1fr;
+        grid-template-rows: auto auto;
+    }
+
+    .sla-event .age { grid-column: 3; text-align: right; }
+    .sla-event .note { grid-column: 1 / -1; }
+}
+
+/* ── Dark mode ────────────────────────────────── */
+[data-theme="dark"] .sla-stat-row .value.warn   { color: #fbbf24; }
+[data-theme="dark"] .sla-stat-row .value.breach  { color: #f87171; }
+[data-theme="dark"] .sla-event .severity.warn   { background: #422006; color: #fcd34d; }
+[data-theme="dark"] .sla-event .severity.breach { background: #450a0a; color: #fca5a5; }
+[data-theme="dark"] .sla-event                  { border-bottom-color: #1e293b; }
+[data-theme="dark"] .pill.ok                    { background: #052e16; color: #86efac; }

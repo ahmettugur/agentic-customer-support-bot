@@ -730,3 +730,47 @@
     .traces-layout { padding: var(--space-4); }
     .traces-header { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
 }
+
+/* ═══════════════════════════════════════════════
+   DARK MODE
+   ═══════════════════════════════════════════════ */
+
+/* Status badges */
+[data-theme="dark"] .badge-completed              { background: #052e16; color: #86efac; border-color: #166534; }
+[data-theme="dark"] .badge-awaiting_user_input    { background: #422006; color: #fcd34d; border-color: #713f12; }
+[data-theme="dark"] .badge-escalation_needed      { background: #4a0520; color: #f9a8d4; border-color: #9f1239; }
+[data-theme="dark"] .badge-max_messages_reached,
+[data-theme="dark"] .badge-repeated_tool_call_guard,
+[data-theme="dark"] .badge-timeout                { background: #431407; color: #fdba74; border-color: #9a3412; }
+
+/* Pills */
+[data-theme="dark"] .pill-green                   { background: #052e16; color: #86efac; border-color: #166534; }
+[data-theme="dark"] .pill-yellow                  { background: #422006; color: #fcd34d; border-color: #713f12; }
+
+/* Step chips */
+[data-theme="dark"] .step-chip.warn               { background: #422006; color: #fcd34d; border-color: #713f12; }
+[data-theme="dark"] .step-chip.action             { background: #2e1065; color: #c4b5fd; border-color: #4c1d95; }
+
+/* Response box */
+[data-theme="dark"] .response-box.draft           { background: #2d1a00; border-color: #713f12; border-left-color: #d97706; }
+
+/* Chat history */
+[data-theme="dark"] .trace-chat-user .trace-chat-role   { color: #818cf8; }
+[data-theme="dark"] .trace-chat-bot .trace-chat-role    { color: #94a3b8; }
+[data-theme="dark"] .trace-chat-agent .trace-chat-role  { color: #86efac; }
+[data-theme="dark"] .trace-chat-bot .trace-chat-bubble  { background: #273344; color: #f1f5f9; border-color: #334155; }
+[data-theme="dark"] .trace-chat-agent .trace-chat-bubble { background: #052e16; color: #d1fae5; border-color: #166534; }
+[data-theme="dark"] .trace-chat-agent-badge             { background: #166534; }
+[data-theme="dark"] .trace-chat-agent-name              { color: #86efac; }
+
+/* Approval cards */
+[data-theme="dark"] .trace-approval-card          { border-color: #334155; background: #273344; }
+[data-theme="dark"] .trace-approval-meta          { color: #64748b; }
+[data-theme="dark"] .trace-approval-reason        { color: #94a3b8; border-left-color: #475569; }
+
+/* Internal note */
+[data-theme="dark"] .internal-note                { background: #2d1a00; border-color: #713f12; border-left-color: #f59e0b; }
+[data-theme="dark"] .internal-note-badge          { color: #fcd34d; }
+[data-theme="dark"] .internal-note-badge svg      { color: #fbbf24; }
+[data-theme="dark"] .internal-note-time           { color: #fbbf24; }
+[data-theme="dark"] .internal-note-body           { color: #fde68a; }

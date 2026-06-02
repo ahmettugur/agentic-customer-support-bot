@@ -1,0 +1,60 @@
+@inject ToastService ToastSvc
+@implements IDisposable
+
+<div class="toast-stack" aria-live="polite" aria-atomic="false" role="status">
+    @foreach (var toast in _toasts)
+    {
+        <div class="toast toast--@toast.Type.ToString().ToLowerInvariant() @(toast.Removing ? "toast--removing" : "")">
+            <span class="toast-icon" aria-hidden="true">@GetIcon(toast.Type)</span>
+            <span class="toast-text">@toast.Text</span>
+            <button class="toast-close" @onclick="() => Remove(toast)" aria-label="Kapat">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    private sealed record ToastEntry(ToastMessage Message, string Text, ToastType Type)
+    {
+        public bool Removing { get; set; }
+    }
+
+    private readonly List<ToastEntry> _toasts = [];
+    private const int AutoDismissMs = 4000;
+    private const int RemoveAnimMs  = 300;
+
+    protected override void OnInitialized() =>
+        ToastSvc.OnShow += HandleShow;
+
+    private void HandleShow(ToastMessage msg)
+    {
+        var entry = new ToastEntry(msg, msg.Text, msg.Type);
+        InvokeAsync(() =>
+        {
+            _toasts.Add(entry);
+            StateHasChanged();
+            _ = Task.Delay(AutoDismissMs).ContinueWith(_ => InvokeAsync(() => Remove(entry)));
+        });
+    }
+
+    private async Task Remove(ToastEntry entry)
+    {
+        if (!_toasts.Contains(entry)) return;
+        entry.Removing = true;
+        StateHasChanged();
+        await Task.Delay(RemoveAnimMs);
+        _toasts.Remove(entry);
+        StateHasChanged();
+    }
+
+    private static string GetIcon(ToastType type) => type switch
+    {
+        ToastType.Success => "✓",
+        ToastType.Error   => "✕",
+        ToastType.Warning => "⚠",
+        _                 => "ℹ"
+    };
+
+    public void Dispose() => ToastSvc.OnShow -= HandleShow;
+}

@@ -177,3 +177,15 @@
     border-top: 1px solid var(--color-border);
     margin: var(--space-4) 0;
 }
+
+@media (max-width: 700px) {
+    .wf-container .layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── Dark mode ────────────────────────────────── */
+[data-theme="dark"] .wf-container button.danger       { background: #dc2626; color: #fff; border-color: #dc2626; }
+[data-theme="dark"] .wf-container button.danger:hover { background: #b91c1c; }
+[data-theme="dark"] .wf-container .badge.active   { background: #052e16; color: #86efac; border-color: #166534; }
+[data-theme="dark"] .wf-container .badge.inactive { background: #450a0a; color: #fca5a5; border-color: #7f1d1d; }

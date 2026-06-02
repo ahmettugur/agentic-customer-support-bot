@@ -6,6 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Müşteri Destek Asistanı</title>
     <base href="/" />
+    <!-- Tema FOUC önleme: Blazor yüklenmeden önce data-theme ayarla -->
+    <script>
+        (function () {
+            var s = localStorage.getItem('csb-theme');
+            var d = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.setAttribute('data-theme', s || (d ? 'dark' : 'light'));
+        })();
+    </script>
     <link rel="preload" id="webassembly" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
@@ -25,13 +33,55 @@
         <div class="loading-progress-text"></div>
     </div>
 
-    <div id="blazor-error-ui" style="display:none;color-scheme:light only;background:lightyellow;bottom:0;box-shadow:0 -1px 2px rgba(0,0,0,.2);box-sizing:border-box;left:0;padding:.6rem 1.25rem .7rem 1.25rem;position:fixed;width:100%;z-index:1000;">
-        An unhandled error has occurred.
-        <a href="." class="reload">Reload</a>
-        <span class="dismiss" style="cursor:pointer;position:absolute;right:.75rem;top:.5rem;">🗙</span>
+    <div id="blazor-error-ui" style="display:none;color-scheme:light only;background:#fef9c3;bottom:0;box-shadow:0 -1px 2px rgba(0,0,0,.2);box-sizing:border-box;left:0;padding:.6rem 1.25rem .7rem 1.25rem;position:fixed;width:100%;z-index:1000;font-family:'Inter',sans-serif;font-size:14px;">
+        Beklenmeyen bir hata oluştu.
+        <a href="." class="reload" style="margin-left:8px;font-weight:600;color:#1d4ed8;">Sayfayı Yenile</a>
+        <span class="dismiss" style="cursor:pointer;position:absolute;right:.75rem;top:.5rem;font-size:18px;">✕</span>
     </div>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
     <script>
+        // ── Dev-mode CSS cache buster ─────────────────────────────────────────
+        // Adds a timestamp query-string to every stylesheet (existing + future).
+        // Runs ONLY on localhost so production fingerprinting is unaffected.
+        (function () {
+            if (!['localhost', '127.0.0.1', '::1'].includes(location.hostname)) return;
+            var ts = Date.now();
+            function bustLink(link) {
+                if (!link || link.rel !== 'stylesheet') return;
+                var href = link.getAttribute('href') || '';
+                if (!href || href.startsWith('http') || href.includes('?')) return;
+                link.href = href + '?_cbv=' + ts;
+            }
+            document.querySelectorAll('link[rel="stylesheet"]').forEach(bustLink);
+            // Also intercept CSS links injected later by Blazor component rendering
+            var obs = new MutationObserver(function (muts) {
+                muts.forEach(function (m) {
+                    m.addedNodes.forEach(function (n) {
+                        if (n.nodeType !== 1) return;
+                        if (n.tagName === 'LINK') { bustLink(n); }
+                        else if (n.querySelectorAll) {
+                            n.querySelectorAll('link[rel="stylesheet"]').forEach(bustLink);
+                        }
+                    });
+                });
+            });
+            obs.observe(document.documentElement, { childList: true, subtree: true });
+        })();
+
+        // ── Tema API (Blazor ThemeService tarafından çağrılır) ───────────────────
+        window.csbTheme = {
+            get: function () {
+                return document.documentElement.getAttribute('data-theme') || 'light';
+            },
+            toggle: function () {
+                var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', next);
+                localStorage.setItem('csb-theme', next);
+                return next;
+            }
+        };
+
+        // ── Dynamic script loader (used by admin/chat bridges) ────────────────
         window.loadScript = function (src, id) {
             return new Promise(function (resolve, reject) {
                 if (id && document.getElementById(id)) { resolve(); return; }

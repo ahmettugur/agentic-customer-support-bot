@@ -9,12 +9,20 @@
 
 <div class="login-page-wrap">
     <div class="login-card">
+        <div class="login-logo" aria-hidden="true">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+        </div>
         <h1>Yönetici Girişi</h1>
         <p class="subtitle">Customer Support Bot — Admin Panel</p>
 
         @if (!string.IsNullOrEmpty(_error))
         {
-            <div class="login-error visible" role="alert">@_error</div>
+            <div class="login-error visible" role="alert" aria-live="polite">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                @_error
+            </div>
         }
 
         <EditForm Model="_model" OnValidSubmit="HandleLoginAsync" class="login-form">
@@ -22,25 +30,49 @@
 
             <label for="username">Kullanıcı Adı</label>
             <InputText id="username" @bind-Value="_model.Username"
-                       autocomplete="username" autofocus />
+                       autocomplete="username" autofocus
+                       aria-required="true" />
 
             <label for="password">Parola</label>
-            <InputText id="password" type="password" @bind-Value="_model.Password"
-                       autocomplete="current-password" />
+            <div class="password-wrapper">
+                <InputText id="password" type="@(_showPassword ? "text" : "password")"
+                           @bind-Value="_model.Password"
+                           autocomplete="current-password"
+                           aria-required="true" />
+                <button type="button" class="btn-show-password"
+                        @onclick="() => _showPassword = !_showPassword"
+                        aria-label="@(_showPassword ? "Parolayı gizle" : "Parolayı göster")"
+                        title="@(_showPassword ? "Gizle" : "Göster")">
+                    @if (_showPassword)
+                    {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" x2="23" y1="1" y2="23"/></svg>
+                    }
+                    else
+                    {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    }
+                </button>
+            </div>
 
-            <button type="submit" id="loginBtn" disabled="@_loading">
+            <button type="submit" id="loginBtn" disabled="@_loading"
+                    aria-busy="@_loading">
+                @if (_loading)
+                {
+                    <span class="login-spinner" aria-hidden="true"></span>
+                }
                 @(_loading ? "Giriş yapılıyor…" : "Giriş Yap")
             </button>
         </EditForm>
 
-        <p class="login-footer">JWT Bearer auth · Access 60dk · Refresh 14g</p>
+        <p class="login-footer">JWT Bearer · Token 60dk · Refresh 14g</p>
     </div>
 </div>
 
 @code {
-    private readonly LoginModel _model = new() { Username = "admin", Password = "Admin123!" };
+    private readonly LoginModel _model = new();
     private string? _error;
     private bool _loading;
+    private bool _showPassword;
 
     private string _returnUrl = "/admin";
 
@@ -52,7 +84,6 @@
         if (!string.IsNullOrWhiteSpace(returnParam))
             _returnUrl = returnParam;
 
-        // Zaten oturum açık ise hemen yönlendir
         var state = await AuthStateProvider.GetAuthenticationStateAsync();
         if (state.User.Identity?.IsAuthenticated == true)
             Nav.NavigateTo(_returnUrl, forceLoad: false);
