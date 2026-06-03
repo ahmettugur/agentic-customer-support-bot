@@ -69,7 +69,7 @@
 </div>
 
 @code {
-    private readonly LoginModel _model = new();
+    private readonly LoginModel _model = new() { Username = "admin", Password = "Admin123!" };
     private string? _error;
     private bool _loading;
     private bool _showPassword;

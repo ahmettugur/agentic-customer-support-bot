@@ -1,17 +1,17 @@
-// Models/Workflow/WorkflowDefinition.cs
-// Low-Code Workflow Designer (#14) — Admin'in declarative olarak tanımlayabileceği
-// Mini iş akışları. Mevcut multi-agent sistem dokunulmaz; bu workflow'lar admin
-// Tarafından tetiklenir veya intent eşleşmesiyle "fast path" olarak çalışır.
+// Domain/Model/Workflow/WorkflowDefinition.cs
+// Low-Code Workflow Designer — declarative iş akışı tanımı.
+// Adımlar arasındaki geçiş Next/OnTrue/OnFalse referanslarıyla bir DAG oluşturur;
+// WorkflowExecutor bu grafiği traversal ederek yürütür.
 
 namespace CustomerSupportBot.Domain.Model.Workflow;
 
 /// <summary>
 /// Bir low-code workflow tanımı. JSON olarak persist edilir, runtime'da
-/// `WorkflowExecutor` tarafından adım adım yorumlanır.
+/// WorkflowExecutor tarafından adım adım yorumlanır.
 /// </summary>
 public class WorkflowDefinition
 {
-    /// <summary>Slug — URL ve API'lerde stabilize ID. Lower-case, kısa çizgi.</summary>
+    /// <summary>Slug — URL ve API'lerde stabil ID. Lower-case, kısa çizgi.</summary>
     public string Id { get; set; } = "";
 
     public string Name { get; set; } = "";
@@ -24,47 +24,50 @@ public class WorkflowDefinition
     public bool IsActive { get; set; } = true;
 
     /// <summary>
+    /// Yürütmenin başlayacağı adımın Id'si.
+    /// Null ise Steps listesindeki ilk eleman kullanılır.
+    /// </summary>
+    public string? StartStepId { get; set; }
+
+    /// <summary>
     /// Kullanıcı mesajında bu kelimelerden biri geçerse workflow tetiklenir.
-    /// Boş ise sadece manuel/admin tetiklemeli olarak kullanılır.
+    /// Boşsa sadece manuel tetiklemeli.
     /// </summary>
     public List<string> TriggerKeywords { get; set; } = new();
 
     /// <summary>
     /// Input'tan değişken çıkarmak için regex desenleri.
-    /// Key = değişken adı, Value = .NET regex (named-group ya da ilk capture group).
-    /// Örn: { "orderId": "(\\d{4,})" }
+    /// Key = değişken adı, Value = .NET regex.
     /// </summary>
     public Dictionary<string, string> InputPatterns { get; set; } = new();
 
-    /// <summary>Sıralı adımlar — executor sırayla yorumlar.</summary>
+    /// <summary>Adım tanımları — executor DAG olarak traversal eder.</summary>
     public List<WorkflowStep> Steps { get; set; } = new();
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
-
-    /// <summary>Audit — son düzenleyen admin.</summary>
     public string? UpdatedBy { get; set; }
 }
 
 /// <summary>Bir workflow adımının tipi.</summary>
 public enum WorkflowStepType
 {
-    /// <summary>Sabit bir mesaj template'ini variables ile substitute eder ve output'a ekler.</summary>
+    /// <summary>Şablon mesajı variables ile doldurur ve yanıta ekler.</summary>
     Respond,
 
-    /// <summary>Mevcut bir tool'u çağırır (product_inquiry / order_status / get_last_order).</summary>
+    /// <summary>Yan etkisiz bir tool çağırır ve sonucu değişkene yazar.</summary>
     Lookup,
 
-    /// <summary>Variables üzerinde koşul değerlendirir; false ise sonraki adım(lar)ı atlar.</summary>
+    /// <summary>Koşulu değerlendirir; OnTrue veya OnFalse adımına dallanır.</summary>
     Branch,
 
-    /// <summary>Bir variables'a yeni değer atar (template substitution destekler).</summary>
+    /// <summary>Bir değişkene değer atar (şablon substitution destekler).</summary>
     SetVariable
 }
 
 /// <summary>
-/// Tek bir workflow adımı. Tip'e göre hangi alanların kullanılacağı değişir;
-/// Validation çalışma zamanında executor içinde yapılır.
+/// Tek bir workflow adımı. Adımlar arası geçiş Next/OnTrue/OnFalse
+/// referanslarıyla eksplisit olarak tanımlanır (positional SkipNext yok).
 /// </summary>
 public class WorkflowStep
 {
@@ -74,33 +77,46 @@ public class WorkflowStep
     /// <summary>UI ve trace için açıklama (opsiyonel).</summary>
     public string? Label { get; set; }
 
-    // ─── Respond ───
-    /// <summary>Şablon mesaj — `{varName}` placeholder'ları variables'tan substitute edilir.</summary>
-    public string? Template { get; set; }
-
-    // ─── Lookup ───
-    /// <summary>Çağrılacak tool adı (WellKnown.ToolNames). Yan etkili tool'lar burada İZİN VERİLMEZ.</summary>
-    public string? Tool { get; set; }
-
-    /// <summary>Tool parametre key → variable adı veya literal değer (`$varName` ya da düz string).</summary>
-    public Dictionary<string, string> Parameters { get; set; } = new();
-
-    /// <summary>Tool çıktısı bu variable'a yazılır (Data + Message).</summary>
-    public string? StoreAs { get; set; }
-
-    // ─── Branch ───
-    /// <summary>"variableName == value" / "variableName != value" / "variableName exists".</summary>
-    public string? Condition { get; set; }
+    // ─── Geçiş bağlantıları ───────────────────────────────────────────────
 
     /// <summary>
-    /// Condition false olduğunda atlanacak adım sayısı (default 1).
+    /// Respond, Lookup ve SetVariable için: bu adım tamamlanınca gidilecek adımın Id'si.
+    /// Null ise workflow sona erer.
     /// </summary>
-    public int SkipNext { get; set; } = 1;
+    public string? Next { get; set; }
 
-    // ─── SetVariable ───
+    /// <summary>Branch için: koşul doğruysa gidilecek adım Id'si. Null = sona er.</summary>
+    public string? OnTrue { get; set; }
+
+    /// <summary>Branch için: koşul yanlışsa gidilecek adım Id'si. Null = sona er.</summary>
+    public string? OnFalse { get; set; }
+
+    // ─── Respond ─────────────────────────────────────────────────────────
+
+    /// <summary>Şablon mesaj — {varName} placeholder'ları variables'tan substitute edilir.</summary>
+    public string? Template { get; set; }
+
+    // ─── Lookup ──────────────────────────────────────────────────────────
+
+    /// <summary>Çağrılacak tool adı. Yan etkili tool'lar izin verilmez.</summary>
+    public string? Tool { get; set; }
+
+    /// <summary>Tool parametre key → variable adı ($varName) veya literal değer.</summary>
+    public Dictionary<string, string> Parameters { get; set; } = new();
+
+    /// <summary>Tool çıktısı bu prefix ile değişkenlere yazılır (storeAs.message, storeAs.success, storeAs.data).</summary>
+    public string? StoreAs { get; set; }
+
+    // ─── Branch ──────────────────────────────────────────────────────────
+
+    /// <summary>"varName == value" / "varName != value" / "varName exists" / "varName missing"</summary>
+    public string? Condition { get; set; }
+
+    // ─── SetVariable ─────────────────────────────────────────────────────
+
     public string? VariableName { get; set; }
 
-    /// <summary>Atanacak değer (template substitution destekler).</summary>
+    /// <summary>Atanacak değer (şablon substitution destekler).</summary>
     public string? VariableValue { get; set; }
 }
 
@@ -117,7 +133,7 @@ public class WorkflowExecutionResult
     public string? Error { get; set; }
 }
 
-/// <summary>Bir adımın yürütme sonucu — debug + admin UI için.</summary>
+/// <summary>Bir adımın yürütme sonucu — debug ve admin UI için.</summary>
 public class WorkflowStepTrace
 {
     public string StepId { get; set; } = "";
@@ -127,4 +143,3 @@ public class WorkflowStepTrace
     public string? Output { get; set; }
     public string? Error { get; set; }
 }
-

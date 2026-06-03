@@ -23,11 +23,13 @@ public class WorkflowExecutorTests
 
     private static WorkflowDefinition BuildDef(params WorkflowStep[] steps) => new()
     {
-        Id = "wf-test",
-        Name = "Test",
+        Id       = "wf-test",
+        Name     = "Test",
         IsActive = true,
-        Steps = steps.ToList()
+        Steps    = steps.ToList()
     };
+
+    // ─── Temel ──────────────────────────────────────────────────────────────
 
     [Fact]
     public void Execute_InactiveWorkflow_ReturnsErrorWithoutSteps()
@@ -47,15 +49,16 @@ public class WorkflowExecutorTests
     {
         var def = BuildDef(new WorkflowStep
         {
-            Type = WorkflowStepType.Respond,
-            Template = "Merhaba {customerName}, hoşgeldin!"
+            Id       = "r1",
+            Type     = WorkflowStepType.Respond,
+            Template = "Merhaba {customerName}, hosgeldin!"
         });
 
         var result = _sut.Execute(def, "selam",
             new Dictionary<string, string> { ["customerName"] = "Ali" });
 
         result.Success.Should().BeTrue();
-        result.FinalResponse.Should().Be("Merhaba Ali, hoşgeldin!");
+        result.FinalResponse.Should().Be("Merhaba Ali, hosgeldin!");
     }
 
     [Fact]
@@ -63,24 +66,45 @@ public class WorkflowExecutorTests
     {
         var def = BuildDef(new WorkflowStep
         {
-            Type = WorkflowStepType.Respond,
-            Template = "Sipariş: {orderId}"
+            Id       = "r1",
+            Type     = WorkflowStepType.Respond,
+            Template = "Siparis: {orderId}"
         });
         def.InputPatterns["orderId"] = @"(\d{4,})";
 
-        var result = _sut.Execute(def, "merhaba 1042 hakkında bilgi alabilir miyim?");
+        var result = _sut.Execute(def, "merhaba 1042 hakkinda bilgi alabilir miyim?");
 
-        result.FinalResponse.Should().Be("Sipariş: 1042");
+        result.FinalResponse.Should().Be("Siparis: 1042");
         result.FinalVariables.Should().ContainKey("orderId").WhoseValue.Should().Be("1042");
     }
 
+    // ─── Branch (graph-based navigation) ────────────────────────────────────
+
     [Fact]
-    public void Execute_BranchFalse_SkipsNextStep()
+    public void Execute_BranchFalse_GoesToOnFalseStep()
     {
+        // orderId bulunamayınca OnFalse → r_notfound adımına gider
         var def = BuildDef(
-            new WorkflowStep { Type = WorkflowStepType.Branch, Condition = "orderId exists" },
-            new WorkflowStep { Type = WorkflowStepType.Respond, Template = "yakalandı" }, // skip edilmeli
-            new WorkflowStep { Type = WorkflowStepType.Respond, Template = "son" }
+            new WorkflowStep
+            {
+                Id        = "br1",
+                Type      = WorkflowStepType.Branch,
+                Condition = "orderId exists",
+                OnTrue    = "r_found",
+                OnFalse   = "r_notfound"
+            },
+            new WorkflowStep
+            {
+                Id       = "r_found",
+                Type     = WorkflowStepType.Respond,
+                Template = "yakalandı"
+            },
+            new WorkflowStep
+            {
+                Id       = "r_notfound",
+                Type     = WorkflowStepType.Respond,
+                Template = "son"
+            }
         );
 
         var result = _sut.Execute(def, "no order id here");
@@ -89,18 +113,59 @@ public class WorkflowExecutorTests
     }
 
     [Fact]
-    public void Execute_BranchTrue_RunsNextStep()
+    public void Execute_BranchTrue_GoesToOnTrueStep()
     {
         var def = BuildDef(
-            new WorkflowStep { Type = WorkflowStepType.Branch, Condition = "orderId exists" },
-            new WorkflowStep { Type = WorkflowStepType.Respond, Template = "var: {orderId}" }
+            new WorkflowStep
+            {
+                Id        = "br1",
+                Type      = WorkflowStepType.Branch,
+                Condition = "orderId exists",
+                OnTrue    = "r1",
+                OnFalse   = null
+            },
+            new WorkflowStep
+            {
+                Id       = "r1",
+                Type     = WorkflowStepType.Respond,
+                Template = "var: {orderId}"
+            }
         );
         def.InputPatterns["orderId"] = @"(\d{4,})";
 
-        var result = _sut.Execute(def, "sipariş 1030 hakkında");
+        var result = _sut.Execute(def, "siparis 1030 hakkinda");
 
         result.FinalResponse.Should().Be("var: 1030");
     }
+
+    [Fact]
+    public void Execute_BranchFalse_OnFalseNull_WorkflowEnds()
+    {
+        // OnFalse = null → workflow sona erer, FinalResponse boş
+        var def = BuildDef(
+            new WorkflowStep
+            {
+                Id        = "br1",
+                Type      = WorkflowStepType.Branch,
+                Condition = "orderId exists",
+                OnTrue    = "r1",
+                OnFalse   = null
+            },
+            new WorkflowStep
+            {
+                Id       = "r1",
+                Type     = WorkflowStepType.Respond,
+                Template = "bulundu"
+            }
+        );
+
+        var result = _sut.Execute(def, "siparis no yok");
+
+        result.Success.Should().BeTrue();
+        result.FinalResponse.Should().BeNullOrEmpty();
+    }
+
+    // ─── Sequential steps (Next bağlantısı) ──────────────────────────────────
 
     [Fact]
     public void Execute_SetVariable_RendersAndStores()
@@ -108,23 +173,47 @@ public class WorkflowExecutorTests
         var def = BuildDef(
             new WorkflowStep
             {
-                Type = WorkflowStepType.SetVariable,
-                VariableName = "greeting",
-                VariableValue = "Sayın {input}"
+                Id            = "sv1",
+                Type          = WorkflowStepType.SetVariable,
+                VariableName  = "greeting",
+                VariableValue = "Sayın {input}",
+                Next          = "r1"
             },
-            new WorkflowStep { Type = WorkflowStepType.Respond, Template = "{greeting}!" }
+            new WorkflowStep
+            {
+                Id       = "r1",
+                Type     = WorkflowStepType.Respond,
+                Template = "{greeting}!"
+            }
         );
 
-        var result = _sut.Execute(def, "Müşteri");
+        var result = _sut.Execute(def, "Müsteri");
 
-        result.FinalResponse.Should().Be("Sayın Müşteri!");
+        result.FinalResponse.Should().Be("Sayın Müsteri!");
     }
+
+    [Fact]
+    public void Execute_MultipleRespondSteps_ConcatenatesWithNewline()
+    {
+        var def = BuildDef(
+            new WorkflowStep { Id = "r1", Type = WorkflowStepType.Respond, Template = "Birinci", Next = "r2" },
+            new WorkflowStep { Id = "r2", Type = WorkflowStepType.Respond, Template = "İkinci" }
+        );
+
+        var result = _sut.Execute(def, "");
+
+        result.FinalResponse.Should().Contain("Birinci");
+        result.FinalResponse.Should().Contain("İkinci");
+    }
+
+    // ─── Lookup ──────────────────────────────────────────────────────────────
 
     [Fact]
     public void Execute_LookupForbiddenTool_StepHasError()
     {
         var def = BuildDef(new WorkflowStep
         {
+            Id   = "lk1",
             Type = WorkflowStepType.Lookup,
             Tool = WellKnown.ToolNames.OrderPlacement
         });
@@ -138,22 +227,40 @@ public class WorkflowExecutorTests
     [Fact]
     public void Execute_LookupOrderStatus_KnownOrderSucceeds()
     {
-        // Fake repo'de 1030 var (Northwind seed).
         var def = BuildDef(new WorkflowStep
         {
-            Type = WorkflowStepType.Lookup,
-            Tool = WellKnown.ToolNames.OrderStatus,
+            Id         = "lk1",
+            Type       = WorkflowStepType.Lookup,
+            Tool       = WellKnown.ToolNames.OrderStatus,
             Parameters = new Dictionary<string, string> { ["orderId"] = "$orderId" },
-            StoreAs = "lookup"
+            StoreAs    = "lookup"
         });
         def.InputPatterns["orderId"] = @"(\d{4,})";
 
-        var result = _sut.Execute(def, "sipariş 1030 durumu");
+        var result = _sut.Execute(def, "siparis 1030 durumu");
 
         result.Success.Should().BeTrue();
         result.FinalVariables.Should().ContainKey("lookup.success");
         result.FinalVariables["lookup.success"].Should().Be("true");
     }
+
+    // ─── Cycle detection ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void Execute_CyclicGraph_StopsWithError()
+    {
+        // s1 → s2 → s1 (döngü)
+        var def = BuildDef(
+            new WorkflowStep { Id = "s1", Type = WorkflowStepType.Respond, Template = "A", Next = "s2" },
+            new WorkflowStep { Id = "s2", Type = WorkflowStepType.Respond, Template = "B", Next = "s1" }
+        );
+
+        var result = _sut.Execute(def, "");
+
+        result.Error.Should().NotBeNullOrWhiteSpace();
+    }
+
+    // ─── EvaluateCondition unit tests ────────────────────────────────────────
 
     [Theory]
     [InlineData("foo == bar", "foo", "bar", true)]

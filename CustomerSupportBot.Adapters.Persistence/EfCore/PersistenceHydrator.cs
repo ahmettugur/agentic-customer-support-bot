@@ -371,83 +371,73 @@ public sealed class PersistenceHydrator : IHostedService
         return
         [
             // ── 1. Sipariş Durum Sorgulama ───────────────────────────────────────
-            // Kullanıcı 4+ haneli sipariş numarası verirse direkt order_status_tool
-            // çağırır; vermezse numarayı ister.
             new WorkflowDefinition
             {
                 Id          = "siparis-durumu",
-                Name        = "Sipariş Durum Sorgulama",
-                Description = "4+ haneli sipariş numarası varsa OrderStatus tool'unu çağırır, yoksa numarayı ister.",
+                Name        = "Siparis Durum Sorgulama",
+                Description = "4+ haneli siparis numarasi varsa OrderStatus tool'unu cagirır, yoksa numarayi ister.",
                 IsActive    = true,
                 Version     = 1,
                 CreatedAt   = now,
                 UpdatedAt   = now,
                 UpdatedBy   = "system",
-                TriggerKeywords = ["sipariş", "kargo", "durum", "nerede", "takip", "geldi mi"],
-                InputPatterns   = new Dictionary<string, string>
-                {
-                    ["orderId"] = @"(\d{4,})"
-                },
+                StartStepId     = "br1",
+                TriggerKeywords = ["siparis", "kargo", "durum", "nerede", "takip"],
+                InputPatterns   = new Dictionary<string, string> { ["orderId"] = @"(\d{4,})" },
                 Steps =
                 [
                     new WorkflowStep
                     {
                         Id        = "br1",
                         Type      = WorkflowStepType.Branch,
-                        Label     = "Sipariş no var mı?",
+                        Label     = "Siparis no var mi?",
                         Condition = "orderId exists",
-                        SkipNext  = 2
+                        OnTrue    = "lk1",
+                        OnFalse   = "r_ask"
                     },
                     new WorkflowStep
                     {
-                        Id       = "r1",
+                        Id       = "r_ask",
                         Type     = WorkflowStepType.Respond,
                         Label    = "Numara iste",
-                        Template = "Siparişinizi sorgulayabilmem için lütfen sipariş numaranızı paylaşın. (ör: 1030)"
-                    },
-                    new WorkflowStep
-                    {
-                        Id        = "br2",
-                        Type      = WorkflowStepType.Branch,
-                        Label     = "Çıkış",
-                        Condition = "true == true",   // her zaman false → daima atla
-                        SkipNext  = 99
+                        Template = "Siparisınizi sorgulayabilmem icin lutfen siparis numaranizi paylasin. (or: 1030)"
                     },
                     new WorkflowStep
                     {
                         Id         = "lk1",
                         Type       = WorkflowStepType.Lookup,
-                        Label      = "Sipariş sorgula",
+                        Label      = "Siparis sorgula",
                         Tool       = WellKnown.ToolNames.OrderStatus,
                         Parameters = new Dictionary<string, string> { ["orderId"] = "$orderId" },
-                        StoreAs    = "siparis"
+                        StoreAs    = "siparis",
+                        Next       = "r_result"
                     },
                     new WorkflowStep
                     {
-                        Id       = "r2",
+                        Id       = "r_result",
                         Type     = WorkflowStepType.Respond,
-                        Label    = "Sonucu göster",
-                        Template = "Sipariş #{orderId} durumu:\n\n{siparis}"
+                        Label    = "Sonucu goster",
+                        Template = "Siparis #{orderId} durumu:\n\n{siparis}"
                     }
                 ]
             },
 
             // ── 2. Ürün Kategorisi Listeleme ─────────────────────────────────────
-            // Kullanıcı bir kategori adı söylerse ürünleri listeler, söylemezse sorar.
             new WorkflowDefinition
             {
                 Id          = "urun-kategori-listesi",
-                Name        = "Ürün Kategorisi Listeleme",
-                Description = "Belirtilen kategorideki ürünleri LLM çağırmadan product_list_tool ile listeler.",
+                Name        = "Urun Kategorisi Listeleme",
+                Description = "Belirtilen kategorideki urunleri LLM cagirmadan product_list_tool ile listeler.",
                 IsActive    = true,
                 Version     = 1,
                 CreatedAt   = now,
                 UpdatedAt   = now,
                 UpdatedBy   = "system",
-                TriggerKeywords = ["ürünler", "liste", "neler var", "ne satıyorsunuz", "kategori", "çeşit"],
+                StartStepId     = "br1",
+                TriggerKeywords = ["urunler", "liste", "neler var", "ne satiyorsunuz", "kategori"],
                 InputPatterns   = new Dictionary<string, string>
                 {
-                    ["category"] = @"(laptop|notebook|telefon|smartphone|tablet|klavye|keyboard|mouse|fare|monitör|monitor|ekran|hoparlör|speaker|aksesuar|yazıcı|yazici|printer)"
+                    ["category"] = @"(laptop|notebook|telefon|smartphone|tablet|klavye|keyboard|mouse|fare|monitor|ekran|aksesuar|yazici|printer)"
                 },
                 Steps =
                 [
@@ -455,58 +445,51 @@ public sealed class PersistenceHydrator : IHostedService
                     {
                         Id        = "br1",
                         Type      = WorkflowStepType.Branch,
-                        Label     = "Kategori anlaşıldı mı?",
+                        Label     = "Kategori anlasildi mi?",
                         Condition = "category exists",
-                        SkipNext  = 2
+                        OnTrue    = "lk1",
+                        OnFalse   = "r_ask"
                     },
                     new WorkflowStep
                     {
-                        Id       = "r1",
+                        Id       = "r_ask",
                         Type     = WorkflowStepType.Respond,
                         Label    = "Kategori sor",
-                        Template = "Hangi kategorideki ürünlerimizi görmek istersiniz?\n\nMevcut kategoriler: Laptop, Telefon, Tablet, Klavye, Mouse, Monitör, Hoparlör, Aksesuar, Yazıcı"
-                    },
-                    new WorkflowStep
-                    {
-                        Id        = "br2",
-                        Type      = WorkflowStepType.Branch,
-                        Label     = "Çıkış",
-                        Condition = "true == true",
-                        SkipNext  = 99
+                        Template = "Hangi kategorideki urunlerimizi gormek istersiniz?\n\nMevcut kategoriler: Laptop, Telefon, Tablet, Klavye, Mouse, Monitor, Aksesuar, Yazici"
                     },
                     new WorkflowStep
                     {
                         Id         = "lk1",
                         Type       = WorkflowStepType.Lookup,
-                        Label      = "Ürün listesi al",
+                        Label      = "Urun listesi al",
                         Tool       = WellKnown.ToolNames.ProductList,
                         Parameters = new Dictionary<string, string> { ["category"] = "$category" },
-                        StoreAs    = "liste"
+                        StoreAs    = "liste",
+                        Next       = "r_result"
                     },
                     new WorkflowStep
                     {
-                        Id       = "r2",
+                        Id       = "r_result",
                         Type     = WorkflowStepType.Respond,
-                        Label    = "Listeyi göster",
-                        Template = "{category} kategorisindeki ürünlerimiz:\n\n{liste}"
+                        Label    = "Listeyi goster",
+                        Template = "{category} kategorisindeki urunlerimiz:\n\n{liste}"
                     }
                 ]
             },
 
             // ── 3. Ürün Bilgisi Sorgulama ────────────────────────────────────────
-            // Kullanıcının sorgusunu product_inquiry_tool'a iletir; bulunamazsa açıklayıcı
-            // bir hata mesajı döner, bulunursa ürün detayını gösterir.
             new WorkflowDefinition
             {
                 Id          = "urun-bilgisi",
-                Name        = "Ürün Bilgisi Sorgulama",
-                Description = "Kullanıcının tam sorgusunu ProductInquiry tool'una iletir, başarısız olursa anlamlı hata verir.",
+                Name        = "Urun Bilgisi Sorgulama",
+                Description = "Kullanicinin sorgusunu ProductInquiry tool'una iletir; bulunamazsa anlamli hata verir.",
                 IsActive    = true,
                 Version     = 1,
                 CreatedAt   = now,
                 UpdatedAt   = now,
                 UpdatedBy   = "system",
-                TriggerKeywords = ["hakkında", "özellikleri", "fiyatı", "kaç para", "bilgi ver", "incele"],
+                StartStepId     = "sv1",
+                TriggerKeywords = ["hakkinda", "ozellikleri", "fiyati", "kac para", "bilgi ver"],
                 InputPatterns   = new Dictionary<string, string>(),
                 Steps =
                 [
@@ -516,48 +499,41 @@ public sealed class PersistenceHydrator : IHostedService
                         Type          = WorkflowStepType.SetVariable,
                         Label         = "Sorguyu kaydet",
                         VariableName  = "query",
-                        VariableValue = "{input}"
+                        VariableValue = "{input}",
+                        Next          = "lk1"
                     },
                     new WorkflowStep
                     {
                         Id         = "lk1",
                         Type       = WorkflowStepType.Lookup,
-                        Label      = "Ürün ara",
+                        Label      = "Urun ara",
                         Tool       = WellKnown.ToolNames.ProductInquiry,
                         Parameters = new Dictionary<string, string> { ["productName"] = "$query" },
-                        StoreAs    = "urun"
+                        StoreAs    = "urun",
+                        Next       = "br1"
                     },
-                    // Bulundu ise: 2 adım atla (hata mesajını geç, başarı mesajına git)
-                    // Bulunmadı ise: atlamaz → hata mesajı → sonra br-exit atlar
                     new WorkflowStep
                     {
                         Id        = "br1",
                         Type      = WorkflowStepType.Branch,
-                        Label     = "Ürün bulundu mu?",
+                        Label     = "Urun bulundu mu?",
                         Condition = "urun.success == true",
-                        SkipNext  = 2
-                    },
-                    new WorkflowStep
-                    {
-                        Id       = "r_err",
-                        Type     = WorkflowStepType.Respond,
-                        Label    = "Bulunamadı yanıtı",
-                        Template = "Üzgünüm, \"{query}\" için bir ürün bulamadım.\n\nÜrün adını daha spesifik belirtir misiniz? (ör: \"Dell XPS 15 hakkında bilgi ver\")"
-                    },
-                    new WorkflowStep
-                    {
-                        Id        = "br_exit",
-                        Type      = WorkflowStepType.Branch,
-                        Label     = "Çıkış (hata yolundan)",
-                        Condition = "true == true",
-                        SkipNext  = 99
+                        OnTrue    = "r_ok",
+                        OnFalse   = "r_err"
                     },
                     new WorkflowStep
                     {
                         Id       = "r_ok",
                         Type     = WorkflowStepType.Respond,
-                        Label    = "Ürün bilgisini göster",
+                        Label    = "Urun bilgisini goster",
                         Template = "Urun Bilgisi:\n\n{urun}"
+                    },
+                    new WorkflowStep
+                    {
+                        Id       = "r_err",
+                        Type     = WorkflowStepType.Respond,
+                        Label    = "Bulunamadi yaniti",
+                        Template = "Uzgunüm, \"{query}\" icin bir urun bulamadim. Urun adini daha spesifik belirtir misiniz?"
                     }
                 ]
             }

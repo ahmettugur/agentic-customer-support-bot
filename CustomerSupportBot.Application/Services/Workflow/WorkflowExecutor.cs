@@ -1,7 +1,7 @@
 // Application/Services/Workflow/WorkflowExecutor.cs
-// Low-Code Workflow Designer — Bir WorkflowDefinition'ı deterministik olarak yürütür.
-// LLM çağrısı YAPMAZ. Sadece: input regex → variable, tool lookup, template substitution,
-// Conditional branch. Yan etkili tool'lar (order_placement, complaint) izin verilmez.
+// Low-Code Workflow Designer — WorkflowDefinition'ı graph traversal ile yürütür.
+// LLM çağrısı YAPMAZ: input regex → variable → tool lookup → template substitution → branch.
+// Adımlar Next/OnTrue/OnFalse referanslarıyla DAG oluşturur; executor bu grafiği traversal eder.
 
 using System.Diagnostics;
 using System.Text;
@@ -19,6 +19,9 @@ public partial class WorkflowExecutor
     private readonly ILogger<WorkflowExecutor> _logger;
     private readonly CustomerSupportToolsService _tools;
 
+    // Sonsuz döngüye karşı güvenlik — bir workflow bu kadar adımdan fazla çalışamaz.
+    private const int MaxStepExecutions = 50;
+
     public WorkflowExecutor(CustomerSupportToolsService tools, ILogger<WorkflowExecutor> logger)
     {
         _tools = tools;
@@ -26,8 +29,7 @@ public partial class WorkflowExecutor
     }
 
     /// <summary>
-    /// Yan etkili tool'lar workflow içinden ÇAĞRILAMAZ.
-    /// (HITL gate'i bypass etmemek için.)
+    /// Yan etkili tool'lar workflow içinden çağrılamaz (HITL gate'i bypass etmemek için).
     /// </summary>
     private static readonly HashSet<string> ForbiddenTools = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -38,7 +40,7 @@ public partial class WorkflowExecutor
         WellKnown.ToolNames.HumanHandoff
     };
 
-    [GeneratedRegex(@"\{([A-Za-z_][A-Za-z0-9_]*)\}", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"\{([A-Za-z_][A-Za-z0-9_.]*)\}", RegexOptions.CultureInvariant)]
     private static partial Regex TemplateRegex();
 
     public WorkflowExecutionResult Execute(
@@ -50,27 +52,25 @@ public partial class WorkflowExecutor
         var result = new WorkflowExecutionResult
         {
             WorkflowId = definition.Id,
-            StartedAt = DateTime.UtcNow
+            StartedAt  = DateTime.UtcNow
         };
 
         if (!definition.IsActive)
         {
-            result.Error = "Workflow pasif.";
+            result.Error      = "Workflow pasif.";
             result.DurationMs = sw.ElapsedMilliseconds;
             return result;
         }
 
-        // ─── Variables init ───
+        // ─── Variables init ───────────────────────────────────────────────────
         var vars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["input"] = userInput ?? ""
         };
         if (initialVariables != null)
-        {
             foreach (var kv in initialVariables) vars[kv.Key] = kv.Value;
-        }
 
-        // ─── Input pattern extraction ───
+        // ─── Input pattern extraction ─────────────────────────────────────────
         foreach (var (varName, pattern) in definition.InputPatterns)
         {
             try
@@ -82,119 +82,137 @@ public partial class WorkflowExecutor
                     vars[varName] = value;
                 }
             }
-            catch (RegexMatchTimeoutException) { /* skip */ }
+            catch (RegexMatchTimeoutException) { /* zaman aşımı → atla */ }
             catch (ArgumentException ex)
             {
-                _logger.LogWarning(ex, "Workflow {Id}: invalid regex for variable {Var}", definition.Id, varName);
+                _logger.LogWarning(ex,
+                    "Workflow {Id}: {Var} için geçersiz regex.", definition.Id, varName);
             }
         }
 
-        // ─── Step execution ───
-        var output = new StringBuilder();
-        for (int i = 0; i < definition.Steps.Count; i++)
+        // ─── Graph traversal ─────────────────────────────────────────────────
+        // Adımları ID'ye göre indeksle — O(1) lookup.
+        var stepMap = definition.Steps.ToDictionary(s => s.Id, s => s, StringComparer.Ordinal);
+
+        // Başlangıç adımı: StartStepId varsa onu, yoksa listenin ilk elemanını kullan.
+        var currentId = definition.StartStepId
+            ?? definition.Steps.FirstOrDefault()?.Id;
+
+        var output      = new StringBuilder();
+        var visitedSet  = new HashSet<string>(StringComparer.Ordinal); // döngü tespiti
+        int execCount   = 0;
+
+        while (currentId is not null)
         {
-            var step = definition.Steps[i];
+            // ── Güvenlik kontrolleri ──────────────────────────────────────────
+            if (++execCount > MaxStepExecutions)
+            {
+                result.Error = $"Maksimum adım sayısına ({MaxStepExecutions}) ulaşıldı. Döngü olabilir.";
+                _logger.LogWarning(
+                    "Workflow {Id}: {Max} adım limitine ulaşıldı.", definition.Id, MaxStepExecutions);
+                break;
+            }
+
+            if (!visitedSet.Add(currentId))
+            {
+                result.Error = $"Döngü tespit edildi: adım '{currentId}' zaten ziyaret edildi.";
+                _logger.LogWarning(
+                    "Workflow {Id}: döngü → {StepId}.", definition.Id, currentId);
+                break;
+            }
+
+            if (!stepMap.TryGetValue(currentId, out var step))
+            {
+                result.Error = $"Adım bulunamadı: '{currentId}'.";
+                _logger.LogWarning(
+                    "Workflow {Id}: bilinmeyen adım ID'si → {StepId}.", definition.Id, currentId);
+                break;
+            }
+
+            // ── Adımı yürüt ──────────────────────────────────────────────────
             var trace = new WorkflowStepTrace
             {
                 StepId = step.Id,
-                Type = step.Type,
-                Label = step.Label
+                Type   = step.Type,
+                Label  = step.Label
             };
 
+            string? nextId;
             try
             {
-                switch (step.Type)
-                {
-                    case WorkflowStepType.Respond:
-                        var rendered = Render(step.Template ?? "", vars);
-                        if (output.Length > 0) output.AppendLine();
-                        output.Append(rendered);
-                        trace.Output = rendered;
-                        break;
-
-                    case WorkflowStepType.Lookup:
-                        trace.Output = ExecuteLookup(step, vars);
-                        break;
-
-                    case WorkflowStepType.Branch:
-                        var pass = EvaluateCondition(step.Condition ?? "", vars);
-                        trace.Output = $"condition={pass}";
-                        if (!pass)
-                        {
-                            // Sonraki SkipNext adımı atla
-                            i += Math.Max(0, step.SkipNext);
-                        }
-                        break;
-
-                    case WorkflowStepType.SetVariable:
-                        if (!string.IsNullOrWhiteSpace(step.VariableName))
-                        {
-                            var value = Render(step.VariableValue ?? "", vars);
-                            vars[step.VariableName] = value;
-                            trace.Output = $"{step.VariableName}={value}";
-                        }
-                        break;
-                }
+                nextId = ExecuteStep(step, vars, output, trace);
             }
             catch (Exception ex)
             {
                 trace.Error = ex.Message;
-                _logger.LogWarning(ex, "Workflow {Id} step {StepId} failed", definition.Id, step.Id);
+                _logger.LogWarning(ex,
+                    "Workflow {Id} adım {StepId} hata verdi.", definition.Id, step.Id);
+                result.StepTraces.Add(trace);
+                break; // hata durumunda traversal'ı durdur
             }
 
             result.StepTraces.Add(trace);
+            currentId = nextId;
         }
 
-        result.Success = !result.StepTraces.Any(t => !string.IsNullOrEmpty(t.Error));
-        result.FinalResponse = output.ToString().TrimEnd();
+        result.Success       = result.Error is null
+                               && !result.StepTraces.Any(t => t.Error is not null);
+        result.FinalResponse  = output.ToString().TrimEnd();
         result.FinalVariables = vars;
-        result.DurationMs = sw.ElapsedMilliseconds;
+        result.DurationMs     = sw.ElapsedMilliseconds;
         return result;
     }
 
-    /// <summary>{varName} placeholder'larını variables'tan substitute eder.</summary>
-    public static string Render(string template, IReadOnlyDictionary<string, string> vars)
+    // ─── Step dispatch ────────────────────────────────────────────────────────
+
+    /// <summary>Adımı yürütür ve bir sonraki adımın ID'sini döner (null = workflow sona erer).</summary>
+    private string? ExecuteStep(
+        WorkflowStep step,
+        Dictionary<string, string> vars,
+        StringBuilder output,
+        WorkflowStepTrace trace)
     {
-        if (string.IsNullOrEmpty(template)) return "";
-        return TemplateRegex().Replace(template, match =>
+        switch (step.Type)
         {
-            var key = match.Groups[1].Value;
-            return vars.TryGetValue(key, out var v) ? v : match.Value;
-        });
+            case WorkflowStepType.Respond:
+            {
+                var rendered = Render(step.Template ?? "", vars);
+                if (output.Length > 0) output.AppendLine();
+                output.Append(rendered);
+                trace.Output = rendered;
+                return step.Next;
+            }
+
+            case WorkflowStepType.Lookup:
+            {
+                trace.Output = ExecuteLookup(step, vars);
+                return step.Next;
+            }
+
+            case WorkflowStepType.Branch:
+            {
+                var pass = EvaluateCondition(step.Condition ?? "", vars);
+                trace.Output = $"condition={pass}";
+                return pass ? step.OnTrue : step.OnFalse;
+            }
+
+            case WorkflowStepType.SetVariable:
+            {
+                if (!string.IsNullOrWhiteSpace(step.VariableName))
+                {
+                    var value = Render(step.VariableValue ?? "", vars);
+                    vars[step.VariableName] = value;
+                    trace.Output = $"{step.VariableName}={value}";
+                }
+                return step.Next;
+            }
+
+            default:
+                throw new InvalidOperationException($"Bilinmeyen adım tipi: {step.Type}");
+        }
     }
 
-    /// <summary>"varName == value" / "!=" / "exists" / "missing".</summary>
-    public static bool EvaluateCondition(string expression, IReadOnlyDictionary<string, string> vars)
-    {
-        if (string.IsNullOrWhiteSpace(expression)) return true;
-        var trimmed = expression.Trim();
-
-        // "varName exists"
-        if (trimmed.EndsWith(" exists", StringComparison.OrdinalIgnoreCase))
-        {
-            var name = trimmed[..^7].Trim();
-            return vars.TryGetValue(name, out var v) && !string.IsNullOrWhiteSpace(v);
-        }
-        if (trimmed.EndsWith(" missing", StringComparison.OrdinalIgnoreCase))
-        {
-            var name = trimmed[..^8].Trim();
-            return !vars.TryGetValue(name, out var v) || string.IsNullOrWhiteSpace(v);
-        }
-
-        // "name == value" / "name != value"
-        foreach (var op in new[] { "==", "!=" })
-        {
-            var idx = trimmed.IndexOf(op, StringComparison.Ordinal);
-            if (idx < 0) continue;
-            var left = trimmed[..idx].Trim();
-            var right = trimmed[(idx + op.Length)..].Trim().Trim('"', '\'');
-            var leftValue = vars.TryGetValue(left, out var lv) ? lv : "";
-            var equals = string.Equals(leftValue, right, StringComparison.Ordinal);
-            return op == "==" ? equals : !equals;
-        }
-
-        return false;
-    }
+    // ─── Lookup ──────────────────────────────────────────────────────────────
 
     private string ExecuteLookup(WorkflowStep step, Dictionary<string, string> vars)
     {
@@ -214,43 +232,88 @@ public partial class WorkflowExecutor
         {
             WellKnown.ToolNames.ProductInquiry =>
                 _tools.ProductInquiryTool(
-                    GetStringParam(resolved, "productName") ?? GetStringParam(resolved, "product_name") ?? ""),
+                    GetParam(resolved, "productName") ?? GetParam(resolved, "product_name") ?? ""),
+
             WellKnown.ToolNames.ProductList =>
-                _tools.ProductListTool(
-                    GetStringParam(resolved, "category")),
+                _tools.ProductListTool(GetParam(resolved, "category")),
+
             WellKnown.ToolNames.OrderStatus =>
                 _tools.OrderStatusTool(
-                    GetStringParam(resolved, "orderId") ?? GetStringParam(resolved, "order_id") ?? ""),
+                    GetParam(resolved, "orderId") ?? GetParam(resolved, "order_id") ?? ""),
+
             WellKnown.ToolNames.GetLastOrder =>
                 _tools.GetLastOrderTool(
-                    GetStringParam(resolved, "customerId") ?? GetStringParam(resolved, "customer_id") ?? ""),
+                    GetParam(resolved, "customerId") ?? GetParam(resolved, "customer_id") ?? ""),
+
             WellKnown.ToolNames.GetAllOrders =>
                 _tools.GetAllOrdersTool(
-                    GetStringParam(resolved, "customerId") ?? GetStringParam(resolved, "customer_id") ?? ""),
-            _ => throw new InvalidOperationException($"Bilinmeyen veya desteklenmeyen tool: {step.Tool}")
+                    GetParam(resolved, "customerId") ?? GetParam(resolved, "customer_id") ?? ""),
+
+            _ => throw new InvalidOperationException(
+                     $"Bilinmeyen veya desteklenmeyen tool: '{step.Tool}'")
         };
 
         if (!string.IsNullOrWhiteSpace(step.StoreAs))
         {
             vars[$"{step.StoreAs}.message"] = tr.Message;
             vars[$"{step.StoreAs}.success"] = tr.Success ? "true" : "false";
-            if (tr.Data != null)
+            vars[step.StoreAs]              = tr.Message;
+
+            if (tr.Data is not null)
             {
-                try
-                {
-                    var json = JsonSerializer.Serialize(tr.Data);
-                    vars[$"{step.StoreAs}.data"] = json;
-                }
+                try { vars[$"{step.StoreAs}.data"] = JsonSerializer.Serialize(tr.Data); }
                 catch (Exception ex)
                 {
                     _logger.LogDebug(ex, "Lookup data serialize edilemedi.");
                 }
             }
-            // Geriye dönük kolaylık: doğrudan storeAs adını da Message olarak set et
-            vars[step.StoreAs] = tr.Message;
         }
 
         return $"{step.Tool} → success={tr.Success}, msg={Truncate(tr.Message, 120)}";
+    }
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    /// <summary>{varName} placeholder'larını variables'tan substitute eder.</summary>
+    public static string Render(string template, IReadOnlyDictionary<string, string> vars)
+    {
+        if (string.IsNullOrEmpty(template)) return "";
+        return TemplateRegex().Replace(template, m =>
+        {
+            var key = m.Groups[1].Value;
+            return vars.TryGetValue(key, out var v) ? v : m.Value;
+        });
+    }
+
+    /// <summary>Koşul ifadesi değerlendirir. Desteklenen operatörler: ==, !=, exists, missing.</summary>
+    public static bool EvaluateCondition(string expression, IReadOnlyDictionary<string, string> vars)
+    {
+        if (string.IsNullOrWhiteSpace(expression)) return true;
+        var trimmed = expression.Trim();
+
+        if (trimmed.EndsWith(" exists", StringComparison.OrdinalIgnoreCase))
+        {
+            var name = trimmed[..^7].Trim();
+            return vars.TryGetValue(name, out var v) && !string.IsNullOrWhiteSpace(v);
+        }
+        if (trimmed.EndsWith(" missing", StringComparison.OrdinalIgnoreCase))
+        {
+            var name = trimmed[..^8].Trim();
+            return !vars.TryGetValue(name, out var v) || string.IsNullOrWhiteSpace(v);
+        }
+
+        foreach (var op in new[] { "==", "!=" })
+        {
+            var idx = trimmed.IndexOf(op, StringComparison.Ordinal);
+            if (idx < 0) continue;
+            var left      = trimmed[..idx].Trim();
+            var right     = trimmed[(idx + op.Length)..].Trim().Trim('"', '\'');
+            var leftValue = vars.TryGetValue(left, out var lv) ? lv : "";
+            var equals    = string.Equals(leftValue, right, StringComparison.Ordinal);
+            return op == "==" ? equals : !equals;
+        }
+
+        return false;
     }
 
     private static string ResolveParameterValue(string raw, IReadOnlyDictionary<string, string> vars)
@@ -264,7 +327,7 @@ public partial class WorkflowExecutor
         return Render(raw, vars);
     }
 
-    private static string? GetStringParam(IReadOnlyDictionary<string, string> p, string key) =>
+    private static string? GetParam(IReadOnlyDictionary<string, string> p, string key) =>
         p.TryGetValue(key, out var v) ? v : null;
 
     private static string Truncate(string s, int max) =>

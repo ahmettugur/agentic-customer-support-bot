@@ -84,10 +84,16 @@
         // ── Dynamic script loader (used by admin/chat bridges) ────────────────
         window.loadScript = function (src, id) {
             return new Promise(function (resolve, reject) {
-                if (id && document.getElementById(id)) { resolve(); return; }
+                if (id) {
+                    var ex = document.getElementById(id);
+                    // Aynı src ise tekrar yükleme (cache kullan)
+                    if (ex && ex.getAttribute('data-src') === src) { resolve(); return; }
+                    // Farklı src (yeni versiyon) — eski elementi kaldır
+                    if (ex) ex.remove();
+                }
                 var s = document.createElement('script');
                 s.src = src;
-                if (id) s.id = id;
+                if (id) { s.id = id; s.setAttribute('data-src', src); }
                 s.onload = resolve;
                 s.onerror = function () { reject(new Error('Script load failed: ' + src)); };
                 document.body.appendChild(s);
