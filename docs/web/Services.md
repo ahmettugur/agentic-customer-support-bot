@@ -2,7 +2,7 @@
 
 **Klasör:** `Services/`
 
-API endpoint'lerini wrap eden client sınıfları. Sayfalar (Razor) bunları `@inject` ile alır, doğrudan `HttpClient` kullanmaz.
+API endpoint'lerini wrap eden client sınıfları ve UI yardımcı servisleri. Sayfalar (Razor) bunları `@inject` ile alır, doğrudan `HttpClient` kullanmaz.
 
 | Service | Endpoint prefix | Kullanım |
 |---|---|---|
@@ -12,9 +12,85 @@ API endpoint'lerini wrap eden client sınıfları. Sayfalar (Razor) bunları `@i
 | `TracesApiService` | `/traces`, `/chat-sessions/.../history`, `/approvals`, `/escalations` | Traces, Replay |
 | `SlaApiService` | `/sla` | SLA sayfası |
 | `WorkflowApiService` | `/workflows` | WorkflowDesigner |
+| `ThemeService` | — (localStorage / DOM) | Karanlık/aydınlık mod yönetimi |
 
 `AuthorizedHttpClientHandler` JWT token otomatik inject eder.
 `AuthService` hariç — refresh döngüsünü önlemek için ham `HttpClient` kullanır.
+
+---
+
+## ThemeService
+
+**Dosya:** `Services/ThemeService.cs`  
+**Tür:** Scoped
+
+Kullanıcı tema tercihini yönetir. `localStorage`'da saklar, sayfalar arası tutarlılığı sağlar.
+
+```csharp
+public sealed class ThemeService
+{
+    public bool IsDark { get; private set; }
+    public event Action? OnChange;
+
+    public async ValueTask EnsureInitAsync()   // İlk render'da mevcut temayı okur
+    public async Task ToggleAsync()            // dark ↔ light geçiş, event fırlatır
+}
+```
+
+### Çalışma prensibi
+
+1. `index.html` `<head>`'inde inline script, sayfa yüklenir yüklenmez `data-theme` attribute'unu ayarlar (FOUC önleme):
+
+```html
+<script>
+(function () {
+    var s = localStorage.getItem('csb-theme');
+    var d = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.setAttribute('data-theme', s || (d ? 'dark' : 'light'));
+})();
+</script>
+```
+
+2. CSS `[data-theme="dark"]` seçicisi tüm dark mode overrides'ları tanımlar (`styles.css`).
+
+3. `ThemeService.ToggleAsync()` → `window.csbTheme.toggle()` JS çağrısı → `<html data-theme>` değiştirilir + `localStorage` güncellenir.
+
+### JS API (`index.html`)
+
+```javascript
+window.csbTheme = {
+    get()    { return document.documentElement.getAttribute('data-theme') || 'light'; },
+    toggle() {
+        var next = ... === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('csb-theme', next);
+        return next;
+    }
+};
+```
+
+### Bileşenlerde kullanım
+
+```razor
+@inject ThemeService Theme
+
+<button @onclick="ToggleTheme">
+    @(Theme.IsDark ? "☀" : "☾")
+</button>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await Theme.EnsureInitAsync();
+        Theme.OnChange += StateHasChanged;
+    }
+
+    private async Task ToggleTheme() => await Theme.ToggleAsync();
+}
+```
+
+Toggle butonu `NavMenu.razor`, `AdminNavBar.razor` ve Chat sayfasında mevcuttur.
 
 ---
 

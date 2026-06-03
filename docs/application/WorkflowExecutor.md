@@ -5,7 +5,7 @@
 
 ## Ne yapar?
 
-Low-code workflow tanımlarını deterministik olarak çalıştırır. LLM çağrısı yapmaz. Regex tabanlı input analizi, değişken atama, koşul dallanması ve read-only tool lookup'larını destekler. Yan etkili tool'ları (sipariş ver, şikayet aç) güvenlik gerekçesiyle bloke eder.
+Low-code workflow tanımlarını **graf traversal** ile deterministik olarak çalıştırır. LLM çağrısı yapmaz. Regex tabanlı input analizi, değişken atama, koşul dallanması ve read-only tool lookup'larını destekler. Döngü tespiti ve yan etkili tool'ların bloklanması dahildir.
 
 ---
 
@@ -43,23 +43,50 @@ Regex.Match(userInput, pattern)
 → Eşleşmezse: atla
 ```
 
-Bozuk regex pattern exception olursa Warning log yazılır, step atlanır (hard fail olmaz).
+Bozuk regex pattern exception olursa Warning log yazılır, atlanır (hard fail olmaz).
 
 ---
 
-### Step türleri
+## Graf traversal
 
-#### `Respond`
+Eski positional index loop'un yerini **explicit ID bağlantıları** aldı:
+
+```csharp
+var stepMap = definition.Steps.ToDictionary(s => s.Id, StringComparer.Ordinal);
+var currentId = definition.StartStepId ?? definition.Steps.FirstOrDefault()?.Id;
+var visitedSet = new HashSet<string>(StringComparer.Ordinal);
+int execCount = 0;
+
+while (currentId is not null)
+{
+    if (++execCount > MaxStepExecutions) { result.Error = "Max adım limitine ulaşıldı"; break; }
+    if (!visitedSet.Add(currentId))      { result.Error = "Döngü tespit edildi"; break; }
+
+    var step = stepMap[currentId];
+    var nextId = ExecuteStep(step, vars, result);
+    currentId = nextId;
+}
+```
+
+`MaxStepExecutions = 50` (sonsuz döngü koruması).  
+`visitedSet` ile ziyaret edilen her node takip edilir — aynı ID ikinci kez gelirse döngü hatası verilir.
+
+---
+
+## Step türleri
+
+### `Respond`
 
 ```
 step.Template içindeki {varName} → vars[varName]
 ```
 
-Output buffer'a ekler. Birden fazla Respond step'i varsa aralarına satır sonu girer.
+Output buffer'a ekler. Birden fazla Respond step'i varsa aralarına satır sonu girer.  
+Döndürür: `step.Next` (sonraki node ID'si, null ise biter)
 
 ---
 
-#### `Lookup`
+### `Lookup`
 
 `step.Tool` adıyla tool çağrısı yapar, sonucu variable olarak saklar.
 
@@ -70,12 +97,13 @@ Output buffer'a ekler. Birden fazla Respond step'i varsa aralarına satır sonu 
 - `complaint_registration_tool`
 - `human_handoff_tool`
 
-Bu tool'lar çağrılırsa exception fırlatır — HITL gate'ini bypass etmemek için.
+Bu tool'lar çağrılırsa hata — HITL gate'ini bypass etmemek için.
 
 **Desteklenen tool'lar:**
 | Tool | Parametre |
 |------|----------|
 | `product_inquiry_tool` | `productName` / `product_name` |
+| `product_list_tool` | — |
 | `order_status_tool` | `orderId` / `order_id` |
 | `get_last_order_tool` | `customerId` / `customer_id` |
 | `get_all_orders_tool` | `customerId` / `customer_id` |
@@ -91,15 +119,19 @@ Bu tool'lar çağrılırsa exception fırlatır — HITL gate'ini bypass etmemek
 - `{varName}` → template render
 - Literal değer → doğrudan kullan
 
+Döndürür: `step.Next`
+
 ---
 
-#### `Branch`
+### `Branch`
 
 ```
 EvaluateCondition(step.Condition, vars)
-→ true:  devam
-→ false: sonraki step.SkipNext adımı atla
+→ true:  step.OnTrue  node ID'sine git
+→ false: step.OnFalse node ID'sine git
 ```
+
+Her iki hedef de `null` olabilir — o durumda ilgili dal için workflow sona erer.
 
 **Desteklenen koşul ifadeleri:**
 
@@ -110,13 +142,17 @@ EvaluateCondition(step.Condition, vars)
 | `varName == "value"` | Eşitlik |
 | `varName != "value"` | Eşitsizlik |
 
+Döndürür: `step.OnTrue` veya `step.OnFalse`
+
 ---
 
-#### `SetVariable`
+### `SetVariable`
 
 ```
 vars[step.VariableName] = Render(step.VariableValue, vars)
 ```
+
+Döndürür: `step.Next`
 
 ---
 
@@ -164,32 +200,28 @@ public class WorkflowExecutionResult
 {
   "id": "order-query",
   "name": "Sipariş Sorgula",
+  "startStepId": "br1",
   "isActive": true,
-  "inputPatterns": {
-    "orderId": "\\b(\\d{4,})\\b"
-  },
+  "inputPatterns": { "orderId": "\\b(\\d{4,})\\b" },
   "steps": [
     {
-      "id": "check-order-id",
-      "type": "Branch",
-      "condition": "orderId missing",
-      "skipNext": 2
+      "id": "br1", "type": "Branch",
+      "condition": "orderId exists",
+      "onTrue": "lk1", "onFalse": "r_ask"
     },
     {
-      "id": "lookup-order",
-      "type": "Lookup",
+      "id": "lk1", "type": "Lookup",
       "tool": "order_status_tool",
       "parameters": { "orderId": "$orderId" },
-      "storeAs": "orderResult"
+      "storeAs": "orderResult",
+      "next": "r_result"
     },
     {
-      "id": "respond-with-result",
-      "type": "Respond",
+      "id": "r_result", "type": "Respond",
       "template": "Sipariş {orderId} durumu: {orderResult.message}"
     },
     {
-      "id": "respond-no-id",
-      "type": "Respond",
+      "id": "r_ask", "type": "Respond",
       "template": "Sipariş numaranızı paylaşır mısınız?"
     }
   ]

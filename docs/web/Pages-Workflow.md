@@ -2,245 +2,214 @@
 
 **Dosyalar:**
 - `Pages/WorkflowDesigner.razor` — `/workflow-designer`
-- `Pages/WorkflowDefaults.cs` — Default workflow JSON şablonu
-- `Pages/NotFound.razor` — `*` (404)
+- `Pages/WorkflowDefaults.cs` — Yeni workflow varsayılan değerleri
+- `wwwroot/js/x6.js` — AntV X6 v2.19.2 graf kütüphanesi (495 KB, UMD bundle)
+- `wwwroot/js/workflow-x6.js` — Özel workflow tasarımcısı implementasyonu
+- `wwwroot/css/workflow.css` — Tasarımcı stilleri
 
-Low-code workflow editor — LLM'siz deterministic akışların admin tarafından oluşturulması.
+Low-code workflow editor — LLM'siz deterministic akışların admin tarafından **görsel olarak** oluşturulması.
 
 ---
 
-## WorkflowDesigner
+## Genel Bakış
 
-İki panel: sol workflow listesi, sağ JSON editor + tester.
+Eski JSON text editor'ın yerini **X6.js tabanlı görsel graf tasarımcısı** aldı. Workflow adımları, birbirine oklarla bağlanmış düğümler (node) olarak çizilir.
 
-### Layout
+3 panelli layout:
 
-```razor
-<div class="workflow-designer">
-    <!-- Sol: liste -->
-    <aside class="workflow-list">
-        <div class="header">
-            <h3>Workflow'lar</h3>
-            <button @onclick="CreateNewWorkflow">+ Yeni</button>
-            <button @onclick="RefreshListAsync">Yenile</button>
-        </div>
-        @foreach (var wf in _workflows)
-        {
-            <div class="wf-item @(_selectedId == wf.Id ? "selected" : "")"
-                 @onclick="() => SelectWorkflowAsync(wf.Id)">
-                <div class="name">@wf.Name</div>
-                <small>
-                    @(wf.IsActive ? "Aktif" : "Pasif") · v@wf.Version · @wf.StepCount adım
-                </small>
-            </div>
-        }
-    </aside>
-
-    <!-- Sağ: editor + tester -->
-    <main class="workflow-editor">
-        <div class="editor-section">
-            <h3>JSON Tanımı</h3>
-            <textarea @bind="_rawJson" class="json-editor" spellcheck="false"></textarea>
-
-            <div class="actions">
-                <button @onclick="SaveAsync">Kaydet</button>
-                <button @onclick="DeleteAsync" class="danger">Sil</button>
-            </div>
-        </div>
-
-        <div class="tester-section">
-            <h3>Test Et</h3>
-            <input @bind="_testInput" placeholder="Örn: 1 durumu nedir" />
-            <button @onclick="TestAsync">▶ Çalıştır</button>
-
-            @if (_testResult != null)
-            {
-                <pre class="test-result @(_testResult.Success ? "success" : "failed")">
-@JsonSerializer.Serialize(_testResult, _prettyJson)
-                </pre>
-            }
-        </div>
-    </main>
-</div>
+```
+┌──────────────┬─────────────────────────────────┬──────────────────┐
+│  Sol Panel   │         Orta — Canvas           │   Sağ Panel      │
+│  Workflow    │  ┌──────────┐  ┌──────────┐    │  Meta form       │
+│  Listesi     │  │  BRANCH  │→ │  LOOKUP  │    │  (isim, tetikl.) │
+│              │  └──────────┘  └──────────┘    │                  │
+│  + Yeni      │       ↓             ↓           │  Seçili Node     │
+│              │  ┌──────────┐  ┌──────────┐    │  özellikleri     │
+│  Yenile      │  │  YANIT   │  │  YANIT   │    │                  │
+│              │  └──────────┘  └──────────┘    │  Test Runner     │
+└──────────────┴─────────────────────────────────┴──────────────────┘
 ```
 
 ---
 
-## JSON editor
+## Toolbar (üst bar)
 
-`textarea` ile basit text editor — sözdizimi vurgu yok, ama:
-- Monospace font
-- Spellcheck kapalı
-- Indent korunur
-
-Gelişmiş editor (Monaco, CodeMirror) ileride entegre edilebilir. Şimdilik basit tutuldu (Blazor WASM bundle boyutu için).
-
-### Save akışı
-
-```csharp
-private async Task SaveAsync()
-{
-    try
-    {
-        // JSON parse — geçerlilik kontrolü
-        var doc = JsonDocument.Parse(_rawJson);
-
-        await Workflow.SaveAsync(_selectedId, _rawJson);
-        await RefreshListAsync();
-        ShowToast("Kaydedildi");
-    }
-    catch (JsonException ex)
-    {
-        ShowError($"JSON hatası: {ex.Message}");
-    }
-    catch (HttpRequestException ex)
-    {
-        ShowError($"Server hatası: {ex.Message}");
-    }
-}
-```
-
-`_selectedId` null ise POST (create), doluysa PUT (update).
-
-### Delete
-
-```csharp
-private async Task DeleteAsync()
-{
-    if (string.IsNullOrEmpty(_selectedId)) return;
-    if (!await ConfirmAsync($"'{_selectedName}' silinsin mi?")) return;
-
-    await Workflow.DeleteAsync(_selectedId);
-    _selectedId = null;
-    _rawJson = "";
-    await RefreshListAsync();
-}
-```
-
-`ConfirmAsync` JS interop: `window.confirm(message)`.
+| Buton | İşlev |
+|-------|-------|
+| YANIT / SORGULA / KOSUL / DEGISKEN | Yeni adım ekler (canvas ortasına) |
+| ↩ / ↪ | Undo / Redo |
+| + / − / ⊡ | Zoom in / out / fit |
+| ⊹ | Canvas'ı ortala |
+| Kaydet | Workflow'u API'ye kaydeder |
+| Sil | Seçili workflow'u siler |
 
 ---
 
-## Tester
+## Node tipleri
 
-Workflow'u kaydetmeden test ediyor.
+Her adım tipi farklı renkte ve sol şerit tasarımıyla gösterilir:
+
+| Tip | Renk | Açıklama |
+|-----|------|---------|
+| YANIT (Respond) | Mavi | Template render, kullanıcıya gönderir |
+| SORGULA (Lookup) | Yeşil | Tool çağrısı + variable'a yazar |
+| KOSUL (Branch) | Sarı | Koşul değerlendirme; OnTrue/OnFalse dallanma |
+| DEGISKEN (SetVariable) | Mor | Variable atama |
+
+---
+
+## Port sistemi ve bağlantı yapımı
+
+Her node'un **port** dairecikleri vardır:
+
+| Port | Konum | Renk | Anlamı |
+|------|-------|------|--------|
+| `in` | Üst | Gri (boş) | Giriş — bağlantı alır |
+| `out` | Alt | Renkli (dolu) | Çıkış — `Next` bağlantısı |
+| `onTrue` | Sağ | Yeşil (dolu) | Branch True dalı |
+| `onFalse` | Alt | Kırmızı (dolu) | Branch False dalı |
+
+**Bağlantı yapmak için:**
+1. Kaynak node'un üzerine gel → çıkış portları büyür
+2. Renkli (dolu) porta **tıkla + sürükle**
+3. Hedef node'un **gri üst portuna** bırak → ok çizilir
+
+Aynı çıkış portundan yalnızca bir bağlantıya izin verilir.
+
+---
+
+## Blazor ↔ JavaScript interop
+
+Sayfa açıldığında JS dosyaları dinamik yüklenir:
 
 ```csharp
-private async Task TestAsync()
+protected override async Task OnAfterRenderAsync(bool firstRender)
 {
-    if (string.IsNullOrEmpty(_selectedId)) return;
+    if (!firstRender) return;
+    _dotNetRef = DotNetObjectReference.Create(this);
 
-    try
-    {
-        _testResult = await Workflow.TestAsync(_selectedId, _testInput, variables: null);
-    }
-    catch (Exception ex)
-    {
-        _testResult = new WorkflowExecutionResult { Success = false, Error = ex.Message };
-    }
+    await JS.InvokeVoidAsync("loadScript", "/js/x6.js", "js-x6");
+    var wfV = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    await JS.InvokeVoidAsync("loadScript", $"/js/workflow-x6.js?v={wfV}", "js-wf-x6");
+    await JS.InvokeVoidAsync("wfDesigner.init", "wf-canvas", _dotNetRef);
 }
 ```
 
-`/workflows/{id}/test` endpoint'i çalıştırır. Response her step'in trace'ini içerir:
+`workflow-x6.js` her sayfa yüklenişinde taze yüklenir (geliştirme cache sorunu önleme).  
+`x6.js` (büyük kütüphane) sabit — browser cache'de kalır.
 
-```json
+### `wfDesigner` JS API
+
+| Metot | Açıklama |
+|-------|---------|
+| `init(containerId, dotNetRef)` | Grafiği başlatır, Blazor callback'i kaydeder |
+| `loadGraph(jsonString)` | Workflow JSON'ını canvas'a çizer |
+| `getGraphData()` | Canvas'tan workflow JSON'ını üretir |
+| `addStep(type)` | Yeni node ekler (`"Respond"`, `"Lookup"`, `"Branch"`, `"SetVariable"`) |
+| `updateSelectedNode(dataJson)` | Seçili node'un verilerini günceller |
+| `undo()` / `redo()` | Geçmişe dön / ileri |
+| `zoomIn()` / `zoomOut()` / `zoomFit()` | Zoom |
+| `center()` | Canvas'ı ortalar |
+| `deleteSelected()` | Seçili hücreleri siler |
+| `destroy()` | Belleği temizler (component dispose) |
+
+### Blazor tarafından çağrılan JS metodları
+
+```csharp
+[JSInvokable]
+public void OnNodeSelected(string? dataJson)   // Node seçildi/seçim kaldırıldı
+[JSInvokable]
+public void OnGraphChanged(string? _)          // Edge eklendi/silindi
+```
+
+---
+
+## Auto-layout algoritması
+
+Workflow JSON yüklendiğinde node'lar otomatik yerleştirilir:
+
+```javascript
+// BFS ile graf traversal
+queue = [{ id: startStepId, x: 0, y: 60 }]
+while (queue) {
+    next    → aynı x, y + V_GAP
+    onTrue  → x + H_GAP*0.55, y + V_GAP
+    onFalse → x - H_GAP*0.55, y + V_GAP
+}
+// Bağlı olmayan node'lar sağa hizalanır
+// Tüm x'ler merkeze normalize edilir
+```
+
+---
+
+## Kaydetme akışı
+
+```csharp
+private async Task SaveWorkflowAsync()
 {
-  "workflowId": "siparis-takibi",
-  "success": true,
-  "finalResponse": "Sipariş 1 durumu: Kargoda",
-  "durationMs": 12,
-  "stepTraces": [
-    { "stepId": "0", "type": "Branch", "skipped": false, "output": "..." },
-    { "stepId": "1", "type": "Lookup", "skipped": false, "output": "..." },
-    { "stepId": "2", "type": "Respond", "skipped": false, "output": "Sipariş 1 durumu: Kargoda" }
-  ],
-  "finalVariables": { "order_id": "1", "status": "Kargoda" }
+    var graphJson = await JS.InvokeAsync<string>("wfDesigner.getGraphData");
+    // graphJson → { startStepId, steps: [...] }
+
+    var req = new WorkflowRequest {
+        Name = _meta.Name, Description = _meta.Description,
+        IsActive = _meta.IsActive,
+        TriggerKeywords = ..., InputPatterns = ...,
+        Steps = steps  // graf'tan gelen Next/OnTrue/OnFalse bağlantılarıyla
+    };
+    await WorkflowApi.SaveAsync(_currentId, req);
 }
 ```
 
-Admin step-by-step debug yapabilir.
+`_currentId` null ise POST (oluştur), doluysa PUT (güncelle).
+
+---
+
+## Test runner
+
+Sağ panelin alt kısmında — workflow'u kaydetmeden test eder.
+
+```csharp
+private async Task RunTestAsync()
+{
+    _testResult = await WorkflowApi.TestAsync(_currentId, _testInput);
+}
+```
+
+`/workflows/{id}/test` endpoint'ini çağırır. Her step'in trace'i, değişkenlerin son durumu ve hata mesajları JSON olarak gösterilir.
 
 ---
 
 ## WorkflowDefaults.cs
 
+Yeni workflow oluşturulduğunda meta form varsayılan değerleri sağlar:
+
 ```csharp
 public static class WorkflowDefaults
 {
-    public const string SampleJson = @"{
-  ""name"": ""Yeni Workflow"",
-  ""description"": ""Yeni oluşturulan workflow"",
-  ""version"": 1,
-  ""isActive"": true,
-  ""triggerKeywords"": [],
-  ""inputPatterns"": {},
-  ""steps"": []
-}";
+    public const string DefaultName = "Yeni Workflow";
+    // ... diğer default'lar
 }
 ```
 
-`CreateNewWorkflow` butonu bu template'i editor'a koyar — boş bir iskelet. Admin alanları doldurur.
-
 ---
 
-## Step tipleri (server-side validation)
+## Encoding
 
-Editor JSON yazımına izin verir; ama server `WorkflowExecutor` geçersiz adımları execute etmez:
+Workflow JSON'ı `UnsafeRelaxedJsonEscaping` ile serialize edilir — Türkçe karakterler ve emoji'ler `\uXXXX` escape dizileri yerine doğrudan UTF-8 olarak saklanır.
 
-| Type | Required field'lar |
-|---|---|
-| `Respond` | `template` |
-| `Lookup` | `tool` (forbidden tools yasak), `storeAs` |
-| `Branch` | `condition`, `skipNext` |
-| `SetVariable` | `variableName`, `variableValue` |
-
-Save'de JSON geçerli ama mantıksal hata varsa save işlemi başarılı olur — test'te fail eder. Daha sıkı validation eklemek isterseniz client-side `WorkflowRequest` schema check ekleyebilirsiniz.
-
-### Forbidden tools
-
-```
-order_placement_tool        — yeni sipariş (HITL gerekir)
-complaint_registration_tool — şikayet (HITL gerekir)
-human_handoff_tool          — insan çağrısı (text chat'te)
-```
-
-Editor uyarı vermez ama server execute fail eder:
-
-```json
+```csharp
+private static readonly JsonSerializerOptions _json = new()
 {
-  "success": false,
-  "error": "Tool 'order_placement_tool' is forbidden in workflows"
-}
+    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+};
 ```
-
-Detay: [Domain Model-Workflow](../domain/Model-Workflow.md).
-
----
-
-## NotFound.razor
-
-```razor
-@page "/{*pageRoute}"
-@layout EmptyLayout
-
-<div class="not-found">
-    <h1>404 — Bulunamadı</h1>
-    <p>İstenen sayfa mevcut değil.</p>
-    <a href="/">Ana sayfaya dön</a>
-</div>
-```
-
-Catch-all route — `App.razor`'daki `<NotFound>` template'i tarafından da kullanılır.
-
-`@page "/{*pageRoute}"` — herhangi bir URL eşleşir. Diğer `@page` direktifleri öncelikli, sadece eşleşmeyen path'ler buraya gelir.
 
 ---
 
 ## Bağlantılar
 
-- [Api Endpoints-Improvements](../api/Endpoints-Improvements.md) — `/workflows` CRUD
+- [Domain Model-Workflow](../domain/Model-Workflow.md) — WorkflowDefinition / WorkflowStep
+- [Application WorkflowExecutor](../application/WorkflowExecutor.md) — Graf traversal engine
+- [Api Endpoints-Admin](../api/Endpoints-Admin.md) — `/workflows` CRUD
 - [Application WorkflowPortService](../application/WorkflowPortService.md)
-- [Application WorkflowExecutor](../application/WorkflowExecutor.md)
-- [Domain Model-Workflow](../domain/Model-Workflow.md)
-- [Services.md](Services.md) — WorkflowApiService
-- [Models.md](Models.md) — WorkflowModels.cs
+- [Web Services.md](Services.md) — WorkflowApiService

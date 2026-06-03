@@ -2,7 +2,7 @@
 
 **Dosya:** `Model/Workflow/WorkflowDefinition.cs`
 
-Bot'un **LLM olmadan** çalıştırabileceği deterministic akışları temsil eder. Admin paneli üzerinden tanımlanır.
+Bot'un **LLM olmadan** çalıştırabileceği deterministic akışları temsil eder. Admin paneli üzerinden görsel tasarımcıyla oluşturulur.
 
 ---
 
@@ -27,13 +27,14 @@ Bu durumlarda LLM gereksiz. Workflow ile **regex + tool + template** → mikrosa
 ```csharp
 public sealed class WorkflowDefinition
 {
-    public string Id { get; set; }                              // Slug
+    public string Id { get; set; }                               // Slug
     public string Name { get; set; }
     public string? Description { get; set; }
     public int Version { get; set; } = 1;
     public bool IsActive { get; set; }
+    public string? StartStepId { get; set; }                     // Graf başlangıç node'u (null → ilk adım)
 
-    public List<string> TriggerKeywords { get; set; } = new();           // Tetikleyici kelimeler
+    public List<string> TriggerKeywords { get; set; } = new();            // Tetikleyici kelimeler
     public Dictionary<string, string> InputPatterns { get; set; } = new();// Regex → variable name
     public List<WorkflowStep> Steps { get; set; } = new();
 }
@@ -48,18 +49,22 @@ TriggerKeywords = ["takip", "kargoda", "nerede"]
 "siparişim nerede" → match → workflow çalıştır
 ```
 
+### StartStepId
+
+Görsel tasarımcı, node'ların y konumuna göre en yukarıdaki node'u başlangıç olarak seçer.
+`null` ise `Steps[0]` kullanılır (geriye dönük uyumluluk).
+
 ### InputPatterns
 
 Mesajdan değişken çıkarır:
 
 ```csharp
 InputPatterns = {
-    ["order_id"] = "\\d{4,}",
-    ["customer_id"] = "\\d{4,}"
+    ["orderId"] = "\\d{4,}",
 }
 
-Mesaj: "5 nerede"
-→ variables = { ["order_id"] = "5" }
+Mesaj: "siparis 1042 nerede"
+→ variables = { ["orderId"] = "1042" }
 ```
 
 ---
@@ -69,59 +74,67 @@ Mesaj: "5 nerede"
 ```csharp
 public sealed class WorkflowStep
 {
+    public string Id { get; set; }                 // Unique node ID (graf düğümü)
     public WorkflowStepType Type { get; set; }
-    public string Label { get; set; }                    // UI debug
+    public string Label { get; set; }              // UI debug
+
+    // Graf bağlantıları (positional SkipNext yerine explicit ID'ler)
+    public string? Next { get; set; }              // Respond / Lookup / SetVariable → sonraki node
+    public string? OnTrue { get; set; }            // Branch → koşul doğruysa git
+    public string? OnFalse { get; set; }           // Branch → koşul yanlışsa git
 
     // Step-specific
-    public string? Template { get; set; }                // Respond
-    public string? Tool { get; set; }                    // Lookup
+    public string? Template { get; set; }          // Respond
+    public string? Tool { get; set; }              // Lookup
     public Dictionary<string, string>? Parameters { get; set; }
-    public string? StoreAs { get; set; }                 // Lookup çıktısı hangi var'a yazılacak
-    public string? Condition { get; set; }               // Branch
-    public int SkipNext { get; set; } = 1;               // Branch — kaç adımı atla
-    public string? VariableName { get; set; }            // SetVariable
+    public string? StoreAs { get; set; }           // Lookup çıktısı hangi var'a yazılacak
+    public string? Condition { get; set; }         // Branch
+    public string? VariableName { get; set; }      // SetVariable
     public string? VariableValue { get; set; }
 }
 
 public enum WorkflowStepType { Respond, Lookup, Branch, SetVariable }
 ```
 
+> **Dikkat:** Eski `SkipNext` alanı kaldırıldı. Artık tüm navigasyon explicit node ID'leriyle yapılır.
+
 ### Step tipleri
 
 #### 1. Respond
-Template'i variables ile render eder, kullanıcıya gönderir.
+Template'i variables ile render eder, kullanıcıya gönderir. `Next` ile bir sonraki node'a geçer.
 
 ```csharp
 new WorkflowStep {
-    Type = Respond,
-    Template = "Sipariş {order_id} durumu: {order_status}"
+    Id = "r1", Type = Respond,
+    Template = "Sipariş {orderId} durumu: {orderResult.message}",
+    Next = null  // null → workflow sona erer
 }
 ```
-
-`{order_id}` ve `{order_status}` variable'lardan substitute edilir.
 
 #### 2. Lookup
-Read-only tool çağırır, sonucu variable'a yazar.
+Read-only tool çağırır, sonucu variable'a yazar. `Next` ile devam eder.
 
 ```csharp
 new WorkflowStep {
-    Type = Lookup,
+    Id = "lk1", Type = Lookup,
     Tool = "order_status_tool",
-    Parameters = { ["order_id"] = "{order_id}" },
-    StoreAs = "order_status"
+    Parameters = { ["orderId"] = "$orderId" },
+    StoreAs = "orderResult",
+    Next = "r1"
 }
 ```
 
-**Forbidden tools:** `order_placement_tool`, `complaint_registration_tool`, `human_handoff_tool` — workflow asla yazma/yan etki tool'u çağıramaz. `WorkflowExecutor` runtime'da bu liste'yi kontrol eder.
+**Forbidden tools:** `order_placement_tool`, `complaint_registration_tool`, `human_handoff_tool` — workflow asla yazma/yan etki tool'u çağıramaz.
 
 #### 3. Branch
-Koşul kontrolü; sağlanmıyorsa sonraki N step atlanır.
+Koşulu değerlendirir; `OnTrue` veya `OnFalse` node'una dallanır. Hedef `null` ise workflow o dalda sona erer.
 
 ```csharp
 new WorkflowStep {
-    Type = Branch,
-    Condition = "order_status == Delivered",
-    SkipNext = 2   // sonraki 2 step'i atla
+    Id = "br1", Type = Branch,
+    Condition = "orderId exists",
+    OnTrue  = "lk1",    // orderId varsa lookup'a git
+    OnFalse = "r_ask"   // yoksa sor adımına git
 }
 ```
 
@@ -129,19 +142,20 @@ new WorkflowStep {
 
 | Operatör | Anlam |
 |---|---|
-| `var exists` | Variable null değil |
-| `var missing` | Variable null veya boş |
+| `var exists` | Variable null değil ve boş değil |
+| `var missing` | Variable yok veya boş |
 | `var == value` | String eşitlik |
 | `var != value` | Eşit değil |
 
 #### 4. SetVariable
-Variable'a değer atar (template substitution destekler).
+Variable'a değer atar (template substitution destekler). `Next` ile devam eder.
 
 ```csharp
 new WorkflowStep {
-    Type = SetVariable,
-    VariableName = "greeting",
-    VariableValue = "Merhaba {customer_name}"
+    Id = "sv1", Type = SetVariable,
+    VariableName  = "greeting",
+    VariableValue = "Merhaba {input}",
+    Next = "r1"
 }
 ```
 
@@ -149,53 +163,54 @@ new WorkflowStep {
 
 ## Tam workflow örneği
 
-**Sipariş takibi workflow:**
+**Sipariş takibi workflow (graf tabanlı):**
 
 ```json
 {
   "id": "siparis-takibi",
   "name": "Sipariş Takibi",
-  "version": 1,
+  "startStepId": "br1",
   "isActive": true,
   "triggerKeywords": ["takip", "nerede", "kargoda"],
-  "inputPatterns": {
-    "order_id": "\\d{4,}"
-  },
+  "inputPatterns": { "orderId": "\\d{4,}" },
   "steps": [
     {
-      "type": "Branch",
-      "label": "order_id var mı?",
-      "condition": "order_id missing",
-      "skipNext": 99
+      "id": "br1", "type": "Branch",
+      "label": "orderId var mı?",
+      "condition": "orderId exists",
+      "onTrue": "lk1", "onFalse": "r_ask"
     },
     {
-      "type": "Lookup",
-      "label": "Sipariş durumu",
+      "id": "lk1", "type": "Lookup",
+      "label": "Sipariş sorgula",
       "tool": "order_status_tool",
-      "parameters": { "order_id": "{order_id}" },
-      "storeAs": "status_result"
+      "parameters": { "orderId": "$orderId" },
+      "storeAs": "siparis",
+      "next": "r_result"
     },
     {
-      "type": "Respond",
-      "label": "Yanıt",
-      "template": "Sipariş {order_id} durumu: {status_result}"
+      "id": "r_result", "type": "Respond",
+      "label": "Sonuç",
+      "template": "Sipariş {orderId} durumu: {siparis.message}"
+    },
+    {
+      "id": "r_ask", "type": "Respond",
+      "label": "Sipariş no iste",
+      "template": "Sipariş numaranızı paylaşır mısınız?"
     }
   ]
 }
 ```
 
 Akış:
-1. Branch: `order_id` boşsa kalan tüm step'ler atlanır (SkipNext=99)
-2. Lookup: `order_status_tool` çağrılır, sonuç `status_result`'a yazılır
-3. Respond: Template render edilip kullanıcıya gönderilir
-
-Eğer Branch geçemezse kullanıcı **hiçbir yanıt almaz** — yukarı LLM'li yola fall-through olur.
+1. `br1` — `orderId` var mı? Varsa `lk1`'e, yoksa `r_ask`'a git
+2. `lk1` — `order_status_tool` çağır, sonucu `siparis.*` variable'larına yaz, `r_result`'a geç
+3. `r_result` — yanıtı render et, sonraki node yok → biter
+4. `r_ask` — soru sor, sonraki node yok → biter
 
 ---
 
 ## WorkflowExecutionResult
-
-Workflow'un çıktısı:
 
 ```csharp
 public sealed class WorkflowExecutionResult
@@ -236,11 +251,10 @@ Workflow ID otomatik üretilirken Türkçe karakterler normalize edilir:
 
 Kural: `ç→c`, `ğ→g`, `ı→i`, `ö→o`, `ş→s`, `ü→u`, lowercase, alfanümerik olmayanlar `-`.
 
-`InMemoryWorkflowDefinitionStore.Slugify` ve `PostgresWorkflowDefinitionStore.Slugify` aynı algoritmayı kullanır.
-
 ---
 
 ## Bağlantılar
 
 - [Application WorkflowExecutor](../application/WorkflowExecutor.md) — execution engine
+- [Web Pages-Workflow](../web/Pages-Workflow.md) — görsel tasarımcı (X6.js)
 - [Persistence WorkflowDefinitionStore](../adapters-persistence/PostgresAdapters.md#postgresworkflowdefinitionstore)
