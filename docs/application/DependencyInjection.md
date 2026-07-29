@@ -28,22 +28,43 @@ AddMemoryServices(configuration)       ← Semantic memory (koşullu)
 ## `AddApplicationOptions`
 
 ```csharp
-services.Configure<ApprovalOptions>(configuration.GetSection("HumanInTheLoop"));
+services.AddOptions<ApprovalOptions>()
+    .Bind(configuration.GetSection("HumanInTheLoop"))
+    .Validate(o => o.TimeoutSeconds > 0, "HumanInTheLoop:TimeoutSeconds pozitif olmalı.")
+    .Validate(o => o.ToolsRequiringApproval != null, "HumanInTheLoop:ToolsRequiringApproval null olamaz.")
+    .ValidateOnStart();
+
 services.Configure<RoutingOptions>(configuration.GetSection("Routing"));
-services.Configure<ParallelExecutionOptions>(configuration.GetSection("ParallelExecution"));
-services.Configure<WorkflowGuardOptions>(configuration.GetSection("WorkflowGuards"));
-services.Configure<SlaOptions>(configuration.GetSection("SLA"));
+
+services.AddOptions<ParallelExecutionOptions>()
+    .Bind(configuration.GetSection(ParallelExecutionOptions.SectionName))
+    .Validate(o => o.MaxDegreeOfParallelism > 0, "ParallelExecution:MaxDegreeOfParallelism pozitif olmalı.")
+    .ValidateOnStart();
+
+services.AddOptions<WorkflowGuardOptions>()
+    .Bind(configuration.GetSection("WorkflowGuards"))
+    .Validate(o => o.TimeoutSeconds > 0, "WorkflowGuards:TimeoutSeconds pozitif olmalı.")
+    .Validate(o => o.MaxDuplicateToolCalls > 0, "WorkflowGuards:MaxDuplicateToolCalls pozitif olmalı.")
+    .Validate(o => o.MaxIterations > 0, "WorkflowGuards:MaxIterations pozitif olmalı.")
+    .Validate(o => o.MaxHandoffsPerAgent > 0, "WorkflowGuards:MaxHandoffsPerAgent pozitif olmalı.")
+    .Validate(o => o.MaxTokensPerRequest > 0, "WorkflowGuards:MaxTokensPerRequest pozitif olmalı.")
+    .Validate(o => o.PlanConfidenceThreshold is >= 0 and <= 1, "WorkflowGuards:PlanConfidenceThreshold 0-1 aralığında olmalı.")
+    .ValidateOnStart();
+
+services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
 ```
 
 `appsettings.json` bölüm adları:
 
-| Options sınıfı | appsettings bölümü |
-|---------------|-------------------|
-| `ApprovalOptions` | `HumanInTheLoop` |
-| `RoutingOptions` | `Routing` |
-| `ParallelExecutionOptions` | `ParallelExecution` |
-| `WorkflowGuardOptions` | `WorkflowGuards` |
-| `SlaOptions` | `SLA` |
+| Options sınıfı | appsettings bölümü | `ValidateOnStart` |
+|---------------|-------------------|--------------------|
+| `ApprovalOptions` | `HumanInTheLoop` | ✅ |
+| `RoutingOptions` | `Routing` | — |
+| `ParallelExecutionOptions` | `ParallelExecution` | ✅ |
+| `WorkflowGuardOptions` | `WorkflowGuards` | ✅ |
+| `SlaOptions` | `SLA` | — |
+
+`ValidateOnStart()` işaretli üç options sınıfı için geçersiz bir değer (ör. `TimeoutSeconds=0`) artık ilk isteği değil **uygulama başlangıcını** patlatır — `IOptions<T>.Value`'nin lazy olarak ilk isteğe kadar okunmamasından kaynaklanan gizli config hatalarını önler.
 
 ---
 
@@ -110,7 +131,6 @@ services.AddSingleton<CustomerProfileService>();
 services.AddSingleton<ICustomerProfileService>(sp => sp.GetRequiredService<CustomerProfileService>());
 services.AddSingleton<ISkillsBasedRouter, SkillsBasedRouter>();
 services.AddSingleton<EscalationPolicyService>();
-services.AddSingleton<WorkflowExecutor>();
 ```
 
 ---

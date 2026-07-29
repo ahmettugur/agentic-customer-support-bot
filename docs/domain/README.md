@@ -28,8 +28,7 @@ CustomerSupportBot.Domain/
 │   ├── Auth/          (UserInfo, RefreshTokenInfo)
 │   ├── Improvement/   (Lesson)
 │   ├── Memory/        (CustomerProfile, MemoryDocument)
-│   ├── Workflow/      (WorkflowDefinition)
-│   └── *.cs           (34 model dosyası)
+│   └── *.cs           (29 model dosyası)
 └── Services/
     ├── EscalationStates.cs
     ├── IdExtractor.cs
@@ -57,7 +56,6 @@ CustomerSupportBot.Domain/
 | [Model-Hitl.md](Model-Hitl.md) | ApprovalRequest, EscalationRequest, HumanAgent, RoutingDecision |
 | [Model-Tools.md](Model-Tools.md) | ToolResult, OrderInfo, ProductInfo, ComplaintInfo, ExtractedIds, VerifiedEntities |
 | [Model-Memory.md](Model-Memory.md) | CustomerProfile, MemoryDocument, Lesson |
-| [Model-Workflow.md](Model-Workflow.md) | WorkflowDefinition + Step + Execution |
 | [Model-Trace.md](Model-Trace.md) | ReasoningTrace, AgentVisit, ToolInvocation, SessionAnalytics, ConversationRating, SlaEvent |
 | [WellKnown.md](WellKnown.md) | Magic string constant registry |
 

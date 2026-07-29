@@ -30,7 +30,6 @@
 | Müşteri profil kişiselleştirmesi | [PersonalizationPortService](PersonalizationPortService.md) + [CustomerProfileService](CustomerProfileService.md) |
 | SLA izleme ve ihlal aksiyonları | [SlaGuardian](SlaGuardian.md) |
 | LLM maliyet takibi | [TelemetryPortService](TelemetryPortService.md) |
-| Low-code workflow CRUD ve test | [WorkflowPortService](WorkflowPortService.md) + [WorkflowExecutor](WorkflowExecutor.md) |
 | Eskalasyon için skill-based agent yönlendirmesi | [SkillsBasedRouter](SkillsBasedRouter.md) |
 | JWT + refresh token yönetimi | [Auth](Auth.md) |
 | Gelen mesaj güvenlik filtresi | [InputGuard](InputGuard.md) |
@@ -75,7 +74,6 @@ CustomerSupportBot.Application/
     ├── Personalization/             # PersonalizationPortService, CustomerProfileService
     ├── Realtime/                    # RealtimeBridgeService, RealtimeNativeService
     ├── Improvement/                 # ImprovementsPortService, LessonMiner
-    ├── Workflow/                    # WorkflowPortService, WorkflowExecutor
     ├── UiHint/                      # UiHintEmitter
     │
     ├── Providers/                  # IContextProvider implementasyonları

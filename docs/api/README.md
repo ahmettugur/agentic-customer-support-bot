@@ -30,7 +30,6 @@ CustomerSupportBot.Api/
 │   ├── SlaEndpoints.cs
 │   ├── TelemetryEndpoints.cs           ← /telemetry/cost
 │   ├── TraceEndpoints.cs               ← /traces (reasoning audit)
-│   ├── WorkflowEndpoints.cs            ← /workflows (low-code DSL)
 │   └── EvaluationEndpoints.cs          ← /eval (scenario testing)
 ├── Extensions/                         ← DI extension method'ları
 │   ├── AiServicesExtensions.cs
@@ -55,7 +54,6 @@ CustomerSupportBot.Api/
 ├── Models/                             ← HTTP DTO'lar (anti-corruption)
 │   ├── AdminModels.cs
 │   ├── EndpointModels.cs
-│   ├── WorkflowRequest.cs
 │   └── Auth/AuthDtos.cs
 ├── Prompts/                            ← LLM prompt'ları (.md dosyaları)
 └── KnowledgeBase/                      ← Embed edilecek KB içerik
@@ -77,7 +75,7 @@ CustomerSupportBot.Api/
 | [Endpoints-Chat.md](Endpoints-Chat.md) | /chat, /chat/stream, /chat/realtime, /sessions |
 | [Endpoints-Admin.md](Endpoints-Admin.md) | /approvals, /escalations, /chat-sessions, /agents, /agent/* |
 | [Endpoints-Observability.md](Endpoints-Observability.md) | /traces, /telemetry, /analytics, /sla, /eval |
-| [Endpoints-Improvements.md](Endpoints-Improvements.md) | /improvements, /memory, /customers, /workflows |
+| [Endpoints-Improvements.md](Endpoints-Improvements.md) | /improvements, /memory, /customers |
 
 ---
 

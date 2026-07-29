@@ -184,7 +184,7 @@ CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:121-140
 
 **Dosya**: `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`
 
-**Detay** → [domain/Model-Workflow.md](domain/Model-Workflow.md).
+**Detay** → [adapters-agents/CustomerSupportChatManager.md](adapters-agents/CustomerSupportChatManager.md).
 
 **Neden?** Tek bir ajan prompt'u tüm rolleri (router + 4 specialist + presenter) karıştırır → karmaşık + kırılgan. Group chat = rol ayrımı.
 

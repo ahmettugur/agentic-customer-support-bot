@@ -23,7 +23,6 @@ API katmanı bu arayüzleri çağırır. Implementasyonlar `Services/` altındad
 | `IMemoryPort` | `MemoryPortService` | Semantik bellek CRUD (API üzerinden) |
 | `IPersonalizationPort` | `PersonalizationPortService` | Müşteri profil güncelleme |
 | `IImprovementsPort` | `ImprovementsPortService` | Lesson mining ve iyileştirme önerileri |
-| `IWorkflowPort` | `WorkflowPortService` | Workflow tanımı CRUD |
 | `ISlaPort` | `SlaPortService` | SLA olay listesi ve özet |
 | `IInputGuard` | `InputGuard` | Gelen mesaj güvenlik filtresi |
 | `IRealtimeBridge` | `RealtimeBridgeService` | Realtime voice (Scoped) |
@@ -73,7 +72,6 @@ Application katmanı bu arayüzleri kullanır. Implementasyonlar Adapter projele
 | `IRatingStore` | Postgres/InMemory | Oturum puanlaması |
 | `ILessonStore` | Postgres/InMemory | Çıkarılan dersler |
 | `ISlaEventSink` | Postgres/InMemory | SLA olay kaydı |
-| `IWorkflowDefinitionStore` | Postgres/InMemory | Workflow tanımı |
 
 ### AI
 

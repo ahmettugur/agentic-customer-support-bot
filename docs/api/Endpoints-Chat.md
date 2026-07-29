@@ -34,8 +34,7 @@ Content-Type: application/json
    - Verdict=Reject → 400 Bad Request (error, message, flags)
    - Flags varsa → LogWarning + devam
 2. IChatPort.HandleAsync(safeRequest)
-   - WorkflowExecutor dene (regex match)
-   - Eşleşme yoksa → Reasoning + AgentTeam pipeline
+   - Reasoning + AgentTeam pipeline
 3. Response döner
 ```
 
