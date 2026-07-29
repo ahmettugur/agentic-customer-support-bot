@@ -254,8 +254,7 @@ new
         {
             order_id = new { type = "string", description = "Sipariş ID, örn: 1" }
         },
-        required = new[] { "order_id" },
-        additionalProperties = false
+        required = new[] { "order_id" }
     }
 }
 ```

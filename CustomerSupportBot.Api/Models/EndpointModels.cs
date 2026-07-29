@@ -10,13 +10,6 @@ public class RerouteInput
     public string? Reason { get; set; }
 }
 
-// ─── WorkflowEndpoints ───
-public class TestRunInput
-{
-    public string? Input { get; set; }
-    public Dictionary<string, string>? Variables { get; set; }
-}
-
 // ─── ImprovementsEndpoints ───
 public sealed record ImprovementDecision(string? DecidedBy, string? Reason);
 

@@ -40,13 +40,14 @@ public sealed class WorkflowDefinition
 }
 ```
 
-### Akış başlatma kuralı
+### TriggerKeywords — henüz bağlanmamış
 
-Kullanıcı mesajı `TriggerKeywords`'tan birini içeriyorsa workflow çalışır:
+`TriggerKeywords` alanı model, admin tasarımcı UI'ı ve persistence katmanında tam olarak tanımlı ve seed verisinde dolduruluyor, ancak **chat pipeline'ında (`ChatPortService`/`CustomerSupportTeam`) hiçbir yerde okunmuyor**. Şu an workflow'lar yalnızca admin panelindeki "Test Et" ekranından (`WorkflowPortService.Test` → `POST /workflows/{id}/test`) manuel olarak çalıştırılabiliyor; kullanıcı mesajıyla otomatik eşleştirme (fast-path) devrede değil.
 
 ```csharp
 TriggerKeywords = ["takip", "kargoda", "nerede"]
-"siparişim nerede" → match → workflow çalıştır
+// Amaçlanan davranış: "siparişim nerede" → match → workflow çalıştır
+// Gerçek durum: bu eşleştirme henüz implemente edilmedi
 ```
 
 ### StartStepId

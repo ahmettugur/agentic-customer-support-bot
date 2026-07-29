@@ -718,7 +718,7 @@ Toplam            6477 ms
 ### Token kullanımı
 
 ```
-ReasoningAgent prompt+response   ~1200 tokens  ($0.00018 @ gpt-4o-mini)
+ReasoningAgent prompt+response   ~1200 tokens  (örnek maliyet — güncel model/fiyat için appsettings.json Telemetry:Pricing bölümüne bakın)
 PlanningAgent                     ~480 tokens  ($0.00007)
 ComplaintAgent                    ~720 tokens  ($0.00011)
 ResponseAgent                     ~440 tokens  ($0.00007)

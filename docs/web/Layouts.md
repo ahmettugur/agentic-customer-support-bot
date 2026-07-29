@@ -6,9 +6,9 @@ Razor layout'ları — sayfa "kabukları". Her sayfa `@layout XxxLayout` direkti
 
 | Layout | Sayfalar | Görünüm |
 |---|---|---|
-| `EmptyLayout` | Login, Chat, NotFound | Boş — nav yok |
+| `EmptyLayout` | Login, Chat | Boş — nav yok |
 | `AdminLayout` | Admin, Traces, Replay, Sla, WorkflowDesigner | Top nav (AdminNavBar) |
-| `MainLayout` | (legacy, kullanılmıyor) | Sol sidebar + içerik |
+| `MainLayout` | `App.razor`'ın `DefaultLayout`'u; NotFound bunu kullanır | Sol sidebar (NavMenu) + içerik |
 
 ---
 
@@ -57,31 +57,54 @@ Blazor component-scoped CSS:
 
 ## AdminNavBar
 
-Admin sayfalarının üst nav'ı.
+Admin sayfalarının üst nav'ı. `ThemeService`'e bağlı bir açık/koyu mod düğmesi ve `AuthorizeView` ile aktif kullanıcı adını gösterir.
 
 ```razor
-@inject AuthService AuthSvc
 @inject NavigationManager Nav
+@inject AuthService AuthSvc
+@inject AppAuthStateProvider AuthState
+@inject ThemeService ThemeSvc
+@implements IDisposable
 
-<nav class="admin-nav">
-    <div class="brand">🤖 Müşteri Destek</div>
-    <ul class="nav-links">
-        <li><NavLink href="/" Match="NavLinkMatch.All">💬 Chat</NavLink></li>
-        <li><NavLink href="/admin">🛡️ HITL Panel</NavLink></li>
-        <li><NavLink href="/traces">🧠 Traces</NavLink></li>
-        <li><NavLink href="/replay">🎬 Replay</NavLink></li>
-        <li><NavLink href="/workflow-designer">🔧 Workflow</NavLink></li>
-        <li><NavLink href="/sla">⏱️ SLA</NavLink></li>
-    </ul>
-    <button @onclick="LogoutAsync" class="logout-btn">Çıkış</button>
+<nav class="csb-topnav">
+    <span class="csb-topnav-brand">CSB Admin</span>
+
+    <NavLink href="/" Match="NavLinkMatch.All">💬 Sohbet</NavLink>
+    <NavLink href="/admin">🛡️ HITL Panel</NavLink>
+    <NavLink href="/traces">🧠 Trace Dashboard</NavLink>
+    <NavLink href="/replay">🎬 Replay</NavLink>
+    <NavLink href="/workflow-designer">🔧 Workflow Designer</NavLink>
+    <NavLink href="/sla">⏱️ SLA</NavLink>
+
+    <button @onclick="ToggleAsync" class="csb-theme-toggle"><!-- güneş/ay ikonu, ThemeSvc.IsDark'a göre --></button>
+
+    <AuthorizeView>
+        <Authorized>
+            <span class="csb-topnav-user">👤 @context.User.Identity?.Name</span>
+            <button @onclick="LogoutAsync" class="csb-topnav-logout">Çıkış</button>
+        </Authorized>
+    </AuthorizeView>
 </nav>
 
 @code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await ThemeSvc.EnsureInitAsync();
+        ThemeSvc.OnChange += StateHasChanged;
+        StateHasChanged();
+    }
+
+    private async Task ToggleAsync() => await ThemeSvc.ToggleAsync();
+
     private async Task LogoutAsync()
     {
         await AuthSvc.LogoutAsync();
-        Nav.NavigateTo("/login");
+        AuthState.NotifyStateChanged();
+        Nav.NavigateTo("/login", forceLoad: false);
     }
+
+    public void Dispose() => ThemeSvc.OnChange -= StateHasChanged;
 }
 ```
 
@@ -114,51 +137,34 @@ Blazor built-in — aktif route ise `active` class ekler. CSS ile vurgulanır:
 @code {
     protected override void OnInitialized()
     {
-        var currentUri = Nav.ToBaseRelativePath(Nav.Uri);
-        Nav.NavigateTo($"/login?return=/{currentUri}", forceLoad: true);
+        var returnTo = Uri.EscapeDataString(Nav.Uri);
+        Nav.NavigateTo($"/login?return={returnTo}", forceLoad: false);
     }
 }
 ```
 
-Mevcut URL `?return=` query param'a kopyalanır:
+Mevcut URL (tam URI, `Uri.EscapeDataString` ile encode edilmiş) `?return=` query param'a kopyalanır. `Login.razor` başarılı login sonrası `return` query'sini okur, oraya yönlendirir.
 
-```
-/admin → /login?return=/admin
-/traces → /login?return=/traces
-```
-
-`Login.razor` başarılı login sonrası `return` query'sini okur, oraya yönlendirir.
-
-### `forceLoad: true` neden?
-
-Normal navigation Blazor router üzerinden gider — auth state aynı kalır. `forceLoad` ile **tam sayfa reload** yapılır:
-- Yeni HTTP request
-- `Program.cs` baştan başlar
-- `AppAuthStateProvider` token'ı tekrar okur
-- Login formu temiz görünür
+`forceLoad: false` — normal Blazor router navigasyonu kullanılır (tam sayfa reload yok); `AppAuthStateProvider.NotifyStateChanged()` zaten çağrıldığı için auth state güncel kalır.
 
 ---
 
-## MainLayout (legacy)
+## MainLayout
 
-`MainLayout.razor` ve `NavMenu.razor` projede mevcut ama **aktif route'larda kullanılmıyor**. Eski sol-sidebar tasarımının kalıntıları.
+`App.razor`'daki `<AuthorizeRouteView DefaultLayout="@typeof(MainLayout)">` bu layout'u varsayılan yapar. `@layout` direktifiyle başka bir layout seçmeyen sayfalar (örn. `NotFound.razor`) buraya düşer.
 
 ```razor
 @inherits LayoutComponentBase
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
-    <main>
+<div class="main-layout-fallback">
+    <NavMenu />
+    <main class="main-layout-content">
         @Body
     </main>
 </div>
 ```
 
-Yeni sayfalar `AdminLayout` (top nav) tercih ediyor — modern dashboard hissi için.
-
-⚠️ Cleanup gerekirse silinebilir.
+Admin sayfaları (`Admin`, `Traces`, `Replay`, `Sla`, `WorkflowDesigner`) kendi `@layout AdminLayout` direktifleriyle bunu ezer — top nav (AdminNavBar) tercih ediyorlar. `MainLayout`/`NavMenu` fiilen sadece `NotFound` sayfasında ve DefaultLayout fallback'i olarak devrede.
 
 ---
 
@@ -198,16 +204,16 @@ Bu sayede component'lerin CSS'i birbirine sızmaz — global pollution yok.
 
 ```razor
 @page "/admin"
+@attribute [Authorize]
 @layout AdminLayout
-@attribute [Authorize(Roles = "Admin,Agent")]
 ```
 
 3 direktif:
 - `@page "/admin"` — URL match
+- `@attribute [Authorize]` — auth requirement (rol kısıtı yok — herhangi bir authenticated kullanıcı: Admin veya Agent)
 - `@layout AdminLayout` — kabuk
-- `@attribute [Authorize]` — auth requirement
 
-Aksi halde `App.razor` `DefaultLayout="@typeof(EmptyLayout)"` kullanır.
+`@layout` direktifi verilmeyen sayfalarda `App.razor`'daki `AuthorizeRouteView DefaultLayout="@typeof(MainLayout)"` devreye girer.
 
 ---
 

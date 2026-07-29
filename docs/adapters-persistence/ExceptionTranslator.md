@@ -1,7 +1,7 @@
 # ExceptionTranslator
 
 **Dosya:** `ExceptionTranslator.cs`  
-**Tür:** `public static class`
+**Tür:** `internal static class`
 
 ## Ne yapar?
 
@@ -12,10 +12,10 @@ EF Core ve Npgsql'den gelen altyapı exception'larını domain exception'larına
 ## `Translate`
 
 ```csharp
-public static Exception Translate(Exception ex)
+public static DomainException Translate(Exception ex, string? context = null)
 ```
 
-Gelen exception'ı inceler ve uygun domain exception döner. Tanınmayan exception'larda orijinali sarmalar.
+Gelen exception'ı inceler ve uygun `DomainException` alt sınıfını döner (üst tip `Exception` değil). `context` verilirse hata mesajının başına eklenir. Tanınmayan exception'lar `PersistenceException` olarak sarmalanır.
 
 ---
 
@@ -24,13 +24,17 @@ Gelen exception'ı inceler ve uygun domain exception döner. Tanınmayan excepti
 | Gelen Exception | Koşul | Domain Exception |
 |----------------|-------|-----------------|
 | `DbUpdateConcurrencyException` | — | `ConcurrencyConflictException` |
-| `PostgresException` | `SqlState = "23505"` (unique violation) | `DuplicateEntityException` |
-| `PostgresException` | `SqlState = "23503"` (foreign key violation) | `EntityNotFoundException` |
-| `PostgresException` | `SqlState = "40P01"` (deadlock) | `PersistenceException("Deadlock")` |
-| `PostgresException` | `SqlState = "57014"` (query timeout) | `PersistenceException("Timeout")` |
-| `PostgresException` | `SqlState = "08*"` (connection error) | `PersistenceException("Connection")` |
-| `OperationCanceledException` | — | Yeniden fırlatılır (catch etme) |
+| `DbUpdateException` içinde `PostgresException` | — | `TranslatePostgres` ile aşağıdaki tabloya göre |
+| `PostgresException` | `SqlState = "23505"` (unique violation) | `ConcurrencyConflictException` (**`DuplicateEntityException` diye bir sınıf yoktur**) |
+| `PostgresException` | `SqlState = "23503"` (foreign key violation) | `EntityNotFoundException("İlişkili kayıt", pgEx.Detail)` |
+| `PostgresException` | `SqlState = "40001"` (serialization) veya `"40P01"` (deadlock) | `ConcurrencyConflictException` (`PersistenceException` **değil**) |
+| `PostgresException` | `SqlState = "57014"` (query timeout) | `PersistenceException` |
+| `PostgresException` | `SqlState = "08000/08001/08003/08006"` (connection error) | `PersistenceException` |
+| `InvalidOperationException` (mesajında "connection" geçiyorsa) | — | `PersistenceException` |
+| `TimeoutException` | — | `PersistenceException` |
 | Diğer | — | `PersistenceException(orijinal)` |
+
+`Translate` metodu **`OperationCanceledException`'ı özel olarak ele almaz** — yeniden fırlatma davranışı, çağıran tarafın `catch (Exception ex) when (ex is not OperationCanceledException)` filtresinden gelir (aşağıdaki kullanım örneğine bakın), `ExceptionTranslator` içinde değil.
 
 ---
 
@@ -43,7 +47,7 @@ try
 }
 catch (Exception ex) when (ex is not OperationCanceledException)
 {
-    throw ExceptionTranslator.Translate(ex);
+    throw ExceptionTranslator.Translate(ex, "Sipariş kaydedilemedi.");
 }
 ```
 
@@ -53,9 +57,8 @@ catch (Exception ex) when (ex is not OperationCanceledException)
 
 | Sınıf | Açıklama |
 |-------|---------|
-| `ConcurrencyConflictException` | Eş zamanlı güncelleme çakışması |
-| `DuplicateEntityException` | Unique kısıtı ihlali |
+| `ConcurrencyConflictException` | Eş zamanlı güncelleme çakışması **veya** unique/deadlock/serialization ihlali |
 | `EntityNotFoundException` | FK referans ettiği kayıt yok |
-| `PersistenceException` | Genel altyapı hatası (deadlock, timeout, bağlantı) |
+| `PersistenceException` | Genel altyapı hatası (timeout, bağlantı, tanınmayan hata) |
 
 Bu exception'lar Application katmanında `try/catch` ile yakalanabilir; HTTP response'a dönüştürme API katmanında yapılır.

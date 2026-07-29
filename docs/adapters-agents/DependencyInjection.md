@@ -72,7 +72,7 @@ Zorunlu:
   ApprovalGateService            → Bu extension tarafından kayıtlı
   IUiHintEmitter                 → Application services (UI ipucu yayıcı)
   IApprovalQueue                 → Application/Persistence
-  IOptions<ApprovalOptions>      → appsettings.json "Approval:" bölümü
+  IOptions<ApprovalOptions>      → appsettings.json "HumanInTheLoop:" bölümü
   IEscalationSink                → Persistence adapter
   IApprovalContextAccessor       → Application services
   EscalationPolicyService        → Application services

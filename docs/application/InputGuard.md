@@ -1,6 +1,6 @@
 # InputGuard
 
-**Dosya:** `Services/InputGuard.cs`  
+**Dosya:** `Services/Chat/InputGuard.cs`  
 **Implements:** `IInputGuard`  
 **Yaşam döngüsü:** Singleton
 
@@ -18,13 +18,15 @@ InputGuardResult Inspect(string? input)
 
 **Döndürülen sonuç:**
 ```csharp
-public record InputGuardResult(
-    InputGuardVerdict Verdict,   // Allow / Sanitize / Reject
-    string SanitizedInput,       // Unicode normalize + görünmez char temizlenmiş
-    List<string> Flags,          // Tetiklenen kural etiketleri
-    string? UserMessage          // Reject durumunda gösterilecek mesaj
+public sealed record InputGuardResult(
+    InputGuardVerdict Verdict,           // Allow / Sanitize / Reject
+    string SanitizedInput,               // Unicode normalize + görünmez char temizlenmiş
+    IReadOnlyList<string> Flags,         // Tetiklenen kural etiketleri
+    string? RejectionReason              // Reject durumunda gösterilecek mesaj (NOT: "UserMessage" değil)
 );
 ```
+
+> Şu anki implementasyon pratikte yalnızca `Allow` veya `Reject` döner — `Sanitize` verdict'i enum'da tanımlı olsa da `Inspect` tarafından hiç üretilmez.
 
 ---
 
@@ -135,18 +137,24 @@ Tüm regex'ler compile-time `[GeneratedRegex]` attribute'u ile oluşturulmuştur
 
 ---
 
-## ChatPortService entegrasyonu
+## Entegrasyon noktası
+
+`InputGuard`, `ChatPortService`'ten çağrılmaz — `ChatPortService.cs` `IInputGuard`'a hiç referans vermez. Gerçek çağıran taraf **API sınırıdır**: `CustomerSupportBot.Api/Endpoints/ChatEndpoints.cs` (hem `HandleChatAsync` hem `HandleChatStreamAsync` içinde), ayrıca `RealtimeBridgeService`/`RealtimeNativeService`.
 
 ```csharp
-// ChatPortService.HandleAsync içinde:
-var guardResult = _inputGuard.Inspect(request.Message);
+// ChatEndpoints.HandleChatAsync içinde:
+var guardResult = inputGuard.Inspect(request.Query);
 if (guardResult.Verdict == InputGuardVerdict.Reject)
 {
-    yield return new StreamEvent.ResponseDelta(guardResult.UserMessage!);
-    yield break;
+    return Results.Json(new
+    {
+        error = "input_blocked",
+        message = guardResult.RejectionReason,
+        flags = guardResult.Flags
+    }, statusCode: StatusCodes.Status400BadRequest);
 }
-var sanitizedInput = guardResult.SanitizedInput;
-// pipeline devam eder sanitizedInput ile
+var safeRequest = request with { Query = guardResult.SanitizedInput };
+var response = await chatPort.HandleAsync(safeRequest);
 ```
 
 ---

@@ -67,100 +67,89 @@ var result = await JS.InvokeAsync<string>("localStorage.getItem", "cs.auth");
 
 ## chat-bridge.js
 
-Minimal Blazor↔JS shim'i.
+`window.__chatSetup(ref, apiBase)` çağrılır ve `window._blazorChatRef`'i saklar; ardından `window.App` (realtime-ui.js'in beklediği minimal köprü) ve `window.chatApp` (aynı dosyanın tam DOM/streaming shim'i — mesaj balonu render, reasoning panel, agent chip'leri) nesnelerini kurar. Bu ikisi de burada gösterilmeyecek kadar geniştir; gerçek kaynak `wwwroot/js/chat-bridge.js`'tir.
 
 ```javascript
-// Setup — Blazor ref ve API base'i kaydet
-window.__chatSetup = (dotNetRef, apiBase) => {
-    window.__chatRef = dotNetRef;
-    window.__chatApiBase = apiBase;
+window.__scrollToBottom = function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    requestAnimationFrame(function () { el.scrollTop = el.scrollHeight; });
 };
 
-// Mesaj listesini en alta scroll et (her render'da)
-window.__scrollToBottom = (id) => {
-    requestAnimationFrame(() => {
-        const el = document.getElementById(id);
-        if (el) el.scrollTop = el.scrollHeight;
-    });
-};
+window.__chatSetup = function (ref, apiBase) {
+    apiBase = (apiBase || '').replace(/\/+$/, '');
+    window._blazorChatRef = ref;
+    // window.App / window.chatApp burada tanımlanır (bkz. yukarıdaki not)
 
-// SSE fetch — /chat/stream
-window.__streamChat = async (dotNetRef, apiBase, text, sessionId) => {
-    try
-    {
-        const resp = await fetch(`${apiBase}/chat/stream`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-            body: JSON.stringify({ sessionId, message: text })
-        });
+    // ── SSE Streaming — non-async: fetch IIFE içinde çalışır, C# hemen döner ──
+    window.__streamChat = function (ref, apiBase, query, sessionId) {
+        var ctrl = new AbortController();
+        window._chatStreamAbort = ctrl;
+        (async function () {
+            try {
+                var r = await fetch(apiBase + '/chat/stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+                    body: JSON.stringify({ query: query, sessionId: sessionId || null }),
+                    signal: ctrl.signal
+                });
+                if (!r.ok) { ref.invokeMethodAsync('OnStreamError', 'HTTP ' + r.status); return; }
 
-        const reader = resp.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-
-            // SSE block: "event: TYPE\ndata: JSON\n\n"
-            let idx;
-            while ((idx = buffer.indexOf('\n\n')) !== -1) {
-                const block = buffer.slice(0, idx).trim();
-                buffer = buffer.slice(idx + 2);
-
-                const lines = block.split('\n');
-                let eventType = 'message';
-                let data = '';
-                for (const line of lines) {
-                    if (line.startsWith('event:')) eventType = line.slice(6).trim();
-                    else if (line.startsWith('data:')) data += line.slice(5).trim();
+                var reader = r.body.getReader(), dec = new TextDecoder();
+                var buf = '', evType = 'message', dlines = [];
+                while (true) {
+                    var chunk = await reader.read();
+                    if (chunk.done) break;
+                    buf += dec.decode(chunk.value, { stream: true });
+                    var parts = buf.split('\n');
+                    buf = parts.pop();
+                    for (var i = 0; i < parts.length; i++) {
+                        var ln = parts[i];
+                        if (ln.startsWith('event:')) evType = ln.slice(6).trim();
+                        else if (ln.startsWith('data:')) dlines.push(ln.slice(5).trim());
+                        else if (ln.length === 0 && dlines.length > 0) {
+                            ref.invokeMethodAsync('OnStreamEvent', evType, dlines.join('\n'));
+                            evType = 'message'; dlines = [];
+                        }
+                    }
                 }
-
-                if (data) {
-                    await dotNetRef.invokeMethodAsync('OnStreamEvent', eventType, data);
-                }
+                ref.invokeMethodAsync('OnStreamComplete');
+            } catch (e) {
+                if (e.name === 'AbortError') ref.invokeMethodAsync('OnStreamComplete');
+                else ref.invokeMethodAsync('OnStreamError', e.message || String(e));
             }
-        }
+            window._chatStreamAbort = null;
+        })();
+    };
 
-        await dotNetRef.invokeMethodAsync('OnStreamComplete');
-    } catch (err) {
-        console.error('[ChatStream]', err);
-        await dotNetRef.invokeMethodAsync('OnStreamEvent', 'error', err.message);
-    }
+    window.__stopStream = function () {
+        if (window._chatStreamAbort) { window._chatStreamAbort.abort(); window._chatStreamAbort = null; }
+    };
 };
 ```
+
+> Request body alanı **`query`**'dir (`ChatRequest.Query` ile eşleşir) — `message` değil.
 
 ### Persistent events — `/chat/events/{sessionId}`
 
 ```javascript
-window.__startPersistentEvents = (dotNetRef, apiBase, sessionId, accessToken) => {
-    const url = `${apiBase}/chat/events/${sessionId}` +
-                (accessToken ? `?access_token=${accessToken}` : '');
-    const es = new EventSource(url);
-
-    es.addEventListener('humanJoined', e => {
-        dotNetRef.invokeMethodAsync('OnPersistentEvent', 'human_joined', e.data);
+window._startPersistentEvents = function (sid) {
+    if (window._chatEs) window._chatEs.close();
+    var es = new EventSource(apiBase + '/chat/events/' + encodeURIComponent(sid));
+    window._chatEs = es;
+    ['human_joined', 'human_left', 'bot_typing', 'human_message', 'handoff_pending', 'handoff_cleared'].forEach(function (t) {
+        es.addEventListener(t, function (e) {
+            ref.invokeMethodAsync('OnPersistentEvent', t, e.data || '{}');
+        });
     });
-    es.addEventListener('humanLeft', e => {
-        dotNetRef.invokeMethodAsync('OnPersistentEvent', 'human_left', e.data);
-    });
-    es.addEventListener('handoffPending', e => {
-        dotNetRef.invokeMethodAsync('OnPersistentEvent', 'handoff_pending', e.data);
-    });
-    es.addEventListener('humanMessage', e => {
-        dotNetRef.invokeMethodAsync('OnPersistentEvent', 'human_message', e.data);
-    });
-
-    window.__persistentEventSource = es;
 };
 
-window.__stopPersistentEvents = () => {
-    window.__persistentEventSource?.close();
-    window.__persistentEventSource = null;
+window._stopPersistentEvents = function () {
+    if (window._chatEs) { window._chatEs.close(); window._chatEs = null; }
 };
 ```
+
+Fonksiyon adları **tek alt çizgi** (`_startPersistentEvents`), çift değil. Event adları **snake_case** SSE event tipleriyle birebir eşleşir: `human_joined`, `human_left`, `bot_typing`, `human_message`, `handoff_pending`, `handoff_cleared` — kamelCase (`humanJoined` vb.) değil.
 
 EventSource browser API'sı — SSE için optimize. Auto-reconnect, retry built-in.
 

@@ -1,6 +1,6 @@
 # ReplanService
 
-**Dosya:** `Services/ReplanService.cs`  
+**Dosya:** `Services/Reasoning/ReplanService.cs`  
 **Implements:** `IReplanService`  
 **Yaşam döngüsü:** Singleton
 

@@ -1,6 +1,6 @@
 # AnalyticsPortService
 
-**Dosya:** `Services/AnalyticsPortService.cs`  
+**Dosya:** `Services/Telemetry/AnalyticsPortService.cs`  
 **Implements:** `IAnalyticsPort`  
 **Yaşam döngüsü:** Singleton
 
@@ -18,40 +18,43 @@ Oturum puanlarını (1-5 yıldız) kaydeder ve admin dashboard için analitik ve
 | `ISessionManager` | Tüm session'ların listesi |
 | `IApprovalQueue` | HITL onay sayıları |
 | `IEscalationSink` | Eskalasyon sayıları |
+| `ILogger<AnalyticsPortService>` | Loglama |
 
 ---
 
 ## Metodlar
 
-### `RateAsync`
+Tüm metodlar **senkrondur** (`Task` yok, `CancellationToken` almazlar).
+
+### `Rate`
 
 ```csharp
-Task RateAsync(string sessionId, int stars, string? feedback, CancellationToken ct = default)
+ConversationRating Rate(string sessionId, int stars, string? comment = null)
 ```
 
-**Validasyon:** `stars` 1–5 aralığında olmalı, aksi hâlde `ArgumentException` fırlatır.
+**Validasyon:** `stars` 1–5 aralığında olmalı, aksi hâlde `ArgumentOutOfRangeException` fırlatır.
 
-`IRatingStore.Upsert` çağırır — aynı session için tekrar puanlama öncekinin üzerine yazar.
+`IRatingStore.Upsert` çağırır — aynı session için tekrar puanlama öncekinin üzerine yazar. Oluşturulan/güncellenen `ConversationRating` kaydını döner.
 
 ---
 
-### `GetRatingAsync / GetRecentRatingsAsync / GetAllRatingsAsync`
+### `GetRating / GetRecentRatings / GetAllRatings`
 
 | Metod | Açıklama |
 |-------|---------|
-| `GetRatingAsync(sessionId)` | Belirli session'ın puanı; yoksa `null` |
-| `GetRecentRatingsAsync(count)` | Son N puanı döner |
-| `GetAllRatingsAsync()` | Tüm puanları döner |
+| `GetRating(sessionId)` | Belirli session'ın puanı; yoksa `null` |
+| `GetRecentRatings(count = 20)` | Son N puanı döner |
+| `GetAllRatings()` | Tüm puanları döner |
 
 ---
 
-### `GetSummaryAsync`
+### `GetSummary`
 
 ```csharp
-Task<RatingSummary> GetSummaryAsync(CancellationToken ct = default)
+object GetSummary()
 ```
 
-`IRatingStore.GetSummary()` sonucunu döner:
+`IRatingStore.GetSummary()` çağrılmaz — `_ratings`, `_sessions`, `_approvals`, `_escalations` üzerinden doğrudan bir anonim nesne inşa edilir:
 
 | Alan | Açıklama |
 |------|---------|
@@ -61,10 +64,10 @@ Task<RatingSummary> GetSummaryAsync(CancellationToken ct = default)
 
 ---
 
-### `GetDashboardAsync`
+### `GetDashboard`
 
 ```csharp
-Task<AnalyticsDashboard> GetDashboardAsync(CancellationToken ct = default)
+AnalyticsDashboard GetDashboard()
 ```
 
 Dört ayrı kaynaktan veri çekerek kapsamlı dashboard üretir:
@@ -94,10 +97,10 @@ IEscalationSink   → açık + son 50 eskalasyon
 
 ---
 
-### `GetSessionAnalyticsAsync`
+### `GetSessionAnalytics`
 
 ```csharp
-Task<SessionAnalytics?> GetSessionAnalyticsAsync(string sessionId, CancellationToken ct = default)
+SessionAnalytics? GetSessionAnalytics(string sessionId)
 ```
 
 Belirli bir oturum için tam analitik döner:
@@ -112,8 +115,9 @@ Belirli bir oturum için tam analitik döner:
 ## API endpoint'leri
 
 ```http
-POST /analytics/rate          → RateAsync
-GET  /analytics/summary       → GetSummaryAsync
-GET  /analytics/dashboard     → GetDashboardAsync
-GET  /analytics/{sessionId}   → GetSessionAnalyticsAsync
+POST /sessions/{sid}/rating   → Rate
+GET  /sessions/{sid}/rating   → GetRating
+GET  /analytics/ratings/recent → GetRecentRatings
+GET  /analytics/dashboard     → GetDashboard
+GET  /analytics/session/{sid} → GetSessionAnalytics
 ```

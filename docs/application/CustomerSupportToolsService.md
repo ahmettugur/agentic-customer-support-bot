@@ -86,13 +86,14 @@ Müşterinin tüm siparişlerini listeler. En fazla 5'i metin olarak formatlar; 
 
 Adımlar:
 1. Parametre doğrulama (`customerId`, `productName`, `quantity`)
-2. Ürün katalogda var mı?
-3. İdempotency cache kontrolü (son 60 saniye aynı istek gelmiş mi?)
+2. Müşteri var mı? (`ICustomerRepository`)
+3. Ürün katalogda var mı?
 4. Stok yeterli mi? (`IProductCatalogRepository.TryDeductStock`)
 5. Sipariş oluştur (`IOrderRepository.Create`)
-6. Sonucu idempotency cache'e kaydet
 
 **Stok yetersizse:** `ToolResult.Conflict` → ajan müşteriye bildirir, yeni sipariş oluşturmaz.
+
+> ⚠️ **İdempotency koruması yoktur.** Aynı parametrelerle art arda iki çağrı iki ayrı sipariş oluşturur — LLM'in tool'u yanlışlıkla iki kez çağırması durumunda tekrar tespiti yapan bir mekanizma bulunmuyor.
 
 ### `OrderCancelTool`
 
@@ -102,9 +103,8 @@ Adımlar:
 1. Parametre doğrulama (`orderId` zorunlu, `reason` min 5 karakter)
 2. Sipariş var mı?
 3. Zaten iptal edilmiş mi? → `ToolResult.Conflict(OrderAlreadyCancelled)`
-4. İdempotency cache kontrolü
-5. `IOrderRepository.Cancel(orderId, reason)` çağrısı
-6. İptal edilemez durumdaysa (`Delivered` vb.) → `ToolResult.Conflict(OrderNotCancellable)`
+4. `IOrderRepository.Cancel(orderId, reason)` çağrısı
+5. İptal edilemez durumdaysa (`Delivered` vb.) → `ToolResult.Conflict(OrderNotCancellable)`
 
 **İptal edilebilir durumlar:** `İşleniyor`, `Kargolandı`  
 **İptal edilemez durumlar:** `Teslim Edildi`, `İptal Edildi`, `İade Talep Edildi`
@@ -117,9 +117,8 @@ Adımlar:
 1. Parametre doğrulama (`orderId` zorunlu, `reason` min 5 karakter)
 2. Sipariş var mı?
 3. Zaten iade talebi var mı? → `ToolResult.Conflict(ReturnAlreadyRequested)`
-4. İdempotency cache kontrolü
-5. `IOrderRepository.RequestReturn(orderId, reason)` çağrısı
-6. Uygun değilse → `ToolResult.Conflict(ReturnNotEligible)` (durum/süre)
+4. `IOrderRepository.RequestReturn(orderId, reason)` çağrısı
+5. Uygun değilse → `ToolResult.Conflict(ReturnNotEligible)` (durum/süre)
 
 **İade edilebilir:** `Teslim Edildi` durumunda, **14 gün** içinde  
 **İade edilemez:** Diğer tüm durumlar veya süre aşımı  
@@ -134,40 +133,13 @@ Adımlar:
 2. Sipariş var mı?
 3. `customerId` verilmemişse siparişten otomatik türetilir (`inferred=true`)
 4. `customerId` verilmişse sipariş sahibiyle eşleşiyor mu?
-5. İdempotency cache kontrolü
-6. Şikayet oluştur (`IComplaintRepository.Create`)
+5. Şikayet oluştur (`IComplaintRepository.Create`)
 
 **CustomerID uyuşmazlığı:** `ToolResult.Conflict(CustomerIdMismatch)` — başkasının siparişine şikayet açılmasını engeller.
 
 ### `HumanHandoffTool` (static)
 
 **Yan etkisi yoktur.** Yalnızca kullanıcının handoff talebini formalleştirir. Gerçek yönlendirme `EscalationPolicyService` ve `HumanHandoffAgent` tarafından yapılır.
-
-## İdempotency mekanizması
-
-Yan etkili tool'lar 60 saniyelik bir idempotency cache kullanır. Bu cache LLM'nin aynı parametrelerle tool'u tekrar çağırmasını önler.
-
-```csharp
-private readonly ConcurrentDictionary<string, (DateTime At, ToolResult Result)> _idempotencyCache;
-private static readonly TimeSpan IdempotencyWindow = TimeSpan.FromSeconds(60);
-```
-
-**Anahtar nasıl hesaplanır?**
-
-```csharp
-private static string ComputeKey(string toolName, params string?[] parts)
-{
-    var raw = string.Join("|", parts.Select(p => p?.Trim().ToLowerInvariant() ?? ""));
-    var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
-    return $"{toolName}:{Convert.ToHexString(bytes)[..16]}"; // 16 hex karakter ≈ 64 bit
-}
-```
-
-Parametreler küçük harfe çevrilip birleştirildikten sonra SHA256 hash'i alınır. "Laptop" ve "laptop" aynı key üretir.
-
-**Cache temizliği:** Cache 200'den fazla giriş içerirse eski girişler (`> 60s`) otomatik temizlenir.
-
-**Önemli:** Cache Singleton servis içinde bellekte tutulur. Pod restart veya yeni pod başlatıldığında sıfırlanır — çok kısa aralıklı pod restart'larında teorik duplicate işlem riski vardır.
 
 ## Sub-servis bağımlılıkları
 
@@ -182,9 +154,8 @@ Parametreler küçük harfe çevrilip birleştirildikten sonra SHA256 hash'i al�
 1. Uygun sub-servis arayüzüne (`IProductToolsService`, `IOrderToolsService`, `IComplaintToolsService`) metot ekleyin.
 2. İlgili sub-serviste implement edin. `[Description("...")]` attribute'u LLM'nin tool'u ne zaman çağıracağını belirler.
 3. `ICustomerSupportToolsService` arayüzüne metot ekleyin ve `CustomerSupportToolsService` facade'ında sub-servise delege edin.
-4. Yan etkisi varsa ilgili sub-serviste idempotency cache ekleyin.
-5. HITL gerektiriyorsa `ApprovalGateService`'de yeni bir `Build___Tool()` metodu yazın ve `appsettings.json`'da `ToolsRequiringApproval` listesine ekleyin.
-6. `CustomerSupportTeam` constructor'ında ilgili ajana tool olarak atayın.
+4. HITL gerektiriyorsa `ApprovalGateService`'de yeni bir `Build___Tool()` metodu yazın ve `appsettings.json`'da `ToolsRequiringApproval` listesine ekleyin.
+5. `CustomerSupportTeam` constructor'ında ilgili ajana tool olarak atayın.
 
 ## Parametre isim sabitleri
 

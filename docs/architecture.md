@@ -18,8 +18,8 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
         ▼                   ▼                  ▼              ▼
 ┌───────────────┐  ┌────────────────┐  ┌─────────────┐  ┌──────────┐
 │ ReasoningSvc  │  │ CustomerSupp.  │  │ TraceStore  │  │ Evaluat. │
-│  (o-series)   │─▶│ Team           │─▶│ (Postgres/  │  │ Runner   │
-└───┬───────────┘  │ (6 agents +    │  │  InMemory)  │  └──────────┘
+│  (o-series)   │─▶│ Team           │─▶│ (Postgres)  │  │ Runner   │
+└───┬───────────┘  │ (6 agents +    │  └─────────────┘  └──────────┘
     │              │  ChatManager   │
     │              │  +Compound query │
     │              │  orchestration)│
@@ -55,8 +55,7 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │    └─ ReasoningChatClient    (o-series / reasoning deployment)     │
 │  PostgreSQL (sessions/traces/approvals/escalations/ratings/auth) │
 │  Qdrant (cs_knowledge / cs_episodic / cs_lessons collections)    │
-│  Redis (opsiyonel cache — bağlantı var, aktif kullanım sınırlı)  │
-│  InMemory Demo Adapters (Product/Order/Complaint — hexagonal)   │
+│  Redis (pub/sub + dağıtık lock — Program.cs'te her zaman kayıtlı)│
 │  IdExtractor (regex — deterministic ID extraction)              │
 │  JWT Bearer Auth (access + refresh token)                        │
 └─────────────────────────────────────────────────────────────────┘
@@ -78,7 +77,7 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 
 ## Proje yapısı (Hexagonal Mimari)
 
-Sistem **Ports & Adapters (Hexagonal)** mimarisine göre düzenlenmiş **8 proje**den oluşur:
+Sistem **Ports & Adapters (Hexagonal)** mimarisine göre düzenlenmiş **10 proje**den oluşur:
 
 ```
 CustomerSupport.slnx
@@ -220,7 +219,7 @@ CustomerSupport.slnx
 │   │   ├── Configurations/             # EF fluent config'ler (her entity için)
 │   │   ├── NorthwindSeedData.cs        # Demo veri (Catalog tabloları için)
 │   │   ├── PersistenceHydrator.cs      # Startup kurtarma (IHostedService)
-│   │   ├── PersistenceOptions.cs       # InMemory/Postgres seçimi
+│   │   ├── PersistenceOptions.cs       # Provider ayarı (yalnızca Postgres desteklenir)
 │   │   ├── Schemas.cs                  # Şema sabitleri
 │   │   └── Migrations/                 # Code-first migration'lar
 │   ├── Postgres/                        # PostgreSQL implementasyonları (17 adapter)
@@ -297,7 +296,7 @@ CustomerSupport.slnx
 │   │   ├── AiServicesExtensions.cs      # AI client + semantic memory + telemetry wrap
 │   │   ├── ApplicationServicesExtensions.cs # application servisleri + context providers
 │   │   ├── AuthServicesExtensions.cs    # JWT Bearer + Admin/Agent policy
-│   │   ├── PersistenceServicesExtensions.cs # InMemory/Postgres adapter seçimi
+│   │   ├── PersistenceServicesExtensions.cs # Postgres adapter kayıtları
 │   │   ├── RedisServicesExtensions.cs   # Redis bağlantısı + locking + pub/sub
 │   │   ├── TelemetryExtensions.cs       # OTLP exporter + activity source
 │   │   ├── HealthCheckExtensions.cs     # Postgres + Redis health check'ler
@@ -394,16 +393,16 @@ PersistenceOptions                 ─┐  ← GetSection("Persistence")
 PromptOptions                      ─┤  ← GetSection("Prompts")
 IPromptRepository      (singleton) ─┤  → FileSystemPromptRepository
                                     │
-  ┌─ Provider == "Postgres" ────────┤  PostgresSessionManager, PostgresReasoningTraceStore,
-  │                                 │  PostgresApprovalQueue, PostgresRatingStore,
-  │                                 │  PostgresChatModeRegistry, PostgresChatBridge,
-  │                                 │  PostgresEscalationSink, ...
-  │                                 │  + IDbContextFactory<CustomerSupportDbContext>
-  │                                 │  + PersistenceHydrator (IHostedService)
-  │                                 │
-  └─ Provider == "InMemory" ────────┤  InMemorySessionManager, InMemoryReasoningTraceStore,
-                                    │  InMemoryApprovalQueue, InMemoryProductCatalogAdapter,
-                                    │  InMemoryOrderAdapter, InMemoryMessageBusAdapter, ...
+  Koşulsuz kayıt (Provider her zaman "Postgres" — enum'un tek üyesi) ─┤
+                                    │  PostgresSessionManager, PostgresReasoningTraceStore,
+                                    │  PostgresApprovalQueue, PostgresRatingStore,
+                                    │  PostgresChatModeRegistry, PostgresChatBridge,
+                                    │  PostgresEscalationSink, ...
+                                    │  + IDbContextFactory<CustomerSupportDbContext>
+                                    │  + PersistenceHydrator (IHostedService)
+                                    │
+  (InMemory* sınıfları koda mevcuttur ama yalnızca testlerden elle örneklenir —
+   bir config anahtarıyla seçilebilen ikinci bir "mod" değildir.)
                                     │
 ── AddAuthenticationServices(config) ──────────────────────────────────
 JwtOptions            (IOptions)   ─┤  ← GetSection("Jwt")
@@ -563,8 +562,8 @@ Tasarımda **iki ayrı chat client** kullanılır. Her ikisi de `AiClientFactory
 2. **`ReasoningChatClient`** (default: OpenAI → `gpt-5.4-nano`, Azure → reasoning deployment, Anthropic → reasoning modeli) — **sadece** `ReasoningService` kullanır; OpenAI/Azure'da `reasoning_effort` parametresi gönderilir.
 
 Bu ayrım sayesinde:
-- Ön-analiz (niyet tespiti, requiredInfo) **daha uzun iç düşünme** zamanı olan o-series modelde yapılır.
-- Esas müşteri yanıtı, araç çağrısı ve ton duyarlı çıktılar **daha hızlı ve daha ucuz** gpt-4o'da üretilir.
+- Ön-analiz (niyet tespiti, requiredInfo) `reasoning_effort` destekli ayrı bir modelde (varsayılan `gpt-5.4-nano`) yapılır.
+- Esas müşteri yanıtı, araç çağrısı ve ton duyarlı çıktılar **daha hızlı ve daha ucuz** olan standart modelde (varsayılan `gpt-5.4`) üretilir.
 - İki modeli bağımsız upgrade/downgrade edebilirsiniz (ayrı config anahtarları).
 
 ## Uygulama başlangıç sırası
@@ -574,8 +573,8 @@ Bu ayrım sayesinde:
 1. **Config okunur** — `AI:Provider` ile sağlayıcı seçilir; ilgili sağlayıcının alt bloğundaki zorunlu alanlar (`ApiKey`, `Endpoint` vb.) eksikse `AiClientFactory` `InvalidOperationException` fırlatır.
 2. **DI modülleri** çağrılır: `AddTelemetryServices` → `AddAiServices` → `AddRedisServices` → `AddPersistenceServices` → `AddApplicationServices` → `AddAuthenticationServices`.
 3. **`MigrateIfDevelopmentAsync`** — Development ortamında PostgreSQL migration'ları otomatik çalışır.
-4. **`WireRoutingLoadTracking`** — Eskalasyon çözümlendiğinde insan temsilci yükünü otomatik azaltan event subscription'ı bağlar.
-5. **Middleware pipeline**: CORS → Rate Limiter → Static Files → WebSockets → Auth → Authorization.
+4. **`HumanAgentPortService` constructor'ı** — Eskalasyon çözümlendiğinde insan temsilci yükünü otomatik azaltan `IEscalationSink.RequestDecided` event aboneliğini kurar (ayrı bir `WireRoutingLoadTracking` çağrısı yoktur — bu davranış servisin kendi constructor'ına taşınmıştır).
+5. **Middleware pipeline**: CORS → Rate Limiter → WebSockets → Auth → Authorization.
 6. **Endpoint mapping**: Public (chat, realtime, session, auth) + Admin scope (trace, eval, memory, improvements, telemetry, personalization, agents, workflows, SLA) + Analytics.
 7. **IHostedService'ler** başlatılır: `KnowledgeBaseIngestor` (KB → Qdrant), `SlaGuardianService` (periyodik SLA taraması), `PersistenceHydrator` (seed data).
 8. **`CustomerSupportTeam` construct edildiğinde** 6 agent yaratılır ve OpenTelemetry middleware ile sarılır — **bu lazy'dir**, ilk `/chat/` isteğinde tetiklenir.
@@ -583,16 +582,16 @@ Bu ayrım sayesinde:
 
 ## Veri yaşam döngüsü (session + trace)
 
-Varsayılan persistence provider **Postgres**'dur (`appsettings.json > Persistence > Provider`). InMemory fallback geliştirme/test amaçlıdır.
+`PersistenceOptions.Provider` enum'unun tek üyesi `Postgres`'tur — üretimde ve geliştirmede kayıtlı olan tek backend budur. `InMemory*` sınıfları koda mevcuttur ve testlerde elle örneklenir, ama runtime'da config ile seçilebilen bir "InMemory modu" **yoktur**.
 
-| Veri | Postgres modu | InMemory modu |
-|------|---------------|---------------|
-| **Session** | `PostgresSessionManager` — kalıcı, restart'a dayanıklı | `InMemorySessionManager` — restart'ta sıfırlanır |
-| **History** | Mesajlar `MessageEntity` olarak DB'de saklanır | `List<ChatMessage>` bellekte birikir |
-| **Trace** | `PostgresReasoningTraceStore` — kalıcı | Ring buffer, max 500 |
-| **HITL Approvals** | `PostgresApprovalQueue` | `InMemoryApprovalQueue` |
-| **Ratings** | `PostgresRatingStore` | `InMemoryRatingStore` |
-| **Auth (Users)** | `UserEntity` + `RefreshTokenEntity` (her zaman Postgres) | — |
+| Veri | Gerçek (Postgres) implementasyon |
+|------|---------------|
+| **Session** | `PostgresSessionManager` — kalıcı, restart'a dayanıklı |
+| **History** | Mesajlar `MessageEntity` olarak DB'de saklanır |
+| **Trace** | `PostgresReasoningTraceStore` — kalıcı |
+| **HITL Approvals** | `PostgresApprovalQueue` |
+| **Ratings** | `PostgresRatingStore` |
+| **Auth (Users)** | `UserEntity` + `RefreshTokenEntity` |
 
 - **History optimizasyonu**: `ConversationSummaryProvider` 8+ mesaj olunca eski mesajları LLM ile özetleyip `SessionState.ConversationSummary` alanına yazar — token tasarrufu.
 - **Episodic memory**: Her workflow tamamlandığında soru+yanıt+intent Qdrant'a vektör olarak yazılır (fire & forget).
@@ -632,27 +631,17 @@ appsettings.json → AI:Provider
 
 **İki bağımsız model:** Standard (hız/maliyet optimize) + Reasoning (derin düşünme). Bağımsız upgrade/downgrade yapılabilir.
 
-### Persistence Provider Switch
+### Persistence Provider — gerçekte bir switch değil
 
 ```
 appsettings.json → Persistence:Provider
 ```
 
-| Değer | Adaptörler | Kullanım |
-|-------|-----------|----------|
-| `Postgres` | `PostgresSessionManager`, `PostgresApprovalQueue`, `PostgresEscalationSink`, ... | Production — kalıcı, yatay ölçeklenebilir |
-| `InMemory` | `InMemorySessionManager`, `InMemoryApprovalQueue`, `InMemoryEscalationSink`, ... | Development, test — restart'ta sıfırlanır |
+`PersistenceOptions.Provider` okunur, ama `PersistenceProvider` enum'unun **tek üyesi** `Postgres`'tur ve `PersistenceAdapterServiceCollectionExtensions.AddPersistenceAdapters()` hiçbir `if/else` dallanması yapmadan Postgres implementasyonlarını koşulsuz kaydeder. `InMemory*` sınıfları (`InMemorySessionManager`, `InMemoryApprovalQueue`, ...) koda mevcuttur ama yalnızca test projelerinden elle örneklenir — bir config değeriyle seçilebilen ikinci bir "mod" yoktur.
 
-**Karar noktası:** `PersistenceAdapterServiceCollectionExtensions.AddPersistenceAdapters()` — tek `if/else` ile 14+ repository aynı interface'lere farklı implementasyonlar bağlar.
+### Message Bus — her zaman Redis
 
-### Message Bus Provider Switch
-
-```
-Redis varsa → RedisMessageBusAdapter (pod'lar arası pub/sub)
-Redis yoksa → InMemoryMessageBusAdapter (tek instance, lokal pub/sub)
-```
-
-**Karar noktası:** `IMessageBusPort` — Redis adaptörü DI'da kayıtlıysa Redis kullanılır; InMemory modda `TryAddSingleton` ile fallback devreye girer. Persistence adaptörleri hiçbir zaman doğrudan Redis'e bağımlı değildir.
+`Program.cs`, `AddRedisServices(configuration)`'ı **her zaman** çağırır ve `RedisAdapterServiceCollectionExtensions` `IMessageBusPort`'u koşulsuz `RedisMessageBusAdapter` olarak kaydeder (`AddSingleton`, `TryAddSingleton` değil). `InMemoryMessageBusAdapter` mevcuttur ama yalnızca testlerde kullanılır — üretimde Redis olmadan çalışan bir fallback yolu yoktur.
 
 ### Prompt Source Switch
 
@@ -673,7 +662,7 @@ appsettings.json → Prompts:RootPath (opsiyonel)
                     ┌─────────────────────────────────────────┐
                     │          appsettings.json                │
                     │  AI:Provider      = OpenAI|Azure|Anthro  │
-                    │  Persistence:Provider = Postgres|InMemory│
+                    │  Persistence:Provider = Postgres (tek)   │
                     │  Prompts:RootPath = (opsiyonel path)     │
                     │  ConnectionStrings:Redis = (gerekli)     │
                     └──────────────┬──────────────────────────┘

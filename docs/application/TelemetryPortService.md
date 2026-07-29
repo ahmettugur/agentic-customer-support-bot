@@ -1,6 +1,6 @@
 # TelemetryPortService
 
-**Dosya:** `Services/TelemetryPortService.cs`  
+**Dosya:** `Services/Telemetry/TelemetryPortService.cs`  
 **Implements:** `ITelemetryPort`  
 **Yaşam döngüsü:** Singleton
 

@@ -1,6 +1,6 @@
 # EscalationPortService
 
-**Dosya:** `Services/EscalationPortService.cs`  
+**Dosya:** `Services/Escalation/EscalationPortService.cs`  
 **Implements:** `IEscalationPort`  
 **Yaşam döngüsü:** Singleton
 
@@ -15,16 +15,17 @@ Eskalasyon isteklerini yönetir ve `IEscalationSink` üzerindeki driven port eve
 | Bağımlılık | Açıklama |
 |-----------|---------|
 | `IEscalationSink` | Eskalasyon kayıt ve sorgulama deposu |
+| `ILogger<EscalationPortService>` | Loglama |
 
 ---
 
 ## Event köprüleme (Bridge Pattern)
 
-Constructor'da `IEscalationSink` event'lerine abone olunur ve bu event'ler driving port event'leri olarak yeniden yayınlanır:
+Constructor'da `IEscalationSink` event'lerine abone olunur ve bu event'ler **aynı isimle** driving port event'leri olarak yeniden yayınlanır (yeniden adlandırma yapılmaz):
 
 ```
-IEscalationSink.RequestCreated  →  IEscalationPort.EscalationCreated
-IEscalationSink.RequestDecided  →  IEscalationPort.EscalationDecided
+IEscalationSink.RequestCreated  →  IEscalationPort.RequestCreated
+IEscalationSink.RequestDecided  →  IEscalationPort.RequestDecided
 ```
 
 Bu sayede API katmanı `IEscalationSink`'i doğrudan bilmeden event akışına katılabilir.
@@ -33,58 +34,55 @@ Bu sayede API katmanı `IEscalationSink`'i doğrudan bilmeden event akışına k
 
 ## Metodlar
 
-### `CreateAsync`
+Tüm metodlar **senkrondur** (`Task` yok, `CancellationToken` almazlar).
+
+### `Create`
 
 ```csharp
-Task<EscalationRequest> CreateAsync(
-    string sessionId,
-    string reason,
-    EscalationPriority priority,
-    string? agentName,
-    CancellationToken ct = default)
+EscalationRequest Create(EscalationRequest request)
 ```
 
-Yeni eskalasyon isteği oluşturur. `IEscalationSink.Create` çağırır.
+Yeni eskalasyon isteği oluşturur — ayrık parametreler yerine hazır `EscalationRequest` nesnesi alır. `IEscalationSink.Create` çağırır.
 
 ---
 
-### `GetOpenAsync`
+### `GetOpen`
 
 ```csharp
-Task<IReadOnlyList<EscalationRequest>> GetOpenAsync(string? sessionId = null, CancellationToken ct = default)
+IReadOnlyList<EscalationRequest> GetOpen()
 ```
 
-Açık (henüz karar verilmemiş) eskalasyonları döner. `sessionId` verilirse o oturuma filtrelenir.
+Açık (henüz karar verilmemiş) tüm eskalasyonları döner. `sessionId` filtresi **yoktur** — çağıran taraf gerekirse kendi filtreler.
 
 ---
 
-### `GetRecentAsync`
+### `GetRecent`
 
 ```csharp
-Task<IReadOnlyList<EscalationRequest>> GetRecentAsync(int count = 50, CancellationToken ct = default)
+IReadOnlyList<EscalationRequest> GetRecent(int count = 50)
 ```
 
 Son `count` eskalasyonu döner (açık ve kapalı tümü).
 
 ---
 
-### `GetAsync`
+### `Get`
 
 ```csharp
-Task<EscalationRequest?> GetAsync(string id, CancellationToken ct = default)
+EscalationRequest? Get(string id)
 ```
 
 Tekil eskalasyon kaydını döner.
 
 ---
 
-### `DecideAsync`
+### `Decide`
 
 ```csharp
-Task<bool> DecideAsync(string id, bool resolved, string decidedBy, string? note, CancellationToken ct = default)
+bool Decide(string id, string action, string? assignedTo = null, string? resolution = null)
 ```
 
-Eskalasyon kararı verir (çözüldü/reddedildi). `IEscalationSink.Decide` çağırır.
+Eskalasyon kararı verir. `action` — `"acknowledge"` | `"resolve"` | `"dismiss"` string değeri alır (bool değil). `IEscalationSink.Decide` çağırır.
 
 ---
 
@@ -107,10 +105,4 @@ Eskalasyon kararı verir (çözüldü/reddedildi). `IEscalationSink.Decide` ça�
 
 ## API endpoint'leri
 
-```http
-POST /escalation              → CreateAsync
-GET  /escalation/open         → GetOpenAsync
-GET  /escalation/recent       → GetRecentAsync
-GET  /escalation/{id}         → GetAsync
-POST /escalation/{id}/decide  → DecideAsync
-```
+Bkz. [Endpoints-Admin.md](../api/Endpoints-Admin.md) — eskalasyon endpoint'lerinin gerçek route'ları için.

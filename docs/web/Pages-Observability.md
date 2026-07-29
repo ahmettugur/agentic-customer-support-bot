@@ -22,9 +22,11 @@ private List<TraceSession> _sessions = new();
 private string? _selectedSessionId;
 private List<TraceDetail> _traces = new();
 private string? _selectedTraceId;
-private TraceDetail? _currentTrace;
-private bool _autoRefresh = false;
+private TraceDetail? _selectedTrace;
+private bool _autoRefresh = true;
 ```
+
+> Gerçek alan adları `_selectedTrace` (`_currentTrace` değil) ve `_autoRefresh` varsayılanı **`true`**'dur (`false` değil).
 
 ### Layout
 
@@ -41,8 +43,8 @@ private bool _autoRefresh = false;
         {
             <TraceSessionItem
                 Session="sess"
-                Selected="@(sess.SessionId == _selectedSessionId)"
-                OnClick="() => SelectSessionAsync(sess.SessionId)" />
+                IsActive="@(sess.SessionId == _selectedSessionId)"
+                OnSessionSelected="SelectSessionAsync" />
         }
     </aside>
 
@@ -55,7 +57,6 @@ private bool _autoRefresh = false;
                 <span class="trace-id">@trace.TraceId</span>
                 <span class="time">@FormatTime(trace.StartedAt)</span>
                 <span class="duration">@trace.DurationMs ms</span>
-                <span class="tokens">@trace.EstimatedTokens tk</span>
                 @if (!string.IsNullOrEmpty(trace.Error))
                 {
                     <span class="error-badge">❌</span>
@@ -66,9 +67,9 @@ private bool _autoRefresh = false;
 
     <!-- Sağ: detay paneli -->
     <aside class="detail-panel">
-        @if (_currentTrace != null)
+        @if (_selectedTrace != null)
         {
-            <TraceDetailPanel Trace="_currentTrace" />
+            <TraceDetailPanel Trace="_selectedTrace" />
         }
     </aside>
 </div>
@@ -83,7 +84,7 @@ _traces = [trace1, trace2, ...]
    ↓
 SelectTraceAsync(traceId)
    ↓ TracesApi.GetTraceAsync(traceId)
-_currentTrace = TraceDetail { ... full data ... }
+_selectedTrace = TraceDetail { ... full data ... }
 ```
 
 `ShowAllTracesAsync` session filter'sız tüm trace'leri getirir (son N).
@@ -93,29 +94,76 @@ _currentTrace = TraceDetail { ... full data ... }
 ## TraceSessionItem component
 
 ```razor
-<div class="session-item @(Selected ? "selected" : "")" @onclick="OnClick">
-    <div class="title">@Session.Title</div>
-    <div class="meta">
+<div class="session-item @(IsActive ? "active" : "")"
+     @onclick="OnClick" role="button" tabindex="0" @onkeydown="HandleKeyDown">
+    <div class="session-item-title">@(Session.Title ?? "(boş)")</div>
+    <div class="session-item-meta">
         <span>@Session.TraceCount trace</span>
         <span>@Session.MessageCount mesaj</span>
-        <small>@FormatTime(Session.LastTraceAt)</small>
+        <span>@FormatTime(Session.LastTraceAt)</span>
     </div>
+    <code class="session-item-id">@Session.SessionId[..Math.Min(8, Session.SessionId.Length)]…</code>
 </div>
 
 @code {
-    [Parameter] public TraceSession Session { get; set; } = null!;
-    [Parameter] public bool Selected { get; set; }
-    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter, EditorRequired] public TraceSession Session { get; set; } = default!;
+    [Parameter] public bool IsActive { get; set; }
+    [Parameter] public EventCallback<string> OnSessionSelected { get; set; }
+
+    private async Task OnClick() => await OnSessionSelected.InvokeAsync(Session.SessionId);
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or " ")
+            await OnSessionSelected.InvokeAsync(Session.SessionId);
+    }
 }
 ```
 
-Kart UI — sol sidebar'da liste item'ı. Reusable component (kod tekrarı azaltma).
+Parametre adları **`IsActive`** (`Selected` değil) ve **`OnSessionSelected` (`EventCallback<string>`, seçilen `SessionId`'yi taşır)** — parametresiz `EventCallback OnClick` değil. Klavye erişilebilirliği için `role="button"`/`@onkeydown` de eklenmiştir.
 
 ---
 
 ## TraceDetailPanel component
 
-Trace'in tüm detayını gösterir — reasoning ağacı, agent visit'leri, tool çağrıları.
+Trace'in tüm detayını gösterir — reasoning, planning, agent timeline, tool çağrıları, chat/approval/escalation geçmişi, specialist reasoning'ler, final critique/revision.
+
+### Gerçek `TraceDetail` modeli
+
+`Reasoning` ve `Planning` **tipli sınıflar değil, ham `JsonElement?`'tir** — API'nin döndürdüğü JSON aynen taşınır, Web tarafında ayrı bir DTO'ya deserialize edilmez:
+
+```csharp
+public sealed class TraceDetail
+{
+    public string? TraceId { get; init; }
+    public string? SessionId { get; init; }
+    public string? UserQuery { get; init; }
+    public DateTimeOffset StartedAt { get; init; }
+    public DateTimeOffset? CompletedAt { get; init; }
+    public string? TerminationReason { get; init; }
+    public int? DurationMs { get; init; }
+    public int? IterationCount { get; init; }
+    public string? Error { get; init; }
+    public string? FinalResponse { get; init; }
+    public JsonElement? Reasoning { get; init; }        // ham JSON — tipli değil
+    public JsonElement? Planning { get; init; }          // ham JSON — tipli değil
+    public List<TraceAgentVisit> AgentVisits { get; init; } = [];
+    public List<JsonElement> SpecialistReasonings { get; init; } = [];
+    public List<TraceToolCall> ToolCalls { get; init; } = [];
+    public bool WasRevised { get; init; }
+    public string? FirstDraftResponse { get; init; }
+    public JsonElement? FinalCritique { get; init; }
+}
+
+public sealed record TraceAgentVisit(string? AgentName, DateTimeOffset StartedAt, int? DurationMs, string? Output);
+public sealed record TraceToolCall(string? ToolName, string? AgentName, DateTimeOffset? InvokedAt, bool Success, string? ParametersSummary, string? ResultSummary);
+```
+
+> `EstimatedTokens`, `ReasoningSummary`, `PlanningSummary` gibi tipler **kodda hiç mevcut değildir** — Model dosyası için bkz. [Models.md](Models.md), o zaten bu gerçek şemayı doğru dokümante ediyor.
+
+### Basitleştirilmiş görünüm
+
+`Reasoning`/`Planning` ham `JsonElement` olduğu için component `@Trace.Reasoning.Analysis` gibi doğrudan property erişimi **yapamaz** — `RenderReasoning`/`RenderPlanning` gibi manuel JSON-okuma yardımcı metodları (`Str()`, `Bool()` vb.) kullanır:
 
 ```razor
 <div class="trace-detail">
@@ -128,29 +176,12 @@ Trace'in tüm detayını gösterir — reasoning ağacı, agent visit'leri, tool
 
     <section>
         <h4>Reasoning</h4>
-        @if (Trace.Reasoning != null)
-        {
-            <p>@Trace.Reasoning.Analysis</p>
-            <details>
-                <summary>Adımlar (@Trace.Reasoning.Steps?.Count)</summary>
-                <ol>
-                    @foreach (var step in Trace.Reasoning.Steps ?? new())
-                    {
-                        <li>@step.Description <small>@step.Action · @step.Grounding</small></li>
-                    }
-                </ol>
-            </details>
-        }
+        @RenderReasoning(Trace.Reasoning)   <!-- JsonElement'i manuel gezen helper -->
     </section>
 
     <section>
         <h4>Planning</h4>
-        @if (Trace.Planning != null)
-        {
-            <p>Intent: <strong>@Trace.Planning.DetectedIntent</strong></p>
-            <p>Selected: <strong>@Trace.Planning.SelectedAgent</strong></p>
-            <p>Rationale: <em>@Trace.Planning.Rationale</em></p>
-        }
+        @RenderPlanning(Trace.Planning)     <!-- JsonElement'i manuel gezen helper -->
     </section>
 
     <section>
@@ -181,7 +212,7 @@ Trace'in tüm detayını gösterir — reasoning ağacı, agent visit'leri, tool
         <h4>Sonuç</h4>
         <p><strong>Durum:</strong> @Trace.TerminationReason</p>
         <p><strong>Yanıt:</strong> @Trace.FinalResponse</p>
-        <small>@Trace.DurationMs ms · @Trace.EstimatedTokens tokens</small>
+        <small>@Trace.DurationMs ms</small>
     </section>
 
     @if (!string.IsNullOrEmpty(Trace.Error))
@@ -193,6 +224,8 @@ Trace'in tüm detayını gösterir — reasoning ağacı, agent visit'leri, tool
     }
 </div>
 ```
+
+Gerçek `TraceDetailPanel.razor` yukarıdakinden daha kapsamlıdır — ayrıca **Chat History**, **Approval History**, **Escalation History**, **Specialist Reasonings** ve **Final Critique / Revision** (compound query'de ilk taslak vs. revize yanıt karşılaştırması) bölümlerini de render eder.
 
 Bu detay sayfası **reasoning denetimi** için kritik — bot'un her kararının arkasındaki düşünce zinciri görülür.
 
@@ -316,13 +349,13 @@ SLA Guardian'ın canlı durumu.
     <div class="status-card approvals">
         <h3>📋 Approval SLA</h3>
         <div class="metric">Pending: <strong>@_status.Approvals.PendingCount</strong></div>
-        <div class="metric">En Eski: <strong>@_status.Approvals.OldestAgeSeconds sn</strong></div>
+        <div class="metric">En Eski: <strong>@_status.Approvals.OldestSeconds sn</strong></div>
         <div class="threshold">
-            <span>Warn: @_status.Approvals.WarnThresholdSeconds sn</span>
-            <span>Breach: @_status.Approvals.BreachThresholdSeconds sn</span>
+            <span>Warn: @_status.Approvals.WarnAfter sn</span>
+            <span>Breach: @_status.Approvals.BreachAfter sn</span>
         </div>
-        <div class="action">Breach'te: <strong>@_status.Approvals.OnBreachAction</strong></div>
-        <div class="breach-count">Breach: @_status.Approvals.BreachCount</div>
+        <div class="action">Breach'te: <strong>@_status.Approvals.OnBreach</strong></div>
+        <div class="breach-count">Breach: @_status.Approvals.BreachCountRecent</div>
     </div>
 
     <div class="status-card escalations">
@@ -377,40 +410,48 @@ private async Task RefreshAsync()
 
 ---
 
-## TraceDetailModels.cs
+## Trace DTO'ları
 
-Web tarafının trace DTO'ları:
+`TraceSession` **`TracesApiService.cs`** içinde tanımlıdır (ayrı bir `TraceDetailModels.cs`'de değil), `TraceDetail`/`TraceAgentVisit`/`TraceToolCall` ise **`Models/TraceDetailModels.cs`**'de:
 
 ```csharp
-public sealed class TraceSession
-{
-    public string SessionId { get; set; } = "";
-    public string? Title { get; set; }
-    public int TraceCount { get; set; }
-    public int MessageCount { get; set; }
-    public DateTime LastTraceAt { get; set; }
-}
+// Services/TracesApiService.cs
+public sealed record TraceSession(
+    string SessionId,
+    string? Title,
+    int TraceCount,
+    int MessageCount,
+    DateTimeOffset LastTraceAt
+);
 
+// Models/TraceDetailModels.cs
 public sealed class TraceDetail
 {
-    public string TraceId { get; set; } = "";
-    public string SessionId { get; set; } = "";
-    public string UserQuery { get; set; } = "";
-    public DateTime StartedAt { get; set; }
-    public DateTime? CompletedAt { get; set; }
-    public long? DurationMs { get; set; }
-    public int EstimatedTokens { get; set; }
-    public string? Error { get; set; }
-    public string? TerminationReason { get; set; }
-    public string? FinalResponse { get; set; }
-    public ReasoningSummary? Reasoning { get; set; }
-    public PlanningSummary? Planning { get; set; }
-    public List<AgentVisit> AgentVisits { get; set; } = new();
-    public List<ToolInvocation> ToolCalls { get; set; } = new();
+    public string? TraceId { get; init; }
+    public string? SessionId { get; init; }
+    public string? UserQuery { get; init; }
+    public DateTimeOffset StartedAt { get; init; }
+    public DateTimeOffset? CompletedAt { get; init; }
+    public string? TerminationReason { get; init; }
+    public int? DurationMs { get; init; }
+    public int? IterationCount { get; init; }
+    public string? Error { get; init; }
+    public string? FinalResponse { get; init; }
+    public JsonElement? Reasoning { get; init; }         // ham JSON, tipli DTO yok
+    public JsonElement? Planning { get; init; }           // ham JSON, tipli DTO yok
+    public List<TraceAgentVisit> AgentVisits { get; init; } = [];
+    public List<JsonElement> SpecialistReasonings { get; init; } = [];
+    public List<TraceToolCall> ToolCalls { get; init; } = [];
+    public bool WasRevised { get; init; }
+    public string? FirstDraftResponse { get; init; }
+    public JsonElement? FinalCritique { get; init; }
 }
+
+public sealed record TraceAgentVisit(string? AgentName, DateTimeOffset StartedAt, int? DurationMs, string? Output);
+public sealed record TraceToolCall(string? ToolName, string? AgentName, DateTimeOffset? InvokedAt, bool Success, string? ParametersSummary, string? ResultSummary);
 ```
 
-Domain `ReasoningTrace`'in JSON-friendly hali. JSON deserialize için flat structure.
+`EstimatedTokens`, `ReasoningSummary`, `PlanningSummary`, `AgentVisit` (tekil, tipli), `ToolInvocation` gibi tipler **kodda yoktur** — `Reasoning`/`Planning` API'den gelen JSON'u aynen taşıyan `JsonElement?`'tir, ayrı bir tipe deserialize edilmez.
 
 ---
 

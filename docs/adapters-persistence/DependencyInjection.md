@@ -109,14 +109,12 @@ AddPersistenceAdapters(configuration)
 ## EF Core Persistence
 
 ```csharp
-services.AddDbContext<CustomerSupportDbContext>(opts =>
+services.AddDbContextFactory<CustomerSupportDbContext>(opts =>
     opts.UseNpgsql(connectionString, npgsql =>
         npgsql.EnableRetryOnFailure(3)));
-
-services.AddDbContextFactory<CustomerSupportDbContext>(...);
 ```
 
-Singleton servisler `IDbContextFactory<T>` kullanır (Scoped DbContext alamazlar). Scoped servisler direkt `DbContext` inject eder.
+**Yalnızca `AddDbContextFactory` çağrılır** — ayrı bir `AddDbContext` kaydı **yoktur**. Hem Singleton hem Scoped tüm servisler (auth repository'leri dahil) `IDbContextFactory<CustomerSupportDbContext>` inject eder ve ihtiyaç anında `CreateDbContext()` ile kısa ömürlü bir context üretir — bu sayede Singleton servisler de DbContext'in scoped yaşam döngüsü kısıtına takılmadan çalışabilir.
 
 ---
 

@@ -1,6 +1,6 @@
 # ApprovalPortService
 
-**Dosya:** `Services/ApprovalPortService.cs`  
+**Dosya:** `Services/Approval/ApprovalPortService.cs`  
 **Implements:** `IApprovalPort`  
 **Yaşam döngüsü:** Singleton
 
@@ -14,49 +14,52 @@ HITL (Human-in-the-Loop) onay kuyruğunu yönetir. Pending onayları listeler, t
 
 | Bağımlılık | Tür | Açıklama |
 |-----------|-----|---------|
-| `IApprovalQueue` | Driven port | Onay kayıtlarının persist edildiği kuyruk (Postgres/InMemory) |
+| `IApprovalQueue` | Driven port | Onay kayıtlarının persist edildiği kuyruk (Postgres) |
+| `ILogger<ApprovalPortService>` | — | Loglama |
 
 ---
 
 ## Metodlar
 
-### `GetPendingAsync`
+Tüm metodlar **senkrondur** (`Task` yok, `CancellationToken` almazlar).
+
+### `GetPending`
 
 ```csharp
-Task<IReadOnlyList<ApprovalRequest>> GetPendingAsync(CancellationToken ct = default)
+IReadOnlyList<ApprovalRequest> GetPending()
 ```
 
 `IApprovalQueue.GetPending()` sonucunu döner. Karar bekleyen tüm onaylar.
 
 ---
 
-### `GetRecentAsync`
+### `GetRecent`
 
 ```csharp
-Task<IReadOnlyList<ApprovalRequest>> GetRecentAsync(int count = 50, CancellationToken ct = default)
+IReadOnlyList<ApprovalRequest> GetRecent(int count = 50)
 ```
 
 Son `count` kadar onay kaydını döner (hem pending hem karara bağlanmış).
 
 ---
 
-### `GetAsync`
+### `Get`
 
 ```csharp
-Task<ApprovalRequest?> GetAsync(string id, CancellationToken ct = default)
+ApprovalRequest? Get(string id)
 ```
 
 Tekil onay kaydını id'ye göre getirir. Bulunamazsa `null`.
 
 ---
 
-### `DecideAsync`
+### `Decide`
 
 ```csharp
-Task<bool> DecideAsync(string id, bool approved, string decidedBy, string? reason, CancellationToken ct = default)
+bool Decide(string id, bool approved, string? decidedBy = null, string? reason = null)
 ```
 
-Onay/red kararı verir.
+Onay/red kararı verir. `decidedBy` ve `reason` opsiyoneldir.
 
 **Önemli:** Karar vermeden önce isteğin `Pending` durumda olduğunu kontrol eder. Zaten karar verilmiş bir kayıt için `false` döner.
 
@@ -74,10 +77,10 @@ Onay/red kararı verir.
 
 ```csharp
 // Admin panelinde bekleyen onayları listele
-var pending = await _approvalPort.GetPendingAsync();
+var pending = _approvalPort.GetPending();
 
 // Onay ver
-var success = await _approvalPort.DecideAsync(
+var success = _approvalPort.Decide(
     id: "req-123",
     approved: true,
     decidedBy: "admin@example.com",
@@ -88,9 +91,4 @@ var success = await _approvalPort.DecideAsync(
 
 ## API endpoint'leri
 
-```http
-GET  /hitl/pending          → GetPendingAsync
-GET  /hitl/recent?count=50  → GetRecentAsync
-GET  /hitl/{id}             → GetAsync
-POST /hitl/{id}/decide      → DecideAsync
-```
+Bkz. [Endpoints-Admin.md](../api/Endpoints-Admin.md) — HITL onay endpoint'lerinin gerçek route'ları için.

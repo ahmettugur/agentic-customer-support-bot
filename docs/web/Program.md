@@ -52,6 +52,10 @@ builder.Services.AddScoped(sp => new AuthService(
     sp.GetRequiredService<AuthTokenStore>()
 ));
 
+// ── UI Servisleri ────────────────────────────────────────────────────────────
+builder.Services.AddScoped<ToastService>();
+builder.Services.AddScoped<ThemeService>();
+
 // ── API Servisleri ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<AdminApiService>();
 builder.Services.AddScoped<AnalyticsApiService>();
@@ -142,36 +146,48 @@ Fire-and-forget task exception'larını browser console'a yazar, uygulamanın cr
 
 ## App.razor
 
-Root component — routing + auth state cascade.
+Root component — routing + auth state cascade + hata sınırı (`ErrorBoundary`).
 
 ```razor
 <CascadingAuthenticationState>
-    <Router AppAssembly="@typeof(App).Assembly">
+    <Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
         <Found Context="routeData">
-            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(EmptyLayout)">
-                <NotAuthorized>
-                    <RedirectToLogin />
-                </NotAuthorized>
-                <Authorizing>
-                    <p>Yetkilendiriliyor…</p>
-                </Authorizing>
-            </AuthorizeRouteView>
+            <ErrorBoundary @ref="_errorBoundary">
+                <ChildContent>
+                    <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                        <NotAuthorized>
+                            <RedirectToLogin />
+                        </NotAuthorized>
+                        <Authorizing>
+                            <p class="muted" style="padding:2rem;">Yetkilendiriliyor…</p>
+                        </Authorizing>
+                    </AuthorizeRouteView>
+                    <FocusOnNavigate RouteData="@routeData" Selector="h1"/>
+                </ChildContent>
+                <ErrorContent Context="ex">
+                    <!-- Beklenmeyen exception yakalanır: hata mesajı + stack trace + "Sayfayı Yenile" / "Hatayı Kapat" -->
+                </ErrorContent>
+            </ErrorBoundary>
         </Found>
-        <NotFound>
-            <LayoutView Layout="@typeof(EmptyLayout)">
-                <NotFound />
-            </LayoutView>
-        </NotFound>
     </Router>
 </CascadingAuthenticationState>
+
+@code {
+    private ErrorBoundary? _errorBoundary;
+    private void ResetError() => _errorBoundary?.Recover();
+}
 ```
+
+`<NotFound>` bloğu (`Router`'ın eski çocuk elementi) kullanılmaz — `Router`'ın `NotFoundPage="typeof(Pages.NotFound)"` attribute'u ile `/not-found` route'una (`@layout MainLayout`) yönlendirilir. `DefaultLayout` **`MainLayout`**'tur, `EmptyLayout` değil — `@layout` direktifi olmayan sayfalar (örn. `NotFound`) buraya düşer; `Chat`/`Login` kendi `@layout EmptyLayout` direktifleriyle bunu ezer.
 
 | Element | Görev |
 |---|---|
 | `CascadingAuthenticationState` | `AuthenticationState`'i tüm component tree'ye yayar |
+| `ErrorBoundary` | Component tree'de yakalanmamış exception'ları render hatasına dönüştürmeden yakalar |
 | `AuthorizeRouteView` | `[Authorize]` route'ları kontrol eder |
 | `NotAuthorized` | Yetki yoksa `RedirectToLogin` |
 | `Authorizing` | Token check ederken kısa loading state |
+| `FocusOnNavigate` | Sayfa geçişinde `h1`'e klavye odağı taşır (erişilebilirlik) |
 
 ---
 

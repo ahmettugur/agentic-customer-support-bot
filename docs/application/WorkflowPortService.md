@@ -1,6 +1,6 @@
 # WorkflowPortService
 
-**Dosya:** `Services/WorkflowPortService.cs`  
+**Dosya:** `Services/Workflow/WorkflowPortService.cs`  
 **Implements:** `IWorkflowPort`  
 **Yaşam döngüsü:** Singleton
 
@@ -86,14 +86,18 @@ Belirtilen workflow'u test input'u ile çalıştırır.
 ```csharp
 public class WorkflowDefinition
 {
-    string Id;
+    string Id;                                  // Slug — URL ve API'lerde stabil ID
     string Name;
     string Description;
+    int Version;
     bool IsActive;
-    Dictionary<string, string> InputPatterns;  // varName → regex pattern
+    string? StartStepId;                        // Graf başlangıç node'u (null → Steps[0])
+    List<string> TriggerKeywords;                // Persist edilir; chat pipeline'ında henüz kullanılmaz
+    Dictionary<string, string> InputPatterns;    // varName → regex pattern
     List<WorkflowStep> Steps;
+    DateTime CreatedAt;
+    DateTime UpdatedAt;
     string? UpdatedBy;
-    DateTime? UpdatedAt;
 }
 ```
 
@@ -103,7 +107,7 @@ public class WorkflowDefinition
 |-----|---------|
 | `Respond` | `{varName}` placeholder'lı şablon metin üretir |
 | `Lookup` | Tool çağrısı yapar, sonucu variable olarak saklar |
-| `Branch` | Koşul değerlendirip `SkipNext` adımı atlar |
+| `Branch` | Koşulu değerlendirip `OnTrue` veya `OnFalse` node ID'sine dallanır |
 | `SetVariable` | Değişken set eder |
 
 ---
@@ -125,9 +129,12 @@ Detaylı bilgi için bkz. [WorkflowExecutor.md](WorkflowExecutor.md).
 ## API endpoint'leri
 
 ```http
-GET    /workflow              → GetAll
-GET    /workflow/{id}         → Get
-POST   /workflow              → Upsert
-DELETE /workflow/{id}         → Delete
-POST   /workflow/{id}/test    → Test
+GET    /workflows             → GetAll
+GET    /workflows/{id}        → Get
+POST   /workflows             → Upsert (yeni kayıt)
+PUT    /workflows/{id}        → Upsert (id ile günceller)
+DELETE /workflows/{id}        → Delete
+POST   /workflows/{id}/test   → Test
 ```
+
+Tüm endpoint'ler `Admin` yetkilendirme politikası altında kayıtlıdır (bkz. `Program.cs` — `adminScope.MapWorkflowEndpoints()`).

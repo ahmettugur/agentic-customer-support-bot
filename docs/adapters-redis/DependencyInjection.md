@@ -102,20 +102,13 @@ public sealed class RedisOptions
 | Alan | Default | Açıklama |
 |---|---|---|
 | `ConnectionString` | `null` | StackExchange.Redis bağlantı dizisi |
-| `KeyPrefix` | `"csbot"` | Multi-tenant ortamda key çakışmasını önler |
+| `KeyPrefix` | `"csbot"` | ⚠️ **Ölü config** — okunur ama hiçbir Redis adapter'ında (`RedisDistributedLockAdapter`, `RedisMessageBusAdapter`) kullanılmaz |
 | `DefaultLockTimeoutSeconds` | `10` | Lock alımı için max bekleme süresi |
 | `LockExpirySeconds` | `30` | Lock otomatik serbest bırakma süresi (deadlock koruma) |
 
-### KeyPrefix neden?
+### KeyPrefix — şu an etkisiz
 
-Birden fazla uygulama aynı Redis instance'ı paylaşıyorsa key'ler ayrıştırılmalı:
-
-```
-csbot:approval:decide:abc123      ← uygulama 1
-otherapp:approval:decide:abc123   ← uygulama 2
-```
-
-`KeyPrefix` lock anahtarlarının başına eklenir — `RedisDistributedLockAdapter` bunu kullanır.
+`RedisDistributedLockAdapter`'ın constructor'ı yalnızca `IConnectionMultiplexer` ve `ILogger` alır; `RedisOptions`'ı hiç inject etmez. `KeyPrefix` alanı config'te ve `RedisOptions` sınıfında tanımlı olsa da lock veya pub/sub key'lerinin başına eklenmez — çok kiracılı (multi-tenant) bir Redis instance paylaşımında key çakışmasını önlemez.
 
 ### LockExpirySeconds neden 30s?
 

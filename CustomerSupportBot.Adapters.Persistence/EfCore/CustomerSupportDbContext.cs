@@ -10,7 +10,6 @@ using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Improvement;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Personalization;
-using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Workflow;
 using Microsoft.EntityFrameworkCore;
 
 namespace CustomerSupportBot.Adapters.Persistence.EfCore;
@@ -49,9 +48,6 @@ public sealed class CustomerSupportDbContext : DbContext
 
     // ─── improvement schema ───
     public DbSet<LessonEntity> Lessons => Set<LessonEntity>();
-
-    // ─── workflow schema ───
-    public DbSet<WorkflowDefinitionEntity> WorkflowDefinitions => Set<WorkflowDefinitionEntity>();
 
     // ─── analytics schema (sla) ───
     public DbSet<SlaEventEntity> SlaEvents => Set<SlaEventEntity>();

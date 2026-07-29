@@ -106,8 +106,10 @@ CustomerSupportBot.Web/
 | `/traces` | Traces | AdminLayout | Admin/Agent |
 | `/replay` | Replay | AdminLayout | Admin/Agent |
 | `/sla` | Sla | AdminLayout | Admin/Agent |
-| `/workflow-designer` | WorkflowDesigner | AdminLayout | Admin |
-| `*` | NotFound | EmptyLayout | Anonim |
+| `/workflow-designer` | WorkflowDesigner | AdminLayout | Admin/Agent |
+| `/not-found` | NotFound | MainLayout | Anonim |
+
+`NotFound.razor` sabit bir `/not-found` route'una sahiptir; wildcard bir `*` route değildir — eşleşmeyen path'ler `App.razor`'daki `<Router NotFoundPage="typeof(Pages.NotFound)">` attribute'u üzerinden buraya yönlendirilir.
 
 `[Authorize]` attribute fail → `RedirectToLogin` çağırılır → `?return=...` query param ile login'e yönlenir.
 

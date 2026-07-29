@@ -166,7 +166,7 @@ private void PersistAsync(string model, long input, long output, decimal cost, d
 - Exception swallow → DB sorunu LLM çağrısını çökertmez
 - Detay/audit için `analytics.llm_call_usages` tablosuna yazılır
 
-InMemory provider'da `_persistence` null — sadece OTLP + in-memory store çalışır.
+`ILlmCallPersistencePort` opsiyonel bir bağımlılıktır (`sp.GetService<...>()` ile nullable alınır) — kayıtlı değilse `_persistence` null olur ve sadece OTLP + in-memory `CostUsageStore` çalışır. Pratikte `ILlmCallPersistencePort` her zaman `PostgresLlmCallUsageSink` olarak kayıtlıdır (bkz. [Persistence — Postgres vs InMemory](../adapters-persistence/README.md#postgres-vs-inmemory)); "InMemory provider" diye ayrı bir çalışma modu yoktur.
 
 ---
 

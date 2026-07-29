@@ -1,8 +1,8 @@
 # Realtime Sesli Konuşma Servisleri
 
 **Dosyalar:**  
-- `Services/RealtimeBridgeService.cs` → `IRealtimeBridge`  
-- `Services/RealtimeNativeService.cs` → `IRealtimeNativeBridge`  
+- `Services/Realtime/RealtimeBridgeService.cs` → `IRealtimeBridge`  
+- `Services/Realtime/RealtimeNativeService.cs` → `IRealtimeNativeBridge`  
 
 **Yaşam döngüsü:** **Scoped** (her WebSocket/SSE bağlantısı için ayrı instance — diğer tüm servisler Singleton)
 

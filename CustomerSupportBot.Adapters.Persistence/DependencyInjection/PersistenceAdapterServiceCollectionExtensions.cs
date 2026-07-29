@@ -41,7 +41,6 @@ public static class PersistenceAdapterServiceCollectionExtensions
         services.AddSingleton<IHumanAgentRegistry, PostgresHumanAgentRegistry>();
         services.AddSingleton<ICustomerProfileStore, PostgresCustomerProfileStore>();
         services.AddSingleton<ILessonStore, PostgresLessonStore>();
-        services.AddSingleton<IWorkflowDefinitionStore, PostgresWorkflowDefinitionStore>();
         services.AddSingleton<ISlaEventSink, PostgresSlaEventSink>();
 
         services.AddSingleton<IOrderRepository, OrderRepository>();

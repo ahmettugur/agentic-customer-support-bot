@@ -28,7 +28,7 @@ Kullanıcı sorgusu
 
 ## EntityVerifier
 
-**Dosya:** `Services/EntityVerifier.cs`  
+**Dosya:** `Services/Reasoning/EntityVerifier.cs`  
 **Tür:** Singleton, LLM çağrısı yapmaz
 
 ### Görevi
@@ -81,7 +81,7 @@ Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN, kullanıcıdan
 
 ## ReasoningMessageBuilder
 
-**Dosya:** `Services/ReasoningMessageBuilder.cs`  
+**Dosya:** `Services/Reasoning/ReasoningMessageBuilder.cs`  
 **Tür:** Singleton, LLM çağrısı yapmaz
 
 ### Görevi
@@ -113,7 +113,7 @@ Reasoning LLM'e gönderilecek mesaj listesini (`List<ConversationMessage>`) olu�
 
 ## ReasoningService
 
-**Dosya:** `Services/ReasoningService.cs`  
+**Dosya:** `Services/Reasoning/ReasoningService.cs`  
 **Implements:** `IReasoningPort`  
 **Yaşam döngüsü:** Singleton
 
@@ -149,7 +149,7 @@ Reasoning LLM'e gönderilecek mesaj listesini (`List<ConversationMessage>`) olu�
 
 ## ReasoningSanityChecker
 
-**Dosya:** `Services/ReasoningSanityChecker.cs`  
+**Dosya:** `Services/Reasoning/ReasoningSanityChecker.cs`  
 **Tür:** Singleton, LLM çağrısı yapmaz
 
 ### Görevi

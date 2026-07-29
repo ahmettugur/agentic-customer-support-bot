@@ -73,7 +73,6 @@ adminScope.MapImprovementsEndpoints();
 adminScope.MapTelemetryEndpoints();
 adminScope.MapPersonalizationEndpoints();
 adminScope.MapAgentsEndpoints();
-adminScope.MapWorkflowEndpoints();
 adminScope.MapSlaEndpoints();
 
 var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent");

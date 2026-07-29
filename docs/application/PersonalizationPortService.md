@@ -1,6 +1,6 @@
 # PersonalizationPortService
 
-**Dosya:** `Services/PersonalizationPortService.cs`  
+**Dosya:** `Services/Personalization/PersonalizationPortService.cs`  
 **Implements:** `IPersonalizationPort`  
 **Yaşam döngüsü:** Singleton
 

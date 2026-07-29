@@ -1,6 +1,6 @@
 # ChatPortService
 
-**Dosya:** `CustomerSupportBot.Application/Services/ChatPortService.cs`  
+**Dosya:** `Services/Chat/ChatPortService.cs`  
 **Implements:** `IChatPort`  
 **Yaşam döngüsü:** Singleton
 

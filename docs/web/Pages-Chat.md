@@ -79,6 +79,7 @@ protected override async Task OnAfterRenderAsync(bool firstRender)
 - `OnStreamComplete()` — yanıt tamamlandı
 - `VoiceSendMessage(string text)` — voice transcript
 - `VoiceTranscript(string text)` — kullanıcının söylediği
+- `VoiceSetSession(string id)` — realtime-ui.js session id'yi bildirir; bu, `_startPersistentEvents(sid)` JS çağrısını tetikleyen gerçek mekanizmadır (bkz. [JsInterop.md](JsInterop.md))
 - `OnPersistentEvent(string type, string data)` — handoff/human event
 
 ---

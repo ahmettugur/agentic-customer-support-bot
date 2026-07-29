@@ -1,6 +1,6 @@
 # SessionPortService
 
-**Dosya:** `Services/SessionPortService.cs`  
+**Dosya:** `Services/Chat/SessionPortService.cs`  
 **Implements:** `ISessionPort`  
 **Yaşam döngüsü:** Singleton
 
@@ -21,16 +21,18 @@ Session CRUD işlemlerini API katmanına sunar. `ISessionManager` driven port'un
 
 ## Metodlar
 
+Yalnızca `MutateStateAsync` gerçekten async'tir; geri kalan tümü **senkrondur** (`Async` son eki taşımaz, `Task`/`CancellationToken` almaz).
+
 | Metod | Delegasyon | Açıklama |
 |-------|-----------|---------|
-| `GetOrCreateSessionAsync` | `ISessionManager.GetOrCreate` | SessionId ile session getirir veya yeni oluşturur |
-| `GetSessionAsync` | `ISessionManager.Get` | Tekil session; yoksa `null` |
-| `UpdateSessionAsync` | `ISessionManager.Update` | Session state'ini günceller |
-| `GetAllSessionsAsync` | `ISessionManager.GetAll` | Tüm session listesi |
-| `GetHistoryAsync` | `ISessionManager.GetHistory` | Session konuşma geçmişi |
-| `AddExchangeAsync` | `ISessionManager.AppendExchange` | Kullanıcı-bot mesaj çifti ekler |
-| `ExtractAndUpdateStateAsync` | `ISessionManager.ExtractAndUpdateState` | Session'dan state çıkarır ve günceller |
-| `MutateStateAsync` | `ISessionManager.MutateState` | Delegate ile state mutasyonu |
+| `GetOrCreateSession` | `ISessionManager.GetOrCreate` | SessionId ile session getirir veya yeni oluşturur |
+| `GetSession` | `ISessionManager.Get` | Tekil session; yoksa `null` |
+| `UpdateSession` | `ISessionManager.Update` | Session state'ini günceller |
+| `GetAllSessions` | `ISessionManager.GetAll` | Tüm session listesi |
+| `GetHistory` | `ISessionManager.GetHistory` | Session konuşma geçmişi |
+| `AddExchange` | `ISessionManager.AddExchange` | Kullanıcı-bot mesaj çifti ekler |
+| `ExtractAndUpdateState` | `ISessionManager.ExtractAndUpdateState` | Session'dan state çıkarır ve günceller |
+| `MutateStateAsync(sessionId, Action<SessionState> mutator, CancellationToken ct = default)` | — | Delegate ile state mutasyonu (tek gerçek async metod) |
 
 ---
 
@@ -68,8 +70,9 @@ public class SessionState
 ## API endpoint'leri
 
 ```http
-GET    /sessions               → GetAllSessionsAsync
-GET    /sessions/{id}          → GetSessionAsync
-GET    /sessions/{id}/history  → GetHistoryAsync
-DELETE /sessions/{id}          → (ISessionManager.Delete doğrudan)
+GET /sessions/                  → GetAllSessions
+GET /sessions/{sessionId}/messages → GetHistory
+GET /sessions/{sessionId}/state    → session state
 ```
+
+> ⚠️ Bu endpoint'ler (`SessionEndpoints.cs`) `Program.cs`'te **hiçbir `RequireAuthorization` grubuna dahil değildir** — kimlik doğrulaması ve rate limit olmadan herkese açıktır. Detay için [Endpoints-Chat.md](../api/Endpoints-Chat.md).

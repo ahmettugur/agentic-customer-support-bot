@@ -1,6 +1,6 @@
 # SubTaskOrchestrator
 
-**Dosya:** `CustomerSupportBot.Application/Services/SubTaskOrchestrator.cs`  
+**Dosya:** `Services/Reasoning/SubTaskOrchestrator.cs`  
 **Tür:** `public class` (tüm metotlar static)  
 **Yaşam döngüsü:** Singleton (DI'da kayıtlı, ama state taşımaz)
 

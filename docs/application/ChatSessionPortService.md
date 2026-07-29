@@ -1,8 +1,10 @@
 # ChatSessionPortService
 
-**Dosya:** `Services/ChatSessionPortService.cs`  
+**Dosya:** `Services/Chat/ChatSessionPortService.cs`  
 **Implements:** `IChatSessionPort`  
 **Yaşam döngüsü:** Singleton
+
+> Metodların çoğu **senkrondur** ve `Task`/`CancellationToken` yerine sonuç-record'ları (`ChatSessionTakeoverResult`, `ChatSessionReleaseResult`, `ChatSessionMessageResult`, `ChatSessionReplanResult`) döner — hata durumları exception yerine `ErrorCode`/`ErrorMessage` alanlarıyla taşınır.
 
 ## Ne yapar?
 
@@ -55,67 +57,67 @@ Session'ın güncel sentiment'ini döner (Positive / Neutral / Negative).
 
 ---
 
-### `TakeOverAsync`
+### `TakeOver`
 
 ```csharp
-Task TakeOverAsync(string sessionId, string agentId, CancellationToken ct = default)
+ChatSessionTakeoverResult TakeOver(string sessionId, string humanAgent, string? agentId = null)
 ```
 
-Human agent oturumu devralır.
+Human agent oturumu devralır. Senkron; sonucu `ChatSessionTakeoverResult` (`Success`, `ErrorCode`, `ErrorMessage`) olarak döner — exception fırlatmaz.
 
 **Akış:**
 ```
-1. IChatModeRegistry.SetMode(sessionId, Human, agentId)
-2. IEscalationSink.GetOpen(sessionId) → açık eskalasyonları "Acknowledged" durumuna getir
-3. IHumanAgentRegistry.IncrementLoad(agentId)
+1. IChatModeRegistry.TakeOver(sessionId, humanAgent)
+2. IEscalationSink.GetOpen() içinden bu session'a ait açıkları "Acknowledged" durumuna getir
+3. IHumanAgentRegistry.IncrementLoad(agentId)  (agentId verilmişse)
 ```
 
 ---
 
-### `ReleaseAsync`
+### `Release`
 
 ```csharp
-Task ReleaseAsync(string sessionId, string agentId, CancellationToken ct = default)
+ChatSessionReleaseResult Release(string sessionId, string? agentId = null)
 ```
 
-Human agent oturumu bırakır.
+Human agent oturumu bırakır. Senkron; sonuç `ChatSessionReleaseResult`.
 
 **Akış:**
 ```
-1. IChatModeRegistry.SetMode(sessionId, Bot, null)
-2. IEscalationSink.GetOpen(sessionId) → açık eskalasyonları "Resolved" yap
-3. IHumanAgentRegistry.DecrementLoad(agentId)
+1. IChatModeRegistry.Release(sessionId)
+2. IEscalationSink.GetOpen() içinden bu session'a ait açıkları "Resolved" yap
+3. IHumanAgentRegistry.DecrementLoad(agentId)  (agentId verilmişse)
 4. IChatBridge.PublishSystemMessage(sessionId, "Temsilci bağlantısı kesildi. Bot devreye alındı.")
 ```
 
 ---
 
-### `SendAdminMessageAsync`
+### `SendAdminMessage`
 
 ```csharp
-Task SendAdminMessageAsync(string sessionId, string agentId, string text, CancellationToken ct = default)
+ChatSessionMessageResult SendAdminMessage(string sessionId, string humanAgent, string text)
 ```
 
-Admin panelinden müşteriye mesaj gönderir.
+Admin panelinden müşteriye mesaj gönderir. Senkron.
 
-**Önkoşul:** Session'ın modu `Human` olmalı. Bot modunda çağrılırsa exception fırlatır.
+**Önkoşul:** Session'ın modu `Human` olmalı. Değilse **exception fırlatmaz** — `ChatSessionMessageResult.ErrorCode = "invalid_state"` döner. `text` boşsa `ErrorCode = "invalid_input"`.
 
 **Akış:**
 ```
-1. IChatModeRegistry.GetMode(sessionId) → Human değilse exception
-2. ISessionManager.AppendMessage(sessionId, role=Agent, label=agentId, text)
-3. IChatBridge.PublishAgentMessage(sessionId, agentId, text)
+1. IChatModeRegistry.GetMode(sessionId) → Human değilse ErrorCode="invalid_state" ile dön
+2. ISessionManager üzerinden mesajı kaydet
+3. IChatBridge.PublishAgentMessage(sessionId, humanAgent, text)
 ```
 
 ---
 
-### `ReplanSessionAsync`
+### `ReplanSession`
 
 ```csharp
-Task ReplanSessionAsync(string sessionId, string? note, CancellationToken ct = default)
+ChatSessionReplanResult ReplanSession(string sessionId, string requestedBy, string? note)
 ```
 
-Admin note ile (veya son kullanıcı mesajıyla) bot'u yeniden planlama tetikler.
+Admin note ile (veya son kullanıcı mesajıyla) bot'u yeniden planlama tetikler. Senkron; `requestedBy` zorunludur (audit için).
 
 **Akış:**
 ```
@@ -128,13 +130,13 @@ Admin note ile (veya son kullanıcı mesajıyla) bot'u yeniden planlama tetikler
 
 ---
 
-### `ReplanEscalationAsync`
+### `ReplanEscalation`
 
 ```csharp
-Task ReplanEscalationAsync(string sessionId, string escalationId, string? note, CancellationToken ct = default)
+ChatSessionReplanResult ReplanEscalation(string escalationId, string requestedBy, string? note)
 ```
 
-Belirli eskalasyonu çözer ve ardından `ReplanSessionAsync` çağırır.
+`sessionId` almaz — ilgili session, eskalasyon kaydından türetilir. Belirli eskalasyonu çözer ve ardından `ReplanSession` çağırır.
 
 ---
 
@@ -161,24 +163,24 @@ Atanmış agent olmayan veya süresi dolmuş açık eskalasyonları kapatır.
 ```
 Admin paneli                ChatSessionPortService              Persistence
 ────────────────────────────────────────────────────────────────────────────
-TakeOver(sessionId, agentId) →
-                               SetMode(Human, agentId)   → ChatModeRegistry
-                               AcknowledgeEscalations()  → EscalationSink
-                               IncrementLoad(agentId)    → HumanAgentRegistry
+TakeOver(sessionId, humanAgent) →
+                               TakeOver(sessionId, humanAgent) → ChatModeRegistry
+                               AcknowledgeEscalations()        → EscalationSink
+                               IncrementLoad(agentId)          → HumanAgentRegistry
 
-SendAdminMessage(text)      →
-                               AppendMessage()           → SessionManager
-                               PublishAgentMessage()     → ChatBridge → Müşteri
+SendAdminMessage(text)       →
+                               kaydet                          → SessionManager
+                               PublishAgentMessage()            → ChatBridge → Müşteri
 
-Release(sessionId, agentId) →
-                               SetMode(Bot, null)        → ChatModeRegistry
-                               ResolveEscalations()      → EscalationSink
-                               DecrementLoad(agentId)    → HumanAgentRegistry
-                               PublishSystemMessage()    → ChatBridge → Müşteri
+Release(sessionId, agentId)  →
+                               Release(sessionId)               → ChatModeRegistry
+                               ResolveEscalations()             → EscalationSink
+                               DecrementLoad(agentId)            → HumanAgentRegistry
+                               PublishSystemMessage()            → ChatBridge → Müşteri
 ```
 
 ---
 
 ## Yeni bir TakeOver senaryosu eklemek
 
-Oturumu devralmada özel iş mantığı gerekiyorsa `TakeOverAsync` içindeki adımlara müdahale edin — örneğin bir CRM sistemine bildirim göndermek için `IChatBridge` benzer arayüzde yeni bir metot sağlayabilir.
+Oturumu devralmada özel iş mantığı gerekiyorsa `TakeOver` içindeki adımlara müdahale edin — örneğin bir CRM sistemine bildirim göndermek için `IChatBridge` benzer arayüzde yeni bir metot sağlayabilir.

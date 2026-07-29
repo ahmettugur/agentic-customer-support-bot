@@ -1,6 +1,8 @@
 # CustomerSupportBot.Adapters.Persistence — Genel Bakış
 
-Application katmanının **driven port** sözleşmelerini (ISessionManager, IApprovalQueue, vb.) implement eden persistence adaptör katmanıdır. İki persistence backend (InMemory ve Postgres), auth altyapısı ve dosya sistemi adaptörlerini içerir.
+Application katmanının **driven port** sözleşmelerini (ISessionManager, IApprovalQueue, vb.) implement eden persistence adaptör katmanıdır. Auth altyapısı ve dosya sistemi adaptörlerini de içerir.
+
+> ⚠️ Üretimde çalışan tek backend **Postgres**'tir. `InMemory/` altında 13 adapter sınıfı mevcuttur ve testlerde kullanılır, ancak `PersistenceOptions.Provider` enum'u yalnızca `Postgres` değerine sahiptir — `PersistenceAdapterServiceCollectionExtensions.AddPersistenceAdapters` hiçbir koşula bağlı kalmadan sadece Postgres implementasyonlarını kaydeder. Runtime'da seçilebilen bir "InMemory modu" yoktur.
 
 ---
 
@@ -32,7 +34,7 @@ CustomerSupportBot.Adapters.Persistence/
 ├── EfCore/
 │   ├── CustomerSupportDbContext.cs     ← EF Core DbContext (9 şema)
 │   ├── PersistenceHydrator.cs          ← Startup kurtarma (IHostedService)
-│   ├── PersistenceOptions.cs           ← InMemory/Postgres seçimi
+│   ├── PersistenceOptions.cs           ← Provider ayarı (şu an yalnızca Postgres)
 │   ├── PersistenceServiceCollectionExtensions.cs
 │   ├── DesignTimeDbContextFactory.cs   ← migration üretimi için
 │   ├── Schemas.cs                      ← şema sabitleri
@@ -74,46 +76,45 @@ CustomerSupportBot.Adapters.Persistence/
 
 ---
 
-## İki backend karşılaştırması
+## Postgres vs InMemory
 
-| Özellik | InMemory | Postgres |
-|---------|----------|---------|
-| Kalıcılık | Yok (restart'ta sıfırlanır) | EF Core + Npgsql |
-| Pub/Sub | Yok (işlem içi) | Redis (opsiyonel) |
-| Yatay ölçekleme | Desteklenmez | Desteklenir |
-| Dağıtık lock | Yok | Redis `IAppDistributedLock` |
-| Startup kurtarma | Yok | `PersistenceHydrator` |
-| Kullanım | Geliştirme / test | Üretim |
-
-`appsettings.json` → `Persistence.Provider = "InMemory" | "Postgres"` ile seçilir.
+| Özellik | Postgres (üretimde kayıtlı olan) | InMemory (yalnızca testlerde kullanılır) |
+|---------|---------|----------|
+| Kalıcılık | EF Core + Npgsql | Yok (process sonlanınca sıfırlanır) |
+| Yatay ölçekleme | Desteklenir | — |
+| Dağıtık lock | Redis `IAppDistributedLock` | — |
+| Startup kurtarma | `PersistenceHydrator` | — |
+| DI'da nasıl seçilir | `AddPersistenceAdapters` içinde koşulsuz kayıtlıdır | Yalnızca test projelerinde `new InMemoryXxx(...)` ile elle örneklenir |
 
 ---
 
 ## Port → Adapter eşleme
 
-| Driven Port | InMemory | Postgres |
+Aşağıdaki tablo **üretimde gerçekten kayıtlı olan** (Postgres) implementasyonları gösterir. "InMemory" sütunu, testlerde kullanılabilen — ama runtime'da bir config anahtarıyla seçilemeyen — karşılıkları listeler.
+
+| Driven Port | Postgres (kayıtlı) | InMemory (yalnızca test) |
 |------------|---------|---------|
-| `ISessionManager` | `InMemorySessionManager` | `PostgresSessionManager` |
-| `IApprovalQueue` | `InMemoryApprovalQueue` | `PostgresApprovalQueue` |
-| `IChatBridge` | `InMemoryChatBridge` | `PostgresChatBridge` |
-| `IChatModeRegistry` | `InMemoryChatModeRegistry` | `PostgresChatModeRegistry` |
-| `IEscalationSink` | `InMemoryEscalationSink` | `PostgresEscalationSink` |
-| `IHumanAgentRegistry` | `InMemoryHumanAgentRegistry` | `PostgresHumanAgentRegistry` |
-| `IOrderRepository` | — | `OrderRepository` |
-| `ICustomerRepository` | — | `CustomerRepository` |
-| `IComplaintRepository` | — | `ComplaintRepository` |
-| `IProductCatalogRepository` | — | `ProductCatalogRepository` |
-| `IRatingStore` | `InMemoryRatingStore` | `PostgresRatingStore` |
-| `IReasoningTraceStore` | `InMemoryReasoningTraceStore` | `PostgresReasoningTraceStore` |
-| `ISlaEventSink` | `InMemorySlaEventSink` | `PostgresSlaEventSink` |
-| `ILessonStore` | `InMemoryLessonStore` | `PostgresLessonStore` |
-| `IWorkflowDefinitionStore` | `InMemoryWorkflowDefinitionStore` | `PostgresWorkflowDefinitionStore` |
-| `ICustomerProfileStore` | `InMemoryCustomerProfileStore` | `PostgresCustomerProfileStore` |
-| `IMessageBusPort` | `InMemoryMessageBusAdapter` | — (Redis ayrı adapter) |
-| `ILlmCallPersistencePort` | — | `PostgresLlmCallUsageSink` |
-| `IPasswordHasher` | — | `BCryptPasswordHasher` |
-| `IJwtAccessTokenProvider` | — | `JwtAccessTokenProvider` |
-| `IRefreshTokenRepository` | — | `EfRefreshTokenRepository` |
-| `IUserAuthRepository` | — | `EfUserAuthRepository` |
-| `IPromptRepository` | `FileSystemPromptRepository` | `FileSystemPromptRepository` |
-| `IKnowledgeBaseSource` | `FileSystemKnowledgeBaseSource` | `FileSystemKnowledgeBaseSource` |
+| `ISessionManager` | `PostgresSessionManager` | `InMemorySessionManager` |
+| `IApprovalQueue` | `PostgresApprovalQueue` | `InMemoryApprovalQueue` |
+| `IChatBridge` | `PostgresChatBridge` | `InMemoryChatBridge` |
+| `IChatModeRegistry` | `PostgresChatModeRegistry` | `InMemoryChatModeRegistry` |
+| `IEscalationSink` | `PostgresEscalationSink` | `InMemoryEscalationSink` |
+| `IHumanAgentRegistry` | `PostgresHumanAgentRegistry` | `InMemoryHumanAgentRegistry` |
+| `IOrderRepository` | `OrderRepository` | — |
+| `ICustomerRepository` | `CustomerRepository` | — |
+| `IComplaintRepository` | `ComplaintRepository` | — |
+| `IProductCatalogRepository` | `ProductCatalogRepository` | — |
+| `IRatingStore` | `PostgresRatingStore` | `InMemoryRatingStore` |
+| `IReasoningTraceStore` | `PostgresReasoningTraceStore` | `InMemoryReasoningTraceStore` |
+| `ISlaEventSink` | `PostgresSlaEventSink` | `InMemorySlaEventSink` |
+| `ILessonStore` | `PostgresLessonStore` | `InMemoryLessonStore` |
+| `IWorkflowDefinitionStore` | `PostgresWorkflowDefinitionStore` | `InMemoryWorkflowDefinitionStore` |
+| `ICustomerProfileStore` | `PostgresCustomerProfileStore` | `InMemoryCustomerProfileStore` |
+| `IMessageBusPort` | — (Redis ayrı adapter, `Adapters.Redis`) | `InMemoryMessageBusAdapter` |
+| `ILlmCallPersistencePort` | `PostgresLlmCallUsageSink` | — |
+| `IPasswordHasher` | `BCryptPasswordHasher` | — |
+| `IJwtAccessTokenProvider` | `JwtAccessTokenProvider` | — |
+| `IRefreshTokenRepository` | `EfRefreshTokenRepository` | — |
+| `IUserAuthRepository` | `EfUserAuthRepository` | — |
+| `IPromptRepository` | `FileSystemPromptRepository` (provider'dan bağımsız) | — |
+| `IKnowledgeBaseSource` | `FileSystemKnowledgeBaseSource` (provider'dan bağımsız) | — |

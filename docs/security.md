@@ -131,9 +131,9 @@ Default CORS policy tüm origin, method ve header'lara izin verir (`AllowAnyOrig
 
 ```
 Kullanıcı mesajı → InputGuard.Inspect(query)
-    ├── Verdict: Pass    → sanitized input ile devam
-    ├── Verdict: Flagged → log + sanitized input ile devam (flagler kaydedilir)
-    └── Verdict: Reject  → 400 Bad Request (input_blocked)
+    ├── Verdict: Allow    → sanitized input ile devam
+    ├── Verdict: Sanitize → tanımlı ama Inspect() tarafından hiç üretilmiyor (ölü dal)
+    └── Verdict: Reject   → 400 Bad Request (input_blocked)
 ```
 
 ### Kontrol Edilen Alanlar

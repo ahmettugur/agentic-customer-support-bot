@@ -127,19 +127,21 @@ Bu metod, `needs_escalation` durumundaki trace'leri tespit eder ve escalation si
 
 ## `ApprovalOptions` yapılandırması
 
-`appsettings.json` → `Approval:` bölümü:
+`appsettings.json` → `HumanInTheLoop:` bölümü:
 
 ```json
 {
   "HumanInTheLoop": {
     "Enabled": true,
-    "TimeoutSeconds": 60,
     "ToolsRequiringApproval": [
       "order_placement_tool",
       "order_cancel_tool",
       "return_request_tool",
       "complaint_registration_tool"
-    ]
+    ],
+    "TimeoutSeconds": 60,
+    "AutoApproveOnTimeout": false,
+    "EscalationEnabled": true
   }
 }
 ```
@@ -147,8 +149,10 @@ Bu metod, `needs_escalation` durumundaki trace'leri tespit eder ve escalation si
 | Ayar | Açıklama |
 |------|---------|
 | `Enabled` | `false` ise tüm tool'lar otomatik onaylanır (geliştirme ortamı için) |
-| `TimeoutSeconds` | Onay kuyrukta bekleme süresi |
 | `ToolsRequiringApproval` | Hangi tool'ların onay gerektirdiği listesi |
+| `TimeoutSeconds` | Onay kuyrukta bekleme süresi |
+| `AutoApproveOnTimeout` | Timeout'ta otomatik onayla mı, reddet mi |
+| `EscalationEnabled` | Timeout/red durumunda eskalasyon oluşturulsun mu |
 
 > **Dikkat:** Production'da `Enabled: false` olmamalı. `Program.cs` başlangıçta bunu kontrol eder ve `LogCritical` yazar.
 

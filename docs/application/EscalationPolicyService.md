@@ -1,6 +1,6 @@
 # EscalationPolicyService
 
-**Dosya:** `CustomerSupportBot.Application/Services/EscalationPolicyService.cs`  
+**Dosya:** `Services/Escalation/EscalationPolicyService.cs`  
 **Yaşam döngüsü:** Singleton
 
 ## Ne yapar?

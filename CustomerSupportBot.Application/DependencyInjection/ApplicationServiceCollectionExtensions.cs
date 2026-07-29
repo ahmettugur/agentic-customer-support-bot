@@ -19,7 +19,6 @@ using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Application.Services.Routing;
 using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Application.Services.UiHint;
-using CustomerSupportBot.Application.Services.Workflow;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -78,7 +77,6 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IHumanAgentPort, HumanAgentPortService>();
         services.AddSingleton<IImprovementsPort, ImprovementsPortService>();
         services.AddSingleton<IPersonalizationPort, PersonalizationPortService>();
-        services.AddSingleton<IWorkflowPort, WorkflowPortService>();
         services.AddSingleton<ISlaPort, SlaPortService>();
     }
 
@@ -126,7 +124,6 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ICustomerProfileService>(sp => sp.GetRequiredService<CustomerSupportBot.Application.Services.Personalization.CustomerProfileService>());
         services.AddSingleton<ISkillsBasedRouter, CustomerSupportBot.Application.Services.Routing.SkillsBasedRouter>();
         services.AddSingleton<EscalationPolicyService>();
-        services.AddSingleton<CustomerSupportBot.Application.Services.Workflow.WorkflowExecutor>();
     }
 
     private static void AddMemoryServices(this IServiceCollection services, IConfiguration configuration)

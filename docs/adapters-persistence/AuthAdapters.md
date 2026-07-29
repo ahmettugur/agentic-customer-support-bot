@@ -50,6 +50,7 @@ JWT access token üretir. `JwtOptions` yapılandırmasından signing key ve ayar
 | `name` | `user.Username` |
 | `role` | `user.Role` |
 | `linked_agent_id` | `user.LinkedAgentId` (varsa) |
+| `jti` | `JwtRegisteredClaimNames.Jti` — her token için benzersiz Guid |
 | `iat` | Issue time |
 | `exp` | `issuedAt + AccessTokenMinutes` |
 
@@ -62,14 +63,16 @@ JWT access token üretir. `JwtOptions` yapılandırmasından signing key ve ayar
 ```json
 {
   "Jwt": {
-    "Secret": "minimum-32-karakter-gizli-anahtar!!!",
+    "SigningKey": "minimum-32-karakter-gizli-anahtar!!!",
     "Issuer": "CustomerSupportBot",
-    "Audience": "CustomerSupportBotUsers",
+    "Audience": "CustomerSupportBot",
     "AccessTokenMinutes": 60,
-    "RefreshTokenDays": 30
+    "RefreshTokenDays": 14
   }
 }
 ```
+
+> Config key **`Jwt:SigningKey`**'dir, `Jwt:Secret` değil. `JwtOptions` sınıfının kod içi varsayılanları `AccessTokenMinutes = 30`, `RefreshTokenDays = 14`'tür — yukarıdaki JSON `appsettings.json`'daki gerçek değerlerdir (varsayılanları override eder).
 
 ---
 

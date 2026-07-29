@@ -1,6 +1,6 @@
 # HumanAgentPortService
 
-**Dosya:** `Services/HumanAgentPortService.cs`  
+**Dosya:** `Services/Escalation/HumanAgentPortService.cs`  
 **Implements:** `IHumanAgentPort`, `IDisposable`  
 **Yaşam döngüsü:** Singleton
 
@@ -16,12 +16,15 @@ Human agent (temsilci) kaydını ve yük takibini yönetir. Temsilcilerin sistem
 |-----------|---------|
 | `IHumanAgentRegistry` | Temsilci kayıt deposu |
 | `IEscalationSink` | Eskalasyon state erişimi |
+| `ILogger<HumanAgentPortService>` | Loglama |
 
-**Constructor'da:** `IEscalationSink.RequestDecided` ve `RequestDismissed` event'lerine `_loadTrackingHandler` abone olunur. Eskalasyon çözüldüğünde veya reddedildiğinde ilgili temsilcinin yükü otomatik azaltılır.
+**Constructor'da:** yalnızca `IEscalationSink.RequestDecided` event'ine `_loadTrackingHandler` abone olunur (ayrı bir `RequestDismissed` event'i **yoktur** — dismiss durumu da `RequestDecided` üzerinden gelir). Handler, eskalasyon `Resolved` veya `Dismissed` olduğunda ilgili `SuggestedAgentId`'nin yükünü otomatik azaltır.
 
 ---
 
 ## Metodlar
+
+Sadece `GetAllMergedAsync` gerçekten async'tir; geri kalan tüm metodlar **senkrondur**.
 
 ### `GetAllMergedAsync`
 
@@ -29,52 +32,54 @@ Human agent (temsilci) kaydını ve yük takibini yönetir. Temsilcilerin sistem
 Task<IReadOnlyList<HumanAgent>> GetAllMergedAsync(CancellationToken ct = default)
 ```
 
-`IHumanAgentRegistry`'deki kayıtlı temsilciler ile linked users'ı birleştirir. Sonuç `DisplayName`'e göre sıralanır.
+`IHumanAgentRegistry.GetAll()` (kayıtlı temsilciler) ile `GetLinkedUsersAsync` (auth kullanıcılarından türetilen, kayıtlı olmayanlar) birleştirilir. Sonuç `DisplayName`'e göre sıralanır.
 
 ---
 
-### `GetAgentAsync`
-
-Tekil temsilci kaydını döner.
-
----
-
-### `CreateAgentAsync / UpdateAgentAsync / DeleteAgentAsync`
-
-CRUD işlemleri. `IHumanAgentRegistry` metodlarını çağırır.
-
----
-
-### `IncrementLoadAsync / DecrementLoadAsync`
+### `GetAgent / CreateAgent / UpdateAgent / DeleteAgent`
 
 ```csharp
-Task IncrementLoadAsync(string agentId, CancellationToken ct = default)
-Task DecrementLoadAsync(string agentId, CancellationToken ct = default)
+HumanAgent? GetAgent(string id)
+HumanAgent CreateAgent(HumanAgent agent)
+HumanAgent? UpdateAgent(string id, HumanAgentInput input)
+bool DeleteAgent(string id)
 ```
 
-Temsilcinin `CurrentLoad` sayacını artırır/azaltır. Maksimum `MaxConcurrentLoad`'u aşan increment'lar görmezden gelinir.
-
-`ChatSessionPortService.TakeOverAsync` ve `ReleaseAsync` bu metodları çağırır.
+Senkron CRUD — `IHumanAgentRegistry` metodlarına doğrudan delege eder.
 
 ---
 
-### `RerouteEscalationAsync`
+### `IncrementLoad / DecrementLoad`
 
 ```csharp
-Task RerouteEscalationAsync(
-    string escalationId,
-    string fromAgentId,
-    string toAgentId,
-    CancellationToken ct = default)
+bool IncrementLoad(string id)
+bool DecrementLoad(string id)
 ```
 
-Bir eskalasyonu eski temsilciden yeni temsilciye aktarır.
+Senkron. Temsilcinin `CurrentLoad` sayacını artırır/azaltır.
+
+> **Not:** `ChatSessionPortService.TakeOver`/`Release` bu metodları **doğrudan `IHumanAgentRegistry` üzerinden** çağırır — `HumanAgentPortService` üzerinden değil.
+
+---
+
+### `RerouteEscalation`
+
+```csharp
+RerouteResult RerouteEscalation(string escalationId, string? agentId, string? reason)
+```
+
+`public sealed record RerouteResult(EscalationRequest? Updated, string? Error);`
+
+Bir eskalasyonu eski temsilciden yeni temsilciye (veya atamayı kaldırmak için `agentId = null`) aktarır. `IEscalationSink.Reassign` diye bir metot **yoktur** — `EscalationRequest` nesnesinin `SuggestedAgentId`/`SuggestedAgentName`/`RoutingNote` alanları doğrudan mutasyona uğratılır.
 
 **Akış:**
 ```
-1. IHumanAgentRegistry.DecrementLoad(fromAgentId)
-2. IHumanAgentRegistry.IncrementLoad(toAgentId)
-3. IEscalationSink.Reassign(escalationId, toAgentId)
+1. IEscalationSink.Get(escalationId) → bulunamazsa Error="Escalation not found."
+2. agentId verilmişse IHumanAgentRegistry.Get(agentId) → bulunamazsa Error="Agent not found."
+3. Eski SuggestedAgentId varsa → DecrementLoad(eski)
+4. esc.SuggestedAgentId/SuggestedAgentName/RoutingNote güncellenir (mutasyon, in-place)
+5. Yeni agent varsa → IncrementLoad(yeni)
+6. RerouteResult(esc, null) döner
 ```
 
 ---
@@ -82,16 +87,16 @@ Bir eskalasyonu eski temsilciden yeni temsilciye aktarır.
 ## Otomatik yük azaltma
 
 ```
-IEscalationSink.RequestDecided/RequestDismissed
+IEscalationSink.RequestDecided (Status = Resolved veya Dismissed)
          │
          ▼
-_loadTrackingHandler(agentId)
+_loadTrackingHandler(esc)
          │
          ▼
-IHumanAgentRegistry.DecrementLoad(agentId)
+IHumanAgentRegistry.DecrementLoad(esc.SuggestedAgentId)
 ```
 
-Bu mekanizma sayesinde temsilci manuel olarak `Release` yapmadan eskalasyon kapanınca yük otomatik düşer. Memory leak'i önlemek için `Dispose()` metodunda event abonelikleri iptal edilir.
+Bu mekanizma sayesinde temsilci manuel olarak `Release` yapmadan eskalasyon kapanınca yük otomatik düşer.
 
 ---
 
@@ -100,8 +105,7 @@ Bu mekanizma sayesinde temsilci manuel olarak `Release` yapmadan eskalasyon kapa
 ```csharp
 public void Dispose()
 {
-    _sink.RequestDecided  -= _loadTrackingHandler;
-    _sink.RequestDismissed -= _loadTrackingHandler;
+    _escalations.RequestDecided -= _loadTrackingHandler;
 }
 ```
 
@@ -109,17 +113,4 @@ public void Dispose()
 
 ## HumanAgent modeli
 
-```csharp
-public class HumanAgent
-{
-    string Id;
-    string DisplayName;
-    IReadOnlyList<string> Skills;       // ["complaint", "order", "tr"]
-    IReadOnlyList<string> Languages;    // ["tr", "en"]
-    int CurrentLoad;
-    int MaxConcurrentLoad;
-    int Priority;                       // SkillsBasedRouter'da kullanılır
-    bool IsActive;
-    string? LinkedUserId;               // Auth user bağlantısı
-}
-```
+Bkz. [Model-Hitl.md](../domain/Model-Hitl.md#humanagent) — gerçek `HumanAgent`/`HumanAgentInput` alanları için.

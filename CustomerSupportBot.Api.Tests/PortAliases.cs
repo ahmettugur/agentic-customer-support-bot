@@ -15,7 +15,6 @@ global using InMemoryChatBridge          = CustomerSupportBot.Adapters.Persisten
 global using InMemoryCustomerProfileStore = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryCustomerProfileStore;
 global using InMemorySessionManager      = CustomerSupportBot.Adapters.Persistence.InMemory.InMemorySessionManager;
 global using InMemoryHumanAgentRegistry  = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryHumanAgentRegistry;
-global using InMemoryWorkflowDefinitionStore = CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryWorkflowDefinitionStore;
 global using InMemorySlaEventSink            = CustomerSupportBot.Adapters.Persistence.InMemory.InMemorySlaEventSink;
 
 // Auth ports

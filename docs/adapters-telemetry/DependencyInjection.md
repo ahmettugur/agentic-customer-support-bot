@@ -118,26 +118,34 @@ service.name=AnotherService                ← başka uygulama
 
 ## TelemetryChatClient kaydı (bu extension dışı!)
 
-**Önemli:** `TelemetryChatClient` bu extension'da kayıt edilmez. Onun kaydı **Composition Root** (`Api/Program.cs` veya `AiServicesExtensions.cs`) katmanında yapılır — çünkü hangi `IChatClient`'ı sarmaladığı ancak orada bilinir. `Adapters.AI` sadece asıl client'ı oluşturur; `Adapters.Telemetry` decorator sınıfını sağlar; ikisini birleştirme sorumluluğu Api katmanındadır.
+**Önemli:** `TelemetryChatClient` bu extension'da kayıt edilmez. Onun kaydı **Composition Root**'ta — `CustomerSupportBot.Api/Extensions/AiServicesExtensions.cs` (`AddAiServices`, `Program.cs` tarafından çağrılır) — yapılır, çünkü hangi `IChatClient`'ı sarmaladığı ancak orada bilinir. `Adapters.AI` sadece asıl client'ı oluşturur; `Adapters.Telemetry` decorator sınıfını sağlar; ikisini birleştirme sorumluluğu Api katmanındadır. Ayrıca `TelemetryOptions.Enabled == false` ise sarmalama hiç yapılmaz, ham `IChatClient` döner.
 
-Tipik kayıt:
+Tipik kayıt (bkz. [adapters-ai/DependencyInjection.md](../adapters-ai/DependencyInjection.md) — birebir güncel kod için):
 
 ```csharp
-// Api/Program.cs (Composition Root)
+// Api/Extensions/AiServicesExtensions.cs (Composition Root)
 services.AddSingleton<IChatClient>(sp =>
 {
-    var aiOptions = sp.GetRequiredService<IOptions<AiOptions>>().Value;
-    IChatClient inner = AiClientFactory.CreateStandardChatClient(aiOptions);
+    var options = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+    var inner = AiClientFactory.CreateStandardChatClient(options);
+    return WrapWithTelemetry(sp, inner, ResolveStandardModel(options), options.Provider.ToString());
+});
+
+private static IChatClient WrapWithTelemetry(IServiceProvider sp, IChatClient inner, string modelHint, string provider)
+{
+    var telemetryOptions = sp.GetRequiredService<IOptions<TelemetryOptions>>().Value;
+    if (!telemetryOptions.Enabled) return inner;
+
     return new TelemetryChatClient(
         inner: inner,
         costCalculator: sp.GetRequiredService<ICostCalculatorPort>(),
         usageStore: sp.GetRequiredService<CostUsageStore>(),
-        modelHint: ResolveModelHint(aiOptions),
-        provider: aiOptions.Provider.ToString().ToLowerInvariant(),
+        modelHint: modelHint,
+        provider: provider,
         logger: sp.GetRequiredService<ILogger<TelemetryChatClient>>(),
         persistence: sp.GetService<ILlmCallPersistencePort>()  // Optional
     );
-});
+}
 ```
 
 `Adapters.Telemetry` kütüphaneyi sağlar; `Adapters.AI` asıl client'ı üretir; Api katmanı ikisini birleştirir.

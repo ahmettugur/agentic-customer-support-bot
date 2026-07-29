@@ -1,103 +1,97 @@
 # HitlEventPortService
 
-**Dosya:** `Services/HitlEventPortService.cs`  
+**Dosya:** `Services/Escalation/HitlEventPortService.cs`  
 **Implements:** `IHitlEventPort`  
 **Yaşam döngüsü:** Singleton
 
 ## Ne yapar?
 
-Admin panel ve müşteri tarafı için HITL (Human-in-the-Loop) olay akışlarını sağlar. SSE (Server-Sent Events) üzerinden admin'e gerçek zamanlı bildirim gönderir. İki farklı abonelik türü sunar.
+Admin panel ve müşteri tarafı için HITL (Human-in-the-Loop) olay akışlarını sağlar. SSE (Server-Sent Events) üzerinden gerçek zamanlı bildirim gönderir. İki farklı abonelik türü sunar. API, `IAsyncEnumerable` tabanlı bir pull-model **değil** — **push/callback** tabanlıdır.
+
+---
+
+## Arayüz
+
+```csharp
+public interface IHitlEventSubscription : IDisposable;
+
+public interface IHitlEventPort
+{
+    IHitlEventSubscription Subscribe(string sessionId, Func<string, object, Task> onEvent);
+    IHitlEventSubscription SubscribeToChatEvents(string sessionId, Func<string, object, Task> onEvent);
+}
+```
+
+`IHitlEventSubscription` sadece `IDisposable`'dır — `EventStream` gibi bir property yoktur, `HitlEvent` diye bir tip de yoktur. Her olay gerçekleştiğinde `onEvent(eventType, payload)` callback'i doğrudan çağrılır (fire-and-forget, `ContinueWith` ile).
+
+---
+
+## Constructor bağımlılıkları
+
+| Bağımlılık | Açıklama |
+|-----------|---------|
+| `IApprovalQueue` | Onay event kaynağı |
+| `IEscalationSink` | Eskalasyon event kaynağı |
+| `IChatModeRegistry` | Bot↔Human mod değişikliği event kaynağı |
 
 ---
 
 ## Abonelik türleri
 
-### 1. `Subscribe` → `ApprovalEscalationSubscription`
+### 1. `Subscribe(sessionId, onEvent)` → `ApprovalEscalationSubscription`
 
 **Kullanım:** Admin panel — bir session'ın onay ve eskalasyon event'lerini dinler.
 
-```csharp
-IHitlEventSubscription Subscribe(string sessionId)
-```
+Abone olunan kaynaklar ve tetiklenen event tipleri (`StreamEventTypes`):
 
-Abone olunan event kaynakları:
-- `IApprovalPort.ApprovalDecided` — onay kararı alındı
-- `IEscalationPort.EscalationCreated` — yeni eskalasyon oluştu
-- `IEscalationPort.EscalationDecided` — eskalasyon kararı alındı
+| Kaynak | Event tipi | Payload |
+|--------|-----------|---------|
+| `IApprovalQueue.RequestCreated` | `ApprovalRequired` | `ApprovalRequest` (ham) |
+| `IApprovalQueue.RequestDecided` | `ApprovalResolved` | `{ id, status, reason, decidedBy }` |
+| `IEscalationSink.RequestCreated` | `EscalationCreated` | `EscalationRequest` (ham) |
 
-Her event `HitlEvent` olarak yayınlanır. Caller `IHitlEventSubscription.EventStream` (IAsyncEnumerable) üzerinden dinler.
+Sadece `req.SessionId == sessionId` eşleşen event'ler callback'e iletilir.
 
 ---
 
-### 2. `SubscribeToChatEvents` → `ChatEventSubscription`
+### 2. `SubscribeToChatEvents(sessionId, onEvent)` → `ChatEventSubscription`
 
 **Kullanım:** Admin panel veya müşteri tarafı — bir session'ın mod değişikliklerini ve handoff event'lerini dinler.
 
-```csharp
-IHitlEventSubscription SubscribeToChatEvents(string sessionId)
-```
-
-Abone olunan event kaynakları:
-- `IChatModeRegistry.ModeChanged` — Bot↔Human geçişi
-- `IEscalationSink.RequestCreated` — eskalasyon oluştu
+Abone olunan kaynaklar:
+- `IChatModeRegistry.ModeChanged`
+- `IEscalationSink.RequestCreated`
+- `IEscalationSink.RequestDecided`
 
 **Üretilen event türleri:**
 
 | Event | Tetikleyici | Açıklama |
 |-------|------------|---------|
-| `HumanJoined` | ModeChanged → Human | Temsilci oturuma katıldı |
-| `HumanLeft` | ModeChanged → Bot | Temsilci ayrıldı, bot devreye girdi |
-| `HandoffPending` | RequestCreated | Eskalasyon isteği oluştu |
-| `HandoffCleared` | ModeChanged → Bot | Handoff tamamlandı/iptal edildi |
-
----
-
-## `IHitlEventSubscription` arayüzü
-
-```csharp
-public interface IHitlEventSubscription : IDisposable
-{
-    IAsyncEnumerable<HitlEvent> EventStream { get; }
-}
-```
-
-`Dispose()` çağrıldığında event kaynaklarından abonelik iptal edilir (memory leak olmaz).
+| `HumanJoined` | ModeChanged → Human | Temsilci oturuma katıldı (`{ sessionId, humanAgent, enteredAt }`) |
+| `HumanLeft` | ModeChanged → Bot | Temsilci ayrıldı, bot devreye girdi (`{ sessionId }`) |
+| `HandoffPending` | RequestCreated | Eskalasyon isteği oluştu (`{ escalationId, reason, createdAt }`) |
+| `HandoffCleared` | RequestDecided (Resolved/Dismissed) **ve** mod zaten Bot ise | Handoff tamamlandı/iptal edildi (`{ escalationId, status }`) |
 
 ---
 
 ## Kullanım örneği (SSE endpoint'i)
 
 ```csharp
-// API controller'da
-using var subscription = _hitlPort.Subscribe(sessionId);
-await foreach (var evt in subscription.EventStream.WithCancellation(ct))
-{
-    await response.WriteAsync($"data: {JsonSerializer.Serialize(evt)}\n\n");
-    await response.Body.FlushAsync(ct);
-}
+using var subscription = hitlEvents.Subscribe(
+    sessionId,
+    (eventType, data) => sse.WriteAsync(eventType, data));
+
+// subscription Dispose edildiğinde tüm event kaynaklarından otomatik unsubscribe olunur
 ```
 
----
-
-## HitlEvent modeli
-
-```csharp
-public record HitlEvent(
-    string Type,          // "HumanJoined", "HandoffPending", vb.
-    string SessionId,
-    DateTime Timestamp,
-    string? AgentId,
-    string? Note
-);
-```
+Gerçek kullanım: `CustomerSupportBot.Api/Endpoints/ChatEndpoints.cs` (stream chat) ve `CustomerSupportBot.Api/Services/ChatEventOrchestrator.cs` (kalıcı `/chat/events/{sessionId}` bağlantısı).
 
 ---
 
 ## HitlEventPortService ile diğer servisler arasındaki ilişki
 
 ```
-IApprovalPort ──────────────────────┐
-IEscalationPort ────────────────────┤→ HitlEventPortService → SSE → Admin Panel
-IChatModeRegistry.ModeChanged ──────┘
-IEscalationSink.RequestCreated ─────┘
+IApprovalQueue.RequestCreated/RequestDecided ───┐
+IEscalationSink.RequestCreated/RequestDecided ──┤→ HitlEventPortService → onEvent callback → SSE → Client
+IChatModeRegistry.ModeChanged ──────────────────┘
 ```

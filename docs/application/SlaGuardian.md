@@ -1,7 +1,7 @@
 # SLA Guardian
 
 **Dosyalar:**  
-- `Services/SlaPortService.cs` — driving port impl  
+- `Services/Sla/SlaPortService.cs` — driving port impl  
 - `Services/Sla/SlaPolicyEvaluator.cs` — ihlal hesaplama motoru  
 - `Services/Sla/SlaOptions.cs` — konfigürasyon modeli  
 

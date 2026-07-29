@@ -2,6 +2,8 @@
 
 Bu doküman uygulamanı **kuran**, **çalıştıran**, **gözlemleyen** ve **konfigüre eden** bakış açısıyla yazılmıştır. Kod-içi mimari için → [architecture.md](architecture.md), endpoint sözleşmeleri için → [api/](api/README.md), pattern detayları için → [agentic-patterns.md](agentic-patterns.md).
 
+> ⚠️ **Bu dokümanın aşağıki bölümlerinde geçen `InMemory*` sınıf isimleri** (`InMemorySessionManager`, `InMemoryApprovalQueue` vb.) koda mevcuttur ve **yalnızca test projelerinden elle örneklenir**. `PersistenceOptions.Provider` enum'unun tek üyesi `Postgres`'tur; `AddPersistenceAdapters` hiçbir koşula bağlı kalmadan sadece Postgres implementasyonlarını kaydeder — runtime'da config ile seçilebilen bir "InMemory modu" yoktur. Aşağıdaki "InMemory modunda" ibareli tablolar, gerçekte **yalnızca test/InMemory sınıflarının davranışını** açıklar; production ortamı her zaman Postgres tablosundaki satırları kullanır.
+
 **Bölümler**:
 
 - [1. Hızlı başlangıç](#1-hızlı-başlangıç)
@@ -249,12 +251,13 @@ Tüm `Telemetry` ayarı kapatılmak istenirse `Telemetry.Enabled = false` — tr
 3. AddAiServices             → IChatClient + ReasoningChatClient (TelemetryChatClient ile sarılı)
                                + SemanticMemory stack (Qdrant + embedding, Enabled ise)
 3b. AddRedisServices         → IConnectionMultiplexer, IDistributedLockProvider, IMessageBusPort
-4. AddPersistenceServices    → Persistence:Provider'a göre:
-                               ├─ "Postgres" → PostgresSessionManager, PostgresReasoningTraceStore,
-                               │               PostgresApprovalQueue, PostgresRatingStore, ...
-                               │               + EF Core DbContext factory + IMessageBusPort + PersistenceHydrator
-                               └─ "InMemory" → InMemory* fallback implementasyonları
-                                               + InMemoryMessageBusAdapter
+4. AddPersistenceServices    → koşulsuz (Provider her zaman "Postgres" — enum'un tek üyesi):
+                               PostgresSessionManager, PostgresReasoningTraceStore,
+                               PostgresApprovalQueue, PostgresRatingStore, ...
+                               + EF Core DbContext factory + PersistenceHydrator
+                               (InMemory* sınıfları koda mevcuttur ama yalnızca testlerden
+                               elle örneklenir — runtime'da config ile seçilebilen bir
+                               "InMemory modu" yoktur)
 5. AddApplicationServices    → 13 driving port servisi, EntityVerifier, ReasoningSanityChecker,
                                ReasoningService, ContextPipeline + 3-4 IContextProvider,
                                InputGuard, CustomerProfileService, SkillsBasedRouter,

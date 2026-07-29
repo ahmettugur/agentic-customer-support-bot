@@ -47,7 +47,7 @@
 ## Schemas.cs
 
 ```csharp
-public static class Schemas
+internal static class Schemas
 {
     public const string Chat           = "chat";
     public const string Hitl           = "hitl";
@@ -67,37 +67,42 @@ Tüm entity konfigürasyonlarında tablo şeması bu sabitler üzerinden referan
 
 ## PersistenceOptions
 
+```csharp
+public sealed class PersistenceOptions
+{
+    public const string SectionName = "Persistence";
+    public PersistenceProvider Provider { get; set; } = PersistenceProvider.Postgres;
+}
+
+public enum PersistenceProvider { Postgres }
+```
+
+`PersistenceOptions`'ın **`ConnectionString` alanı yoktur** — bağlantı dizesi ayrı bir top-level config anahtarından okunur: `ConnectionStrings:PostgreSQL`.
+
 ```json
 {
-  "Persistence": {
-    "Provider": "Postgres",
-    "ConnectionString": "Host=...;Database=csbot;Username=csbot;Password=..."
-  }
+  "Persistence": { "Provider": "Postgres" },
+  "ConnectionStrings": { "PostgreSQL": "Host=...;Database=csbot;Username=csbot;Password=..." }
 }
 ```
 
-| Değer | Açıklama |
-|-------|---------|
-| `"InMemory"` | EF Core kullanılmaz |
-| `"Postgres"` | DbContext + DbContextFactory kayıt edilir |
+`PersistenceProvider` enum'unun **tek üyesi vardır: `Postgres`**. `"InMemory"` diye bir seçenek yoktur; `Provider` alanı okunur ama hiçbir yerde dallanma (`switch`/`if`) için kullanılmaz — DI kaydı koşulsuzdur.
 
 ---
 
 ## PersistenceServiceCollectionExtensions
 
-Postgres seçildiğinde:
-
 ```csharp
-services.AddDbContext<CustomerSupportDbContext>(opts =>
+services.AddDbContextFactory<CustomerSupportDbContext>(opts =>
     opts.UseNpgsql(connectionString,
         npgsql => npgsql.EnableRetryOnFailure(3,
             TimeSpan.FromSeconds(5), null)));
-
-services.AddDbContextFactory<CustomerSupportDbContext>(...);
 ```
 
+**Yalnızca `AddDbContextFactory` çağrılır** — ayrı bir `AddDbContext` kaydı yoktur.
+
 **Neden `DbContextFactory`?**  
-Singleton adapter'lar (örn. `PostgresSessionManager`) `DbContext`'i doğrudan inject edemez — Scoped bir servis Singleton'a inject edilemez. `IDbContextFactory<T>` kullanarak her işlemde kısa ömürlü `DbContext` yaratılır:
+Singleton adapter'lar (örn. `PostgresSessionManager`) `DbContext`'i doğrudan inject edemez — Scoped bir servis Singleton'a inject edilemez. `IDbContextFactory<T>` kullanarak her işlemde kısa ömürlü `DbContext` yaratılır — bu, Scoped servisler (auth repository'leri dahil) için de aynı şekilde kullanılır:
 
 ```csharp
 await using var db = await _factory.CreateDbContextAsync(ct);
@@ -123,7 +128,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<CustomerSu
 **Migration oluşturmak için:**
 ```bash
 cd CustomerSupportBot.Adapters.Persistence
-dotnet ef migrations add <MigrationName> --project . --startup-project ../CustomerSupportBot.Web
+dotnet ef migrations add <MigrationName> --project . --startup-project ../CustomerSupportBot.Api
 dotnet ef database update
 ```
 

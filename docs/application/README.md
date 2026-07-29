@@ -43,16 +43,16 @@
 CustomerSupportBot.Application/
 │
 ├── Ports/
-│   ├── Driving/          # Gelen porlar — API katmanının çağırdığı arayüzler
+│   ├── Inbound/           # Gelen porlar — API katmanının çağırdığı arayüzler
 │   │   ├── IChatPort.cs
 │   │   ├── IReasoningPort.cs
 │   │   ├── IApprovalPort.cs
 │   │   ├── ISessionPort.cs
 │   │   ├── ITracePort.cs
 │   │   ├── IEvaluationPort.cs
-│   │   └── ... (12 arayüz)
+│   │   └── ... (20+ arayüz)
 │   │
-│   └── Driven/           # Giden porlar — Adapter'ların implement ettiği arayüzler
+│   └── Outbound/          # Giden porlar — Adapter'ların implement ettiği arayüzler
 │       ├── IAgentTeamPort.cs
 │       ├── IContextPipeline.cs
 │       ├── IPromptRepository.cs
@@ -64,18 +64,19 @@ CustomerSupportBot.Application/
 │       └── Locking/       → IAppDistributedLock
 │
 └── Services/
-    ├── ChatPortService.cs          # IChatPort — Ana use-case orkestrasyonu
-    ├── ReasoningService.cs         # IReasoningPort — LLM reasoning pipeline
-    ├── ReasoningMessageBuilder.cs  # Reasoning mesaj listesi inşaatı
-    ├── ReasoningSanityChecker.cs   # Deterministic doğruluk kontrolü
-    ├── EntityVerifier.cs           # DB'ye dayalı entity doğrulama
-    ├── ContextPipeline.cs          # IContextPipeline — paralel context sağlayıcı zinciri
-    ├── CustomerSupportToolsService.cs # Tool implementasyonları + idempotency
-    ├── SubTaskOrchestrator.cs      # Compound query decomposition
-    ├── SessionStateService.cs      # Sentiment + intent session yönetimi
-    ├── ApprovalContextAccessor.cs  # AsyncLocal HITL context
-    ├── EscalationPolicyService.cs  # Eskalasyon politikası + routing
-    ├── InputGuard.cs               # Güvenlik kapısı (6 kural, LLM'den önce çalışır)
+    ├── Chat/                        # ChatPortService, ChatSessionPortService, ContextPipeline, InputGuard, SessionStateService, SessionPortService
+    ├── Reasoning/                   # ReasoningService, ReasoningMessageBuilder, ReasoningSanityChecker, EntityVerifier, SubTaskOrchestrator, ReplanService
+    ├── Tools/                       # CustomerSupportToolsService (facade) + ProductToolsService, OrderToolsService, ComplaintToolsService
+    ├── Approval/                    # ApprovalPortService, ApprovalContextAccessor
+    ├── Escalation/                  # EscalationPortService, EscalationPolicyService, HitlEventPortService, HumanAgentPortService
+    ├── Auth/                        # TokenPortService, UserService
+    ├── Telemetry/                   # AnalyticsPortService, TelemetryPortService, TracePortService
+    ├── Sla/                         # SlaPortService, SlaPolicyEvaluator
+    ├── Personalization/             # PersonalizationPortService, CustomerProfileService
+    ├── Realtime/                    # RealtimeBridgeService, RealtimeNativeService
+    ├── Improvement/                 # ImprovementsPortService, LessonMiner
+    ├── Workflow/                    # WorkflowPortService, WorkflowExecutor
+    ├── UiHint/                      # UiHintEmitter
     │
     ├── Providers/                  # IContextProvider implementasyonları
     │   ├── ConversationSummaryProvider.cs
@@ -85,23 +86,15 @@ CustomerSupportBot.Application/
     │
     ├── Memory/                     # Semantik bellek servisleri
     │   ├── SemanticMemoryService.cs
+    │   ├── MemoryPortService.cs
     │   └── KnowledgeBaseIngestionService.cs
-    │
-    ├── Personalization/            # Müşteri profil servisi
-    │   └── CustomerProfileService.cs
     │
     ├── Evaluation/                 # Otomatik senaryo değerlendirici
     │   ├── EvaluationRunner.cs
     │   └── CriteriaEvaluator.cs
     │
-    ├── Routing/                    # Skills-based routing
-    │   └── SkillsBasedRouter.cs
-    │
-    ├── Sla/                        # SLA politika değerlendiricisi
-    │   └── SlaPolicyEvaluator.cs
-    │
-    └── Improvement/                # Ders madenciliği (LessonMiner)
-        └── LessonMiner.cs
+    └── Routing/                    # Skills-based routing
+        └── SkillsBasedRouter.cs
 ```
 
 ## Bir isteğin uçtan uca akışı
@@ -111,7 +104,7 @@ CustomerSupportBot.Application/
     │ HTTP POST /chat/stream
     ▼
 [ChatEndpoints]  ← Api katmanı
-    │ IInputGuard.Inspect(query) — 6 güvenlik kontrolü
+    │ IInputGuard.Inspect(query) — 7 güvenlik kontrolü
     │    → Reject ise 400 döner
     ▼
 [ChatPortService.HandleStreamAsync]

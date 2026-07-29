@@ -66,44 +66,46 @@ Bu sayede:
 
 ## Composition Root pattern — neden IChatClient burada değil?
 
-`IChatClient` kayıt **`Api/Program.cs`'de** yapılır:
+`IChatClient` kayıt **`CustomerSupportBot.Api/Extensions/AiServicesExtensions.cs`** (`AddAiServices`) içinde yapılır — `Program.cs` sadece bu extension metodunu çağırır:
 
 ```csharp
-// Api/Program.cs
-services.AddSingleton<IChatClient>(sp =>
+// Api/Extensions/AiServicesExtensions.cs
+public static IServiceCollection AddAiServices(this IServiceCollection services, IConfiguration configuration)
 {
-    var aiOptions = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+    services.AddAiAdapters(configuration);
 
-    // 1) Asıl client (provider-spesifik)
-    IChatClient inner = AiClientFactory.CreateStandardChatClient(aiOptions);
+    services.AddSingleton<IChatClient>(sp =>
+    {
+        var options = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+        var inner = AiClientFactory.CreateStandardChatClient(options);
+        return WrapWithTelemetry(sp, inner, ResolveStandardModel(options), options.Provider.ToString());
+    });
 
-    // 2) Telemetry decorator
-    var costCalc = sp.GetRequiredService<ICostCalculatorPort>();
-    var usageStore = sp.GetRequiredService<CostUsageStore>();
-    var persistence = sp.GetService<ILlmCallPersistencePort>();
+    services.AddSingleton<ReasoningChatClient>(sp =>
+    {
+        var options = sp.GetRequiredService<IOptions<AiOptions>>().Value;
+        return AiClientFactory.CreateReasoningChatClient(options, inner =>
+            WrapWithTelemetry(sp, inner, ResolveReasoningModel(options), options.Provider.ToString()));
+    });
+    services.AddSingleton<IReasoningChatClient>(sp =>
+        sp.GetRequiredService<ReasoningChatClient>());   // önce concrete olarak kaydedilir, sonra mapper
 
-    return new TelemetryChatClient(
-        inner,
-        costCalc,
-        usageStore,
-        modelHint: ResolveModelHint(aiOptions),
-        provider: aiOptions.Provider.ToString().ToLowerInvariant(),
-        sp.GetRequiredService<ILogger<TelemetryChatClient>>(),
-        persistence);
-});
+    services.AddSingleton<IGeneralChatClient>(sp =>
+        new GeneralChatClientAdapter(sp.GetRequiredService<IChatClient>()));
 
-// Reasoning client için (decorate parametresi ile telemetri)
-services.AddSingleton<IReasoningChatClient>(sp =>
+    return services;
+}
+
+private static IChatClient WrapWithTelemetry(IServiceProvider sp, IChatClient inner, string modelHint, string provider)
 {
-    var aiOptions = sp.GetRequiredService<IOptions<AiOptions>>().Value;
-    return AiClientFactory.CreateReasoningChatClient(
-        aiOptions,
-        decorate: inner => new TelemetryChatClient(inner, ...));
-});
+    var telemetryOptions = sp.GetRequiredService<IOptions<TelemetryOptions>>().Value;
+    if (!telemetryOptions.Enabled) return inner;   // Telemetry kapalıysa ham client döner, sarmalama yapılmaz
 
-services.AddSingleton<IGeneralChatClient>(sp =>
-    new GeneralChatClientAdapter(sp.GetRequiredService<IChatClient>()));
+    return new TelemetryChatClient(inner, /* ... */);
+}
 ```
+
+`ResolveStandardModel`/`ResolveReasoningModel` iki ayrı metottur (tek bir `ResolveModelHint` helper'ı yoktur) — her ikisi de `AiOptions.Provider`'a göre OpenAI/AzureOpenAI/Anthropic model adını seçer.
 
 ### Neden?
 
@@ -127,13 +129,10 @@ Detaylar için [Options.md](Options.md).
 
 ## Kullanım
 
-`Program.cs`:
+`Program.cs` yalnızca çağırır:
 
 ```csharp
-services.AddAiAdapters(configuration);
-
-// IChatClient + telemetry wrap (Composition Root sorumluluğu):
-services.AddSingleton<IChatClient>(sp => /* ... */);
-services.AddSingleton<IReasoningChatClient>(sp => /* ... */);
-services.AddSingleton<IGeneralChatClient>(sp => /* ... */);
+builder.Services.AddAiServices(builder.Configuration);
 ```
+
+`AddAiServices` (`AiServicesExtensions.cs`) içeride `AddAiAdapters` (Adapters.AI) ile `IChatClient`/`IReasoningChatClient`/`IGeneralChatClient` kayıtlarını + telemetri sarmalamasını birleştirir.

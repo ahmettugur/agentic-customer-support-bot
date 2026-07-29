@@ -9,14 +9,16 @@ Tek dosyada base sınıf + 4 alt sınıf. Application katmanı bunları `catch` 
 ## DomainException (base)
 
 ```csharp
-public abstract class DomainException : Exception
+public class DomainException : Exception
 {
     public string Code { get; }
-    protected DomainException(string code, string message, Exception? inner = null);
+    public DomainException(string code, string message, Exception? innerException = null);
 }
 ```
 
-**Code:** Makine-okunabilir hata kodu (örn. `"ORDER_NOT_FOUND"`). API katmanı bunu response body'e koyar; client lokalize mesaj seçebilir.
+`abstract` değildir — doğrudan da örneklenebilir, ama pratikte her zaman alt sınıflarından biri fırlatılır. `Code` her alt sınıfta ilgili ctor içinde **sabit** olarak set edilir (çağıran taraf `code` parametresi geçmez — sadece `DomainException`'ın kendisi 2 parametre alır).
+
+**Code:** Makine-okunabilir hata kodu. API katmanı bunu response body'e koyar; client lokalize mesaj seçebilir.
 
 ---
 
@@ -25,6 +27,12 @@ public abstract class DomainException : Exception
 ### EntityNotFoundException
 
 Resource bulunamadı (session, order, customer, complaint, vb.).
+
+```csharp
+public EntityNotFoundException(string entityType, string entityId)
+```
+
+`Code` sabittir: `"ENTITY_NOT_FOUND"`. Mesaj otomatik üretilir: `"{entityType} bulunamadı: '{entityId}'"`. `EntityType`/`EntityId` property'leri de saklanır.
 
 | Özellik | Değer |
 |---|---|
@@ -36,6 +44,12 @@ Resource bulunamadı (session, order, customer, complaint, vb.).
 
 Veritabanı katmanından gelen **geçici** hatalar (timeout, deadlock, connection loss).
 
+```csharp
+public PersistenceException(string message, Exception? innerException = null)
+```
+
+`Code` sabittir: `"PERSISTENCE_ERROR"`.
+
 | Özellik | Değer |
 |---|---|
 | HTTP karşılığı | `503 Service Unavailable` |
@@ -46,6 +60,12 @@ Veritabanı katmanından gelen **geçici** hatalar (timeout, deadlock, connectio
 
 3rd-party servis erişilemiyor (AI provider, Redis, dış API).
 
+```csharp
+public ExternalServiceException(string serviceName, string message, Exception? innerException = null)
+```
+
+`Code` sabittir: `"EXTERNAL_SERVICE_ERROR"`. `ServiceName` property'si ayrıca saklanır.
+
 | Özellik | Değer |
 |---|---|
 | HTTP karşılığı | `502 Bad Gateway` |
@@ -55,6 +75,12 @@ Veritabanı katmanından gelen **geçici** hatalar (timeout, deadlock, connectio
 ### ConcurrencyConflictException
 
 Eş zamanlı güncelleme çakışması (iki admin aynı approval'ı aynı anda kararlaştırır).
+
+```csharp
+public ConcurrencyConflictException(string message, Exception? innerException = null)
+```
+
+`Code` sabittir: `"CONCURRENCY_CONFLICT"`.
 
 | Özellik | Değer |
 |---|---|
@@ -71,7 +97,7 @@ try
 {
     var order = await orderRepo.GetAsync(orderId, ct);
     if (order is null)
-        throw new EntityNotFoundException("ORDER_NOT_FOUND", $"Sipariş {orderId} bulunamadı");
+        throw new EntityNotFoundException("Order", orderId);
     // ...
 }
 catch (PersistenceException ex)

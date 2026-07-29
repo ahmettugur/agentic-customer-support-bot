@@ -1,8 +1,8 @@
 # MemoryPortService
 
 **Dosyalar:**  
-- `Services/MemoryPortService.cs` — aktif implementasyon  
-- `Services/MemoryPortService.cs` → `DisabledMemoryPort` — no-op implementasyon  
+- `Services/Memory/MemoryPortService.cs` — aktif implementasyon  
+- `Services/Memory/MemoryPortService.cs` → `DisabledMemoryPort` — no-op implementasyon  
 
 **Implements:** `IMemoryPort`  
 **Yaşam döngüsü:** Singleton

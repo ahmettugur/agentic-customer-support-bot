@@ -1,6 +1,6 @@
 # TracePortService
 
-**Dosya:** `Services/TracePortService.cs`  
+**Dosya:** `Services/Telemetry/TracePortService.cs`  
 **Implements:** `ITracePort`  
 **Yaşam döngüsü:** Singleton
 
@@ -20,74 +20,79 @@ Reasoning trace kayıtlarını sorgular ve istatistik üretir. `IReasoningTraceS
 
 ## Metodlar
 
-### `GetRecentTracesAsync`
+Tüm metodlar **senkrondur** (`Task` yok, `CancellationToken` almazlar).
+
+### `GetRecentTraces`
 
 ```csharp
-Task<IReadOnlyList<ReasoningTrace>> GetRecentTracesAsync(int count = 50, CancellationToken ct = default)
+IReadOnlyList<ReasoningTrace> GetRecentTraces(int count = 20)
 ```
 
-Son `count` trace kaydını döner.
+Son `count` trace kaydını döner (varsayılan **20**).
 
 ---
 
-### `GetTraceAsync`
+### `GetTrace`
 
 ```csharp
-Task<ReasoningTrace?> GetTraceAsync(string traceId, CancellationToken ct = default)
+ReasoningTrace? GetTrace(string traceId)
 ```
 
 Tekil trace'i döner.
 
 ---
 
-### `GetTracesBySessionAsync`
+### `GetTracesBySession`
 
 ```csharp
-Task<IReadOnlyList<ReasoningTrace>> GetTracesBySessionAsync(string sessionId, CancellationToken ct = default)
+IReadOnlyList<ReasoningTrace> GetTracesBySession(string sessionId)
 ```
 
 Belirli session'ın tüm trace'lerini döner.
 
 ---
 
-### `GetSessionsSummaryAsync`
+### `GetSessionsSummary`
 
 ```csharp
-Task<IReadOnlyList<SessionTraceSummary>> GetSessionsSummaryAsync(int count = 50, CancellationToken ct = default)
+IReadOnlyList<TracedSessionSummary> GetSessionsSummary()
 ```
 
-Son `count` session'ın özetini döner.
+Parametre almaz — dahili olarak en son 500 trace taranarak session bazlı özet çıkarılır.
 
-**Hesaplama:**
+```csharp
+public sealed record TracedSessionSummary(
+    string SessionId,
+    string Title,
+    int TraceCount,
+    DateTime LastTraceAt,
+    string? LastQuery,
+    int MessageCount);
 ```
-Son trace'ler → session'a göre grupla
-Her group için:
-  - SessionId
-  - Title: group.First().UserQuery (max 60 karakter)
-  - MessageCount: trace sayısı * 2 (her trace = 1 user + 1 bot)
-  - LastActivityAt: en son trace'in StartedAt
-```
+
+`MessageCount` trace sayısından türetilmez — `ISessionManager.GetHistory(sessionId).Count` ile gerçek mesaj geçmişinden okunur.
 
 ---
 
-### `GetStatsAsync`
+### `GetStats`
 
 ```csharp
-Task<TraceStats> GetStatsAsync(CancellationToken ct = default)
+TraceStatsSummary GetStats()
 ```
 
 Son 500 trace üzerinden istatistik hesaplar.
 
-**`TraceStats` alanları:**
+```csharp
+public sealed record TraceStatsSummary(
+    int TotalTraces,
+    int CompletedCount,
+    int ErrorCount,
+    double AvgDurationMs,
+    double AvgIterationCount,
+    IReadOnlyDictionary<string, int> TerminationReasons);
+```
 
-| Alan | Hesaplama |
-|------|----------|
-| `TotalTraces` | Son 500 trace sayısı |
-| `CompletionRate` | `termination_reason == "completed"` oranı (0.0–1.0) |
-| `ErrorCount` | `trace.Error != null` olan sayı |
-| `AverageDurationMs` | Ortalama süre (ms) |
-| `AverageIterations` | Ortalama iterasyon sayısı |
-| `TerminationReasonDistribution` | Her `termination_reason` değerinin frekansı |
+`CompletedCount` ham bir sayıdır — hazır bir `CompletionRate` oranı **yoktur**; gerekiyorsa `CompletedCount / (double)TotalTraces` çağıran tarafta hesaplanır.
 
 ---
 
@@ -115,10 +120,4 @@ public class ReasoningTrace
 
 ## API endpoint'leri
 
-```http
-GET /trace/recent?count=50        → GetRecentTracesAsync
-GET /trace/{traceId}              → GetTraceAsync
-GET /trace/session/{sessionId}    → GetTracesBySessionAsync
-GET /trace/sessions-summary       → GetSessionsSummaryAsync
-GET /trace/stats                  → GetStatsAsync
-```
+Bkz. [Endpoints-Observability.md](../api/Endpoints-Observability.md) — gerçek route'lar için (`Admin` yetkisi gerektirir).

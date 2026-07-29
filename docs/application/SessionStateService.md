@@ -1,6 +1,6 @@
 # SessionStateService
 
-**Dosya:** `CustomerSupportBot.Application/Services/SessionStateService.cs`  
+**Dosya:** `Services/Chat/SessionStateService.cs`  
 **Yaşam döngüsü:** Singleton
 
 ## Ne yapar?

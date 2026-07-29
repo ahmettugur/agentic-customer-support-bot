@@ -116,7 +116,7 @@ Neden? `IChatClient` `Adapters.Telemetry/TelemetryChatClient` ile sarmalanmalı.
 - `Adapters.Telemetry` → decorator (TelemetryChatClient)
 - `Api` (Composition Root) → ikisini birleştirir
 
-`AddAiAdapters` sadece embedding + vector + realtime + options kaydeder. Chat client kaydı için `Api/Program.cs` bak.
+`AddAiAdapters` sadece embedding + vector + realtime + options kaydeder. Chat client kaydı için `CustomerSupportBot.Api/Extensions/AiServicesExtensions.cs` (`AddAiServices`) bak.
 
 ---
 
@@ -167,8 +167,8 @@ OpenAI Realtime WebSocket
 | Paket | Amaç |
 |---|---|
 | `Microsoft.Extensions.AI` | `IChatClient` interface |
-| `OpenAI` | OpenAI SDK |
+| `Microsoft.Agents.AI.OpenAI` | OpenAI istemcisi (OpenAI SDK'yı transitive getirir — doğrudan `OpenAI` paket referansı yoktur) |
 | `Azure.AI.OpenAI` | Azure OpenAI SDK |
-| `Anthropic.SDK` | Anthropic SDK |
+| `Microsoft.Agents.AI.Anthropic` | Anthropic istemcisi |
 | `Qdrant.Client` | Qdrant gRPC client |
 | `System.Net.WebSockets` | Realtime WS bağlantısı |

@@ -15,30 +15,32 @@ HITL akışında kullanılan core domain modeller — onay, eskalasyon, insan ag
 Yüksek riskli tool çağrılarında (`order_placement_tool`, `complaint_registration_tool`) **admin onayı** gerekir. Bu modeller pending onayı temsil eder.
 
 ```csharp
-public sealed class ApprovalRequest
+public class ApprovalRequest
 {
-    public string Id { get; init; }
-    public string SessionId { get; init; }
-    public string? TraceId { get; init; }
-    public string ToolName { get; init; }
-    public string AgentName { get; init; }
+    public string Id { get; set; }                    // Guid.NewGuid()[..12]
+    public string? SessionId { get; set; }
+    public string? TraceId { get; set; }
+    public string ToolName { get; set; } = "";
+    public string? AgentName { get; set; }
 
-    public Dictionary<string, object?> Parameters { get; init; }
-    public string UserQuery { get; init; }
-    public string? Justification { get; init; }       // Agent neden onay istiyor
+    public Dictionary<string, object?> Parameters { get; set; } = new();
+    public string? UserQuery { get; set; }
+    public string? Justification { get; set; }         // Agent neden onay istiyor
 
-    public DateTime CreatedAt { get; init; }
-    public int TimeoutSeconds { get; init; }
+    public DateTime RequestedAt { get; set; }           // NOT: "CreatedAt" değil
+    public int TimeoutSeconds { get; set; } = 60;
 
     // Karar
-    public ApprovalStatus Status { get; set; }
+    public ApprovalStatus Status { get; set; } = ApprovalStatus.Pending;
     public DateTime? DecidedAt { get; set; }
-    public string? DecidedBy { get; set; }            // Admin user id
+    public string? DecidedBy { get; set; }             // Admin user id
     public string? DecisionReason { get; set; }
 }
 
 public enum ApprovalStatus { Pending, Approved, Rejected, Expired }
 ```
+
+Tüm property'ler mutable (`get; set;`) — `sealed`/`init` değil. Zaman damgası alanının adı **`RequestedAt`**'tir, `CreatedAt` değil.
 
 ### Status geçişleri
 
@@ -154,12 +156,12 @@ public enum EscalationAction
 Live takeover yapacak veya escalation çözecek **insan agent** kaydı:
 
 ```csharp
-public sealed class HumanAgent
+public class HumanAgent
 {
-    public string Id { get; init; }
-    public string DisplayName { get; set; }
+    public string Id { get; set; }                            // Guid.NewGuid()[..8]
+    public string DisplayName { get; set; } = "";
     public string? Email { get; set; }
-    public bool IsActive { get; set; }
+    public bool IsActive { get; set; } = true;
 
     // Skills-based routing
     public List<string> Skills { get; set; } = new();        // Normalize lowercase
@@ -171,8 +173,25 @@ public sealed class HumanAgent
 
     // Routing tie-break
     public int Priority { get; set; }                        // Yüksek öncelikli ajan
+
+    public DateTime CreatedAt { get; set; }
+    public DateTime? LastAssignedAt { get; set; }
+}
+
+/// <summary>Admin endpoint'i için temsilci create/update input modeli — tüm alanlar nullable (partial update).</summary>
+public class HumanAgentInput
+{
+    public string DisplayName { get; set; } = "";
+    public string? Email { get; set; }
+    public List<string>? Skills { get; set; }
+    public List<string>? Languages { get; set; }
+    public bool? IsActive { get; set; }
+    public int? MaxConcurrentLoad { get; set; }
+    public int? Priority { get; set; }
 }
 ```
+
+`sealed` değildir; `Id` dahil tüm property'ler mutable (`get; set;`).
 
 ### Skill normalize kuralı
 
@@ -200,7 +219,19 @@ Eğer agent aynı zamanda admin panele login oluyorsa, `Users` tablosunda karş�
 
 ## RoutingDecision
 
-`SkillsBasedRouter`'ın çıktısı (Domain'de yok, Application'da; ama HumanAgent burada tanımlandığı için bağlantı için referans veriyoruz):
+`SkillsBasedRouter`'ın çıktısı — `Model/HumanAgent.cs` içinde, Domain katmanında tanımlıdır (Application'da değil):
+
+```csharp
+public class RoutingDecision
+{
+    public string? SuggestedAgentId { get; set; }
+    public string? SuggestedAgentName { get; set; }
+    public double MatchScore { get; set; }
+    public List<string> MatchedSkills { get; set; } = new();
+    public List<string> MissingSkills { get; set; } = new();
+    public string? Note { get; set; }
+}
+```
 
 ```
 Skill match score  +
