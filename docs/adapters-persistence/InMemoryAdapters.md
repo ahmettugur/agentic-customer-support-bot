@@ -165,22 +165,6 @@ Ring buffer: 500.
 
 ---
 
-## InMemoryWorkflowDefinitionStore
-
-**Port:** `IWorkflowDefinitionStore`
-
-| Metod | Açıklama |
-|-------|---------|
-| `Upsert(def, updatedBy)` | Ekle/güncelle; ID yoksa `Slugify(name)` |
-| `Get(id)` | Tekil |
-| `GetAll()` | Tümü |
-| `GetActive()` | `IsActive == true` |
-| `Delete(id)` | Sil |
-
-**Slugify:** İsim küçük harfe çevrilir, Türkçe karakterler normalleştirilir (`ç→c`, `ğ→g`, `ı→i`, `ö→o`, `ş→s`, `ü→u`), alfanümerik olmayan karakterler kaldırılır.
-
----
-
 ## InMemoryCustomerProfileStore
 
 **Port:** `ICustomerProfileStore`

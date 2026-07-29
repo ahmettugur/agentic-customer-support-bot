@@ -131,18 +131,6 @@ catalog.complaints
 
 Complaints tablosu `ValueGeneratedNever()` kullanır — `Code` alanı seed verilerinde açıkça atanır, sequence yoktur.
 
-### 10. Workflow definitions seed
-
-```
-workflow.workflow_definitions
-→ SeedDefaultWorkflowsAsync: 3 örnek WorkflowDefinition
-   - "siparis-durumu"
-   - "urun-kategori-listesi"
-   - "urun-bilgisi"
-```
-
-Her başlangıçta çalışır (tabloya özgü boş-kontrolü yok). Her örnek için: kayıt hiç yoksa **veya** son güncelleyen `UpdatedBy == "system"` ise upsert edilir. Bir admin bu workflow'lardan birini panelden düzenlerse `UpdatedBy` artık `"system"` olmadığından, sonraki restart'larda üzerine yazılmaz.
-
 ---
 
 ## Neden sadece Postgres?

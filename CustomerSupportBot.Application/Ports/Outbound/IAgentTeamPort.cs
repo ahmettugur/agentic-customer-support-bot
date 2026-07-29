@@ -15,7 +15,8 @@ public interface IAgentTeamPort
         string query,
         List<ConversationMessage>? conversationHistory = null,
         AgentSession? session = null,
-        ReasoningResult? reasoning = null);
+        ReasoningResult? reasoning = null,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Workflow'u SSE stream event'leri olarak koşturur.

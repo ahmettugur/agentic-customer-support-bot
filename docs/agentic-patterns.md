@@ -542,7 +542,7 @@ private async Task<string> RunDecomposedAsync(...)
 - **Recursion-safe** — derived reasoning'in `SubTasks=[]` olması sonsuz döngüyü engeller.
 - **Streaming uyumlu** — iç workflow event'leri forward edilir; sadece final response aggregated olarak yayın.
 
-**Neden?** MAF `GroupChatManager.SelectNextAgentAsync` bir turda tek next speaker seçer. Compound query için bu yetersiz. Kod katmanında orkestrasyon = *"N ayrı ama ilişkili konuşma = N workflow run"* modeli. Detay → [application/WorkflowExecutor.md](application/WorkflowExecutor.md).
+**Neden?** MAF `GroupChatManager.SelectNextAgentAsync` bir turda tek next speaker seçer. Compound query için bu yetersiz. Kod katmanında orkestrasyon = *"N ayrı ama ilişkili konuşma = N workflow run"* modeli. Detay → [adapters-agents/CustomerSupportTeam.md](adapters-agents/CustomerSupportTeam.md).
 
 ---
 

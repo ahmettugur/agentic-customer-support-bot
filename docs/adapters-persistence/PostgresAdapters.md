@@ -129,16 +129,6 @@ Startup: `PersistenceHydrator` tamamlanmamış trace'leri `terminated_by_restart
 
 ---
 
-## PostgresWorkflowDefinitionStore
-
-**Port:** `IWorkflowDefinitionStore`
-
-**Hydration:** Tüm tablo lazy.  
-**Upsert:** `version` otomatik artırılır; ID yoksa `Slugify(name)` ile türetilir.  
-**Slugify:** `ç→c`, `ğ→g`, `ı→i`, `ö→o`, `ş→s`, `ü→u` + küçük harf + alfanümerik filtre.
-
----
-
 ## PostgresLlmCallUsageSink
 
 **Port:** `ILlmCallPersistencePort`

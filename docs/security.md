@@ -105,7 +105,7 @@ var agentScope = app.MapGroup("/agent").RequireAuthorization("AdminOrAgent");
 |-------|-------------|
 | **Public** (auth gerektirmez) | `POST /chat/`, `POST /chat/stream`, `GET /chat/events/{sid}`, `GET /sessions/`, `POST/GET .../rating` |
 | **Auth gerektirir** | `POST /auth/logout` |
-| **Admin** | Trace, Evaluation, Memory, Improvements, Telemetry, Personalization, Agents, Workflows, SLA, Admin (HITL) |
+| **Admin** | Trace, Evaluation, Memory, Improvements, Telemetry, Personalization, Agents, SLA, Admin (HITL) |
 | **AdminOrAgent** | `/agent/escalations/*`, `/agent/approvals/*`, `/agent/chat-sessions/*`, `/agent/profile` |
 
 ### Rate Limiting
@@ -186,18 +186,6 @@ Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`) içi
 - Mükerrer kayıtlar (ör. compound query'de aynı şikayetin iki kez açılması) engellenir
 - Cache max 200 entry tutar; eski entry'ler otomatik temizlenir
 
-### 4.3 Workflow Yasak Tool'lar
-
-Low-code Workflow Designer'da yan etkili tool'lar çağrılamaz:
-
-| Yasak Tool | Neden |
-|------------|-------|
-| `order_placement_tool` | Sipariş oluşturur (yan etkili) |
-| `complaint_registration_tool` | Şikayet kaydeder (yan etkili) |
-| `human_handoff_tool` | İnsan aktarımı başlatır (yan etkili) |
-
-Bu kısıtlama HITL approval gate'inin bypass edilmesini önler.
-
 ---
 
 ## 5. Workflow Guard'lar
@@ -215,10 +203,12 @@ Bu kısıtlama HITL approval gate'inin bypass edilmesini önler.
 
 | Guard | Ne yapar? |
 |-------|-----------|
-| **Timeout** | Tek workflow turunun max süresi. Aşılırsa iptal edilir |
+| **Timeout** | Tek workflow turunun max süresi. Aşılırsa iptal edilir — hem `RunStreamingAsync` hem `RunAsync` (non-streaming: `EvaluationRunner`, `ReplanService`) için geçerlidir |
 | **MaxDuplicateToolCalls** | Aynı tool'u N kez arka arkaya çağırırsa devre kesilir |
-| **MaxTokensPerRequest** | Bağlam toplam token üst sınırı |
+| **MaxTokensPerRequest** | ⚠️ Şu an kodda okunmuyor — ölü config |
 | **MaxIterations** | ChatManager max agent geçiş sayısı |
+
+`WorkflowGuardOptions` (ve `ApprovalOptions`, `ParallelExecutionOptions`) `ValidateOnStart()` ile kayıtlıdır — `TimeoutSeconds=0` gibi geçersiz bir değer artık ilk isteği değil **uygulama başlangıcını** patlatır.
 
 ---
 
@@ -253,5 +243,4 @@ appsettings.Production.json
 
 - **HITL pattern detayları** → [agentic-patterns.md](agentic-patterns.md#20-human-in-the-loop)
 - **API endpoint güvenlik kapsamı** → [api/](api/README.md)
-- **Workflow guard'lar** → [domain/Model-Workflow.md](domain/Model-Workflow.md)
 - **Mimari genel bakış** → [architecture.md](architecture.md)

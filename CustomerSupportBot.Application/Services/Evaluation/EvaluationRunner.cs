@@ -79,7 +79,7 @@ public class EvaluationRunner : IEvaluationPort
             // Token'ı doğru slot'a bağlıyoruz.
             var reasoning = await _reasoningService.ReasonAsync(
                 scenario.Query, session, history: null, ct: ct);
-            var response = await _team.RunAsync(scenario.Query, null, session, reasoning);
+            var response = await _team.RunAsync(scenario.Query, null, session, reasoning, ct);
 
             result.Response = response;
             result.DetectedIntent = reasoning.Intent;

@@ -27,8 +27,7 @@ Bu doküman bir kullanıcı mesajının baştan sona nasıl işlendiğini **kod 
 [ChatPortService.HandleStreamAsync]
   • Session lookup/create
   • SessionStateExtractor (deterministic) — turn++, intent keyword
-  • Workflow match? (WorkflowExecutor)
-       │ (eşleşmedi)
+       │
        ▼
 [ReasoningService.AnalyzeAsync]
   • IdExtractor.Extract → ExtractedIds
@@ -98,9 +97,6 @@ public async Task HandleStreamAsync(string sessionId, string message, ...)
 
     SessionStateExtractor.ExtractAndApply(
         session.State, message, botResponse: "", turnNumber: ++turn);    // ← BP
-
-    var workflow = await _workflowExecutor.TryMatchAsync(message, session);
-    if (workflow != null) { /* fast path */ return; }    // ← BP — workflow match?
     ...
 }
 ```

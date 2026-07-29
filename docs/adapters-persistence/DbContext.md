@@ -13,7 +13,7 @@
 
 **Base:** `DbContext` (EF Core 10 + Npgsql)
 
-9 PostgreSQL şemasında 22 tablo barındırır. Tüm entity konfigürasyonları `assembly.GetTypes()` ile otomatik uygulanır — yeni entity eklendiğinde DbContext dosyasına dokunmak gerekmez.
+8 PostgreSQL şemasında 21 tablo barındırır. Tüm entity konfigürasyonları `assembly.GetTypes()` ile otomatik uygulanır — yeni entity eklendiğinde DbContext dosyasına dokunmak gerekmez.
 
 ### DbSet'ler
 
@@ -34,7 +34,6 @@
 | `RefreshTokens` | `auth` | `refresh_tokens` |
 | `CustomerProfiles` | `personalization` | `customer_profiles` |
 | `Lessons` | `improvement` | `lessons` |
-| `WorkflowDefinitions` | `workflow` | `workflow_definitions` |
 | `Categories` | `catalog` | `categories` |
 | `Customers` | `catalog` | `customers` |
 | `Orders` | `catalog` | `orders` |
@@ -56,7 +55,6 @@ internal static class Schemas
     public const string Auth           = "auth";
     public const string Personalization = "personalization";
     public const string Improvement    = "improvement";
-    public const string Workflow       = "workflow";
     public const string Catalog        = "catalog";
 }
 ```
@@ -138,7 +136,7 @@ dotnet ef database update
 
 `EfCore/Configurations/` altında her entity için `IEntityTypeConfiguration<T>` sınıfı vardır. Önemli konfigürasyonlar:
 
-- **JSONB sütunlar:** `StateJson`, `ParametersJson`, `SkillsJson`, `StepsJson` gibi karmaşık tipler PostgreSQL JSONB olarak saklanır
+- **JSONB sütunlar:** `StateJson`, `ParametersJson`, `SkillsJson` gibi karmaşık tipler PostgreSQL JSONB olarak saklanır
 - **Enum'lar:** `Status`, `Mode`, `Role` string olarak saklanır (migration stabilitesi için)
 - **FK ilişkileri:** `messages.session_id → sessions.session_id`, `users.linked_agent_id → human_agents.id`
 

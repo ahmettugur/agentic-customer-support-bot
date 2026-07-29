@@ -44,7 +44,6 @@ AddPersistenceAdapters(configuration)
     │   ├── IHumanAgentRegistry → PostgresHumanAgentRegistry
     │   ├── ICustomerProfileStore → PostgresCustomerProfileStore
     │   ├── ILessonStore → PostgresLessonStore
-    │   ├── IWorkflowDefinitionStore → PostgresWorkflowDefinitionStore
     │   └── ISlaEventSink → PostgresSlaEventSink
     │
     ├── Catalog adaptörler (Singleton)
@@ -78,7 +77,6 @@ AddPersistenceAdapters(configuration)
 | `IReasoningTraceStore` | `PostgresReasoningTraceStore` | Singleton |
 | `ISlaEventSink` | `PostgresSlaEventSink` | Singleton |
 | `ILessonStore` | `PostgresLessonStore` | Singleton |
-| `IWorkflowDefinitionStore` | `PostgresWorkflowDefinitionStore` | Singleton |
 | `ICustomerProfileStore` | `PostgresCustomerProfileStore` | Singleton |
 | `ILlmCallPersistencePort` | `PostgresLlmCallUsageSink` | Singleton |
 | `IOrderRepository` | `OrderRepository` | Singleton |

@@ -1,6 +1,6 @@
 # Reference — Class / Interface Sözlüğü
 
-Sistemde yer alan her sınıf, interface ve enum için **tek paragraf lık** rol tanımı + ana alan/metod listesi. Diğer dokümanlar (`adapters-agents/`, `domain/Model-Workflow.md`, `domain/Model-Reasoning.md`, `agentic-patterns.md`) bu referans üzerinden yüksek seviyeli anlatım yapar.
+Sistemde yer alan her sınıf, interface ve enum için **tek paragraf lık** rol tanımı + ana alan/metod listesi. Diğer dokümanlar (`adapters-agents/`, `domain/Model-Reasoning.md`, `agentic-patterns.md`) bu referans üzerinden yüksek seviyeli anlatım yapar.
 
 **Bölümler**:
 
@@ -246,12 +246,6 @@ Per-customer profil yönetimi. `RecordInteractionAsync` (LLM-siz heuristik, her 
 ### `SkillsBasedRouter` — `Application/Services/Routing/SkillsBasedRouter.cs`
 
 Deterministik skills-based eşleştirme. Reasoning trace + müşteri profili → required skill çıkarımı → aday seçimi (skill match + dil + load balance). LLM kullanmaz. `ISkillsBasedRouter` port'unu (`Application/Ports/Driven/`) implemente eder.
-
----
-
-### `WorkflowExecutor` — `Services/Workflow/WorkflowExecutor.cs`
-
-Low-code workflow designer motoru. Admin tanımlı JSON workflow'larını LLM-siz deterministik olarak çalıştırır. Step tipleri: Respond, Lookup, Branch, SetVariable.
 
 ---
 
@@ -744,7 +738,7 @@ Her `Add*` metodu kendi katmanının sınıflarını kaydeder:
 | `AddAiServices` | `IChatClient`, `ReasoningChatClient`, `AiClientFactory`, `IOptions<AiProviderOptions>` |
 | `AddRedisServices` | `IConnectionMultiplexer`, `IDistributedLockProvider`, `IMessageBusPort → RedisMessageBusAdapter` |
 | `AddPersistenceServices` | Postgres: `PostgresSessionManager`, `PostgresApprovalQueue`, `PostgresRatingStore`, `IMessageBusPort → InMemoryMessageBusAdapter` (InMemory mod); `IOptions<PromptOptions>`, `IPromptRepository → FileSystemPromptRepository` |
-| `AddApplicationServices` | 13 driving port servisi (ISessionPort, IChatPort, IApprovalPort, IEscalationPort, ...), `EntityVerifier`, `ReasoningSanityChecker`, `ReasoningService`, `EvaluationRunner`, `ContextPipeline` (IContextPipeline), `IContextProvider` × 3-4, `InputGuard`, `CustomerProfileService` (ICustomerProfileService), `SkillsBasedRouter` (ISkillsBasedRouter), `EscalationPolicyService`, `WorkflowExecutor`, `LessonMiner`, `IOptions<WorkflowGuardOptions>`, `IOptions<ParallelExecutionOptions>` — dahili olarak `AddAgentsAdapter()` çağırır |
+| `AddApplicationServices` | 12 driving port servisi (ISessionPort, IChatPort, IApprovalPort, IEscalationPort, ...), `EntityVerifier`, `ReasoningSanityChecker`, `ReasoningService`, `EvaluationRunner`, `ContextPipeline` (IContextPipeline), `IContextProvider` × 3-4, `InputGuard`, `CustomerProfileService` (ICustomerProfileService), `SkillsBasedRouter` (ISkillsBasedRouter), `EscalationPolicyService`, `LessonMiner`, `IOptions<WorkflowGuardOptions>` (ValidateOnStart), `IOptions<ParallelExecutionOptions>` (ValidateOnStart) — dahili olarak `AddAgentsAdapter()` çağırır |
 | `AddAgentsAdapter` | `ApprovalGateService`, `CustomerSupportTeam` → `IAgentTeamPort` (IChatClient fail-fast doğrulama) |
 
 ### `IMessageBusPort` — `CustomerSupportBot.Application/Ports/Driven/Messaging/IMessageBusPort.cs`
@@ -770,7 +764,6 @@ Secondary port. Postgres adaptörlerinin Redis'e doğrudan bağımlılığını 
 ## Çapraz referanslar
 
 - **Agent davranışı detayı** → [adapters-agents/](adapters-agents/README.md)
-- **Workflow akışı / compound query** → [domain/Model-Workflow.md](domain/Model-Workflow.md)
 - **Reasoning pipeline katmanları** → [domain/Model-Reasoning.md](domain/Model-Reasoning.md)
 - **Tasarım örüntüleri** → [agentic-patterns.md](agentic-patterns.md)
 - **Mimari + DI + sequence diagram** → [architecture.md](architecture.md)

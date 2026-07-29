@@ -8,7 +8,6 @@ API response'larını deserialize etmek için kullanılan client-side model'ler.
 |---|---|
 | `AdminModels.cs` | Approval, Escalation, ChatSession, Analytics, Agent, SLA, Lesson, SessionAnalytics |
 | `TraceDetailModels.cs` | TraceDetail, TraceAgentVisit, TraceToolCall, ReplayStep |
-| `WorkflowModels.cs` | WorkflowListEntry, WorkflowListResponse |
 
 ---
 
@@ -311,34 +310,6 @@ public sealed record ReplayStep(string Kind, DateTimeOffset? Time, string Title,
 
 ---
 
-## WorkflowModels.cs
-
-### WorkflowListEntry
-
-```csharp
-public sealed class WorkflowListEntry
-{
-    public string Id { get; init; } = string.Empty;
-    public string Name { get; init; } = string.Empty;
-    public bool IsActive { get; init; }
-    public int Version { get; init; }
-    public List<JsonElement>? Steps { get; init; }
-    public int StepCount => Steps?.Count ?? 0;
-}
-```
-
-`Steps` `JsonElement?` listesi — raw JSON olarak tutulur (schema değişikliklerine karşı esnek). `StepCount` computed property.
-
-### WorkflowListResponse
-
-```csharp
-public sealed record WorkflowListResponse(int Count, List<WorkflowListEntry> Items);
-```
-
-`WorkflowApiService.GetListAsync()` bu response'u deserialize eder, `Items` döndürür.
-
----
-
 ## JSON serialization
 
 Tüm DTO'lar `System.Net.Http.Json` ile deserialize edilir:
@@ -353,22 +324,8 @@ Naming convention: server camelCase yayar, C# PascalCase property — default ma
 
 ---
 
-## Pages/WorkflowDefaults.cs
-
-```csharp
-internal static class WorkflowDefaults
-{
-    public static readonly string SampleJson = @"{ ... }";
-}
-```
-
-WorkflowDesigner sayfasının "Yeni Workflow" için default JSON şablonu. Türkçe sipariş takip örneği içerir — admin JSON editörüne bu şablon ile başlar.
-
----
-
 ## Bağlantılar
 
 - [Domain Model katmanı](../domain/README.md) — server tarafı karşılıkları
 - [Services.md](Services.md) — bu modelleri kullanan service'ler
 - [Pages-Admin.md](Pages-Admin.md) — modellerin UI rendering'i
-- [Pages-Workflow.md](Pages-Workflow.md) — WorkflowModels kullanımı

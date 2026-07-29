@@ -7,7 +7,7 @@ Razor layout'ları — sayfa "kabukları". Her sayfa `@layout XxxLayout` direkti
 | Layout | Sayfalar | Görünüm |
 |---|---|---|
 | `EmptyLayout` | Login, Chat | Boş — nav yok |
-| `AdminLayout` | Admin, Traces, Replay, Sla, WorkflowDesigner | Top nav (AdminNavBar) |
+| `AdminLayout` | Admin, Traces, Replay, Sla | Top nav (AdminNavBar) |
 | `MainLayout` | `App.razor`'ın `DefaultLayout`'u; NotFound bunu kullanır | Sol sidebar (NavMenu) + içerik |
 
 ---
@@ -73,7 +73,6 @@ Admin sayfalarının üst nav'ı. `ThemeService`'e bağlı bir açık/koyu mod d
     <NavLink href="/admin">🛡️ HITL Panel</NavLink>
     <NavLink href="/traces">🧠 Trace Dashboard</NavLink>
     <NavLink href="/replay">🎬 Replay</NavLink>
-    <NavLink href="/workflow-designer">🔧 Workflow Designer</NavLink>
     <NavLink href="/sla">⏱️ SLA</NavLink>
 
     <button @onclick="ToggleAsync" class="csb-theme-toggle"><!-- güneş/ay ikonu, ThemeSvc.IsDark'a göre --></button>
@@ -164,7 +163,7 @@ Mevcut URL (tam URI, `Uri.EscapeDataString` ile encode edilmiş) `?return=` quer
 </div>
 ```
 
-Admin sayfaları (`Admin`, `Traces`, `Replay`, `Sla`, `WorkflowDesigner`) kendi `@layout AdminLayout` direktifleriyle bunu ezer — top nav (AdminNavBar) tercih ediyorlar. `MainLayout`/`NavMenu` fiilen sadece `NotFound` sayfasında ve DefaultLayout fallback'i olarak devrede.
+Admin sayfaları (`Admin`, `Traces`, `Replay`, `Sla`) kendi `@layout AdminLayout` direktifleriyle bunu ezer — top nav (AdminNavBar) tercih ediyorlar. `MainLayout`/`NavMenu` fiilen sadece `NotFound` sayfasında ve DefaultLayout fallback'i olarak devrede.
 
 ---
 
@@ -178,7 +177,6 @@ Admin sayfaları (`Admin`, `Traces`, `Replay`, `Sla`, `WorkflowDesigner`) kendi 
 | `wwwroot/css/traces.css` | Traces sayfası |
 | `wwwroot/css/replay.css` | Replay |
 | `wwwroot/css/sla.css` | SLA |
-| `wwwroot/css/workflow.css` | Workflow Designer |
 | `Layout/*.razor.css` | Component-scoped (Blazor CSS isolation) |
 | `Pages/*.razor.css` | Aynı |
 

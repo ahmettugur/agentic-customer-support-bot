@@ -11,6 +11,10 @@ namespace CustomerSupportBot.Adapters.Agents;
 
 public static class WorkflowResponseExtractor
 {
+    // LLM çıktısı (potansiyel olarak adversarial/prompt-injection kaynaklı metin) üzerinde
+    // çalışan tüm regex'ler için ortak timeout — ReDoS'a karşı savunma katmanı.
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(500);
+
     public static string ExtractResultFromOutput(WorkflowOutputEvent output)
     {
         if (output.Data is IEnumerable<ChatMessage> chatMessages)
@@ -77,12 +81,20 @@ public static class WorkflowResponseExtractor
     public static string RemoveTerminationMarkers(string result)
     {
         if (string.IsNullOrEmpty(result)) return result;
-        var cleaned = Regex.Replace(
-            result,
-            @"TERMINATE(\s*[:\s]+reason\s*=\s*[a-zA-Z_]+|\s*\([^)]+\))?[\s\S]*$",
-            "",
-            RegexOptions.IgnoreCase);
-        return cleaned.Trim();
+        try
+        {
+            var cleaned = Regex.Replace(
+                result,
+                @"TERMINATE(\s*[:\s]+reason\s*=\s*[a-zA-Z_]+|\s*\([^)]+\))?[\s\S]*$",
+                "",
+                RegexOptions.IgnoreCase,
+                RegexTimeout);
+            return cleaned.Trim();
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return result.Trim();
+        }
     }
 
     public static string RemoveTechnicalJsonBlocks(string result)
@@ -93,20 +105,31 @@ public static class WorkflowResponseExtractor
             $"\"{WellKnown.JsonProperties.PreToolCheck}\"|\"{WellKnown.JsonProperties.ResultConfidence}\"" +
             $"|\"{WellKnown.JsonProperties.PostToolReflection}\"|\"{WellKnown.JsonProperties.SelfCritique}\"";
 
-        var cleaned = Regex.Replace(
-            result,
-            @"```(?:json)?\s*\{[^`]*(?:" + technicalKeys + @")[^`]*\}\s*```",
-            "",
-            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        try
+        {
+            var cleaned = Regex.Replace(
+                result,
+                @"```(?:json)?\s*\{[^`]*(?:" + technicalKeys + @")[^`]*\}\s*```",
+                "",
+                RegexOptions.IgnoreCase | RegexOptions.Singleline,
+                RegexTimeout);
 
-        cleaned = Regex.Replace(
-            cleaned,
-            @"\{(?:[^{}]|(?:\{[^{}]*\}))*(?:" + technicalKeys + @")(?:[^{}]|(?:\{[^{}]*\}))*\}",
-            "",
-            RegexOptions.Singleline);
+            // Not: sadece tek seviye brace nesting'i eşleştirir — 2+ seviye derin, iç içe
+            // JSON bloklarını kaçırabilir. Bu bilinen bir sınırlamadır (best-effort temizlik).
+            cleaned = Regex.Replace(
+                cleaned,
+                @"\{(?:[^{}]|(?:\{[^{}]*\}))*(?:" + technicalKeys + @")(?:[^{}]|(?:\{[^{}]*\}))*\}",
+                "",
+                RegexOptions.Singleline,
+                RegexTimeout);
 
-        cleaned = Regex.Replace(cleaned, @"\n{3,}", "\n\n");
-        return cleaned.Trim();
+            cleaned = Regex.Replace(cleaned, @"\n{3,}", "\n\n", RegexOptions.None, RegexTimeout);
+            return cleaned.Trim();
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return result.Trim();
+        }
     }
 
     public static bool ContainsAgentRoutingMessage(string text)
@@ -124,13 +147,20 @@ public static class WorkflowResponseExtractor
     {
         if (string.IsNullOrEmpty(text)) return null;
 
-        var match = Regex.Match(text, @"TERMINATE[:\s]+reason\s*=\s*([a-zA-Z_]+)", RegexOptions.IgnoreCase);
-        if (match.Success) return match.Groups[1].Value.ToLowerInvariant();
+        try
+        {
+            var match = Regex.Match(text, @"TERMINATE[:\s]+reason\s*=\s*([a-zA-Z_]+)", RegexOptions.IgnoreCase, RegexTimeout);
+            if (match.Success) return match.Groups[1].Value.ToLowerInvariant();
 
-        match = Regex.Match(text, @"TERMINATE\s*\(([^)]+)\)", RegexOptions.IgnoreCase);
-        if (match.Success) return match.Groups[1].Value.Trim().ToLowerInvariant();
+            match = Regex.Match(text, @"TERMINATE\s*\(([^)]+)\)", RegexOptions.IgnoreCase, RegexTimeout);
+            if (match.Success) return match.Groups[1].Value.Trim().ToLowerInvariant();
 
-        return null;
+            return null;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return null;
+        }
     }
 
     public static string ExtractDeltaText(object? data)

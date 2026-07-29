@@ -53,7 +53,7 @@ public sealed class ChatPortService : IChatPort
         var reasoningResult = await _reasoning.ReasonAsync(query, session, history, ct);
 
         using var approvalScope = _approvalContext.SetScope(sessionId, null, query);
-        var response = await _team.RunAsync(query, history, session, reasoningResult);
+        var response = await _team.RunAsync(query, history, session, reasoningResult, ct);
 
         _sessionState.UpdateSessionIntent(session, reasoningResult.Intent);
         _sessions.AddExchange(sessionId, query, response);

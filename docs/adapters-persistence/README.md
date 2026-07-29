@@ -108,7 +108,6 @@ Aşağıdaki tablo **üretimde gerçekten kayıtlı olan** (Postgres) implementa
 | `IReasoningTraceStore` | `PostgresReasoningTraceStore` | `InMemoryReasoningTraceStore` |
 | `ISlaEventSink` | `PostgresSlaEventSink` | `InMemorySlaEventSink` |
 | `ILessonStore` | `PostgresLessonStore` | `InMemoryLessonStore` |
-| `IWorkflowDefinitionStore` | `PostgresWorkflowDefinitionStore` | `InMemoryWorkflowDefinitionStore` |
 | `ICustomerProfileStore` | `PostgresCustomerProfileStore` | `InMemoryCustomerProfileStore` |
 | `IMessageBusPort` | — (Redis ayrı adapter, `Adapters.Redis`) | `InMemoryMessageBusAdapter` |
 | `ILlmCallPersistencePort` | `PostgresLlmCallUsageSink` | — |

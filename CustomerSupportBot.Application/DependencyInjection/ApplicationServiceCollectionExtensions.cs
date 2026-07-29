@@ -49,11 +49,30 @@ public static class ApplicationServiceCollectionExtensions
 
     private static void AddApplicationOptions(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<ApprovalOptions>(configuration.GetSection("HumanInTheLoop"));
+        services.AddOptions<ApprovalOptions>()
+            .Bind(configuration.GetSection("HumanInTheLoop"))
+            .Validate(o => o.TimeoutSeconds > 0, "HumanInTheLoop:TimeoutSeconds pozitif olmalı.")
+            .Validate(o => o.ToolsRequiringApproval != null, "HumanInTheLoop:ToolsRequiringApproval null olamaz.")
+            .ValidateOnStart();
+
         services.Configure<RoutingOptions>(configuration.GetSection("Routing"));
-        services.Configure<ParallelExecutionOptions>(
-            configuration.GetSection(ParallelExecutionOptions.SectionName));
-        services.Configure<WorkflowGuardOptions>(configuration.GetSection("WorkflowGuards"));
+
+        services.AddOptions<ParallelExecutionOptions>()
+            .Bind(configuration.GetSection(ParallelExecutionOptions.SectionName))
+            .Validate(o => o.MaxDegreeOfParallelism > 0, "ParallelExecution:MaxDegreeOfParallelism pozitif olmalı.")
+            .ValidateOnStart();
+
+        services.AddOptions<WorkflowGuardOptions>()
+            .Bind(configuration.GetSection("WorkflowGuards"))
+            .Validate(o => o.TimeoutSeconds > 0, "WorkflowGuards:TimeoutSeconds pozitif olmalı.")
+            .Validate(o => o.MaxDuplicateToolCalls > 0, "WorkflowGuards:MaxDuplicateToolCalls pozitif olmalı.")
+            .Validate(o => o.MaxIterations > 0, "WorkflowGuards:MaxIterations pozitif olmalı.")
+            .Validate(o => o.MaxHandoffsPerAgent > 0, "WorkflowGuards:MaxHandoffsPerAgent pozitif olmalı.")
+            .Validate(o => o.MaxTokensPerRequest > 0, "WorkflowGuards:MaxTokensPerRequest pozitif olmalı.")
+            .Validate(o => o.PlanConfidenceThreshold is >= 0 and <= 1,
+                "WorkflowGuards:PlanConfidenceThreshold 0-1 aralığında olmalı.")
+            .ValidateOnStart();
+
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
     }
 

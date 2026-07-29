@@ -11,7 +11,6 @@ API endpoint'lerini wrap eden client sınıfları ve UI yardımcı servisleri. S
 | `ChatApiService` | `/chat`, `/sessions` | Chat sayfası |
 | `TracesApiService` | `/traces`, `/chat-sessions/.../history`, `/approvals`, `/escalations` | Traces, Replay |
 | `SlaApiService` | `/sla` | SLA sayfası |
-| `WorkflowApiService` | `/workflows` | WorkflowDesigner |
 | `ThemeService` | — (localStorage / DOM) | Karanlık/aydınlık mod yönetimi |
 
 `AuthorizedHttpClientHandler` JWT token otomatik inject eder.
@@ -326,50 +325,6 @@ Task<List<SlaEvent>> GetEventsAsync(int count = 100)
 ```
 
 `SlaEventsResponse(int TotalCount, List<SlaEvent> Items)` ile deserialize edilir, `Items` döndürülür. Hata durumunda `null`/`[]` döner.
-
----
-
-## WorkflowApiService
-
-```csharp
-public sealed class WorkflowApiService(HttpClient http)
-```
-
-```csharp
-Task<List<WorkflowListEntry>> GetListAsync()
-    // → GET /workflows (WorkflowListResponse → Items)
-
-Task<string?> GetRawAsync(string id)
-    // → GET /workflows/{id} → JsonElement pretty-print
-
-Task<(bool Ok, string? Error, string? SavedId)> SaveAsync(string? id, string rawJson)
-    // id=null → POST /workflows
-    // id=... → PUT /workflows/{id}
-
-Task<(bool Ok, string? Error)> DeleteAsync(string id)
-    // → DELETE /workflows/{id}
-
-Task<string> TestAsync(string id, string input)
-    // → POST /workflows/{id}/test
-    //   body: { input }
-    //   Response: JsonElement → pretty-print string
-```
-
-### Neden raw JSON?
-
-WorkflowDesigner JSON editor kullanıyor. `SaveAsync` raw string'i `JsonSerializer.Deserialize<JsonElement>` ile parse eder, `JsonContent.Create(body)` ile gönderir. Parse hatası → `(false, "JSON hatası: ...", null)` döner.
-
-### Pretty-print ayarı
-
-```csharp
-private static readonly JsonSerializerOptions _pretty = new()
-{
-    WriteIndented = true,
-    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-};
-```
-
-`GetRawAsync` ve `TestAsync` bu ayarla format eder.
 
 ---
 

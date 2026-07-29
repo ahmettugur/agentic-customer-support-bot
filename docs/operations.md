@@ -58,7 +58,6 @@ dotnet run
 | `http://localhost:5021/traces.html` | Trace dashboard |
 | `http://localhost:5021/replay.html` | Trace step-by-step replay |
 | `http://localhost:5021/sla.html` | SLA durumu monitör |
-| `http://localhost:5021/workflow-designer.html` | Low-code workflow editör |
 
 ### İlk akış denemesi
 
@@ -261,7 +260,7 @@ Tüm `Telemetry` ayarı kapatılmak istenirse `Telemetry.Enabled = false` — tr
 5. AddApplicationServices    → 13 driving port servisi, EntityVerifier, ReasoningSanityChecker,
                                ReasoningService, ContextPipeline + 3-4 IContextProvider,
                                InputGuard, CustomerProfileService, SkillsBasedRouter,
-                               WorkflowExecutor, LessonMiner, EvaluationRunner,
+                               LessonMiner, EvaluationRunner,
                                AddAgentsAdapter (CustomerSupportTeam + ApprovalGateService),
                                SlaGuardianService (BackgroundService), KnowledgeBaseIngestor
 6. AddAuthenticationServices → JWT Bearer + Admin authorization policy
@@ -270,7 +269,7 @@ Tüm `Telemetry` ayarı kapatılmak istenirse `Telemetry.Enabled = false` — tr
 9. Middleware pipeline       → CORS → RateLimiter → WebSockets → Auth → Authorization
 10. Endpoint mapping         → Public: Chat, Realtime (WS), Session, Auth
                                Admin: Trace, Eval, Memory, Improvements, Telemetry,
-                                      Personalization, Agents, Workflows, SLA
+                                      Personalization, Agents, SLA
                                + Analytics (kısmi public)
 11. IHostedService'ler başlar→ KnowledgeBaseIngestor, SlaGuardianService, PersistenceHydrator
 12. app.Run()                → Kestrel dinler (default :5021)
@@ -344,15 +343,7 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
 | `IHumanAgentRegistry` (`InMemoryHumanAgentRegistry`) | İnsan müşteri temsilcisi kayıtları (skill tag, dil, max load, current load). Seed `Routing.SeedAgents` config'inden yüklenir |
 | `ISkillsBasedRouter` (`SkillsBasedRouter`) | Reasoning trace + opsiyonel müşteri profilinden skill gereksinimlerini çıkarır, en iyi skill + dil + load match'iyle aday seçer. LLM-siz, deterministik (<1ms) |
 | Hook | `ApprovalGateService.ProcessPendingEscalations` → `EscalationPolicyService.ProcessPendingEscalations` her yeni `EscalationRequest`'e routing alanlarını (`SuggestedAgentId`, `MatchScore`, `RequiredSkills`, `Priority`, `RoutingNote`) doldurur ve `IncrementLoad` çağırır. Routing iş mantığı Application katmanındaki `EscalationPolicyService`'dedir |
-| Auto-decrement | `WireRoutingLoadTracking` başlangıçta `IEscalationSink.RequestDecided` event'ine bağlanır; eskalasyon resolve/dismiss olunca atanan temsilcinin `CurrentLoad`'unu -1 yapar |
-
-### Low-Code Workflow Designer
-
-| Servis | Sorumluluk |
-|---|---|
-| `IWorkflowDefinitionStore` (`InMemoryWorkflowDefinitionStore`) | Workflow tanımlarını saklar; upsert'te otomatik versiyon artırır ve Türkçe karakterleri normalize ederek slug üretir |
-| `WorkflowExecutor` | Tanımı deterministik olarak yorumlar (LLM-siz). Adım tipleri: `Respond` (template `{var}` substitute), `Lookup` (yan etkisiz tool çağrısı), `Branch` (`var exists/missing/==/!=`), `SetVariable`. `OrderPlacement`/`Complaint`/`HumanHandoff` tool'ları yasaklı (HITL gate'i bypass etmemek için) |
-| Admin UI | `wwwroot/workflow-designer.html` — JSON editor + dry-run test butonu |
+| Auto-decrement | `HumanAgentPortService` constructor'ı `IEscalationSink.RequestDecided` event'ine bağlanır; eskalasyon resolve/dismiss olunca atanan temsilcinin `CurrentLoad`'unu -1 yapar |
 
 ### Parallel SubTask Execution (#E)
 
@@ -535,7 +526,6 @@ Varsayılan persistence provider **Postgres**'dur (`appsettings.json > Persisten
 | Semantic memory | Qdrant (vektör DB) | **Kalıcı** |
 | Bridge history (admin transcript) | `InMemoryChatBridge` | Kayıp |
 | Chat mode | `InMemoryChatModeRegistry` | Kayıp |
-| Workflow definitions | `InMemoryWorkflowDefinitionStore` | Kayıp |
 | Customer profiles | `InMemoryCustomerProfileStore` | Kayıp |
 | Demo kataloglar (InMemory) | `InMemoryProductCatalogAdapter` vs | Sabit seed | Yeni instance |
 
@@ -640,7 +630,7 @@ Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 - **Endpoint sözleşmeleri + SSE event şemaları** → [api/](api/README.md)
 - **Tasarım pattern'leri (HITL, Replan, Compound query, …)** → [agentic-patterns.md](agentic-patterns.md)
 - **Agent davranış sözleşmeleri** → [adapters-agents/](adapters-agents/README.md)
-- **Workflow + ChatManager mantığı** → [domain/Model-Workflow.md](domain/Model-Workflow.md)
+- **ChatManager routing mantığı** → [adapters-agents/CustomerSupportChatManager.md](adapters-agents/CustomerSupportChatManager.md)
 - **Reasoning pipeline ve sanity rule'lar** → [domain/Model-Reasoning.md](domain/Model-Reasoning.md)
 - **Class/interface sözleşmeleri** → [class-reference.md](class-reference.md)
 - **Yeni feature/agent/tool ekleme** → [developer-guide.md](developer-guide.md)

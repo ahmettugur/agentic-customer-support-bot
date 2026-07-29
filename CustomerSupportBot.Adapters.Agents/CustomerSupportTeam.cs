@@ -168,33 +168,62 @@ public class CustomerSupportTeam : IAgentTeamPort
         string query,
         List<ConversationMessage>? conversationHistory = null,
         AgentSession? session = null,
-        ReasoningResult? reasoning = null)
+        ReasoningResult? reasoning = null,
+        CancellationToken ct = default)
     {
         if (SubTaskOrchestrator.IsCompoundQuery(reasoning))
         {
-            return await RunDecomposedAsync(query, conversationHistory, session, reasoning!);
+            return await RunDecomposedAsync(query, conversationHistory, session, reasoning!, ct);
         }
 
         var messages = await BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
+
+        using var timeoutCts = new CancellationTokenSource(
+            TimeSpan.FromSeconds(_guards.TimeoutSeconds));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        var effectiveCt = linkedCts.Token;
 
         var workflow = CreateWorkflow();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         string result = "";
+        string? workflowError = null;
 
-        await foreach (var evt in run.WatchStreamAsync())
+        await foreach (var (evt, evtError) in EnumerateWorkflowEventsSafely(run, effectiveCt))
         {
+            if (evtError != null)
+            {
+                workflowError = evtError;
+                break;
+            }
+            if (evt == null) continue;
+
             switch (evt)
             {
                 case WorkflowOutputEvent output:
                     result = WorkflowResponseExtractor.ExtractResultFromOutput(output);
                     break;
                 case WorkflowErrorEvent errorEvt:
-                    throw ExceptionTranslator.Translate(
-                        errorEvt.Exception ?? new InvalidOperationException("Workflow hatası"),
-                        "RunAsync workflow hatası.");
+                    workflowError = errorEvt.Exception?.Message ?? "workflow error";
+                    break;
             }
+        }
+
+        if (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            throw ExceptionTranslator.Translate(
+                new TimeoutException($"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı."),
+                "RunAsync workflow timeout.");
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        if (workflowError != null)
+        {
+            throw ExceptionTranslator.Translate(
+                new InvalidOperationException(workflowError),
+                "RunAsync workflow hatası.");
         }
 
         result = WorkflowResponseExtractor.RemoveTerminationMarkers(result);
@@ -517,21 +546,40 @@ public class CustomerSupportTeam : IAgentTeamPort
         if (conversationHistory is { Count: > 0 })
             messages.AddRange(conversationHistory.Select(m => new ChatMessage(ToChatRole(m.Role), m.Text)));
 
-        if (session?.State.ForceReplanNextTurn == true)
+        var replanHint = ConsumeForceReplanHint(session);
+        if (replanHint != null)
         {
-            var hint = WellKnown.FallbackMessages.ReplanPlanningHint;
-            if (!string.IsNullOrWhiteSpace(session.State.ReplanNote))
-            {
-                hint += $"\n\n📌 Admin notu (sadece sana, müşteri görmez): \"{session.State.ReplanNote}\"";
-            }
-            messages.Add(new ChatMessage(ChatRole.System, hint));
-            session.State.ForceReplanNextTurn = false;
-            session.State.ReplanNote = null;
+            messages.Add(new ChatMessage(ChatRole.System, replanHint));
         }
 
         messages.Add(new ChatMessage(ChatRole.User, query));
 
         return messages;
+    }
+
+    /// <summary>
+    /// ForceReplanNextTurn bayrağını atomik olarak okur ve temizler — tek kullanımlık (one-shot)
+    /// olması gerektiği için birden fazla eşzamanlı çağrının (paralel alt-görevler veya aynı
+    /// session'a gelen eşzamanlı istekler) aynı flag'i birden çok kez tüketmesini engeller.
+    /// </summary>
+    private static string? ConsumeForceReplanHint(AgentSession? session)
+    {
+        if (session is null) return null;
+
+        lock (session)
+        {
+            if (!session.State.ForceReplanNextTurn) return null;
+
+            var hint = WellKnown.FallbackMessages.ReplanPlanningHint;
+            if (!string.IsNullOrWhiteSpace(session.State.ReplanNote))
+            {
+                hint += $"\n\n📌 Admin notu (sadece sana, müşteri görmez): \"{session.State.ReplanNote}\"";
+            }
+
+            session.State.ForceReplanNextTurn = false;
+            session.State.ReplanNote = null;
+            return hint;
+        }
     }
 
     private string BuildReasoningSummaryHint(ReasoningResult r)
@@ -600,7 +648,8 @@ public class CustomerSupportTeam : IAgentTeamPort
         string query,
         List<ConversationMessage>? conversationHistory,
         AgentSession? session,
-        ReasoningResult reasoning)
+        ReasoningResult reasoning,
+        CancellationToken ct)
     {
         var parts = new List<string>();
         var runningHistory = conversationHistory != null
@@ -622,12 +671,12 @@ public class CustomerSupportTeam : IAgentTeamPort
 
                 var tasks = group.Items.Select(async sub =>
                 {
-                    await sem.WaitAsync().ConfigureAwait(false);
+                    await sem.WaitAsync(ct).ConfigureAwait(false);
                     try
                     {
                         var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
                         var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
-                        var subResp = await RunAsync(subQuery, historySnapshot, session, subReasoning)
+                        var subResp = await RunAsync(subQuery, historySnapshot, session, subReasoning, ct)
                             .ConfigureAwait(false);
                         return (sub, subResp);
                     }
@@ -650,7 +699,7 @@ public class CustomerSupportTeam : IAgentTeamPort
                 {
                     var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
                     var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
-                    var subResp = await RunAsync(subQuery, runningHistory, session, subReasoning)
+                    var subResp = await RunAsync(subQuery, runningHistory, session, subReasoning, ct)
                         .ConfigureAwait(false);
                     collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, subResp);
                     runningHistory.Add(new ConversationMessage(ConversationRoles.User, subQuery));

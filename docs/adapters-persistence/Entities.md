@@ -266,26 +266,6 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 
 ---
 
-## `workflow` şeması
-
-### `WorkflowDefinitionEntity` → `workflow.workflow_definitions`
-
-| Sütun | Tür | Açıklama |
-|-------|-----|---------|
-| `Id` | `varchar` PK | Slugify ile oluşturulur |
-| `Name` | `varchar` | |
-| `Description` | `text?` | |
-| `Version` | `int` | Upsert'te otomatik artırılır |
-| `IsActive` | `bool` | |
-| `TriggerKeywordsJson` | `jsonb` | Tetikleyici anahtar kelimeler |
-| `InputPatternsJson` | `jsonb` | `{"orderId": "\\b(\\d{4,})\\b"}` |
-| `StepsJson` | `jsonb` | `List<WorkflowStep>` |
-| `CreatedAt` | `timestamptz` | |
-| `UpdatedAt` | `timestamptz?` | |
-| `UpdatedBy` | `varchar?` | |
-
----
-
 ## `catalog` şeması
 
 ### `CategoryEntity` → `catalog.categories`

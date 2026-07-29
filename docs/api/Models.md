@@ -9,13 +9,12 @@ HTTP isteklerinin **giriş şekli**. Domain modelleri doğrudan endpoint'lerde e
 | `AdminModels.cs` | Admin endpoint input DTO'ları |
 | `Auth/AuthDtos.cs` | Login/refresh/logout |
 | `EndpointModels.cs` | Çeşitli endpoint input'ları |
-| `WorkflowRequest.cs` | Workflow CRUD request'i |
 
 ---
 
 ## Neden ayrı DTO?
 
-Domain modelleri (ör. `WorkflowDefinition`) iş kuralları ve invariant'lar taşır. HTTP boundary'sinde:
+Domain modelleri iş kuralları ve invariant'lar taşır. HTTP boundary'sinde:
 
 - **Tip değişiklikleri** olabilir (enum string, string ID, vb.)
 - **Validation farklı** — HTTP'de optional, Domain'de required olabilir
@@ -121,13 +120,6 @@ public class RerouteInput
     public string? Reason { get; set; }
 }
 
-// WorkflowEndpoints
-public class TestRunInput
-{
-    public string? Input { get; set; }
-    public Dictionary<string, string>? Variables { get; set; }
-}
-
 // ImprovementsEndpoints
 public sealed record ImprovementDecision(string? DecidedBy, string? Reason);
 
@@ -147,14 +139,6 @@ public sealed record RatingInput(int Stars, string? Feedback);
 
 ```json
 { "agentId": "agent-2", "reason": "İlk agent meşgul, VIP müşteri" }
-```
-
-### `TestRunInput`
-
-`POST /workflows/{id}/test` — workflow'u test verisiyle çalıştır.
-
-```json
-{ "input": "5 nerede", "variables": { "customer_id": "1990" } }
 ```
 
 ### `ImprovementDecision`
@@ -187,81 +171,6 @@ Validation: `stars` 1-5 arası olmalı; aksi halde 400 Bad Request.
 
 ---
 
-## WorkflowRequest.cs
-
-Workflow create/update için **detaylı** DTO:
-
-```csharp
-public sealed class WorkflowRequest
-{
-    public string Name { get; set; } = "";
-    public string Description { get; set; } = "";
-    public int Version { get; set; } = 1;
-    public bool IsActive { get; set; } = true;
-    public string? StartStepId { get; set; }
-    public List<string> TriggerKeywords { get; set; } = new();
-    public Dictionary<string, string> InputPatterns { get; set; } = new();
-    public List<WorkflowStepRequest> Steps { get; set; } = new();
-}
-
-public sealed class WorkflowStepRequest
-{
-    public string? Id { get; set; }
-    public string Type { get; set; } = "Respond";    // Respond | Lookup | Branch | SetVariable
-    public string? Label { get; set; }
-
-    // Graf bağlantıları (explicit node ID — eski SkipNext kaldırıldı)
-    public string? Next { get; set; }                 // Respond | Lookup | SetVariable
-    public string? OnTrue { get; set; }                // Branch
-    public string? OnFalse { get; set; }               // Branch
-
-    public string? Template { get; set; }             // Respond
-    public string? Tool { get; set; }                 // Lookup
-    public Dictionary<string, string> Parameters { get; set; } = new();
-    public string? StoreAs { get; set; }              // Lookup
-    public string? Condition { get; set; }            // Branch
-    public string? VariableName { get; set; }         // SetVariable
-    public string? VariableValue { get; set; }        // SetVariable
-}
-```
-
-### Neden ayrı DTO?
-
-`WorkflowDefinition` (Domain) tipi `WorkflowStepType` enum kullanır. HTTP'de string olarak geliyor — DTO bunu string olarak tutar, endpoint'te dönüştürülür:
-
-```csharp
-Type = Enum.TryParse<WorkflowStepType>(s.Type, true, out var t) ? t : WorkflowStepType.Respond,
-```
-
-Parse başarısız olursa `Respond` default. Bu sayede yeni step tipi eklemek Domain'i etkilemez.
-
-### Request örneği
-
-```http
-POST /workflows
-Authorization: Bearer <admin-jwt>
-Content-Type: application/json
-
-{
-  "name": "Sipariş Takibi",
-  "description": "1030 siparişinin durumunu sorgular",
-  "version": 1,
-  "isActive": true,
-  "triggerKeywords": ["takip", "kargoda", "nerede"],
-  "inputPatterns": { "order_id": "\\d{4,}" },
-  "steps": [
-    { "type": "Branch", "label": "order_id var mı?", "condition": "order_id missing", "skipNext": 99 },
-    { "type": "Lookup", "label": "Sipariş durumu", "tool": "order_status_tool",
-      "parameters": { "orderId": "$order_id" }, "storeAs": "lookup" },
-    { "type": "Respond", "template": "Sipariş {order_id} durumu: {lookup}" }
-  ]
-}
-```
-
-Detay: [Domain Model-Workflow](../domain/Model-Workflow.md).
-
----
-
 ## DTO best practice
 
 | Kural | Sebep |
@@ -278,5 +187,4 @@ Detay: [Domain Model-Workflow](../domain/Model-Workflow.md).
 
 - [Endpoints-Auth.md](Endpoints-Auth.md) — Login/Refresh akışı
 - [Endpoints-Admin.md](Endpoints-Admin.md) — AdminModels kullanımı
-- [Endpoints-Improvements.md](Endpoints-Improvements.md) — Workflow CRUD, Memory, Personalization
-- [Domain Model-Workflow](../domain/Model-Workflow.md)
+- [Endpoints-Improvements.md](Endpoints-Improvements.md) — Improvements, Memory, Personalization

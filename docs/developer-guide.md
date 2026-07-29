@@ -801,7 +801,7 @@ curl -s http://localhost:5021/traces/recent?count=1 \
 | Response final'da `TERMINATE` | yok (`JoinAggregatedParts` zaten temiz) |
 | Frontend'de `response_complete` event'inde `decomposed=true` | evet |
 
-Detay → [domain/Model-Reasoning.md](domain/Model-Reasoning.md) ve [application/WorkflowExecutor.md](application/WorkflowExecutor.md).
+Detay → [domain/Model-Reasoning.md](domain/Model-Reasoning.md).
 
 ---
 
@@ -981,4 +981,4 @@ curl -sX POST "http://localhost:5021/eval/run" \
 
 ---
 
-Sorularınız olursa: [architecture.md](architecture.md), [domain/Model-Reasoning.md](domain/Model-Reasoning.md), [domain/Model-Workflow.md](domain/Model-Workflow.md), [agentic-patterns.md](agentic-patterns.md) dokümanlarını ilk uğrak olarak öneririz.
+Sorularınız olursa: [architecture.md](architecture.md), [domain/Model-Reasoning.md](domain/Model-Reasoning.md), [agentic-patterns.md](agentic-patterns.md) dokümanlarını ilk uğrak olarak öneririz.

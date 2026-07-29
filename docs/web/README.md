@@ -44,8 +44,6 @@ CustomerSupportBot.Web/
 │   ├── Traces.razor                    ← /traces (reasoning audit)
 │   ├── Replay.razor                    ← /replay (step-through)
 │   ├── Sla.razor                       ← /sla (SLA dashboard)
-│   ├── WorkflowDesigner.razor          ← /workflow-designer
-│   ├── WorkflowDefaults.cs             ← Default workflow JSON
 │   └── NotFound.razor                  ← 404
 ├── Components/
 │   ├── TraceDetailPanel.razor          ← Trace detayı (sağ panel)
@@ -59,12 +57,10 @@ CustomerSupportBot.Web/
 │   ├── ChatApiService.cs               ← /sessions, /rating
 │   ├── AnalyticsApiService.cs          ← /analytics
 │   ├── TracesApiService.cs             ← /traces
-│   ├── SlaApiService.cs                ← /sla
-│   └── WorkflowApiService.cs           ← /workflows
+│   └── SlaApiService.cs                ← /sla
 ├── Models/
 │   ├── AdminModels.cs
-│   ├── TraceDetailModels.cs
-│   └── WorkflowModels.cs
+│   └── TraceDetailModels.cs
 └── wwwroot/
     ├── index.html                      ← Blazor bootstrap
     ├── css/                            ← Component-scoped + global stiller
@@ -89,8 +85,7 @@ CustomerSupportBot.Web/
 | [Pages-Chat.md](Pages-Chat.md) | Chat.razor — müşteri arayüzü, voice integration |
 | [Pages-Admin.md](Pages-Admin.md) | Admin.razor — HITL paneli (tüm tab'lar) |
 | [Pages-Observability.md](Pages-Observability.md) | Traces, Replay, Sla + bileşenleri |
-| [Pages-Workflow.md](Pages-Workflow.md) | WorkflowDesigner + WorkflowDefaults |
-| [Services.md](Services.md) | 6 API service sınıfı |
+| [Services.md](Services.md) | 5 API service sınıfı |
 | [Models.md](Models.md) | DTO'lar |
 | [JsInterop.md](JsInterop.md) | chat-bridge, admin-chat-bridge, realtime-* JS dosyaları |
 
@@ -106,7 +101,6 @@ CustomerSupportBot.Web/
 | `/traces` | Traces | AdminLayout | Admin/Agent |
 | `/replay` | Replay | AdminLayout | Admin/Agent |
 | `/sla` | Sla | AdminLayout | Admin/Agent |
-| `/workflow-designer` | WorkflowDesigner | AdminLayout | Admin/Agent |
 | `/not-found` | NotFound | MainLayout | Anonim |
 
 `NotFound.razor` sabit bir `/not-found` route'una sahiptir; wildcard bir `*` route değildir — eşleşmeyen path'ler `App.razor`'daki `<Router NotFoundPage="typeof(Pages.NotFound)">` attribute'u üzerinden buraya yönlendirilir.

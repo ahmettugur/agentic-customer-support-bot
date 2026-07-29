@@ -68,7 +68,7 @@ public sealed class ReplanService : IReplanService
                 var reasoningResult = await _reasoning.ReasonAsync(effectiveQuery, session, history, ct);
 
                 using var approvalScope = _approvalContext.SetScope(sessionId, null, effectiveQuery);
-                var response = await _team.RunAsync(effectiveQuery, history, session, reasoningResult);
+                var response = await _team.RunAsync(effectiveQuery, history, session, reasoningResult, ct);
 
                 if (string.IsNullOrWhiteSpace(response))
                 {

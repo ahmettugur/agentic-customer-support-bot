@@ -62,7 +62,6 @@ builder.Services.AddScoped<AnalyticsApiService>();
 builder.Services.AddScoped<ChatApiService>();
 builder.Services.AddScoped<TracesApiService>();
 builder.Services.AddScoped<SlaApiService>();
-builder.Services.AddScoped<WorkflowApiService>();
 
 await builder.Build().RunAsync();
 ```
@@ -124,7 +123,6 @@ Production'da `appsettings.Production.json` ile override.
 | `ChatApiService` | Chat rating + session metadata |
 | `TracesApiService` | Trace dashboard + replay |
 | `SlaApiService` | SLA status + events |
-| `WorkflowApiService` | Workflow CRUD + test |
 
 Tümü aynı authorize `HttpClient`'ı DI'dan alır — `AuthorizedHttpClientHandler` Bearer token ekler.
 

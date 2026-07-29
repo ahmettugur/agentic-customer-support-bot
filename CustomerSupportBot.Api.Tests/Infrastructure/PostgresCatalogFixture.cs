@@ -12,8 +12,10 @@ namespace CustomerSupportBot.Api.Tests.Infrastructure;
 /// </summary>
 public sealed class PostgresCatalogFixture : IAsyncLifetime
 {
+    // Alpine imajı ICU collation'larını (ör. "und-u-ks-level1", ProductConfiguration/CategoryConfiguration'da
+    // kullanılıyor) içermiyor — Debian tabanlı "postgres:16" kullanılmalı.
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
+        .WithImage("postgres:16")
         .Build();
 
     public IDbContextFactory<CustomerSupportDbContext> DbFactory { get; private set; } = null!;
