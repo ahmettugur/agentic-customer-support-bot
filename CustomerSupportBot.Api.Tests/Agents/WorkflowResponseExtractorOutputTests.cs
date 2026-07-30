@@ -1,5 +1,5 @@
 // Tests/Agents/WorkflowResponseExtractorOutputTests.cs
-// WorkflowOutputEvent ile �al��an extractor metodlar�.
+// WorkflowOutputEvent ile çalışan extractor metodları.
 using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Agents.AI.Workflows;
@@ -15,7 +15,7 @@ public class WorkflowResponseExtractorOutputTests
     private static ChatMessage Msg(ChatRole role, string text, string? authorName = null)
         => new(role, text) { AuthorName = authorName };
 
-    // ��� ExtractResultFromOutput ���
+    // ─── ExtractResultFromOutput ───
 
     [Fact]
     public void ExtractResultFromOutput_StringData_ReturnsString()
@@ -126,7 +126,7 @@ public class WorkflowResponseExtractorOutputTests
         result.SelectedAgent.Should().Be("OrderAgent");
     }
 
-    // ��� ExtractSpecialistReasoningsFromOutput ���
+    // ─── ExtractSpecialistReasoningsFromOutput ───
 
     [Fact]
     public void ExtractSpecialistReasoningsFromOutput_NotChatMessages_ReturnsEmpty()
@@ -174,7 +174,7 @@ public class WorkflowResponseExtractorOutputTests
             .Should().BeTrue();
     }
 
-    // ��� IsInternalWorkflowExecutor ���
+    // ─── IsInternalWorkflowExecutor ───
 
     [Theory]
     [InlineData("GroupChatHost-1")]
@@ -196,7 +196,7 @@ public class WorkflowResponseExtractorOutputTests
         WorkflowResponseExtractor.IsInternalWorkflowExecutor(id).Should().BeFalse();
     }
 
-    // ��� RemoveTechnicalJsonBlocks ���
+    // ─── RemoveTechnicalJsonBlocks ───
 
     [Fact]
     public void RemoveTechnicalJsonBlocks_PlainJsonWithSelfCritique_Stripped()

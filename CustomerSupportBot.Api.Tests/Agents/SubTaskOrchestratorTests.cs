@@ -93,15 +93,15 @@ public class SubTaskOrchestratorTests
     public void CreateSubTaskReasoning_BlankTargetAgent_UsesDescriptionAsAction()
     {
         var parent = new ReasoningResult();
-        var sub = new SubTask { Description = "salt i�", TargetAgent = "" };
-        SubTaskOrchestrator.CreateSubTaskReasoning(parent, sub).NextAction.Should().Be("salt i�");
+        var sub = new SubTask { Description = "salt iş", TargetAgent = "" };
+        SubTaskOrchestrator.CreateSubTaskReasoning(parent, sub).NextAction.Should().Be("salt iş");
     }
 
     [Fact]
     public void FormatSubTaskQuery_NoEntities_DescriptionOnly()
     {
-        var sub = new SubTask { Description = "�ikayet ver" };
-        SubTaskOrchestrator.FormatSubTaskQuery(sub).Should().Be("�ikayet ver");
+        var sub = new SubTask { Description = "şikayet ver" };
+        SubTaskOrchestrator.FormatSubTaskQuery(sub).Should().Be("şikayet ver");
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class SubTaskOrchestratorTests
     {
         var sub = new SubTask
         {
-            Description = "sipari� sor",
+            Description = "sipariş sor",
             Entities = new() { ["order_id"] = "1030" }
         };
         var q = SubTaskOrchestrator.FormatSubTaskQuery(sub);
@@ -128,9 +128,9 @@ public class SubTaskOrchestratorTests
     public void FormatSubTaskResult_FormatsHeader()
     {
         var sub = new SubTask { Order = 2, Description = "tema" };
-        var formatted = SubTaskOrchestrator.FormatSubTaskResult(sub, "  yan�t  ");
+        var formatted = SubTaskOrchestrator.FormatSubTaskResult(sub, "  yanıt  ");
         formatted.Should().StartWith("**2) tema**");
-        formatted.Should().Contain("yan�t");
+        formatted.Should().Contain("yanıt");
     }
 
     [Fact]

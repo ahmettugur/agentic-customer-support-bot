@@ -97,7 +97,7 @@ public class InMemoryChatBridgeTests
             return null;
         }, cts.Token);
 
-        // Aboneli�in olu�mas� i�in k�sa bekleme
+        // Aboneliğin oluşması için kısa bekleme
         await Task.Delay(100, cts.Token);
         _bridge.PublishAdminMessage("s1", "Ali", "merhaba");
 

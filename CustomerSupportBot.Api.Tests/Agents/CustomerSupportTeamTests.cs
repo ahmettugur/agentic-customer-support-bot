@@ -1,6 +1,6 @@
 // Tests/Agents/CustomerSupportTeamTests.cs
-// CustomerSupportTeam ctor + CreateWorkflow + BuildReasoningSummaryHint kapsam�.
-// Tam workflow execution �ok dependency gerektirdi�i i�in sadece yap� testleri.
+// CustomerSupportTeam ctor + CreateWorkflow + BuildReasoningSummaryHint kapsamı.
+// Tam workflow execution çok dependency gerektirdiği için sadece yapı testleri.
 
 using System.Reflection;
 using CustomerSupportBot.Adapters.Agents;
@@ -107,7 +107,7 @@ public class CustomerSupportTeamTests
         var team = BuildTeam();
         var method = typeof(CustomerSupportTeam).GetMethod(
             "BuildReasoningSummaryHint", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (method == null) return; // Y�ntem yoksa atla
+        if (method == null) return; // Yöntem yoksa atla
 
         var reasoning = new ReasoningResult
         {
@@ -151,15 +151,15 @@ public class CustomerSupportTeamTests
 
         var history = new List<ConversationMessage>
         {
-            new(ConversationRoles.User, "�nceki mesaj"),
-            new(ConversationRoles.Assistant, "�nceki yan�t"),
+            new(ConversationRoles.User, "önceki mesaj"),
+            new(ConversationRoles.Assistant, "önceki yanıt"),
         };
-        var task = (Task)method.Invoke(team, ["�imdiki", history, null, null])!;
+        var task = (Task)method.Invoke(team, ["şimdiki", history, null, null])!;
         await task.ConfigureAwait(true);
         var messages = (task.GetType().GetProperty("Result")!.GetValue(task) as List<ChatMessage>)!;
 
-        messages.Should().Contain(m => m.Text == "�nceki mesaj");
-        messages.Should().Contain(m => m.Text == "�imdiki");
+        messages.Should().Contain(m => m.Text == "önceki mesaj");
+        messages.Should().Contain(m => m.Text == "şimdiki");
     }
 
     [Fact]
@@ -174,7 +174,7 @@ public class CustomerSupportTeamTests
         await task.ConfigureAwait(true);
         var messages = (task.GetType().GetProperty("Result")!.GetValue(task) as List<ChatMessage>)!;
 
-        // Entity hint genelde System rol�nde eklenir
+        // Entity hint genelde System rolünde eklenir
         messages.Should().Contain(m => m.Role == ChatRole.System);
     }
 }

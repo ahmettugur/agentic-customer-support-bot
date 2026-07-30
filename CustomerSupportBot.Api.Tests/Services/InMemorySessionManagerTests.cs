@@ -46,7 +46,7 @@ public class InMemorySessionManagerTests
     public void AddExchange_BuildsHistory()
     {
         _mgr.AddExchange("s1", "merhaba", "selam");
-        _mgr.AddExchange("s1", "yard�m", "tabii");
+        _mgr.AddExchange("s1", "yardım", "tabii");
 
         var history = _mgr.GetHistory("s1");
         history.Should().HaveCount(4);
@@ -97,10 +97,10 @@ public class InMemorySessionManagerTests
     public void AppendAssistantMessage_AppendsToHistory()
     {
         _mgr.GetOrCreate("s1");
-        _mgr.AppendAssistantMessage("s1", "agent yan�t�");
+        _mgr.AppendAssistantMessage("s1", "agent yanıtı");
         var h = _mgr.GetHistory("s1");
         h.Should().HaveCount(1);
-        h[0].Text.Should().Be("agent yan�t�");
+        h[0].Text.Should().Be("agent yanıtı");
     }
 
     [Fact]

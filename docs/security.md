@@ -110,12 +110,20 @@ var agentScope = app.MapGroup("/agent").RequireAuthorization("AdminOrAgent");
 
 ### Rate Limiting
 
-Chat endpoint'leri `"chat"` rate limiting policy'si altındadır. Default: IP başına dakikada 20 istek.
+| Policy | Limit | Kapsam |
+|--------|-------|--------|
+| `chat` | IP başına 20/dk | `POST /chat/`, `POST /chat/stream` |
+| `general` | IP başına 60/dk | `/analytics/*` (public) + tüm `Admin`/`AdminOrAgent` scope'ları (`adminScope`, `agentScope` — Program.cs) |
 
 ```csharp
 app.MapPost("/chat/", HandleChatAsync).RequireRateLimiting("chat");
 app.MapPost("/chat/stream", HandleChatStreamAsync).RequireRateLimiting("chat");
+
+var adminScope = app.MapGroup("").RequireAuthorization("Admin").RequireRateLimiting("general");
+var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRateLimiting("general");
 ```
+
+> Admin/agent uçları auth arkasında olsa da önceden rate limitsizdi — sızmış bir JWT veya kötü niyetli bir admin/agent hesabı sınırsız istek atabiliyordu. `general` politikası grup seviyesinde uygulanır; SSE endpoint'leri (`/chat-sessions/{sid}/subscribe` vb.) tek bir istek olarak sayıldığından uzun ömürlü bağlantılar limitten etkilenmez.
 
 ### CORS
 
@@ -180,11 +188,20 @@ Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`) çal
 
 ### 4.2 Tool Idempotency
 
-Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`) için **SHA256 hash tabanlı idempotency cache** mevcuttur:
+**Dosya:** `CustomerSupportBot.Application/Services/Tools/SideEffectIdempotencyCache.cs`
 
-- Aynı parametrelerle 60 saniye içinde yapılan çağrılar cache'den döner
-- Mükerrer kayıtlar (ör. compound query'de aynı şikayetin iki kez açılması) engellenir
-- Cache max 200 entry tutar; eski entry'ler otomatik temizlenir
+Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`) için **SHA256 imza tabanlı mükerrer çağrı koruması** vardır:
+
+- İmza = `toolAdı + parametreler`; 60 saniyelik pencere (`DefaultWindow`), max 200 kayıt (`DefaultMaxEntries`), aşılırsa en eski kayıtlar atılır
+- Cache isabetinde tool **çalıştırılmaz** — stok düşülmez, DB'ye kayıt yazılmaz
+- **Sonuç sessizce taklit edilmez.** Çağırana ayırt edilebilir bir bilgilendirme döner:
+  *"Bu siparişi az önce oluşturmuştum — sipariş numarası: 1082. Mükerrer kayıt oluşturmadım. Gerçekten ikinci bir sipariş istiyorsanız lütfen açıkça belirtin."*
+  `Data` içinde `duplicate = true` bayrağı bulunur. Böylece mükerrer kayıt engellenirken meşru tekrar talebi de kaybolmaz.
+- Yalnızca **başarılı** çağrılar cache'lenir — hata sonrası yeniden deneme engellenmez
+- İmza kanonik değerler üzerinden kurulur: sipariş için katalogdan çözülen ürün adı (`"kahve"` ve `"Kahve"` aynı sayılır), şikayet için türetilmiş `customerId` (parametrenin verilip verilmemesi iki farklı çağrı gibi görünmez)
+- `SideEffectIdempotencyCache` **Singleton** kaydedilir; `OrderToolsService` ve `ComplaintToolsService` aynı örneği paylaşır
+
+> **Neden gerekli?** `MaxDuplicateToolCalls` guard'ı `CustomerSupportChatManager` içinde, yani **tek workflow koşusunun** mesaj geçmişine bakar. Compound query'de her alt görev ayrı (bazen paralel) bir workflow koşusu olduğu için o guard mükerrer yan etkili çağrıları göremez. Bu cache o boşluğu kapatır.
 
 ---
 
@@ -195,7 +212,6 @@ Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`) içi
   "WorkflowGuards": {
     "TimeoutSeconds": 180,
     "MaxDuplicateToolCalls": 3,
-    "MaxTokensPerRequest": 30000,
     "MaxIterations": 20
   }
 }
@@ -205,8 +221,9 @@ Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`) içi
 |-------|-----------|
 | **Timeout** | Tek workflow turunun max süresi. Aşılırsa iptal edilir — hem `RunStreamingAsync` hem `RunAsync` (non-streaming: `EvaluationRunner`, `ReplanService`) için geçerlidir |
 | **MaxDuplicateToolCalls** | Aynı tool'u N kez arka arkaya çağırırsa devre kesilir |
-| **MaxTokensPerRequest** | ⚠️ Şu an kodda okunmuyor — ölü config |
 | **MaxIterations** | ChatManager max agent geçiş sayısı |
+
+> **Kaldırıldı:** `MaxTokensPerRequest` daha önce config'de tanımlıydı ama kodda hiç okunmuyordu (ölü config). Workflow boyunca kümülatif token kullanımını izleyip orta-akışta kesmek `CustomerSupportChatManager`'a yeni bir mekanizma eklemeyi gerektiren ayrı bir özellik — var olmayan bir korumayı config'de var gibi göstermek yerine kaldırıldı. Gerçek token/maliyet takibi `TelemetryChatClient` + `CostUsageStore` üzerinden çağrı bazında yapılıyor (bkz. [architecture.md](architecture.md)).
 
 `WorkflowGuardOptions` (ve `ApprovalOptions`, `ParallelExecutionOptions`) `ValidateOnStart()` ile kayıtlıdır — `TimeoutSeconds=0` gibi geçersiz bir değer artık ilk isteği değil **uygulama başlangıcını** patlatır.
 

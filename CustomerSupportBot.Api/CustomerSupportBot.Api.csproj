@@ -11,8 +11,11 @@
     <!-- Api katmanına özgü paketler -->
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <!-- contentfiles kasıtlı olarak DAHIL DEĞİL: bu paketin content item'ları (**/*.resx glob'u
+         dahil) MSBuild tarafından consuming proje köküne göre çözülüyor. bin/obj derinleştikçe
+         (nested publish/build çıktıları) bu glob kendi içine katlanıp MSB3552 ile patlıyordu. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <IncludeAssets>runtime; build; native; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="YamlDotNet" Version="18.1.0" />

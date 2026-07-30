@@ -23,6 +23,7 @@ public static class ChatEndpoints
     /// </summary>
     private static async Task<IResult> HandleChatAsync(
         ChatRequest request,
+        HttpContext httpContext,
         IChatPort chatPort,
         IInputGuard inputGuard,
         ILoggerFactory loggerFactory)
@@ -51,7 +52,9 @@ public static class ChatEndpoints
         }
 
         var safeRequest = request with { Query = guardResult.SanitizedInput };
-        var response = await chatPort.HandleAsync(safeRequest);
+        // İstemci bağlantıyı keserse reasoning/workflow zinciri de iptal edilir —
+        // aksi halde LLM çağrısı WorkflowGuards:TimeoutSeconds süresince boşa çalışır.
+        var response = await chatPort.HandleAsync(safeRequest, httpContext.RequestAborted);
         return Results.Json(response);
     }
 

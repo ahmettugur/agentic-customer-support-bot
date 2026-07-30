@@ -33,7 +33,7 @@ public class InMemoryApprovalQueue : IApprovalQueue
         _logger = logger;
     }
 
-    public ApprovalRequest Create(ApprovalRequest request)
+    public Task<ApprovalRequest> CreateAsync(ApprovalRequest request, CancellationToken ct = default)
     {
         request.TimeoutSeconds = _options.TimeoutSeconds;
         var tcs = new TaskCompletionSource<ApprovalRequest>(
@@ -52,7 +52,7 @@ public class InMemoryApprovalQueue : IApprovalQueue
         try { RequestCreated?.Invoke(this, request); }
         catch (Exception ex) { _logger.LogWarning(ex, "RequestCreated handler failed"); }
 
-        return request;
+        return Task.FromResult(request);
     }
 
     public async Task<ApprovalRequest> AwaitDecisionAsync(string id, CancellationToken ct = default)
@@ -66,9 +66,10 @@ public class InMemoryApprovalQueue : IApprovalQueue
         using (cts.Token.Register(() =>
         {
             if (entry.Tcs.Task.IsCompleted) return;
-            // Timeout → auto decision
+            // Timeout → auto decision. Bu implementasyon tamamen bellek-içi (I/O yok),
+            // bu yüzden DecideAsync senkron tamamlanır — Task.Run'a gerek yok.
             var autoApprove = _options.AutoApproveOnTimeout;
-            Decide(
+            _ = DecideAsync(
                 id,
                 approved: autoApprove,
                 decidedBy: WellKnown.Defaults.System,
@@ -86,12 +87,13 @@ public class InMemoryApprovalQueue : IApprovalQueue
         }
     }
 
-    public bool Decide(string id, bool approved, string? decidedBy = null, string? reason = null)
+    public Task<bool> DecideAsync(
+        string id, bool approved, string? decidedBy = null, string? reason = null, CancellationToken ct = default)
     {
-        if (!_entries.TryGetValue(id, out var entry)) return false;
+        if (!_entries.TryGetValue(id, out var entry)) return Task.FromResult(false);
         lock (entry.Lock)
         {
-            if (entry.Request.Status != ApprovalStatus.Pending) return false;
+            if (entry.Request.Status != ApprovalStatus.Pending) return Task.FromResult(false);
 
             entry.Request.Status = approved ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
             entry.Request.DecidedAt = DateTime.UtcNow;
@@ -106,7 +108,7 @@ public class InMemoryApprovalQueue : IApprovalQueue
             catch (Exception ex) { _logger.LogWarning(ex, "RequestDecided handler failed"); }
 
             entry.Tcs.TrySetResult(entry.Request);
-            return true;
+            return Task.FromResult(true);
         }
     }
 

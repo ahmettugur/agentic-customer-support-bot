@@ -64,15 +64,15 @@ services.AddSingleton<ISemanticMemoryWriter, YourSemanticMemoryImplementation>()
 Zorunlu:
   IChatClient                    → AddAiServices() tarafından kayıtlı
   IContextPipeline               → Application services
-  IOptions<WorkflowGuardOptions> → appsettings.json "Workflow:" bölümü
-  IOptions<ParallelExecutionOptions> → appsettings.json "ParallelExecution:" bölümü
+  IOptions<WorkflowGuardOptions> → appsettings.json "WorkflowGuards:" bölümü (ValidateOnStart ile doğrulanır)
+  IOptions<ParallelExecutionOptions> → appsettings.json "ParallelExecution:" bölümü (ValidateOnStart ile doğrulanır)
   IReasoningTraceStore           → Persistence adapter
   IPromptRepository              → FileSystemPromptRepository (Adapters.Persistence, Api projesi tarafından kayıtlı)
   ICustomerSupportToolsService   → Application services
   ApprovalGateService            → Bu extension tarafından kayıtlı
   IUiHintEmitter                 → Application services (UI ipucu yayıcı)
   IApprovalQueue                 → Application/Persistence
-  IOptions<ApprovalOptions>      → appsettings.json "HumanInTheLoop:" bölümü
+  IOptions<ApprovalOptions>      → appsettings.json "HumanInTheLoop:" bölümü (ValidateOnStart ile doğrulanır)
   IEscalationSink                → Persistence adapter
   IApprovalContextAccessor       → Application services
   EscalationPolicyService        → Application services
@@ -87,16 +87,14 @@ Opsiyonel:
 
 ```json
 {
-  "Workflow": {
-    "TimeoutSeconds": 120,
-    "MaxIterations": 15,
-    "MaxHandoffsPerAgent": 3,
-    "MaxDuplicateToolCalls": 2,
-    "PlanConfidenceThreshold": 0.6
+  "WorkflowGuards": {
+    "TimeoutSeconds": 180,
+    "MaxIterations": 20,
+    "MaxDuplicateToolCalls": 3
   },
   "ParallelExecution": {
-    "MaxDegreeOfParallelism": 3,
-    "ReadOnlyIntentPatterns": ["inquiry", "sorgula", "nerede"]
+    "Enabled": true,
+    "MaxDegreeOfParallelism": 4
   },
   "HumanInTheLoop": {
     "Enabled": true,
@@ -110,3 +108,7 @@ Opsiyonel:
   }
 }
 ```
+
+> `MaxHandoffsPerAgent` (default 2) ve `PlanConfidenceThreshold` (default 0.7) `appsettings.json`'da tanımlı **değildir** — `WorkflowGuardOptions` sınıfındaki default değerler kullanılır. Yine de `ValidateOnStart()` bunları da doğrular.
+>
+> Hangi alt görevin paralel çalışabileceği config'den değil, `WellKnown.AgentNames.ReadOnly` kümesinden (şu an yalnızca `ProductAgent`) belirlenir.

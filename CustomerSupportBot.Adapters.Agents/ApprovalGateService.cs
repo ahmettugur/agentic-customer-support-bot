@@ -214,7 +214,7 @@ public class ApprovalGateService
                 Parameters = parameters,
                 Justification = string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName)
             };
-            _approvalQueue.Create(req);
+            await _approvalQueue.CreateAsync(req, ct);
         }
 
         try

@@ -65,7 +65,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         _messageBus.Subscribe("csbot:approval:decided", OnRemoteDecided);
     }
 
-    public ApprovalRequest Create(ApprovalRequest request)
+    public async Task<ApprovalRequest> CreateAsync(ApprovalRequest request, CancellationToken ct = default)
     {
         EnsureHydrated();
 
@@ -76,7 +76,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         var entry = new QueueEntry(request, tcs);
         _entries[request.Id] = entry;
 
-        try { InsertAsync(request).GetAwaiter().GetResult(); }
+        try { await InsertAsync(request, ct).ConfigureAwait(false); }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[HITL] Approval INSERT başarısız. Id={Id}", request.Id);
@@ -121,41 +121,55 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(entry.Request.TimeoutSeconds));
 
-        using (cts.Token.Register(() =>
-        {
-            if (entry.Tcs.Task.IsCompleted) return;
-            var autoApprove = _options.AutoApproveOnTimeout;
-            Decide(
-                id,
-                approved: autoApprove,
-                decidedBy: WellKnown.Defaults.System,
-                reason: autoApprove
-                    ? WellKnown.ApprovalReasons.AutoApproveTimeout
-                    : WellKnown.ApprovalReasons.TimeoutExpired);
-            if (!autoApprove)
-            {
-                entry.Request.Status = ApprovalStatus.Expired;
-                // Status değişti — DB güncellemesi de gerek
-                try { UpdateAsync(entry.Request).GetAwaiter().GetResult(); }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "[HITL] Approval Expired UPDATE başarısız. Id={Id}", id);
-                }
-            }
-        }))
+        // CancellationToken.Register yalnızca senkron Action kabul eder; asenkron
+        // Decide/Update çağrılarını burada thread'i bloklamadan (fire-and-forget,
+        // Task.Run ile) tetikliyoruz. entry.Tcs.Task zaten bu işin bitmesini bekler.
+        using (cts.Token.Register(() => _ = HandleTimeoutAsync(id, entry)))
         {
             return await entry.Tcs.Task.ConfigureAwait(false);
         }
     }
 
-    public bool Decide(string id, bool approved, string? decidedBy = null, string? reason = null)
+    private async Task HandleTimeoutAsync(string id, QueueEntry entry)
+    {
+        if (entry.Tcs is null || entry.Tcs.Task.IsCompleted) return;
+
+        var autoApprove = _options.AutoApproveOnTimeout;
+        try
+        {
+            await DecideAsync(
+                id,
+                approved: autoApprove,
+                decidedBy: WellKnown.Defaults.System,
+                reason: autoApprove
+                    ? WellKnown.ApprovalReasons.AutoApproveTimeout
+                    : WellKnown.ApprovalReasons.TimeoutExpired).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[HITL] Timeout auto-decide başarısız. Id={Id}", id);
+        }
+
+        if (!autoApprove)
+        {
+            entry.Request.Status = ApprovalStatus.Expired;
+            try { await UpdateAsync(entry.Request).ConfigureAwait(false); }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[HITL] Approval Expired UPDATE başarısız. Id={Id}", id);
+            }
+        }
+    }
+
+    public async Task<bool> DecideAsync(
+        string id, bool approved, string? decidedBy = null, string? reason = null, CancellationToken ct = default)
     {
         EnsureHydrated();
         if (!_entries.TryGetValue(id, out var entry)) return false;
 
-        // Distributed lock: farklı pod'lardan eş zamanlı Decide() çağrılarını serialize eder.
+        // Distributed lock: farklı pod'lardan eş zamanlı DecideAsync() çağrılarını serialize eder.
         // TryAcquireAsync null dönerse (başka pod lock tutuyor) kararı reddet — double-decision önlemi.
-        var handle = _distributedLock.TryAcquireAsync($"approval:{id}").GetAwaiter().GetResult();
+        var handle = await _distributedLock.TryAcquireAsync($"approval:{id}", ct: ct).ConfigureAwait(false);
         if (handle is null)
         {
             _logger.LogWarning("[HITL] Approval distributed lock alınamadı; karar reddedildi. Id={Id}", id);
@@ -172,7 +186,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             entry.Request.DecidedBy = string.IsNullOrWhiteSpace(decidedBy) ? WellKnown.Defaults.Admin : decidedBy;
             entry.Request.DecisionReason = reason;
 
-            try { UpdateAsync(entry.Request).GetAwaiter().GetResult(); }
+            try { await UpdateAsync(entry.Request).ConfigureAwait(false); }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[HITL] Approval UPDATE başarısız. Id={Id}", id);
@@ -202,7 +216,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         }
         finally
         {
-            handle.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            await handle.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -263,11 +277,11 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
 
     // ─────────────────────────────────────────────────────────────────────────
 
-    private async Task InsertAsync(ApprovalRequest req)
+    private async Task InsertAsync(ApprovalRequest req, CancellationToken ct = default)
     {
-        await using var ctx = await _dbFactory.CreateDbContextAsync();
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
         ctx.Approvals.Add(ToEntity(req));
-        await ctx.SaveChangesAsync();
+        await ctx.SaveChangesAsync(ct);
     }
 
     private async Task UpdateAsync(ApprovalRequest req)
@@ -335,6 +349,11 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         };
     }
 
+    // Kasıtlı olarak sync-blocking: GetPending/GetRecent/Get senkron port metotları
+    // (admin panel salt-okunur uçları) olduğu için burada async'e geçmek onları da
+    // async'e zorlar. Bloklama süreç ömrü boyunca yalnızca BİR KEZ (ilk çağrıda)
+    // gerçekleşir — CreateAsync/DecideAsync'teki her-istekte-bir DB round-trip'i ile
+    // aynı sınıfta değildir, bu yüzden kapsam dışı bırakıldı.
     private void EnsureHydrated()
     {
         if (_hydrated) return;

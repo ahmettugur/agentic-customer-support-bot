@@ -31,7 +31,7 @@ public sealed class SlaPortService : ISlaPort
     public IReadOnlyList<SlaEvent> GetRecentEvents(int count = 100)
         => _events.GetRecent(Math.Clamp(count, 1, 500));
 
-    public void ScanOnce(SlaOptions opts)
+    public async Task ScanOnceAsync(SlaOptions opts, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
 
@@ -42,7 +42,7 @@ public sealed class SlaPortService : ISlaPort
             if (eval.BreachEvent is not null)
             {
                 _events.Record(eval.BreachEvent);
-                ApplyApprovalBreach(req, eval.BreachAction);
+                await ApplyApprovalBreachAsync(req, eval.BreachAction, ct);
             }
         }
 
@@ -59,19 +59,19 @@ public sealed class SlaPortService : ISlaPort
         }
     }
 
-    private void ApplyApprovalBreach(ApprovalRequest req, SlaBreachAction action)
+    private async Task ApplyApprovalBreachAsync(ApprovalRequest req, SlaBreachAction action, CancellationToken ct)
     {
         switch (action)
         {
             case SlaBreachAction.AutoReject:
-                _approvals.Decide(req.Id, approved: false,
+                await _approvals.DecideAsync(req.Id, approved: false,
                     decidedBy: WellKnown.Defaults.System,
-                    reason: "SLA breach — auto-reject");
+                    reason: "SLA breach — auto-reject", ct: ct);
                 break;
             case SlaBreachAction.AutoApprove:
-                _approvals.Decide(req.Id, approved: true,
+                await _approvals.DecideAsync(req.Id, approved: true,
                     decidedBy: WellKnown.Defaults.System,
-                    reason: "SLA breach — auto-approve");
+                    reason: "SLA breach — auto-approve", ct: ct);
                 break;
         }
     }

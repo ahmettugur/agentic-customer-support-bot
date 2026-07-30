@@ -108,7 +108,8 @@ public class ApprovalGateServiceToolBuilderTests
 
         queue.RequestCreated += (_, req) =>
         {
-            queue.Decide(req.Id, approved: false, decidedBy: "test", reason: "test_reject");
+            // InMemoryApprovalQueue.DecideAsync tamamen bellek-içi (I/O yok), senkron tamamlanır.
+            _ = queue.DecideAsync(req.Id, approved: false, decidedBy: "test", reason: "test_reject");
         };
 
         var svc = Build(opts, queue);
@@ -140,7 +141,7 @@ public class ApprovalGateServiceToolBuilderTests
             NullLogger<InMemoryApprovalQueue>.Instance);
         queue.RequestCreated += (_, req) =>
         {
-            queue.Decide(req.Id, approved: true, decidedBy: "test", reason: "ok");
+            _ = queue.DecideAsync(req.Id, approved: true, decidedBy: "test", reason: "ok");
         };
 
         var svc = Build(opts, queue);
@@ -170,7 +171,7 @@ public class ApprovalGateServiceToolBuilderTests
             Options.Create(opts),
             NullLogger<InMemoryApprovalQueue>.Instance);
         queue.RequestCreated += (_, req) =>
-            queue.Decide(req.Id, approved: false, decidedBy: "t", reason: "no_complaint");
+            _ = queue.DecideAsync(req.Id, approved: false, decidedBy: "t", reason: "no_complaint");
 
         var svc = Build(opts, queue);
         var fn = svc.BuildComplaintRegistrationTool();

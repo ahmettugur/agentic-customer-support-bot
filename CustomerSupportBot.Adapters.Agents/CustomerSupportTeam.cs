@@ -183,11 +183,12 @@ public class CustomerSupportTeam : IAgentTeamPort
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
         var effectiveCt = linkedCts.Token;
 
+        var st = StartTraceState(session, query, reasoning);
+
         var workflow = CreateWorkflow();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
-        string result = "";
         string? workflowError = null;
 
         await foreach (var (evt, evtError) in EnumerateWorkflowEventsSafely(run, effectiveCt))
@@ -199,40 +200,56 @@ public class CustomerSupportTeam : IAgentTeamPort
             }
             if (evt == null) continue;
 
-            switch (evt)
+            if (evt is WorkflowErrorEvent errorEvt)
             {
-                case WorkflowOutputEvent output:
-                    result = WorkflowResponseExtractor.ExtractResultFromOutput(output);
-                    break;
-                case WorkflowErrorEvent errorEvt:
-                    workflowError = errorEvt.Exception?.Message ?? "workflow error";
-                    break;
+                workflowError = errorEvt.Exception?.Message ?? "workflow error";
+                break;
             }
+
+            ApplyTraceEvent(st, evt);
         }
+
+        st.Trace.IterationCount = st.IterationCount;
 
         if (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
+            _traceStore.Complete(st.Trace.TraceId,
+                terminationReason: WellKnown.Termination.ReasonTimeout,
+                error: $"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı");
             throw ExceptionTranslator.Translate(
                 new TimeoutException($"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı."),
                 "RunAsync workflow timeout.");
         }
 
-        ct.ThrowIfCancellationRequested();
+        if (ct.IsCancellationRequested)
+        {
+            _traceStore.Complete(st.Trace.TraceId,
+                terminationReason: "cancelled",
+                error: "İstek çağıran tarafından iptal edildi.");
+            ct.ThrowIfCancellationRequested();
+        }
 
         if (workflowError != null)
         {
+            _traceStore.Complete(st.Trace.TraceId, terminationReason: "error", error: workflowError);
             throw ExceptionTranslator.Translate(
                 new InvalidOperationException(workflowError),
                 "RunAsync workflow hatası.");
         }
 
-        result = WorkflowResponseExtractor.RemoveTerminationMarkers(result);
+        var terminationReason =
+            WorkflowResponseExtractor.ParseTerminationReasonFromResult(st.Result)
+            ?? WellKnown.Termination.ReasonCompleted;
+
+        var result = WorkflowResponseExtractor.RemoveTerminationMarkers(st.Result);
         result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(result);
 
         if (WorkflowResponseExtractor.ContainsAgentRoutingMessage(result))
         {
-            result = await RewriteRoutingMessageAsync(result, query);
+            result = await RewriteRoutingMessageAsync(result, query, ct);
         }
+
+        await FinalizeTraceAsync(st, session, query, result, terminationReason);
 
         return result;
     }
@@ -262,22 +279,13 @@ public class CustomerSupportTeam : IAgentTeamPort
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
         var effectiveCt = linkedCts.Token;
 
-        var trace = _traceStore.StartTrace(session?.SessionId ?? "anonymous", query);
-        if (reasoning != null)
-        {
-            trace.Reasoning = reasoning;
-            _traceStore.Update(trace);
-        }
-        var activeVisits = new Dictionary<string, AgentVisit>();
+        var st = StartTraceState(session, query, reasoning);
 
         var workflow = CreateWorkflow();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
-        string result = "";
-        string? lastAgentSignature = null;
         string? workflowError = null;
-        int iterationCount = 0;
 
         await foreach (var (evt, evtError) in EnumerateWorkflowEventsSafely(run, effectiveCt))
         {
@@ -288,86 +296,30 @@ public class CustomerSupportTeam : IAgentTeamPort
             }
             if (evt == null) continue;
 
-            switch (evt)
+            if (evt is WorkflowErrorEvent errorEvt)
             {
-                case ExecutorInvokedEvent invoked:
-                {
-                    var executorId = invoked.ExecutorId ?? "unknown";
-                    iterationCount++;
-                    if (WorkflowResponseExtractor.IsInternalWorkflowExecutor(executorId)) break;
+                workflowError = errorEvt.Exception?.Message ?? "workflow error";
+                break;
+            }
 
-                    var sig = $"{executorId}:running";
-                    if (sig == lastAgentSignature) break;
-                    lastAgentSignature = sig;
-
-                    // Visit'i sadece activeVisits'e kaydet; trace listesine CompletedEvent'te
-                    // ekleyeceğiz — bu şekilde pasif geçiş turları (0ms) kaydedilmez.
-                    activeVisits[executorId] = new AgentVisit
-                    {
-                        AgentName = executorId,
-                        StartedAt = DateTime.UtcNow
-                    };
-
-                    yield return new StreamEvent(StreamEventTypes.Agent,
-                        new { name = executorId, status = "running" });
-                    break;
-                }
-
-                case ExecutorCompletedEvent completed:
-                {
-                    var completedId = completed.ExecutorId ?? "unknown";
-                    if (WorkflowResponseExtractor.IsInternalWorkflowExecutor(completedId)) break;
-
-                    var sig = $"{completedId}:done";
-                    if (sig == lastAgentSignature) break;
-                    lastAgentSignature = sig;
-
-                    if (activeVisits.TryGetValue(completedId, out var visit))
-                    {
-                        visit.CompletedAt = DateTime.UtcNow;
-                        activeVisits.Remove(completedId);
-
-                        // Sadece anlamlı süre olan ziyaretleri kaydet (> 0ms).
-                        // 0ms = framework pasif geçiş turu, gerçek iş yok.
-                        if (visit.DurationMs is null or > 0)
-                        {
-                            trace.AgentVisits.Add(visit);
-                            _traceStore.Update(trace);
-                        }
-                    }
-
-                    yield return new StreamEvent(StreamEventTypes.Agent,
-                        new { name = completedId, status = "done" });
-                    break;
-                }
-
-                case WorkflowOutputEvent output:
-                    result = WorkflowResponseExtractor.ExtractResultFromOutput(output);
-                    var planning = WorkflowResponseExtractor.ExtractPlanningFromOutput(output);
-                    if (planning != null) trace.Planning = planning;
-                    var specialistReasonings = WorkflowResponseExtractor.ExtractSpecialistReasoningsFromOutput(output);
-                    if (specialistReasonings.Count > 0) trace.SpecialistReasonings.AddRange(specialistReasonings);
-                    if (planning != null || specialistReasonings.Count > 0)
-                        _traceStore.Update(trace);
-                    break;
-
-                case WorkflowErrorEvent errorEvt:
-                    workflowError = errorEvt.Exception?.Message ?? "workflow error";
-                    break;
+            // Trace toplama RunAsync ile paylaşılan ApplyTraceEvent'te; burada yalnızca
+            // gözlemlenebilir bir ajan durumu değişikliği varsa stream event yayınlanır.
+            if (ApplyTraceEvent(st, evt) is { } surfaced)
+            {
+                yield return new StreamEvent(StreamEventTypes.Agent,
+                    new { name = surfaced.Name, status = surfaced.Status });
             }
 
             // Tool çağrıları sırasında biriken UI ipuçlarını (ör. category_picker) hemen yayınla
             foreach (var hint in _uiHint.DrainPending(sessionId))
                 yield return hint;
-
-            if (workflowError != null) break;
         }
 
-        trace.IterationCount = iterationCount;
+        st.Trace.IterationCount = st.IterationCount;
 
         if (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
-            _traceStore.Complete(trace.TraceId,
+            _traceStore.Complete(st.Trace.TraceId,
                 terminationReason: WellKnown.Termination.ReasonTimeout,
                 error: $"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı");
             yield return new StreamEvent(StreamEventTypes.Error,
@@ -377,30 +329,23 @@ public class CustomerSupportTeam : IAgentTeamPort
 
         if (workflowError != null)
         {
-            _traceStore.Complete(trace.TraceId, terminationReason: "error", error: workflowError);
+            _traceStore.Complete(st.Trace.TraceId, terminationReason: "error", error: workflowError);
             yield return new StreamEvent(StreamEventTypes.Error,
                 new { message = workflowError });
             yield break;
         }
 
-        var terminationReason = WorkflowResponseExtractor.ParseTerminationReasonFromResult(result) ?? WellKnown.Termination.ReasonCompleted;
-        result = WorkflowResponseExtractor.RemoveTerminationMarkers(result);
+        var terminationReason =
+            WorkflowResponseExtractor.ParseTerminationReasonFromResult(st.Result)
+            ?? WellKnown.Termination.ReasonCompleted;
+
+        var result = WorkflowResponseExtractor.RemoveTerminationMarkers(st.Result);
         result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(result);
 
         if (WorkflowResponseExtractor.ContainsAgentRoutingMessage(result))
-            result = await RewriteRoutingMessageAsync(result, query);
+            result = await RewriteRoutingMessageAsync(result, query, effectiveCt);
 
-        _approvalGate.ProcessPendingEscalations(trace, query, result);
-
-        PopulateAgentVisitOutputs(trace, result);
-
-        WriteEpisodicMemorySafe(trace, query, result);
-
-        await UpdateCustomerProfileSafeAsync(session, trace, query, result);
-
-        _traceStore.Complete(trace.TraceId,
-            terminationReason: terminationReason,
-            finalResponse: result);
+        await FinalizeTraceAsync(st, session, query, result, terminationReason);
 
         yield return new StreamEvent(StreamEventTypes.ResponseStart,
             new { terminationReason });
@@ -412,6 +357,130 @@ public class CustomerSupportTeam : IAgentTeamPort
 
         yield return new StreamEvent(StreamEventTypes.ResponseComplete,
             new { text = result, terminationReason });
+    }
+
+    /// <summary>
+    /// Tek bir workflow koşusunun trace toplama durumu. <see cref="RunAsync"/> ve
+    /// <see cref="RunStreamingAsync"/> aynı toplama mantığını paylaşır — daha önce
+    /// yalnızca streaming yol trace üretiyordu, bu yüzden non-streaming çağıranlar
+    /// (POST /chat/, EvaluationRunner, ReplanService) izlenemiyor ve eskalasyon
+    /// kaydı oluşturmuyordu.
+    /// </summary>
+    private sealed class TraceState
+    {
+        public required ReasoningTrace Trace { get; init; }
+        public Dictionary<string, AgentVisit> ActiveVisits { get; } = new();
+        public string? LastAgentSignature { get; set; }
+        public int IterationCount { get; set; }
+        public string Result { get; set; } = "";
+    }
+
+    private TraceState StartTraceState(AgentSession? session, string query, ReasoningResult? reasoning)
+    {
+        var trace = _traceStore.StartTrace(session?.SessionId ?? "anonymous", query);
+        if (reasoning != null)
+        {
+            trace.Reasoning = reasoning;
+            _traceStore.Update(trace);
+        }
+        return new TraceState { Trace = trace };
+    }
+
+    /// <summary>
+    /// Bir workflow event'inin trace yan etkilerini uygular.
+    /// Dönüş değeri null değilse çağıran taraf bunu bir <c>Agent</c> stream event'i
+    /// olarak yayınlayabilir; null ise event iç/mükerrer olduğu için gözlemlenebilir
+    /// bir değişiklik üretmemiştir.
+    /// </summary>
+    private (string Name, string Status)? ApplyTraceEvent(TraceState st, WorkflowEvent evt)
+    {
+        switch (evt)
+        {
+            case ExecutorInvokedEvent invoked:
+            {
+                var executorId = invoked.ExecutorId ?? "unknown";
+                st.IterationCount++;
+                if (WorkflowResponseExtractor.IsInternalWorkflowExecutor(executorId)) return null;
+
+                var sig = $"{executorId}:running";
+                if (sig == st.LastAgentSignature) return null;
+                st.LastAgentSignature = sig;
+
+                // Visit'i sadece ActiveVisits'e kaydet; trace listesine CompletedEvent'te
+                // ekleyeceğiz — bu şekilde pasif geçiş turları (0ms) kaydedilmez.
+                st.ActiveVisits[executorId] = new AgentVisit
+                {
+                    AgentName = executorId,
+                    StartedAt = DateTime.UtcNow
+                };
+
+                return (executorId, "running");
+            }
+
+            case ExecutorCompletedEvent completed:
+            {
+                var completedId = completed.ExecutorId ?? "unknown";
+                if (WorkflowResponseExtractor.IsInternalWorkflowExecutor(completedId)) return null;
+
+                var sig = $"{completedId}:done";
+                if (sig == st.LastAgentSignature) return null;
+                st.LastAgentSignature = sig;
+
+                if (st.ActiveVisits.TryGetValue(completedId, out var visit))
+                {
+                    visit.CompletedAt = DateTime.UtcNow;
+                    st.ActiveVisits.Remove(completedId);
+
+                    // Sadece anlamlı süre olan ziyaretleri kaydet (> 0ms).
+                    // 0ms = framework pasif geçiş turu, gerçek iş yok.
+                    if (visit.DurationMs is null or > 0)
+                    {
+                        st.Trace.AgentVisits.Add(visit);
+                        _traceStore.Update(st.Trace);
+                    }
+                }
+
+                return (completedId, "done");
+            }
+
+            case WorkflowOutputEvent output:
+            {
+                st.Result = WorkflowResponseExtractor.ExtractResultFromOutput(output);
+                var planning = WorkflowResponseExtractor.ExtractPlanningFromOutput(output);
+                if (planning != null) st.Trace.Planning = planning;
+                var specialistReasonings =
+                    WorkflowResponseExtractor.ExtractSpecialistReasoningsFromOutput(output);
+                if (specialistReasonings.Count > 0)
+                    st.Trace.SpecialistReasonings.AddRange(specialistReasonings);
+                if (planning != null || specialistReasonings.Count > 0)
+                    _traceStore.Update(st.Trace);
+                return null;
+            }
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
+    /// Workflow başarıyla tamamlandığında trace'i kapatır ve bağlı yan etkileri
+    /// (eskalasyon işleme, episodik bellek, müşteri profili) tetikler.
+    /// </summary>
+    private async Task FinalizeTraceAsync(
+        TraceState st,
+        AgentSession? session,
+        string query,
+        string result,
+        string terminationReason)
+    {
+        _approvalGate.ProcessPendingEscalations(st.Trace, query, result);
+        PopulateAgentVisitOutputs(st.Trace, result);
+        WriteEpisodicMemorySafe(st.Trace, query, result);
+        await UpdateCustomerProfileSafeAsync(session, st.Trace, query, result);
+
+        _traceStore.Complete(st.Trace.TraceId,
+            terminationReason: terminationReason,
+            finalResponse: result);
     }
 
     private static void PopulateAgentVisitOutputs(ReasoningTrace trace, string finalResult)
@@ -619,7 +688,8 @@ public class CustomerSupportTeam : IAgentTeamPort
         });
     }
 
-    private async Task<string> RewriteRoutingMessageAsync(string routingMessage, string originalQuery)
+    private async Task<string> RewriteRoutingMessageAsync(
+        string routingMessage, string originalQuery, CancellationToken ct)
     {
         try
         {
@@ -635,11 +705,15 @@ public class CustomerSupportTeam : IAgentTeamPort
                     }))
             };
 
-            var response = await _chatClient.GetResponseAsync(prompt);
+            var response = await _chatClient.GetResponseAsync(prompt, cancellationToken: ct);
             return response.Text ?? WellKnown.FallbackMessages.RoutingRewrite;
         }
-        catch
+        catch (Exception ex)
         {
+            // Sessizce yutmak, sürekli patlayan bir LLM çağrısını görünmez kılıyordu —
+            // kullanıcı hep aynı fallback'i görür, sebebi hiçbir yere yazılmazdı.
+            _loggerFactory.CreateLogger<CustomerSupportTeam>().LogWarning(
+                ex, "Routing mesajı yeniden yazılamadı; fallback mesaj kullanılıyor.");
             return WellKnown.FallbackMessages.RoutingRewrite;
         }
     }
@@ -768,7 +842,7 @@ public class CustomerSupportTeam : IAgentTeamPort
                     {
                         var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
                         var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
-                        var resp = await RunAsync(subQuery, historySnapshot, session, subReasoning)
+                        var resp = await RunAsync(subQuery, historySnapshot, session, subReasoning, ct)
                             .ConfigureAwait(false);
                         return (sub, resp);
                     }

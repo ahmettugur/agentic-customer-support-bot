@@ -124,7 +124,7 @@ public class TokenServiceTests
         var user = Seed(dbf);
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
-        // User'� pasifle�tir
+        // User'ı pasifleştir
         await using (var ctx = await dbf.CreateDbContextAsync(TestContext.Current.CancellationToken))
         {
             var u = await ctx.Users.FirstAsync(x => x.Id == user.Id, cancellationToken: TestContext.Current.CancellationToken);

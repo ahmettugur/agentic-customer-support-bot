@@ -64,7 +64,11 @@ app.MapChatEndpoints();
 app.MapRealtimeEndpoints();
 app.MapSessionEndpoints();
 
-var adminScope = app.MapGroup("").RequireAuthorization("Admin");
+// Admin/agent uçları auth arkasında olduğu için önceden rate limit yoktu — bir
+// kimlik bilgisi sızarsa (veya kötüye kullanılırsa) sınırsız istek atılabiliyordu.
+// "general" (60/dk/IP) politikası zaten AnalyticsEndpoints'te kullanılıyor; burada
+// da aynı eşiği uyguluyoruz.
+var adminScope = app.MapGroup("").RequireAuthorization("Admin").RequireRateLimiting("general");
 adminScope.MapAdminEndpoints();
 adminScope.MapTraceEndpoints();
 adminScope.MapEvaluationEndpoints();
@@ -75,7 +79,7 @@ adminScope.MapPersonalizationEndpoints();
 adminScope.MapAgentsEndpoints();
 adminScope.MapSlaEndpoints();
 
-var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent");
+var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRateLimiting("general");
 agentScope.MapAgentPanelEndpoints();
 
 app.MapAnalyticsEndpoints();

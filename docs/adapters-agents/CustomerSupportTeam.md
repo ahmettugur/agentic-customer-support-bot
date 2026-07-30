@@ -53,15 +53,36 @@ public async Task<string> RunAsync(
     string query,
     List<ConversationMessage>? conversationHistory = null,
     AgentSession? session = null,
-    ReasoningResult? reasoning = null)
+    ReasoningResult? reasoning = null,
+    CancellationToken ct = default)
 ```
 
-1. Compound query mi? → `RunDecomposedAsync` çağrılır (aşağıda açıklandı).
+1. Compound query mi? → `RunDecomposedAsync` çağrılır (aşağıda açıklandı) — `ct` içeri taşınır.
 2. Workflow mesajları oluşturulur (`BuildWorkflowMessagesAsync`).
-3. Yeni bir `Workflow` + `InProcessExecution` başlatılır.
-4. `WorkflowOutputEvent` yakalanır, sonuç çıkarılır.
-5. `TERMINATE` marker'ları ve teknik JSON blokları temizlenir.
-6. Sonuç agent routing mesajı içeriyorsa `RewriteRoutingMessageAsync` ile kullanıcı dostu hale getirilir.
+3. `RunStreamingAsync` ile aynı timeout deseni kurulur: `timeoutCts` (`WorkflowGuardOptions.TimeoutSeconds`) + dışarıdan gelen `ct` `CreateLinkedTokenSource` ile birleştirilir.
+4. Yeni bir `Workflow` + `InProcessExecution` başlatılır; olay akışı `EnumerateWorkflowEventsSafely` ile bu birleşik token'a bağlı olarak tüketilir.
+5. `WorkflowOutputEvent` yakalanır, sonuç çıkarılır.
+6. Timeout dolarsa `TimeoutException`, dış `ct` iptal edilirse `OperationCanceledException`, workflow hata verirse `InvalidOperationException` fırlatılır (hepsi `ExceptionTranslator.Translate` ile domain exception'a çevrilir). Her üç durumda trace `_traceStore.Complete(...)` ile `timeout` / `cancelled` / `error` nedeniyle kapatılır.
+7. `TERMINATE` marker'ları ve teknik JSON blokları temizlenir.
+8. Sonuç agent routing mesajı içeriyorsa `RewriteRoutingMessageAsync` ile kullanıcı dostu hale getirilir.
+9. `FinalizeTraceAsync` çağrılır — eskalasyon işleme, agent visit çıktıları, episodik bellek ve müşteri profili güncellemesi.
+
+> **Önceki davranış (1):** `RunAsync` hiçbir `CancellationToken` almıyor ve timeout uygulamıyordu — LLM sağlayıcısı asılırsa (özellikle `EvaluationRunner`/`ReplanService` gibi non-streaming çağıranlar için) süresiz beklerdi. Artık `RunStreamingAsync` ile birebir aynı koruma altındadır.
+>
+> **Önceki davranış (2):** `RunAsync` **hiç trace üretmiyordu**. Bu yüzden `POST /chat/`, `EvaluationRunner` ve `ReplanService` üzerinden gelen her şey gözlemlenebilirlik açısından kördü: agent visit yok, planning JSON'u yok, `ProcessPendingEscalations` çağrılmadığı için eskalasyon kaydı oluşmuyordu, episodik bellek ve müşteri profili güncellenmiyordu. Değerlendirme (evaluation) koşularının trace üretmemesi sonuçların incelenememesine yol açıyordu. Artık iki yol da aynı trace altyapısını paylaşır.
+
+### Paylaşılan trace altyapısı
+
+`RunAsync` ve `RunStreamingAsync` trace toplama mantığını üç ortak parçada paylaşır:
+
+| Üye | Görev |
+|---|---|
+| `TraceState` (private sealed class) | Tek koşunun trace durumu: `Trace`, `ActiveVisits`, `LastAgentSignature`, `IterationCount`, `Result` |
+| `StartTraceState(session, query, reasoning)` | Trace'i açar, `reasoning` varsa iliştirir |
+| `ApplyTraceEvent(st, evt)` | Bir workflow event'inin trace yan etkilerini uygular. Dönüş `(Name, Status)?` — null değilse çağıran bunu `Agent` stream event'i olarak yayınlar, null ise event iç/mükerrer olduğu için gözlemlenebilir değişiklik üretmemiştir |
+| `FinalizeTraceAsync(st, session, query, result, reason)` | Eskalasyon + agent visit çıktıları + episodik bellek + profil + `Complete` |
+
+Bu sayede `ExecutorInvokedEvent`/`ExecutorCompletedEvent` dedupe'u, 0ms pasif tur filtresi ve iç executor gizlemesi tek yerde tanımlıdır — streaming yol yalnızca `yield` sorumluluğunu ekler.
 
 ### `RunStreamingAsync` (SSE Streaming)
 
@@ -111,6 +132,8 @@ Workflow'a gidecek mesaj listesini hazırlar. Sıra önemlidir:
 6. User mesajı: Güncel sorgu
 ```
 
+**Replan bayrağının atomik tüketimi:** `session.State.ForceReplanNextTurn`/`ReplanNote` okuma+temizleme işlemi `ConsumeForceReplanHint(session)` yardımcı metodunda `lock (session)` ile atomik yapılır. Compound query'de aynı `session` referansı birden fazla alt göreve paralel geçildiği için (`RunDecomposedAsync`/`RunDecomposedStreamingAsync` içindeki `Task.WhenAll` grupları), kilitsiz bir kontrol birden fazla eşzamanlı çağrının aynı replan ipucunu görüp tekrar tekrar enjekte etmesine yol açabilirdi — artık yalnızca **bir** çağrı bayrağı görüp tüketiyor.
+
 ### `RewriteRoutingMessageAsync` (özel)
 
 Agent'ın ürettiği yanıt `OrderAgent:`, `PlanningAgent:` gibi iç teknik ifadeler içeriyorsa bu metod devreye girer. LLM'i `routing-rewrite-system.md` + `routing-rewrite-user.md` prompt'larıyla çağırarak mesajı kullanıcı dostu Türkçeye çevirir.
@@ -138,22 +161,26 @@ Kullanıcı: "1001'i iptal et ve iade başlat"
 
 ## Trace (İzleme)
 
-`RunStreamingAsync` içinde her workflow çalışması için bir `ReasoningTrace` oluşturulur:
+Her workflow çalışması için — **hem** `RunAsync` **hem** `RunStreamingAsync` — bir `ReasoningTrace` oluşturulur:
 
 ```csharp
-var trace = _traceStore.StartTrace(session?.SessionId ?? "anonymous", query);
+var st = StartTraceState(session, query, reasoning);
+// → _traceStore.StartTrace(session?.SessionId ?? "anonymous", query)
 ```
 
-- `ExecutorInvokedEvent` → `AgentVisit` başlar (ne zaman başladı)
+Olay eşlemesi `ApplyTraceEvent` içinde tanımlıdır:
+
+- `ExecutorInvokedEvent` → `AgentVisit` başlar (ne zaman başladı), `IterationCount` artar
 - `ExecutorCompletedEvent` → `AgentVisit` kapanır (ne zaman bitti, süre hesaplanır)
 - `WorkflowOutputEvent` → Planning ve specialist reasoning bilgileri trace'e eklenir
-- Workflow bittikten sonra `_traceStore.Complete(...)` çağrılır
+- Workflow bittikten sonra `FinalizeTraceAsync` → `_traceStore.Complete(...)` çağrılır
 
 > 0ms'lik ziyaretler trace'e eklenmez — bunlar MAF'ın iç pasif geçiş turlarıdır.
+> `WellKnown.SystemExecutorPrefixes` ile eşleşen iç executor'lar da atlanır.
 
 ## Episodik Bellek ve Müşteri Profili
 
-Workflow tamamlandıktan sonra iki opsiyonel yan etki tetiklenir, her ikisi de fire-and-forget (başarısız olursa sessizce loglanır, yanıt etkilenmez):
+Workflow tamamlandıktan sonra `FinalizeTraceAsync` içinde iki opsiyonel yan etki tetiklenir, her ikisi de fire-and-forget (başarısız olursa sessizce loglanır, yanıt etkilenmez):
 
 ```
 WriteEpisodicMemorySafe()       → ISemanticMemoryWriter.WriteEpisodeAsync(...)
@@ -165,6 +192,6 @@ UpdateCustomerProfileSafeAsync() → ICustomerProfileService.RecordInteractionAs
 | Sorun | Olası neden | Çözüm |
 |-------|-------------|-------|
 | Yanıt boş geliyor | `WorkflowOutputEvent.Data` beklenen formatta değil | `WorkflowResponseExtractor.ExtractResultFromOutput` içinde yeni format case'i ekle |
-| "İşlem X saniyede tamamlanamadı" | `WorkflowGuardOptions.TimeoutSeconds` çok kısa | `appsettings.json`'da `Workflow:TimeoutSeconds` değerini artır |
+| "İşlem X saniyede tamamlanamadı" | `WorkflowGuardOptions.TimeoutSeconds` çok kısa | `appsettings.json`'da `WorkflowGuards:TimeoutSeconds` değerini artır (artık `RunAsync` için de geçerli) |
 | Agent adı yanıtta görünüyor | `RewriteRoutingMessageAsync` çalışmadı veya prompt başarısız | `routing-rewrite-*` prompt'larını kontrol et; LLM bağlantısını doğrula |
 | Compound query tek yanıt üretiyor | `SubTaskOrchestrator.IsCompoundQuery` false dönüyor | Reasoning aşamasında `subTasks` alanının dolu geldiğini kontrol et |

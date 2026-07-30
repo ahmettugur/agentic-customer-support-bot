@@ -26,9 +26,11 @@
     <!-- EF Core + PostgreSQL — sadece bu adaptörde bulunur, Core bilmez -->
         <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+        <!-- contentfiles kasıtlı olarak DAHIL DEĞİL: MSB3552 (**/*.resx glob) nedeni — bkz.
+             CustomerSupportBot.Api.csproj'daki not. -->
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <IncludeAssets>runtime; build; native; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.1" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />

@@ -12,11 +12,16 @@ public sealed class ComplaintToolsService : IComplaintToolsService
 {
     private readonly IComplaintRepository _complaints;
     private readonly IOrderRepository _orders;
+    private readonly SideEffectIdempotencyCache _idempotency;
 
-    public ComplaintToolsService(IComplaintRepository complaints, IOrderRepository orders)
+    public ComplaintToolsService(
+        IComplaintRepository complaints,
+        IOrderRepository orders,
+        SideEffectIdempotencyCache? idempotency = null)
     {
         _complaints = complaints;
         _orders = orders;
+        _idempotency = idempotency ?? new SideEffectIdempotencyCache();
     }
 
     [Description("Müşteri şikayetini sipariş numarasıyla kaydeder. order_id ve description zorunludur; " +
@@ -52,6 +57,27 @@ public sealed class ComplaintToolsService : IComplaintToolsService
                 $"Sağladığınız müşteri kimliği ({effectiveCustomerId}) '{orderId}' siparişinin sahibiyle eşleşmiyor.");
         }
 
+        // Mükerrer çağrı koruması — kayıt oluşturulmadan ÖNCE. İmza türetilmiş
+        // customerId üzerinden kurulur, böylece customerId'nin verilip verilmemesi
+        // aynı şikayeti iki farklı çağrı gibi göstermez.
+        var signature = new object?[] { orderId, effectiveCustomerId, complaintText };
+        if (_idempotency.TryGetRecent(WellKnown.ToolNames.ComplaintRegistration, signature, out var recent))
+        {
+            return ToolResult.Ok(
+                message: $"Bu şikayeti az önce kaydetmiştim — şikayet numarası: {recent.EntityId}. " +
+                         "Mükerrer kayıt oluşturmadım. Gerçekten ikinci bir şikayet kaydı istiyorsanız lütfen açıkça belirtin.",
+                data: new
+                {
+                    complaintId = recent.EntityId,
+                    orderId,
+                    customerId = effectiveCustomerId,
+                    customerIdInferred = inferred,
+                    status = WellKnown.ComplaintStatuses.Pending,
+                    duplicate = true
+                },
+                confidence: 0.9);
+        }
+
         var complaintId = _complaints.Create(new ComplaintInfo
         {
             OrderId    = orderId,
@@ -60,8 +86,11 @@ public sealed class ComplaintToolsService : IComplaintToolsService
             Status     = WellKnown.ComplaintStatuses.Pending
         });
 
-        return ToolResult.Ok(
+        var result = ToolResult.Ok(
             message: $"Şikayet başarıyla kaydedildi! Şikayet numarası: {complaintId}",
             data: new { complaintId, orderId, customerId = effectiveCustomerId, customerIdInferred = inferred, status = WellKnown.ComplaintStatuses.Pending });
+
+        _idempotency.Record(WellKnown.ToolNames.ComplaintRegistration, signature, result, complaintId);
+        return result;
     }
 }

@@ -15,7 +15,7 @@ public class InMemoryEscalationSinkTests
         SessionId = "s1",
         AgentName = "ComplaintAgent",
         Reason = "needs human",
-        UserQuery = "�ikayet",
+        UserQuery = "şikayet",
         Status = EscalationStatus.Open,
         CreatedAt = DateTime.UtcNow
     };

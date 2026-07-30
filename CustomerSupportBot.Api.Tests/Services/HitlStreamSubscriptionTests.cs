@@ -37,7 +37,7 @@ public class HitlEventPortServiceTests
 
         using var sub = port.Subscribe("s1", (eventType, data) => fwd.WriteAsync(eventType, data));
 
-        queue.Create(new ApprovalRequest { SessionId = "s1", ToolName = "x", AgentName = "a" });
+        await queue.CreateAsync(new ApprovalRequest { SessionId = "s1", ToolName = "x", AgentName = "a" }, TestContext.Current.CancellationToken);
 
         await Task.Delay(50, TestContext.Current.CancellationToken);
         var text = Encoding.UTF8.GetString(body.ToArray());
@@ -54,7 +54,7 @@ public class HitlEventPortServiceTests
 
         using var sub = port.Subscribe("s1", (eventType, data) => fwd.WriteAsync(eventType, data));
 
-        queue.Create(new ApprovalRequest { SessionId = "OTHER", ToolName = "x", AgentName = "a" });
+        await queue.CreateAsync(new ApprovalRequest { SessionId = "OTHER", ToolName = "x", AgentName = "a" }, TestContext.Current.CancellationToken);
 
         await Task.Delay(50, TestContext.Current.CancellationToken);
         body.Length.Should().Be(0);
@@ -71,8 +71,8 @@ public class HitlEventPortServiceTests
         using var sub = port.Subscribe("s1", (eventType, data) => fwd.WriteAsync(eventType, data));
 
         var req = new ApprovalRequest { SessionId = "s1", ToolName = "x", AgentName = "a" };
-        queue.Create(req);
-        queue.Decide(req.Id, approved: true, decidedBy: "admin", reason: "ok");
+        await queue.CreateAsync(req, TestContext.Current.CancellationToken);
+        await queue.DecideAsync(req.Id, approved: true, decidedBy: "admin", reason: "ok", ct: TestContext.Current.CancellationToken);
 
         await Task.Delay(50, TestContext.Current.CancellationToken);
         var text = Encoding.UTF8.GetString(body.ToArray());
@@ -107,7 +107,7 @@ public class HitlEventPortServiceTests
         var sub = port.Subscribe("s1", (eventType, data) => fwd.WriteAsync(eventType, data));
         sub.Dispose();
 
-        queue.Create(new ApprovalRequest { SessionId = "s1", ToolName = "x", AgentName = "a" });
+        await queue.CreateAsync(new ApprovalRequest { SessionId = "s1", ToolName = "x", AgentName = "a" }, TestContext.Current.CancellationToken);
 
         await Task.Delay(50, TestContext.Current.CancellationToken);
         body.Length.Should().Be(0);

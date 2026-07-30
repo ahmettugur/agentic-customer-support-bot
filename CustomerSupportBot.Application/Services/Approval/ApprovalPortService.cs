@@ -40,7 +40,7 @@ public sealed class ApprovalPortService : IApprovalPort
         return _approvalQueue.Get(id);
     }
 
-    public bool Decide(string id, bool approved, string? decidedBy = null, string? reason = null)
+    public async Task<bool> DecideAsync(string id, bool approved, string? decidedBy = null, string? reason = null, CancellationToken ct = default)
     {
         var request = _approvalQueue.Get(id);
         if (request is null)
@@ -55,7 +55,7 @@ public sealed class ApprovalPortService : IApprovalPort
             return false;
         }
 
-        var result = _approvalQueue.Decide(id, approved, decidedBy, reason);
+        var result = await _approvalQueue.DecideAsync(id, approved, decidedBy, reason, ct);
 
         if (result)
         {

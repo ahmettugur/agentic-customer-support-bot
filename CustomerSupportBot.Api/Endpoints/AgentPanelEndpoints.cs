@@ -176,7 +176,7 @@ public static class AgentPanelEndpoints
             Results.Json(approvals.GetPending()));
 
         group.MapPost("/approvals/{id}/approve",
-            (string id, ApprovalDecisionInput? body, HttpContext ctx, IApprovalPort approvals) =>
+            async (string id, ApprovalDecisionInput? body, HttpContext ctx, IApprovalPort approvals, CancellationToken ct) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             var decidedBy = agentId ?? ctx.User.FindFirstValue(ClaimTypes.Name) ?? "agent";
@@ -195,23 +195,23 @@ public static class AgentPanelEndpoints
                 });
             }
 
-            var ok = approvals.Decide(id, approved: true,
+            var ok = await approvals.DecideAsync(id, approved: true,
                 decidedBy: decidedBy,
-                reason: body?.Reason);
+                reason: body?.Reason, ct: ct);
             return ok
                 ? Results.Ok(new { id, status = "approved", decidedBy })
                 : Results.NotFound(new { error = "Request bulunamadı veya zaten karara bağlandı." });
         });
 
         group.MapPost("/approvals/{id}/reject",
-            (string id, ApprovalDecisionInput? body, HttpContext ctx, IApprovalPort approvals) =>
+            async (string id, ApprovalDecisionInput? body, HttpContext ctx, IApprovalPort approvals, CancellationToken ct) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             var decidedBy = agentId ?? ctx.User.FindFirstValue(ClaimTypes.Name) ?? "agent";
 
-            var ok = approvals.Decide(id, approved: false,
+            var ok = await approvals.DecideAsync(id, approved: false,
                 decidedBy: decidedBy,
-                reason: body?.Reason ?? "Agent reddetti");
+                reason: body?.Reason ?? "Agent reddetti", ct: ct);
             return ok
                 ? Results.Ok(new { id, status = "rejected", decidedBy })
                 : Results.NotFound(new { error = "Request bulunamadı veya zaten karara bağlandı." });

@@ -13,12 +13,18 @@ public sealed class OrderToolsService : IOrderToolsService
     private readonly IOrderRepository _orders;
     private readonly IProductCatalogRepository _products;
     private readonly ICustomerRepository _customers;
+    private readonly SideEffectIdempotencyCache _idempotency;
 
-    public OrderToolsService(IOrderRepository orders, IProductCatalogRepository products, ICustomerRepository customers)
+    public OrderToolsService(
+        IOrderRepository orders,
+        IProductCatalogRepository products,
+        ICustomerRepository customers,
+        SideEffectIdempotencyCache? idempotency = null)
     {
         _orders = orders;
         _products = products;
         _customers = customers;
+        _idempotency = idempotency ?? new SideEffectIdempotencyCache();
     }
 
     [Description("Yeni sipariş oluşturur. Ürün adı, adet ve müşteri kimlik numarası zorunludur. " +
@@ -49,7 +55,27 @@ public sealed class OrderToolsService : IOrderToolsService
                 WellKnown.ToolErrorCodes.ProductNotFound,
                 $"Üzgünüz, '{productName}' ürünümüzün kataloğunda bulunmamaktadır.");
 
-        if (!_products.TryDeductStock(product.Name, quantity!.Value))
+        // Mükerrer çağrı koruması — stok düşülmeden ve sipariş yazılmadan ÖNCE.
+        // İmza kanonik ürün adı üzerinden kurulur, böylece "kahve"/"Kahve" aynı sayılır.
+        var signature = new object?[] { product.Name, quantity!.Value, customerId };
+        if (_idempotency.TryGetRecent(WellKnown.ToolNames.OrderPlacement, signature, out var recent))
+        {
+            return ToolResult.Ok(
+                message: $"Bu siparişi az önce oluşturmuştum — sipariş numarası: {recent.EntityId}. " +
+                         "Mükerrer kayıt oluşturmadım. Gerçekten ikinci bir sipariş istiyorsanız lütfen açıkça belirtin.",
+                data: new
+                {
+                    orderId = recent.EntityId,
+                    product = product.Name,
+                    quantity = quantity.Value,
+                    customerId,
+                    status = WellKnown.OrderStatuses.Processing,
+                    duplicate = true
+                },
+                confidence: 0.9);
+        }
+
+        if (!_products.TryDeductStock(product.Name, quantity.Value))
             return ToolResult.Conflict(
                 WellKnown.ToolErrorCodes.StockInsufficient,
                 $"Yalnızca {product.Stock} adet {product.Name} stokta mevcut, {quantity.Value} adet sipariş verilemez.");
@@ -63,9 +89,12 @@ public sealed class OrderToolsService : IOrderToolsService
             OrderDate  = DateTime.Now
         });
 
-        return ToolResult.Ok(
+        var result = ToolResult.Ok(
             message: $"Sipariş başarıyla oluşturuldu! Sipariş numarası: {orderId}",
             data: new { orderId, product = product.Name, quantity = quantity.Value, customerId, status = WellKnown.OrderStatuses.Processing });
+
+        _idempotency.Record(WellKnown.ToolNames.OrderPlacement, signature, result, orderId);
+        return result;
     }
 
     [Description("Sipariş durumunu sipariş numarasıyla sorgular. Sonuç ToolResult olarak döner.")]

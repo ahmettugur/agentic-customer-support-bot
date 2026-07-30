@@ -47,7 +47,7 @@ public static class AdminEndpoints
         });
 
         app.MapPost("/approvals/{id}/approve",
-            (string id, ApprovalDecisionInput? body, IApprovalPort approvals) =>
+            async (string id, ApprovalDecisionInput? body, IApprovalPort approvals, CancellationToken ct) =>
         {
             var req = approvals.Get(id);
             if (req == null)
@@ -67,20 +67,20 @@ public static class AdminEndpoints
                 });
             }
 
-            var ok = approvals.Decide(id, approved: true,
+            var ok = await approvals.DecideAsync(id, approved: true,
                 decidedBy: body?.DecidedBy ?? WellKnown.Defaults.Admin,
-                reason: body?.Reason);
+                reason: body?.Reason, ct: ct);
             return ok
                 ? Results.Json(new { id, status = "approved" })
                 : Results.NotFound(new { error = "Request bulunamadı veya zaten karara bağlandı." });
         });
 
         app.MapPost("/approvals/{id}/reject",
-            (string id, ApprovalDecisionInput? body, IApprovalPort approvals) =>
+            async (string id, ApprovalDecisionInput? body, IApprovalPort approvals, CancellationToken ct) =>
         {
-            var ok = approvals.Decide(id, approved: false,
+            var ok = await approvals.DecideAsync(id, approved: false,
                 decidedBy: body?.DecidedBy ?? WellKnown.Defaults.Admin,
-                reason: body?.Reason ?? "Admin reddetti");
+                reason: body?.Reason ?? "Admin reddetti", ct: ct);
             return ok
                 ? Results.Json(new { id, status = "rejected" })
                 : Results.NotFound(new { error = "Request bulunamadı veya zaten karara bağlandı." });

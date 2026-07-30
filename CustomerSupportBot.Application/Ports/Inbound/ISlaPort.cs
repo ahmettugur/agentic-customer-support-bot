@@ -34,5 +34,5 @@ public interface ISlaPort
     SlaStatusResult GetStatus();
 
     /// <summary>Tek bir SLA tarama döngüsünü çalıştırır; arka plan worker'ı tarafından her iterasyonda çağrılır.</summary>
-    void ScanOnce(SlaOptions opts);
+    Task ScanOnceAsync(SlaOptions opts, CancellationToken ct = default);
 }

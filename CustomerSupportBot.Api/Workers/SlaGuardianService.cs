@@ -75,7 +75,7 @@ public class SlaGuardianService : BackgroundService
         if (_distributedLock == null)
         {
             // Redis yok — single-instance, kilit gereksiz
-            _slaPort.ScanOnce(opts);
+            await _slaPort.ScanOnceAsync(opts, ct);
             return;
         }
 
@@ -89,6 +89,6 @@ public class SlaGuardianService : BackgroundService
             return;
         }
 
-        _slaPort.ScanOnce(opts);
+        await _slaPort.ScanOnceAsync(opts, ct);
     }
 }

@@ -27,27 +27,27 @@ public class InMemoryApprovalQueueTests
     };
 
     [Fact]
-    public void Create_AddsRequestAndFiresEvent()
+    public async Task Create_AddsRequestAndFiresEvent()
     {
         var q = NewQueue();
         ApprovalRequest? captured = null;
         q.RequestCreated += (_, r) => captured = r;
 
-        var req = q.Create(NewReq());
+        var req = await q.CreateAsync(NewReq(), TestContext.Current.CancellationToken);
 
         captured.Should().BeSameAs(req);
         q.GetPending().Should().ContainSingle();
     }
 
     [Fact]
-    public void Decide_Approve_TransitionsAndFires()
+    public async Task Decide_Approve_TransitionsAndFires()
     {
         var q = NewQueue();
-        q.Create(NewReq());
+        await q.CreateAsync(NewReq(), TestContext.Current.CancellationToken);
         ApprovalRequest? captured = null;
         q.RequestDecided += (_, r) => captured = r;
 
-        q.Decide("a1", true, "admin", "looks good").Should().BeTrue();
+        (await q.DecideAsync("a1", true, "admin", "looks good", TestContext.Current.CancellationToken)).Should().BeTrue();
 
         captured.Should().NotBeNull();
         var pending = q.GetPending();
@@ -58,37 +58,37 @@ public class InMemoryApprovalQueueTests
     }
 
     [Fact]
-    public void Decide_Reject_StatusRejected()
+    public async Task Decide_Reject_StatusRejected()
     {
         var q = NewQueue();
-        q.Create(NewReq());
-        q.Decide("a1", false, null, "bad");
+        await q.CreateAsync(NewReq(), TestContext.Current.CancellationToken);
+        await q.DecideAsync("a1", false, null, "bad", TestContext.Current.CancellationToken);
         q.Get("a1")!.Status.Should().Be(ApprovalStatus.Rejected);
     }
 
     [Fact]
-    public void Decide_Twice_SecondReturnsFalse()
+    public async Task Decide_Twice_SecondReturnsFalse()
     {
         var q = NewQueue();
-        q.Create(NewReq());
-        q.Decide("a1", true);
-        q.Decide("a1", false).Should().BeFalse();
+        await q.CreateAsync(NewReq(), TestContext.Current.CancellationToken);
+        await q.DecideAsync("a1", true, ct: TestContext.Current.CancellationToken);
+        (await q.DecideAsync("a1", false, ct: TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
-    public void Decide_UnknownId_False()
+    public async Task Decide_UnknownId_False()
     {
         var q = NewQueue();
-        q.Decide("nope", true).Should().BeFalse();
+        (await q.DecideAsync("nope", true, ct: TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
     public async Task AwaitDecisionAsync_Decided_ReturnsResult()
     {
         var q = NewQueue();
-        q.Create(NewReq());
+        await q.CreateAsync(NewReq(), TestContext.Current.CancellationToken);
         var task = q.AwaitDecisionAsync("a1", TestContext.Current.CancellationToken);
-        q.Decide("a1", true);
+        await q.DecideAsync("a1", true, ct: TestContext.Current.CancellationToken);
         var result = await task;
         result.Status.Should().Be(ApprovalStatus.Approved);
     }
@@ -98,9 +98,9 @@ public class InMemoryApprovalQueueTests
     {
         var q = NewQueue(timeout: 1, autoApprove: false);
         var req = NewReq();
-        q.Create(req);
+        await q.CreateAsync(req, TestContext.Current.CancellationToken);
         var result = await q.AwaitDecisionAsync("a1", TestContext.Current.CancellationToken);
-        // AutoApprove off � reject + Expired
+        // AutoApprove off — reject + Expired
         result.Status.Should().Be(ApprovalStatus.Expired);
     }
 
@@ -108,7 +108,7 @@ public class InMemoryApprovalQueueTests
     public async Task AwaitDecisionAsync_TimeoutAutoApprove_StatusApproved()
     {
         var q = NewQueue(timeout: 1, autoApprove: true);
-        q.Create(NewReq());
+        await q.CreateAsync(NewReq(), TestContext.Current.CancellationToken);
         var result = await q.AwaitDecisionAsync("a1", TestContext.Current.CancellationToken);
         result.Status.Should().Be(ApprovalStatus.Approved);
     }

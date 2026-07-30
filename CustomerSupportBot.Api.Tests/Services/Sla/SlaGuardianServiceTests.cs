@@ -1,5 +1,5 @@
 // Services/Sla/SlaGuardianServiceTests.cs
-// ISlaPort.ScanOnce davranışını doğrular: warn/breach kayıtları, AutoReject ve
+// ISlaPort.ScanOnceAsync davranışını doğrular: warn/breach kayıtları, AutoReject ve
 // öncelik yükseltmesi. SlaPortService (Application katmanı) doğrudan test edilir;
 // SlaGuardianService artık ince bir tetikleyici olduğundan ayrıca test edilmez.
 
@@ -40,7 +40,7 @@ public class SlaGuardianServiceTests
     }
 
     [Fact]
-    public void ScanOnce_Approval_BreachesAndAutoRejects()
+    public async Task ScanOnce_Approval_BreachesAndAutoRejects()
     {
         var opts = new SlaOptions
         {
@@ -53,14 +53,14 @@ public class SlaGuardianServiceTests
         };
         var (slaPort, approvals, _, sink) = BuildHarness(opts);
 
-        var req = approvals.Create(new ApprovalRequest
+        var req = await approvals.CreateAsync(new ApprovalRequest
         {
             ToolName = "order_placement_tool",
             RequestedAt = DateTime.UtcNow.AddSeconds(-10),
             SessionId = "s1"
-        });
+        }, TestContext.Current.CancellationToken);
 
-        slaPort.ScanOnce(opts);
+        await slaPort.ScanOnceAsync(opts, TestContext.Current.CancellationToken);
 
         sink.GetRecent().Should().Contain(e =>
             e.Severity == SlaPolicyEvaluator.SeverityBreach &&
@@ -70,7 +70,7 @@ public class SlaGuardianServiceTests
     }
 
     [Fact]
-    public void ScanOnce_Approval_AboveWarn_BelowBreach_OnlyWarn()
+    public async Task ScanOnce_Approval_AboveWarn_BelowBreach_OnlyWarn()
     {
         var opts = new SlaOptions
         {
@@ -83,14 +83,14 @@ public class SlaGuardianServiceTests
         };
         var (slaPort, approvals, _, sink) = BuildHarness(opts);
 
-        var req = approvals.Create(new ApprovalRequest
+        var req = await approvals.CreateAsync(new ApprovalRequest
         {
             ToolName = "complaint_registration_tool",
             RequestedAt = DateTime.UtcNow.AddSeconds(-5),
             SessionId = "s1"
-        });
+        }, TestContext.Current.CancellationToken);
 
-        slaPort.ScanOnce(opts);
+        await slaPort.ScanOnceAsync(opts, TestContext.Current.CancellationToken);
 
         var events = sink.GetRecent();
         events.Should().Contain(e => e.Severity == SlaPolicyEvaluator.SeverityWarn);
@@ -99,7 +99,7 @@ public class SlaGuardianServiceTests
     }
 
     [Fact]
-    public void ScanOnce_Escalation_Breach_BoostsPriority()
+    public async Task ScanOnce_Escalation_Breach_BoostsPriority()
     {
         var opts = new SlaOptions
         {
@@ -120,7 +120,7 @@ public class SlaGuardianServiceTests
             Reason = "y"
         });
 
-        slaPort.ScanOnce(opts);
+        await slaPort.ScanOnceAsync(opts, TestContext.Current.CancellationToken);
 
         escalations.Get(esc.Id)!.Priority.Should().Be(EscalationPriority.High);
         sink.GetRecent().Should().Contain(e =>
@@ -129,7 +129,7 @@ public class SlaGuardianServiceTests
     }
 
     [Fact]
-    public void ScanOnce_Idempotent_DoesNotDuplicateBreachEvents()
+    public async Task ScanOnce_Idempotent_DoesNotDuplicateBreachEvents()
     {
         var opts = new SlaOptions
         {
@@ -141,15 +141,15 @@ public class SlaGuardianServiceTests
         };
         var (slaPort, approvals, _, sink) = BuildHarness(opts);
 
-        approvals.Create(new ApprovalRequest
+        await approvals.CreateAsync(new ApprovalRequest
         {
             ToolName = "order_placement_tool",
             RequestedAt = DateTime.UtcNow.AddSeconds(-5)
-        });
+        }, TestContext.Current.CancellationToken);
 
-        slaPort.ScanOnce(opts);
-        slaPort.ScanOnce(opts);
-        slaPort.ScanOnce(opts);
+        await slaPort.ScanOnceAsync(opts, TestContext.Current.CancellationToken);
+        await slaPort.ScanOnceAsync(opts, TestContext.Current.CancellationToken);
+        await slaPort.ScanOnceAsync(opts, TestContext.Current.CancellationToken);
 
         var breachEvents = sink.GetRecent().Where(e =>
             e.Severity == SlaPolicyEvaluator.SeverityBreach).ToList();

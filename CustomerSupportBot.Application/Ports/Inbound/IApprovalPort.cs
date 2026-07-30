@@ -20,5 +20,5 @@ public interface IApprovalPort
     /// Admin kararını uygular (approve / reject).
     /// Request Pending değilse false döner (idempotent).
     /// </summary>
-    bool Decide(string id, bool approved, string? decidedBy = null, string? reason = null);
+    Task<bool> DecideAsync(string id, bool approved, string? decidedBy = null, string? reason = null, CancellationToken ct = default);
 }

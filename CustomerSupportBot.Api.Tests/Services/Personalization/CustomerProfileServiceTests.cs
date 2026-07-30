@@ -51,14 +51,14 @@ public class CustomerProfileServiceTests
     public async Task RecordInteraction_FirstCall_CreatesProfileAndCounts()
     {
         var (svc, store, _) = Build();
-        var p = await svc.RecordInteractionAsync("CUST-1", "Dell XPS 15 stokta var mı?", "Evet 10 adet.", "product_inquiry", isNewSession: true, ct: TestContext.Current.CancellationToken);
+        var p = await svc.RecordInteractionAsync("CUST-1", "Laptop stokta var mı?", "Evet 10 adet.", "product_inquiry", isNewSession: true, ct: TestContext.Current.CancellationToken);
 
         p.Should().NotBeNull();
         p.TotalSessions.Should().Be(1);
         p.TotalTurns.Should().Be(1);
         p.IntentFrequency["product_inquiry"].Should().Be(1);
         p.PreferredLanguage.Should().Be("tr");
-        p.ProductInterests.Should().Contain("Dell XPS 15");
+        p.ProductInterests.Should().Contain("Laptop");
         store.Count.Should().Be(1);
     }
 
@@ -79,13 +79,16 @@ public class CustomerProfileServiceTests
     [Fact]
     public async Task RecordInteraction_DedupesProductsAndKeepsNewestFirst()
     {
+        // ExtractProductMentions artık katalog-tabanlı: metni IProductCatalogRepository'deki
+        // gerçek ürün adlarıyla eşleştiriyor (eskiden marka kalıbı çıkarımı yapıyordu).
+        // Bu yüzden sorgular seed'de gerçekten var olan ürünlere referans vermeli.
         var (svc, _, _) = Build();
-        await svc.RecordInteractionAsync("CUST-1", "Dell XPS 15 sorgula", "ok", "product_inquiry", ct: TestContext.Current.CancellationToken);
-        await svc.RecordInteractionAsync("CUST-1", "Apple iPhone 15 Pro fiyat", "ok", "product_inquiry", ct: TestContext.Current.CancellationToken);
-        var p = await svc.RecordInteractionAsync("CUST-1", "Dell XPS 15 yeniden sor", "ok", "product_inquiry", ct: TestContext.Current.CancellationToken);
+        await svc.RecordInteractionAsync("CUST-1", "Laptop sorgula", "ok", "product_inquiry", ct: TestContext.Current.CancellationToken);
+        await svc.RecordInteractionAsync("CUST-1", "Tablet fiyat", "ok", "product_inquiry", ct: TestContext.Current.CancellationToken);
+        var p = await svc.RecordInteractionAsync("CUST-1", "Laptop yeniden sor", "ok", "product_inquiry", ct: TestContext.Current.CancellationToken);
 
-        // En son söz edilen Dell başa gelmeli
-        p!.ProductInterests.Should().StartWith(new[] { "Dell XPS 15", "Apple iPhone 15 Pro" });
+        // En son söz edilen Laptop başa gelmeli
+        p!.ProductInterests.Should().StartWith(new[] { "Laptop", "Tablet" });
         p.ProductInterests.Distinct().Should().HaveCount(p.ProductInterests.Count);
     }
 

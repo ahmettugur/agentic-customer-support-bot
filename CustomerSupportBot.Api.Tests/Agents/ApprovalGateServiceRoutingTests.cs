@@ -100,7 +100,7 @@ public class ApprovalGateServiceRoutingTests
         open[0].SuggestedAgentName.Should().Be("Alice");
         open[0].MatchScore.Should().BeGreaterThan(0);
         open[0].RequiredSkills.Should().Contain("complaint");
-        open[0].Priority.Should().Be(EscalationPriority.High); // ComplaintAgent � High
+        open[0].Priority.Should().Be(EscalationPriority.High); // ComplaintAgent — High
 
         registry.Get("alice")!.CurrentLoad.Should().Be(1);
     }

@@ -23,6 +23,12 @@ public static class WebApplicationExtensions
         var factory = scope.ServiceProvider
             .GetRequiredService<IDbContextFactory<CustomerSupportDbContext>>();
         await using var ctx = await factory.CreateDbContextAsync();
+
+        // Relational olmayan provider'da (test host'unun EF InMemory'si) MigrateAsync
+        // desteklenmez ve host başlatma aşamasında patlar. Prod'da provider her zaman
+        // Npgsql olduğu için bu kontrol no-op'tur.
+        if (!ctx.Database.IsRelational()) return;
+
         await ctx.Database.MigrateAsync();
     }
 }

@@ -55,7 +55,7 @@ public class SubTaskOrchestratorPartitionTests
     [Fact]
     public void Partition_MixedSequence_PreservesOrderedGroups()
     {
-        // read, write, read � 3 grup: [P] (parallel-1), [O] (serial), [P] (parallel-1)
+        // read, write, read — 3 grup: [P] (parallel-1), [O] (serial), [P] (parallel-1)
         var subs = new[]
         {
             Sub(1, WellKnown.AgentNames.Product),

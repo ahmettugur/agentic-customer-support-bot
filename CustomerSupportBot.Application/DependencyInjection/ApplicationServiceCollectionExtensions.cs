@@ -68,7 +68,6 @@ public static class ApplicationServiceCollectionExtensions
             .Validate(o => o.MaxDuplicateToolCalls > 0, "WorkflowGuards:MaxDuplicateToolCalls pozitif olmalı.")
             .Validate(o => o.MaxIterations > 0, "WorkflowGuards:MaxIterations pozitif olmalı.")
             .Validate(o => o.MaxHandoffsPerAgent > 0, "WorkflowGuards:MaxHandoffsPerAgent pozitif olmalı.")
-            .Validate(o => o.MaxTokensPerRequest > 0, "WorkflowGuards:MaxTokensPerRequest pozitif olmalı.")
             .Validate(o => o.PlanConfidenceThreshold is >= 0 and <= 1,
                 "WorkflowGuards:PlanConfidenceThreshold 0-1 aralığında olmalı.")
             .ValidateOnStart();
@@ -101,6 +100,10 @@ public static class ApplicationServiceCollectionExtensions
 
     private static void AddChatServices(this IServiceCollection services)
     {
+        // Yan etkili tool'lar için mükerrer çağrı koruması — Order ve Complaint servisleri
+        // AYNI cache örneğini paylaşmalı, bu yüzden Singleton.
+        services.AddSingleton<SideEffectIdempotencyCache>();
+
         services.AddSingleton<ProductToolsService>();
         services.AddSingleton<IProductToolsService>(sp => sp.GetRequiredService<ProductToolsService>());
         services.AddSingleton<OrderToolsService>();

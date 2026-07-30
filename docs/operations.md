@@ -108,7 +108,6 @@ Tüm konfigürasyon `CustomerSupportBot.Api/appsettings.json` üzerinden okunur.
 "WorkflowGuards": {
   "TimeoutSeconds": 180,            // tek workflow turunun max süresi
   "MaxDuplicateToolCalls": 3,       // aynı tool'u N kere arka arkaya çağırırsa devre kesilir
-  "MaxTokensPerRequest": 30000,     // bağlam toplam token üst sınırı
   "MaxIterations": 20               // ChatManager max agent geçişi
 }
 ```

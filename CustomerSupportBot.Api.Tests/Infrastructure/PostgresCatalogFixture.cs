@@ -36,7 +36,13 @@ public sealed class PostgresCatalogFixture : IAsyncLifetime
         DbFactory = new SimpleDbContextFactory(options);
 
         await using var ctx = DbFactory.CreateDbContext();
-        await ctx.Database.EnsureCreatedAsync();
+
+        // MigrateAsync — EnsureCreatedAsync DEĞİL. Şemayı modelden üreten EnsureCreated,
+        // InitialCreate migration'ındaki `CREATE COLLATION "und-u-ks-level1"` raw SQL'ini
+        // çalıştırmıyor; Product.Name/Category.Name kolonları o collation'ı istediği için
+        // CREATE TABLE "collation does not exist" hatasıyla düşüyordu. Migration yolu
+        // hem collation'ı oluşturur hem de migration'ların kendisini doğrular.
+        await ctx.Database.MigrateAsync();
 
         await SeedAsync();
 
@@ -62,10 +68,17 @@ public sealed class PostgresCatalogFixture : IAsyncLifetime
 
         await ctx.SaveChangesAsync();
 
+        // ComplaintRepository.Create nextval('catalog.complaint_seq') kullanıyor;
+        // orders.code ise identity kolonu.
         await ctx.Database.ExecuteSqlRawAsync(
             "CREATE SEQUENCE IF NOT EXISTS catalog.order_seq START WITH 1082; " +
             "CREATE SEQUENCE IF NOT EXISTS catalog.complaint_seq START WITH 1006; " +
-            "SELECT setval(pg_get_serial_sequence('catalog.products','id'), (SELECT MAX(id) FROM catalog.products));");
+            "SELECT setval(pg_get_serial_sequence('catalog.products','id'), (SELECT MAX(id) FROM catalog.products)); " +
+            // Seed satırları AÇIK kod değerleriyle (1030, 1042, …) eklendiği için identity
+            // sequence'leri ilerlemiyor ve yeni kayıtlar 1'den başlıyordu — seed'in üstüne
+            // çıkacak şekilde senkronize et.
+            "SELECT setval(pg_get_serial_sequence('catalog.orders','code'), (SELECT MAX(code) FROM catalog.orders)); " +
+            "SELECT setval(pg_get_serial_sequence('catalog.complaints','code'), (SELECT MAX(code) FROM catalog.complaints));");
     }
 
     private sealed class SimpleDbContextFactory : IDbContextFactory<CustomerSupportDbContext>

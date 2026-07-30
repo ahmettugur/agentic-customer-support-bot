@@ -63,7 +63,7 @@ public class CustomerSupportChatManagerTests
         mgr.Should().NotBeNull();
     }
 
-    // ��� SelectNextAgentAsync via reflection (protected) ���
+    // ─── SelectNextAgentAsync via reflection (protected) ───
     private static async ValueTask<AIAgent> InvokeSelectAsync(
         CustomerSupportChatManager mgr, IReadOnlyList<ChatMessage> history)
     {
@@ -92,7 +92,7 @@ public class CustomerSupportChatManagerTests
                        "\",\"intentConfidence\":0.95,\"needsClarification\":false}";
         var history = new List<ChatMessage>
         {
-            new(ChatRole.User, "sipari�imi sor"),
+            new(ChatRole.User, "siparişimi sor"),
             new(ChatRole.Assistant, planJson) { AuthorName = WellKnown.AgentNames.Planning }
         };
         var picked = await InvokeSelectAsync(mgr, history);
@@ -111,7 +111,7 @@ public class CustomerSupportChatManagerTests
             new(ChatRole.User, "soru"),
             new(ChatRole.Assistant, planJson) { AuthorName = WellKnown.AgentNames.Planning }
         };
-        // �lk se�im limit i�inde, ikinci se�im limit d��� kalmal� � ResponseAgent'a d��er
+        // İlk seçim limit içinde, ikinci seçim limit dışı kalmalı — ResponseAgent'a düşer
         var first = await InvokeSelectAsync(mgr, history);
         first.Name.Should().Be(WellKnown.AgentNames.Order);
 
@@ -119,7 +119,7 @@ public class CustomerSupportChatManagerTests
         second.Name.Should().Be(WellKnown.AgentNames.Response);
     }
 
-    // ��� ShouldTerminateAsync ���
+    // ─── ShouldTerminateAsync ───
     private static async ValueTask<bool> InvokeShouldTerminate(
         CustomerSupportChatManager mgr, IReadOnlyList<ChatMessage> history)
     {
@@ -153,7 +153,7 @@ public class CustomerSupportChatManagerTests
     public async Task ShouldTerminate_RepeatedToolCalls_ReturnsTrue()
     {
         var mgr = BuildManager(new WorkflowGuardOptions { MaxDuplicateToolCalls = 2 });
-        // Ayn� tool �a�r�s�n� iki kere i�eren history
+        // Aynı tool çağrısını iki kere içeren history
         var fc = new FunctionCallContent("call1", "tool_x", new Dictionary<string, object?> { ["a"] = 1 });
         var fc2 = new FunctionCallContent("call2", "tool_x", new Dictionary<string, object?> { ["a"] = 1 });
         var msg1 = new ChatMessage(ChatRole.Assistant, new[] { (AIContent)fc });

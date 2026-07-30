@@ -14,7 +14,7 @@ public sealed class OrderRepositoryIntegrationTests
     {
         var order = _fx.OrderRepo.Get("1030");
         order.Should().NotBeNull();
-        order!.Product.Should().Be("Beer");
+        order!.Product.Should().Be("Bira");   // seed Türkçeleştirildi (eski: "Beer")
         order.CustomerId.Should().Be("1027");
     }
 
@@ -45,7 +45,7 @@ public sealed class OrderRepositoryIntegrationTests
     {
         var order = new OrderInfo
         {
-            Product    = "Coffee",
+            Product    = "Kahve",
             Quantity   = 5,
             CustomerId = "9001",
             Status     = WellKnown.OrderStatuses.Processing,
@@ -77,20 +77,25 @@ public sealed class ProductCatalogRepositoryIntegrationTests
 
     public ProductCatalogRepositoryIntegrationTests(PostgresCatalogFixture fx) => _fx = fx;
 
+    // NOT: NorthwindSeedData Türkçeleştirildi (Coffee→Kahve, Chocolate→Çikolata).
+    // Bu testler İngilizce adlarla kalmıştı; fixture hiç ayağa kalkmadığı için
+    // uyumsuzluk fark edilmemişti.
     [Fact]
     public void FindProduct_ExactName_ReturnsProduct()
     {
-        var p = _fx.ProductRepo.FindProduct("Coffee");
+        var p = _fx.ProductRepo.FindProduct("Kahve");
         p.Should().NotBeNull();
         p!.Price.Should().Be(46.00m);
     }
 
     [Fact]
-    public void FindProduct_PartialName_ReturnsFirstMatch()
+    public void FindProduct_CaseAndAccentInsensitive_ReturnsProduct()
     {
-        var p = _fx.ProductRepo.FindProduct("Chocolate");
+        // "und-u-ks-level1" ICU collation'ı non-deterministic: büyük/küçük harf ve
+        // aksan duyarsız eşleşme sağlar. Bu test collation'ın gerçekten uygulandığını doğrular.
+        var p = _fx.ProductRepo.FindProduct("çikolata");
         p.Should().NotBeNull();
-        p!.Name.Should().Contain("Chocolate");
+        p!.Name.Should().Be("Çikolata");
     }
 
     [Fact]

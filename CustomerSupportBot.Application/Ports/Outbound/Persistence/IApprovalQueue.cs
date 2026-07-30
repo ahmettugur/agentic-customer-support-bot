@@ -7,9 +7,9 @@ namespace CustomerSupportBot.Application.Ports.Outbound.Persistence;
 ///</summary>
 public interface IApprovalQueue
 {
-    ApprovalRequest Create(ApprovalRequest request);
+    Task<ApprovalRequest> CreateAsync(ApprovalRequest request, CancellationToken ct = default);
     Task<ApprovalRequest> AwaitDecisionAsync(string id, CancellationToken ct = default);
-    bool Decide(string id, bool approved, string? decidedBy = null, string? reason = null);
+    Task<bool> DecideAsync(string id, bool approved, string? decidedBy = null, string? reason = null, CancellationToken ct = default);
     IReadOnlyList<ApprovalRequest> GetPending();
     IReadOnlyList<ApprovalRequest> GetRecent(int count = 50);
     ApprovalRequest? Get(string id);

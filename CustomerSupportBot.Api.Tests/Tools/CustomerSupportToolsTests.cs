@@ -75,11 +75,49 @@ public class CustomerSupportToolsTests
     {
         var product = _fixture.ProductRepo.GetAll().First().Name;
         var customerId = "9003";
+        var ordersBefore = _fixture.OrderRepo.GetByCustomer(customerId).Count;
+
         var r1 = _svc.OrderPlacementTool(product, 1, customerId);
         var r2 = _svc.OrderPlacementTool(product, 1, customerId);
+
         r1.Success.Should().BeTrue();
         r2.Success.Should().BeTrue();
-        r1.Message.Should().Be(r2.Message);
+
+        // İkinci çağrı YENİ sipariş oluşturmamalı...
+        _fixture.OrderRepo.GetByCustomer(customerId).Count
+            .Should().Be(ordersBefore + 1, "mükerrer çağrı ikinci bir sipariş yazmamalı");
+
+        // ...ama sonucu sessizce taklit etmek yerine mükerrer olduğunu bildirmeli.
+        r2.Message.Should().NotBe(r1.Message);
+        r2.Message.Should().Contain("az önce");
+        r2.Data.Should().NotBeNull();
+        r2.Data!.GetType().GetProperty("duplicate")!.GetValue(r2.Data).Should().Be(true);
+
+        // Uyarı, ilk siparişin numarasını taşımalı.
+        var firstOrderId = r1.Data!.GetType().GetProperty("orderId")!.GetValue(r1.Data)!.ToString();
+        r2.Message.Should().Contain(firstOrderId);
+    }
+
+    [Fact]
+    public void OrderPlacement_OutsideWindow_CreatesSecondOrder()
+    {
+        // Pencere dışına çıkıldığında mükerrer koruması devreye girmemeli.
+        var window = TimeSpan.FromSeconds(60);
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var cache = new SideEffectIdempotencyCache(window, clock: clock);
+        var svc = TestFactory.CreateToolsService(
+            _fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo, idempotency: cache);
+
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var customerId = "9005";
+
+        var r1 = svc.OrderPlacementTool(product, 1, customerId);
+        clock.Advance(window + TimeSpan.FromSeconds(1));
+        var r2 = svc.OrderPlacementTool(product, 1, customerId);
+
+        r1.Success.Should().BeTrue();
+        r2.Success.Should().BeTrue();
+        _fixture.OrderRepo.GetByCustomer(customerId).Count.Should().Be(2);
     }
 
     [Fact]

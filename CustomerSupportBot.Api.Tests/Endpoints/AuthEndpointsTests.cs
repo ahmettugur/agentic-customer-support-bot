@@ -18,7 +18,7 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
         var dbf = _factory.GetDbContextFactory();
         await using var ctx = await dbf.CreateDbContextAsync();
 
-        // Ayn� username varsa kullan
+        // Aynı username varsa kullan
         var existing = ctx.Users.FirstOrDefault(u => u.Username == username);
         if (existing is not null) return;
 
@@ -133,6 +133,6 @@ public class AuthEndpointsTests : IClassFixture<TestWebApplicationFactory>
             new AuthenticationHeaderValue("Bearer", body!.AccessToken);
 
         var resp = await client.GetAsync("/traces/recent", TestContext.Current.CancellationToken);
-        ((int)resp.StatusCode).Should().BeLessThan(400, "Admin role bearer ile yetkili olmal�");
+        ((int)resp.StatusCode).Should().BeLessThan(400, "Admin role bearer ile yetkili olmalı");
     }
 }

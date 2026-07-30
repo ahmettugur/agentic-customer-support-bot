@@ -88,12 +88,20 @@ Adımlar:
 1. Parametre doğrulama (`customerId`, `productName`, `quantity`)
 2. Müşteri var mı? (`ICustomerRepository`)
 3. Ürün katalogda var mı?
-4. Stok yeterli mi? (`IProductCatalogRepository.TryDeductStock`)
-5. Sipariş oluştur (`IOrderRepository.Create`)
+4. **Mükerrer çağrı kontrolü** (`SideEffectIdempotencyCache`) — stok düşülmeden önce
+5. Stok yeterli mi? (`IProductCatalogRepository.TryDeductStock`)
+6. Sipariş oluştur (`IOrderRepository.Create`) ve sonucu cache'e kaydet
 
 **Stok yetersizse:** `ToolResult.Conflict` → ajan müşteriye bildirir, yeni sipariş oluşturmaz.
 
-> ⚠️ **İdempotency koruması yoktur.** Aynı parametrelerle art arda iki çağrı iki ayrı sipariş oluşturur — LLM'in tool'u yanlışlıkla iki kez çağırması durumunda tekrar tespiti yapan bir mekanizma bulunmuyor.
+**Mükerrer çağrıda** (aynı ürün + adet + müşteri, 60 saniye içinde): stok düşülmez, sipariş yazılmaz. `ToolResult.Ok` döner ama mesaj ilk siparişin numarasını taşır ve `Data.duplicate = true` olur:
+
+```
+"Bu siparişi az önce oluşturmuştum — sipariş numarası: 1082. Mükerrer kayıt
+ oluşturmadım. Gerçekten ikinci bir sipariş istiyorsanız lütfen açıkça belirtin."
+```
+
+Sonuç sessizce taklit edilmediği için meşru bir tekrar sipariş talebi kaybolmaz — ajan kullanıcıya durumu bildirip teyit isteyebilir. Detay: [security.md §4.2](../security.md#42-tool-idempotency).
 
 ### `OrderCancelTool`
 
@@ -133,9 +141,12 @@ Adımlar:
 2. Sipariş var mı?
 3. `customerId` verilmemişse siparişten otomatik türetilir (`inferred=true`)
 4. `customerId` verilmişse sipariş sahibiyle eşleşiyor mu?
-5. Şikayet oluştur (`IComplaintRepository.Create`)
+5. **Mükerrer çağrı kontrolü** (`SideEffectIdempotencyCache`) — kayıt oluşturulmadan önce
+6. Şikayet oluştur (`IComplaintRepository.Create`) ve sonucu cache'e kaydet
 
 **CustomerID uyuşmazlığı:** `ToolResult.Conflict(CustomerIdMismatch)` — başkasının siparişine şikayet açılmasını engeller.
+
+**Mükerrer çağrıda** (aynı `orderId` + türetilmiş `customerId` + şikayet metni, 60 saniye içinde): yeni kayıt oluşturulmaz, ilk şikayet numarasını bildiren bir `ToolResult.Ok` döner (`Data.duplicate = true`). İmza **türetilmiş** `customerId` üzerinden kurulduğu için, `customerId`'nin bir çağrıda verilip diğerinde verilmemesi aynı şikayeti iki farklı çağrı gibi göstermez.
 
 ### `HumanHandoffTool` (static)
 

@@ -21,12 +21,6 @@ public class WorkflowGuardOptions
     public int MaxDuplicateToolCalls { get; set; } = 3;
 
     /// <summary>
-    /// Tek bir istek için maksimum tahmini token kullanımı.
-    /// Bu eşik aşılırsa workflow sonlandırılır ve kullanıcıya hata dönülür.
-    /// </summary>
-    public long MaxTokensPerRequest { get; set; } = 30000;
-
-    /// <summary>
     /// Maksimum workflow iterasyon sayısı (MAF superstep).
     /// </summary>
     public int MaxIterations { get; set; } = 20;

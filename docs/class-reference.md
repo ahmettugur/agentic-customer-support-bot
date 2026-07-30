@@ -517,7 +517,6 @@ Tool çağrılarının **standart dönüş zarfı**. Tüm 6 tool fonksiyonu bunu
 
 - `TimeoutSeconds` = 60 — tüm workflow timeout
 - `MaxDuplicateToolCalls` = 3 — aynı tool+param tekrar eşiği
-- `MaxTokensPerRequest` = 30000 — tahmini token üst sınırı
 - `MaxIterations` = 20 — MAF superstep üst sınırı
 
 ChatManager `ShouldTerminateAsync` bu ayarları kullanır.

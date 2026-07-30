@@ -69,6 +69,8 @@ Kullanıcıya gönderilecek metinden `TERMINATE` ve sonrasını siler.
 TERMINATE(\s*[:\s]+reason\s*=\s*[a-zA-Z_]+|\s*\([^)]+\))?[\s\S]*$
 ```
 
+Tüm regex çağrıları 500ms `matchTimeout` (`RegexTimeout` sabiti) ile çalışır; `RegexMatchTimeoutException` yakalanırsa temizlenmemiş orijinal metin döner (crash yerine best-effort davranış). LLM çıktısı (potansiyel prompt-injection kaynaklı adversarial metin) üzerinde çalıştığı için bu, ReDoS'a karşı savunma katmanıdır.
+
 **Örnekler:**
 
 | Giriş | Çıkış |
@@ -91,6 +93,8 @@ Specialist ajanların ürettiği iç JSON bloklarını metinden siler. Bu blokla
 1. Kod bloğu içindeki JSON'lar silinir (` ```json { ... } ``` ` formatı)
 2. Düz JSON nesneleri silinir (`{ ... }` formatı)
 3. Üç veya daha fazla ardışık boş satır `\n\n`'e indirgenir
+
+> **Bilinen sınırlama:** Adım 2'deki brace-eşleştirme regex'i yalnızca **tek seviye** iç içe geçmeyi destekler (`(?:[^{}]|(?:\{[^{}]*\}))*`) — 2+ seviye derin iç içe JSON bloklarını kaçırabilir. Kapsamlı bir brace-counting parser'a geçiş yapılmadı; bunun yerine timeout eklendi (aşağıya bakın).
 
 ### `ContainsAgentRoutingMessage`
 

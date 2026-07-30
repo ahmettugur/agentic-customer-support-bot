@@ -72,7 +72,7 @@ public class EvaluationRunnerTests
         return new EvaluationRunner(team, reasoningService, sessionManager, traceStore);
     }
 
-    // ��� LoadScenarios ���
+    // ─── LoadScenarios ───
 
     [Fact]
     public void LoadScenarios_ValidYaml_DeserializesScenarios()
@@ -91,7 +91,7 @@ public class EvaluationRunnerTests
                   - "turn_count <= 5"
               - id: complaint-1
                 category: complaint
-                query: "�r�n bozuk geldi"
+                query: "ürün bozuk geldi"
                 expected_tools: []
                 success_criteria: []
             """;
@@ -162,7 +162,7 @@ public class EvaluationRunnerTests
         act.Should().Throw<FileNotFoundException>();
     }
 
-    // ��� RunAsync ���
+    // ─── RunAsync ───
 
     [Fact]
     public async Task RunAsync_EmptyScenarios_CompletesWithZeroResults()
@@ -192,11 +192,11 @@ public class EvaluationRunnerTests
         var result = await runner.RunAsync(scenarios, cts.Token);
 
         result.TotalScenarios.Should().Be(2);
-        result.Results.Should().BeEmpty(); // hi� �al��t�rmadan break
+        result.Results.Should().BeEmpty(); // hiç çalıştırmadan break
     }
 
-    // ��� RunScenarioAsync ���
-    // Not: Tam ak�� reasoning + workflow gerektirdi�inden CancellationToken alsa bile
-    // Mock IChatClient ile workflow ba�lang�c� as�l� kalabiliyor; bu y�zden yaln�zca
-    // RunAsync seviyesinde pre-cancellation kapsam� yeterli.
+    // ─── RunScenarioAsync ───
+    // Not: Tam akış reasoning + workflow gerektirdiğinden CancellationToken alsa bile
+    // Mock IChatClient ile workflow başlangıcı asılı kalabiliyor; bu yüzden yalnızca
+    // RunAsync seviyesinde pre-cancellation kapsamı yeterli.
 }
