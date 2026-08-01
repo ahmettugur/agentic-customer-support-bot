@@ -19,14 +19,22 @@ internal sealed class HumanHandoffAgent : SupportAgentBase
     private static ChatClientAgent BuildInner(IChatClient chatClient, IPromptRepository prompts)
         => new(
             chatClient,
-            instructions: prompts.Get("agents/human-handoff-agent"),
-            name: WellKnown.AgentNames.HumanHandoff,
-            description: "Kullanıcının açıkça insan temsilcisiyle görüşme talebini karşılar.",
-            tools: [
-                AIFunctionFactory.Create(
-                    CustomerSupportToolsService.HumanHandoffTool,
-                    new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.HumanHandoff })
-            ]);
+            new ChatClientAgentOptions
+            {
+                Name = WellKnown.AgentNames.HumanHandoff,
+                Description = "Kullanıcının açıkça insan temsilcisiyle görüşme talebini karşılar.",
+                ChatOptions = new ChatOptions
+                {
+                    Instructions = prompts.Get("agents/human-handoff-agent"),
+                    Tools = [
+                        AIFunctionFactory.Create(
+                            CustomerSupportToolsService.HumanHandoffTool,
+                            new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.HumanHandoff })
+                    ],
+                    ResponseFormat = ChatResponseFormat.ForJsonSchema<SpecialistReasoningSchema>(
+                        SpecialistReasoningSchemaOptions.CamelCase)
+                }
+            });
 
     /// <summary>
     /// BREAKPOINT BURAYA: LLM'e gönderilen tam mesaj listesi.

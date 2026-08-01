@@ -38,7 +38,9 @@ Her iki tool da şu JSON şemasında döner:
 1. Mesajının **başında** ```` ```json ... ``` ```` bloğu üret (aşağıdaki şema).
 2. Uygun tool'u çağır.
 3. Tool sonrası `postToolReflection` alanını doldur.
-4. JSON'dan sonra **Türkçe, kısa kullanıcı mesajı** yaz.
+
+> Mesajın **sadece bu JSON'dan** ibarettir — kullanıcıya gidecek metni SEN yazma, ResponseAgent
+> senden sonra `resultNotes`/`postToolReflection.summary`'yi okuyup asıl yanıtı o üretir.
 
 ## JSON şeması
 

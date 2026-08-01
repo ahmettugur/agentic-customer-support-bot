@@ -25,13 +25,21 @@ internal sealed class ProductAgent : SupportAgentBase
         ICustomerSupportToolsService tools)
         => new(
             chatClient,
-            instructions: prompts.Get("agents/product-agent"),
-            name: WellKnown.AgentNames.Product,
-            description: "Ürün sorgularını yanıtlar.",
-            tools: [
-                AIFunctionFactory.Create(tools.ProductInquiryTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.ProductInquiry }),
-                AIFunctionFactory.Create(tools.ProductListTool,    new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.ProductList })
-            ]);
+            new ChatClientAgentOptions
+            {
+                Name = WellKnown.AgentNames.Product,
+                Description = "Ürün sorgularını yanıtlar.",
+                ChatOptions = new ChatOptions
+                {
+                    Instructions = prompts.Get("agents/product-agent"),
+                    Tools = [
+                        AIFunctionFactory.Create(tools.ProductInquiryTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.ProductInquiry }),
+                        AIFunctionFactory.Create(tools.ProductListTool,    new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.ProductList })
+                    ],
+                    ResponseFormat = ChatResponseFormat.ForJsonSchema<SpecialistReasoningSchema>(
+                        SpecialistReasoningSchemaOptions.CamelCase)
+                }
+            });
 
     /// <summary>
     /// BREAKPOINT BURAYA: LLM'e gönderilen tam mesaj listesi.

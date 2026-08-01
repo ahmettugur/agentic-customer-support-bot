@@ -27,4 +27,11 @@ public interface IAgentTeamPort
         AgentSession? session = null,
         ReasoningResult? reasoning = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Ajan takımı workflow graph'ının Mermaid.js diyagramını döner — dokümantasyon ve
+    /// debug amaçlı (MAF'ın <c>Workflow.ToMermaidString()</c> extension'ı). Graph topolojisi
+    /// tur/oturumdan bağımsız sabittir (aynı 6 ajan + GroupChatHost), bu yüzden argüman almaz.
+    /// </summary>
+    string GetWorkflowDiagram();
 }

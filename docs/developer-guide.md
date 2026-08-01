@@ -517,9 +517,9 @@ curl -X POST "http://localhost:5021/eval/run" \
 
 Tekil senaryo çalıştırmak için: `POST /eval/run/billing-happy-path`
 
-### Desteklenen criterion metinleri
+### Desteklenen criterion type'ları
 
-`CustomerSupportBot.Application/Services/Evaluation/CriteriaEvaluator.cs` okuyarak desteklenen metin kalıplarına bakabilirsiniz. Yeni kalıp eklemek için `CriteriaEvaluator.Evaluate` metoduna yeni bir `if`/`else` bloğu eklenir.
+`CustomerSupportBot.Adapters.Agents/Evaluation/CriteriaEvaluator.cs` okuyarak desteklenen `type`'lara bakabilirsiniz (bkz. [evaluation.md §3](evaluation.md#3-criteriaevaluator--yapılandırılmış-typed-criterion-dispatch)). Yeni bir `type` eklemek için `Checks` dispatch table'ına yeni bir entry eklenir — `Microsoft.Agents.AI.EvalCheck` döndüren bir `Func<CriterionSpec, ScenarioRunContext, EvalCheck>`.
 
 ---
 

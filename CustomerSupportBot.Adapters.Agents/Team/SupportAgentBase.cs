@@ -9,7 +9,15 @@
 // Debug: LLM'in kendi akıl yürütmesine adım adım girilemez, ama çağrının GİRDİSİ ve
 // ÇIKTISI burada yakalanır. OnBeforeRun/OnAfterRun her ajanda AYRI implemente edilir —
 // böylece breakpoint yalnızca o ajanın turunda durur, altısında birden değil.
+//
+// ÖNEMLİ: RunCoreAsync VE RunCoreStreamingAsync'in İKİSİ de override edilmeli.
+// WorkflowRunner her turda TurnToken(emitEvents: true) gönderiyor — bu, GroupChat'in
+// AIAgentHostExecutor'ının ajanı HER ZAMAN streaming yoldan (_agent.RunStreamingAsync)
+// çağırması demek, RunAsync/RunCoreAsync değil. Sadece RunCoreAsync override edilseydi
+// (önceki hâli) bu hook'lar gerçek çalışan sistemde HİÇ TETİKLENMEZDİ — DelegatingAIAgent'ın
+// varsayılan RunCoreStreamingAsync'i doğrudan iç ajana geçer, sessizce.
 
+using System.Runtime.CompilerServices;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -37,6 +45,34 @@ internal abstract class SupportAgentBase : DelegatingAIAgent
         OnAfterRun(response);
 
         return response;
+    }
+
+    /// <summary>
+    /// Gerçek çalışan sistemde kullanılan yol budur (bkz. sınıf başı yorum). Update'leri
+    /// olduğu gibi yield edip ayrıca biriktiriyoruz; akış bitince biriken update'lerden
+    /// <see cref="AgentResponseExtensions.ToAgentResponse(IEnumerable{AgentResponseUpdate})"/>
+    /// ile RunCoreAsync ile aynı şekle sahip bir AgentResponse kurup OnAfterRun'a veriyoruz —
+    /// böylece iki yoldaki debug hook'ları tutarlı davranıyor.
+    /// </summary>
+    protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+        IEnumerable<ChatMessage> messages,
+        AgentSession? session = null,
+        AgentRunOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var messageList = messages as IReadOnlyList<ChatMessage> ?? messages.ToList();
+
+        OnBeforeRun(messageList);
+
+        var updates = new List<AgentResponseUpdate>();
+        await foreach (var update in base.RunCoreStreamingAsync(messageList, session, options, cancellationToken)
+                           .ConfigureAwait(false))
+        {
+            updates.Add(update);
+            yield return update;
+        }
+
+        OnAfterRun(updates.ToAgentResponse());
     }
 
     /// <summary>BREAKPOINT: LLM'e gönderilmek üzere olan tam mesaj listesi.</summary>

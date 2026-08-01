@@ -74,4 +74,6 @@ public class CustomerSupportTeam : IAgentTeamPort
             ? _decomposed.RunDecomposedStreamingAsync(query, conversationHistory, session, reasoning!, ct)
             : _runner.RunStreamingAsync(query, conversationHistory, session, reasoning, ct);
     }
+
+    public string GetWorkflowDiagram() => _runner.GetWorkflowDiagram();
 }

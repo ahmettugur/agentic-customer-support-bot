@@ -1,27 +1,39 @@
 // Tests/Evaluation/CriteriaEvaluatorMoreTests.cs
 // CriteriaEvaluator için ek branch coverage.
-using CustomerSupportBot.Application.Services.Evaluation;
+using CustomerSupportBot.Adapters.Agents.Evaluation;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Api.Tests.Evaluation;
 
 public class CriteriaEvaluatorMoreTests
 {
+    private static EvalItem BuildItem(ScenarioRunContext ctx, string query = "q")
+    {
+        var conversation = new List<ChatMessage> { new(ChatRole.User, query) };
+        conversation.AddRange(ctx.ToolsCalled.Select(toolName =>
+            new ChatMessage(ChatRole.Assistant, [new FunctionCallContent(Guid.NewGuid().ToString(), toolName)])));
+        return new EvalItem(query, ctx.Response ?? "", conversation);
+    }
+
     // ─── turn_count operatör varyantları ───
     [Theory]
-    [InlineData("turn_count == 3", 3, true)]
-    [InlineData("turn_count == 3", 4, false)]
-    [InlineData("turn_count = 3", 3, true)]
-    [InlineData("turn_count < 5", 4, true)]
-    [InlineData("turn_count < 5", 5, false)]
-    [InlineData("turn_count >= 2", 2, true)]
-    [InlineData("turn_count >= 2", 1, false)]
-    [InlineData("turn_count > 1", 2, true)]
-    [InlineData("turn_count > 1", 1, false)]
-    public void TurnCount_AllOperators_BehaveCorrectly(string criterion, int actual, bool expected)
+    [InlineData("==", 3, 3, true)]
+    [InlineData("==", 3, 4, false)]
+    [InlineData("=", 3, 3, true)]
+    [InlineData("<", 5, 4, true)]
+    [InlineData("<", 5, 5, false)]
+    [InlineData(">=", 2, 2, true)]
+    [InlineData(">=", 2, 1, false)]
+    [InlineData(">", 1, 2, true)]
+    [InlineData(">", 1, 1, false)]
+    public void TurnCount_AllOperators_BehaveCorrectly(string op, int value, int actual, bool expected)
     {
         var ctx = new ScenarioRunContext { IterationCount = actual };
-        var r = CriteriaEvaluator.Evaluate(criterion, ctx);
+        var spec = new CriterionSpec { Type = "turn_count", Op = op, Value = value };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().Be(expected);
     }
 
@@ -41,7 +53,8 @@ public class CriteriaEvaluatorMoreTests
                 }
             }
         };
-        var r = CriteriaEvaluator.Evaluate("no missing_param_tool error", ctx);
+        var spec = new CriterionSpec { Type = "no_missing_param_tool" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeTrue();
     }
 
@@ -60,11 +73,12 @@ public class CriteriaEvaluatorMoreTests
                 }
             }
         };
-        var r = CriteriaEvaluator.Evaluate("no missing_param_tool error", ctx);
+        var spec = new CriterionSpec { Type = "no_missing_param_tool" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeFalse();
     }
 
-    // ─── agent requests ... ───
+    // ─── agent requests field ───
     [Fact]
     public void AgentRequests_ResponseAsksCustomerId_Pass()
     {
@@ -72,7 +86,8 @@ public class CriteriaEvaluatorMoreTests
         {
             Response = "Lütfen müşteri kimlik numaranızı paylaşır mısınız?"
         };
-        var r = CriteriaEvaluator.Evaluate("agent requests customer_id", ctx);
+        var spec = new CriterionSpec { Type = "agent_requests_field", Field = "customer_id" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeTrue();
     }
 
@@ -80,7 +95,8 @@ public class CriteriaEvaluatorMoreTests
     public void AgentRequests_ResponseAsksOrderNumber_Pass()
     {
         var ctx = new ScenarioRunContext { Response = "Sipariş numaranız nedir?" };
-        var r = CriteriaEvaluator.Evaluate("agent requests order_id", ctx);
+        var spec = new CriterionSpec { Type = "agent_requests_field", Field = "order_id" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeTrue();
     }
 
@@ -92,7 +108,8 @@ public class CriteriaEvaluatorMoreTests
             Response = "Devam edebilmem için bilgiye ihtiyacım var.",
             TerminationReason = "awaiting_user_input"
         };
-        var r = CriteriaEvaluator.Evaluate("requests customer_id", ctx);
+        var spec = new CriterionSpec { Type = "agent_requests_field", Field = "customer_id" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeTrue();
     }
 
@@ -100,11 +117,12 @@ public class CriteriaEvaluatorMoreTests
     public void AgentRequests_NoQuestion_Fail()
     {
         var ctx = new ScenarioRunContext { Response = "İşlem başarıyla tamamlandı." };
-        var r = CriteriaEvaluator.Evaluate("agent requests customer_id", ctx);
+        var spec = new CriterionSpec { Type = "agent_requests_field", Field = "customer_id" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeFalse();
     }
 
-    // ─── customer_id used / uses customer_id ───
+    // ─── customer_id_used ───
     [Fact]
     public void CustomerIdUsed_CollectedInPreToolCheck_Pass()
     {
@@ -123,7 +141,8 @@ public class CriteriaEvaluatorMoreTests
                 }
             }
         };
-        var r = CriteriaEvaluator.Evaluate("customer_id used correctly", ctx);
+        var spec = new CriterionSpec { Type = "customer_id_used" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeTrue();
     }
 
@@ -141,20 +160,18 @@ public class CriteriaEvaluatorMoreTests
                 }
             }
         };
-        var r = CriteriaEvaluator.Evaluate("uses customer_id", ctx);
+        var spec = new CriterionSpec { Type = "customer_id_used" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeFalse();
     }
 
-    // ─── no_hallucinated / no hallucination ───
-    // Not: FinalCritique/ResponseCritique tipi kaldırıldı; bu kriter artık
-    // veri olmadan değerlendirilmiyor. İlgili testler düşürüldü.
-
-    // ─── order status ───
+    // ─── order_status_contains ───
     [Fact]
     public void OrderStatus_ResponseHasStatusKeyword_Pass()
     {
         var ctx = new ScenarioRunContext { Response = "Siparişiniz kargo aşamasında." };
-        var r = CriteriaEvaluator.Evaluate("response includes order status", ctx);
+        var spec = new CriterionSpec { Type = "order_status_contains" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeTrue();
     }
 
@@ -162,7 +179,8 @@ public class CriteriaEvaluatorMoreTests
     public void OrderStatus_NoKeyword_Fail()
     {
         var ctx = new ScenarioRunContext { Response = "Yardımcı olamadım." };
-        var r = CriteriaEvaluator.Evaluate("sipariş durumu var mı", ctx);
+        var spec = new CriterionSpec { Type = "order_status_contains" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeFalse();
     }
 
@@ -171,7 +189,8 @@ public class CriteriaEvaluatorMoreTests
     public void OrderIdReturned_MissingId_Fail()
     {
         var ctx = new ScenarioRunContext { Response = "İşlem yapıldı." };
-        var r = CriteriaEvaluator.Evaluate("order id returned", ctx);
+        var spec = new CriterionSpec { Type = "order_id_returned" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeFalse();
     }
 
@@ -179,16 +198,18 @@ public class CriteriaEvaluatorMoreTests
     public void ComplaintIdReturned_MissingId_Fail()
     {
         var ctx = new ScenarioRunContext { Response = "Şikayetiniz alındı." };
-        var r = CriteriaEvaluator.Evaluate("complaint id returned", ctx);
+        var spec = new CriterionSpec { Type = "complaint_id_returned" };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeFalse();
     }
 
-    // ─── ResponseContains: response null ───
+    // ─── ContainsAny: response null ───
     [Fact]
-    public void ResponseContains_NullResponse_Fail()
+    public void ContainsAny_NullResponse_Fail()
     {
         var ctx = new ScenarioRunContext { Response = null };
-        var r = CriteriaEvaluator.Evaluate("response contains 'merhaba'", ctx);
+        var spec = new CriterionSpec { Type = "contains_any", Values = ["merhaba"] };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeFalse();
     }
 
@@ -200,7 +221,8 @@ public class CriteriaEvaluatorMoreTests
         {
             ToolsCalled = new List<string> { "complaint_tool" }
         };
-        var r = CriteriaEvaluator.Evaluate("complaint_tool NOT called", ctx);
+        var spec = new CriterionSpec { Type = "tool_not_called", Values = ["complaint_tool"] };
+        var r = CriteriaEvaluator.Evaluate(spec, BuildItem(ctx), ctx);
         r.Passed.Should().BeFalse();
     }
 }

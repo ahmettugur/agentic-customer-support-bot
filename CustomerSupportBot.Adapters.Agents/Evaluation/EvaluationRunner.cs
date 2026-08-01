@@ -1,13 +1,18 @@
-// Application/Services/Evaluation/EvaluationRunner.cs
+// Adapters.Agents/Evaluation/EvaluationRunner.cs
 // Evaluation-scenarios'daki senaryoları sistem üzerinde otomatik çalıştırır.
 // Her senaryo için reasoning + workflow + critique akışını koşturur, trace üzerinden doğrular.
+//
+// MAF EvalItem/ChatMessage/FunctionCallContent tiplerini CriteriaEvaluator'a beslemek için
+// kullandığından Adapters.Agents'ta yaşıyor (bkz. CriteriaEvaluator.cs başındaki not).
 
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
-namespace CustomerSupportBot.Application.Services.Evaluation;
+namespace CustomerSupportBot.Adapters.Agents.Evaluation;
 
 public class EvaluationRunner : IEvaluationPort
 {
@@ -93,16 +98,9 @@ public class EvaluationRunner : IEvaluationPort
                 .Distinct()
                 .ToList() ?? new();
 
-            // Tool çağrılarını specialist reasoning'lerden derle
-            var toolsCalled = new List<string>();
-            foreach (var sp in trace?.SpecialistReasonings ?? new())
-            {
-                if (sp.ResultConfidence.HasValue && sp.PreToolCheck?.CanProceed == true)
-                {
-                    // Hangi tool çağrıldı bilinmiyor — agent adından türet
-                    toolsCalled.Add(AgentToToolName(sp.AgentName));
-                }
-            }
+            // Tool çağrılarını trace'in gerçek ToolCalls listesinden al (agent adından
+            // tahmin etmek yerine — ReasoningTrace.ToolCalls zaten doğru ToolName'i tutuyor).
+            var toolsCalled = (trace?.ToolCalls ?? new()).Select(tc => tc.ToolName).ToList();
             result.ToolsCalled = toolsCalled;
 
             // Success criteria evaluation
@@ -120,9 +118,24 @@ public class EvaluationRunner : IEvaluationPort
                 Planning = trace?.Planning
             };
 
+            // EvalChecks gibi built-in MAF check'lerinin item.Conversation üzerinden
+            // FunctionCallContent taraması yapabilmesi için sentetik bir konuşma kuruyoruz —
+            // gerçek ChatMessage geçmişi trace'te tutulmuyor, ama tool adları biliniyor.
+            var conversation = new List<ChatMessage> { new(ChatRole.User, scenario.Query) };
+            conversation.AddRange(toolsCalled.Select(toolName =>
+                new ChatMessage(ChatRole.Assistant, [new FunctionCallContent(Guid.NewGuid().ToString(), toolName)])));
+            var evalItem = new EvalItem(scenario.Query, response ?? "", conversation)
+            {
+                ExpectedToolCalls = scenario.ExpectedToolCalls.Count == 0
+                    ? null
+                    : scenario.ExpectedToolCalls
+                        .Select(t => new ExpectedToolCall(t.Name, t.Arguments))
+                        .ToList()
+            };
+
             foreach (var criterion in scenario.SuccessCriteria)
             {
-                var critResult = CriteriaEvaluator.Evaluate(criterion, ctx);
+                var critResult = CriteriaEvaluator.Evaluate(criterion, evalItem, ctx);
                 result.CriteriaResults.Add(critResult);
                 if (critResult.Passed) result.PassedCriteria++;
             }
@@ -159,17 +172,5 @@ public class EvaluationRunner : IEvaluationPort
         if (string.IsNullOrEmpty(name)) return "-";
         var idx = name.IndexOf('_');
         return idx > 0 ? name.Substring(0, idx) : name;
-    }
-
-    private static string AgentToToolName(string agentName)
-    {
-        var simple = SimplifyAgentName(agentName);
-        return simple switch
-        {
-            "ProductAgent" => "product_inquiry_tool",
-            "OrderAgent" => "order_status_tool", // Birden fazla tool var; inquiry default
-            "ComplaintAgent" => "complaint_registration_tool",
-            _ => simple.ToLowerInvariant()
-        };
     }
 }

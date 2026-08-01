@@ -41,9 +41,13 @@ scenarios:
     expected_agents: [PlanningAgent, ProductAgent, ResponseAgent]
     expected_tools: [product_inquiry_tool]
     success_criteria:
-      - "response contains 'Dizüstü' OR 'laptop'"
-      - "no_hallucinated_price"
-      - "turn_count <= 1"
+      - type: contains_any
+        values: ["Dizüstü", "laptop"]
+      - type: manual_review
+        note: "no_hallucinated_price"
+      - type: turn_count
+        op: "<="
+        value: 1
 
   - id: S06
     category: missing_customer_id_for_order
@@ -51,9 +55,13 @@ scenarios:
     expected_behavior: clarification_request
     expected_agents: [PlanningAgent, ResponseAgent]
     success_criteria:
-      - "agent requests customer_id"
-      - "no tool called with null customer_id"
-      - "turn_count <= 1"
+      - type: agent_requests_field
+        field: customer_id
+      - type: manual_review
+        note: "no tool called with null customer_id"
+      - type: turn_count
+        op: "<="
+        value: 1
     known_failure_mode: missing_param_tool
 ```
 
@@ -68,9 +76,9 @@ scenarios:
 | `expected_behavior` | Hayır | Beklenen davranış tipi (ör. `clarification_request`) |
 | `expected_agents` | Hayır | Beklenen agent geçiş sırası |
 | `expected_tools` | Hayır | Beklenen tool çağrıları |
-| `success_criteria` | Evet | String pattern tabanlı değerlendirme kuralları (aşağıda) |
+| `success_criteria` | Evet | Yapılandırılmış (typed) değerlendirme kuralları (§3) |
 | `known_failure_mode` | Hayır | Bilinen hata kategorisi (ör. `routing_error`, `hallucination`) |
-| `turns` | Hayır | Çok turlu senaryolar için (multi-turn) |
+| `turns` | Hayır | **Bilinen sınırlama:** YAML'da tanımlanabilir ama `EvaluationScenario`/`EvaluationRunner` bunu okumuyor — çok-turlu senaryolar (S12, S22, S23) bugün fiilen tek-turlu (`query`) gibi çalışır. Ayrı bir iş olarak ele alınmadı. |
 
 ### Senaryo Kategorileri (evaluation-scenarios.yaml'dan)
 
@@ -88,46 +96,45 @@ scenarios:
 
 ---
 
-## 3. CriteriaEvaluator — Regex Tabanlı Pattern Matching
+## 3. CriteriaEvaluator — Yapılandırılmış (typed) Criterion Dispatch
 
-`CriteriaEvaluator.Evaluate(criterion, ctx)` her `success_criteria` satırını **string pattern** olarak yorumlar. Tipler enum değil, serbest metin pattern'leridir.
+`CriteriaEvaluator.Evaluate(spec, evalItem, ctx)` her `success_criteria` girdisini **`type` alanına göre** bir dispatch table üzerinden bir `Microsoft.Agents.AI.EvalCheck` delegate'ine yönlendirir (`EvalCheck = delegate EvalCheckResult(EvalItem)`, `Microsoft.Agents.AI` 1.15.0). Built-in eşleşen check'ler için framework'ün gerçek `EvalChecks`/`FunctionEvaluator` tiplerini kullanır; bu uygulamaya özgü olanlar (`turn_count`, `customer_id_used` vb.) `FunctionEvaluator.Create` ile yazılmış custom closure'lardır. Bu yüzden `CriteriaEvaluator`/`EvaluationRunner`, MAF'a bağımlı olmayan `CustomerSupportBot.Application` yerine `CustomerSupportBot.Adapters.Agents/Evaluation/`'da yaşar.
 
-### Desteklenen Pattern'lar
+### Desteklenen `type`'lar
 
-| Pattern | Örnek | Ne yapar? |
-|---------|-------|-----------|
-| `response contains '<text>'` | `"response contains 'Dizüstü' OR 'laptop'"` | Yanıtta anahtar kelimeleri arar. `OR` ile alternatifler desteklenir |
-| `turn_count <op> N` | `"turn_count <= 1"` | İterasyon sayısını karşılaştırır. Operatörler: `<=`, `<`, `==`, `>=`, `>`, `=` |
-| `<tool_name> called` | `"order_status_tool called"` | Belirtilen tool'un çağrılıp çağrılmadığını kontrol eder |
-| `<tool_name> NOT called` | `"complaint_registration_tool NOT called"` | Tool'un çağrılmadığını doğrular |
-| `no extra tool calls` | `"no extra tool calls"` | Beklenen tool sayısından fazla çağrı yapılmadığını kontrol eder |
-| `no missing_param_tool error` | `"no missing_param_tool error"` | Tool validation hatası olmadığını doğrular |
-| `agent requests <field>` | `"agent requests customer_id"` | Yanıtta ek bilgi isteniyor mu kontrol eder (ör. müşteri kimliği, sipariş numarası) |
-| `complaint id returned` | `"complaint id returned"` | Yanıtta `\d{4,}` formatında şikayet ID'si var mı? |
-| `order id returned` | `"order id returned"` | Yanıtta `\d{4,}` formatında sipariş ID'si var mı? |
-| `customer_id used correctly` | `"customer_id used correctly"` | Specialist PreToolCheck'te `customer_id` parametresinin toplandığını doğrular |
-| `response contains order status` | `"response contains order status"` | Yanıtta sipariş durumu bilgisi (durum/teslim/kargo) var mı? |
+| `type` | Alanlar | Mekanizma | Ne yapar? |
+|--------|---------|-----------|-----------|
+| `contains_any` | `values: [...]` | `FunctionEvaluator.Create` | Yanıtta verilen kelimelerden en az biri var mı (OR, case-insensitive) |
+| `tool_called` | `values: [...]` | `EvalChecks.ToolCalledCheck` (gerçek built-in) | Belirtilen tool'ların tümü çağrıldı mı |
+| `tool_not_called` | `values: [...]` | `FunctionEvaluator.Create` | Belirtilen tool'lardan hiçbiri çağrılmadı mı |
+| `turn_count` / `iteration_count` | `op`, `value` | `FunctionEvaluator.Create` | `ctx.IterationCount` karşılaştırması. Operatörler: `<=`, `<`, `==`, `>=`, `>`, `=` |
+| `no_extra_tool_calls` | — | `FunctionEvaluator.Create` | Çağrılan tool sayısı beklenenden fazla değil |
+| `no_missing_param_tool` | — | `FunctionEvaluator.Create` | Specialist `PreToolCheck`'te validation hatası yok |
+| `agent_requests_field` | `field` | `FunctionEvaluator.Create` | Yanıtta ek bilgi isteniyor mu (müşteri kimliği/sipariş no) |
+| `complaint_id_returned` | — | `FunctionEvaluator.Create` | Yanıtta `\d{4,}` formatında şikayet ID'si var mı |
+| `order_id_returned` | — | `FunctionEvaluator.Create` | Yanıtta `\d{4,}` formatında sipariş ID'si var mı |
+| `customer_id_used` | — | `FunctionEvaluator.Create` | Specialist `PreToolCheck.CollectedParams`'ta `customer_id` toplandı mı |
+| `order_status_contains` | — | `FunctionEvaluator.Create` | Yanıtta sipariş durumu bilgisi (durum/teslim/kargo) var mı |
+| `tool_call_args_match` | — (senaryo seviyesinde `expected_tool_calls`) | `EvalChecks.ToolCallArgsMatch` (gerçek built-in) | Çağrılan tool'ların argümanları senaryonun `expected_tool_calls` listesiyle eşleşiyor mu (subset match — fazladan argüman sorun değil). `expected_tool_calls` boşsa otomatik geçer. |
+| `manual_review` | `note` | — | Her zaman `Passed=false, Skipped="manual_review_needed"` — otomatik değerlendirilemeyen kriterler için açık işaretleme |
 
-### Eşleşmeyen Pattern'lar
+Bilinmeyen `type` değeri de aynı şekilde `manual_review_needed` olarak işaretlenir (fail-safe, exception atmaz).
 
-Desteklenmeyen pattern'lar (ör. `"no blind retry"`, `"graceful clarification"`) `manual_review_needed` olarak işaretlenir ve başarısız sayılmaz.
+> **Kapsam notu:** Bu tablo, redesign öncesi regex/keyword-sniffing ile tanınan ~9 kalıbın 1:1 typed karşılığıdır. Yeni otomasyon kapasitesi eklenmedi — `docs/evaluation-scenarios.yaml`'daki, eskiden de fiilen `manual_review_needed`'a düşen kriterler (`no_hallucinated_price`, `refuses to comply`, `first_token_latency_ms < 3000` vb.) bu redesign'da açıkça `type: manual_review` olarak işaretlendi.
+
+### EvalItem İnşası
+
+`EvaluationRunner`, `EvalChecks.ToolCalledCheck` gibi built-in'lerin gerçekten çalışabilmesi için sentetik bir `EvalItem` kurar: kullanıcı sorgusu + `trace.ToolCalls` listesinden türetilen `FunctionCallContent`'li asistan mesajları. Gerçek `ChatMessage` geçmişi trace'te tutulmadığından bu sentetik ama framework'ün beklediği gerçek mekanizmayı (`item.Conversation` taraması) kullanır.
 
 ### CriteriaEvaluator Akışı
 
 ```
-CriteriaEvaluator.Evaluate(criterion, ScenarioRunContext)
-    ├─ "response contains ..." → EvalContains() — OR ile split, case-insensitive arama
-    ├─ "turn_count <= N"       → IterationCount operatör karşılaştırma
-    ├─ "no extra tool calls"   → ToolsCalled.Count <= ExpectedTools.Count
-    ├─ "<tool> NOT called"     → ToolsCalled regex match (olumsuz)
-    ├─ "<tool> called"         → ToolsCalled regex match
-    ├─ "agent requests ..."    → Response'ta müşteri/sipariş sorusu arama
-    ├─ "complaint id returned" → \d{4,} (şikayet bağlamında) regex
-    ├─ "order id returned"     → \d{4,} (sipariş bağlamında) regex
-    └─ (tanınmayan)            → Skipped = "manual_review_needed"
+CriteriaEvaluator.Evaluate(CriterionSpec, EvalItem, ScenarioRunContext)
+    ├─ Checks[spec.Type] bulunamadı → Skipped = "manual_review_needed"
+    └─ Checks[spec.Type] bulundu   → EvalCheck(evalItem) çalıştırılır
     │
     ▼
-    CriterionResult { Criterion, Passed, Evaluation, Skipped? }
+    EvalCheckResult { Passed, Reason, CheckName } → CriterionResult { Criterion, Passed, Evaluation, Skipped? }
 ```
 
 ---
@@ -149,7 +156,7 @@ Her senaryo **izole session** içinde çalışır (birbirinden bağımsız):
 
 - **Intent match**: `expected_intent` set'liyse `reasoning.Intent` ile case-insensitive karşılaştırma
 - **Agent trace**: `trace.AgentVisits` üzerinden ziyaret edilen agent'ları derler
-- **Tool mapping**: Specialist agent adından tool adını türetir (`OrderAgent` → `order_status_tool`)
+- **Tool listesi**: `trace.ToolCalls` (gerçek `ToolInvocation.ToolName` listesi) doğrudan kullanılır — daha önce agent adından tool adı tahmin eden bir heuristic vardı, redesign'da doğru veri kaynağına geçildi
 
 ---
 
@@ -202,14 +209,14 @@ Her senaryo **izole session** içinde çalışır (birbirinden bağımsız):
       "passed": true,
       "criteriaResults": [
         {
-          "criterion": "response contains 'Dizüstü' OR 'laptop'",
+          "criterion": "contains_any: Dizüstü OR laptop",
           "passed": true,
-          "evaluation": "'Dizüstü' yanıtta bulundu"
+          "evaluation": "Passed"
         },
         {
           "criterion": "turn_count <= 1",
           "passed": true,
-          "evaluation": "iteration_count=1, beklenen <= 1"
+          "evaluation": "turn_count=1, beklenen <= 1"
         }
       ],
       "response": "Evet, Dell XPS 15 dizüstü bilgisayarımız mevcuttur...",
@@ -253,22 +260,26 @@ Her senaryo **izole session** içinde çalışır (birbirinden bağımsız):
   expected_agents: [PlanningAgent, BeklenenAgent, ResponseAgent]
   expected_tools: [beklenen_tool]
   success_criteria:
-    - "response contains 'anahtar kelime'"
-    - "beklenen_tool called"
-    - "turn_count <= 2"
+    - type: contains_any
+      values: ["anahtar kelime"]
+    - type: tool_called
+      values: [beklenen_tool]
+    - type: turn_count
+      op: "<="
+      value: 2
   known_failure_mode: routing_error
 ```
 
-> **Not:** `CriteriaEvaluator` tarafından tanınmayan pattern'lar (ör. `"no blind retry"`) `manual_review_needed` olarak işaretlenir. Bu senaryolar rapordan düşmez ama `Passed=false`, `Skipped="manual_review_needed"` olur.
+> **Not:** `type` alanı `CriteriaEvaluator`'ın dispatch table'ında yoksa (§3 tablosu) `manual_review_needed` olarak işaretlenir — aynı `type: manual_review` gibi. Bu senaryolar rapordan düşmez ama `Passed=false`, `Skipped="manual_review_needed"` olur.
 
 ---
 
 ## Çapraz Referanslar
 
 - **Senaryo dosyası** → [evaluation-scenarios.yaml](evaluation-scenarios.yaml)
-- **EvaluationRunner kaynak** → `Application/Services/Evaluation/EvaluationRunner.cs`
-- **CriteriaEvaluator kaynak** → `Application/Services/Evaluation/CriteriaEvaluator.cs`
-- **Model tanımları** → `Application/Ports/Driving/EvaluationModels.cs`
+- **EvaluationRunner kaynak** → `Adapters.Agents/Evaluation/EvaluationRunner.cs`
+- **CriteriaEvaluator kaynak** → `Adapters.Agents/Evaluation/CriteriaEvaluator.cs`
+- **Model tanımları** → `Application/Ports/Inbound/EvaluationModels.cs`
 - **Geliştirici rehberi** → [developer-guide.md](developer-guide.md)
 - **API endpoint'leri** → [api/](api/README.md)
 - **Agent davranışları** → [adapters-agents/](adapters-agents/README.md)

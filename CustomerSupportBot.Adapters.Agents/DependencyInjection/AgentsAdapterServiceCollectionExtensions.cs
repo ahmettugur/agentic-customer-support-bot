@@ -1,6 +1,8 @@
 // Adapters.Agents/DependencyInjection/AgentsAdapterServiceCollectionExtensions.cs
 // Agents adapter servislerini DI container'a kaydeder.
 
+using CustomerSupportBot.Adapters.Agents.Evaluation;
+using CustomerSupportBot.Application.Ports.Inbound;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -30,6 +32,11 @@ public static class AgentsAdapterServiceCollectionExtensions
         services.AddSingleton<CustomerSupportTeam>();
         services.AddSingleton<IAgentTeamPort>(sp =>
             sp.GetRequiredService<CustomerSupportTeam>());
+
+        // EvaluationRunner MAF'ın EvalItem/ChatMessage tiplerine bağımlı olduğu için
+        // burada (Application değil) yaşıyor — bkz. CriteriaEvaluator.cs başındaki not.
+        services.AddSingleton<EvaluationRunner>();
+        services.AddSingleton<IEvaluationPort>(sp => sp.GetRequiredService<EvaluationRunner>());
 
         return services;
     }

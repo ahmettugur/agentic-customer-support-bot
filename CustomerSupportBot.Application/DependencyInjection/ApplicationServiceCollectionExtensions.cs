@@ -11,7 +11,6 @@ using CustomerSupportBot.Application.Services.Reasoning;
 using CustomerSupportBot.Application.Services.Realtime;
 using CustomerSupportBot.Application.Services.Telemetry;
 using CustomerSupportBot.Application.Services.Tools;
-using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Application.Services.Personalization;
 using CustomerSupportBot.Application.Services.Improvement;
@@ -137,8 +136,6 @@ public static class ApplicationServiceCollectionExtensions
     {
         services.AddSingleton<EntityVerifier>();
         services.AddSingleton<ReasoningSanityChecker>();
-        services.AddSingleton<EvaluationRunner>();
-        services.AddSingleton<IEvaluationPort>(sp => sp.GetRequiredService<EvaluationRunner>());
         services.AddSingleton<InputGuard>();
         services.AddSingleton<IInputGuard>(sp => sp.GetRequiredService<InputGuard>());
         services.AddSingleton<CustomerSupportBot.Application.Services.Improvement.LessonMiner>();

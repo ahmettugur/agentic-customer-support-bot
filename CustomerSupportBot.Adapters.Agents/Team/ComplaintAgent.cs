@@ -24,10 +24,18 @@ internal sealed class ComplaintAgent : SupportAgentBase
         ApprovalGateService approvalGate)
         => new(
             chatClient,
-            instructions: prompts.Get("agents/complaint-agent"),
-            name: WellKnown.AgentNames.Complaint,
-            description: "Müşteri şikayetlerini işler.",
-            tools: [approvalGate.BuildComplaintRegistrationTool()]);
+            new ChatClientAgentOptions
+            {
+                Name = WellKnown.AgentNames.Complaint,
+                Description = "Müşteri şikayetlerini işler.",
+                ChatOptions = new ChatOptions
+                {
+                    Instructions = prompts.Get("agents/complaint-agent"),
+                    Tools = [approvalGate.BuildComplaintRegistrationTool()],
+                    ResponseFormat = ChatResponseFormat.ForJsonSchema<SpecialistReasoningSchema>(
+                        SpecialistReasoningSchemaOptions.CamelCase)
+                }
+            });
 
     /// <summary>
     /// BREAKPOINT BURAYA: LLM'e gönderilen tam mesaj listesi.

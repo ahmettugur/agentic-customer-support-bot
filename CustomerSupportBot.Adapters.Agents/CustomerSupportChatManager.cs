@@ -22,6 +22,12 @@ public class CustomerSupportChatManager : GroupChatManager
     private readonly AIAgent _responseAgent;
     private readonly IReadOnlyList<IRoutingStrategy> _strategies;
 
+    // NOT — checkpoint restore ön koşulu: GroupChatManager.IterationCount framework tarafından
+    // otomatik checkpoint'lenir, ama bu dictionary DEĞİL (bkz. GroupChatManager.OnCheckpointingAsync/
+    // OnCheckpointRestoredAsync — RoundRobinGroupChatManager kendi cursor'ı için bu deseni kullanıyor).
+    // Bugün CheckpointManager bağlı olmadığı için bu hook'lar hiç ateşlenmiyor, dolayısıyla bu bir bug
+    // değil. Ama checkpointing ileride bağlanırsa, bu iki hook override edilip _handoffCounts burada
+    // persist/restore edilmeden restart sonrası sessizce sıfırlanır (handoff-limit garantisi zayıflar).
     private readonly Dictionary<string, int> _handoffCounts =
         new(StringComparer.OrdinalIgnoreCase);
 

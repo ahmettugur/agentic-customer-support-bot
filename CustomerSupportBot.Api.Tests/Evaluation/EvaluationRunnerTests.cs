@@ -3,7 +3,7 @@
 using CustomerSupportBot.Adapters.AI.Chat;
 using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Api.Infrastructure;
-using CustomerSupportBot.Application.Services.Evaluation;
+using CustomerSupportBot.Adapters.Agents.Evaluation;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Api.Tests.Helpers;
@@ -88,8 +88,11 @@ public class EvaluationRunnerTests
                 expected_agents: [PlanningAgent, OrderAgent]
                 expected_tools: [order_status_tool]
                 success_criteria:
-                  - "response contains 'durum'"
-                  - "turn_count <= 5"
+                  - type: contains_any
+                    values: ["durum"]
+                  - type: turn_count
+                    op: "<="
+                    value: 5
               - id: complaint-1
                 category: complaint
                 query: "ürün bozuk geldi"

@@ -20,8 +20,50 @@ public class EvaluationScenario
     public string? ExpectedBehavior { get; set; }
     public List<string> ExpectedAgents { get; set; } = new();
     public List<string> ExpectedTools { get; set; } = new();
-    public List<string> SuccessCriteria { get; set; } = new();
+
+    /// <summary>
+    /// Argüman-seviyeli tool çağrı beklentisi — <c>type: tool_call_args_match</c> kriteri için.
+    /// <see cref="ExpectedTools"/>'tan bağımsız: o sadece isim listesi (no_extra_tool_calls için),
+    /// bu ise isim+argüman eşleşmesi (subset match — fazladan argüman sorun değil) ister.
+    /// </summary>
+    public List<ExpectedToolCallSpec> ExpectedToolCalls { get; set; } = new();
+
+    public List<CriterionSpec> SuccessCriteria { get; set; } = new();
     public string? KnownFailureMode { get; set; }
+}
+
+/// <summary>YAML'da <c>expected_tool_calls</c> altında tanımlanan tek bir tool çağrı beklentisi.</summary>
+public class ExpectedToolCallSpec
+{
+    public string Name { get; set; } = "";
+
+    /// <summary>Null ise sadece isim kontrol edilir (argümanlara bakılmaz).</summary>
+    public Dictionary<string, object>? Arguments { get; set; }
+}
+
+/// <summary>
+/// Yapılandırılmış (typed) başarı kriteri — CriteriaEvaluator'daki dispatch table'ın anahtarı
+/// olan Type dışındaki alanlar kriter türüne göre kullanılır/yoksayılır.
+/// </summary>
+public class CriterionSpec
+{
+    /// <summary>Dispatch anahtarı: contains_any, tool_called, turn_count, manual_review vb.</summary>
+    public string Type { get; set; } = "";
+
+    /// <summary>contains_any / tool_called / tool_not_called için değer listesi.</summary>
+    public List<string>? Values { get; set; }
+
+    /// <summary>turn_count / iteration_count için karşılaştırma operatörü ("&lt;=", "==", ...).</summary>
+    public string? Op { get; set; }
+
+    /// <summary>turn_count / iteration_count için eşik değer.</summary>
+    public int? Value { get; set; }
+
+    /// <summary>agent_requests_field için beklenen alan adı (ör. "customer_id").</summary>
+    public string? Field { get; set; }
+
+    /// <summary>manual_review için gözden geçirme notu.</summary>
+    public string? Note { get; set; }
 }
 
 /// <summary>Tek bir senaryonun çalıştırılma sonucu.</summary>

@@ -58,6 +58,9 @@ internal sealed class WorkflowRunner
         _loggerFactory = loggerFactory;
     }
 
+    /// <summary>Bkz. <see cref="IAgentTeamPort.GetWorkflowDiagram"/>.</summary>
+    public string GetWorkflowDiagram() => _factory.CreateWorkflow().ToMermaidString();
+
     public async Task<string> RunAsync(
         string query,
         List<ConversationMessage>? conversationHistory,
@@ -88,6 +91,12 @@ internal sealed class WorkflowRunner
                 break;
             }
             if (evt == null) continue;
+
+            if (evt is RequestInfoEvent requestInfo)
+            {
+                await HandleRequestInfoEventAsync(run, requestInfo, effectiveCt);
+                continue;
+            }
 
             if (evt is WorkflowErrorEvent errorEvt)
             {
@@ -179,6 +188,12 @@ internal sealed class WorkflowRunner
                 break;
             }
             if (evt == null) continue;
+
+            if (evt is RequestInfoEvent requestInfo)
+            {
+                await HandleRequestInfoEventAsync(run, requestInfo, effectiveCt);
+                continue;
+            }
 
             if (evt is WorkflowErrorEvent errorEvt)
             {
@@ -571,6 +586,42 @@ internal sealed class WorkflowRunner
             _loggerFactory.CreateLogger<WorkflowRunner>()
                 .LogDebug(ex, "Workflow run graceful stop sırasında hata (yok sayıldı)");
         }
+    }
+
+    /// <summary>
+    /// HITL onay köprüsü. ApprovalGateService, yan etkili tool'ları ApprovalRequiredAIFunction
+    /// ile sarmalıyor — FunctionInvokingChatClient bu tool'ları GERÇEKTEN ÇALIŞTIRMADAN önce
+    /// bir ToolApprovalRequestContent üretiyor, bu da AIAgentHostExecutor tarafından workflow
+    /// superstep'ini duraklatan gerçek bir RequestInfoEvent'e dönüşüyor (GroupChatWorkflowBuilder
+    /// ile kurulan her ajan bunu otomatik destekliyor — ek graph kablolaması gerekmez).
+    ///
+    /// Burada event'i yakalayıp ApprovalGateService.RequestApprovalAsync ile AYNI
+    /// IApprovalQueue/SSE/SLA altyapısını tetikliyoruz (admin paneli, eskalasyon, SLA guardian
+    /// hiç değişmedi — sadece "kim bekliyor" değişti: eskiden tool lambda'sının içindeki bir
+    /// Task, şimdi framework'ün kendi checkpoint'lenebilir superstep duraklaması).
+    ///
+    /// Bilinmeyen/parse edilemeyen bir RequestInfoEvent gelirse (ör. framework ileride başka
+    /// tür request'ler eklerse) sessizce atlanır — hiçbir yanıt gönderilmez, o superstep askıda
+    /// kalır; bu, bugünkü sürümde sadece approval-request türü beklendiği için kabul edilen bir
+    /// sınır durumdur.
+    /// </summary>
+    private async Task HandleRequestInfoEventAsync(StreamingRun run, RequestInfoEvent requestInfo, CancellationToken ct)
+    {
+        if (!requestInfo.Request.TryGetDataAs<ToolApprovalRequestContent>(out var approvalRequest))
+            return;
+
+        if (approvalRequest.ToolCall is not FunctionCallContent functionCall)
+            return;
+
+        var decision = await _approvalGate.RequestApprovalAsync(
+            toolName: functionCall.Name,
+            agentName: ApprovalGateService.ResolveAgentName(functionCall.Name),
+            parameters: functionCall.Arguments,
+            ct);
+
+        var responseContent = approvalRequest.CreateResponse(decision.Approved, decision.Reason);
+        var externalResponse = requestInfo.Request.CreateResponse(responseContent);
+        await run.SendResponseAsync(externalResponse);
     }
 
     private static async IAsyncEnumerable<(WorkflowEvent? evt, string? error)>

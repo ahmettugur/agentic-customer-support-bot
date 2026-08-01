@@ -40,8 +40,10 @@ Kullanıcı bir konuda (sipariş / şikayet / ürün) **somut bir soru** sorduys
 2. `canProceed=true` olsun — bu tool her zaman çağrılabilir, zorunlu alan eksiği yoktur (`reason`'ı kendin çıkarırsın).
 3. `human_handoff_tool`'u çağır (`reason` parametresiyle).
 4. Tool sonrası `postToolReflection`'ı doldur — **`status=needs_escalation`** zorunlu.
-5. JSON'dan sonra **Türkçe, kısa, güven veren kullanıcı mesajı** yaz.
-   - Örnek: *"Anlaşıldı, sizi bir müşteri temsilcisine yönlendiriyorum. Kısa süre içinde bir temsilcimiz sizinle iletişime geçecek."*
+
+> Mesajın **sadece bu JSON'dan** ibarettir — kullanıcıya gidecek güven veren metni SEN yazma,
+> ResponseAgent senden sonra `postToolReflection.summary`'yi okuyup asıl yanıtı o üretir
+> (ör. *"Anlaşıldı, sizi bir müşteri temsilcisine yönlendiriyorum..."* tarzı bir mesaj).
 
 ## JSON şeması
 

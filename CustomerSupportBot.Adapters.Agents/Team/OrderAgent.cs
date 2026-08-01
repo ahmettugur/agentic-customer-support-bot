@@ -27,17 +27,25 @@ internal sealed class OrderAgent : SupportAgentBase
         ICustomerSupportToolsService tools)
         => new(
             chatClient,
-            instructions: prompts.Get("agents/order-agent"),
-            name: WellKnown.AgentNames.Order,
-            description: "Sipariş oluşturma, sorgulama, iptal ve iade işlemlerini yürütür.",
-            tools: [
-                approvalGate.BuildOrderPlacementTool(),
-                AIFunctionFactory.Create(tools.OrderStatusTool,  new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.OrderStatus }),
-                AIFunctionFactory.Create(tools.GetLastOrderTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.GetLastOrder }),
-                AIFunctionFactory.Create(tools.GetAllOrdersTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.GetAllOrders }),
-                approvalGate.BuildOrderCancelTool(),
-                approvalGate.BuildReturnRequestTool()
-            ]);
+            new ChatClientAgentOptions
+            {
+                Name = WellKnown.AgentNames.Order,
+                Description = "Sipariş oluşturma, sorgulama, iptal ve iade işlemlerini yürütür.",
+                ChatOptions = new ChatOptions
+                {
+                    Instructions = prompts.Get("agents/order-agent"),
+                    Tools = [
+                        approvalGate.BuildOrderPlacementTool(),
+                        AIFunctionFactory.Create(tools.OrderStatusTool,  new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.OrderStatus }),
+                        AIFunctionFactory.Create(tools.GetLastOrderTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.GetLastOrder }),
+                        AIFunctionFactory.Create(tools.GetAllOrdersTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.GetAllOrders }),
+                        approvalGate.BuildOrderCancelTool(),
+                        approvalGate.BuildReturnRequestTool()
+                    ],
+                    ResponseFormat = ChatResponseFormat.ForJsonSchema<SpecialistReasoningSchema>(
+                        SpecialistReasoningSchemaOptions.CamelCase)
+                }
+            });
 
     /// <summary>
     /// BREAKPOINT BURAYA: LLM'e gönderilen tam mesaj listesi — kullanıcı sorgusu,

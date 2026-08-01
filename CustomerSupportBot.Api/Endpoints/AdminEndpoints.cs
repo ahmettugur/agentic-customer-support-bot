@@ -25,6 +25,7 @@
 
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;
@@ -312,6 +313,12 @@ public static class AdminEndpoints
 
         // Admin panel index (tek HTML sayfası)
         app.MapGet("/admin", () => Results.Redirect("/admin.html"));
+
+        // ─── WORKFLOW DİYAGRAMI (dokümantasyon/debug) ───
+        // MAF'ın Workflow.ToMermaidString()'i — ajan takımının graph topolojisi (6 ajan +
+        // GroupChatHost) tur/oturumdan bağımsız sabittir, bu yüzden parametre almaz.
+        app.MapGet("/workflow/diagram", (IAgentTeamPort team) =>
+            Results.Text(team.GetWorkflowDiagram(), "text/plain"));
 
         return app;
     }

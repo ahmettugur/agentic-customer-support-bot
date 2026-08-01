@@ -142,7 +142,8 @@ public class EvaluationRunnerLoadScenariosTests
                   - PlanningAgent
                 expected_tools: []
                 success_criteria:
-                  - "response_contains: merhaba"
+                  - type: contains_any
+                    values: ["merhaba"]
             """;
         var path = Path.Combine(Path.GetTempPath(), $"eval-{Guid.NewGuid():N}.yaml");
         File.WriteAllText(path, yaml);

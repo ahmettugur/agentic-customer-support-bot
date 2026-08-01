@@ -1,5 +1,15 @@
 // Adapters.Agents/ApprovalGateService.cs
 // HITL — Human-in-the-Loop approval gate + escalation sink servisleri.
+//
+// Onay bekletme mantığı artık framework'ün kendi mekanizmasına dayanıyor:
+// yan etkili tool'lar ApprovalRequiredAIFunction ile sarmalanıyor,
+// FunctionInvokingChatClient bu tool'lardan gelen çağrıyı gerçekten ÇALIŞTIRMADAN
+// önce bir RequestInfoEvent olarak workflow superstep'ini duraklatıyor
+// (bkz. WorkflowRunner.HandleApprovalRequestAsync — event'i yakalayıp bu servisteki
+// RequestApprovalAsync ile aynı IApprovalQueue/SSE/SLA altyapısını tetikleyen taraf).
+// Eskiden bu bekleme tool lambda'sının İÇİNDE (bloklayan bir await) yapılıyordu;
+// artık workflow'un kendisi duraklatılıyor — checkpoint'lenebilir bir superstep durması,
+// süreç-içi bir Task değil.
 
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Application.Services;
@@ -44,152 +54,113 @@ public class ApprovalGateService
 
     public AIFunction BuildOrderPlacementTool()
     {
-        return AIFunctionFactory.Create(
-            async (
+        var inner = AIFunctionFactory.Create(
+            (
                 [System.ComponentModel.Description("Sipariş verilecek ürünün adı")] string productName,
                 [System.ComponentModel.Description("Sipariş adedi")] int? quantity,
-                [System.ComponentModel.Description("Müşteri kimlik numarası (zorunlu)")] string customerId,
-                CancellationToken ct) =>
-            {
-                var decision = await RequestApprovalAsync(
-                    toolName: WellKnown.ToolNames.OrderPlacement,
-                    agentName: WellKnown.AgentNames.Order,
-                    parameters: new Dictionary<string, object?>
-                    {
-                        ["productName"] = productName,
-                        ["quantity"] = quantity,
-                        ["customerId"] = customerId
-                    },
-                    ct);
-
-                if (decision is { Approved: false } d)
-                {
-                    return ToolResult.ValidationError(
-                        $"{WellKnown.FallbackMessages.ApprovalRejected}: {d.Reason ?? WellKnown.ApprovalReasons.AdminRejected}");
-                }
-
-                return _tools.OrderPlacementTool(productName, quantity, customerId);
-            },
+                [System.ComponentModel.Description("Müşteri kimlik numarası (zorunlu)")] string customerId) =>
+                _tools.OrderPlacementTool(productName, quantity, customerId),
             name: WellKnown.ToolNames.OrderPlacement,
             description:
                 "Yeni sipariş oluşturur. Ürün adı, adet ve müşteri kimlik numarası zorunludur. " +
                 "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
+
+        return WrapIfRequiresApproval(WellKnown.ToolNames.OrderPlacement, inner);
     }
 
     public AIFunction BuildComplaintRegistrationTool()
     {
-        return AIFunctionFactory.Create(
-            async (
+        var inner = AIFunctionFactory.Create(
+            (
                 [System.ComponentModel.Description("Şikayetin ilişkili olduğu sipariş numarası (zorunlu)")] string orderId,
                 [System.ComponentModel.Description("Şikayet açıklaması (zorunlu, en az 10 karakter)")] string complaintText,
-                [System.ComponentModel.Description("Müşteri kimlik numarası (opsiyonel)")] string? customerId,
-                CancellationToken ct) =>
-            {
-                var decision = await RequestApprovalAsync(
-                    toolName: WellKnown.ToolNames.ComplaintRegistration,
-                    agentName: WellKnown.AgentNames.Complaint,
-                    parameters: new Dictionary<string, object?>
-                    {
-                        ["orderId"] = orderId,
-                        ["complaintText"] = complaintText,
-                        ["customerId"] = customerId
-                    },
-                    ct);
-
-                if (decision is { Approved: false } d)
-                {
-                    return ToolResult.ValidationError(
-                        $"{WellKnown.FallbackMessages.ComplaintRejected}: {d.Reason ?? WellKnown.ApprovalReasons.AdminRejected}");
-                }
-
-                return _tools.ComplaintRegistrationTool(orderId, complaintText, customerId);
-            },
+                [System.ComponentModel.Description("Müşteri kimlik numarası (opsiyonel)")] string? customerId) =>
+                _tools.ComplaintRegistrationTool(orderId, complaintText, customerId),
             name: WellKnown.ToolNames.ComplaintRegistration,
             description:
                 "Müşteri şikayetini sipariş numarasıyla kaydeder. order_id ve description zorunludur. " +
                 "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
+
+        return WrapIfRequiresApproval(WellKnown.ToolNames.ComplaintRegistration, inner);
     }
 
     public AIFunction BuildOrderCancelTool()
     {
-        return AIFunctionFactory.Create(
-            async (
+        var inner = AIFunctionFactory.Create(
+            (
                 [System.ComponentModel.Description("İptal edilecek sipariş numarası (zorunlu, ör. '1030')")] string orderId,
-                [System.ComponentModel.Description("İptal sebebi (zorunlu, en az 5 karakter)")] string reason,
-                CancellationToken ct) =>
-            {
-                var decision = await RequestApprovalAsync(
-                    toolName: WellKnown.ToolNames.OrderCancel,
-                    agentName: WellKnown.AgentNames.Order,
-                    parameters: new Dictionary<string, object?>
-                    {
-                        ["orderId"] = orderId,
-                        ["reason"] = reason
-                    },
-                    ct);
-
-                if (decision is { Approved: false } d)
-                {
-                    return ToolResult.ValidationError(
-                        $"{WellKnown.FallbackMessages.ApprovalRejected}: {d.Reason ?? WellKnown.ApprovalReasons.AdminRejected}");
-                }
-
-                return _tools.OrderCancelTool(orderId, reason);
-            },
+                [System.ComponentModel.Description("İptal sebebi (zorunlu, en az 5 karakter)")] string reason) =>
+                _tools.OrderCancelTool(orderId, reason),
             name: WellKnown.ToolNames.OrderCancel,
             description:
                 "Mevcut bir siparişi iptal eder. Sadece 'İşleniyor' veya 'Kargolandı' durumundaki siparişler iptal edilebilir. " +
                 "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
+
+        return WrapIfRequiresApproval(WellKnown.ToolNames.OrderCancel, inner);
     }
 
     public AIFunction BuildReturnRequestTool()
     {
-        return AIFunctionFactory.Create(
-            async (
+        var inner = AIFunctionFactory.Create(
+            (
                 [System.ComponentModel.Description("İade talep edilecek sipariş numarası (zorunlu, ör. '1042')")] string orderId,
-                [System.ComponentModel.Description("İade sebebi (zorunlu, en az 5 karakter)")] string reason,
-                CancellationToken ct) =>
-            {
-                var decision = await RequestApprovalAsync(
-                    toolName: WellKnown.ToolNames.ReturnRequest,
-                    agentName: WellKnown.AgentNames.Order,
-                    parameters: new Dictionary<string, object?>
-                    {
-                        ["orderId"] = orderId,
-                        ["reason"] = reason
-                    },
-                    ct);
-
-                if (decision is { Approved: false } d)
-                {
-                    return ToolResult.ValidationError(
-                        $"{WellKnown.FallbackMessages.ApprovalRejected}: {d.Reason ?? WellKnown.ApprovalReasons.AdminRejected}");
-                }
-
-                return _tools.ReturnRequestTool(orderId, reason);
-            },
+                [System.ComponentModel.Description("İade sebebi (zorunlu, en az 5 karakter)")] string reason) =>
+                _tools.ReturnRequestTool(orderId, reason),
             name: WellKnown.ToolNames.ReturnRequest,
             description:
                 "Teslim edilmiş bir sipariş için iade talebi oluşturur. Sadece 'Teslim Edildi' durumundaki " +
                 "ve 14 gün içindeki siparişler iade edilebilir. " +
                 "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
+
+        return WrapIfRequiresApproval(WellKnown.ToolNames.ReturnRequest, inner);
     }
 
-    private async Task<ApprovalDecisionResult> RequestApprovalAsync(
+    /// <summary>
+    /// Tool'u sadece config'de onay gerektiriyorsa <see cref="ApprovalRequiredAIFunction"/> ile
+    /// sarmalar — FunctionInvokingChatClient bu işaretli tool'ları gerçekten çağırmadan önce
+    /// bir <c>ToolApprovalRequestContent</c> üretip workflow'un duraklamasını sağlıyor.
+    /// Onay kapalıysa (<see cref="ApprovalOptions.Enabled"/>=false) veya bu tool listede yoksa
+    /// eski davranış korunur: tool doğrudan çalışır.
+    /// </summary>
+    private AIFunction WrapIfRequiresApproval(string toolName, AIFunction inner) =>
+        RequiresApproval(toolName) ? new ApprovalRequiredAIFunction(inner) : inner;
+
+    private bool RequiresApproval(string toolName) =>
+        _approvalOptions.Enabled && _approvalOptions.ToolsRequiringApproval.Contains(toolName);
+
+    /// <summary>
+    /// Hangi ajanın hangi tool'u sahiplendiğini çözer — <c>ToolApprovalRequestContent</c>
+    /// sadece tool adını taşıdığı için (workflow hangi ajanın turduğunu doğrudan söylemiyor),
+    /// bu eşleme admin panelinde "hangi ajan istiyor" bilgisini göstermek için gerekiyor.
+    /// </summary>
+    public static string ResolveAgentName(string toolName) => toolName switch
+    {
+        WellKnown.ToolNames.OrderPlacement or WellKnown.ToolNames.OrderCancel or WellKnown.ToolNames.ReturnRequest
+            => WellKnown.AgentNames.Order,
+        WellKnown.ToolNames.ComplaintRegistration => WellKnown.AgentNames.Complaint,
+        _ => "UnknownAgent"
+    };
+
+    /// <summary>
+    /// Bir onay talebi oluşturur (veya aynı imzalı bekleyen bir talep varsa onu yeniden kullanır)
+    /// ve admin kararını bekler. WorkflowRunner, framework'ün <c>RequestInfoEvent</c>'ini
+    /// yakaladığında bu metodu çağırır — mevcut IApprovalQueue/SSE/SLA altyapısı (bu metodun
+    /// gövdesi) değişmedi, sadece ÇAĞRILDIĞI YER değişti: eskiden tool lambda'sının içinden,
+    /// şimdi WorkflowRunner'ın workflow event döngüsünden.
+    /// </summary>
+    public async Task<ApprovalDecisionResult> RequestApprovalAsync(
         string toolName,
         string agentName,
-        Dictionary<string, object?> parameters,
+        IDictionary<string, object?>? parameters,
         CancellationToken ct)
     {
-        if (!_approvalOptions.Enabled
-            || !_approvalOptions.ToolsRequiringApproval.Contains(toolName))
-        {
-            return new ApprovalDecisionResult(Approved: true, Reason: null);
-        }
+        var paramsDict = parameters is null
+            ? new Dictionary<string, object?>()
+            : new Dictionary<string, object?>(parameters);
 
         var ctx = _contextAccessor.Context;
 
-        var paramSig = BuildParamSignature(parameters);
+        var paramSig = BuildParamSignature(paramsDict);
         var existing = ctx?.SessionId is { Length: > 0 } sid
             ? _approvalQueue.GetPending().FirstOrDefault(p =>
                   string.Equals(p.SessionId, sid, StringComparison.Ordinal)
@@ -211,7 +182,7 @@ public class ApprovalGateService
                 UserQuery = ctx?.UserQuery,
                 ToolName = toolName,
                 AgentName = agentName,
-                Parameters = parameters,
+                Parameters = paramsDict,
                 Justification = string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName)
             };
             await _approvalQueue.CreateAsync(req, ct);
