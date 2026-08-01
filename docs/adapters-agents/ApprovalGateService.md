@@ -1,129 +1,64 @@
 # ApprovalGateService
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/ApprovalGateService.cs`  
+**Dosya:** `CustomerSupportBot.Adapters.Agents/ApprovalGateService.cs`
 **Yaşam döngüsü:** Singleton
 
-## Ne yapar?
+## Ne işe yarar?
 
-`ApprovalGateService`, **HITL (Human-in-the-Loop)** onay kapısını uygular. Yan etkili tool'lar (sipariş oluşturma, **sipariş iptali**, **iade talebi**, şikayet kaydı) çalışmadan önce bu servis üzerinden geçer ve admin onayı bekler.
+**HITL (Human-in-the-Loop)** onay kapısını uygular. Yan etkili 4 tool (sipariş oluşturma, sipariş iptali, iade talebi, şikayet kaydı) config'de işaretliyse, `FunctionInvokingChatClient` bu tool'ları gerçekten çalıştırmadan önce durur ve admin onayı bekler.
 
-**Temel fikir:** LLM bir tool çağırmak istediğinde, o tool önce admin'e "Bu işlemi yapayım mı?" diye sorar. Admin onaylarsa tool gerçekten çalışır; reddederse kullanıcıya "işlem reddedildi" yanıtı döner.
+> **Mimari not (önemli):** Onay bekleme mantığı framework'ün **native** mekanizmasına dayanır — eski modelde (bu dosyanın önceki dokümantasyonunda anlatılan) `RequestApprovalAsync` tool lambda'sının **içinde** çağrılıp bloklayan bir `await` ile beklerdi; süreç restart'ında bu bekleme (ve dolayısıyla `TaskCompletionSource`) kaybolurdu. Artık `Build*Tool()` metotları tool'u `ApprovalRequiredAIFunction` ile sarmalar; `FunctionInvokingChatClient` bunu görünce tool'u çalıştırmadan **önce** bir `ToolApprovalRequestContent` üretir, bu da `AIAgentHostExecutor` üzerinden gerçek, checkpoint'lenebilir bir workflow superstep duraklaması olan `RequestInfoEvent`'e dönüşür. `WorkflowRunner.HandleRequestInfoEventAsync` bu event'i yakalayıp `RequestApprovalAsync`'i (artık `public`) çağırır — metodun gövdesi (kuyruk, bekleme, duplicate-istek koruması) değişmedi, yalnızca **çağrıldığı yer** değişti.
 
-## HITL Akışı
+## Hangi amaçla kullanılır?
 
-```
-OrderAgent: "order_placement_tool çağırıyorum"
-    │
-    ▼
-ApprovalGateService.BuildOrderPlacementTool() ← daha önce oluşturulan tool
-    │
-    ▼
-RequestApprovalAsync(toolName, agentName, params)
-    │
-    ├─► ApprovalOptions.Enabled = false? → Direkt onayla (geç)
-    ├─► Tool approval listesinde yok? → Direkt onayla (geç)
-    │
-    └─► IApprovalQueue.Create(req)   ← Queue'ya ekle
-            │
-            ▼
-        IApprovalQueue.AwaitDecisionAsync(req.Id) ← Admin kararını bekle
-            │
-            ├─► Approved = true  → _tools.OrderPlacementTool(...) çağrılır
-            └─► Approved = false → ToolResult.ValidationError(...) döner
-```
+`AgentTeamFactory`, `OrderAgent`/`ComplaintAgent` kurulurken bu servisin `Build*Tool()` metotlarını çağırıp dönen `AIFunction`'ları ilgili ajana tool olarak atar. `WorkflowRunner.HandleRequestInfoEventAsync`, workflow her HITL duraklamasında `RequestApprovalAsync`'i çağırır.
 
-Admin arayüzü (Admin Chat Panel) bu kuyrukta bekleyen istekleri listeler ve `Approve/Reject` butonları gösterir.
+## Sorumlulukları
 
-## `BuildOrderPlacementTool`
+- 4 yan etkili tool için sarmalayıcı `AIFunction` üretmek (`BuildOrderPlacementTool`, `BuildOrderCancelTool`, `BuildReturnRequestTool`, `BuildComplaintRegistrationTool`) — her biri `ICustomerSupportToolsService`'teki gerçek implementasyona delege eden bir inner `AIFunction` kurar, sonra `WrapIfRequiresApproval` ile (config'e göre) `ApprovalRequiredAIFunction`'a sarmalar.
+- `RequestApprovalAsync`: bir onay talebi oluşturmak (veya aynı session+tool+parametre imzalı bekleyen bir talep varsa onu yeniden kullanmak), `IApprovalQueue.AwaitDecisionAsync` ile admin kararını beklemek, sonucu `ApprovalDecisionResult`'a çevirmek.
+- `ResolveAgentName(toolName)`: `ToolApprovalRequestContent` yalnızca tool adı taşıdığı için, admin panelinde "hangi ajan istiyor" bilgisini göstermek amacıyla tool→ajan eşlemesi yapmak.
+- `ProcessPendingEscalations`: `EscalationPolicyService.ProcessPendingEscalations`'a delege ederek `needs_escalation` durumundaki trace'leri eskalasyon sink'ine yazdırmak.
 
-Sipariş oluşturma tool'unu HITL kapısıyla sarmalar ve bir `AIFunction` olarak döndürür. Bu `AIFunction` doğrudan `OrderAgent`'a tool olarak atanır.
+**Üstlenmediği işler:** Onayın **ne zaman** isteneceğine framework karar verir (bu servis yalnızca isteği kuyruğa koyup bekler); admin arayüzü/SSE/SLA guardian ayrı bileşenlerdir (`IApprovalQueue`, `ApprovalPortService`, `SlaGuardian` — Application katmanı).
 
-**Tool parametreleri:**
+## Diğer katman ve bileşenlerle ilişkileri
 
-| Parametre | Tür | Açıklama |
-|-----------|-----|---------|
-| `productName` | string | Sipariş verilecek ürünün adı |
-| `quantity` | int? | Sipariş adedi |
-| `customerId` | string | Müşteri kimlik numarası (zorunlu) |
+**Implements:** Yok — somut bir servis sınıfı (arayüz yok, doğrudan enjekte edilir).
 
-**Çalışma şekli:**
-1. `RequestApprovalAsync` çağrılır.
-2. Onay gelirse `_tools.OrderPlacementTool(productName, quantity, customerId)` çalıştırılır.
-3. Ret gelirse `ToolResult.ValidationError(...)` döndürülür ve ajan kullanıcıya ret mesajı iletir.
+**Bağımlılıkları:** `IApprovalQueue` (Application outbound port — onay kuyruğu), `ApprovalOptions` (config), `IEscalationSink`, `IApprovalContextAccessor` (ambient session/trace/query bilgisi), `ICustomerSupportToolsService` (gerçek tool implementasyonları), `EscalationPolicyService`, `ILogger<ApprovalGateService>?`.
 
-## `BuildOrderCancelTool`
+**Kimler çağırır:** `AgentTeamFactory` (constructor'da `OrderAgent`/`ComplaintAgent`'a geçirilir; `Team/OrderAgent.cs` ve `Team/ComplaintAgent.cs` `Build*Tool()` metotlarını doğrudan çağırır), `WorkflowRunner.HandleRequestInfoEventAsync` (`RequestApprovalAsync`), `WorkflowRunner`/`TurnFinalizer` (`ProcessPendingEscalations`).
 
-Sipariş iptal tool'unu HITL kapısıyla sarmalar.
+**Kullandığı MAF tipleri:** `Microsoft.Extensions.AI.ApprovalRequiredAIFunction` (saf işaretleyici — `InvokeAsync` doğrudan iç fonksiyona delege eder, gerçek engelleme `FunctionInvokingChatClient`'ta olur).
 
-**Tool parametreleri:**
+## Kullanılma nedeni ve tasarım yaklaşımı
 
-| Parametre | Tür | Açıklama |
-|-----------|-----|----------|
-| `orderId` | string | İptal edilecek sipariş numarası (zorunlu) |
-| `reason` | string | İptal sebebi (min 5 karakter, zorunlu) |
+Framework'ün native HITL mekanizmasına geçiş, hexagonal mimariyi bilinçli olarak korudu: Application katmanındaki `IApprovalQueue`/SSE/SLA altyapısı **hiç değişmedi** — yalnızca "kim bekliyor" değişti (eskiden tool lambda'sının içindeki bir `Task`, şimdi framework'ün kendi checkpoint'lenebilir superstep duraklaması). Bu sayede MAF-spesifik bridging (`ApprovalRequiredAIFunction`, `RequestInfoEvent`) tamamen bu adapter katmanında kaldı, Application katmanı framework-agnostic kalmaya devam etti.
 
-**Çalışma şekli:**
-1. `RequestApprovalAsync` çağrılır.
-2. Onay gelirse `_tools.OrderCancelTool(orderId, reason)` çalıştırılır.
-3. Ret gelirse `ToolResult.ValidationError(...)` döndürülür.
+**Duplicate istek önleme:** Aynı session'da, aynı tool için, aynı parametrelerle zaten bekleyen bir istek varsa yeni bir istek oluşturulmaz — ajan aynı tool'u tekrar çağırmaya çalışırsa (ör. LLM'in retry davranışı) ikinci bir onay isteği admin panelinde tekrar görünmez.
 
-## `BuildReturnRequestTool`
+**Kritik detay — red mesajı formatı:** Admin bir onayı reddettiğinde, LLM'e giden tool sonucu JSON zarfı DEĞİL, `FunctionInvokingChatClient`'ın sabit ürettiği düz bir string: `"Tool call invocation rejected. {reason}"`. Bu özelleştirilemez (private metod, hook yok). `order-agent.md`/`complaint-agent.md` promptlarına bu formatı tanıyıp `status="failed"` üretecek özel talimat eklendi (bkz. `docs/adapters-agents/Team/OrderAgent.md`).
 
-İade talebi tool'unu HITL kapısıyla sarmalar.
+## Metotlar / Üyeler
 
-**Tool parametreleri:**
+| Üye | Açıklama |
+|---|---|
+| `BuildOrderPlacementTool()` | `order_placement_tool`'u kurar, `productName`/`quantity`/`customerId` alır, HITL gate'inden geçer. |
+| `BuildOrderCancelTool()` | `order_cancel_tool`'u kurar, `orderId`/`reason` alır, HITL gate'inden geçer. |
+| `BuildReturnRequestTool()` | `return_request_tool`'u kurar, `orderId`/`reason` alır, HITL gate'inden geçer. |
+| `BuildComplaintRegistrationTool()` | `complaint_registration_tool`'u kurar, `orderId`/`complaintText`/`customerId?` alır, HITL gate'inden geçer. |
+| `WrapIfRequiresApproval(toolName, inner)` (private) | Config'de onay gerekiyorsa `ApprovalRequiredAIFunction` ile sarmalar, değilse tool'u olduğu gibi döner. |
+| `RequiresApproval(toolName)` (private) | `ApprovalOptions.Enabled && ToolsRequiringApproval.Contains(toolName)`. |
+| `ResolveAgentName(toolName)` (static) | Tool adından ajan adını çözer (`OrderPlacement`/`OrderCancel`/`ReturnRequest` → Order, `ComplaintRegistration` → Complaint, diğer → `"UnknownAgent"`). |
+| `RequestApprovalAsync(toolName, agentName, parameters, ct)` | Onay talebi oluşturur/yeniden kullanır, kararı bekler, `ApprovalDecisionResult` döner. İptal edilirse `(false, "İstek iptal edildi")`. |
+| `ProcessPendingEscalations(trace, userQuery, finalResponse)` | `EscalationPolicyService`'e delege eder. |
+| `BuildParamSignature(parameters)` (private static) | Parametre sözlüğünden deterministik, alfabetik sıralı bir imza string'i üretir (duplicate istek tespiti için). |
+| `ApprovalDecisionResult` (record) | `(bool Approved, string? Reason)`. |
 
-| Parametre | Tür | Açıklama |
-|-----------|-----|----------|
-| `orderId` | string | İade talep edilecek sipariş numarası (zorunlu) |
-| `reason` | string | İade sebebi (min 5 karakter, zorunlu) |
+## Bağımlılıklar
 
-**Çalışma şekli:**
-1. `RequestApprovalAsync` çağrılır.
-2. Onay gelirse `_tools.ReturnRequestTool(orderId, reason)` çalıştırılır.
-3. Ret gelirse `ToolResult.ValidationError(...)` döndürülür.
-
-## `BuildComplaintRegistrationTool`
-
-Şikayet kayıt tool'unu HITL kapısıyla sarmalar.
-
-**Tool parametreleri:**
-
-| Parametre | Tür | Açıklama |
-|-----------|-----|---------|
-| `orderId` | string | Şikayetin ilişkili olduğu sipariş numarası (zorunlu) |
-| `complaintText` | string | Şikayet açıklaması (min 10 karakter, zorunlu) |
-| `customerId` | string? | Müşteri kimlik numarası (opsiyonel) |
-
-## `RequestApprovalAsync` (özel)
-
-HITL isteği oluşturur ve kararı bekler.
-
-```csharp
-private async Task<ApprovalDecisionResult> RequestApprovalAsync(
-    string toolName,
-    string agentName,
-    Dictionary<string, object?> parameters,
-    CancellationToken ct)
-```
-
-**Önemli davranış — duplicate istek önleme:**
-
-Aynı session'da, aynı tool için, aynı parametrelerle zaten bekleyen bir istek varsa yeni bir istek oluşturulmaz; mevcut istek yeniden kullanılır. Bu, ajan aynı tool'u tekrar çağırmaya çalıştığında ikinci bir onay isteğinin oluşmasını engeller.
-
-```csharp
-var paramSig = BuildParamSignature(parameters);
-var existing = _approvalQueue.GetPending().FirstOrDefault(p =>
-    p.SessionId == sid && p.ToolName == toolName && BuildParamSignature(p.Parameters) == paramSig);
-```
-
-**İptal edilirse:** `OperationCanceledException` yakalanır ve `ApprovalDecisionResult(false, "İstek iptal edildi")` döner.
-
-## `ProcessPendingEscalations`
-
-Workflow tamamlandıktan sonra `CustomerSupportTeam` tarafından çağrılır. İçeride `EscalationPolicyService.ProcessPendingEscalations(trace, userQuery, finalResponse)` metoduna delege eder.
-
-Bu metod, `needs_escalation` durumundaki trace'leri tespit eder ve escalation sink'e (örn. `IEscalationSink` → Postgres) yazar.
+Constructor injection: `IApprovalQueue approvalQueue`, `IOptions<ApprovalOptions> approvalOptions`, `IEscalationSink escalationSink`, `IApprovalContextAccessor contextAccessor`, `ICustomerSupportToolsService tools`, `EscalationPolicyService escalationPolicy`, `ILogger<ApprovalGateService>? logger = null`.
 
 ## `ApprovalOptions` yapılandırması
 
@@ -154,30 +89,11 @@ Bu metod, `needs_escalation` durumundaki trace'leri tespit eder ve escalation si
 | `AutoApproveOnTimeout` | Timeout'ta otomatik onayla mı, reddet mi |
 | `EscalationEnabled` | Timeout/red durumunda eskalasyon oluşturulsun mu |
 
-> **Dikkat:** Production'da `Enabled: false` olmamalı. `Program.cs` başlangıçta bunu kontrol eder ve `LogCritical` yazar.
+> **Dikkat:** Production'da `Enabled: false` olmamalı.
 
 ## Yeni bir tool'u HITL kapısına bağlamak
 
 1. `ApprovalGateService`'e yeni bir `Build___Tool()` metodu ekleyin, mevcut metodları örnek alın.
 2. `ApprovalOptions.ToolsRequiringApproval` listesine yeni tool adını ekleyin.
-3. `CustomerSupportTeam` constructor'ında ilgili ajana bu yeni tool'u atayın.
-
-## `BuildParamSignature` (özel)
-
-Parametre sözlüğünden deterministik bir imza string'i üretir. Anahtarlar alfabetik sırayla birleştirilir:
-
-```
-{ "customerId": "C001", "productName": "Laptop" }
-    → "customerId=C001|productName=Laptop"
-```
-
-Bu imza, duplicate istek tespitinde ve log'larda kullanılır.
-
-## `ApprovalDecisionResult` record
-
-```csharp
-public sealed record ApprovalDecisionResult(bool Approved, string? Reason);
-```
-
-- `Approved`: İşlem onaylandı mı?
-- `Reason`: Ret nedeni (varsa admin tarafından girilir)
+3. `ResolveAgentName` switch'ine yeni tool→ajan eşlemesini ekleyin.
+4. İlgili `Team/*Agent.cs` dosyasında yeni tool'u ajana atayın.

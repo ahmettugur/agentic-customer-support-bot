@@ -347,11 +347,23 @@ public static class ToolParameterNames
     public const string ProductName = "product_name";
     public const string Quantity = "quantity";
     public const string Reason = "reason";
-    public const string Description = "description";
+    public const string ComplaintDescription = "description";
 }
 ```
 
 Tool parametrelerinin standart isimleri — `CollectedInfo` Dict'iyle uyumlu.
+
+### Defaults
+
+```csharp
+public static class Defaults
+{
+    public const string Admin = "admin";
+    public const string System = "system";
+}
+```
+
+Genel amaçlı sabit değerler — ör. `decidedBy`/`actor` alanlarında varsayılan kimlik.
 
 ---
 

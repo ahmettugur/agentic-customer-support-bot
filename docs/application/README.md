@@ -13,7 +13,7 @@
 | Compound query / paralel görev mantığını değiştirmek | [SubTaskOrchestrator](SubTaskOrchestrator.md) |
 | Eskalasyon politikasını düzenlemek | [EscalationPolicyService](EscalationPolicyService.md) |
 | Semantik bellek veya knowledge base ile çalışmak | [Memory](Memory.md) |
-| Otomatik test / evaluation senaryosu çalıştırmak | [Evaluation](Evaluation.md) |
+| Otomatik test / evaluation senaryosu çalıştırmak | [docs/evaluation.md](../evaluation.md) + [Adapters.Agents/Evaluation](../adapters-agents/Evaluation/README.md) (implementasyon MAF'a bağımlı olduğu için orada yaşar — `IEvaluationPort` arayüzü burada) |
 | DI kayıtlarını anlamak | [DependencyInjection](DependencyInjection.md) |
 | Tüm port arayüzlerinin listesi | [Ports](Ports.md) |
 | HITL onay kuyruğunu yönetmek | [ApprovalPortService](ApprovalPortService.md) |
@@ -87,13 +87,11 @@ CustomerSupportBot.Application/
     │   ├── MemoryPortService.cs
     │   └── KnowledgeBaseIngestionService.cs
     │
-    ├── Evaluation/                 # Otomatik senaryo değerlendirici
-    │   ├── EvaluationRunner.cs
-    │   └── CriteriaEvaluator.cs
-    │
     └── Routing/                    # Skills-based routing
         └── SkillsBasedRouter.cs
 ```
+
+> **Not:** `Services/Evaluation/` burada YOK — `EvaluationRunner`/`CriteriaEvaluator`, `Microsoft.Agents.AI`'ın gerçek `EvalCheck`/`EvalItem` tiplerini kullandığı için `CustomerSupportBot.Adapters.Agents/Evaluation/`'da yaşar (bu proje kasıtlı olarak yalnızca Domain'e bağımlı, MAF referansı almaz). `IEvaluationPort` arayüzü (`Ports/Inbound/IEvaluationPort.cs`) ve `EvaluationModels.cs` (`CriterionSpec`, `EvaluationScenario` vb.) burada kalır — yalnızca implementasyon taşındı.
 
 ## Bir isteğin uçtan uca akışı
 

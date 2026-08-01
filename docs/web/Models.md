@@ -322,6 +322,25 @@ Naming convention: server camelCase yayar, C# PascalCase property — default ma
 
 `record` tiplerde `JsonPropertyName` attribute gerekmez — positional constructor parametrelerini server JSON'unun field adlarıyla eşleştirmek için isimlendirme kuralına uyulur.
 
+### JsonExtensions.cs
+
+**Dosya:** `Helpers/JsonExtensions.cs`
+**Erişim:** `internal static`
+
+`GetFromJsonAsync<T>`'in tip-güvenli deserialization'ının yeterli olmadığı, ham `JsonElement` üzerinde çalışmayı gerektiren durumlar için (ör. şekli önceden tam bilinmeyen/opsiyonel alanlı SSE payload'ları) küçük bir `JsonElement` extension seti sağlar:
+
+```csharp
+internal static class JsonExtensions
+{
+    public static string? TryGetProp(this JsonElement el, string key)
+    public static bool? TryGetBool(this JsonElement el, string key)
+    public static int? TryGetInt(this JsonElement el, string key)
+    public static List<string>? TryGetStringArray(this JsonElement el, string key)
+}
+```
+
+Her metot `TryGetProperty` ile alanın var olup olmadığını kontrol eder — eksik/yanlış tipli alan exception fırlatmaz, `null` döner.
+
 ---
 
 ## Bağlantılar

@@ -25,6 +25,9 @@ services.AddSingleton<CustomerSupportTeam>();
 
 services.AddSingleton<IAgentTeamPort>(sp =>
     sp.GetRequiredService<CustomerSupportTeam>());
+
+services.AddSingleton<EvaluationRunner>();
+services.AddSingleton<IEvaluationPort>(sp => sp.GetRequiredService<EvaluationRunner>());
 ```
 
 | Servis | Kayıt tipi | Açıklama |
@@ -32,6 +35,8 @@ services.AddSingleton<IAgentTeamPort>(sp =>
 | `ApprovalGateService` | Singleton | HITL onay kapısı |
 | `CustomerSupportTeam` | Singleton | Ana orkestratör — concrete tip olarak da erişilebilir |
 | `IAgentTeamPort` | Singleton (factory) | Application katmanının kullandığı port arayüzü |
+| `EvaluationRunner` (`Evaluation/`) | Singleton | `IEvaluationPort` implementasyonu — MAF `EvalItem` tiplerine bağımlı olduğu için burada kayıtlı (bkz. [Evaluation/README.md](Evaluation/README.md)) |
+| `IEvaluationPort` | Singleton (factory) | Application katmanının kullandığı port arayüzü |
 
 `CustomerSupportTeam` hem concrete tip (`CustomerSupportTeam`) hem de arayüz (`IAgentTeamPort`) olarak kayıtlıdır. Concrete tip `ApprovalGateService` gibi bileşenler tarafından doğrudan erişilebilir; Application katmanı yalnızca `IAgentTeamPort` üzerinden erişir.
 
@@ -77,6 +82,8 @@ Zorunlu:
   IApprovalContextAccessor       → Application services
   EscalationPolicyService        → Application services
   ILoggerFactory                 → ASP.NET Core (otomatik)
+  IReasoningPort                 → Application services (EvaluationRunner için)
+  ISessionManager                → Application/Persistence (EvaluationRunner için)
 
 Opsiyonel:
   ISemanticMemoryWriter          → Semantic memory adapter (varsa)

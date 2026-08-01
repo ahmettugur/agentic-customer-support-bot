@@ -40,7 +40,7 @@ Application katmanı bu arayüzleri kullanır. Implementasyonlar Adapter projele
 
 | Arayüz | Beklenen Adapter | Açıklama |
 |--------|-----------------|---------|
-| `IAgentTeamPort` | `CustomerSupportTeam` (Adapters.Agents) | Ajan workflow çalıştırma |
+| `IAgentTeamPort` | `CustomerSupportTeam` (Adapters.Agents) | Ajan workflow çalıştırma (`RunAsync`/`RunStreamingAsync`) + `GetWorkflowDiagram()` (admin panelindeki Mermaid diyagramı) |
 | `IContextPipeline` | `ContextPipeline` | Context provider zinciri |
 | `IPromptRepository` | `FileSystemPromptRepository` (Adapters.Persistence) | Prompt dosyaları okuyucu |
 | `ICustomerSupportToolsService` | `CustomerSupportToolsService` | Genel tool orchestrator |

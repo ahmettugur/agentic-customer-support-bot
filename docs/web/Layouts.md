@@ -40,10 +40,19 @@ Hiçbir UI elementi yok — sadece sayfa içeriği render edilir. Login ve Chat 
     <main class="admin-main">
         @Body
     </main>
+    <ToastContainer />
 </div>
 ```
 
-Üstte nav bar, altta sayfa içeriği. `admin.css` global olarak yüklenir — tüm admin sayfaları aynı stil.
+Üstte nav bar, altta sayfa içeriği. `admin.css` global olarak yüklenir — tüm admin sayfaları aynı stil. `ToastContainer` (bkz. aşağı) yalnızca bu layout'a eklenir — toast bildirimleri şu an sadece admin sayfalarında kullanılıyor.
+
+### ToastContainer
+
+**Dosya:** `Components/ToastContainer.razor`
+
+`ToastService.OnShow` event'ine abone olup (`OnInitialized`) her yeni `ToastMessage`'ı ekranın bir köşesinde 4 saniye gösterir, sonra 300ms'lik bir fade-out animasyonuyla kaldırır (`AutoDismissMs`/`RemoveAnimMs`). Kullanıcı çarpı butonuyla erken kapatabilir. 4 toast tipi (`Success`/`Error`/`Warning`/`Info`) her biri ayrı bir ikon ve CSS sınıfıyla gösterilir. `Dispose`'da event aboneliğini kaldırır (memory leak önleme).
+
+Kullanımı: `Services/ToastService.cs`'e bkz. — herhangi bir sayfa/component `@inject ToastService` edip `ToastSvc.ShowSuccess("...")` gibi çağırarak toast tetikleyebilir; `ToastContainer` bunu global olarak dinler ve render eder.
 
 ### CSS scope
 

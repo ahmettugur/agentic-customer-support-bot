@@ -12,6 +12,7 @@ API endpoint'lerini wrap eden client sınıfları ve UI yardımcı servisleri. S
 | `TracesApiService` | `/traces`, `/chat-sessions/.../history`, `/approvals`, `/escalations` | Traces, Replay |
 | `SlaApiService` | `/sla` | SLA sayfası |
 | `ThemeService` | — (localStorage / DOM) | Karanlık/aydınlık mod yönetimi |
+| `ToastService` | — (in-memory event) | Toast bildirim tetikleyici (`ToastContainer` dinler) |
 
 `AuthorizedHttpClientHandler` JWT token otomatik inject eder.
 `AuthService` hariç — refresh döngüsünü önlemek için ham `HttpClient` kullanır.
@@ -90,6 +91,32 @@ window.csbTheme = {
 ```
 
 Toggle butonu `NavMenu.razor`, `AdminNavBar.razor` ve Chat sayfasında mevcuttur.
+
+---
+
+## ToastService
+
+**Dosya:** `Services/ToastService.cs`
+**Tür:** Scoped
+
+Ekranda geçici bildirim (toast) göstermek için basit bir event-tabanlı yayıncı — state tutmaz, yalnızca `OnShow` event'ini fırlatır.
+
+```csharp
+public sealed class ToastService
+{
+    public event Action<ToastMessage>? OnShow;
+
+    public void ShowSuccess(string text)
+    public void ShowError(string text)
+    public void ShowWarning(string text)
+    public void ShowInfo(string text)
+}
+
+public sealed record ToastMessage(string Text, ToastType Type, Guid Id = default);
+public enum ToastType { Success, Error, Warning, Info }
+```
+
+Herhangi bir sayfa/component `@inject ToastService` edip yukarıdaki `Show*` metotlarından birini çağırır; `Components/ToastContainer.razor` (bkz. [Layouts.md](Layouts.md#toastcontainer)) bu event'i dinleyip render eder ve otomatik kapatmayı yönetir. `ToastService` kendisi hiçbir UI/zamanlama mantığı içermez — tamamen `ToastContainer`'a devredilmiştir.
 
 ---
 

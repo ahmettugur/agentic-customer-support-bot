@@ -17,9 +17,9 @@ Bu üç parser, LLM'in **yapılandırılmış JSON yanıtını** Domain modeline
 LLM çıktı (Raw JSON String)                Domain modeli (C# DTO)
 ───────────────────────────                ─────────────────────
 {                                     →    PlanningResult
-  "intent": "OrderInquiry",                {
-  "confidence": 0.85,                         DetectedIntent = "OrderInquiry",
-  ...                                         IntentConfidence = 0.85,
+  "detectedIntent": "OrderInquiry",        {
+  "intentConfidence": 0.85,                    DetectedIntent = "OrderInquiry",
+  ...                                          IntentConfidence = 0.85,
 }                                          }
 ```
 
@@ -42,20 +42,20 @@ Parser'lar **defensive** yazılmıştır — bozuk girdi exception fırlatmaz, e
 
 | JSON alanı | Domain field |
 |---|---|
-| `intent` (string) | `DetectedIntent` |
-| `confidence` (number) | `IntentConfidence` |
-| `evidence` (string[]) | `SupportingEvidence` |
+| `detectedIntent` (string) | `DetectedIntent` |
+| `intentConfidence` (number veya string) | `IntentConfidence` |
+| `supportingEvidence` (string[]) | `SupportingEvidence` |
 | `selectedAgent` (string) | `SelectedAgent` |
 | `rationale` (string) | `Rationale` |
-| `alternatives` (array) | `AlternativesRejected` |
+| `alternativesRejected` (array) | `AlternativesRejected` |
 | `needsClarification` (bool) | `NeedsClarification` |
 | `clarificationQuestion` (string) | `ClarificationQuestion` |
 | `taskDescription` (string) | `TaskDescription` |
 
-### Alternatives yapısı
+### AlternativesRejected yapısı
 
 ```json
-"alternatives": [
+"alternativesRejected": [
   { "agent": "OrderAgent", "reason": "Kullanıcı yeni sipariş istemiyor" },
   { "agent": "ComplaintAgent", "reason": "Şikayet ifadesi yok" }
 ]
