@@ -8,6 +8,14 @@ public interface IApprovalContextAccessor
 {
     ApprovalContext? Context { get; }
     IDisposable SetScope(string? sessionId, string? traceId, string? userQuery);
+
+    /// <summary>
+    /// Mevcut ambient bağlamda şu an fiilen çalışan uzman ajanın adını günceller
+    /// (ör. "ProductAgent"). Tool çağrıları (ör. IUiHintEmitter.Emit) bu değeri
+    /// okuyarak ürettikleri event'i doğru ajana etiketler — stream event
+    /// zamanlamasına/sırasına bağlı kalmadan.
+    /// </summary>
+    void SetCurrentAgent(string? agentName);
 }
 
-public sealed record ApprovalContext(string? SessionId, string? TraceId, string? UserQuery);
+public sealed record ApprovalContext(string? SessionId, string? TraceId, string? UserQuery, string? AgentName = null);

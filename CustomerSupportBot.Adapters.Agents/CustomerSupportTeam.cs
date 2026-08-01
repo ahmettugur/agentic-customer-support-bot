@@ -52,6 +52,7 @@ public class CustomerSupportTeam : IAgentTeamPort
     private readonly ApprovalGateService _approvalGate;
     private readonly ICustomerSupportToolsService _tools;
     private readonly IUiHintEmitter _uiHint;
+    private readonly IApprovalContextAccessor _approvalContext;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ISemanticMemoryWriter? _semanticMemory;
     private readonly ICustomerProfileService? _profileService;
@@ -67,6 +68,7 @@ public class CustomerSupportTeam : IAgentTeamPort
         ApprovalGateService approvalGate,
         ICustomerSupportToolsService tools,
         IUiHintEmitter uiHint,
+        IApprovalContextAccessor approvalContext,
         ILoggerFactory loggerFactory,
         ISemanticMemoryWriter? semanticMemory = null,
         ICustomerProfileService? profileService = null)
@@ -78,6 +80,7 @@ public class CustomerSupportTeam : IAgentTeamPort
         _approvalGate = approvalGate;
         _tools = tools;
         _uiHint = uiHint;
+        _approvalContext = approvalContext;
         _loggerFactory = loggerFactory;
         _semanticMemory = semanticMemory;
         _profileService = profileService;
@@ -399,15 +402,29 @@ public class CustomerSupportTeam : IAgentTeamPort
             case ExecutorInvokedEvent invoked:
             {
                 var executorId = invoked.ExecutorId ?? "unknown";
-                st.IterationCount++;
                 if (WorkflowResponseExtractor.IsInternalWorkflowExecutor(executorId)) return null;
+
+                // GroupChatHost her turda seçilmeyen tüm ajanlara da geçmişlerini senkron
+                // tutmak için mesaj yollar (BroadcastAsync) — bu da Invoked/Completed
+                // event çiftini tetikler ama ajan gerçekte çalışmaz. Süreye bakarak ayırt
+                // etmek güvenilir değil (gerçek ajanlar da bazen <1ms'de tamamlanabiliyor);
+                // asıl ayırt edici framework'ün TEK gerçek-tur sinyali olan TurnToken'dır —
+                // sadece seçilen konuşmacı TurnToken alır, broadcast hedefleri ise düz
+                // ChatMessage listesi alır (bkz. GroupChatHost.TakeTurnAsync/BroadcastAsync).
+                if (invoked.Data is not TurnToken) return null;
+
+                st.IterationCount++;
 
                 var sig = $"{executorId}:running";
                 if (sig == st.LastAgentSignature) return null;
                 st.LastAgentSignature = sig;
 
+                // Tool çağrıları (ör. UI hint emisyonu) bu ajan adına etiketlensin —
+                // hangi ajanın hint ürettiğini stream event sırasına bağlı kalmadan bilelim.
+                _approvalContext.SetCurrentAgent(executorId);
+
                 // Visit'i sadece ActiveVisits'e kaydet; trace listesine CompletedEvent'te
-                // ekleyeceğiz — bu şekilde pasif geçiş turları (0ms) kaydedilmez.
+                // ekleyeceğiz.
                 st.ActiveVisits[executorId] = new AgentVisit
                 {
                     AgentName = executorId,
@@ -422,23 +439,18 @@ public class CustomerSupportTeam : IAgentTeamPort
                 var completedId = completed.ExecutorId ?? "unknown";
                 if (WorkflowResponseExtractor.IsInternalWorkflowExecutor(completedId)) return null;
 
+                // ActiveVisits'te kaydı yoksa bu, Invoked aşamasında TurnToken taşımadığı
+                // için zaten atlanmış bir broadcast/senkron tamamlanmasıdır — yok say.
+                if (!st.ActiveVisits.TryGetValue(completedId, out var visit)) return null;
+
                 var sig = $"{completedId}:done";
                 if (sig == st.LastAgentSignature) return null;
                 st.LastAgentSignature = sig;
 
-                if (st.ActiveVisits.TryGetValue(completedId, out var visit))
-                {
-                    visit.CompletedAt = DateTime.UtcNow;
-                    st.ActiveVisits.Remove(completedId);
-
-                    // Sadece anlamlı süre olan ziyaretleri kaydet (> 0ms).
-                    // 0ms = framework pasif geçiş turu, gerçek iş yok.
-                    if (visit.DurationMs is null or > 0)
-                    {
-                        st.Trace.AgentVisits.Add(visit);
-                        _traceStore.Update(st.Trace);
-                    }
-                }
+                visit.CompletedAt = DateTime.UtcNow;
+                st.ActiveVisits.Remove(completedId);
+                st.Trace.AgentVisits.Add(visit);
+                _traceStore.Update(st.Trace);
 
                 return (completedId, "done");
             }
@@ -792,6 +804,7 @@ public class CustomerSupportTeam : IAgentTeamPort
         ReasoningResult reasoning,
         [EnumeratorCancellation] CancellationToken ct)
     {
+        var sessionId = session?.SessionId ?? string.Empty;
         var runningHistory = conversationHistory != null
             ? new List<ConversationMessage>(conversationHistory)
             : new List<ConversationMessage>();
@@ -842,21 +855,30 @@ public class CustomerSupportTeam : IAgentTeamPort
                     {
                         var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
                         var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
+                        // Bu paralel dalın kendi (izole) async akışında ambient ajan adını
+                        // sub.TargetAgent'a sabitle — RunAsync hint drain etmediği için
+                        // (streaming değil), ürettiği ipuçları burada, kendi TargetAgent'ıyla
+                        // etiketlenmiş biçimde kuyrukta bekler.
+                        _approvalContext.SetCurrentAgent(sub.TargetAgent);
                         var resp = await RunAsync(subQuery, historySnapshot, session, subReasoning, ct)
                             .ConfigureAwait(false);
-                        return (sub, resp);
+                        var hints = _uiHint.DrainPending(sessionId);
+                        return (sub, resp, hints);
                     }
                     finally { sem.Release(); }
                 }).ToList();
 
                 var results = await Task.WhenAll(tasks).ConfigureAwait(false);
 
-                foreach (var (sub, resp) in results.OrderBy(t => t.sub.Order))
+                foreach (var (sub, resp, hints) in results.OrderBy(t => t.sub.Order))
                 {
                     collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, resp);
                     runningHistory.Add(new ConversationMessage(ConversationRoles.User,
                         SubTaskOrchestrator.FormatSubTaskQuery(sub)));
                     runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, resp));
+
+                    foreach (var hint in hints)
+                        yield return hint;
 
                     yield return new StreamEvent(StreamEventTypes.Agent,
                         new { name = $"SubTask#{sub.Order}", status = "done", order = sub.Order });
@@ -882,6 +904,7 @@ public class CustomerSupportTeam : IAgentTeamPort
                     var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
                     var subResponseBuilder = new StringBuilder();
 
+                    _approvalContext.SetCurrentAgent(sub.TargetAgent);
                     await foreach (var evt in RunStreamingAsync(
                         subQuery, runningHistory, session, subReasoning, ct))
                     {

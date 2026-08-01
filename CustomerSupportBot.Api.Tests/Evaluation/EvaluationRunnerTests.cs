@@ -51,6 +51,7 @@ public class EvaluationRunnerTests
             traceStore,
             prompts, approvalGate, tools,
             new CustomerSupportBot.Application.Services.UiHint.UiHintEmitter(new ApprovalContextAccessor()),
+            new ApprovalContextAccessor(),
             NullLoggerFactory.Instance);
 
         var reasoningClient = new ReasoningChatClient(chatClient, "gpt-test", "low");

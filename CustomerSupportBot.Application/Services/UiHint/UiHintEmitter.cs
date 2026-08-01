@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 
@@ -17,9 +19,26 @@ public sealed class UiHintEmitter : IUiHintEmitter
 
     public void Emit(StreamEvent evt)
     {
-        var sessionId = _ctx.Context?.SessionId;
+        var ctx = _ctx.Context;
+        var sessionId = ctx?.SessionId;
         if (string.IsNullOrEmpty(sessionId)) return;
-        _store.GetOrAdd(sessionId, _ => new ConcurrentQueue<StreamEvent>()).Enqueue(evt);
+        _store.GetOrAdd(sessionId, _ => new ConcurrentQueue<StreamEvent>()).Enqueue(TagAgent(evt, ctx!.AgentName));
+    }
+
+    /// <summary>
+    /// Event'i ürettiği anda ambient bağlamdaki "şu an çalışan ajan" bilgisiyle etiketler.
+    /// Böylece frontend, hint'in hangi ajana ait olduğunu drain zamanlamasına/sırasına
+    /// (ör. o an ekranda görünen son "agent" event'ine) güvenerek tahmin etmek zorunda kalmaz.
+    /// </summary>
+    private static StreamEvent TagAgent(StreamEvent evt, string? agentName)
+    {
+        if (string.IsNullOrEmpty(agentName) || evt.Data is null) return evt;
+
+        var node = JsonSerializer.SerializeToNode(evt.Data);
+        if (node is not JsonObject obj) return evt;
+
+        obj["agent"] = agentName;
+        return evt with { Data = obj };
     }
 
     public IReadOnlyList<StreamEvent> DrainPending(string sessionId)

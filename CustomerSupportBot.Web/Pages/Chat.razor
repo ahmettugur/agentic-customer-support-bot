@@ -659,6 +659,13 @@
                 _pendingHandoff = false;
                 break;
             case "ui_hint":
+                // Backend, hint'i ürettiği anki ambient ajanla etiketler (bkz. UiHintEmitter).
+                // Bu, hint kuyruğa girip gecikmeli tüketildiğinde (ör. paralel alt görevler)
+                // ekrandaki ajan çipinin yanlış (o an aktif olan başka) ajanı göstermesini önler.
+                if (jd.TryGetProperty("agent", out var hintAgent) && hintAgent.ValueKind == JsonValueKind.String)
+                {
+                    _agentName = hintAgent.GetString();
+                }
                 if (_currentBot is not null
                     && jd.TryGetProperty("kind", out var hintKind)
                     && hintKind.GetString() == "category_picker"
@@ -918,17 +925,24 @@
         return "🏷️";
     }
 
-    private static string FriendlyAgentName(string id) => id switch
+    private static string FriendlyAgentName(string id)
     {
-        "PlanningAgent"      => "Planlama Ajanı",
-        "ProductAgent"=> "Ürün Ajanı",
-        "OrderAgent"         => "Sipariş Ajanı",
-        "ComplaintAgent"     => "Şikayet Ajanı",
-        "ResponseAgent"      => "Yanıt Ajanı",
-        "Orchestrator"       => "Orkestratör",
-        _ when id.StartsWith("SubTask#") => $"Alt Görev {id[8..]}",
-        _ => id
-    };
+        // Workflow executor id'leri "<AjanAdı>_<guid>" biçiminde gelir
+        // (AIAgentExtensions.GetDescriptiveId) — eşleşme için guid soneki atılır.
+        var baseName = id.Contains('_') ? id[..id.IndexOf('_')] : id;
+        return baseName switch
+        {
+            "PlanningAgent"      => "Planlama Ajanı",
+            "ProductAgent"       => "Ürün Ajanı",
+            "OrderAgent"         => "Sipariş Ajanı",
+            "ComplaintAgent"     => "Şikayet Ajanı",
+            "HumanHandoffAgent"  => "Müşteri Temsilcisi",
+            "ResponseAgent"      => "Yanıt Ajanı",
+            "Orchestrator"       => "Orkestratör",
+            _ when id.StartsWith("SubTask#") => $"Alt Görev {id[8..]}",
+            _ => baseName
+        };
+    }
 
     private async Task ScrollBottomAsync()
     {

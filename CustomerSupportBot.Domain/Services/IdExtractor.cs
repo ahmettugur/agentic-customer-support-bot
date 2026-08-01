@@ -6,6 +6,7 @@
 //   complaint_id : şikayet bağlamında 4+ haneli sayı (ör. 1001, 1003)
 //   customer_id  : müşteri bağlamında veya bağımsız 4+ haneli sayı (ör. 1008, 1027)
 
+using System.Linq;
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Domain.Model;
 
@@ -22,16 +23,19 @@ public static class IdExtractor
         @"\b(\d{4,})\b", RegexOptions.Compiled);
 
     // Sipariş bağlam kelimeleri
+    // NOT: Türkçe eklemeli bir dil olduğu için ("siparişim", "siparişimin", "siparişi" gibi)
+    // sondaki \b kasıtlı olarak yok — ş/i harfi \w kabul edildiğinden ek geldiğinde
+    // kelime sınırı oluşmuyor ve eşleşme kaçıyordu.
     private static readonly Regex OrderKeyword = new(
-        @"\bsipari[sş]\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"\bsipari[sş]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Şikayet bağlam kelimeleri
     private static readonly Regex ComplaintKeyword = new(
-        @"\bşikayet\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"\bşikayet", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Müşteri bağlam kelimeleri
     private static readonly Regex CustomerKeyword = new(
-        @"\bmü[sş]teri\b|\bnumaram\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"\bmü[sş]teri|\bnumaram\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
     /// Metinden tüm ID türlerini çıkarır. Her alan tek bir değer döner
@@ -83,16 +87,20 @@ public static class IdExtractor
         }
         else
         {
-            // Tek sayı veya bağlam yok
-            var singleNum = numbers[0].Value;
+            // Tek sayı: en yakın bağlam kelimesi kazanır (whole-text presence değil).
+            // Trailing \b kaldırıldığından ör. "müşterim 1008 son siparişi" cümlesinde
+            // hem müşteri hem sipariş kelimesi metinde geçer — hangisinin sayıya
+            // fiilen daha yakın olduğuna bakmadan "sipariş var" diye karar vermek yanlış olur.
+            var singleMatch = numbers[0];
+            var singleNum = singleMatch.Value;
+            var numStart = singleMatch.Index;
+            var numEnd = numStart + singleMatch.Length;
 
-            if (hasOrder)
-                result.OrderId = singleNum;
-            else if (hasComplaint)
-                result.ComplaintId = singleNum;
-            else if (hasCustomer)
-                result.CustomerId = singleNum;
-            else
+            var orderGap = NearestGap(OrderKeyword, text, numStart, numEnd);
+            var complaintGap = NearestGap(ComplaintKeyword, text, numStart, numEnd);
+            var customerGap = NearestGap(CustomerKeyword, text, numStart, numEnd);
+
+            if (orderGap is null && complaintGap is null && customerGap is null)
             {
                 // Bağlam yok — kısa sorgularda (≤5 token) customer_id varsay
                 var tokenCount = text.Split(
@@ -100,6 +108,24 @@ public static class IdExtractor
                     StringSplitOptions.RemoveEmptyEntries).Length;
                 if (tokenCount <= 5)
                     result.CustomerId = singleNum;
+            }
+            else
+            {
+                // Eşitlikte sipariş > şikayet > müşteri (mevcut önceliği korur).
+                var winner = new[]
+                    {
+                        (Kind: 0, Gap: orderGap),
+                        (Kind: 1, Gap: complaintGap),
+                        (Kind: 2, Gap: customerGap)
+                    }
+                    .Where(c => c.Gap.HasValue)
+                    .OrderBy(c => c.Gap!.Value)
+                    .ThenBy(c => c.Kind)
+                    .First().Kind;
+
+                if (winner == 0) result.OrderId = singleNum;
+                else if (winner == 1) result.ComplaintId = singleNum;
+                else result.CustomerId = singleNum;
             }
         }
 
@@ -148,6 +174,29 @@ public static class IdExtractor
         lines.Add("Not: Ekstraksiyon yanlış görünüyorsa kullanıcıya doğrulat.");
 
         return string.Join('\n', lines);
+    }
+
+    /// <summary>
+    /// Verilen sayıya en yakın regex eşleşmesinin (varsa) karakter boşluğunu döner.
+    /// Aradaki boşluk (index farkı değil, gerçek karakter mesafesi) kullanılır —
+    /// böylece "müşterim 1008 son siparişi" gibi cümlelerde bitişik kelime kazanır.
+    /// </summary>
+    private static int? NearestGap(Regex re, string text, int numStart, int numEnd)
+    {
+        int? best = null;
+        foreach (Match m in re.Matches(text))
+        {
+            int gap;
+            if (m.Index + m.Length <= numStart)
+                gap = numStart - (m.Index + m.Length);
+            else if (m.Index >= numEnd)
+                gap = m.Index - numEnd;
+            else
+                gap = 0;
+
+            if (best is null || gap < best.Value) best = gap;
+        }
+        return best;
     }
 
     private static string ExtractWindow(string text, int center, int radius)

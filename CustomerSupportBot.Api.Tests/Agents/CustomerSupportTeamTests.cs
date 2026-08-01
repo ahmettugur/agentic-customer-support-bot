@@ -68,6 +68,7 @@ public class CustomerSupportTeamTests
             approvalGate,
             tools,
             new CustomerSupportBot.Application.Services.UiHint.UiHintEmitter(new ApprovalContextAccessor()),
+            new ApprovalContextAccessor(),
             loggerFactory);
     }
 

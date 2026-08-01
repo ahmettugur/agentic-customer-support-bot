@@ -19,6 +19,14 @@ public sealed class ApprovalContextAccessor : IApprovalContextAccessor
         return new ContextScope(previous);
     }
 
+    public void SetCurrentAgent(string? agentName)
+    {
+        var current = _current.Value;
+        _current.Value = current is null
+            ? new ApprovalContext(null, null, null, agentName)
+            : current with { AgentName = agentName };
+    }
+
     private sealed class ContextScope : IDisposable
     {
         private readonly ApprovalContext? _previous;

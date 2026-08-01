@@ -74,6 +74,40 @@ public class IdExtractorTests
         ids.HasAny.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("siparişim 1030 nerede?")]
+    [InlineData("siparişimin durumu ne 1030")]
+    [InlineData("siparişimi 1030 iptal etmek istiyorum")]
+    public void Extract_SuffixedOrderKeyword_StillExtractsOrderId(string text)
+    {
+        // Türkçe eklemeli yapı ("sipariş" + iyelik eki) — \b...\b eskiden
+        // eki geldiğinde eşleşmeyi kaçırıyordu (bkz. IdExtractor.cs yorum).
+        var ids = IdExtractor.Extract(text);
+        ids.OrderId.Should().Be("1030");
+    }
+
+    [Fact]
+    public void Extract_SuffixedCustomerKeyword_StillExtractsCustomerId()
+    {
+        var ids = IdExtractor.Extract("müşterim 1008 son siparişi");
+        ids.CustomerId.Should().Be("1008");
+    }
+
+    [Fact]
+    public void Extract_TwoConsecutiveOrderQueries_EachExtractsOwnOrderId()
+    {
+        // Gerçek kullanıcı senaryosu: "1042 nolu sipariş durumu" (bare kelime, eski
+        // regex ile de çalışırdı) ardından aynı sohbette "1043 numaralı siparişin
+        // durumu" (iyelik ekli — eski \b...\b regex burada kaçırıyordu, order_id
+        // customer_id'ye düşüyor ya da hiç çıkarılmıyordu).
+        var first = IdExtractor.Extract("1042 nolu sipariş durumunu sorgulamak istiyorum");
+        first.OrderId.Should().Be("1042");
+
+        var second = IdExtractor.Extract("1043 numaralı siparişin durumunu sorgulamak istiyorum");
+        second.OrderId.Should().Be("1043");
+        second.CustomerId.Should().BeNull();
+    }
+
     [Fact]
     public void BuildHintMessage_NoIds_ReturnsNull()
     {
