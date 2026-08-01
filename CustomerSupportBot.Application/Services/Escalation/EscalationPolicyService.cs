@@ -67,23 +67,28 @@ public class EscalationPolicyService
             };
         }
 
-        // Session bazlı dedup — aynı session'da açık eskalasyon varsa yeni oluşturma.
-        if (!string.IsNullOrWhiteSpace(trace.SessionId))
-        {
-            var existing = _escalationSink.GetOpen()
-                .FirstOrDefault(e => string.Equals(e.SessionId, trace.SessionId, StringComparison.Ordinal));
-
-            if (existing != null)
-            {
-                _logger.LogDebug(
-                    "[HITL] Session {SessionId} için zaten açık eskalasyon var (id={Id}, status={Status}); yeni kayıt oluşturulmuyor.",
-                    trace.SessionId, existing.Id, existing.Status);
-                return;
-            }
-        }
-
         foreach (var sr in candidates)
         {
+            // Session + ajan bazlı dedup — aynı session'da AYNI ajandan zaten açık bir
+            // eskalasyon varsa yeni oluşturma. Sadece SessionId'ye bakmak (eski davranış)
+            // aynı sohbette farklı bir ajandan gelen, tamamen bağımsız bir eskalasyonu da
+            // bastırıyordu (ör. Order eskalasyonu açıkken Complaint eskalasyonu hiç açılmıyordu).
+            if (!string.IsNullOrWhiteSpace(trace.SessionId))
+            {
+                var existing = _escalationSink.GetOpen().FirstOrDefault(e =>
+                    string.Equals(e.SessionId, trace.SessionId, StringComparison.Ordinal)
+                    && string.Equals(e.AgentName, sr.AgentName, StringComparison.OrdinalIgnoreCase));
+
+                if (existing != null)
+                {
+                    _logger.LogDebug(
+                        "[HITL] Session {SessionId} için {AgentName} ajanından zaten açık eskalasyon var " +
+                        "(id={Id}, status={Status}); yeni kayıt oluşturulmuyor.",
+                        trace.SessionId, sr.AgentName, existing.Id, existing.Status);
+                    continue;
+                }
+            }
+
             var reflection = sr.PostToolReflection!;
             try
             {

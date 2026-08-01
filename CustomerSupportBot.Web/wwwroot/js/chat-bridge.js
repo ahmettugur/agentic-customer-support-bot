@@ -13,6 +13,13 @@ window.__chatSetup = function (ref, apiBase) {
     apiBase = (apiBase || '').replace(/\/+$/, '');
     window._blazorChatRef = ref;
 
+    // Ajan-isim haritasının tek doğruluk kaynağı C# tarafı (Chat.razor._agentNameMap) —
+    // burada elle kopya tutmak yerine bir kez JSInterop ile çekip cache'liyoruz.
+    // Assembly adı: CustomerSupportBot.Web (RootNamespace override yok, proje adıyla aynı).
+    DotNet.invokeMethodAsync('CustomerSupportBot.Web', 'GetAgentNameMap')
+        .then(function (map) { window._agentNameMap = map || {}; })
+        .catch(function () { window._agentNameMap = {}; });
+
     // ── Minimal window.App bridge (realtime-ui.js uses this) ─────────────────
     window.App = {
         sendMessage: function (t) { ref.invokeMethodAsync('VoiceSendMessage', t); },
@@ -161,9 +168,10 @@ window.__chatSetup = function (ref, apiBase) {
             }
         },
         _extractAnalysis: function (raw) {
-            var idx = raw.indexOf('"analysis"');
+            var marker = '"analysis"';
+            var idx = raw.indexOf(marker);
             if (idx < 0) return '';
-            var ci = raw.indexOf(':', idx + 10);
+            var ci = raw.indexOf(':', idx + marker.length);
             if (ci < 0) return '';
             var qs = raw.indexOf('"', ci + 1);
             if (qs < 0) return '';
@@ -178,12 +186,13 @@ window.__chatSetup = function (ref, apiBase) {
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         },
         _friendlyAgent: function (id) {
-            var m = {
-                PlanningAgent: 'Planlama Ajanı', ProductAgent: 'Ürün Ajanı',
-                OrderAgent: 'Sipariş Ajanı', ComplaintAgent: 'Şikayet Ajanı',
-                ResponseAgent: 'Yanıt Ajanı', Orchestrator: 'Orkestratör'
-            };
-            return m[id] || (id.startsWith('SubTask#') ? 'Alt Görev ' + id.slice(8) : id);
+            // Workflow executor id'leri "<AjanAdı>_<guid>" biçiminde gelir — eşleşme
+            // için guid soneki atılır. Harita artık C#'tan (Chat.razor._agentNameMap)
+            // JSInterop ile çekiliyor (bkz. __chatSetup) — tek doğruluk kaynağı, elle
+            // senkron tutulan ikinci bir kopya yok.
+            var baseName = id.indexOf('_') >= 0 ? id.substring(0, id.indexOf('_')) : id;
+            var map = window._agentNameMap || {};
+            return map[baseName] || (baseName.indexOf('SubTask#') === 0 ? 'Alt Görev ' + baseName.slice(8) : baseName);
         }
     };
 
@@ -192,20 +201,17 @@ window.__chatSetup = function (ref, apiBase) {
     // The actual fetch+stream runs inside an IIFE so C# is never blocked waiting
     // for the Promise — OnStreamEvent callbacks arrive in real time.
     window.__streamChat = function (ref, apiBase, query, sessionId) {
-        console.log('[streamChat] START apiBase=' + apiBase + ' query=' + query + ' sid=' + sessionId);
         var ctrl = new AbortController();
         window._chatStreamAbort = ctrl;
         (async function () {
             try {
                 var url = apiBase + '/chat/stream';
-                console.log('[streamChat] fetch ' + url);
                 var r = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
                     body: JSON.stringify({ query: query, sessionId: sessionId || null }),
                     signal: ctrl.signal
                 });
-                console.log('[streamChat] status=' + r.status);
                 if (!r.ok) {
                     ref.invokeMethodAsync('OnStreamError', 'HTTP ' + r.status).catch(function () { });
                     return;
@@ -224,13 +230,11 @@ window.__chatSetup = function (ref, apiBase) {
                         if (ln.startsWith('event:')) { evType = ln.slice(6).trim(); }
                         else if (ln.startsWith('data:')) { dlines.push(ln.slice(5).trim()); }
                         else if (ln.length === 0 && dlines.length > 0) {
-                            console.log('[streamChat] event: ' + evType);
                             ref.invokeMethodAsync('OnStreamEvent', evType, dlines.join('\n')).catch(function (e) { console.error('[streamChat] invoke err:', e); });
                             evType = 'message'; dlines = [];
                         }
                     }
                 }
-                console.log('[streamChat] COMPLETE');
                 ref.invokeMethodAsync('OnStreamComplete').catch(function () { });
             } catch (e) {
                 console.error('[streamChat] ERROR:', e.name, e.message);

@@ -29,9 +29,11 @@ public class ApprovalSlaOptions
 
     /// <summary>
     /// Bu süreyi aşan onaylar SLA ihlali sayılır ve <see cref="OnBreach"/>'e göre
-    /// otomatik karar verilir.
+    /// otomatik karar verilir. HumanInTheLoop.TimeoutSeconds (onay kuyruğunun kendi
+    /// timeout'u) ile AYNI veya ondan BÜYÜK tutulmalı — küçük tutulursa SLA, admin'e
+    /// tanınan onay penceresini (queue timeout ne olursa olsun) fiilen kısaltır.
     /// </summary>
-    public int BreachAfterSeconds { get; set; } = 45;
+    public int BreachAfterSeconds { get; set; } = 60;
 
     /// <summary>
     /// Breach sonrası otomatik aksiyon:

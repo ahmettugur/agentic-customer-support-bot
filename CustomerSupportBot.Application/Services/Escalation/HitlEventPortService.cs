@@ -4,6 +4,7 @@
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
+using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services.Escalation;
 
@@ -12,22 +13,28 @@ public sealed class HitlEventPortService : IHitlEventPort
     private readonly IApprovalQueue _approvals;
     private readonly IEscalationSink _escalations;
     private readonly IChatModeRegistry _modeRegistry;
+    private readonly ILogger<HitlEventPortService> _logger;
 
-    public HitlEventPortService(IApprovalQueue approvals, IEscalationSink escalations, IChatModeRegistry modeRegistry)
+    public HitlEventPortService(
+        IApprovalQueue approvals,
+        IEscalationSink escalations,
+        IChatModeRegistry modeRegistry,
+        ILogger<HitlEventPortService>? logger = null)
     {
         _approvals = approvals;
         _escalations = escalations;
         _modeRegistry = modeRegistry;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<HitlEventPortService>.Instance;
     }
 
     public IHitlEventSubscription Subscribe(string sessionId, Func<string, object, Task> onEvent)
     {
-        return new ApprovalEscalationSubscription(_approvals, _escalations, sessionId, onEvent);
+        return new ApprovalEscalationSubscription(_approvals, _escalations, sessionId, onEvent, _logger);
     }
 
     public IHitlEventSubscription SubscribeToChatEvents(string sessionId, Func<string, object, Task> onEvent)
     {
-        return new ChatEventSubscription(_modeRegistry, _escalations, sessionId, onEvent);
+        return new ChatEventSubscription(_modeRegistry, _escalations, sessionId, onEvent, _logger);
     }
 
     private sealed class ApprovalEscalationSubscription : IHitlEventSubscription
@@ -39,17 +46,20 @@ public sealed class HitlEventPortService : IHitlEventPort
         private readonly EventHandler<ApprovalRequest> _approvalCreatedHandler;
         private readonly EventHandler<ApprovalRequest> _approvalDecidedHandler;
         private readonly EventHandler<EscalationRequest> _escalationCreatedHandler;
+        private readonly ILogger _logger;
 
         public ApprovalEscalationSubscription(
             IApprovalQueue approvals,
             IEscalationSink escalations,
             string sessionId,
-            Func<string, object, Task> onEvent)
+            Func<string, object, Task> onEvent,
+            ILogger logger)
         {
             _approvals = approvals;
             _escalations = escalations;
             _sessionId = sessionId;
             _onEvent = onEvent;
+            _logger = logger;
 
             _approvalCreatedHandler = (_, req) =>
             {
@@ -93,9 +103,13 @@ public sealed class HitlEventPortService : IHitlEventPort
             _escalations.RequestCreated -= _escalationCreatedHandler;
         }
 
-        private static void FireAndForget(Task task)
+        private void FireAndForget(Task task)
         {
-            _ = task.ContinueWith(_ => { }, TaskScheduler.Default);
+            _ = task.ContinueWith(t =>
+            {
+                _logger.LogWarning(t.Exception?.GetBaseException(),
+                    "[HITL] Event handler failed (session={SessionId})", _sessionId);
+            }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
         }
     }
 
@@ -108,17 +122,20 @@ public sealed class HitlEventPortService : IHitlEventPort
         private readonly EventHandler<ChatSessionState> _modeHandler;
         private readonly EventHandler<EscalationRequest> _escCreatedHandler;
         private readonly EventHandler<EscalationRequest> _escDecidedHandler;
+        private readonly ILogger _logger;
 
         public ChatEventSubscription(
             IChatModeRegistry modeRegistry,
             IEscalationSink escalations,
             string sessionId,
-            Func<string, object, Task> onEvent)
+            Func<string, object, Task> onEvent,
+            ILogger logger)
         {
             _modeRegistry = modeRegistry;
             _escalations = escalations;
             _sessionId = sessionId;
             _onEvent = onEvent;
+            _logger = logger;
 
             _modeHandler = (_, s) =>
             {
@@ -175,9 +192,13 @@ public sealed class HitlEventPortService : IHitlEventPort
             _escalations.RequestDecided -= _escDecidedHandler;
         }
 
-        private static void FireAndForget(Task task)
+        private void FireAndForget(Task task)
         {
-            _ = task.ContinueWith(_ => { }, TaskScheduler.Default);
+            _ = task.ContinueWith(t =>
+            {
+                _logger.LogWarning(t.Exception?.GetBaseException(),
+                    "[HITL] Chat event handler failed (session={SessionId})", _sessionId);
+            }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
         }
     }
 }

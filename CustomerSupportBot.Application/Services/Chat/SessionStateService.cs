@@ -30,11 +30,19 @@ public sealed class SessionStateService
     /// </summary>
     public void UpdateSessionIntent(AgentSession session, string? intent)
     {
-        if (!string.IsNullOrWhiteSpace(intent) && intent != WellKnown.Intents.Unknown)
+        if (string.IsNullOrWhiteSpace(intent) || intent == WellKnown.Intents.Unknown) return;
+
+        // Aynı session'a çakışan (çift-submit, çoklu sekme) eşzamanlı isteklerde
+        // state mutasyonu — bkz. UpdateSessionSentiment'teki ConsecutiveNegativeTurns
+        // yorumu için aynı gerekçe. ISessionManager.GetOrCreate/Get aynı sessionId için
+        // hep AYNI AgentSession referansını döndürür, bu yüzden session nesnesinin
+        // kendisi kilit anahtarı olarak güvenle kullanılabilir (bkz.
+        // WorkflowRunner.ConsumeForceReplanHint'teki aynı kalıp).
+        lock (session)
         {
             session.State.CurrentIntent = intent;
-            _sessionManager.Update(session);
         }
+        _sessionManager.Update(session);
     }
 
     /// <summary>
@@ -49,15 +57,20 @@ public sealed class SessionStateService
             return; // LLM sentiment döndürmemiş, kural tabanlı sonucu koru
         }
 
-        var state = session.State;
-        state.Sentiment = reasoning.Sentiment;
-        state.SentimentScore = reasoning.SentimentScore;
+        // ConsecutiveNegativeTurns++ oku-değiştir-yaz — kilitsiz olursa aynı session'a
+        // çakışan iki eşzamanlı istek (çift-submit, çoklu sekme) birbirinin artışını
+        // ezebilir ve otomatik eskalasyon eşiği bir tur geç tetiklenir/hiç tetiklenmez.
+        lock (session)
+        {
+            var state = session.State;
+            state.Sentiment = reasoning.Sentiment;
+            state.SentimentScore = reasoning.SentimentScore;
 
-        // Ardışık negatif sayacını güncelle
-        if (reasoning.SentimentScore < WellKnown.SentimentThresholds.NegativeThreshold)
-            state.ConsecutiveNegativeTurns++;
-        else
-            state.ConsecutiveNegativeTurns = 0;
+            if (reasoning.SentimentScore < WellKnown.SentimentThresholds.NegativeThreshold)
+                state.ConsecutiveNegativeTurns++;
+            else
+                state.ConsecutiveNegativeTurns = 0;
+        }
     }
 
     /// <summary>
@@ -82,21 +95,25 @@ public sealed class SessionStateService
     /// </summary>
     public SentimentAlertResult CheckSentimentAlert(AgentSession session)
     {
-        var state = session.State;
-        var result = new SentimentAlertResult
+        SentimentAlertResult result;
+        lock (session)
         {
-            Sentiment = state.Sentiment,
-            Score = state.SentimentScore,
-            ConsecutiveNegativeTurns = state.ConsecutiveNegativeTurns,
-            SessionId = session.SessionId,
-            ShouldAlert = state.ConsecutiveNegativeTurns >= WellKnown.SentimentThresholds.AutoEscalationConsecutiveNegative
-        };
+            var state = session.State;
+            result = new SentimentAlertResult
+            {
+                Sentiment = state.Sentiment,
+                Score = state.SentimentScore,
+                ConsecutiveNegativeTurns = state.ConsecutiveNegativeTurns,
+                SessionId = session.SessionId,
+                ShouldAlert = state.ConsecutiveNegativeTurns >= WellKnown.SentimentThresholds.AutoEscalationConsecutiveNegative
+            };
+        }
 
         if (result.ShouldAlert)
         {
             _logger.LogWarning(
                 "[Sentiment Alert] Session {SessionId}: {Consecutive} ardışık negatif tur (skor: {Score})",
-                session.SessionId, state.ConsecutiveNegativeTurns, state.SentimentScore);
+                session.SessionId, result.ConsecutiveNegativeTurns, result.Score);
         }
 
         return result;

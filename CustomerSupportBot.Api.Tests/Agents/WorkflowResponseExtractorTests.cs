@@ -1,6 +1,8 @@
 // Tests/Agents/WorkflowResponseExtractorTests.cs
 using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Domain.Model;
+using Microsoft.Extensions.AI;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 
@@ -117,5 +119,36 @@ public class WorkflowResponseExtractorTests
     public void IsInternalWorkflowExecutor_EmptyId_True()
     {
         WorkflowResponseExtractor.IsInternalWorkflowExecutor("").Should().BeTrue();
+    }
+
+    [Fact]
+    public void ContainsHumanHandoffToolCall_ToolCalled_True()
+    {
+        var msg = new ChatMessage(ChatRole.Assistant, new List<AIContent>
+        {
+            new FunctionCallContent("call1", WellKnown.ToolNames.HumanHandoff,
+                new Dictionary<string, object?> { ["reason"] = "bottan sıkıldım" })
+        });
+
+        WorkflowResponseExtractor.ContainsHumanHandoffToolCall([msg]).Should().BeTrue();
+    }
+
+    [Fact]
+    public void ContainsHumanHandoffToolCall_DifferentTool_False()
+    {
+        var msg = new ChatMessage(ChatRole.Assistant, new List<AIContent>
+        {
+            new FunctionCallContent("call1", WellKnown.ToolNames.OrderStatus,
+                new Dictionary<string, object?> { ["orderId"] = "1030" })
+        });
+
+        WorkflowResponseExtractor.ContainsHumanHandoffToolCall([msg]).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ContainsHumanHandoffToolCall_NoFunctionCalls_False()
+    {
+        var msg = new ChatMessage(ChatRole.Assistant, "sadece metin");
+        WorkflowResponseExtractor.ContainsHumanHandoffToolCall([msg]).Should().BeFalse();
     }
 }

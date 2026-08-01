@@ -111,7 +111,7 @@ public class ApprovalGateServiceEscalationTests
     }
 
     [Fact]
-    public void ProcessPendingEscalations_DuplicateSession_SecondSkipped()
+    public void ProcessPendingEscalations_DuplicateSessionSameAgent_SecondSkipped()
     {
         var svc = BuildService();
         var trace = new ReasoningTrace
@@ -132,7 +132,54 @@ public class ApprovalGateServiceEscalationTests
         };
 
         svc.ProcessPendingEscalations(trace, "q", "r");
-        // İkinci çağrı session zaten açık olduğu için skip etmeli
+        // Aynı session + aynı ajan (Complaint) zaten açık eskalasyonu varken ikinci
+        // çağrı skip edilmeli.
+        var trace2 = new ReasoningTrace
+        {
+            SessionId = "s1",
+            SpecialistReasonings = new List<SpecialistReasoning>
+            {
+                new()
+                {
+                    AgentName = WellKnown.AgentNames.Complaint,
+                    PostToolReflection = new PostToolReflection
+                    {
+                        Status = WellKnown.TaskStatuses.NeedsEscalation,
+                        HandoffReason = "ikinci"
+                    }
+                }
+            }
+        };
+        svc.ProcessPendingEscalations(trace2, "q", "r");
+        var open = _sink.GetOpen();
+        open.Should().ContainSingle();
+        open[0].Reason.Should().Be("ilk");
+    }
+
+    [Fact]
+    public void ProcessPendingEscalations_SameSessionDifferentAgent_BothCreated()
+    {
+        // Dedup ajan bazlı olmalı — aynı sohbette farklı bir ajandan (bağımsız bir konuda)
+        // gelen ikinci bir eskalasyon, ilk ajanın açık eskalasyonu tarafından bastırılmamalı.
+        var svc = BuildService();
+        var trace = new ReasoningTrace
+        {
+            SessionId = "s1",
+            SpecialistReasonings = new List<SpecialistReasoning>
+            {
+                new()
+                {
+                    AgentName = WellKnown.AgentNames.Complaint,
+                    PostToolReflection = new PostToolReflection
+                    {
+                        Status = WellKnown.TaskStatuses.NeedsEscalation,
+                        HandoffReason = "şikayet_nedeni"
+                    }
+                }
+            }
+        };
+        svc.ProcessPendingEscalations(trace, "q", "r");
+
         var trace2 = new ReasoningTrace
         {
             SessionId = "s1",
@@ -144,13 +191,17 @@ public class ApprovalGateServiceEscalationTests
                     PostToolReflection = new PostToolReflection
                     {
                         Status = WellKnown.TaskStatuses.NeedsEscalation,
-                        HandoffReason = "ikinci"
+                        HandoffReason = "sipariş_nedeni"
                     }
                 }
             }
         };
         svc.ProcessPendingEscalations(trace2, "q", "r");
-        _sink.GetOpen().Should().ContainSingle();
+
+        var open = _sink.GetOpen();
+        open.Should().HaveCount(2);
+        open.Should().Contain(e => e.AgentName == WellKnown.AgentNames.Complaint && e.Reason == "şikayet_nedeni");
+        open.Should().Contain(e => e.AgentName == WellKnown.AgentNames.Order && e.Reason == "sipariş_nedeni");
     }
 
     [Fact]

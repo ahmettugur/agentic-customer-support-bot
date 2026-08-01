@@ -210,6 +210,22 @@ internal sealed class WorkflowRunner
             yield break;
         }
 
+        if (ct.IsCancellationRequested)
+        {
+            // İstemci bağlantıyı kesti (durdur butonu, sekme kapatma, yeni sohbet) —
+            // RunAsync'in (non-streaming) aynı durumdaki davranışıyla simetrik: workflow'a
+            // kooperatif dur sinyali gönderilir, gereksiz finalize/persist adımları
+            // (RewriteRoutingMessageAsync, TurnFinalizer) atlanır. Önceden bu dal burada
+            // eksikti — linked token expire oluyor, enumeration sessizce bitiyordu ama
+            // StopRunGracefullyAsync hiç çağrılmıyordu.
+            await StopRunGracefullyAsync(run);
+            _approvalGate.ProcessPendingEscalations(st.Trace, query, "");
+            _traceStore.Complete(st.Trace.TraceId,
+                terminationReason: "cancelled",
+                error: "İstek çağıran tarafından iptal edildi.");
+            yield break;
+        }
+
         if (workflowError != null)
         {
             _approvalGate.ProcessPendingEscalations(st.Trace, query, "");
@@ -396,6 +412,10 @@ internal sealed class WorkflowRunner
                     if (planning != null) st.Trace.Planning = planning;
 
                     var reasonings = WorkflowResponseExtractor.ExtractSpecialistReasonings(pendingMessages);
+
+                    if (completedId.StartsWith(WellKnown.AgentNames.HumanHandoff, StringComparison.OrdinalIgnoreCase))
+                        EnsureHumanHandoffEscalation(pendingMessages, reasonings);
+
                     if (reasonings.Count > 0) MergeSpecialistReasonings(st.Trace, reasonings);
                 }
 
@@ -439,6 +459,13 @@ internal sealed class WorkflowRunner
                 if (planning != null) st.Trace.Planning = planning;
                 var specialistReasonings =
                     WorkflowResponseExtractor.ExtractSpecialistReasoningsFromOutput(output);
+
+                // Son güvence: turun tamamı burada görünür durumda — ExecutorCompletedEvent
+                // aşamasında bir sebeple (event kaçırma, sıralama) yakalanamamışsa bile
+                // human_handoff_tool çağrısı burada da kontrol edilir.
+                if (output.Data is IEnumerable<ChatMessage> allMessages)
+                    EnsureHumanHandoffEscalation(allMessages, specialistReasonings);
+
                 if (specialistReasonings.Count > 0)
                     MergeSpecialistReasonings(st.Trace, specialistReasonings);
                 if (planning != null || specialistReasonings.Count > 0)
@@ -465,6 +492,65 @@ internal sealed class WorkflowRunner
             if (idx >= 0) trace.SpecialistReasonings[idx] = r;
             else trace.SpecialistReasonings.Add(r);
         }
+    }
+
+    private const string HandoffFallbackSummary =
+        "Kullanıcı insan temsilciyle görüşme talep etti (human_handoff_tool çağrıldı).";
+
+    private const string HandoffFallbackReason =
+        "human_handoff_tool çağrıldı ama LLM reflection'ı needs_escalation olarak " +
+        "işaretlemedi; sistem garantisiyle düzeltildi.";
+
+    /// <summary>
+    /// Kullanıcı açıkça insan temsilci istediğinde (human_handoff_tool çağrıldığında)
+    /// eskalasyonun oluşmasını KOD İLE garanti eder — LLM'in postToolReflection'da
+    /// <c>status=needs_escalation</c> yazmayı unutmasına/yanlış yazmasına bağlı kalmaz.
+    /// EscalationPolicyService.ProcessPendingEscalations SADECE bu status'e bakarak
+    /// eskalasyon açtığı için, model reflection JSON'unu yanlış üretirse kullanıcı
+    /// "temsilci bağlanacak" mesajı alır ama admin panelinde hiçbir kayıt oluşmazdı —
+    /// sessiz bir başarısızlık noktasıydı.
+    ///
+    /// <para>
+    /// Bilinçli takas: garanti TEK YÖNLÜ. Tool çağrısı da bir LLM kararı olduğu için, model
+    /// handoff tool'unu gereksiz çağırıp reflection'da "aslında gerek yok" dese bile kayıt
+    /// açılır. Müşteri desteğinde kaçırılan eskalasyonun maliyeti fazladan eskalasyondan
+    /// yüksek olduğu ve admin panelinde dismiss yolu bulunduğu için bu yön tercih edildi.
+    /// Panelde gürültü artarsa bakılacak ilk yer burasıdır.
+    /// </para>
+    ///
+    /// <para>
+    /// Bilinen kapsam dışı köşe: HumanHandoffAgent turu uçuş hâlindeyken workflow timeout'a
+    /// takılırsa tool çağrısı hiç tamamlanmadığı için FunctionCallContent oluşmaz ve garanti
+    /// devreye giremez.
+    /// </para>
+    /// </summary>
+    private static void EnsureHumanHandoffEscalation(
+        IEnumerable<ChatMessage> messages, List<SpecialistReasoning> reasonings)
+    {
+        if (!WorkflowResponseExtractor.ContainsHumanHandoffToolCall(messages)) return;
+
+        var existing = reasonings.FirstOrDefault(r =>
+            string.Equals(r.AgentName, WellKnown.AgentNames.HumanHandoff, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is null)
+        {
+            existing = new SpecialistReasoning { AgentName = WellKnown.AgentNames.HumanHandoff };
+            reasonings.Add(existing);
+        }
+
+        var reflection = existing.PostToolReflection ??= new PostToolReflection();
+
+        // LLM zaten doğru işaretlemiş — hiçbir alanına dokunma.
+        if (reflection.StatusEnum == TaskCompletionStatus.NeedsEscalation) return;
+
+        // Yerinde düzelt (remove+replace DEĞİL): PreToolCheck, ResultConfidence, ResultNotes
+        // ve MissingContext gibi LLM'in ürettiği diğer alanlar korunur. MissingContext ayrıca
+        // fonksiyonel — EscalationPolicyService bunu doğrudan EscalationRequest'e kopyalıyor,
+        // dolayısıyla kaybı admin'in gördüğü kayıttan "hangi bilgi eksikti"yi silerdi.
+        reflection.Status = WellKnown.TaskStatuses.NeedsEscalation;
+        reflection.TaskComplete = false;
+        if (string.IsNullOrWhiteSpace(reflection.Summary)) reflection.Summary = HandoffFallbackSummary;
+        if (string.IsNullOrWhiteSpace(reflection.HandoffReason)) reflection.HandoffReason = HandoffFallbackReason;
     }
 
     /// <summary>

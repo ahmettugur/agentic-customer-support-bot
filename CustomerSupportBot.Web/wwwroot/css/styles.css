@@ -771,6 +771,25 @@ body {
     font-style: italic;
 }
 
+.btn-cancel-pending {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 5px 12px;
+    background: transparent;
+    color: #78350f;
+    border: 1px solid #fcd34d;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-family);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--transition);
+}
+
+.btn-cancel-pending:hover {
+    background: rgba(245, 158, 11, 0.12);
+}
+
 .dot-pending {
     display: inline-block;
     width: 8px;
@@ -1163,6 +1182,14 @@ body {
 /* ═══════════════════════════════════════════════
    AGENT STATUS CHIP
    ═══════════════════════════════════════════════ */
+.agent-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    margin-bottom: 4px;
+}
+
 .agent-chip {
     display: inline-flex;
     align-items: center;
@@ -1402,6 +1429,14 @@ body {
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
     margin-top: var(--space-2);
+}
+
+.input-wrapper button.btn-stop-stream {
+    background: #ef4444;
+}
+
+.input-wrapper button.btn-stop-stream:hover {
+    background: #dc2626;
 }
 
 /* ═══════════════════════════════════════════════
@@ -2117,6 +2152,13 @@ body {
     color: #fde68a;
 }
 [data-theme="dark"] .human-mode-banner.pending strong { color: #fde68a; }
+[data-theme="dark"] .btn-cancel-pending {
+    color: #fde68a;
+    border-color: #713f12;
+}
+[data-theme="dark"] .btn-cancel-pending:hover {
+    background: rgba(245, 158, 11, 0.18);
+}
 
 /* Tema toggle butonu — global stiller (NavMenu + AdminNavBar paylaşır) */
 .csb-theme-toggle {

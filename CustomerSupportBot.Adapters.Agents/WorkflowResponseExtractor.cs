@@ -93,6 +93,21 @@ public static class WorkflowResponseExtractor
         return results;
     }
 
+    /// <summary>
+    /// human_handoff_tool bu mesaj koleksiyonunda çağrılmış mı? Kullanıcı açıkça insan
+    /// temsilci istediğinde HumanHandoffAgent bu tool'u çağırır ve dönüşünde
+    /// <c>postToolReflection.status=needs_escalation</c> ayarlaması BEKLENİR (bkz.
+    /// human-handoff-agent.md) — ama bu tamamen LLM'in JSON'u doğru üretmesine bağlı bir
+    /// varsayımdı. Tool çağrısının kendisi (FunctionCallContent) deterministik bir sinyal;
+    /// bu yüzden eskalasyon artık buna da bakılarak garanti altına alınıyor
+    /// (bkz. WorkflowRunner.EnsureHumanHandoffEscalation).
+    /// </summary>
+    public static bool ContainsHumanHandoffToolCall(IEnumerable<ChatMessage> chatMessages) =>
+        chatMessages
+            .SelectMany(m => m.Contents)
+            .OfType<FunctionCallContent>()
+            .Any(fc => string.Equals(fc.Name, WellKnown.ToolNames.HumanHandoff, StringComparison.Ordinal));
+
     public static string RemoveTerminationMarkers(string result)
     {
         if (string.IsNullOrEmpty(result)) return result;

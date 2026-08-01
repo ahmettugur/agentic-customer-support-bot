@@ -257,4 +257,133 @@ public class CustomerSupportTeamTests
 
         afterCutoff.Should().BeEmpty();
     }
+
+    // EnsureHumanHandoffEscalation — human_handoff_tool çağrıldığında eskalasyonun LLM'in
+    // postToolReflection'ı doğru üretmesine bakılmaksızın garanti altına alındığını test eder
+    // (Bulgu C). Private static olduğu için reflection ile çağrılıyor.
+
+    private static void InvokeEnsureHumanHandoffEscalation(
+        IEnumerable<ChatMessage> messages, List<SpecialistReasoning> reasonings)
+    {
+        var method = typeof(WorkflowRunner).GetMethod(
+            "EnsureHumanHandoffEscalation", BindingFlags.Static | BindingFlags.NonPublic)!;
+        method.Invoke(null, [messages, reasonings]);
+    }
+
+    private static ChatMessage HumanHandoffToolCallMessage() =>
+        new(ChatRole.Assistant, new List<AIContent>
+        {
+            new FunctionCallContent("call1", WellKnown.ToolNames.HumanHandoff,
+                new Dictionary<string, object?> { ["reason"] = "bottan sıkıldım" })
+        });
+
+    [Fact]
+    public void EnsureHumanHandoffEscalation_ToolCalledButReflectionMissing_SynthesizesEscalation()
+    {
+        // LLM tool'u çağırdı ama reflection JSON'unu hiç üretmedi/parse edilemedi —
+        // en kırılgan senaryo.
+        var reasonings = new List<SpecialistReasoning>();
+
+        InvokeEnsureHumanHandoffEscalation([HumanHandoffToolCallMessage()], reasonings);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].AgentName.Should().Be(WellKnown.AgentNames.HumanHandoff);
+        reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.NeedsEscalation);
+    }
+
+    [Fact]
+    public void EnsureHumanHandoffEscalation_ToolCalledButWrongStatus_OverridesToNeedsEscalation()
+    {
+        // LLM tool'u çağırdı ama status'ü yanlışlıkla "done" bıraktı.
+        var reasonings = new List<SpecialistReasoning>
+        {
+            new()
+            {
+                AgentName = WellKnown.AgentNames.HumanHandoff,
+                PostToolReflection = new PostToolReflection
+                {
+                    Status = WellKnown.TaskStatuses.Done,
+                    Summary = "orijinal özet"
+                }
+            }
+        };
+
+        InvokeEnsureHumanHandoffEscalation([HumanHandoffToolCallMessage()], reasonings);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.NeedsEscalation);
+        reasonings[0].PostToolReflection!.Summary.Should().Be("orijinal özet"); // mevcut özet korunur
+    }
+
+    [Fact]
+    public void EnsureHumanHandoffEscalation_ToolCalledAndReflectionAlreadyCorrect_LeavesUnchanged()
+    {
+        var original = new SpecialistReasoning
+        {
+            AgentName = WellKnown.AgentNames.HumanHandoff,
+            PostToolReflection = new PostToolReflection
+            {
+                Status = WellKnown.TaskStatuses.NeedsEscalation,
+                HandoffReason = "orijinal neden"
+            }
+        };
+        var reasonings = new List<SpecialistReasoning> { original };
+
+        InvokeEnsureHumanHandoffEscalation([HumanHandoffToolCallMessage()], reasonings);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].Should().BeSameAs(original); // dokunulmadı
+    }
+
+    [Fact]
+    public void EnsureHumanHandoffEscalation_ToolNotCalled_NoOp()
+    {
+        var reasonings = new List<SpecialistReasoning>();
+        var msg = new ChatMessage(ChatRole.Assistant, "sipariş durumu: kargoda");
+
+        InvokeEnsureHumanHandoffEscalation([msg], reasonings);
+
+        reasonings.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EnsureHumanHandoffEscalation_StatusOverridden_PreservesSiblingFields()
+    {
+        // Düzeltme YERİNDE yapılmalı: LLM'in ürettiği diğer alanlar korunmalı.
+        // MissingContext ayrıca fonksiyonel — EscalationPolicyService bunu doğrudan
+        // EscalationRequest'e kopyalıyor (bkz. EscalationPolicyService.cs).
+        var original = new SpecialistReasoning
+        {
+            AgentName = WellKnown.AgentNames.HumanHandoff,
+            ResultConfidence = 0.91,
+            ResultNotes = "tool başarıyla çalıştı",
+            PreToolCheck = new PreToolCheck { CanProceed = true, Reasoning = "sebep mevcut" },
+            PostToolReflection = new PostToolReflection
+            {
+                Status = WellKnown.TaskStatuses.Done,   // ← yanlış status
+                TaskComplete = true,
+                Summary = "orijinal özet",
+                HandoffReason = "orijinal neden",
+                MissingContext = ["müşteri numarası", "sipariş geçmişi"]
+            }
+        };
+        var reasonings = new List<SpecialistReasoning> { original };
+
+        InvokeEnsureHumanHandoffEscalation([HumanHandoffToolCallMessage()], reasonings);
+
+        reasonings.Should().ContainSingle();
+        var r = reasonings[0];
+
+        // Düzeltilenler
+        r.PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.NeedsEscalation);
+        r.PostToolReflection.TaskComplete.Should().BeFalse();
+
+        // Korunanlar
+        r.ResultConfidence.Should().Be(0.91);
+        r.ResultNotes.Should().Be("tool başarıyla çalıştı");
+        r.PreToolCheck!.Reasoning.Should().Be("sebep mevcut");
+        r.PostToolReflection.Summary.Should().Be("orijinal özet");
+        r.PostToolReflection.HandoffReason.Should().Be("orijinal neden");
+        r.PostToolReflection.MissingContext.Should().BeEquivalentTo(["müşteri numarası", "sipariş geçmişi"]);
+    }
 }

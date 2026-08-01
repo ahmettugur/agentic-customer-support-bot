@@ -112,18 +112,38 @@
                                 <img class="avatar-img" src="images/chatbot.png" alt="Bot" />
                             </div>
                             <div class="message-content">
-                                @if (msg.IsStreaming && !string.IsNullOrEmpty(_agentName))
+                                @if (msg.IsStreaming && _agentChips.Count > 0)
                                 {
-                                    <div class="agent-chip @(_agentStatus == "done" ? "done" : "running")">
-                                        @if (_agentStatus == "done")
+                                    <div class="agent-chip-list">
+                                        @foreach (var chip in _agentChips.OrderBy(c => c.SortOrder))
                                         {
-                                            <span class="agent-chip-check">✓</span>
+                                            <div class="agent-chip @(chip.Status == "done" ? "done" : "running")">
+                                                @if (chip.Status == "done")
+                                                {
+                                                    <span class="agent-chip-check">✓</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="agent-chip-dot"></span>
+                                                }
+                                                <span class="agent-chip-text">@FriendlyAgentName(chip.Name) @(chip.Status == "done" ? "tamamlandı" : "çalışıyor…")</span>
+                                            </div>
                                         }
-                                        else
+                                    </div>
+                                }
+                                else if (!msg.IsStreaming && msg.ProcessedAgents is { Count: > 0 })
+                                {
+                                    <!-- Akış bittiğinde canlı çipler yerini bu dondurulmuş (hepsi "tamamlandı")
+                                         kopyaya bırakır — kullanıcı hangi ajanların çalıştığını yanıt
+                                         bittikten sonra da görsün diye kaybolmuyor. -->
+                                    <div class="agent-chip-list">
+                                        @foreach (var agentName in msg.ProcessedAgents)
                                         {
-                                            <span class="agent-chip-dot"></span>
+                                            <div class="agent-chip done">
+                                                <span class="agent-chip-check">✓</span>
+                                                <span class="agent-chip-text">@agentName tamamlandı</span>
+                                            </div>
                                         }
-                                        <span class="agent-chip-text">@FriendlyAgentName(_agentName) @(_agentStatus == "done" ? "tamamlandı" : "çalışıyor…")</span>
                                     </div>
                                 }
                         @if (!string.IsNullOrEmpty(msg.ReasoningText) || msg.ReasoningData.HasValue)
@@ -240,7 +260,14 @@
                 <span class="pending-text">
                     <strong>Bir müşteri temsilcisi bağlanıyor…</strong>
                     Lütfen yanıt gelene kadar bekleyin.
+                    @if (!string.IsNullOrWhiteSpace(_pendingHandoffReason))
+                    {
+                        <span class="pending-reason" title="@_pendingHandoffReason">@_pendingHandoffReason</span>
+                    }
                 </span>
+                <button class="btn-cancel-pending" @onclick="CancelPendingHandoff" title="Beklemekten vazgeç">
+                    Vazgeç
+                </button>
             </div>
         }
 
@@ -257,7 +284,7 @@
         <!-- RATING -->
         @if (_showRating && !_ratingSubmitted)
         {
-            <div class="rating-widget">
+            <div class="rating-widget" @onmouseenter="ClearRatingAutoHideTimer" @onmouseleave="StartRatingAutoHideTimer">
                 <div class="rating-widget-inner">
                     <div class="rating-widget-header">
                         <span class="rating-widget-icon">
@@ -304,7 +331,7 @@
                        @bind="_input"
                        @bind:event="oninput"
                        @onkeydown="HandleKeyDown"
-                       disabled="@(_isStreaming || _botTyping || (_pendingHandoff && !_humanMode))" />
+                       disabled="@(_isStreaming || (_pendingHandoff && !_humanMode))" />
                 <button id="voiceBtn" title="Sesli Asistan (tam pipeline)" aria-label="Sesli konuşmayı başlat" class="btn-voice">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="9" y="2" width="6" height="12" rx="3"/>
@@ -317,12 +344,23 @@
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                     </svg>
                 </button>
-                <button id="sendBtn" title="Gönder" aria-label="Mesaj gönder" @onclick="HandleSendAsync" disabled="@_isStreaming">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M3.714 3.048a.498.498 0 0 0-.683.627l2.843 7.627a2 2 0 0 1 0 1.396l-2.842 7.627a.498.498 0 0 0 .682.627l18.168-8.215a.5.5 0 0 0 0-.904z"/>
-                        <path d="M6 12h16"/>
-                    </svg>
-                </button>
+                @if (_isStreaming)
+                {
+                    <button id="stopBtn" type="button" title="Yanıtı durdur" aria-label="Yanıtı durdur" class="btn-stop-stream" @onclick="StopStreamAsync">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <rect x="6" y="6" width="12" height="12" rx="2"/>
+                        </svg>
+                    </button>
+                }
+                else
+                {
+                    <button id="sendBtn" title="Gönder" aria-label="Mesaj gönder" @onclick="HandleSendAsync">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3.714 3.048a.498.498 0 0 0-.683.627l2.843 7.627a2 2 0 0 1 0 1.396l-2.842 7.627a.498.498 0 0 0 .682.627l18.168-8.215a.5.5 0 0 0 0-.904z"/>
+                            <path d="M6 12h16"/>
+                        </svg>
+                    </button>
+                }
             </div>
             <div id="voiceStatus" class="voice-status" hidden="">
                 <span class="voice-pulse"></span>
@@ -345,6 +383,28 @@
         public JsonElement? ReasoningData { get; set; }
         public bool   IsStreaming   { get; set; }
         public List<string>? CategoryPicker { get; set; }
+
+        /// <summary>
+        /// Bu yanıtı üretirken görev alan ajanların (friendly) adları, sıralı ve
+        /// tekilleştirilmiş. Canlı çip listesi (_agentChips) response_start'ta
+        /// temizlenir; bu alan o anki içeriğin kalıcı bir kopyasıdır — yanıt
+        /// tamamlandıktan sonra da "hangi ajanlar çalıştı" izini kaybetmemek için.
+        /// </summary>
+        public List<string> ProcessedAgents { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Tekil bir ajan durum çipi. Compound query'lerde backend birden fazla
+    /// SubTask#N için ayrı ayrı "agent" event'i gönderir (bkz. DecomposedRunner) —
+    /// bunları tek bir _agentName/_agentStatus alanına yazmak paralel alt görevlerin
+    /// birbirini ezmesine sebep oluyordu; artık ajan adına göre anahtarlanmış bir
+    /// liste tutuluyor, her biri kendi çipinde görünür.
+    /// </summary>
+    private sealed class AgentChip
+    {
+        public required string Name { get; init; }
+        public string Status { get; set; } = "running";
+        public int SortOrder { get; init; }
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -362,19 +422,25 @@
     private string   _ratingFeedback    = string.Empty;
     private bool     _ratingSubmitted;
     private ChatMsg? _currentBot;
-    private string?  _agentName;
-    private string?  _agentStatus;
+    private readonly List<AgentChip> _agentChips = new();
+    private int      _agentChipSeq;
     private bool     _pendingHandoff;
     private string?  _pendingHandoffReason;
     private System.Threading.Timer? _pendingHandoffTimer;
     private System.Threading.Timer? _ratingDelayTimer;
     private System.Threading.Timer? _ratingAutoHideTimer;
+    private System.Threading.Timer? _coalesceTimer;
+    private bool     _coalescePending;
     private string   _apiBase           = string.Empty;
     private DotNetObjectReference<Chat>? _dotNetRef;
 
     // ── Markdown ──────────────────────────────────────────────────────────────
+    // DisableHtml(): asistan mesajı LLM çıktısıdır (prompt injection ile kontrol
+    // edilebilir) ve doğrudan MarkupString olarak render ediliyor — ham HTML/script
+    // geçişine izin vermek XSS'e açık kapı bırakırdı. DisableHtml, gömülü HTML
+    // etiketlerini literal metin olarak encode eder, markdown biçimlendirmesi etkilenmez.
     private static readonly Markdig.MarkdownPipeline _mdPipeline =
-        new Markdig.MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
+        new Markdig.MarkdownPipelineBuilder().UseAdvancedExtensions().DisableHtml().Build();
 
     private static MarkupString RenderMd(string text) =>
         new(Markdig.Markdown.ToHtml(text ?? "", _mdPipeline));
@@ -541,6 +607,16 @@
 
     private async Task SendChipMessage(string text) => await SendAsync(text);
 
+    /// <summary>
+    /// Kullanıcı devam eden yanıtı durdurur. __stopStream fetch'in AbortController'ını
+    /// tetikler; chat-bridge.js AbortError'ı yakalayıp OnStreamComplete'i zaten çağırıyor
+    /// (bkz. chat-bridge.js), bu yüzden burada state temizliği tekrarlanmıyor.
+    /// </summary>
+    private async Task StopStreamAsync()
+    {
+        try { await JS.InvokeVoidAsync("__stopStream"); } catch { }
+    }
+
     [JSInvokable]
     public async Task VoiceSendMessage(string text) =>
         await InvokeAsync(async () => await SendAsync(text));
@@ -563,8 +639,7 @@
             _messages.Add(new ChatMsg { Role = "user", Content = text });
             _currentBot  = new ChatMsg { Role = "assistant", IsStreaming = true };
             _messages.Add(_currentBot);
-            _agentName   = null;
-            _agentStatus = null;
+            ClearAgentChips();
             _isStreaming  = true;
             StateHasChanged();
             _ = ScrollBottomAsync();
@@ -584,6 +659,7 @@
             _currentBot = new ChatMsg { Role = "assistant", IsStreaming = true };
             _messages.Add(_currentBot);
         }
+        ClearAgentChips();
         _isStreaming = true;
         StateHasChanged();
         await ScrollBottomAsync();
@@ -630,12 +706,22 @@
                 if (jd.TryGetProperty("analysis", out var rc)) _currentBot.ReasoningText = rc.GetString() ?? _currentBot.ReasoningText;
                 break;
             case "agent":
-                _agentName   = jd.TryGetProperty("name",   out var an) ? an.GetString() : null;
-                _agentStatus = jd.TryGetProperty("status", out var as_) ? as_.GetString() : null;
+                {
+                    var name   = jd.TryGetProperty("name",   out var an) ? an.GetString() : null;
+                    var status = jd.TryGetProperty("status", out var as_) ? as_.GetString() : null;
+                    UpsertAgentChip(name, status);
+                }
                 break;
             case "response_start":
-                _agentName   = null;
-                _agentStatus = null;
+                // Yanıt akmaya başlamadan önce o ana kadarki çip listesini mesaja
+                // kalıcı olarak kopyala — canlı çipler temizlense de "hangi ajanlar
+                // çalıştı" bilgisi mesajın altında görünmeye devam etsin.
+                _currentBot.ProcessedAgents = _agentChips
+                    .OrderBy(c => c.SortOrder)
+                    .Select(c => FriendlyAgentName(c.Name))
+                    .Distinct()
+                    .ToList();
+                ClearAgentChips();
                 break;
             case "response_delta":
                 if (jd.TryGetProperty("text", out var delta)) _currentBot.Content += delta.GetString() ?? "";
@@ -643,8 +729,7 @@
             case "response_complete":
                 if (jd.TryGetProperty("text", out var full)) _currentBot.Content = full.GetString() ?? _currentBot.Content;
                 _currentBot.IsStreaming = false;
-                _agentName = null;
-                _agentStatus = null;
+                ClearAgentChips();
                 break;
             case "human_joined":
                 // Bot yanıtı streaming sırasında admin devralırsa bot balonunu kaldır
@@ -662,9 +747,13 @@
                 // Backend, hint'i ürettiği anki ambient ajanla etiketler (bkz. UiHintEmitter).
                 // Bu, hint kuyruğa girip gecikmeli tüketildiğinde (ör. paralel alt görevler)
                 // ekrandaki ajan çipinin yanlış (o an aktif olan başka) ajanı göstermesini önler.
+                // Ajan zaten çip listesinde varsa durumuna dokunulmaz — sadece daha önce hiç
+                // görülmemişse (running) eklenir.
                 if (jd.TryGetProperty("agent", out var hintAgent) && hintAgent.ValueKind == JsonValueKind.String)
                 {
-                    _agentName = hintAgent.GetString();
+                    var hintAgentName = hintAgent.GetString();
+                    if (!string.IsNullOrEmpty(hintAgentName) && !_agentChips.Any(c => c.Name == hintAgentName))
+                        UpsertAgentChip(hintAgentName, "running");
                 }
                 if (_currentBot is not null
                     && jd.TryGetProperty("kind", out var hintKind)
@@ -683,10 +772,22 @@
                 _currentBot.IsStreaming = false;
                 break;
         }
-        StateHasChanged();
-        // İçerik büyüten event'lerde scroll'u takip ettir
-        if (type is "response_delta" or "response_complete" or "reasoning_delta" or "reasoning_complete")
-            _ = ScrollBottomAsync();
+
+        if (type is "response_delta" or "reasoning_delta")
+        {
+            // Token başına ayrı StateHasChanged + JS interop scroll yerine kısa bir
+            // pencerede (60ms) toplayıp tek render + tek scroll yap — hızlı streaming
+            // sırasında her karakter için tam Blazor render döngüsü + JS geçişi
+            // hissedilir bir yavaşlık yaratıyordu.
+            ScheduleCoalescedRender();
+        }
+        else
+        {
+            CancelCoalescedRender();
+            StateHasChanged();
+            if (type is "response_complete" or "reasoning_complete")
+                _ = ScrollBottomAsync();
+        }
     }
 
     [JSInvokable]
@@ -809,8 +910,8 @@
         _ratingFeedback      = string.Empty;
         _ratingSubmitted     = false;
         ClearRatingAutoHideTimer();
-        _agentName           = null;
-        _agentStatus         = null;
+        CancelCoalescedRender();
+        ClearAgentChips();
         ClearPendingHandoffTimer();
         ClearRatingDelayTimer();
         _pendingHandoff      = false;
@@ -857,6 +958,24 @@
         _pendingHandoffTimer = null;
     }
 
+    /// <summary>
+    /// Kullanıcı temsilci beklemekten vazgeçtiğinde çağrılır — sunucudaki eskalasyon
+    /// kaydını kapatmaz (o admin'in elinde), sadece istemci tarafında input'u yeniden
+    /// açar. Eğer bir temsilci daha sonra bağlanırsa "human_joined" event'i zaten
+    /// _pendingHandoff'u tekrar false yapıp devralmayı normal şekilde gösterecektir.
+    /// </summary>
+    private void CancelPendingHandoff()
+    {
+        ClearPendingHandoffTimer();
+        _pendingHandoff = false;
+        _pendingHandoffReason = null;
+        _messages.Add(new ChatMsg
+        {
+            Role    = "system",
+            Content = "Beklemekten vazgeçtiniz. Sohbete devam edebilirsiniz; bir temsilci daha sonra bağlanırsa bilgilendirileceksiniz."
+        });
+    }
+
     private void StartRatingDelayTimer()
     {
         ClearRatingDelayTimer();
@@ -898,13 +1017,54 @@
                 });
             }
             catch { }
-        }, null, TimeSpan.FromSeconds(5), System.Threading.Timeout.InfiniteTimeSpan);
+        }, null, TimeSpan.FromSeconds(18), System.Threading.Timeout.InfiniteTimeSpan);
     }
 
     private void ClearRatingAutoHideTimer()
     {
         _ratingAutoHideTimer?.Dispose();
         _ratingAutoHideTimer = null;
+    }
+
+    // ── Ajan çip listesi ──────────────────────────────────────────────────────
+    private void UpsertAgentChip(string? name, string? status)
+    {
+        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(status)) return;
+        var existing = _agentChips.FirstOrDefault(c => c.Name == name);
+        if (existing != null) existing.Status = status;
+        else _agentChips.Add(new AgentChip { Name = name, Status = status, SortOrder = _agentChipSeq++ });
+    }
+
+    private void ClearAgentChips()
+    {
+        _agentChips.Clear();
+        _agentChipSeq = 0;
+    }
+
+    // ── response_delta / reasoning_delta render coalescing ──────────────────────
+    private void ScheduleCoalescedRender()
+    {
+        if (_coalescePending) return;
+        _coalescePending = true;
+        _coalesceTimer?.Dispose();
+        _coalesceTimer = new System.Threading.Timer(async _ =>
+        {
+            _coalescePending = false;
+            try
+            {
+                await InvokeAsync(StateHasChanged);
+                await ScrollBottomAsync();
+            }
+            catch (ObjectDisposedException) { }
+            catch (TaskCanceledException) { }
+        }, null, TimeSpan.FromMilliseconds(60), System.Threading.Timeout.InfiniteTimeSpan);
+    }
+
+    private void CancelCoalescedRender()
+    {
+        _coalesceTimer?.Dispose();
+        _coalesceTimer = null;
+        _coalescePending = false;
     }
 
     private static string GetCategoryIcon(string category)
@@ -925,24 +1085,33 @@
         return "🏷️";
     }
 
+    // Tek doğruluk kaynağı: agent adı → Türkçe etiket. Daha önce chat-bridge.js
+    // (sesli mod) kendi kopyasını elle senkron tutuyordu ve HumanHandoffAgent case'i
+    // eksikti — bu drift'i önlemek için JS artık bu sözlüğü GetAgentNameMap() ile
+    // JSInterop üzerinden bir kez çekip cache'liyor (bkz. chat-bridge.js __chatSetup).
+    private static readonly Dictionary<string, string> _agentNameMap = new()
+    {
+        ["PlanningAgent"]     = "Planlama Ajanı",
+        ["ProductAgent"]      = "Ürün Ajanı",
+        ["OrderAgent"]        = "Sipariş Ajanı",
+        ["ComplaintAgent"]    = "Şikayet Ajanı",
+        ["HumanHandoffAgent"] = "Müşteri Temsilcisi",
+        ["ResponseAgent"]     = "Yanıt Ajanı",
+        ["Orchestrator"]      = "Orkestratör",
+    };
+
     private static string FriendlyAgentName(string id)
     {
         // Workflow executor id'leri "<AjanAdı>_<guid>" biçiminde gelir
         // (AIAgentExtensions.GetDescriptiveId) — eşleşme için guid soneki atılır.
         var baseName = id.Contains('_') ? id[..id.IndexOf('_')] : id;
-        return baseName switch
-        {
-            "PlanningAgent"      => "Planlama Ajanı",
-            "ProductAgent"       => "Ürün Ajanı",
-            "OrderAgent"         => "Sipariş Ajanı",
-            "ComplaintAgent"     => "Şikayet Ajanı",
-            "HumanHandoffAgent"  => "Müşteri Temsilcisi",
-            "ResponseAgent"      => "Yanıt Ajanı",
-            "Orchestrator"       => "Orkestratör",
-            _ when id.StartsWith("SubTask#") => $"Alt Görev {id[8..]}",
-            _ => baseName
-        };
+        if (_agentNameMap.TryGetValue(baseName, out var friendly)) return friendly;
+        return baseName.StartsWith("SubTask#") ? $"Alt Görev {baseName[8..]}" : baseName;
     }
+
+    [JSInvokable]
+    public static Task<Dictionary<string, string>> GetAgentNameMap() =>
+        Task.FromResult(_agentNameMap);
 
     private async Task ScrollBottomAsync()
     {
@@ -956,6 +1125,7 @@
         ClearPendingHandoffTimer();
         ClearRatingDelayTimer();
         ClearRatingAutoHideTimer();
+        CancelCoalescedRender();
         try { await JS.InvokeVoidAsync("__stopStream"); } catch { }
         if (_dotNetRef is not null)
         {
