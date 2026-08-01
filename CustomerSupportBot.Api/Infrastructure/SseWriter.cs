@@ -49,14 +49,4 @@ internal static class SseWriter
         await response.WriteAsync(sb.ToString(), ct);
         await response.Body.FlushAsync(ct);
     }
-
-    /// <summary>
-    /// Anonymous object'ten "text" property'sini reflection ile okur.
-    /// StreamEvent.Data anonim tip olduğu için JSON round-trip yerine direkt erişim.
-    /// </summary>
-    public static string GetTextFromAnon(object data)
-    {
-        var prop = data.GetType().GetProperty("text");
-        return prop?.GetValue(data) as string ?? "";
-    }
 }

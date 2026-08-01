@@ -112,11 +112,9 @@ public sealed class ChatPortService : IChatPort
         await foreach (var evt in _team.RunStreamingAsync(query, history, session, reasoningResult, ct))
         {
             yield return evt;
-            if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is not null)
+            if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is TextDeltaPayload { Text.Length: > 0 } delta)
             {
-                var text = TryExtractText(evt.Data);
-                if (!string.IsNullOrEmpty(text))
-                    responseBuilder.Append(text);
+                responseBuilder.Append(delta.Text);
             }
         }
 
@@ -145,16 +143,4 @@ public sealed class ChatPortService : IChatPort
         }
     }
 
-    private static string? TryExtractText(object data)
-    {
-        try
-        {
-            var json = System.Text.Json.JsonSerializer.Serialize(data);
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("text", out var textProp))
-                return textProp.GetString();
-        }
-        catch { /* ignore */ }
-        return null;
-    }
 }

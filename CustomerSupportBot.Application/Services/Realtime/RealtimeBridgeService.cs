@@ -243,10 +243,9 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
             await foreach (var evt in _team.RunStreamingAsync(safeQuery, history, session, finalReasoning, ct))
             {
                 await ForwardStreamEventAsync(channel, evt, ct);
-                if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is not null)
+                if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is TextDeltaPayload { Text.Length: > 0 } delta)
                 {
-                    var text = TryExtractText(evt.Data);
-                    if (!string.IsNullOrEmpty(text)) responseBuilder.Append(text);
+                    responseBuilder.Append(delta.Text);
                 }
             }
 
@@ -275,14 +274,4 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
     private static Task ForwardStreamEventAsync(IBrowserChannel channel, StreamEvent evt, CancellationToken ct)
         => channel.SendJsonAsync(new { type = evt.Type, data = evt.Data }, ct);
 
-    private static string? TryExtractText(object data)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(JsonSerializer.Serialize(data));
-            if (doc.RootElement.TryGetProperty("text", out var prop)) return prop.GetString();
-        }
-        catch { /* ignore */ }
-        return null;
-    }
 }

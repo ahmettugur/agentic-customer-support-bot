@@ -15,6 +15,15 @@ public record StreamEvent(string Type, object? Data);
 /// </summary>
 public sealed record SessionEventPayload(string SessionId);
 
+/// <summary>
+/// <see cref="StreamEventTypes.ResponseDelta"/> ve <see cref="StreamEventTypes.ReasoningDelta"/>
+/// event'lerinin payload'ı. Önceden anonim <c>new { text = ... }</c> nesneleri kullanılıyordu ve
+/// aggregator'lar (ChatPortService, RealtimeBridgeService, WorkflowResponseExtractor) bunu JSON
+/// round-trip veya reflection ile okumak zorunda kalıyordu — rename'de sessizce boş string
+/// dönerlerdi. Bu record aynı JSON şekli (camelCase → "text") üretir, tipli okumaya izin verir.
+/// </summary>
+public sealed record TextDeltaPayload(string Text);
+
 /// <summary>Tanımlı event tipleri — tip güvenliği için sabitler.</summary>
 public static class StreamEventTypes
 {

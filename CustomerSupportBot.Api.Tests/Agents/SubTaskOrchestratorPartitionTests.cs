@@ -13,8 +13,8 @@ public class SubTaskOrchestratorPartitionTests
         MaxDegreeOfParallelism = 4
     };
 
-    private static SubTask Sub(int order, string agent, string desc = "x") =>
-        new() { Order = order, TargetAgent = agent, Description = desc };
+    private static SubTask Sub(int order, string agent, string desc = "x", string intent = "") =>
+        new() { Order = order, TargetAgent = agent, Description = desc, Intent = intent };
 
     [Fact]
     public void Partition_Empty_ReturnsEmpty() =>
@@ -132,5 +132,58 @@ public class SubTaskOrchestratorPartitionTests
     public void IsReadOnly_OrderAgent_False()
     {
         DefaultOpts.IsReadOnly(Sub(1, WellKnown.AgentNames.Order)).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(WellKnown.Intents.OrderInquiry)]
+    [InlineData(WellKnown.Intents.OrderListing)]
+    public void IsReadOnly_OrderAgentWithReadOnlyIntent_True(string intent)
+    {
+        DefaultOpts.IsReadOnly(Sub(1, WellKnown.AgentNames.Order, intent: intent)).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(WellKnown.Intents.OrderCreation)]
+    [InlineData(WellKnown.Intents.OrderCancellation)]
+    [InlineData(WellKnown.Intents.ReturnRequest)]
+    public void IsReadOnly_OrderAgentWithWriteIntent_False(string intent)
+    {
+        DefaultOpts.IsReadOnly(Sub(1, WellKnown.AgentNames.Order, intent: intent)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Partition_TwoOrderStatusQueries_SingleParallelGroup()
+    {
+        // Gerçek kullanıcı senaryosu: "1042 ve 1043 numaralı siparişlerin durumu ne?"
+        // İkisi de OrderAgent + sipariş_sorgulama — artık paralel çalışmalı.
+        var subs = new[]
+        {
+            Sub(1, WellKnown.AgentNames.Order, intent: WellKnown.Intents.OrderInquiry),
+            Sub(2, WellKnown.AgentNames.Order, intent: WellKnown.Intents.OrderInquiry)
+        };
+
+        var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
+
+        groups.Should().HaveCount(1);
+        groups[0].Parallel.Should().BeTrue();
+        groups[0].Items.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Partition_OrderInquiryThenOrderCancellation_TwoGroups()
+    {
+        // Sorgu (read) sonra iptal (write) — yan-etkili adımdan önce/sonra sıralama
+        // korunmalı, ikisi tek paralel gruba alınmamalı.
+        var subs = new[]
+        {
+            Sub(1, WellKnown.AgentNames.Order, intent: WellKnown.Intents.OrderInquiry),
+            Sub(2, WellKnown.AgentNames.Order, intent: WellKnown.Intents.OrderCancellation)
+        };
+
+        var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
+
+        groups.Should().HaveCount(2);
+        groups[0].Parallel.Should().BeTrue();
+        groups[1].Parallel.Should().BeFalse();
     }
 }

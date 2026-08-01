@@ -1,6 +1,7 @@
 // Tests/Agents/WorkflowResponseExtractorOutputTests.cs
 // WorkflowOutputEvent ile çalışan extractor metodları.
 using CustomerSupportBot.Adapters.Agents;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -227,16 +228,9 @@ public class WorkflowResponseExtractorOutputTests
     // ExtractDeltaText
 
     [Fact]
-    public void ExtractDeltaText_ObjectWithoutTextProperty_ReturnsEmpty()
+    public void ExtractDeltaText_NotATextDeltaPayload_ReturnsEmpty()
     {
         var data = new { other = "x" };
-        WorkflowResponseExtractor.ExtractDeltaText(data).Should().Be("");
-    }
-
-    [Fact]
-    public void ExtractDeltaText_TextNull_ReturnsEmpty()
-    {
-        var data = new { text = (string?)null };
         WorkflowResponseExtractor.ExtractDeltaText(data).Should().Be("");
     }
 

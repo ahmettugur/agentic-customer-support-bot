@@ -2,6 +2,7 @@
 // MAF workflow output event'lerinden anlamlı veri çıkaran yardımcı sınıf.
 
 using System.Text.RegularExpressions;
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using Microsoft.Agents.AI.Workflows;
@@ -41,9 +42,16 @@ public static class WorkflowResponseExtractor
     }
 
     public static PlanningResult? ExtractPlanningFromOutput(WorkflowOutputEvent output)
-    {
-        if (output.Data is not IEnumerable<ChatMessage> chatMessages) return null;
+        => output.Data is IEnumerable<ChatMessage> chatMessages ? ExtractPlanning(chatMessages) : null;
 
+    /// <summary>
+    /// PlanningAgent mesajını herhangi bir <see cref="ChatMessage"/> koleksiyonundan çıkarır.
+    /// Hem final <see cref="WorkflowOutputEvent"/> hem de ara <c>ExecutorCompletedEvent.Data</c>
+    /// (aynı şekle sahip pending-state listesi) üzerinde çalışır — böylece plan/eskalasyon
+    /// bilgisi workflow tamamlanmadan da (timeout/hata durumunda) elde edilebilir.
+    /// </summary>
+    public static PlanningResult? ExtractPlanning(IEnumerable<ChatMessage> chatMessages)
+    {
         var planningMsg = chatMessages
             .FirstOrDefault(m => m.AuthorName == WellKnown.AgentNames.Planning
                                  || (m.Text?.Contains($"\"{WellKnown.JsonProperties.SelectedAgent}\"",
@@ -52,10 +60,17 @@ public static class WorkflowResponseExtractor
     }
 
     public static List<SpecialistReasoning> ExtractSpecialistReasoningsFromOutput(WorkflowOutputEvent output)
+        => output.Data is IEnumerable<ChatMessage> chatMessages
+            ? ExtractSpecialistReasonings(chatMessages)
+            : new List<SpecialistReasoning>();
+
+    /// <summary>
+    /// Specialist reasoning JSON'larını herhangi bir <see cref="ChatMessage"/> koleksiyonundan
+    /// çıkarır — bkz. <see cref="ExtractPlanning"/> için aynı ara-durum gerekçesi.
+    /// </summary>
+    public static List<SpecialistReasoning> ExtractSpecialistReasonings(IEnumerable<ChatMessage> chatMessages)
     {
         var results = new List<SpecialistReasoning>();
-        if (output.Data is not IEnumerable<ChatMessage> chatMessages) return results;
-
         var specialistNames = new HashSet<string>(WellKnown.AgentNames.Specialists, StringComparer.OrdinalIgnoreCase);
 
         foreach (var msg in chatMessages)
@@ -163,12 +178,8 @@ public static class WorkflowResponseExtractor
         }
     }
 
-    public static string ExtractDeltaText(object? data)
-    {
-        if (data == null) return string.Empty;
-        var prop = data.GetType().GetProperty("text");
-        return prop?.GetValue(data)?.ToString() ?? string.Empty;
-    }
+    public static string ExtractDeltaText(object? data) =>
+        data is TextDeltaPayload payload ? payload.Text : string.Empty;
 
     public static bool IsInternalWorkflowExecutor(string executorId)
     {

@@ -1,5 +1,6 @@
 // Tests/Agents/WorkflowResponseExtractorTests.cs
 using CustomerSupportBot.Adapters.Agents;
+using CustomerSupportBot.Application.Ports.Inbound;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 
@@ -106,9 +107,9 @@ public class WorkflowResponseExtractorTests
     }
 
     [Fact]
-    public void ExtractDeltaText_AnonymousObject_ReadsTextProperty()
+    public void ExtractDeltaText_TextDeltaPayload_ReadsText()
     {
-        var data = new { text = "hello" };
+        var data = new TextDeltaPayload("hello");
         WorkflowResponseExtractor.ExtractDeltaText(data).Should().Be("hello");
     }
 

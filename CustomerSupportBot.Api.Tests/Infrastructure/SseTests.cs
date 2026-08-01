@@ -55,19 +55,6 @@ public class SseWriterTests
         body.Length.Should().Be(0);
     }
 
-    [Fact]
-    public void GetTextFromAnon_ReturnsTextProperty()
-    {
-        var data = new { text = "merhaba" };
-        SseWriter.GetTextFromAnon(data).Should().Be("merhaba");
-    }
-
-    [Fact]
-    public void GetTextFromAnon_NoTextProperty_ReturnsEmpty()
-    {
-        var data = new { other = "x" };
-        SseWriter.GetTextFromAnon(data).Should().Be("");
-    }
 }
 
 public class SseForwarderTests

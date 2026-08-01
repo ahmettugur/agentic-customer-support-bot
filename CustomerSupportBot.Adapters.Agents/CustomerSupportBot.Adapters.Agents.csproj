@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="CustomerSupportBot.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Hexagonal: Domain modelleri ve Application port'ları -->
     <ProjectReference Include="..\CustomerSupportBot.Domain\CustomerSupportBot.Domain.csproj" />
     <ProjectReference Include="..\CustomerSupportBot.Application\CustomerSupportBot.Application.csproj" />

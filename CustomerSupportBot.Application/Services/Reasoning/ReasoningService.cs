@@ -119,14 +119,14 @@ public class ReasoningService : IReasoningPort
                 {
                     var chunkText = pendingChunks.ToString();
                     pendingChunks.Clear();
-                    yield return new StreamEvent(StreamEventTypes.ReasoningDelta, new { text = chunkText });
+                    yield return new StreamEvent(StreamEventTypes.ReasoningDelta, new TextDeltaPayload(chunkText));
                     lastEmit = DateTimeOffset.UtcNow;
                     await Task.Delay(minInterval, ct);
                 }
             }
 
             if (pendingChunks.Length > 0)
-                yield return new StreamEvent(StreamEventTypes.ReasoningDelta, new { text = pendingChunks.ToString() });
+                yield return new StreamEvent(StreamEventTypes.ReasoningDelta, new TextDeltaPayload(pendingChunks.ToString()));
         }
 
         var fullText = buffer.ToString();
