@@ -1,10 +1,11 @@
 <!doctype html>
 <html lang="tr">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Mimarisi — Agentic Customer Support Bot</title>
-<!--
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Mimarisi — Agentic Customer Support Bot</title>
+  <!--
   docs/agent-architecture.html
 
   Sistemin görsel haritası — ajan katmanı + sesli kanal, model katmanı, operasyonel
@@ -16,915 +17,1715 @@
 
   Ajan/tool matrisinin sapmaması PromptContractTests + WellKnownTests ile korunur.
 -->
-<style>
-  :root {
-    --ground:#FAFAFC; --ground-2:#F1F2F6; --ink:#0E1216; --ink-2:#39424E; --ink-3:#6B7684;
-    --rule:#DCDFE7; --rule-strong:#C3C8D4;
-    --accent:#B06A12; --accent-soft:#FBF1E0;
-    --read:#0F766E;  --read-soft:#E3F2F0;
-    --write:#A93553; --write-soft:#FBE7EC;
-    --shadow:0 1px 2px rgba(14,18,22,.05), 0 8px 24px -16px rgba(14,18,22,.28);
-    --mono: ui-monospace,"SF Mono","JetBrains Mono","Cascadia Mono",Menlo,Consolas,monospace;
-    --sans: ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
+  <style>
     :root {
-      --ground:#0E1216; --ground-2:#161C23; --ink:#E8EBF0; --ink-2:#B2BCC9; --ink-3:#7C8796;
-      --rule:#232C36; --rule-strong:#33404E;
-      --accent:#E0A458; --accent-soft:#2A1F10;
-      --read:#4FBFAE; --read-soft:#10241F;
-      --write:#E0778F; --write-soft:#2A141B;
-      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+      --ground: #FAFAFC;
+      --ground-2: #F1F2F6;
+      --ink: #0E1216;
+      --ink-2: #39424E;
+      --ink-3: #6B7684;
+      --rule: #DCDFE7;
+      --rule-strong: #C3C8D4;
+      --accent: #B06A12;
+      --accent-soft: #FBF1E0;
+      --read: #0F766E;
+      --read-soft: #E3F2F0;
+      --write: #A93553;
+      --write-soft: #FBE7EC;
+      --shadow: 0 1px 2px rgba(14, 18, 22, .05), 0 8px 24px -16px rgba(14, 18, 22, .28);
+      --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+      --sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     }
-  }
-  :root[data-theme="dark"] {
-    --ground:#0E1216; --ground-2:#161C23; --ink:#E8EBF0; --ink-2:#B2BCC9; --ink-3:#7C8796;
-    --rule:#232C36; --rule-strong:#33404E; --accent:#E0A458; --accent-soft:#2A1F10;
-    --read:#4FBFAE; --read-soft:#10241F; --write:#E0778F; --write-soft:#2A141B;
-    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
-  }
-  :root[data-theme="light"] {
-    --ground:#FAFAFC; --ground-2:#F1F2F6; --ink:#0E1216; --ink-2:#39424E; --ink-3:#6B7684;
-    --rule:#DCDFE7; --rule-strong:#C3C8D4; --accent:#B06A12; --accent-soft:#FBF1E0;
-    --read:#0F766E; --read-soft:#E3F2F0; --write:#A93553; --write-soft:#FBE7EC;
-    --shadow:0 1px 2px rgba(14,18,22,.05), 0 8px 24px -16px rgba(14,18,22,.28);
-  }
 
-  *{box-sizing:border-box}
-  html{-webkit-text-size-adjust:100%}
-  body{
-    margin:0; background:var(--ground); color:var(--ink);
-    font-family:var(--sans); font-size:16px; line-height:1.65;
-    -webkit-font-smoothing:antialiased;
-  }
-  img{max-width:100%}
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ground: #0E1216;
+        --ground-2: #161C23;
+        --ink: #E8EBF0;
+        --ink-2: #B2BCC9;
+        --ink-3: #7C8796;
+        --rule: #232C36;
+        --rule-strong: #33404E;
+        --accent: #E0A458;
+        --accent-soft: #2A1F10;
+        --read: #4FBFAE;
+        --read-soft: #10241F;
+        --write: #E0778F;
+        --write-soft: #2A141B;
+        --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+      }
+    }
 
-  .wrap{max-width:1140px;margin:0 auto;padding:0 24px 96px;display:grid;grid-template-columns:1fr;gap:0}
-  @media (min-width:1000px){.wrap{grid-template-columns:200px minmax(0,1fr);gap:48px;padding-top:8px}}
+    :root[data-theme="dark"] {
+      --ground: #0E1216;
+      --ground-2: #161C23;
+      --ink: #E8EBF0;
+      --ink-2: #B2BCC9;
+      --ink-3: #7C8796;
+      --rule: #232C36;
+      --rule-strong: #33404E;
+      --accent: #E0A458;
+      --accent-soft: #2A1F10;
+      --read: #4FBFAE;
+      --read-soft: #10241F;
+      --write: #E0778F;
+      --write-soft: #2A141B;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+    }
 
-  /* theme toggle */
-  .theme-btn{
-    position:fixed; top:16px; right:16px; z-index:50;
-    font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
-    background:var(--ground-2); color:var(--ink-2); border:1px solid var(--rule-strong);
-    border-radius:4px; padding:6px 10px; cursor:pointer; box-shadow:var(--shadow);
-  }
-  .theme-btn:hover{color:var(--accent); border-color:var(--accent)}
+    :root[data-theme="light"] {
+      --ground: #FAFAFC;
+      --ground-2: #F1F2F6;
+      --ink: #0E1216;
+      --ink-2: #39424E;
+      --ink-3: #6B7684;
+      --rule: #DCDFE7;
+      --rule-strong: #C3C8D4;
+      --accent: #B06A12;
+      --accent-soft: #FBF1E0;
+      --read: #0F766E;
+      --read-soft: #E3F2F0;
+      --write: #A93553;
+      --write-soft: #FBE7EC;
+      --shadow: 0 1px 2px rgba(14, 18, 22, .05), 0 8px 24px -16px rgba(14, 18, 22, .28);
+    }
 
-  /* masthead */
-  .masthead{grid-column:1/-1;border-bottom:2px solid var(--ink);padding:56px 0 20px;margin-bottom:44px}
-  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
-  h1{font-family:var(--mono);font-size:clamp(26px,4.4vw,42px);font-weight:600;letter-spacing:-.02em;line-height:1.1;margin:0 0 14px;text-wrap:balance}
-  .standfirst{margin:0;max-width:62ch;color:var(--ink-2);font-size:17px}
-  .meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:22px;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
-  .meta b{color:var(--ink);font-weight:600}
+    * {
+      box-sizing: border-box
+    }
 
-  /* rail */
-  nav.rail{display:none}
-  @media (min-width:1000px){
-    nav.rail{display:block;position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow-y:auto;
-      font-family:var(--mono);font-size:12px;line-height:1.5;border-left:1px solid var(--rule);padding-left:14px}
-    nav.rail a{display:block;padding:5px 0 5px 14px;margin-left:-16px;color:var(--ink-3);text-decoration:none;border-left:2px solid transparent}
-    nav.rail a:hover,nav.rail a:focus-visible{color:var(--accent);border-left-color:var(--accent)}
-    nav.rail .n{color:var(--rule-strong);margin-right:7px}
-  }
-  main{min-width:0}
+    html {
+      -webkit-text-size-adjust: 100%
+    }
 
-  section{margin-bottom:60px;scroll-margin-top:24px}
-  h2{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:-.01em;margin:0 0 6px;display:flex;align-items:baseline;gap:12px}
-  h2 .n{font-size:12px;color:var(--accent);letter-spacing:.1em;border:1px solid var(--accent);border-radius:3px;padding:1px 6px;flex:none}
-  h3{font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:.02em;margin:30px 0 10px}
-  .lede{margin:0 0 22px;color:var(--ink-2);max-width:68ch}
-  p{max-width:68ch}
-  a{color:var(--accent)}
+    body {
+      margin: 0;
+      background: var(--ground);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
 
-  .scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--ground-2)}
-  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
-  th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--rule);vertical-align:top}
-  thead th{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);
-    font-weight:600;background:var(--ground);position:sticky;top:0;border-bottom:1px solid var(--rule-strong)}
-  tbody tr:last-child td{border-bottom:none}
-  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
-  code,.mono{font-family:var(--mono);font-size:.92em}
-  td code{background:var(--ground);border:1px solid var(--rule);border-radius:3px;padding:1px 5px}
+    img {
+      max-width: 100%
+    }
 
-  .chip{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
-    font-weight:600;padding:2px 7px;border-radius:3px;white-space:nowrap}
-  .chip-read{background:var(--read-soft);color:var(--read);border:1px solid var(--read)}
-  .chip-write{background:var(--write-soft);color:var(--write);border:1px solid var(--write)}
-  .chip-gate{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
-  .chip-none{background:var(--ground);color:var(--ink-3);border:1px solid var(--rule-strong)}
+    .wrap {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 0 24px 96px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0
+    }
 
-  .note{border:1px solid var(--rule);border-left:3px solid var(--accent);background:var(--ground-2);
-    border-radius:0 6px 6px 0;padding:14px 18px;margin:22px 0;font-size:14.5px;color:var(--ink-2);max-width:72ch}
-  .note b{color:var(--ink)}
-  .note .tag{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:5px}
+    @media (min-width:1000px) {
+      .wrap {
+        grid-template-columns: 200px minmax(0, 1fr);
+        gap: 48px;
+        padding-top: 8px
+      }
+    }
 
-  .agents{display:grid;gap:12px;grid-template-columns:1fr}
-  @media (min-width:620px){.agents{grid-template-columns:1fr 1fr}}
-  .agent{border:1px solid var(--rule);border-radius:6px;background:var(--ground-2);padding:14px 16px;box-shadow:var(--shadow)}
-  .agent header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
-  .agent h4{font-family:var(--mono);font-size:13.5px;margin:0;font-weight:600}
-  .agent p{margin:0 0 10px;font-size:13.5px;color:var(--ink-2);max-width:none}
-  .agent ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
-  .agent li{font-family:var(--mono);font-size:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-  .agent li .dot{width:5px;height:5px;border-radius:50%;flex:none}
-  .dot-read{background:var(--read)} .dot-write{background:var(--write)}
+    /* theme toggle */
+    .theme-btn {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 50;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      background: var(--ground-2);
+      color: var(--ink-2);
+      border: 1px solid var(--rule-strong);
+      border-radius: 4px;
+      padding: 6px 10px;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+    }
 
-  ol.stages{list-style:none;counter-reset:s;padding:0;margin:20px 0;display:flex;flex-direction:column;gap:2px}
-  ol.stages li{counter-increment:s;position:relative;padding:11px 0 11px 46px;border-bottom:1px solid var(--rule);
-    font-size:14.5px;color:var(--ink-2);max-width:72ch}
-  ol.stages li:last-child{border-bottom:none}
-  ol.stages li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:11px;
-    font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.06em}
-  ol.stages b{color:var(--ink);font-family:var(--mono);font-size:13px;font-weight:600}
+    .theme-btn:hover {
+      color: var(--accent);
+      border-color: var(--accent)
+    }
 
-  ul.plain{padding-left:18px;max-width:70ch;color:var(--ink-2);font-size:14.5px}
-  ul.plain li{margin-bottom:6px}
-  ul.plain b{color:var(--ink)}
+    /* masthead */
+    .masthead {
+      grid-column: 1/-1;
+      border-bottom: 2px solid var(--ink);
+      padding: 56px 0 20px;
+      margin-bottom: 44px
+    }
 
-  /* ── Diyagramlar: inline SVG (mermaid yok — harici bağımlılık sıfır) ──
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0 0 14px
+    }
+
+    h1 {
+      font-family: var(--mono);
+      font-size: clamp(26px, 4.4vw, 42px);
+      font-weight: 600;
+      letter-spacing: -.02em;
+      line-height: 1.1;
+      margin: 0 0 14px;
+      text-wrap: balance
+    }
+
+    .standfirst {
+      margin: 0;
+      color: var(--ink-2);
+      font-size: 17px
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+      margin-top: 22px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--ink-3)
+    }
+
+    .meta b {
+      color: var(--ink);
+      font-weight: 600
+    }
+
+    /* rail */
+    nav.rail {
+      display: none
+    }
+
+    @media (min-width:1000px) {
+      nav.rail {
+        display: block;
+        position: sticky;
+        top: 24px;
+        align-self: start;
+        max-height: calc(100vh - 48px);
+        overflow-y: auto;
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.5;
+        border-left: 1px solid var(--rule);
+        padding-left: 14px
+      }
+
+      nav.rail a {
+        display: block;
+        padding: 5px 0 5px 14px;
+        margin-left: -16px;
+        color: var(--ink-3);
+        text-decoration: none;
+        border-left: 2px solid transparent
+      }
+
+      nav.rail a:hover,
+      nav.rail a:focus-visible {
+        color: var(--accent);
+        border-left-color: var(--accent)
+      }
+
+      nav.rail .n {
+        color: var(--rule-strong);
+        margin-right: 7px
+      }
+    }
+
+    main {
+      min-width: 0
+    }
+
+    section {
+      margin-bottom: 60px;
+      scroll-margin-top: 24px
+    }
+
+    h2 {
+      font-family: var(--mono);
+      font-size: 19px;
+      font-weight: 600;
+      letter-spacing: -.01em;
+      margin: 0 0 6px;
+      display: flex;
+      align-items: baseline;
+      gap: 12px
+    }
+
+    h2 .n {
+      font-size: 12px;
+      color: var(--accent);
+      letter-spacing: .1em;
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+      padding: 1px 6px;
+      flex: none
+    }
+
+    h3 {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: .02em;
+      margin: 30px 0 10px
+    }
+
+    .lede {
+      margin: 0 0 22px;
+      color: var(--ink-2);
+    }
+
+    a {
+      color: var(--accent)
+    }
+
+    .scroll {
+      overflow-x: auto;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: var(--ground-2)
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 13.5px;
+      min-width: 560px
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--rule);
+      vertical-align: top
+    }
+
+    thead th {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      font-weight: 600;
+      background: var(--ground);
+      position: sticky;
+      top: 0;
+      border-bottom: 1px solid var(--rule-strong)
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none
+    }
+
+    td.num {
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap
+    }
+
+    code,
+    .mono {
+      font-family: var(--mono);
+      font-size: .92em
+    }
+
+    td code {
+      background: var(--ground);
+      border: 1px solid var(--rule);
+      border-radius: 3px;
+      padding: 1px 5px
+    }
+
+    .chip {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 3px;
+      white-space: nowrap
+    }
+
+    .chip-read {
+      background: var(--read-soft);
+      color: var(--read);
+      border: 1px solid var(--read)
+    }
+
+    .chip-write {
+      background: var(--write-soft);
+      color: var(--write);
+      border: 1px solid var(--write)
+    }
+
+    .chip-gate {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid var(--accent)
+    }
+
+    .chip-none {
+      background: var(--ground);
+      color: var(--ink-3);
+      border: 1px solid var(--rule-strong)
+    }
+
+    .note {
+      border: 1px solid var(--rule);
+      border-left: 3px solid var(--accent);
+      background: var(--ground-2);
+      border-radius: 0 6px 6px 0;
+      padding: 14px 18px;
+      margin: 22px 0;
+      font-size: 14.5px;
+      color: var(--ink-2);
+    }
+
+    .note b {
+      color: var(--ink)
+    }
+
+    .note .tag {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 5px
+    }
+
+    .agents {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr
+    }
+
+    @media (min-width:620px) {
+      .agents {
+        grid-template-columns: 1fr 1fr
+      }
+    }
+
+    .agent {
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: var(--ground-2);
+      padding: 14px 16px;
+      box-shadow: var(--shadow)
+    }
+
+    .agent header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px
+    }
+
+    .agent h4 {
+      font-family: var(--mono);
+      font-size: 13.5px;
+      margin: 0;
+      font-weight: 600
+    }
+
+    .agent p {
+      margin: 0 0 10px;
+      font-size: 13.5px;
+      color: var(--ink-2);
+      max-width: none
+    }
+
+    .agent ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px
+    }
+
+    .agent li {
+      font-family: var(--mono);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap
+    }
+
+    .agent li .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      flex: none
+    }
+
+    .dot-read {
+      background: var(--read)
+    }
+
+    .dot-write {
+      background: var(--write)
+    }
+
+    ol.stages {
+      list-style: none;
+      counter-reset: s;
+      padding: 0;
+      margin: 20px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px
+    }
+
+    ol.stages li {
+      counter-increment: s;
+      position: relative;
+      padding: 11px 0 11px 46px;
+      border-bottom: 1px solid var(--rule);
+      font-size: 14.5px;
+      color: var(--ink-2);
+    }
+
+    ol.stages li:last-child {
+      border-bottom: none
+    }
+
+    ol.stages li::before {
+      content: counter(s, decimal-leading-zero);
+      position: absolute;
+      left: 0;
+      top: 11px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: .06em
+    }
+
+    ol.stages b {
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 600
+    }
+
+    ul.plain {
+      padding-left: 18px;
+      max-width: 70ch;
+      color: var(--ink-2);
+      font-size: 14.5px
+    }
+
+    ul.plain li {
+      margin-bottom: 6px
+    }
+
+    ul.plain b {
+      color: var(--ink)
+    }
+
+    /* ── Diyagramlar: inline SVG (mermaid yok — harici bağımlılık sıfır) ──
      SVG belge içinde satır içi olduğu için CSS custom property'leri miras alır;
      böylece diyagramlar da tema ile birlikte değişir. */
-  .diagram{border:1px solid var(--rule);border-radius:6px;background:var(--ground-2);padding:18px;margin:22px 0;overflow-x:auto}
-  .diagram-cap{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:0 0 14px}
-  .diagram svg{display:block;min-width:640px;width:100%;height:auto}
+    .diagram {
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      background: var(--ground-2);
+      padding: 18px;
+      margin: 22px 0;
+      overflow-x: auto
+    }
 
-  .d-node   {fill:var(--ground); stroke:var(--rule-strong); stroke-width:1}
-  .d-accent {fill:var(--accent-soft); stroke:var(--accent); stroke-width:1.2}
-  .d-muted  {fill:var(--ground-2); stroke:var(--rule-strong); stroke-width:1; stroke-dasharray:3 3}
-  .d-band   {fill:var(--accent-soft); stroke:var(--accent); stroke-width:1; opacity:.9}
+    .diagram-cap {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin: 0 0 14px
+    }
 
-  .d-t   {fill:var(--ink); font-family:var(--mono); font-size:12px}
-  .d-t-a {fill:var(--accent); font-family:var(--mono); font-size:12px; font-weight:600}
-  .d-sub {fill:var(--ink-3); font-family:var(--mono); font-size:10px}
-  .d-lbl {fill:var(--ink-3); font-family:var(--mono); font-size:10px}
-  .d-lane{fill:var(--ink); font-family:var(--mono); font-size:11px; font-weight:600}
+    .diagram svg {
+      display: block;
+      min-width: 640px;
+      width: 100%;
+      height: auto
+    }
 
-  .d-line {stroke:var(--rule-strong); stroke-width:1.2; fill:none}
-  .d-dash {stroke:var(--rule); stroke-width:1; fill:none; stroke-dasharray:4 4}
-  .d-head {fill:var(--rule-strong)}
+    .d-node {
+      fill: var(--ground);
+      stroke: var(--rule-strong);
+      stroke-width: 1
+    }
 
-  footer.end{grid-column:1/-1;border-top:1px solid var(--rule);margin-top:20px;padding-top:18px;
-    font-family:var(--mono);font-size:11.5px;color:var(--ink-3);line-height:1.8}
-  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
-</style>
+    .d-accent {
+      fill: var(--accent-soft);
+      stroke: var(--accent);
+      stroke-width: 1.2
+    }
+
+    .d-muted {
+      fill: var(--ground-2);
+      stroke: var(--rule-strong);
+      stroke-width: 1;
+      stroke-dasharray: 3 3
+    }
+
+    .d-band {
+      fill: var(--accent-soft);
+      stroke: var(--accent);
+      stroke-width: 1;
+      opacity: .9
+    }
+
+    .d-t {
+      fill: var(--ink);
+      font-family: var(--mono);
+      font-size: 12px
+    }
+
+    .d-t-a {
+      fill: var(--accent);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600
+    }
+
+    .d-sub {
+      fill: var(--ink-3);
+      font-family: var(--mono);
+      font-size: 10px
+    }
+
+    .d-lbl {
+      fill: var(--ink-3);
+      font-family: var(--mono);
+      font-size: 10px
+    }
+
+    .d-lane {
+      fill: var(--ink);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600
+    }
+
+    .d-line {
+      stroke: var(--rule-strong);
+      stroke-width: 1.2;
+      fill: none
+    }
+
+    .d-dash {
+      stroke: var(--rule);
+      stroke-width: 1;
+      fill: none;
+      stroke-dasharray: 4 4
+    }
+
+    .d-head {
+      fill: var(--rule-strong)
+    }
+
+    footer.end {
+      grid-column: 1/-1;
+      border-top: 1px solid var(--rule);
+      margin-top: 20px;
+      padding-top: 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--ink-3);
+      line-height: 1.8
+    }
+
+    @media (prefers-reduced-motion:reduce) {
+      * {
+        animation: none !important;
+        transition: none !important
+      }
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      border-radius: 2px
+    }
+  </style>
 </head>
+
 <body>
 
-<button class="theme-btn" id="themeBtn" type="button" aria-label="Temayı değiştir">tema</button>
+  <button class="theme-btn" id="themeBtn" type="button" aria-label="Temayı değiştir">tema</button>
 
-<div class="wrap">
+  <div class="wrap">
 
-  <header class="masthead">
-    <p class="eyebrow">Agentic Customer Support Bot · Mimari Referans</p>
-    <h1>Sistem mimarisi: ajanlar, kontroller ve güvenlik sınırları</h1>
-    <p class="standfirst">
-      Altı ajanın nasıl sıraya girdiği, hangi tool'ların hangi ajana bağlı olduğu, insan
-      onayının akışı nerede durdurduğu; ayrıca sesli kanal, model katmanı, SLA gözcüsü,
-      telemetri/maliyet ve kalite döngüsü — tamamı kaynak koddan çıkarılmış ve doğrulanmıştır.
-    </p>
-    <div class="meta">
-      <span><b>6</b> ajan</span>
-      <span><b>10</b> tool</span>
-      <span><b>4</b> HITL onay kapısı</span>
-      <span><b>3</b> routing stratejisi</span>
-      <span><b>2</b> sesli kanal</span>
-      <span><b>23</b> değerlendirme senaryosu</span>
-      <span>Microsoft Agent Framework <b>1.15.0</b></span>
-    </div>
-  </header>
-
-  <nav class="rail" aria-label="İçindekiler">
-    <a href="#akis"><span class="n">01</span>İstek yaşam döngüsü</a>
-    <a href="#ajanlar"><span class="n">02</span>Ajanlar ve tool'lar</a>
-    <a href="#baglam"><span class="n">02b</span>Bağlam kurulumu</a>
-    <a href="#routing"><span class="n">03</span>Routing</a>
-    <a href="#orkestrasyon"><span class="n">04</span>Orkestrasyon</a>
-    <a href="#hitl"><span class="n">05</span>HITL onay kapısı</a>
-    <a href="#handoff"><span class="n">06</span>Handoff &amp; eskalasyon</a>
-    <a href="#guards"><span class="n">07</span>Guard'lar</a>
-    <a href="#garanti"><span class="n">08</span>Kod garantileri</a>
-    <a href="#ses"><span class="n">09</span>Sesli konuşma</a>
-    <a href="#model"><span class="n">10</span>Model katmanı</a>
-    <a href="#operasyon"><span class="n">11</span>Operasyonel kontroller</a>
-    <a href="#kalite"><span class="n">12</span>Kalite döngüsü</a>
-  </nav>
-
-  <main>
-
-    <!-- 01 -->
-    <section id="akis">
-      <h2><span class="n">01</span>İstek yaşam döngüsü</h2>
-      <p class="lede">
-        Bir mesaj workflow'a ulaşmadan önce iki deterministik aşamadan geçer. Bu sıra önemli:
-        LLM'e gitmeden önce girdi filtrelenir, sonra entity'ler veritabanına karşı doğrulanır —
-        ajanlar bu doğrulanmış sonucu yeniden hesaplamaz, devralır.
+    <header class="masthead">
+      <p class="eyebrow">Agentic Customer Support Bot · Mimari Referans</p>
+      <h1>Sistem mimarisi: ajanlar, kontroller ve güvenlik sınırları</h1>
+      <p class="standfirst">
+        Altı ajanın nasıl sıraya girdiği, hangi tool'ların hangi ajana bağlı olduğu, insan
+        onayının akışı nerede durdurduğu; ayrıca sesli kanal, model katmanı, SLA gözcüsü,
+        telemetri/maliyet ve kalite döngüsü — tamamı kaynak koddan çıkarılmış ve doğrulanmıştır.
       </p>
-
-      <div class="diagram">
-        <p class="diagram-cap">Uçtan uca akış</p>
-        <svg viewBox="0 0 980 210" role="img" aria-label="İstek yaşam döngüsü akış diyagramı">
-          <defs>
-            <marker id="a1" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-              <path d="M0,0 L8,4 L0,8 z" class="d-head"/>
-            </marker>
-          </defs>
-
-          <!-- ana zincir -->
-          <rect x="8"   y="22" width="104" height="44" rx="22" class="d-node"/>
-          <text x="60"  y="49" text-anchor="middle" class="d-t">Kullanıcı</text>
-
-          <rect x="146" y="22" width="126" height="44" rx="5" class="d-accent"/>
-          <text x="209" y="42" text-anchor="middle" class="d-t-a">InputGuard</text>
-          <text x="209" y="56" text-anchor="middle" class="d-sub">deterministik</text>
-
-          <rect x="306" y="22" width="150" height="44" rx="5" class="d-node"/>
-          <text x="381" y="42" text-anchor="middle" class="d-t">ReasoningService</text>
-          <text x="381" y="56" text-anchor="middle" class="d-sub">+ EntityVerifier</text>
-
-          <!-- karar: bileşik sorgu -->
-          <polygon points="560,20 646,44 560,68 474,44" class="d-node"/>
-          <text x="560" y="41" text-anchor="middle" class="d-sub">bileşik</text>
-          <text x="560" y="53" text-anchor="middle" class="d-sub">sorgu?</text>
-
-          <rect x="684" y="22" width="136" height="44" rx="5" class="d-node"/>
-          <text x="752" y="49" text-anchor="middle" class="d-t">WorkflowRunner</text>
-
-          <rect x="854" y="22" width="118" height="44" rx="5" class="d-accent"/>
-          <text x="913" y="42" text-anchor="middle" class="d-t-a">GroupChat</text>
-          <text x="913" y="56" text-anchor="middle" class="d-sub">6 ajan</text>
-
-          <!-- ana oklar -->
-          <path d="M112,44 H146"  class="d-line" marker-end="url(#a1)"/>
-          <path d="M272,44 H306"  class="d-line" marker-end="url(#a1)"/>
-          <path d="M456,44 H474"  class="d-line" marker-end="url(#a1)"/>
-          <path d="M646,44 H684"  class="d-line" marker-end="url(#a1)"/>
-          <text x="665" y="36" text-anchor="middle" class="d-lbl">hayır</text>
-          <path d="M820,44 H854"  class="d-line" marker-end="url(#a1)"/>
-
-          <!-- red dalı -->
-          <path d="M209,66 V96" class="d-line" marker-end="url(#a1)"/>
-          <rect x="152" y="98" width="114" height="30" rx="15" class="d-muted"/>
-          <text x="209" y="118" text-anchor="middle" class="d-sub">400 — reddedildi</text>
-
-          <!-- DB doğrulama -->
-          <path d="M381,66 V96" class="d-line" marker-end="url(#a1)"/>
-          <path d="M340,104 a41,9 0 0 1 82,0 v18 a41,9 0 0 1 -82,0 z" class="d-node"/>
-          <path d="M340,104 a41,9 0 0 0 82,0" class="d-line"/>
-          <text x="381" y="120" text-anchor="middle" class="d-sub">DB</text>
-
-          <!-- compound dalı -->
-          <path d="M560,68 V112 H684" class="d-line" marker-end="url(#a1)"/>
-          <text x="600" y="86" text-anchor="middle" class="d-lbl">evet</text>
-          <rect x="474" y="140" width="172" height="34" rx="5" class="d-node"/>
-          <text x="560" y="161" text-anchor="middle" class="d-t">DecomposedRunner</text>
-          <path d="M560,112 V140" class="d-line" marker-end="url(#a1)"/>
-          <text x="654" y="128" class="d-lbl">alt görev başına yeniden</text>
-
-          <!-- geri dönüş -->
-          <path d="M913,66 V180 H120 V66" class="d-dash" marker-end="url(#a1)"/>
-          <rect x="742" y="164" width="132" height="32" rx="5" class="d-node"/>
-          <text x="808" y="184" text-anchor="middle" class="d-t">TurnFinalizer</text>
-          <text x="440" y="176" class="d-lbl">yanıt + trace kapanışı</text>
-        </svg>
+      <div class="meta">
+        <span><b>6</b> ajan</span>
+        <span><b>10</b> tool</span>
+        <span><b>4</b> HITL onay kapısı</span>
+        <span><b>3</b> routing stratejisi</span>
+        <span><b>2</b> sesli kanal</span>
+        <span><b>23</b> değerlendirme senaryosu</span>
+        <span>Microsoft Agent Framework <b>1.15.0</b></span>
       </div>
-
-      <ol class="stages">
-        <li><b>Oturum çözümleme</b> — <code>GetOrCreate(sessionId)</code> ve konuşma geçmişi yüklenir. Streaming yolda istemciye önce bir <code>session</code> event'i gönderilir.</li>
-        <li><b>Canlı devralma kontrolü</b> — oturum <em>Human</em> modundaysa (admin sohbeti devralmış) bot <b>hiç çalışmaz</b>: mesaj geçmişe yazılır, admin paneline iletilir ve akış burada biter.</li>
-        <li><b>InputGuard</b> — uzunluk, görünmez/RTL karakter, enjeksiyon kalıpları, HTML/script, ID enumeration. Reddedilirse istek LLM'e hiç ulaşmaz. Dört giriş noktasının (chat, chat/stream, realtime bridge, realtime native) hepsinde çalışır.</li>
-        <li><b>ReasoningService</b> — niyet, güven skoru, adımlar ve alt görevler üretir. İçinde <code>EntityVerifier</code> sorgu + geçmiş + oturum durumu + DB'yi birleştirip <code>VerifiedEntities</code>'i kurar; <code>ReasoningSanityChecker</code> tutarsızlıkları işaretler.</li>
-        <li><b>ApprovalContext scope</b> — <code>sessionId</code>/<code>traceId</code>/sorgu ambient bir kapsama yazılır. HITL onay kaydının hangi oturuma ve konuşmaya ait olduğunu bu taşır; tool katmanı workflow'dan parametre almadan buradan okur.</li>
-        <li><b>CustomerSupportTeam</b> — bileşik sorgu mu tek sorgu mu olduğuna karar verip <code>DecomposedRunner</code> veya <code>WorkflowRunner</code>'a yönlendiren ince kabuk.</li>
-        <li><b>WorkflowRunner</b> — system mesajlarını kurar (bağlam &rarr; reasoning özeti &rarr; entity hint &rarr; geçmiş &rarr; replan notu &rarr; sorgu — bkz. <a href="#baglam">02b</a>), GroupChat workflow'unu başlatır, event akışını trace'e ve stream event'lerine çevirir.</li>
-        <li><b>TurnFinalizer</b> — eskalasyonları işler, ajan ziyaretlerini kaydeder, epizodik belleği ve müşteri profilini günceller, trace'i kapatır.</li>
-        <li>
-          <b>Geçmişe yazma</b> — <code>AddExchange</code> kullanıcı mesajını ve yanıtı geçmişe ekler; aynı çağrı içinde
-          <code>SessionStateExtractor</code> tur sayacını, niyeti, duygu durumunu, konuşma fazını ve ID'leri
-          <b>kalıcı oturum durumuna</b> işler.
-          <br>
-          <span style="color:var(--accent)">⚠ Bu adım workflow'dan <b>sonra</b> çalışır</span> — yani ajanlar
-          çalışırken kullanıcının o anki mesajı henüz geçmişte değildir. Bağlam sağlayıcılarının güncel sorguyu
-          geçmişten okuyamamasının sebebi budur; sorgu onlara ayrı parametre olarak geçirilir.
-        </li>
-      </ol>
-
-      <div class="note">
-        <span class="tag">Streaming farkı</span>
-        <code>/chat/stream</code> aynı adımları izler, ek olarak her aşamayı SSE event'i olarak yayınlar
-        (<code>session</code>, reasoning delta'ları, ajan durumları, yanıt delta'ları) ve tur sonunda
-        duygu-durum uyarısı üretebilir. Adım sırası ve geçmişe yazmanın en sonda olması aynıdır.
-      </div>
-
-      <div class="note">
-        <span class="tag">Tek doğruluk kaynağı</span>
-        <b>VerifiedEntities</b> bir kez hesaplanır ve ileriye taşınır. Aşağı akıştaki bileşenlerin ham
-        <code>IdExtractor.Extract(query)</code> ile yeniden çıkarım yapması geçmişte üç ayrı üretim
-        hatasına yol açtı; artık <code>ReasoningResult.VerifiedEntities</code> devralınıyor.
-      </div>
-    </section>
-
-    <!-- 02 -->
-    <section id="ajanlar">
-      <h2><span class="n">02</span>Ajanlar ve tool'ları</h2>
-      <p class="lede">
-        Altı ajan da <code>AgentTeamFactory.CreateWorkflow()</code> içinde tek bir GroupChat'e katılımcı
-        olarak eklenir. Ayrı graph kablolaması yoktur — sırayı <code>CustomerSupportChatManager</code> belirler.
-      </p>
-
-      <div class="agents">
-        <article class="agent">
-          <header><h4>PlanningAgent</h4><span class="chip chip-none">tool yok</span></header>
-          <p>Talebi analiz eder, plan üretir, hangi uzmana gidileceğini seçer. Niyeti kendisi tespit <em>etmez</em> — ReasoningService'in kararını devralır.</p>
-        </article>
-
-        <article class="agent">
-          <header><h4>ProductAgent</h4><span class="chip chip-read">salt okunur</span></header>
-          <p>Ürün özellikleri, stok, fiyat ve kategori listeleme.</p>
-          <ul>
-            <li><span class="dot dot-read"></span>product_inquiry_tool</li>
-            <li><span class="dot dot-read"></span>product_list_tool</li>
-          </ul>
-        </article>
-
-        <article class="agent">
-          <header><h4>OrderAgent</h4><span class="chip chip-write">karma</span></header>
-          <p>Sipariş sorgulama, oluşturma, iptal ve iade. Sistemdeki tek karma ajan: hem okuyan hem yazan tool'lara sahip.</p>
-          <ul>
-            <li><span class="dot dot-read"></span>order_status_tool</li>
-            <li><span class="dot dot-read"></span>get_last_order_tool</li>
-            <li><span class="dot dot-read"></span>get_all_orders_tool</li>
-            <li><span class="dot dot-write"></span>order_placement_tool <span class="chip chip-gate">onay</span></li>
-            <li><span class="dot dot-write"></span>order_cancel_tool <span class="chip chip-gate">onay</span></li>
-            <li><span class="dot dot-write"></span>return_request_tool <span class="chip chip-gate">onay</span></li>
-          </ul>
-        </article>
-
-        <article class="agent">
-          <header><h4>ComplaintAgent</h4><span class="chip chip-write">yan etkili</span></header>
-          <p>Şikayet kaydı oluşturur. Tek tool'u da onay kapısından geçer.</p>
-          <ul>
-            <li><span class="dot dot-write"></span>complaint_registration_tool <span class="chip chip-gate">onay</span></li>
-          </ul>
-        </article>
-
-        <article class="agent">
-          <header><h4>HumanHandoffAgent</h4><span class="chip chip-none">yan etkisiz</span></header>
-          <p>Kullanıcı açıkça temsilci istediğinde devreye girer. Somut iş yapmaz — eskalasyon kaydı açılmasını tetikler. DB'ye dokunmadığı için onay gerektirmez.</p>
-          <ul>
-            <li><span class="dot dot-read"></span>human_handoff_tool</li>
-          </ul>
-        </article>
-
-        <article class="agent">
-          <header><h4>ResponseAgent</h4><span class="chip chip-none">tool yok</span></header>
-          <p>Uzman çıktılarını kullanıcıya yönelik nihai yanıta çevirir, <code>TERMINATE: reason=…</code> ekler ve self-critique JSON'u üretir. Yalnızca bunun token'ları kullanıcıya akıtılır.</p>
-        </article>
-      </div>
-
-      <h3>Tool matrisi</h3>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Tool</th><th>Sahibi</th><th>DB</th><th>Admin onayı</th></tr></thead>
-          <tbody>
-            <tr><td><code>product_inquiry_tool</code></td><td>ProductAgent</td><td><span class="chip chip-read">okur</span></td><td>—</td></tr>
-            <tr><td><code>product_list_tool</code></td><td>ProductAgent</td><td><span class="chip chip-read">okur</span></td><td>—</td></tr>
-            <tr><td><code>order_status_tool</code></td><td>OrderAgent</td><td><span class="chip chip-read">okur</span></td><td>—</td></tr>
-            <tr><td><code>get_last_order_tool</code></td><td>OrderAgent</td><td><span class="chip chip-read">okur</span></td><td>—</td></tr>
-            <tr><td><code>get_all_orders_tool</code></td><td>OrderAgent</td><td><span class="chip chip-read">okur</span></td><td>—</td></tr>
-            <tr><td><code>order_placement_tool</code></td><td>OrderAgent</td><td><span class="chip chip-write">yazar</span></td><td><span class="chip chip-gate">zorunlu</span></td></tr>
-            <tr><td><code>order_cancel_tool</code></td><td>OrderAgent</td><td><span class="chip chip-write">yazar</span></td><td><span class="chip chip-gate">zorunlu</span></td></tr>
-            <tr><td><code>return_request_tool</code></td><td>OrderAgent</td><td><span class="chip chip-write">yazar</span></td><td><span class="chip chip-gate">zorunlu</span></td></tr>
-            <tr><td><code>complaint_registration_tool</code></td><td>ComplaintAgent</td><td><span class="chip chip-write">yazar</span></td><td><span class="chip chip-gate">zorunlu</span></td></tr>
-            <tr><td><code>human_handoff_tool</code></td><td>HumanHandoffAgent</td><td>—</td><td>—</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p style="font-size:13.5px;color:var(--ink-3);margin-top:10px">
-        Veritabanına yazan dört tool'un dördü de onay kapısından geçer — kapsamda boşluk yok.
-        Eşleme tek kaynakta tutulur: <code>WellKnown.SideEffectToolOwners</code>.
-      </p>
-    </section>
-
-    <!-- 02b -->
-    <section id="baglam">
-      <h2><span class="n">02b</span>Ajanlar ne görüyor — bağlam kurulumu</h2>
-      <p class="lede">
-        Ajanlar yalnızca kullanıcının mesajını almaz. <code>WorkflowRunner.BuildWorkflowMessagesAsync</code>
-        workflow'a gidecek mesaj listesini şu <b>sırayla</b> kurar; ilk dördü system rolündedir,
-        yani ajanlar bunları talimat ağırlığında görür.
-      </p>
-
-      <div class="scroll">
-        <table>
-          <thead><tr><th>#</th><th>Mesaj</th><th>Rol</th><th>Kaynağı</th></tr></thead>
-          <tbody>
-            <tr><td class="num">1</td><td>Oturum bağlamı</td><td>System</td><td><code>ContextPipeline</code> — aşağıdaki sağlayıcıların birleşimi</td></tr>
-            <tr><td class="num">2</td><td>Reasoning özeti</td><td>System</td><td><code>BuildReasoningSummaryHint</code> — niyet, adımlar, güven</td></tr>
-            <tr><td class="num">3</td><td>Entity hint</td><td>System</td><td><code>ResolveExtractedIds</code> → <code>IdExtractor.BuildHintMessage</code></td></tr>
-            <tr><td class="num">4</td><td>Konuşma geçmişi</td><td>User/Assistant</td><td>Oturum geçmişi</td></tr>
-            <tr><td class="num">5</td><td>Replan notu <em>(varsa)</em></td><td>System</td><td>Admin "yeniden planla" tetiği — tek kullanımlık</td></tr>
-            <tr><td class="num">6</td><td>Kullanıcı sorgusu</td><td>User</td><td>Bu turun mesajı</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <h3>Bağlam sağlayıcıları (Order sırasıyla)</h3>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Order</th><th>Sağlayıcı</th><th>Ne katar</th></tr></thead>
-          <tbody>
-            <tr><td class="num">5</td><td><code>ConversationSummary</code></td><td>Geçmiş 8 mesajı aşınca LLM ile özetlenir (token tasarrufu)</td></tr>
-            <tr><td class="num">6</td><td><code>CustomerProfile</code></td><td>Kalıcı müşteri profili — sık niyetler, dil/ton tercihi, son puanlar</td></tr>
-            <tr><td class="num">7</td><td><code>SemanticMemory</code></td><td><b>Bilgi tabanı + onaylanmış dersler</b> — vektör aramayla getirilir</td></tr>
-            <tr><td class="num">10</td><td><code>CustomerContext</code></td><td>Müşterinin sipariş/şikayet özeti (DB'den)</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="note">
-        <span class="tag">Self-Improving Loop bağlantısı</span>
-        Admin panelinde <b>onaylanan</b> dersler burada devreye girer: vektör hafızaya yazılır
-        ve sonraki turlarda <code>SemanticMemory</code> sağlayıcısı kullanıcının o anki sorusuna
-        semantik yakın olanları çeker. Onaylanmamış öneriler ajanlara hiç ulaşmaz.
-        Getirilenler tur başına <code>TopK</code> ve ortak bir karakter bütçesiyle sınırlıdır.
-      </div>
-
-      <div class="note">
-        <span class="tag">Enjeksiyon savunması</span>
-        Bilgi tabanı ve ders içerikleri <code>&lt;retrieved_data&gt;</code> fence'i içine
-        sarmalanır ve kapanış etiketi nötrleştirilir. Ajan prompt'ları bu bloğun <b>veri</b>
-        olduğunu, talimat olmadığını açıkça belirtir — retrieve edilen metinde "önceki
-        talimatları yok say" gibi ifadeler geçse bile uygulanmaz.
-      </div>
-    </section>
-
-    <!-- 03 -->
-    <section id="routing">
-      <h2><span class="n">03</span>Routing — sırayı kim belirliyor</h2>
-      <p class="lede">
-        <code>CustomerSupportChatManager.SelectNextAgentAsync</code> üç stratejiyi <em>sırayla</em> dener;
-        ilk sonuç dönen kazanır. Hiçbiri eşleşmezse PlanningAgent'a düşülür (uyarı loglanır).
-      </p>
-
-      <div class="diagram">
-        <p class="diagram-cap">Karar akışı — üç strateji sırayla denenir, ilk eşleşen kazanır</p>
-        <svg viewBox="0 0 900 560" role="img" aria-label="Routing karar akış diyagramı">
-          <defs>
-            <marker id="a2" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-              <path d="M0,0 L8,4 L0,8 z" class="d-head"/>
-            </marker>
-          </defs>
-
-          <!-- giriş -->
-          <rect x="118" y="8" width="164" height="34" rx="17" class="d-node"/>
-          <text x="200" y="30" text-anchor="middle" class="d-t">Sıradaki ajan?</text>
-          <path d="M200,42 V64" class="d-line" marker-end="url(#a2)"/>
-
-          <!-- 1: FirstTurn -->
-          <polygon points="200,66 336,106 200,146 64,106" class="d-node"/>
-          <text x="200" y="100" text-anchor="middle" class="d-sub">geçmişte Planning</text>
-          <text x="200" y="114" text-anchor="middle" class="d-sub">mesajı var mı?</text>
-          <text x="60"  y="80" text-anchor="end" class="d-lbl">1 · FirstTurn</text>
-
-          <path d="M336,106 H604" class="d-line" marker-end="url(#a2)"/>
-          <text x="470" y="98" text-anchor="middle" class="d-lbl">hayır</text>
-          <rect x="606" y="88" width="172" height="36" rx="5" class="d-accent"/>
-          <text x="692" y="111" text-anchor="middle" class="d-t-a">PlanningAgent</text>
-
-          <path d="M200,146 V180" class="d-line" marker-end="url(#a2)"/>
-          <text x="212" y="166" class="d-lbl">evet</text>
-
-          <!-- 2: PlanRouting -->
-          <polygon points="200,182 336,222 200,262 64,222" class="d-node"/>
-          <text x="200" y="216" text-anchor="middle" class="d-sub">son mesaj</text>
-          <text x="200" y="230" text-anchor="middle" class="d-sub">Planning'den mi?</text>
-          <text x="60"  y="196" text-anchor="end" class="d-lbl">2 · PlanRouting</text>
-
-          <path d="M336,222 H604" class="d-line" marker-end="url(#a2)"/>
-          <text x="470" y="214" text-anchor="middle" class="d-lbl">evet</text>
-          <rect x="606" y="182" width="172" height="34" rx="5" class="d-node"/>
-          <text x="692" y="204" text-anchor="middle" class="d-t">seçilen uzman</text>
-          <text x="790" y="204" class="d-lbl">plan parse OK</text>
-
-          <path d="M692,216 V236" class="d-line" marker-end="url(#a2)"/>
-          <rect x="606" y="238" width="172" height="34" rx="5" class="d-accent"/>
-          <text x="692" y="260" text-anchor="middle" class="d-t-a">ResponseAgent</text>
-          <text x="790" y="254" class="d-lbl">parse hatası /</text>
-          <text x="790" y="267" class="d-lbl">netleştirme / bilinmeyen</text>
-
-          <path d="M200,262 V296" class="d-line" marker-end="url(#a2)"/>
-          <text x="212" y="282" class="d-lbl">hayır</text>
-
-          <!-- 3: Reflection -->
-          <polygon points="200,298 336,338 200,378 64,338" class="d-node"/>
-          <text x="200" y="332" text-anchor="middle" class="d-sub">son mesaj</text>
-          <text x="200" y="346" text-anchor="middle" class="d-sub">uzmandan mı?</text>
-          <text x="60"  y="312" text-anchor="end" class="d-lbl">3 · Reflection</text>
-
-          <path d="M336,338 H604" class="d-line" marker-end="url(#a2)"/>
-          <text x="470" y="330" text-anchor="middle" class="d-lbl">evet</text>
-          <rect x="606" y="300" width="172" height="34" rx="5" class="d-node"/>
-          <text x="692" y="322" text-anchor="middle" class="d-t">önerilen ajan</text>
-          <text x="790" y="322" class="d-lbl">handoffSuggestion</text>
-
-          <path d="M692,334 V354" class="d-line" marker-end="url(#a2)"/>
-          <rect x="606" y="356" width="172" height="34" rx="5" class="d-accent"/>
-          <text x="692" y="378" text-anchor="middle" class="d-t-a">ResponseAgent</text>
-          <text x="790" y="371" class="d-lbl">needs_escalation /</text>
-          <text x="790" y="384" class="d-lbl">eksik / tamam</text>
-
-          <!-- fallback -->
-          <path d="M200,378 V416" class="d-line" marker-end="url(#a2)"/>
-          <text x="212" y="400" class="d-lbl">hayır</text>
-          <rect x="98" y="418" width="204" height="34" rx="5" class="d-muted"/>
-          <text x="200" y="440" text-anchor="middle" class="d-sub">fallback — uyarı loglanır</text>
-          <path d="M302,435 H604" class="d-line" marker-end="url(#a2)"/>
-          <rect x="606" y="418" width="172" height="34" rx="5" class="d-accent"/>
-          <text x="692" y="440" text-anchor="middle" class="d-t-a">PlanningAgent</text>
-
-          <!-- handoff tavanı -->
-          <path d="M692,452 V488" class="d-line" marker-end="url(#a2)"/>
-          <rect x="470" y="490" width="416" height="52" rx="5" class="d-band"/>
-          <text x="678" y="510" text-anchor="middle" class="d-t-a">handoff tavanı — seçimden SONRA</text>
-          <text x="678" y="526" text-anchor="middle" class="d-sub">aynı ajana 2. devirden sonra zorla ResponseAgent</text>
-          <path d="M470,516 H300" class="d-dash"/>
-          <text x="286" y="512" text-anchor="end" class="d-lbl">tüm dallar</text>
-        </svg>
-      </div>
-
-      <div class="note">
-        <span class="tag">Handoff tavanı</span>
-        Strateji bir ajan seçtikten <b>sonra</b> devir sayacı kontrol edilir. Aynı ajana
-        <code>MaxHandoffsPerAgent</code> (varsayılan <b>2</b>) kez devredilmişse seçim geçersiz kılınır
-        ve tur zorla <b>ResponseAgent</b>'a gider — iki uzmanın birbirine top atıp sonsuz döngüye
-        girmesi böyle engellenir.
-      </div>
-
-      <h3>Turun bitişi</h3>
-      <ul class="plain">
-        <li>Son mesajda <code>TERMINATE</code> işareti varsa, veya</li>
-        <li>Son 10 mesajda aynı tool tekrar tekrar çağrıldıysa (<code>MaxDuplicateToolCalls</code>), veya</li>
-        <li><code>MaximumIterationCount</code> aşıldıysa.</li>
-      </ul>
-    </section>
-
-    <!-- 04 -->
-    <section id="orkestrasyon">
-      <h2><span class="n">04</span>Orkestrasyon — tek sorgu vs bileşik</h2>
-      <p class="lede">
-        Reasoning sonucu <em>iki veya daha fazla farklı uzmana</em> yönelen alt görev ürettiyse sorgu
-        bileşik sayılır ve her alt görev ayrı bir workflow koşusu olarak yürütülür.
-      </p>
-
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Bileşen</th><th>Sorumluluğu</th></tr></thead>
-          <tbody>
-            <tr><td><code>CustomerSupportTeam</code></td><td>Kompozisyon kökü. <code>IsCompoundQuery</code> ile ayrımı yapar, başka iş yapmaz.</td></tr>
-            <tr><td><code>SubTaskOrchestrator</code></td><td>Alt görevleri sıralar, yan-etkisiz olanları paralel gruplara böler (<code>Partition</code>), sonuçları birleştirir.</td></tr>
-            <tr><td><code>DecomposedRunner</code></td><td>Grupları yürütür; her alt görev için <code>WorkflowRunner</code>'ı yeniden çağırır.</td></tr>
-            <tr><td><code>WorkflowRunner</code></td><td>Katmanın gerçek orkestratörü: mesaj kurulumu, workflow koşusu, HITL köprüsü, trace toplama, stream event üretimi.</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="note">
-        <span class="tag">Paralellik kuralı</span>
-        Yalnızca <b>salt okunur</b> alt görevler aynı anda çalıştırılır. Yan etkili olanlar sıraya
-        alınır — sipariş oluşturma ile iptalin yarışması engellenir. Sıralama <code>Order</code>
-        alanına göre korunur, yani <em>oku &rarr; yaz &rarr; oku</em> deseni bozulmaz.
-      </div>
-    </section>
-
-    <!-- 05 -->
-    <section id="hitl">
-      <h2><span class="n">05</span>HITL — insan onay kapısı</h2>
-      <p class="lede">
-        Yan etkili tool'lar <code>ApprovalRequiredAIFunction</code> ile sarmalanır. Framework bu
-        tool'ları <em>çalıştırmadan önce</em> workflow superstep'ini duraklatır; bekleyen taraf bir
-        <code>Task</code> değil, gerçek ve checkpoint'lenebilir bir duraklama.
-      </p>
-
-      <div class="diagram">
-        <p class="diagram-cap">Onay sekansı — order_cancel_tool örneği</p>
-        <svg viewBox="0 0 940 470" role="img" aria-label="HITL onay sekans diyagramı">
-          <defs>
-            <marker id="a3" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-              <path d="M0,0 L8,4 L0,8 z" class="d-head"/>
-            </marker>
-          </defs>
-
-          <!-- yaşam çizgisi başlıkları -->
-          <rect x="14"  y="8" width="118" height="30" rx="4" class="d-node"/>
-          <text x="73"  y="28" text-anchor="middle" class="d-lane">OrderAgent</text>
-          <rect x="198" y="8" width="140" height="30" rx="4" class="d-node"/>
-          <text x="268" y="28" text-anchor="middle" class="d-lane">Framework</text>
-          <rect x="404" y="8" width="148" height="30" rx="4" class="d-node"/>
-          <text x="478" y="28" text-anchor="middle" class="d-lane">WorkflowRunner</text>
-          <rect x="618" y="8" width="132" height="30" rx="4" class="d-node"/>
-          <text x="684" y="28" text-anchor="middle" class="d-lane">ApprovalQueue</text>
-          <rect x="816" y="8" width="110" height="30" rx="4" class="d-accent"/>
-          <text x="871" y="28" text-anchor="middle" class="d-lane">Admin</text>
-
-          <!-- yaşam çizgileri -->
-          <path d="M73,38  V452" class="d-dash"/>
-          <path d="M268,38 V452" class="d-dash"/>
-          <path d="M478,38 V452" class="d-dash"/>
-          <path d="M684,38 V452" class="d-dash"/>
-          <path d="M871,38 V452" class="d-dash"/>
-
-          <!-- 1 -->
-          <path d="M73,72 H262" class="d-line" marker-end="url(#a3)"/>
-          <text x="80" y="66" class="d-sub">order_cancel_tool(orderId, reason)</text>
-
-          <!-- duraklama bandı -->
-          <rect x="196" y="88" width="360" height="46" rx="5" class="d-band"/>
-          <text x="376" y="106" text-anchor="middle" class="d-t-a">⏸ superstep duraklar</text>
-          <text x="376" y="122" text-anchor="middle" class="d-sub">RequestInfoEvent — tool ÇALIŞTIRILMAZ</text>
-          <path d="M268,134 H472" class="d-line" marker-end="url(#a3)"/>
-
-          <!-- 2 -->
-          <path d="M478,168 H678" class="d-line" marker-end="url(#a3)"/>
-          <text x="486" y="162" class="d-sub">RequestApprovalAsync(tool, argümanlar, gerekçe)</text>
-
-          <!-- 3 -->
-          <path d="M684,206 H865" class="d-line" marker-end="url(#a3)"/>
-          <text x="692" y="200" class="d-sub">SSE bildirim</text>
-
-          <!-- admin kutusu -->
-          <rect x="596" y="222" width="330" height="44" rx="5" class="d-node"/>
-          <text x="761" y="240" text-anchor="middle" class="d-sub">panelde: parametreler alan-alan,</text>
-          <text x="761" y="254" text-anchor="middle" class="d-sub">planlama gerekçesi, trace derin linki</text>
-
-          <!-- 4 -->
-          <path d="M871,296 H690" class="d-line" marker-end="url(#a3)"/>
-          <text x="864" y="290" text-anchor="end" class="d-sub">Onayla + zorunlu gerekçe / Reddet</text>
-
-          <!-- 5 -->
-          <path d="M684,334 H484" class="d-line" marker-end="url(#a3)"/>
-          <text x="676" y="328" text-anchor="end" class="d-sub">karar</text>
-
-          <!-- 6 -->
-          <path d="M478,372 H274" class="d-line" marker-end="url(#a3)"/>
-          <text x="470" y="366" text-anchor="end" class="d-sub">SendResponseAsync — superstep devam eder</text>
-
-          <!-- 7 sonuç -->
-          <path d="M268,410 H79" class="d-line" marker-end="url(#a3)"/>
-          <text x="260" y="404" text-anchor="end" class="d-sub">onaylandı: tool çalışır, JSON zarfı</text>
-          <path d="M268,442 H79" class="d-line" marker-end="url(#a3)"/>
-          <text x="260" y="436" text-anchor="end" class="d-sub">reddedildi: "Tool call invocation rejected. …" — düz metin</text>
-        </svg>
-      </div>
-
-      <ul class="plain">
-        <li><b>Zaman aşımı</b> — karar verilmezse süre sonunda otomatik reddedilir (<code>AutoApproveOnTimeout=false</code>).</li>
-        <li><b>Gerekçe zorunluluğu</b> — dört yüksek riskli tool'un onayında admin gerekçe yazmak zorundadır; karar sunucuda verilip panele <code>ReasonRequired</code> olarak bildirilir.</li>
-        <li><b>Red formatı farklıdır</b> — reddedilen çağrının sonucu JSON zarfı değil düz bir cümledir; uzman prompt'ları bunu ayrıca ele alır.</li>
-      </ul>
-    </section>
-
-    <!-- 06 -->
-    <section id="handoff">
-      <h2><span class="n">06</span>Handoff ve eskalasyon</h2>
-      <p class="lede">
-        İki farklı mekanizma sık karıştırılır: <b>handoff</b> ajanlar arası devirdir,
-        <b>eskalasyon</b> insana devirdir.
-      </p>
-
-      <div class="scroll">
-        <table>
-          <thead><tr><th></th><th>Handoff</th><th>Eskalasyon</th></tr></thead>
-          <tbody>
-            <tr><td><b>Ne</b></td><td>Bir uzmandan diğerine tur devri</td><td>Admin paneline insan müdahalesi kaydı</td></tr>
-            <tr><td><b>Tetikleyici</b></td><td><code>postToolReflection.handoffSuggestion</code></td><td><code>postToolReflection.status = needs_escalation</code></td></tr>
-            <tr><td><b>Kim işler</b></td><td><code>ReflectionRoutingStrategy</code></td><td><code>EscalationPolicyService</code></td></tr>
-            <tr><td><b>Sınır</b></td><td>Ajan başına <code>MaxHandoffsPerAgent</code></td><td>Ajan-farkındalıklı tekilleştirme</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <p style="margin-top:18px">
-        <code>HumanHandoffAgent</code> ise bunlardan ayrı bir üçüncü şeydir: kullanıcı <em>açıkça</em>
-        temsilci istediğinde PlanningAgent'ın yönlendirdiği ajandır ve çağırdığı tool eskalasyonu tetikler.
-      </p>
-    </section>
-
-    <!-- 07 -->
-    <section id="guards">
-      <h2><span class="n">07</span>Guard'lar ve limitler</h2>
-      <p class="lede">
-        Hepsi <code>WorkflowGuardOptions</code> üzerinden yapılandırılır. Aşağıdaki değerler
-        <code>appsettings.json</code>'daki <b>etkin</b> ayarlardır (sınıf varsayılanları farklı
-        olabilir — ör. <code>TimeoutSeconds</code> kodda 60, config'te 180).
-      </p>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Ayar</th><th>Varsayılan</th><th>Neyi engeller</th></tr></thead>
-          <tbody>
-            <tr><td><code>TimeoutSeconds</code></td><td class="num">180</td><td>Askıda kalan workflow; kooperatif durdurma denenir</td></tr>
-            <tr><td><code>MaxIterations</code></td><td class="num">20</td><td>Sonsuz ajan turu</td></tr>
-            <tr><td><code>MaxHandoffsPerAgent</code></td><td class="num">2</td><td>İki uzmanın birbirine top atması</td></tr>
-            <tr><td><code>MaxDuplicateToolCalls</code></td><td class="num">3</td><td>Aynı tool'un kısır döngüde tekrarı</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- 08 -->
-    <section id="garanti">
-      <h2><span class="n">08</span>LLM'e güvenilmeyen yerler</h2>
-      <p class="lede">
-        Mimarinin en önemli tercihi: güvenlik-kritik değişmezler prompt'a değil <em>koda</em> emanet
-        edilmiştir. Model yanlış JSON üretse bile bu garantiler devreye girer.
-      </p>
-
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Garanti</th><th>Ne yapar</th><th>Yön</th></tr></thead>
-          <tbody>
-            <tr><td><code>EnsureHumanHandoffEscalation</code></td><td><code>human_handoff_tool</code> çağrıldıysa durumu <code>needs_escalation</code>'a zorlar</td><td>Tek yönlü — kaçırılan eskalasyonun maliyeti fazladan eskalasyondan yüksek</td></tr>
-            <tr><td><code>EnsureSideEffectToolCompletion</code></td><td>Yazan bir tool <em>başarıyla</em> döndüyse durumu <code>done</code>'a zorlar</td><td>Tek yönlü — başarısızlık asla "tamam"a çevrilmez</td></tr>
-            <tr><td><code>EntityVerifier</code></td><td>Entity'leri DB'ye karşı doğrular; model uydurma ID kullanamaz</td><td>Doğrulama</td></tr>
-            <tr><td>HITL onay kapısı</td><td>Yazan hiçbir tool insan onayı olmadan çalışamaz</td><td>Kesin blok</td></tr>
-            <tr><td><code>RemoveTechnicalJsonBlocks</code></td><td>Reasoning/reflection JSON'unun kullanıcıya sızmasını temizler</td><td>Çıktı filtresi</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="note">
-        <span class="tag">Pratik sonuç</span>
-        Tamamen başarılı bir prompt enjeksiyonu bile veritabanına yazamaz, eskalasyon durumunu
-        uyduramaz veya doğrulanmamış bir ID kullanamaz. Enjeksiyonun kalan etkisi ikna/sosyal
-        mühendislik yüzeyiyle sınırlıdır.
-      </div>
-    </section>
-
-
-    <!-- 09 -->
-    <section id="ses">
-      <h2><span class="n">09</span>Sesli konuşma — iki ayrı kanal</h2>
-      <p class="lede">
-        OpenAI Realtime API üzerinden iki mod var ve aralarındaki fark güvenlik açısından
-        belirleyici: biri yazılı sohbetle <b>aynı</b> ajan hattını kullanır, diğeri hız için
-        onu atlar.
-      </p>
-      <div class="scroll">
-        <table>
-          <thead><tr><th></th><th>🎤 Sesli Asistan (köprü)</th><th>⚡ Hızlı Sesli (native)</th></tr></thead>
-          <tbody>
-            <tr><td><b>Model rolü</b></td><td>Yalnızca STT/TTS köprüsü — konuşmayı yorumlamaz</td><td>Modelin kendisi function calling yapar</td></tr>
-            <tr><td><b>Ajan hattı</b></td><td>Yazılı sohbetle <b>aynı</b> 6-ajanlı pipeline (reasoning, routing, HITL)</td><td>Pipeline <b>atlanır</b></td></tr>
-            <tr><td><b>Tool erişimi</b></td><td>Tümü</td><td>Yalnızca salt-okunur</td></tr>
-            <tr><td><b>Yazan tool'lar</b></td><td>HITL onayından geçer</td><td><span class="chip chip-gate">engelli</span> — model kullanıcıyı yazılı sohbete yönlendirir</td></tr>
-            <tr><td><b>Karşılığı</b></td><td>Tam yetenek, daha yavaş</td><td>Belirgin hız/maliyet kazancı, sınırlı yetenek</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="note">
-        <span class="tag">Güvenlik değişmezi korunuyor</span>
-        Native modda sipariş/iptal/iade/şikayet tool'ları <b>kod seviyesinde</b> reddedilir
-        (<code>FORBIDDEN_IN_VOICE</code>). Yani "hızlı mod" HITL kapısını delmez — yan etkili
-        her işlem, hangi kanaldan gelirse gelsin, insan onayı gerektiren yazılı hatta düşer.
-      </div>
-    </section>
-
-    <!-- 10 -->
-    <section id="model">
-      <h2><span class="n">10</span>Model katmanı — iki rol, iki sağlayıcı</h2>
-      <p class="lede">
-        Sistem tek bir modele bağlı değil: farklı işler farklı modellere, sağlayıcı ise
-        yapılandırmayla değiştirilebilir.
-      </p>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Rol</th><th>Kullanıldığı yer</th><th>Neden ayrı</th></tr></thead>
-          <tbody>
-            <tr><td><b>Reasoning modeli</b></td><td>ReasoningService — niyet, plan, alt görevler</td><td>Muhakeme ağırlıklı, <code>ReasoningEffort</code> ayarlanabilir</td></tr>
-            <tr><td><b>Sohbet modeli</b></td><td>Altı ajan + özetleme + ders çıkarma</td><td>Tool çağrısı ve doğal yanıt üretimi</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p>
-        Sağlayıcı <code>AiClientFactory</code> üzerinden <b>OpenAI</b> veya <b>Azure OpenAI</b>
-        olarak seçilir; uygulama kodu hangisinin kullanıldığını bilmez. Kalıcılık katmanı da
-        benzer şekilde InMemory/Postgres arasında değiştirilebilir.
-      </p>
-    </section>
-
-    <!-- 11 -->
-    <section id="operasyon">
-      <h2><span class="n">11</span>Operasyonel kontroller</h2>
-
-      <h3>SLA / yanıt süresi gözcüsü</h3>
-      <p class="lede">
-        Arka planda çalışan bir servis bekleyen onayları ve açık eskalasyonları periyodik
-        tarar. Amaç: insan onayı bekleyen bir işlemin sessizce askıda kalmaması.
-      </p>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>İzlenen</th><th>Uyarı</th><th>İhlal</th><th>İhlalde aksiyon</th></tr></thead>
-          <tbody>
-            <tr><td>Bekleyen onay</td><td class="num">20 sn</td><td class="num">60 sn</td><td>Otomatik <b>reddet</b> (işlem yapılmaz)</td></tr>
-            <tr><td>Açık eskalasyon</td><td class="num">60 sn</td><td class="num">180 sn</td><td>Öncelik bir kademe <b>yükseltilir</b></td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p style="font-size:13.5px;color:var(--ink-3);margin-top:10px">
-        Çok örnekli (multi-pod) kurulumda tarama dağıtık kilitle korunur — aynı kayıt iki kez işlenmez.
-      </p>
-
-      <h3>Eskalasyon kime gidiyor — beceri tabanlı yönlendirme</h3>
-      <p>
-        Eskalasyon açıldığında niyet + müşteri profilinden gerekli beceri etiketleri çıkarılır
-        ve uygun temsilci puanlanarak önerilir:
-      </p>
-      <div class="note" style="border-left-color:var(--read)">
-        <code>skor = (1 − dilAğırlığı) × beceriEşleşmesi + dilAğırlığı × dilEşleşmesi</code><br>
-        <span style="font-size:13px">Kapasitesi dolu temsilciler elenir; yük dengeleme açık olduğunda mevcut yük de hesaba katılır. Eşik altında eşleşme yoksa atama yapılmaz, kayıt atanmamış kalır.</span>
-      </div>
-
-      <h3>Telemetri ve maliyet</h3>
-      <p>
-        Tüm LLM çağrıları, ajan adımları ve tool kullanımları OpenTelemetry ile OTLP'ye
-        aktarılır (Jaeger/Prometheus/Grafana uyumlu). Ayrıca her çağrının token kullanımı
-        model bazlı fiyat tablosuyla <b>USD maliyete</b> çevrilip birikimli olarak saklanır —
-        oturum ve model kırılımında raporlanabilir.
-      </p>
-    </section>
-
-    <!-- 12 -->
-    <section id="kalite">
-      <h2><span class="n">12</span>Kalite döngüsü ve gözlemlenebilirlik</h2>
-
-      <h3>Trace &amp; Replay</h3>
-      <p>
-        Her tur bir <em>reasoning trace</em> üretir: hangi ajanlar sırayla çalıştı, hangi
-        tool'lar hangi argümanlarla çağrıldı, ne döndü, tur neden sonlandı. Replay arayüzü
-        bir turu <b>adım adım yeniden oynatır</b> — hata ayıklama ve demo için.
-      </p>
-
-      <h3>Değerlendirme (evaluation)</h3>
-      <p>
-        YAML ile tanımlı <b>23 senaryo</b> sistemi uçtan uca koşturur ve her senaryonun başarı
-        kriterlerini otomatik değerlendirir (beklenen tool çağrıldı mı, yanıt beklenen içeriği
-        kapsıyor mu, tur sayısı sınırda mı). Senaryolar tekrarlı çalıştırılabilir, böylece
-        LLM'in doğası gereği değişken çıktısı için kararlılık ölçülür.
-      </p>
-
-      <h3>Self-Improving Loop</h3>
-      <p>
-        Düşük puanlı veya hatalı turlar taranır, LLM bunlardan <b>ders önerileri</b> çıkarır.
-        Öneriler admin onayından geçmeden hiçbir etkiye sahip değildir; onaylananlar vektör
-        hafızaya yazılır ve sonraki konuşmalarda ilgili oldukları ölçüde bağlama girer
-        (bkz. <a href="#baglam">02b</a>).
-      </p>
-      <div class="note">
-        <span class="tag">Tarama manueldir</span>
-        Ders çıkarma yalnızca admin panelinden tetiklenir; zamanlanmış otomatik tarama yoktur.
-        Bu bilinçli: otomatik tarama hem LLM maliyeti üretir hem de kimsenin bakmadığı bir
-        onay kuyruğu biriktirir.
-      </div>
-
-      <h3>Kişiselleştirme</h3>
-      <p>
-        Her müşteri için kalıcı profil tutulur: sık niyetler, ilgilendiği ürünler, dil/ton
-        tercihi, son memnuniyet puanları. Profil bağlam hattı üzerinden ajanlara verilir ve
-        eskalasyon yönlendirmesinde dil eşleşmesi için de kullanılır.
-      </p>
-    </section>
-
-  </main>
-
-  <footer class="end">
-    Kaynak: AgentTeamFactory · CustomerSupportChatManager · Routing.cs · WorkflowRunner ·
-    ApprovalGateService · EscalationPolicyService · WellKnown<br>
-    İlgili dokümanlar: architecture.md · adapters-agents/ · security.md
-  </footer>
-</div>
-
-<script>
-  (function () {
-    var root = document.documentElement;
-    var btn = document.getElementById('themeBtn');
-    var saved = null;
-    try { saved = localStorage.getItem('agentDocTheme'); } catch (e) { /* storage kapalı */ }
-    if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
-
-    btn.addEventListener('click', function () {
-      var current = root.getAttribute('data-theme');
-      if (!current) {
-        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        current = prefersDark ? 'dark' : 'light';
-      }
-      var next = current === 'dark' ? 'light' : 'dark';
-      root.setAttribute('data-theme', next);
-      try { localStorage.setItem('agentDocTheme', next); } catch (e) { /* yok say */ }
-    });
-  })();
-</script>
+    </header>
+
+    <nav class="rail" aria-label="İçindekiler">
+      <a href="#akis"><span class="n">01</span>İstek yaşam döngüsü</a>
+      <a href="#ajanlar"><span class="n">02</span>Ajanlar ve tool'lar</a>
+      <a href="#baglam"><span class="n">02b</span>Bağlam kurulumu</a>
+      <a href="#routing"><span class="n">03</span>Routing</a>
+      <a href="#orkestrasyon"><span class="n">04</span>Orkestrasyon</a>
+      <a href="#hitl"><span class="n">05</span>HITL onay kapısı</a>
+      <a href="#handoff"><span class="n">06</span>Handoff &amp; eskalasyon</a>
+      <a href="#guards"><span class="n">07</span>Guard'lar</a>
+      <a href="#garanti"><span class="n">08</span>Kod garantileri</a>
+      <a href="#ses"><span class="n">09</span>Sesli konuşma</a>
+      <a href="#model"><span class="n">10</span>Model katmanı</a>
+      <a href="#operasyon"><span class="n">11</span>Operasyonel kontroller</a>
+      <a href="#kalite"><span class="n">12</span>Kalite döngüsü</a>
+    </nav>
+
+    <main>
+
+      <!-- 01 -->
+      <section id="akis">
+        <h2><span class="n">01</span>İstek yaşam döngüsü</h2>
+        <p class="lede">
+          Bir mesaj workflow'a ulaşmadan önce iki deterministik aşamadan geçer. Bu sıra önemli:
+          LLM'e gitmeden önce girdi filtrelenir, sonra entity'ler veritabanına karşı doğrulanır —
+          ajanlar bu doğrulanmış sonucu yeniden hesaplamaz, devralır.
+        </p>
+
+        <div class="diagram">
+          <p class="diagram-cap">Uçtan uca akış</p>
+          <svg viewBox="0 0 980 210" role="img" aria-label="İstek yaşam döngüsü akış diyagramı">
+            <defs>
+              <marker id="a1" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="6.5" markerHeight="6.5"
+                orient="auto-start-reverse">
+                <path d="M0,0 L8,4 L0,8 z" class="d-head" />
+              </marker>
+            </defs>
+
+            <!-- ana zincir -->
+            <rect x="8" y="22" width="104" height="44" rx="22" class="d-node" />
+            <text x="60" y="49" text-anchor="middle" class="d-t">Kullanıcı</text>
+
+            <rect x="146" y="22" width="126" height="44" rx="5" class="d-accent" />
+            <text x="209" y="42" text-anchor="middle" class="d-t-a">InputGuard</text>
+            <text x="209" y="56" text-anchor="middle" class="d-sub">deterministik</text>
+
+            <rect x="306" y="22" width="150" height="44" rx="5" class="d-node" />
+            <text x="381" y="42" text-anchor="middle" class="d-t">ReasoningService</text>
+            <text x="381" y="56" text-anchor="middle" class="d-sub">+ EntityVerifier</text>
+
+            <!-- karar: bileşik sorgu -->
+            <polygon points="560,20 646,44 560,68 474,44" class="d-node" />
+            <text x="560" y="41" text-anchor="middle" class="d-sub">bileşik</text>
+            <text x="560" y="53" text-anchor="middle" class="d-sub">sorgu?</text>
+
+            <rect x="684" y="22" width="136" height="44" rx="5" class="d-node" />
+            <text x="752" y="49" text-anchor="middle" class="d-t">WorkflowRunner</text>
+
+            <rect x="854" y="22" width="118" height="44" rx="5" class="d-accent" />
+            <text x="913" y="42" text-anchor="middle" class="d-t-a">GroupChat</text>
+            <text x="913" y="56" text-anchor="middle" class="d-sub">6 ajan</text>
+
+            <!-- ana oklar -->
+            <path d="M112,44 H146" class="d-line" marker-end="url(#a1)" />
+            <path d="M272,44 H306" class="d-line" marker-end="url(#a1)" />
+            <path d="M456,44 H474" class="d-line" marker-end="url(#a1)" />
+            <path d="M646,44 H684" class="d-line" marker-end="url(#a1)" />
+            <text x="665" y="36" text-anchor="middle" class="d-lbl">hayır</text>
+            <path d="M820,44 H854" class="d-line" marker-end="url(#a1)" />
+
+            <!-- red dalı -->
+            <path d="M209,66 V96" class="d-line" marker-end="url(#a1)" />
+            <rect x="152" y="98" width="114" height="30" rx="15" class="d-muted" />
+            <text x="209" y="118" text-anchor="middle" class="d-sub">400 — reddedildi</text>
+
+            <!-- DB doğrulama -->
+            <path d="M381,66 V96" class="d-line" marker-end="url(#a1)" />
+            <path d="M340,104 a41,9 0 0 1 82,0 v18 a41,9 0 0 1 -82,0 z" class="d-node" />
+            <path d="M340,104 a41,9 0 0 0 82,0" class="d-line" />
+            <text x="381" y="120" text-anchor="middle" class="d-sub">DB</text>
+
+            <!-- compound dalı -->
+            <path d="M560,68 V112 H684" class="d-line" marker-end="url(#a1)" />
+            <text x="600" y="86" text-anchor="middle" class="d-lbl">evet</text>
+            <rect x="474" y="140" width="172" height="34" rx="5" class="d-node" />
+            <text x="560" y="161" text-anchor="middle" class="d-t">DecomposedRunner</text>
+            <path d="M560,112 V140" class="d-line" marker-end="url(#a1)" />
+            <text x="654" y="128" class="d-lbl">alt görev başına yeniden</text>
+
+            <!-- geri dönüş -->
+            <path d="M913,66 V180 H120 V66" class="d-dash" marker-end="url(#a1)" />
+            <rect x="742" y="164" width="132" height="32" rx="5" class="d-node" />
+            <text x="808" y="184" text-anchor="middle" class="d-t">TurnFinalizer</text>
+            <text x="440" y="176" class="d-lbl">yanıt + trace kapanışı</text>
+          </svg>
+        </div>
+
+        <ol class="stages">
+          <li><b>Oturum çözümleme</b> — <code>GetOrCreate(sessionId)</code> ve konuşma geçmişi yüklenir. Streaming yolda
+            istemciye önce bir <code>session</code> event'i gönderilir.</li>
+          <li><b>Canlı devralma kontrolü</b> — oturum <em>Human</em> modundaysa (admin sohbeti devralmış) bot <b>hiç
+              çalışmaz</b>: mesaj geçmişe yazılır, admin paneline iletilir ve akış burada biter.</li>
+          <li><b>InputGuard</b> — uzunluk, görünmez/RTL karakter, enjeksiyon kalıpları, HTML/script, ID enumeration.
+            Reddedilirse istek LLM'e hiç ulaşmaz. Dört giriş noktasının (chat, chat/stream, realtime bridge, realtime
+            native) hepsinde çalışır.</li>
+          <li><b>ReasoningService</b> — niyet, güven skoru, adımlar ve alt görevler üretir. İçinde
+            <code>EntityVerifier</code> sorgu + geçmiş + oturum durumu + DB'yi birleştirip
+            <code>VerifiedEntities</code>'i kurar; <code>ReasoningSanityChecker</code> tutarsızlıkları işaretler.
+          </li>
+          <li><b>ApprovalContext scope</b> — <code>sessionId</code>/<code>traceId</code>/sorgu ambient bir kapsama
+            yazılır. HITL onay kaydının hangi oturuma ve konuşmaya ait olduğunu bu taşır; tool katmanı workflow'dan
+            parametre almadan buradan okur.</li>
+          <li><b>CustomerSupportTeam</b> — bileşik sorgu mu tek sorgu mu olduğuna karar verip
+            <code>DecomposedRunner</code> veya <code>WorkflowRunner</code>'a yönlendiren ince kabuk.
+          </li>
+          <li><b>WorkflowRunner</b> — system mesajlarını kurar (bağlam &rarr; reasoning özeti &rarr; entity hint &rarr;
+            geçmiş &rarr; replan notu &rarr; sorgu — bkz. <a href="#baglam">02b</a>), GroupChat workflow'unu başlatır,
+            event akışını trace'e ve stream event'lerine çevirir.</li>
+          <li><b>TurnFinalizer</b> — eskalasyonları işler, ajan ziyaretlerini kaydeder, epizodik belleği ve müşteri
+            profilini günceller, trace'i kapatır.</li>
+          <li>
+            <b>Geçmişe yazma</b> — <code>AddExchange</code> kullanıcı mesajını ve yanıtı geçmişe ekler; aynı çağrı
+            içinde
+            <code>SessionStateExtractor</code> tur sayacını, niyeti, duygu durumunu, konuşma fazını ve ID'leri
+            <b>kalıcı oturum durumuna</b> işler.
+            <br>
+            <span style="color:var(--accent)">⚠ Bu adım workflow'dan <b>sonra</b> çalışır</span> — yani ajanlar
+            çalışırken kullanıcının o anki mesajı henüz geçmişte değildir. Bağlam sağlayıcılarının güncel sorguyu
+            geçmişten okuyamamasının sebebi budur; sorgu onlara ayrı parametre olarak geçirilir.
+          </li>
+        </ol>
+
+        <div class="note">
+          <span class="tag">Streaming farkı</span>
+          <code>/chat/stream</code> aynı adımları izler, ek olarak her aşamayı SSE event'i olarak yayınlar
+          (<code>session</code>, reasoning delta'ları, ajan durumları, yanıt delta'ları) ve tur sonunda
+          duygu-durum uyarısı üretebilir. Adım sırası ve geçmişe yazmanın en sonda olması aynıdır.
+        </div>
+
+        <div class="note">
+          <span class="tag">Tek doğruluk kaynağı</span>
+          <b>VerifiedEntities</b> bir kez hesaplanır ve ileriye taşınır. Aşağı akıştaki bileşenlerin ham
+          <code>IdExtractor.Extract(query)</code> ile yeniden çıkarım yapması geçmişte üç ayrı üretim
+          hatasına yol açtı; artık <code>ReasoningResult.VerifiedEntities</code> devralınıyor.
+        </div>
+      </section>
+
+      <!-- 02 -->
+      <section id="ajanlar">
+        <h2><span class="n">02</span>Ajanlar ve tool'ları</h2>
+        <p class="lede">
+          Altı ajan da <code>AgentTeamFactory.CreateWorkflow()</code> içinde tek bir GroupChat'e katılımcı
+          olarak eklenir. Ayrı graph kablolaması yoktur — sırayı <code>CustomerSupportChatManager</code> belirler.
+        </p>
+
+        <div class="agents">
+          <article class="agent">
+            <header>
+              <h4>PlanningAgent</h4><span class="chip chip-none">tool yok</span>
+            </header>
+            <p>Talebi analiz eder, plan üretir, hangi uzmana gidileceğini seçer. Niyeti kendisi tespit <em>etmez</em> —
+              ReasoningService'in kararını devralır.</p>
+          </article>
+
+          <article class="agent">
+            <header>
+              <h4>ProductAgent</h4><span class="chip chip-read">salt okunur</span>
+            </header>
+            <p>Ürün özellikleri, stok, fiyat ve kategori listeleme.</p>
+            <ul>
+              <li><span class="dot dot-read"></span>product_inquiry_tool</li>
+              <li><span class="dot dot-read"></span>product_list_tool</li>
+            </ul>
+          </article>
+
+          <article class="agent">
+            <header>
+              <h4>OrderAgent</h4><span class="chip chip-write">karma</span>
+            </header>
+            <p>Sipariş sorgulama, oluşturma, iptal ve iade. Sistemdeki tek karma ajan: hem okuyan hem yazan tool'lara
+              sahip.</p>
+            <ul>
+              <li><span class="dot dot-read"></span>order_status_tool</li>
+              <li><span class="dot dot-read"></span>get_last_order_tool</li>
+              <li><span class="dot dot-read"></span>get_all_orders_tool</li>
+              <li><span class="dot dot-write"></span>order_placement_tool <span class="chip chip-gate">onay</span></li>
+              <li><span class="dot dot-write"></span>order_cancel_tool <span class="chip chip-gate">onay</span></li>
+              <li><span class="dot dot-write"></span>return_request_tool <span class="chip chip-gate">onay</span></li>
+            </ul>
+          </article>
+
+          <article class="agent">
+            <header>
+              <h4>ComplaintAgent</h4><span class="chip chip-write">yan etkili</span>
+            </header>
+            <p>Şikayet kaydı oluşturur. Tek tool'u da onay kapısından geçer.</p>
+            <ul>
+              <li><span class="dot dot-write"></span>complaint_registration_tool <span
+                  class="chip chip-gate">onay</span></li>
+            </ul>
+          </article>
+
+          <article class="agent">
+            <header>
+              <h4>HumanHandoffAgent</h4><span class="chip chip-none">yan etkisiz</span>
+            </header>
+            <p>Kullanıcı açıkça temsilci istediğinde devreye girer. Somut iş yapmaz — eskalasyon kaydı açılmasını
+              tetikler. DB'ye dokunmadığı için onay gerektirmez.</p>
+            <ul>
+              <li><span class="dot dot-read"></span>human_handoff_tool</li>
+            </ul>
+          </article>
+
+          <article class="agent">
+            <header>
+              <h4>ResponseAgent</h4><span class="chip chip-none">tool yok</span>
+            </header>
+            <p>Uzman çıktılarını kullanıcıya yönelik nihai yanıta çevirir, <code>TERMINATE: reason=…</code> ekler ve
+              self-critique JSON'u üretir. Yalnızca bunun token'ları kullanıcıya akıtılır.</p>
+          </article>
+        </div>
+
+        <h3>Tool matrisi</h3>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Tool</th>
+                <th>Sahibi</th>
+                <th>DB</th>
+                <th>Admin onayı</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>product_inquiry_tool</code></td>
+                <td>ProductAgent</td>
+                <td><span class="chip chip-read">okur</span></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>product_list_tool</code></td>
+                <td>ProductAgent</td>
+                <td><span class="chip chip-read">okur</span></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>order_status_tool</code></td>
+                <td>OrderAgent</td>
+                <td><span class="chip chip-read">okur</span></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>get_last_order_tool</code></td>
+                <td>OrderAgent</td>
+                <td><span class="chip chip-read">okur</span></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>get_all_orders_tool</code></td>
+                <td>OrderAgent</td>
+                <td><span class="chip chip-read">okur</span></td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>order_placement_tool</code></td>
+                <td>OrderAgent</td>
+                <td><span class="chip chip-write">yazar</span></td>
+                <td><span class="chip chip-gate">zorunlu</span></td>
+              </tr>
+              <tr>
+                <td><code>order_cancel_tool</code></td>
+                <td>OrderAgent</td>
+                <td><span class="chip chip-write">yazar</span></td>
+                <td><span class="chip chip-gate">zorunlu</span></td>
+              </tr>
+              <tr>
+                <td><code>return_request_tool</code></td>
+                <td>OrderAgent</td>
+                <td><span class="chip chip-write">yazar</span></td>
+                <td><span class="chip chip-gate">zorunlu</span></td>
+              </tr>
+              <tr>
+                <td><code>complaint_registration_tool</code></td>
+                <td>ComplaintAgent</td>
+                <td><span class="chip chip-write">yazar</span></td>
+                <td><span class="chip chip-gate">zorunlu</span></td>
+              </tr>
+              <tr>
+                <td><code>human_handoff_tool</code></td>
+                <td>HumanHandoffAgent</td>
+                <td>—</td>
+                <td>—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:13.5px;color:var(--ink-3);margin-top:10px">
+          Veritabanına yazan dört tool'un dördü de onay kapısından geçer — kapsamda boşluk yok.
+          Eşleme tek kaynakta tutulur: <code>WellKnown.SideEffectToolOwners</code>.
+        </p>
+      </section>
+
+      <!-- 02b -->
+      <section id="baglam">
+        <h2><span class="n">02b</span>Ajanlar ne görüyor — bağlam kurulumu</h2>
+        <p class="lede">
+          Ajanlar yalnızca kullanıcının mesajını almaz. <code>WorkflowRunner.BuildWorkflowMessagesAsync</code>
+          workflow'a gidecek mesaj listesini şu <b>sırayla</b> kurar; ilk dördü system rolündedir,
+          yani ajanlar bunları talimat ağırlığında görür.
+        </p>
+
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Mesaj</th>
+                <th>Rol</th>
+                <th>Kaynağı</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="num">1</td>
+                <td>Oturum bağlamı</td>
+                <td>System</td>
+                <td><code>ContextPipeline</code> — aşağıdaki sağlayıcıların birleşimi</td>
+              </tr>
+              <tr>
+                <td class="num">2</td>
+                <td>Reasoning özeti</td>
+                <td>System</td>
+                <td><code>BuildReasoningSummaryHint</code> — niyet, adımlar, güven</td>
+              </tr>
+              <tr>
+                <td class="num">3</td>
+                <td>Entity hint</td>
+                <td>System</td>
+                <td><code>ResolveExtractedIds</code> → <code>IdExtractor.BuildHintMessage</code></td>
+              </tr>
+              <tr>
+                <td class="num">4</td>
+                <td>Konuşma geçmişi</td>
+                <td>User/Assistant</td>
+                <td>Oturum geçmişi</td>
+              </tr>
+              <tr>
+                <td class="num">5</td>
+                <td>Replan notu <em>(varsa)</em></td>
+                <td>System</td>
+                <td>Admin "yeniden planla" tetiği — tek kullanımlık</td>
+              </tr>
+              <tr>
+                <td class="num">6</td>
+                <td>Kullanıcı sorgusu</td>
+                <td>User</td>
+                <td>Bu turun mesajı</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Bağlam sağlayıcıları (Order sırasıyla)</h3>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th>
+                <th>Sağlayıcı</th>
+                <th>Ne katar</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="num">5</td>
+                <td><code>ConversationSummary</code></td>
+                <td>Geçmiş 8 mesajı aşınca LLM ile özetlenir (token tasarrufu)</td>
+              </tr>
+              <tr>
+                <td class="num">6</td>
+                <td><code>CustomerProfile</code></td>
+                <td>Kalıcı müşteri profili — sık niyetler, dil/ton tercihi, son puanlar</td>
+              </tr>
+              <tr>
+                <td class="num">7</td>
+                <td><code>SemanticMemory</code></td>
+                <td><b>Bilgi tabanı + onaylanmış dersler</b> — vektör aramayla getirilir</td>
+              </tr>
+              <tr>
+                <td class="num">10</td>
+                <td><code>CustomerContext</code></td>
+                <td>Müşterinin sipariş/şikayet özeti (DB'den)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note">
+          <span class="tag">Self-Improving Loop bağlantısı</span>
+          Admin panelinde <b>onaylanan</b> dersler burada devreye girer: vektör hafızaya yazılır
+          ve sonraki turlarda <code>SemanticMemory</code> sağlayıcısı kullanıcının o anki sorusuna
+          semantik yakın olanları çeker. Onaylanmamış öneriler ajanlara hiç ulaşmaz.
+          Getirilenler tur başına <code>TopK</code> ve ortak bir karakter bütçesiyle sınırlıdır.
+        </div>
+
+        <div class="note">
+          <span class="tag">Enjeksiyon savunması</span>
+          Bilgi tabanı ve ders içerikleri <code>&lt;retrieved_data&gt;</code> fence'i içine
+          sarmalanır ve kapanış etiketi nötrleştirilir. Ajan prompt'ları bu bloğun <b>veri</b>
+          olduğunu, talimat olmadığını açıkça belirtir — retrieve edilen metinde "önceki
+          talimatları yok say" gibi ifadeler geçse bile uygulanmaz.
+        </div>
+      </section>
+
+      <!-- 03 -->
+      <section id="routing">
+        <h2><span class="n">03</span>Routing — sırayı kim belirliyor</h2>
+        <p class="lede">
+          <code>CustomerSupportChatManager.SelectNextAgentAsync</code> üç stratejiyi <em>sırayla</em> dener;
+          ilk sonuç dönen kazanır. Hiçbiri eşleşmezse PlanningAgent'a düşülür (uyarı loglanır).
+        </p>
+
+        <div class="diagram">
+          <p class="diagram-cap">Karar akışı — üç strateji sırayla denenir, ilk eşleşen kazanır</p>
+          <svg viewBox="0 0 900 560" role="img" aria-label="Routing karar akış diyagramı">
+            <defs>
+              <marker id="a2" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="6.5" markerHeight="6.5"
+                orient="auto-start-reverse">
+                <path d="M0,0 L8,4 L0,8 z" class="d-head" />
+              </marker>
+            </defs>
+
+            <!-- giriş -->
+            <rect x="118" y="8" width="164" height="34" rx="17" class="d-node" />
+            <text x="200" y="30" text-anchor="middle" class="d-t">Sıradaki ajan?</text>
+            <path d="M200,42 V64" class="d-line" marker-end="url(#a2)" />
+
+            <!-- 1: FirstTurn -->
+            <polygon points="200,66 336,106 200,146 64,106" class="d-node" />
+            <text x="200" y="100" text-anchor="middle" class="d-sub">geçmişte Planning</text>
+            <text x="200" y="114" text-anchor="middle" class="d-sub">mesajı var mı?</text>
+            <text x="60" y="80" text-anchor="end" class="d-lbl">1 · FirstTurn</text>
+
+            <path d="M336,106 H604" class="d-line" marker-end="url(#a2)" />
+            <text x="470" y="98" text-anchor="middle" class="d-lbl">hayır</text>
+            <rect x="606" y="88" width="172" height="36" rx="5" class="d-accent" />
+            <text x="692" y="111" text-anchor="middle" class="d-t-a">PlanningAgent</text>
+
+            <path d="M200,146 V180" class="d-line" marker-end="url(#a2)" />
+            <text x="212" y="166" class="d-lbl">evet</text>
+
+            <!-- 2: PlanRouting -->
+            <polygon points="200,182 336,222 200,262 64,222" class="d-node" />
+            <text x="200" y="216" text-anchor="middle" class="d-sub">son mesaj</text>
+            <text x="200" y="230" text-anchor="middle" class="d-sub">Planning'den mi?</text>
+            <text x="60" y="196" text-anchor="end" class="d-lbl">2 · PlanRouting</text>
+
+            <path d="M336,222 H604" class="d-line" marker-end="url(#a2)" />
+            <text x="470" y="214" text-anchor="middle" class="d-lbl">evet</text>
+            <rect x="606" y="182" width="172" height="34" rx="5" class="d-node" />
+            <text x="692" y="204" text-anchor="middle" class="d-t">seçilen uzman</text>
+            <text x="790" y="204" class="d-lbl">plan parse OK</text>
+
+            <path d="M692,216 V236" class="d-line" marker-end="url(#a2)" />
+            <rect x="606" y="238" width="172" height="34" rx="5" class="d-accent" />
+            <text x="692" y="260" text-anchor="middle" class="d-t-a">ResponseAgent</text>
+            <text x="790" y="254" class="d-lbl">parse hatası /</text>
+            <text x="790" y="267" class="d-lbl">netleştirme / bilinmeyen</text>
+
+            <path d="M200,262 V296" class="d-line" marker-end="url(#a2)" />
+            <text x="212" y="282" class="d-lbl">hayır</text>
+
+            <!-- 3: Reflection -->
+            <polygon points="200,298 336,338 200,378 64,338" class="d-node" />
+            <text x="200" y="332" text-anchor="middle" class="d-sub">son mesaj</text>
+            <text x="200" y="346" text-anchor="middle" class="d-sub">uzmandan mı?</text>
+            <text x="60" y="312" text-anchor="end" class="d-lbl">3 · Reflection</text>
+
+            <path d="M336,338 H604" class="d-line" marker-end="url(#a2)" />
+            <text x="470" y="330" text-anchor="middle" class="d-lbl">evet</text>
+            <rect x="606" y="300" width="172" height="34" rx="5" class="d-node" />
+            <text x="692" y="322" text-anchor="middle" class="d-t">önerilen ajan</text>
+            <text x="790" y="322" class="d-lbl">handoffSuggestion</text>
+
+            <path d="M692,334 V354" class="d-line" marker-end="url(#a2)" />
+            <rect x="606" y="356" width="172" height="34" rx="5" class="d-accent" />
+            <text x="692" y="378" text-anchor="middle" class="d-t-a">ResponseAgent</text>
+            <text x="790" y="371" class="d-lbl">needs_escalation /</text>
+            <text x="790" y="384" class="d-lbl">eksik / tamam</text>
+
+            <!-- fallback -->
+            <path d="M200,378 V416" class="d-line" marker-end="url(#a2)" />
+            <text x="212" y="400" class="d-lbl">hayır</text>
+            <rect x="98" y="418" width="204" height="34" rx="5" class="d-muted" />
+            <text x="200" y="440" text-anchor="middle" class="d-sub">fallback — uyarı loglanır</text>
+            <path d="M302,435 H604" class="d-line" marker-end="url(#a2)" />
+            <rect x="606" y="418" width="172" height="34" rx="5" class="d-accent" />
+            <text x="692" y="440" text-anchor="middle" class="d-t-a">PlanningAgent</text>
+
+            <!-- handoff tavanı -->
+            <path d="M692,452 V488" class="d-line" marker-end="url(#a2)" />
+            <rect x="470" y="490" width="416" height="52" rx="5" class="d-band" />
+            <text x="678" y="510" text-anchor="middle" class="d-t-a">handoff tavanı — seçimden SONRA</text>
+            <text x="678" y="526" text-anchor="middle" class="d-sub">aynı ajana 2. devirden sonra zorla
+              ResponseAgent</text>
+            <path d="M470,516 H300" class="d-dash" />
+            <text x="286" y="512" text-anchor="end" class="d-lbl">tüm dallar</text>
+          </svg>
+        </div>
+
+        <div class="note">
+          <span class="tag">Handoff tavanı</span>
+          Strateji bir ajan seçtikten <b>sonra</b> devir sayacı kontrol edilir. Aynı ajana
+          <code>MaxHandoffsPerAgent</code> (varsayılan <b>2</b>) kez devredilmişse seçim geçersiz kılınır
+          ve tur zorla <b>ResponseAgent</b>'a gider — iki uzmanın birbirine top atıp sonsuz döngüye
+          girmesi böyle engellenir.
+        </div>
+
+        <h3>Turun bitişi</h3>
+        <ul class="plain">
+          <li>Son mesajda <code>TERMINATE</code> işareti varsa, veya</li>
+          <li>Son 10 mesajda aynı tool tekrar tekrar çağrıldıysa (<code>MaxDuplicateToolCalls</code>), veya</li>
+          <li><code>MaximumIterationCount</code> aşıldıysa.</li>
+        </ul>
+      </section>
+
+      <!-- 04 -->
+      <section id="orkestrasyon">
+        <h2><span class="n">04</span>Orkestrasyon — tek sorgu vs bileşik</h2>
+        <p class="lede">
+          Reasoning sonucu <em>iki veya daha fazla farklı uzmana</em> yönelen alt görev ürettiyse sorgu
+          bileşik sayılır ve her alt görev ayrı bir workflow koşusu olarak yürütülür.
+        </p>
+
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Bileşen</th>
+                <th>Sorumluluğu</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>CustomerSupportTeam</code></td>
+                <td>Kompozisyon kökü. <code>IsCompoundQuery</code> ile ayrımı yapar, başka iş yapmaz.</td>
+              </tr>
+              <tr>
+                <td><code>SubTaskOrchestrator</code></td>
+                <td>Alt görevleri sıralar, yan-etkisiz olanları paralel gruplara böler (<code>Partition</code>),
+                  sonuçları birleştirir.</td>
+              </tr>
+              <tr>
+                <td><code>DecomposedRunner</code></td>
+                <td>Grupları yürütür; her alt görev için <code>WorkflowRunner</code>'ı yeniden çağırır.</td>
+              </tr>
+              <tr>
+                <td><code>WorkflowRunner</code></td>
+                <td>Katmanın gerçek orkestratörü: mesaj kurulumu, workflow koşusu, HITL köprüsü, trace toplama, stream
+                  event üretimi.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note">
+          <span class="tag">Paralellik kuralı</span>
+          Yalnızca <b>salt okunur</b> alt görevler aynı anda çalıştırılır. Yan etkili olanlar sıraya
+          alınır — sipariş oluşturma ile iptalin yarışması engellenir. Sıralama <code>Order</code>
+          alanına göre korunur, yani <em>oku &rarr; yaz &rarr; oku</em> deseni bozulmaz.
+        </div>
+      </section>
+
+      <!-- 05 -->
+      <section id="hitl">
+        <h2><span class="n">05</span>HITL — insan onay kapısı</h2>
+        <p class="lede">
+          Yan etkili tool'lar <code>ApprovalRequiredAIFunction</code> ile sarmalanır. Framework bu
+          tool'ları <em>çalıştırmadan önce</em> workflow superstep'ini duraklatır; bekleyen taraf bir
+          <code>Task</code> değil, gerçek ve checkpoint'lenebilir bir duraklama.
+        </p>
+
+        <div class="diagram">
+          <p class="diagram-cap">Onay sekansı — order_cancel_tool örneği</p>
+          <svg viewBox="0 0 940 470" role="img" aria-label="HITL onay sekans diyagramı">
+            <defs>
+              <marker id="a3" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="6.5" markerHeight="6.5"
+                orient="auto-start-reverse">
+                <path d="M0,0 L8,4 L0,8 z" class="d-head" />
+              </marker>
+            </defs>
+
+            <!-- yaşam çizgisi başlıkları -->
+            <rect x="14" y="8" width="118" height="30" rx="4" class="d-node" />
+            <text x="73" y="28" text-anchor="middle" class="d-lane">OrderAgent</text>
+            <rect x="198" y="8" width="140" height="30" rx="4" class="d-node" />
+            <text x="268" y="28" text-anchor="middle" class="d-lane">Framework</text>
+            <rect x="404" y="8" width="148" height="30" rx="4" class="d-node" />
+            <text x="478" y="28" text-anchor="middle" class="d-lane">WorkflowRunner</text>
+            <rect x="618" y="8" width="132" height="30" rx="4" class="d-node" />
+            <text x="684" y="28" text-anchor="middle" class="d-lane">ApprovalQueue</text>
+            <rect x="816" y="8" width="110" height="30" rx="4" class="d-accent" />
+            <text x="871" y="28" text-anchor="middle" class="d-lane">Admin</text>
+
+            <!-- yaşam çizgileri -->
+            <path d="M73,38  V452" class="d-dash" />
+            <path d="M268,38 V452" class="d-dash" />
+            <path d="M478,38 V452" class="d-dash" />
+            <path d="M684,38 V452" class="d-dash" />
+            <path d="M871,38 V452" class="d-dash" />
+
+            <!-- 1 -->
+            <path d="M73,72 H262" class="d-line" marker-end="url(#a3)" />
+            <text x="80" y="66" class="d-sub">order_cancel_tool(orderId, reason)</text>
+
+            <!-- duraklama bandı -->
+            <rect x="196" y="88" width="360" height="46" rx="5" class="d-band" />
+            <text x="376" y="106" text-anchor="middle" class="d-t-a">⏸ superstep duraklar</text>
+            <text x="376" y="122" text-anchor="middle" class="d-sub">RequestInfoEvent — tool ÇALIŞTIRILMAZ</text>
+            <path d="M268,134 H472" class="d-line" marker-end="url(#a3)" />
+
+            <!-- 2 -->
+            <path d="M478,168 H678" class="d-line" marker-end="url(#a3)" />
+            <text x="486" y="162" class="d-sub">RequestApprovalAsync(tool, argümanlar, gerekçe)</text>
+
+            <!-- 3 -->
+            <path d="M684,206 H865" class="d-line" marker-end="url(#a3)" />
+            <text x="692" y="200" class="d-sub">SSE bildirim</text>
+
+            <!-- admin kutusu -->
+            <rect x="596" y="222" width="330" height="44" rx="5" class="d-node" />
+            <text x="761" y="240" text-anchor="middle" class="d-sub">panelde: parametreler alan-alan,</text>
+            <text x="761" y="254" text-anchor="middle" class="d-sub">planlama gerekçesi, trace derin linki</text>
+
+            <!-- 4 -->
+            <path d="M871,296 H690" class="d-line" marker-end="url(#a3)" />
+            <text x="864" y="290" text-anchor="end" class="d-sub">Onayla + zorunlu gerekçe / Reddet</text>
+
+            <!-- 5 -->
+            <path d="M684,334 H484" class="d-line" marker-end="url(#a3)" />
+            <text x="676" y="328" text-anchor="end" class="d-sub">karar</text>
+
+            <!-- 6 -->
+            <path d="M478,372 H274" class="d-line" marker-end="url(#a3)" />
+            <text x="470" y="366" text-anchor="end" class="d-sub">SendResponseAsync — superstep devam eder</text>
+
+            <!-- 7 sonuç -->
+            <path d="M268,410 H79" class="d-line" marker-end="url(#a3)" />
+            <text x="260" y="404" text-anchor="end" class="d-sub">onaylandı: tool çalışır, JSON zarfı</text>
+            <path d="M268,442 H79" class="d-line" marker-end="url(#a3)" />
+            <text x="260" y="436" text-anchor="end" class="d-sub">reddedildi: "Tool call invocation rejected. …" — düz
+              metin</text>
+          </svg>
+        </div>
+
+        <ul class="plain">
+          <li><b>Zaman aşımı</b> — karar verilmezse süre sonunda otomatik reddedilir
+            (<code>AutoApproveOnTimeout=false</code>).</li>
+          <li><b>Gerekçe zorunluluğu</b> — dört yüksek riskli tool'un onayında admin gerekçe yazmak zorundadır; karar
+            sunucuda verilip panele <code>ReasonRequired</code> olarak bildirilir.</li>
+          <li><b>Red formatı farklıdır</b> — reddedilen çağrının sonucu JSON zarfı değil düz bir cümledir; uzman
+            prompt'ları bunu ayrıca ele alır.</li>
+        </ul>
+      </section>
+
+      <!-- 06 -->
+      <section id="handoff">
+        <h2><span class="n">06</span>Handoff ve eskalasyon</h2>
+        <p class="lede">
+          İki farklı mekanizma sık karıştırılır: <b>handoff</b> ajanlar arası devirdir,
+          <b>eskalasyon</b> insana devirdir.
+        </p>
+
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Handoff</th>
+                <th>Eskalasyon</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Ne</b></td>
+                <td>Bir uzmandan diğerine tur devri</td>
+                <td>Admin paneline insan müdahalesi kaydı</td>
+              </tr>
+              <tr>
+                <td><b>Tetikleyici</b></td>
+                <td><code>postToolReflection.handoffSuggestion</code></td>
+                <td><code>postToolReflection.status = needs_escalation</code></td>
+              </tr>
+              <tr>
+                <td><b>Kim işler</b></td>
+                <td><code>ReflectionRoutingStrategy</code></td>
+                <td><code>EscalationPolicyService</code></td>
+              </tr>
+              <tr>
+                <td><b>Sınır</b></td>
+                <td>Ajan başına <code>MaxHandoffsPerAgent</code></td>
+                <td>Ajan-farkındalıklı tekilleştirme</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="margin-top:18px">
+          <code>HumanHandoffAgent</code> ise bunlardan ayrı bir üçüncü şeydir: kullanıcı <em>açıkça</em>
+          temsilci istediğinde PlanningAgent'ın yönlendirdiği ajandır ve çağırdığı tool eskalasyonu tetikler.
+        </p>
+      </section>
+
+      <!-- 07 -->
+      <section id="guards">
+        <h2><span class="n">07</span>Guard'lar ve limitler</h2>
+        <p class="lede">
+          Hepsi <code>WorkflowGuardOptions</code> üzerinden yapılandırılır. Aşağıdaki değerler
+          <code>appsettings.json</code>'daki <b>etkin</b> ayarlardır (sınıf varsayılanları farklı
+          olabilir — ör. <code>TimeoutSeconds</code> kodda 60, config'te 180).
+        </p>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Ayar</th>
+                <th>Varsayılan</th>
+                <th>Neyi engeller</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>TimeoutSeconds</code></td>
+                <td class="num">180</td>
+                <td>Askıda kalan workflow; kooperatif durdurma denenir</td>
+              </tr>
+              <tr>
+                <td><code>MaxIterations</code></td>
+                <td class="num">20</td>
+                <td>Sonsuz ajan turu</td>
+              </tr>
+              <tr>
+                <td><code>MaxHandoffsPerAgent</code></td>
+                <td class="num">2</td>
+                <td>İki uzmanın birbirine top atması</td>
+              </tr>
+              <tr>
+                <td><code>MaxDuplicateToolCalls</code></td>
+                <td class="num">3</td>
+                <td>Aynı tool'un kısır döngüde tekrarı</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 08 -->
+      <section id="garanti">
+        <h2><span class="n">08</span>LLM'e güvenilmeyen yerler</h2>
+        <p class="lede">
+          Mimarinin en önemli tercihi: güvenlik-kritik değişmezler prompt'a değil <em>koda</em> emanet
+          edilmiştir. Model yanlış JSON üretse bile bu garantiler devreye girer.
+        </p>
+
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Garanti</th>
+                <th>Ne yapar</th>
+                <th>Yön</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>EnsureHumanHandoffEscalation</code></td>
+                <td><code>human_handoff_tool</code> çağrıldıysa durumu <code>needs_escalation</code>'a zorlar</td>
+                <td>Tek yönlü — kaçırılan eskalasyonun maliyeti fazladan eskalasyondan yüksek</td>
+              </tr>
+              <tr>
+                <td><code>EnsureSideEffectToolCompletion</code></td>
+                <td>Yazan bir tool <em>başarıyla</em> döndüyse durumu <code>done</code>'a zorlar</td>
+                <td>Tek yönlü — başarısızlık asla "tamam"a çevrilmez</td>
+              </tr>
+              <tr>
+                <td><code>EntityVerifier</code></td>
+                <td>Entity'leri DB'ye karşı doğrular; model uydurma ID kullanamaz</td>
+                <td>Doğrulama</td>
+              </tr>
+              <tr>
+                <td>HITL onay kapısı</td>
+                <td>Yazan hiçbir tool insan onayı olmadan çalışamaz</td>
+                <td>Kesin blok</td>
+              </tr>
+              <tr>
+                <td><code>RemoveTechnicalJsonBlocks</code></td>
+                <td>Reasoning/reflection JSON'unun kullanıcıya sızmasını temizler</td>
+                <td>Çıktı filtresi</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note">
+          <span class="tag">Pratik sonuç</span>
+          Tamamen başarılı bir prompt enjeksiyonu bile veritabanına yazamaz, eskalasyon durumunu
+          uyduramaz veya doğrulanmamış bir ID kullanamaz. Enjeksiyonun kalan etkisi ikna/sosyal
+          mühendislik yüzeyiyle sınırlıdır.
+        </div>
+      </section>
+
+
+      <!-- 09 -->
+      <section id="ses">
+        <h2><span class="n">09</span>Sesli konuşma — iki ayrı kanal</h2>
+        <p class="lede">
+          OpenAI Realtime API üzerinden iki mod var ve aralarındaki fark güvenlik açısından
+          belirleyici: biri yazılı sohbetle <b>aynı</b> ajan hattını kullanır, diğeri hız için
+          onu atlar.
+        </p>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>🎤 Sesli Asistan (köprü)</th>
+                <th>⚡ Hızlı Sesli (native)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Model rolü</b></td>
+                <td>Yalnızca STT/TTS köprüsü — konuşmayı yorumlamaz</td>
+                <td>Modelin kendisi function calling yapar</td>
+              </tr>
+              <tr>
+                <td><b>Ajan hattı</b></td>
+                <td>Yazılı sohbetle <b>aynı</b> 6-ajanlı pipeline (reasoning, routing, HITL)</td>
+                <td>Pipeline <b>atlanır</b></td>
+              </tr>
+              <tr>
+                <td><b>Tool erişimi</b></td>
+                <td>Tümü</td>
+                <td>Yalnızca salt-okunur</td>
+              </tr>
+              <tr>
+                <td><b>Yazan tool'lar</b></td>
+                <td>HITL onayından geçer</td>
+                <td><span class="chip chip-gate">engelli</span> — model kullanıcıyı yazılı sohbete yönlendirir</td>
+              </tr>
+              <tr>
+                <td><b>Karşılığı</b></td>
+                <td>Tam yetenek, daha yavaş</td>
+                <td>Belirgin hız/maliyet kazancı, sınırlı yetenek</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">
+          <span class="tag">Güvenlik değişmezi korunuyor</span>
+          Native modda sipariş/iptal/iade/şikayet tool'ları <b>kod seviyesinde</b> reddedilir
+          (<code>FORBIDDEN_IN_VOICE</code>). Yani "hızlı mod" HITL kapısını delmez — yan etkili
+          her işlem, hangi kanaldan gelirse gelsin, insan onayı gerektiren yazılı hatta düşer.
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section id="model">
+        <h2><span class="n">10</span>Model katmanı — iki rol, iki sağlayıcı</h2>
+        <p class="lede">
+          Sistem tek bir modele bağlı değil: farklı işler farklı modellere, sağlayıcı ise
+          yapılandırmayla değiştirilebilir.
+        </p>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Rol</th>
+                <th>Kullanıldığı yer</th>
+                <th>Neden ayrı</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><b>Reasoning modeli</b></td>
+                <td>ReasoningService — niyet, plan, alt görevler</td>
+                <td>Muhakeme ağırlıklı, <code>ReasoningEffort</code> ayarlanabilir</td>
+              </tr>
+              <tr>
+                <td><b>Sohbet modeli</b></td>
+                <td>Altı ajan + özetleme + ders çıkarma</td>
+                <td>Tool çağrısı ve doğal yanıt üretimi</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Sağlayıcı <code>AiClientFactory</code> üzerinden <b>OpenAI</b> veya <b>Azure OpenAI</b>
+          olarak seçilir; uygulama kodu hangisinin kullanıldığını bilmez. Kalıcılık katmanı da
+          benzer şekilde InMemory/Postgres arasında değiştirilebilir.
+        </p>
+      </section>
+
+      <!-- 11 -->
+      <section id="operasyon">
+        <h2><span class="n">11</span>Operasyonel kontroller</h2>
+
+        <h3>SLA / yanıt süresi gözcüsü</h3>
+        <p class="lede">
+          Arka planda çalışan bir servis bekleyen onayları ve açık eskalasyonları periyodik
+          tarar. Amaç: insan onayı bekleyen bir işlemin sessizce askıda kalmaması.
+        </p>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>İzlenen</th>
+                <th>Uyarı</th>
+                <th>İhlal</th>
+                <th>İhlalde aksiyon</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Bekleyen onay</td>
+                <td class="num">20 sn</td>
+                <td class="num">60 sn</td>
+                <td>Otomatik <b>reddet</b> (işlem yapılmaz)</td>
+              </tr>
+              <tr>
+                <td>Açık eskalasyon</td>
+                <td class="num">60 sn</td>
+                <td class="num">180 sn</td>
+                <td>Öncelik bir kademe <b>yükseltilir</b></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:13.5px;color:var(--ink-3);margin-top:10px">
+          Çok örnekli (multi-pod) kurulumda tarama dağıtık kilitle korunur — aynı kayıt iki kez işlenmez.
+        </p>
+
+        <h3>Eskalasyon kime gidiyor — beceri tabanlı yönlendirme</h3>
+        <p>
+          Eskalasyon açıldığında niyet + müşteri profilinden gerekli beceri etiketleri çıkarılır
+          ve uygun temsilci puanlanarak önerilir:
+        </p>
+        <div class="note" style="border-left-color:var(--read)">
+          <code>skor = (1 − dilAğırlığı) × beceriEşleşmesi + dilAğırlığı × dilEşleşmesi</code><br>
+          <span style="font-size:13px">Kapasitesi dolu temsilciler elenir; yük dengeleme açık olduğunda mevcut yük de
+            hesaba katılır. Eşik altında eşleşme yoksa atama yapılmaz, kayıt atanmamış kalır.</span>
+        </div>
+
+        <h3>Telemetri ve maliyet</h3>
+        <p>
+          Tüm LLM çağrıları, ajan adımları ve tool kullanımları OpenTelemetry ile OTLP'ye
+          aktarılır (Jaeger/Prometheus/Grafana uyumlu). Ayrıca her çağrının token kullanımı
+          model bazlı fiyat tablosuyla <b>USD maliyete</b> çevrilip birikimli olarak saklanır —
+          oturum ve model kırılımında raporlanabilir.
+        </p>
+      </section>
+
+      <!-- 12 -->
+      <section id="kalite">
+        <h2><span class="n">12</span>Kalite döngüsü ve gözlemlenebilirlik</h2>
+
+        <h3>Trace &amp; Replay</h3>
+        <p>
+          Her tur bir <em>reasoning trace</em> üretir: hangi ajanlar sırayla çalıştı, hangi
+          tool'lar hangi argümanlarla çağrıldı, ne döndü, tur neden sonlandı. Replay arayüzü
+          bir turu <b>adım adım yeniden oynatır</b> — hata ayıklama ve demo için.
+        </p>
+
+        <h3>Değerlendirme (evaluation)</h3>
+        <p>
+          YAML ile tanımlı <b>23 senaryo</b> sistemi uçtan uca koşturur ve her senaryonun başarı
+          kriterlerini otomatik değerlendirir (beklenen tool çağrıldı mı, yanıt beklenen içeriği
+          kapsıyor mu, tur sayısı sınırda mı). Senaryolar tekrarlı çalıştırılabilir, böylece
+          LLM'in doğası gereği değişken çıktısı için kararlılık ölçülür.
+        </p>
+
+        <h3>Self-Improving Loop</h3>
+        <p>
+          Düşük puanlı veya hatalı turlar taranır, LLM bunlardan <b>ders önerileri</b> çıkarır.
+          Öneriler admin onayından geçmeden hiçbir etkiye sahip değildir; onaylananlar vektör
+          hafızaya yazılır ve sonraki konuşmalarda ilgili oldukları ölçüde bağlama girer
+          (bkz. <a href="#baglam">02b</a>).
+        </p>
+        <div class="note">
+          <span class="tag">Tarama manueldir</span>
+          Ders çıkarma yalnızca admin panelinden tetiklenir; zamanlanmış otomatik tarama yoktur.
+          Bu bilinçli: otomatik tarama hem LLM maliyeti üretir hem de kimsenin bakmadığı bir
+          onay kuyruğu biriktirir.
+        </div>
+
+        <h3>Kişiselleştirme</h3>
+        <p>
+          Her müşteri için kalıcı profil tutulur: sık niyetler, ilgilendiği ürünler, dil/ton
+          tercihi, son memnuniyet puanları. Profil bağlam hattı üzerinden ajanlara verilir ve
+          eskalasyon yönlendirmesinde dil eşleşmesi için de kullanılır.
+        </p>
+      </section>
+
+    </main>
+
+    <footer class="end">
+      Kaynak: AgentTeamFactory · CustomerSupportChatManager · Routing.cs · WorkflowRunner ·
+      ApprovalGateService · EscalationPolicyService · WellKnown<br>
+      İlgili dokümanlar: architecture.md · adapters-agents/ · security.md
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var btn = document.getElementById('themeBtn');
+      var saved = null;
+      try { saved = localStorage.getItem('agentDocTheme'); } catch (e) { /* storage kapalı */ }
+      if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
+
+      btn.addEventListener('click', function () {
+        var current = root.getAttribute('data-theme');
+        if (!current) {
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          current = prefersDark ? 'dark' : 'light';
+        }
+        var next = current === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        try { localStorage.setItem('agentDocTheme', next); } catch (e) { /* yok say */ }
+      });
+    })();
+  </script>
 
 </body>
+
 </html>
