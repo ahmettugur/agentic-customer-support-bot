@@ -12,7 +12,7 @@ Kullanıcı açıkça insan/canlı temsilci istediğinde devreye girer ("temsilc
 
 ## Hangi amaçla kullanılır?
 
-`PlanningAgent`, kullanıcının açıkça insan temsilci istediğini tespit ettiğinde (`detectedIntent="talep_temsilci"`) bu ajana yönlendirir — bu kural diğer specialist seçimlerine göre **öncelikli**dir (sipariş/ürün/şikayet niyeti varsa bile kullanıcı doğrudan insan istiyorsa bu ajan seçilir).
+`PlanningAgent`, kullanıcının açıkça insan temsilci istediğini tespit ettiğinde (`selectedAgent="HumanHandoffAgent"`) bu ajana yönlendirir — bu kural diğer specialist seçimlerine göre **öncelikli**dir (sipariş/ürün/şikayet niyeti varsa bile kullanıcı doğrudan insan istiyorsa bu ajan seçilir). Intent tespiti `PlanningAgent`'ın kendi işi değildir (bkz. [PlanningAgent.md](PlanningAgent.md)) — bu karar, reasoning hint'indeki nihai intent + doğrudan kullanıcı ifadesi (`"temsilci bağla"` vb.) üzerinden verilir.
 
 ## Sorumlulukları
 

@@ -110,8 +110,8 @@ public class ReasoningTrace
     int IterationCount;
     long? DurationMs;
     DateTime StartedAt;
-    ReasoningResult? Reasoning;   // Intent, sanity issues, confidence
-    PlanningResult? Planning;     // DetectedIntent, agents
+    ReasoningResult? Reasoning;   // Intent, sanity issues, confidence — intent'in tek sahibi
+    PlanningResult? Planning;     // SelectedAgent, routing (intent tespiti YOK)
     List<AgentVisit> AgentVisits; // Ziyaret edilen agent'lar ve süreleri
 }
 ```

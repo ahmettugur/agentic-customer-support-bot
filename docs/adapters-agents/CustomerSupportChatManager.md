@@ -89,7 +89,6 @@ Bu sınıf tarafından kullanılan ayarlar (`appsettings.json` → `Workflow:` b
 | `MaxIterations` | int | `GroupChatManager.MaximumIterationCount` |
 | `MaxHandoffsPerAgent` | int | `EnforceHandoffLimit` |
 | `MaxDuplicateToolCalls` | int | `DetectRepeatedToolCall` |
-| `PlanConfidenceThreshold` | double | `PlanRoutingStrategy` |
 | `TimeoutSeconds` | int | `CustomerSupportTeam` (burada kullanılmaz) |
 
 ## Örnek akış

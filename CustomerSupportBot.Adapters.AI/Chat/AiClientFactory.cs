@@ -1,9 +1,8 @@
 // Adapters.AI/Chat/AiClientFactory.cs
-// OpenAI, Azure OpenAI ve Anthropic sağlayıcıları arasında geçişi yöneten factory.
+// OpenAI ve Azure OpenAI sağlayıcıları arasında geçişi yöneten factory.
 // Strongly-typed AiOptions üzerinden çalışır (IOptions<AiOptions> ile DI'dan gelir).
 
 using System.ClientModel;
-using Anthropic;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using OpenAI;
@@ -19,7 +18,6 @@ public static class AiClientFactory
     public static IChatClient CreateStandardChatClient(AiOptions options) => options.Provider switch
     {
         AiProvider.AzureOpenAI => CreateAzureChatClient(options.AzureOpenAI, Require(options.AzureOpenAI.Deployment, "AI:AzureOpenAI:Deployment")),
-        AiProvider.Anthropic => CreateAnthropicChatClient(options.Anthropic, Require(options.Anthropic.Model, "AI:Anthropic:Model")),
         _ => CreateOpenAIChatClient(options.OpenAI, Require(options.OpenAI.Model, "AI:OpenAI:Model")),
     };
 
@@ -40,18 +38,6 @@ public static class AiClientFactory
                 var deployment = !string.IsNullOrWhiteSpace(az.ReasoningDeployment) ? az.ReasoningDeployment! : Require(az.Deployment, "AI:AzureOpenAI:Deployment");
                 var client = decorate(CreateAzureChatClient(az, deployment));
                 return new ReasoningChatClient(client, deployment, Require(az.ReasoningEffort, "AI:AzureOpenAI:ReasoningEffort"));
-            }
-            case AiProvider.Anthropic:
-            {
-                var an = options.Anthropic;
-                var model = !string.IsNullOrWhiteSpace(an.ReasoningModel) ? an.ReasoningModel! : Require(an.Model, "AI:Anthropic:Model");
-                var client = decorate(CreateAnthropicChatClient(an, model));
-                // Anthropic Messages API'sinde "reasoning_effort" parametresi desteklenmez.
-                // ReasoningChatClient bu değeri OpenAI o-series'e özgü "reasoning_effort" header'ına
-                // dönüştürerek gönderir; Anthropic bu header'ı sessizce ignore eder — API hatası oluşmaz.
-                // Dolayısıyla Anthropic provider'da standart ve reasoning model davranışı özdeştir;
-                // derin düşünme için "extended thinking" destekli bir Anthropic modeli kullanılmalıdır.
-                return new ReasoningChatClient(client, model, "medium");
             }
             default:
             {
@@ -97,16 +83,5 @@ public static class AiClientFactory
             new ApiKeyCredential(options.ApiKey!));
 
         return azureClient.GetChatClient(deployment).AsIChatClient();
-    }
-
-    private static IChatClient CreateAnthropicChatClient(AnthropicOptions options, string model)
-    {
-        if (string.IsNullOrWhiteSpace(options.ApiKey))
-        {
-            throw new InvalidOperationException("AI:Anthropic:ApiKey yapılandırması bulunamadı.");
-        }
-
-        var client = new AnthropicClient { ApiKey = options.ApiKey };
-        return client.AsIChatClient(model, options.MaxTokens);
     }
 }

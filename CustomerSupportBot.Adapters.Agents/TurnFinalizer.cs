@@ -108,7 +108,7 @@ internal sealed class TurnFinalizer
 
         var sessionId = trace.SessionId;
         var traceId = trace.TraceId;
-        var intent = trace.Reasoning?.Intent ?? trace.Planning?.DetectedIntent;
+        var intent = trace.Reasoning?.Intent;
         var memory = _semanticMemory;
         var logger = _loggerFactory.CreateLogger<TurnFinalizer>();
 
@@ -131,7 +131,7 @@ internal sealed class TurnFinalizer
         var customerId = session?.State.CustomerId;
         if (string.IsNullOrWhiteSpace(customerId)) return;
 
-        var intent = trace.Reasoning?.Intent ?? trace.Planning?.DetectedIntent;
+        var intent = trace.Reasoning?.Intent;
         var logger = _loggerFactory.CreateLogger<TurnFinalizer>();
 
         try

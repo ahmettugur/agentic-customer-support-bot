@@ -197,6 +197,115 @@ public class CustomerSupportToolsTests
         inferred.Should().BeTrue();
     }
 
+    // ═══ OrderCancelTool ═══
+    [Fact]
+    public void OrderCancel_BlankOrderId_ValidationError()
+    {
+        var r = _svc.OrderCancelTool("", "geçerli bir iptal sebebi");
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
+    }
+
+    [Fact]
+    public void OrderCancel_ShortReason_ValidationError()
+    {
+        // Sınır: 4 karakter → reddedilmeli (min 5).
+        var r = _svc.OrderCancelTool("1030", "1234");
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
+        r.Error.MissingFields.Should().Contain(WellKnown.ToolParameterNames.Reason);
+    }
+
+    [Fact]
+    public void OrderCancel_WhitespacePaddedReason_ValidationError()
+    {
+        // Ham uzunluk 5 ama trim sonrası 1 — boşluk dolgusu kuralı aşmamalı.
+        var r = _svc.OrderCancelTool("1030", "a    ");
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
+    }
+
+    [Fact]
+    public void OrderCancel_ExactlyFiveCharReason_CancelsOrder()
+    {
+        // Sınır: tam 5 karakter geçerli → doğrulama geçip iptal akışı sürmeli.
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var customerId = "9501";
+        var placed = _svc.OrderPlacementTool(product, 1, customerId);
+        var orderId = placed.Data!.GetType().GetProperty("orderId")!.GetValue(placed.Data) as string;
+
+        var r = _svc.OrderCancelTool(orderId!, "12345");
+        r.Success.Should().BeTrue();
+        _fixture.OrderRepo.Get(orderId!)!.Status.Should().Be(WellKnown.OrderStatuses.Cancelled);
+    }
+
+    // ═══ ReturnRequestTool ═══
+    [Fact]
+    public void ReturnRequest_BlankOrderId_ValidationError()
+    {
+        var r = _svc.ReturnRequestTool("", "geçerli bir iade sebebi");
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
+    }
+
+    [Fact]
+    public void ReturnRequest_ShortReason_ValidationError()
+    {
+        // Sınır: 4 karakter → reddedilmeli (min 5).
+        var r = _svc.ReturnRequestTool("1030", "1234");
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
+        r.Error.MissingFields.Should().Contain(WellKnown.ToolParameterNames.Reason);
+    }
+
+    [Fact]
+    public void ReturnRequest_ExactlyFiveCharReason_PassesValidation()
+    {
+        // Bilinmeyen sipariş + geçerli sebep: doğrulama geçip akış NotFound'a ilerlemeli.
+        var r = _svc.ReturnRequestTool("9999", "12345");
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
+    }
+
+    [Fact]
+    public void ReturnRequest_ValidInput_CreatesReturnRequest()
+    {
+        // Seed siparişleri 2006 tarihli (14 gün penceresi dolmuş) — taze bir
+        // 'Teslim Edildi' siparişi doğrudan repo üzerinden oluşturuluyor.
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var orderId = _fixture.OrderRepo.Create(new OrderInfo
+        {
+            Product = product,
+            Quantity = 1,
+            CustomerId = "9502",
+            Status = WellKnown.OrderStatuses.Delivered,
+            OrderDate = DateTime.UtcNow
+        });
+
+        var r = _svc.ReturnRequestTool(orderId, "ürün hasarlı geldi");
+        r.Success.Should().BeTrue();
+        _fixture.OrderRepo.Get(orderId)!.Status.Should().Be(WellKnown.OrderStatuses.ReturnRequested);
+    }
+
+    // ═══ ComplaintRegistrationTool — sınır değerleri ═══
+    [Fact]
+    public void Complaint_NineCharDescription_ValidationError()
+    {
+        // Sınır: 9 karakter → reddedilmeli (min 10).
+        var r = _svc.ComplaintRegistrationTool("1030", "123456789", null);
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
+    }
+
+    [Fact]
+    public void Complaint_WhitespacePaddedDescription_ValidationError()
+    {
+        // Ham uzunluk 10 ama trim sonrası 2 — boşluk dolgusu kuralı aşmamalı.
+        var r = _svc.ComplaintRegistrationTool("1030", "ab        ", null);
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
+    }
+
+    [Fact]
+    public void Complaint_ExactlyTenCharDescription_PassesValidation()
+    {
+        // Bilinmeyen sipariş + geçerli metin: doğrulama geçip akış NotFound'a ilerlemeli.
+        var r = _svc.ComplaintRegistrationTool("9999", "1234567890", null);
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
+    }
+
     // ═══ GetLastOrderTool ═══
     [Fact]
     public void GetLastOrder_BlankCustomer_ValidationError()

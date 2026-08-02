@@ -140,7 +140,8 @@ internal sealed class WorkflowRunner
         }
 
         var terminationReason =
-            WorkflowResponseExtractor.ParseTerminationReasonFromResult(st.Result)
+            WorkflowResponseExtractor.ParseTerminationReasonFromResult(
+                st.Result, _loggerFactory.CreateLogger<WorkflowRunner>())
             ?? WellKnown.Termination.ReasonCompleted;
 
         var result = WorkflowResponseExtractor.RemoveTerminationMarkers(st.Result);
@@ -251,7 +252,8 @@ internal sealed class WorkflowRunner
         }
 
         var terminationReason =
-            WorkflowResponseExtractor.ParseTerminationReasonFromResult(st.Result)
+            WorkflowResponseExtractor.ParseTerminationReasonFromResult(
+                st.Result, _loggerFactory.CreateLogger<WorkflowRunner>())
             ?? WellKnown.Termination.ReasonCompleted;
 
         var result = WorkflowResponseExtractor.RemoveTerminationMarkers(st.Result);
@@ -688,7 +690,7 @@ internal sealed class WorkflowRunner
             }
         }
 
-        var extractedIds = IdExtractor.Extract(query);
+        var extractedIds = ResolveExtractedIds(query, reasoning);
         var entityHint = IdExtractor.BuildHintMessage(extractedIds);
         if (!string.IsNullOrWhiteSpace(entityHint))
         {
@@ -707,6 +709,32 @@ internal sealed class WorkflowRunner
         messages.Add(new ChatMessage(ChatRole.User, query));
 
         return messages;
+    }
+
+    /// <summary>
+    /// Workflow'a gidecek ENTITY EXTRACTION hint'i için ID kaynağını çözer.
+    /// <c>reasoning.VerifiedEntities</c> mevcutsa (ReasoningService zaten <see cref="EntityVerifier"/>
+    /// ile query+geçmiş+session+DB'yi birleştirip doğrulamış) o kullanılır — <c>IdExtractor.Extract(query)</c>
+    /// yalnızca GÜNCEL mesaja bakar, önceki turdaki bağlamı (ör. "peki 1043" gibi bağlam kelimesiz
+    /// bir takip mesajını) tamamen kaçırır. Bu yüzden bu iki yol tutarsız çalışıyordu: reasoning
+    /// aşaması "1043"ü doğru bağlamda çözebilirken, workflow'un kendi (query-only) çıkarımı aynı
+    /// sayıyı bağlamsız görüp "kısa mesaj → customer_id" varsayılanına düşüyor, specialist'e yanlış
+    /// tool'u (get_last_order_tool yerine order_status_tool gerekirken) önerip yanlış-negatif
+    /// "sipariş bulunamadı" yanıtı ürettiriyordu. <c>reasoning</c> null ise (ör. bazı çağıranlar
+    /// reasoning'i atlıyor) eski (query-only) davranışa düşülür.
+    /// </summary>
+    internal static ExtractedIds ResolveExtractedIds(string query, ReasoningResult? reasoning)
+    {
+        var verified = reasoning?.VerifiedEntities;
+        if (verified is null || !verified.HasAny)
+            return IdExtractor.Extract(query);
+
+        return new ExtractedIds
+        {
+            OrderId = verified.OrderId?.Value,
+            CustomerId = verified.CustomerId?.Value,
+            ComplaintId = verified.ComplaintId?.Value
+        };
     }
 
     /// <summary>
@@ -741,7 +769,7 @@ internal sealed class WorkflowRunner
         if (!string.IsNullOrWhiteSpace(r.Analysis))
             linesBuilder.AppendLine($"- Analiz: {r.Analysis}");
         if (!string.IsNullOrWhiteSpace(r.Intent) && r.Intent != WellKnown.Intents.Unknown)
-            linesBuilder.AppendLine($"- Ön-tahmin edilen niyet: {r.Intent}");
+            linesBuilder.AppendLine($"- Niyet (nihai — ReasoningService kararı): {r.Intent}");
         if (r.Steps.Count > 0)
             linesBuilder.AppendLine($"- Önerilen adımlar: {string.Join(" → ", r.Steps.Select(s => s.Description))}");
         if (r.RequiredInfo.Count > 0)

@@ -11,7 +11,6 @@ AI sağlayıcılarından gelen altyapı exception'larını **domain exception**'
 
 Provider SDK'ları kendi exception tipleri fırlatır:
 - OpenAI: `ClientResultException` (HTTP detayları)
-- Anthropic: kendi exception tipleri
 - Qdrant: `Grpc.Core.RpcException`
 - Genel: `HttpRequestException`, `TaskCanceledException`
 
@@ -171,7 +170,7 @@ private static DomainException TranslateGrpc(Grpc.Core.RpcException rpc, string?
 
 | Servis adı | Kullanım |
 |---|---|
-| `"AI"` | Chat, embedding (OpenAI/Azure/Anthropic) |
+| `"AI"` | Chat, embedding (OpenAI/Azure) |
 | `"Qdrant"` | Vector store |
 | `"Redis"` | Lock, message bus (Adapters.Redis) |
 | `"Postgres"` | Persistence (Adapters.Persistence) |

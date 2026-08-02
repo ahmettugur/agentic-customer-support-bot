@@ -280,8 +280,7 @@ Statik sınıf. PlanningAgent çıktısından `PlanningResult` çıkarır:
 - **`TryParse(planningOutput)` → `PlanningResult?`** —
   1. `ExtractJsonBlock`: Önce ` ```json ... ``` ` fence, sonra ``` ... ```, en son düz `{ ... }` arama.
   2. `JsonDocument.Parse` + property-by-property okuma.
-  3. `intentConfidence` sayı veya string olabilir (`ReasoningResult.StringToScore` fallback).
-  4. `alternativesRejected` → `List<RejectedAlternative>`.
+  3. `alternativesRejected` → `List<RejectedAlternative>`.
 
 Parse başarısızsa null döner; ChatManager fallback mantığına düşer.
 
@@ -455,9 +454,9 @@ EntityVerifier çıktısı:
 
 ### `PlanningResult` + `RejectedAlternative` — `Models/PlanningResult.cs`
 
-PlanningAgent JSON çıktısı:
+PlanningAgent JSON çıktısı (intent tespiti YOK — tek sahibi `ReasoningResult.Intent`, bkz. [reasoning.md §4](reasoning.md)):
 
-- `DetectedIntent`, `IntentConfidence`, `SupportingEvidence`
+- `SupportingEvidence`
 - `SelectedAgent`, `Rationale`, `TaskDescription`
 - `AlternativesRejected` — `List<RejectedAlternative>` (agent + reason)
 - `NeedsClarification`, `ClarificationQuestion`
@@ -707,7 +706,7 @@ Hexagonal mimaride `Program.cs` **composition root** rolündedir — DI kayıtla
 // 1. Telemetri (cross-cutting — ilk kayıt)
 builder.Services.AddTelemetryServices(builder.Configuration);    // → Adapters.Telemetry
 
-// 2. AI istemcileri (sağlayıcı: OpenAI / AzureOpenAI / Anthropic)
+// 2. AI istemcileri (sağlayıcı: OpenAI / AzureOpenAI)
 builder.Services.AddAiServices(builder.Configuration);           // → Api/Extensions/AiServicesExtensions
 
 // 3. Redis adaptörleri (locking + IMessageBusPort)

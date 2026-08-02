@@ -108,7 +108,7 @@ Sonuç sessizce taklit edilmediği için meşru bir tekrar sipariş talebi kaybo
 **Yan etkilidir** — sipariş durumunu `İptal Edildi` olarak değiştirir.
 
 Adımlar:
-1. Parametre doğrulama (`orderId` zorunlu, `reason` min 5 karakter)
+1. Parametre doğrulama (`orderId` zorunlu, `reason` trim sonrası min 5 karakter)
 2. Sipariş var mı?
 3. Zaten iptal edilmiş mi? → `ToolResult.Conflict(OrderAlreadyCancelled)`
 4. `IOrderRepository.Cancel(orderId, reason)` çağrısı
@@ -122,7 +122,7 @@ Adımlar:
 **Yan etkilidir** — sipariş durumunu `İade Talep Edildi` olarak değiştirir.
 
 Adımlar:
-1. Parametre doğrulama (`orderId` zorunlu, `reason` min 5 karakter)
+1. Parametre doğrulama (`orderId` zorunlu, `reason` trim sonrası min 5 karakter)
 2. Sipariş var mı?
 3. Zaten iade talebi var mı? → `ToolResult.Conflict(ReturnAlreadyRequested)`
 4. `IOrderRepository.RequestReturn(orderId, reason)` çağrısı
@@ -137,7 +137,7 @@ Adımlar:
 **Yan etkilidir** — şikayet oluşturur.
 
 Adımlar:
-1. Parametre doğrulama (`orderId` zorunlu, `complaintText` en az 10 karakter)
+1. Parametre doğrulama (`orderId` zorunlu, `complaintText` trim sonrası en az 10 karakter)
 2. Sipariş var mı?
 3. `customerId` verilmemişse siparişten otomatik türetilir (`inferred=true`)
 4. `customerId` verilmişse sipariş sahibiyle eşleşiyor mu?

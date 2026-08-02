@@ -125,10 +125,36 @@ public static class WellKnown
     public static class Termination
     {
         public const string Marker = "TERMINATE";
+
+        // ── LLM (ResponseAgent) tarafından üretilen reason'lar ──
+        // response-agent.md prompt'undaki reason listesiyle birebir hizalı tutulmalı.
         public const string ReasonCompleted = "completed";
+        public const string ReasonAwaitingUserInput = "awaiting_user_input";
+        public const string ReasonEscalationNeeded = "escalation_needed";
+        public const string ReasonNotFound = "not_found";
+        public const string ReasonError = "error";
+
+        // ── Sistem (guard) tarafından üretilen reason'lar ──
+        // LLM bunları üretmez; guard/timeout yolları terminationReason'u doğrudan ayarlar.
         public const string ReasonMaxMessages = "max_messages_reached";
         public const string ReasonRepeatedToolCall = "repeated_tool_call_guard";
         public const string ReasonTimeout = "timeout";
+
+        /// <summary>
+        /// Bilinen tüm reason değerleri — <c>WorkflowResponseExtractor.ParseTerminationReasonFromResult</c>
+        /// bu kümeyle doğrular; kanonik (küçük harf) değerleri içerir, karşılaştırma case-insensitive'dir.
+        /// </summary>
+        public static readonly IReadOnlySet<string> KnownReasons = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ReasonCompleted,
+            ReasonAwaitingUserInput,
+            ReasonEscalationNeeded,
+            ReasonNotFound,
+            ReasonError,
+            ReasonMaxMessages,
+            ReasonRepeatedToolCall,
+            ReasonTimeout
+        };
     }
 
     /// <summary>Eskalasyon aksiyonları — InMemoryEscalationSink.Decide.</summary>

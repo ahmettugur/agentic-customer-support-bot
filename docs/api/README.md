@@ -167,7 +167,7 @@ SSE tek yönlü (server→client), WebSocket çift yönlü.
 
 | Section | İçerik |
 |---|---|
-| `AI` | Provider seçimi, OpenAI/Azure/Anthropic config, Realtime |
+| `AI` | Provider seçimi, OpenAI/Azure config, Realtime |
 | `Persistence` | InMemory veya Postgres provider |
 | `ConnectionStrings:Postgres` | DB bağlantısı |
 | `ConnectionStrings:Redis` veya `Redis:ConnectionString` | Redis |

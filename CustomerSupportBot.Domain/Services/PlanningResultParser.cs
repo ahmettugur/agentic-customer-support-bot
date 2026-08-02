@@ -25,19 +25,8 @@ public static class PlanningResultParser
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            // IntentConfidence sayısal veya string olabilir
-            double confidence = 0.5;
-            if (root.TryGetProperty("intentConfidence", out var conf))
-            {
-                confidence = conf.ValueKind == JsonValueKind.Number
-                    ? Math.Clamp(conf.GetDouble(), 0.0, 1.0)
-                    : ReasoningResult.StringToScore(conf.GetString());
-            }
-
             return new PlanningResult
             {
-                DetectedIntent = GetString(root, "detectedIntent"),
-                IntentConfidence = confidence,
                 SupportingEvidence = GetStringArray(root, "supportingEvidence"),
                 SelectedAgent = GetString(root, "selectedAgent"),
                 Rationale = GetString(root, "rationale"),

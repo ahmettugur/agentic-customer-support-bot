@@ -108,8 +108,7 @@ internal sealed class PlanRoutingStrategy : IRoutingStrategy
             return Result(_ctx.ResponseAgent, Branches.PlanParseFailed);
         }
 
-        if (plan.NeedsClarification ||
-            plan.IntentConfidence < _ctx.Guards.PlanConfidenceThreshold)
+        if (plan.NeedsClarification)
         {
             return Result(_ctx.ResponseAgent, Branches.PlanClarification);
         }

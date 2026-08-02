@@ -16,11 +16,10 @@ public sealed class AiOptions
     public AiProvider Provider { get; set; }              // Aktif sağlayıcı
     public OpenAiOptions OpenAI { get; set; } = new();
     public AzureOpenAiOptions AzureOpenAI { get; set; } = new();
-    public AnthropicOptions Anthropic { get; set; } = new();
     public RealtimeOptions Realtime { get; set; } = new();
 }
 
-public enum AiProvider { OpenAI, AzureOpenAI, Anthropic }
+public enum AiProvider { OpenAI, AzureOpenAI }
 ```
 
 **Tek aktif sağlayıcı:** `Provider` değeri AiClientFactory'nin hangi SDK'yı kullanacağını belirler.
@@ -64,29 +63,6 @@ public sealed class AzureOpenAiOptions
 ```
 
 Azure'da `Model` yerine `Deployment` (Azure portal'de tanımlanmış deployment adı). Üç gerekli alan: `Endpoint`, `ApiKey`, `Deployment`.
-
----
-
-## AnthropicOptions
-
-```csharp
-public sealed class AnthropicOptions
-{
-    public string? ApiKey { get; set; }
-    public string? Model { get; set; }
-    public string? ReasoningModel { get; set; }
-    public int MaxTokens { get; set; }
-}
-```
-
-| Alan | Örnek |
-|---|---|
-| `ApiKey` | `sk-ant-...` |
-| `Model` | `claude-haiku-4-5-20251001`, `claude-sonnet-4-6` |
-| `ReasoningModel` | Claude'un "extended thinking" modeli |
-| `MaxTokens` | 4096, 8192 (Anthropic max_tokens zorunlu) |
-
-> ⚠️ Anthropic'te `reasoning_effort` parametresi **kabul edilir ama yok sayılır**. Reasoning modelin kendi davranışı vardır (extended thinking otomatik). `ReasoningModel` farklı seçilirse asıl etkisi orada görünür.
 
 ---
 
@@ -162,12 +138,6 @@ Startup'ta hangi sağlayıcı seçilmişse onun alanları kontrol edilir. Yanlı
       "ReasoningDeployment": "o1-mini",
       "ReasoningEffort": "high"
     },
-    "Anthropic": {
-      "ApiKey": "sk-ant-...",
-      "Model": "claude-haiku-4-5-20251001",
-      "ReasoningModel": "claude-sonnet-4-6",
-      "MaxTokens": 4096
-    },
     "Realtime": {
       "Enabled": true,
       "Model": "gpt-realtime-2",
@@ -189,8 +159,9 @@ Production'da provider'ı değiştirmek **kod değişikliği gerektirmez**:
 
 ```bash
 # Env var override
-AI__Provider=Anthropic
-AI__Anthropic__ApiKey=sk-ant-newkey
+AI__Provider=AzureOpenAI
+AI__AzureOpenAI__Endpoint=https://contoso.openai.azure.com
+AI__AzureOpenAI__ApiKey=newkey
 ```
 
 Uygulamayı yeniden başlat — `Adapters.AI` yeni sağlayıcıya geçer. Application/Domain hiç etkilenmez (port'lar aynı).

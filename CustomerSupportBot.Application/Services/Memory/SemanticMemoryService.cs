@@ -17,6 +17,7 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
 {
     private readonly IVectorMemoryPort _store;
     private readonly IEmbeddingPort _embedder;
+    private readonly IContextSanitizer _sanitizer;
     private readonly SemanticMemoryOptions _options;
     private readonly ILogger<SemanticMemoryService> _logger;
 
@@ -27,11 +28,13 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
     public SemanticMemoryService(
         IVectorMemoryPort store,
         IEmbeddingPort embedder,
+        IContextSanitizer sanitizer,
         IOptions<SemanticMemoryOptions> options,
         ILogger<SemanticMemoryService> logger)
     {
         _store = store;
         _embedder = embedder;
+        _sanitizer = sanitizer;
         _options = options.Value;
         _logger = logger;
     }
@@ -95,13 +98,18 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
     {
         if (!Enabled || string.IsNullOrWhiteSpace(userQuery)) return Task.CompletedTask;
 
+        // Write-time temizlik: episodik belleğe giren kullanıcı metni/yanıtı sanitize edilir
+        // (read-time tarafında ayrıca <retrieved_data> fence uygulanır — çift katman).
+        var safeQuery = _sanitizer.Sanitize(userQuery);
+        var safeResponse = _sanitizer.Sanitize(finalResponse);
+
         var doc = new MemoryDocument
         {
             Kind = MemoryKind.Episodic,
             SessionId = sessionId,
             Source = traceId,
-            Title = TruncateOneLine(userQuery, 80),
-            Text = $"Soru: {userQuery}\n\nYanıt: {Truncate(finalResponse, 1200)}",
+            Title = TruncateOneLine(safeQuery, 80),
+            Text = $"Soru: {safeQuery}\n\nYanıt: {Truncate(safeResponse, 1200)}",
         };
         if (!string.IsNullOrEmpty(intent)) doc.Tags["intent"] = intent;
         if (rating.HasValue) doc.Tags["rating"] = rating.Value.ToString();

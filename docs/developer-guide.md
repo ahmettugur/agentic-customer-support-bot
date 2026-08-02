@@ -31,9 +31,8 @@ Bu doküman geliştiricilerin en sık ihtiyaç duyacağı iş senaryolarını **
 - Aşağıdaki AI sağlayıcılardan **biri** için erişim:
   - **OpenAI** (chat + o-series reasoning)
   - **Azure OpenAI** (`gpt-5.1` deployment + reasoning deployment)
-  - **Anthropic** (Claude — Sonnet/Opus/Haiku)
 
-**Sağlayıcı seçimi**: `appsettings.json > AI:Provider` (`OpenAI` | `AzureOpenAI` | `Anthropic`). Yapılandırma sınıfı: `CustomerSupportBot.Adapters.AI/Options/AiProviderOptions.cs`.
+**Sağlayıcı seçimi**: `appsettings.json > AI:Provider` (`OpenAI` | `AzureOpenAI`). Yapılandırma sınıfı: `CustomerSupportBot.Adapters.AI/Options/AiProviderOptions.cs`.
 
 **Çalıştırma**:
 ```bash
@@ -50,10 +49,6 @@ dotnet user-secrets set "AI:Provider"               "AzureOpenAI"
 dotnet user-secrets set "AI:AzureOpenAI:Endpoint"   "https://<resource>.openai.azure.com"
 dotnet user-secrets set "AI:AzureOpenAI:ApiKey"     "..."
 # Deployment isimleri appsettings.json'dan okunur (default: gpt-5.1)
-
-# Anthropic
-dotnet user-secrets set "AI:Provider"           "Anthropic"
-dotnet user-secrets set "AI:Anthropic:ApiKey"   "sk-ant-..."
 
 # Sunucu
 dotnet run --project CustomerSupportBot.Api
@@ -527,7 +522,7 @@ Tekil senaryo çalıştırmak için: `POST /eval/run/billing-happy-path`
 
 ### Senaryo
 
-"Reasoning `intentConfidence >= 0.9` ama hiç `supportingEvidence` yoksa uyarı üret" gibi 9. bir kural eklemek.
+"Reasoning `confidenceScore >= 0.9` ama hiç `requiredInfo` yoksa uyarı üret" gibi 9. bir kural eklemek (bkz. `ReasoningSanityChecker`'ın mevcut kuralları — `r.ConfidenceScore` üzerinden çalışırlar; `supportingEvidence`/`intentConfidence` `PlanningResult`'a ait alanlardı, kaldırıldı — bkz. [reasoning.md §4](reasoning.md)).
 
 ### Adımlar
 
@@ -840,7 +835,7 @@ curl http://localhost:5021/traces/recent?count=5 | jq '.[0]'
 
 **Olası sebep**: `ReasoningService.ReasonAsync` exception fırlatıyor → fallback devreye giriyor.
 
-**Kontrol**: Log'larda `"Reasoning başarısız"` mesajı var mı? O-series / reasoning deployment erişimi yoksa kullanılan sağlayıcıya göre `appsettings.json > AI:OpenAI:ReasoningModel` / `AI:AzureOpenAI:ReasoningDeployment` / `AI:Anthropic:ReasoningModel` alanını mevcut bir modele çekin (örn. `gpt-4o-mini`).
+**Kontrol**: Log'larda `"Reasoning başarısız"` mesajı var mı? O-series / reasoning deployment erişimi yoksa kullanılan sağlayıcıya göre `appsettings.json > AI:OpenAI:ReasoningModel` / `AI:AzureOpenAI:ReasoningDeployment` alanını mevcut bir modele çekin (örn. `gpt-4o-mini`).
 
 ### "Hallucination yakalanmıyor"
 

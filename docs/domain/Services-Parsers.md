@@ -17,9 +17,9 @@ Bu üç parser, LLM'in **yapılandırılmış JSON yanıtını** Domain modeline
 LLM çıktı (Raw JSON String)                Domain modeli (C# DTO)
 ───────────────────────────                ─────────────────────
 {                                     →    PlanningResult
-  "detectedIntent": "OrderInquiry",        {
-  "intentConfidence": 0.85,                    DetectedIntent = "OrderInquiry",
-  ...                                          IntentConfidence = 0.85,
+  "selectedAgent": "OrderAgent",           {
+  "needsClarification": false,                 SelectedAgent = "OrderAgent",
+  ...                                          NeedsClarification = false,
 }                                          }
 ```
 
@@ -42,8 +42,6 @@ Parser'lar **defensive** yazılmıştır — bozuk girdi exception fırlatmaz, e
 
 | JSON alanı | Domain field |
 |---|---|
-| `detectedIntent` (string) | `DetectedIntent` |
-| `intentConfidence` (number veya string) | `IntentConfidence` |
 | `supportingEvidence` (string[]) | `SupportingEvidence` |
 | `selectedAgent` (string) | `SelectedAgent` |
 | `rationale` (string) | `Rationale` |
@@ -51,6 +49,8 @@ Parser'lar **defensive** yazılmıştır — bozuk girdi exception fırlatmaz, e
 | `needsClarification` (bool) | `NeedsClarification` |
 | `clarificationQuestion` (string) | `ClarificationQuestion` |
 | `taskDescription` (string) | `TaskDescription` |
+
+Niyet alanları (`detectedIntent`, `intentConfidence`) eski şemadan kaldırıldı — niyet artık yalnızca `ReasoningResult.Intent`'ten gelir; eski formatta gelen bu alanlar parse sırasında sessizce yok sayılır.
 
 ### AlternativesRejected yapısı
 

@@ -47,7 +47,6 @@ services.AddOptions<WorkflowGuardOptions>()
     .Validate(o => o.MaxDuplicateToolCalls > 0, "WorkflowGuards:MaxDuplicateToolCalls pozitif olmalı.")
     .Validate(o => o.MaxIterations > 0, "WorkflowGuards:MaxIterations pozitif olmalı.")
     .Validate(o => o.MaxHandoffsPerAgent > 0, "WorkflowGuards:MaxHandoffsPerAgent pozitif olmalı.")
-    .Validate(o => o.PlanConfidenceThreshold is >= 0 and <= 1, "WorkflowGuards:PlanConfidenceThreshold 0-1 aralığında olmalı.")
     .ValidateOnStart();
 
 services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));

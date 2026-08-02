@@ -24,7 +24,7 @@ Bu doküman uygulamanı **kuran**, **çalıştıran**, **gözlemleyen** ve **kon
 
 - **.NET 10 SDK**
 - **Docker** — PostgreSQL, Qdrant ve opsiyonel altyapı container'ları için (`docker compose up -d`)
-- **Bir LLM sağlayıcısı**: OpenAI / Azure OpenAI / Anthropic — birinin API anahtarı yeterli
+- **Bir LLM sağlayıcısı**: OpenAI / Azure OpenAI — birinin API anahtarı yeterli
 - Modern bir tarayıcı (frontend ES2022 + EventSource kullanır)
 
 ### Çalıştırma
@@ -38,8 +38,6 @@ dotnet user-secrets set "AI:OpenAI:ApiKey" "sk-..."
 # veya
 dotnet user-secrets set "AI:AzureOpenAI:Endpoint" "https://<resource>.openai.azure.com/"
 dotnet user-secrets set "AI:AzureOpenAI:ApiKey" "..."
-# veya
-dotnet user-secrets set "AI:Anthropic:ApiKey" "sk-ant-..."
 
 # Altyapı container'ları (PostgreSQL, Qdrant, vb.)
 docker compose up -d postgres qdrant
@@ -76,7 +74,7 @@ Tüm konfigürasyon `CustomerSupportBot.Api/appsettings.json` üzerinden okunur.
 ```json
 {
   "AI": {
-    "Provider": "OpenAI",                  // OpenAI | AzureOpenAI | Anthropic
+    "Provider": "OpenAI",                  // OpenAI | AzureOpenAI
     "OpenAI": {
       "ApiKey": "",
       "Model": "gpt-5.4",                  // standart chat — ajanlar, ChatManager
@@ -89,12 +87,6 @@ Tüm konfigürasyon `CustomerSupportBot.Api/appsettings.json` üzerinden okunur.
       "Deployment": "gpt-5.4",
       "ReasoningDeployment": "gpt-5.4",
       "ReasoningEffort": "high"
-    },
-    "Anthropic": {
-      "ApiKey": "",
-      "Model": "claude-haiku-4-5",
-      "ReasoningModel": "claude-haiku-4-5",
-      "MaxTokens": 4096
     }
   }
 }
@@ -164,7 +156,7 @@ Smart Routing & Skills-Based Escalation konfigürasyonu. Bir eskalasyon (`needs_
 
 ### `Telemetry`
 
-Uygulama tüm LLM çağrılarını (chat + reasoning, OpenAI / Azure OpenAI / Anthropic), ajan adımlarını, tool çağrılarını ve workflow turlarını **OpenTelemetry** üzerinden span ve metric olarak yayar. Ek olarak her LLM çağrısının token kullanımı ve **USD maliyeti** (`Pricing` tablosuyla) hesaplanır.
+Uygulama tüm LLM çağrılarını (chat + reasoning, OpenAI / Azure OpenAI), ajan adımlarını, tool çağrılarını ve workflow turlarını **OpenTelemetry** üzerinden span ve metric olarak yayar. Ek olarak her LLM çağrısının token kullanımı ve **USD maliyeti** (`Pricing` tablosuyla) hesaplanır.
 
 ```jsonc
 "Telemetry": {
@@ -182,8 +174,7 @@ Uygulama tüm LLM çağrılarını (chat + reasoning, OpenAI / Azure OpenAI / An
     "default":               { "InputPer1K": 0.00015, "OutputPer1K": 0.0006 },
     "gpt-5.4":               { "InputPer1K": 0.0025,  "OutputPer1K": 0.01 },
     "gpt-5.4-nano":          { "InputPer1K": 0.00015, "OutputPer1K": 0.0006 },
-    "text-embedding-3-large":{ "InputPer1K": 0.00013, "OutputPer1K": 0 },
-    "claude-haiku-4-5":      { "InputPer1K": 0.001,   "OutputPer1K": 0.005 }
+    "text-embedding-3-large":{ "InputPer1K": 0.00013, "OutputPer1K": 0 }
   }
 }
 ```

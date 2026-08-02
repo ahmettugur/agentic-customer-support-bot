@@ -84,6 +84,7 @@ Zorunlu:
   ILoggerFactory                 → ASP.NET Core (otomatik)
   IReasoningPort                 → Application services (EvaluationRunner için)
   ISessionManager                → Application/Persistence (EvaluationRunner için)
+  IOptions<EvaluationQualityOptions> → appsettings.json "EvaluationQuality:" bölümü (EvaluationRunner'ın MEAI quality check'leri için, opsiyonel — section yoksa Enabled=false varsayılanı geçerli)
 
 Opsiyonel:
   ISemanticMemoryWriter          → Semantic memory adapter (varsa)
@@ -103,6 +104,9 @@ Opsiyonel:
     "Enabled": true,
     "MaxDegreeOfParallelism": 4
   },
+  "EvaluationQuality": {
+    "Enabled": false
+  },
   "HumanInTheLoop": {
     "Enabled": true,
     "TimeoutSeconds": 120,
@@ -116,6 +120,6 @@ Opsiyonel:
 }
 ```
 
-> `MaxHandoffsPerAgent` (default 2) ve `PlanConfidenceThreshold` (default 0.7) `appsettings.json`'da tanımlı **değildir** — `WorkflowGuardOptions` sınıfındaki default değerler kullanılır. Yine de `ValidateOnStart()` bunları da doğrular.
+> `MaxHandoffsPerAgent` (default 2) `appsettings.json`'da tanımlı **değildir** — `WorkflowGuardOptions` sınıfındaki default değer kullanılır. Yine de `ValidateOnStart()` bunu da doğrular.
 >
 > Hangi alt görevin paralel çalışabileceği config'den değil, `WellKnown.AgentNames.ReadOnly` kümesinden (şu an yalnızca `ProductAgent`) belirlenir.

@@ -41,6 +41,8 @@ HITL onay köprüsü (`HandleRequestInfoEventAsync`) framework'ün native `Reque
 
 `EnsureHumanHandoffEscalation`'ın "tek yönlü garanti" tasarımı bilinçli bir takas: kaçırılan eskalasyonun maliyeti fazladan eskalasyondan yüksek görüldüğü için, `human_handoff_tool` çağrıldıysa LLM'in reflection'ı ne derse desin eskalasyon kaydı açılır (admin panelinde dismiss yolu var, tersi mümkün değil).
 
+**`ResolveExtractedIds` — canlıda gözlemlenen bug ve düzeltmesi:** Eskiden `BuildWorkflowMessagesAsync` entity hint'ini her zaman `IdExtractor.Extract(query)` ile (yalnızca güncel mesajdan, regex + Türkçe bağlam kelimesiyle) hesaplıyordu — `ReasoningService`'in aynı turda zaten `EntityVerifier` ile (query+geçmiş+session+DB birleştirerek) hesapladığı daha doğru sonuçtan (`reasoning.VerifiedEntities`) habersizdi. Sonuç: bağlam kelimesiz kısa takip mesajlarında ("sipariş numaram 1042" → "peki 1043") `IdExtractor` sayıyı `customer_id` sanıp yanlış tool'u (`get_last_order_tool`) öneriyor, DB'de gerçekten var olan siparişi "bulunamadı" olarak yanıtlıyordu. Aynı sınıftan ikinci bir örnek `SubTaskOrchestrator.CreateSubTaskReasoning`'de de vardı (compound query alt-görevleri için) — ikisi de düzeltildi, tek doğruluk kaynağı artık `EntityVerifier`'ın ürettiği `VerifiedEntities`.
+
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
@@ -54,6 +56,7 @@ HITL onay köprüsü (`HandleRequestInfoEventAsync`) framework'ün native `Reque
 | `EnsureHumanHandoffEscalation(messages, reasonings)` (private static) | `human_handoff_tool` çağrıldıysa `postToolReflection.status`'ü `needs_escalation`'a zorlar (LLM zaten doğru işaretlediyse dokunmaz). |
 | `HandleRequestInfoEventAsync(run, requestInfo, ct)` (private) | HITL onay köprüsü — `ToolApprovalRequestContent`'i `ApprovalGateService.RequestApprovalAsync`'e, kararı `run.SendResponseAsync`'e bağlar. |
 | `BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning)` (private) | Workflow'a gidecek `ChatMessage` listesini kurar (bağlam → reasoning hint → entity hint → geçmiş → replan notu → sorgu). |
+| `ResolveExtractedIds(query, reasoning)` (internal static) | Entity hint'i için ID kaynağını çözer — `reasoning.VerifiedEntities` mevcutsa (ReasoningService'in query+geçmiş+session+DB'yi birleştirdiği sonuç) onu kullanır, yoksa `IdExtractor.Extract(query)` (yalnızca güncel mesaj, bağlamsız) fallback'ine düşer. Bkz. tasarım notu — bu ayrım gerçek bir üretim bug'ını (bağlam kelimesiz takip mesajlarında yanlış tool seçimi) düzeltmek için eklendi. |
 | `RewriteRoutingMessageAsync(routingMessage, originalQuery, ct)` (private) | Yanıt metninde ajan adı sızıntısı varsa LLM ile (`routing-rewrite-*` promptları) yeniden yazar; hata olursa sabit fallback mesajı döner. |
 | `StopRunGracefullyAsync(run)` (private) | Timeout/iptal anında `run.CancelRunAsync()` ile kooperatif durdurma dener (best-effort). |
 

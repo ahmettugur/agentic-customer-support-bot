@@ -109,16 +109,23 @@ Metnin içinde herhangi bir ajan adı (`WellKnown.AgentNames.All` listesi) geçi
 ### `ParseTerminationReasonFromResult`
 
 ```csharp
-public static string? ParseTerminationReasonFromResult(string text)
+public static string? ParseTerminationReasonFromResult(string text, ILogger? logger = null)
 ```
 
-TERMINATE marker'ının yanındaki nedeni çıkarır.
+TERMINATE marker'ının yanındaki nedeni çıkarır ve `WellKnown.Termination.KnownReasons` kümesiyle doğrular.
 
 | Metin | Sonuç |
 |-------|-------|
-| `"... TERMINATE reason=escalated"` | `"escalated"` |
-| `"... TERMINATE(human_handoff)"` | `"human_handoff"` |
+| `"... TERMINATE reason=escalation_needed"` | `"escalation_needed"` |
+| `"... TERMINATE(awaiting_user_input)"` | `"awaiting_user_input"` |
+| `"... TERMINATE reason=Completed"` | `"completed"` (case-insensitive normalize) |
+| `"... TERMINATE reason=bilinmeyen_deger"` | `null` + warning log (çağıran `completed` fallback'i uygular) |
 | `"... TERMINATE"` | `null` |
+
+Reason uzayı iki kategoriden oluşur (`WellKnown.Termination` altında sabitler):
+
+- **LLM (ResponseAgent) ürettiği:** `completed`, `awaiting_user_input`, `escalation_needed`, `not_found`, `error` — response-agent.md prompt'undaki listeyle birebir hizalıdır.
+- **Sistem (guard) ürettiği:** `max_messages_reached`, `repeated_tool_call_guard`, `timeout` — LLM bunları üretmez; guard/timeout yolları `terminationReason`'u doğrudan ayarlar.
 
 Bu değer trace'e ve `ResponseStart`/`ResponseComplete` event'lerine eklenir.
 

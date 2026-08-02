@@ -16,9 +16,9 @@ Müşteri talebini analiz eder, yapılandırılmış bir plan (JSON: `PlanningRe
 
 ## Sorumlulukları
 
-- Kullanıcı niyetini (`detectedIntent`), güven skorunu (`intentConfidence`), kanıtları (`supportingEvidence`) belirlemek.
+- Kanıtları (`supportingEvidence`) toplamak. **Niyet (intent) tespiti yapmaz** — niyet ReasoningService'in tekil sorumluluğudur; reasoning hint'indeki intent nihai karar olarak kabul edilir.
 - Uygun specialist ajanı seçmek (`selectedAgent`) ve gerekçesini (`rationale`) + reddedilen alternatifleri (`alternativesRejected`) üretmek.
-- Netleştirme gerekip gerekmediğine (`needsClarification`) karar vermek — `intentConfidence < WorkflowGuardOptions.PlanConfidenceThreshold` ise `ResponseAgent`'a yönlendirilir.
+- Netleştirme gerekip gerekmediğine (`needsClarification`) karar vermek — emin değilse `needsClarification=true` üretir; bu durumda `PlanRoutingStrategy` specialist yerine `ResponseAgent`'a yönlendirir.
 - Seçilen ajana iletilecek görev tanımını (`taskDescription`) yazmak.
 - Prompt injection / rol değiştirme girişimlerini kullanıcı niyeti olarak yorumlamak, sistem talimatlarını asla ifşa etmemek (`docs/`'taki "Talimat ayırımı" bölümü).
 
@@ -34,7 +34,7 @@ Müşteri talebini analiz eder, yapılandırılmış bir plan (JSON: `PlanningRe
 
 **Structured output:** `PlanningAgent`'ın çıktısı `ChatOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema<PlanningResult>(camelCaseOptions)` ile `PlanningResult` şemasına zorlanır (OpenAI/Azure OpenAI strict JSON schema). Bu, K3 analizinin "en yüksek kaldıraç" önerisiydi çünkü `PlanningAgent`'ın tool'u yok, saf JSON üretiyor — hiçbir prose/tool-call karışması riski taşımıyor, en düşük riskli ve en net kazançlı structured-output adayı. Prompt'taki eski "Bölüm 2 — Routing" satırı (`selectedAgent`'ı tekrar düz metin olarak yazma talimatı) koddan hiç okunmuyordu (`Routing.cs` yalnızca parse edilmiş `PlanningResult.SelectedAgent`'a bakıyor) — bu yüzden kaldırılması güvenliydi.
 
-`PlanningResultParser`'ın fence-temizleme + alan-bazlı defensive parse mantığı **kaldırılmadı** — Anthropic bridge'i `ResponseFormat`'ı okumadığı için o path'te tek çalışan güvence bu parser'dır.
+`PlanningResultParser`'ın fence-temizleme + alan-bazlı defensive parse mantığı **kaldırılmadı** — provider strict schema'yı honor etmediği durumda tek çalışan güvence bu parser'dır.
 
 ## Metotlar / Üyeler
 

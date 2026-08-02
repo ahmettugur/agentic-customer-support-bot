@@ -116,7 +116,7 @@ public class SkillsBasedRouter : ISkillsBasedRouter
 
     /// <summary>
     /// Reasoning trace + müşteri profilinden gerekli skill tag listesi üretir.
-    /// 1. Final intent (Reasoning.Intent veya Planning.DetectedIntent) → IntentSkillMap
+    /// 1. Final intent (Reasoning.Intent — intent'in tek sahibi ReasoningService) → IntentSkillMap
     /// 2. Specialist agent adı → tematik skill (complaint/order/product)
     /// 3. Müşteri profili admin notu → ProfileKeywordSkillMap
     /// 4. Tercih edilen dil → "tr"/"en"
@@ -129,7 +129,7 @@ public class SkillsBasedRouter : ISkillsBasedRouter
         var result = new HashSet<string>(StringComparer.Ordinal);
 
         // 1. Intent → skills
-        var intent = trace?.Reasoning?.Intent ?? trace?.Planning?.DetectedIntent ?? "";
+        var intent = trace?.Reasoning?.Intent ?? "";
         if (!string.IsNullOrWhiteSpace(intent))
         {
             if (_options.IntentSkillMap.TryGetValue(intent, out var skills))

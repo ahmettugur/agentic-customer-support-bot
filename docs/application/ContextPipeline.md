@@ -120,6 +120,8 @@ Kullanıcının son mesajını `SemanticMemoryService`'e gönderir. `Knowledge` 
 
 **Bütçe kontrolü:** Her chunk eklendiğinde `budget` azaltılır. `budget < 100` olunca ek chunk eklenmez.
 
+**Prompt-injection koruması (read-time):** Her hit'in snippet'ı (ve title'ı) `IContextSanitizer` ile işlenir: önce `Sanitize` (kontrol karakterleri + HTML comment temizliği), sonra bütçe kırpması, en sonda `WrapRetrieved` ile `<retrieved_data source="knowledge|lesson">…</retrieved_data>` fence'ine alınır. İçerikte kapanış etiketi geçiyorsa `‹/retrieved_data›` biçiminde nötralize edilir — fence kırılamaz. Ajan prompt'ları bu etiketin içeriğini **veri** olarak kabul eder, talimat olarak uygulamaz.
+
 ---
 
 ## Yeni provider eklemek

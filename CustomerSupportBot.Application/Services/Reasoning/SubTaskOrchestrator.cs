@@ -56,8 +56,37 @@ public class SubTaskOrchestrator
             Assumptions = new List<string>(),
             Steps = new List<ReasoningStep>(),
             SanityIssues = new List<ReasoningIssue>(),
-            SubTasks = new List<SubTask>() // ← Recursive loop önleyici
+            SubTasks = new List<SubTask>(), // ← Recursive loop önleyici
+            // subTask.Entities zaten VerifiedEntities'ten türetilmişti (bkz. SubTask.Entities
+            // yorumu) — burada VerifiedEntities'e GERİ çevrilmezse WorkflowRunner.ResolveExtractedIds
+            // fallback'e düşüp FormatSubTaskQuery'nin "açıklama (order_id=1042)" biçimindeki
+            // sentetik metnini IdExtractor.Extract ile regex'ten geçirmeye çalışır — bu metinde
+            // "sipariş"/"müşteri" gibi Türkçe bağlam kelimeleri YOK, dolayısıyla o regex çoğu
+            // zaman hiçbir şey bulamaz veya yanlış sınıflandırır.
+            VerifiedEntities = BuildVerifiedEntities(subTask.Entities)
         };
+    }
+
+    /// <summary>
+    /// SubTask.Entities (düz "order_id"/"customer_id"/"complaint_id" → değer sözlüğü) üzerinden
+    /// bir VerifiedEntities kurar. Orijinal DB-doğrulama durumu decompose sırasında sözlüğe
+    /// düzleştirilirken kaybolduğu için <see cref="EntityVerification.FormatOnly"/> kullanılır —
+    /// WorkflowRunner.ResolveExtractedIds yalnızca HasAny/değer bakar, verification seviyesine
+    /// duyarlı değil.
+    /// </summary>
+    private static VerifiedEntities? BuildVerifiedEntities(Dictionary<string, string> entities)
+    {
+        if (entities.Count == 0) return null;
+
+        var result = new VerifiedEntities();
+        if (entities.TryGetValue("order_id", out var orderId) && !string.IsNullOrWhiteSpace(orderId))
+            result.OrderId = new VerifiedEntity { Value = orderId, Source = EntitySource.Derived, Verification = EntityVerification.FormatOnly };
+        if (entities.TryGetValue("customer_id", out var customerId) && !string.IsNullOrWhiteSpace(customerId))
+            result.CustomerId = new VerifiedEntity { Value = customerId, Source = EntitySource.Derived, Verification = EntityVerification.FormatOnly };
+        if (entities.TryGetValue("complaint_id", out var complaintId) && !string.IsNullOrWhiteSpace(complaintId))
+            result.ComplaintId = new VerifiedEntity { Value = complaintId, Source = EntitySource.Derived, Verification = EntityVerification.FormatOnly };
+
+        return result.HasAny ? result : null;
     }
 
     /// <summary>

@@ -27,7 +27,7 @@ public class CostUsageStoreTests
         var store = new CostUsageStore();
         store.Record("gpt-x", 1000, 500, 0.01m, 100);
         store.Record("gpt-x", 2000, 1000, 0.02m, 200);
-        store.Record("claude", 500, 100, 0.001m, 50);
+        store.Record("gpt-y", 500, 100, 0.001m, 50);
 
         var snap = store.GetSnapshot();
         snap.TotalCalls.Should().Be(3);

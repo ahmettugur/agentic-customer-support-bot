@@ -94,7 +94,7 @@ TelemetryChatClient (decorator) intercept eder
    ├─ Activity başlat: "ai.chat" [Client kind]
    ├─ Stopwatch başlat
    ↓
-Asıl IChatClient (OpenAI/Anthropic adapter)
+Asıl IChatClient (OpenAI/Azure adapter)
    ↓
    Response döner — UsageDetails ile (input + output tokens)
    ↓

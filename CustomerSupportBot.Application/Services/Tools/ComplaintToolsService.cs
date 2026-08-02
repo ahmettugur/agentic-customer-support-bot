@@ -34,7 +34,8 @@ public sealed class ComplaintToolsService : IComplaintToolsService
     {
         var missing = new List<string>();
         if (string.IsNullOrWhiteSpace(orderId)) missing.Add(WellKnown.ToolParameterNames.OrderId);
-        if (string.IsNullOrWhiteSpace(complaintText) || complaintText.Length < 10)
+        // Trim: boşluk dolgusuyla min-uzunluk kuralı aşılamamalı.
+        if (string.IsNullOrWhiteSpace(complaintText) || complaintText.Trim().Length < 10)
             missing.Add($"{WellKnown.ToolParameterNames.ComplaintDescription} (en az 10 karakter)");
         if (missing.Count > 0)
             return ToolResult.ValidationError($"Şikayet kaydı için şu bilgiler gerekli: {string.Join(", ", missing)}.", missing.ToArray());

@@ -18,15 +18,14 @@
 public static IChatClient CreateStandardChatClient(AiOptions options)
 ```
 
-Üç dal:
+İki dal:
 
 | Provider | İç implementasyon |
 |---|---|
 | `OpenAI` | `new OpenAIClient(apiKey).GetChatClient(model).AsIChatClient()` |
 | `AzureOpenAI` | `new AzureOpenAIClient(endpoint, apiKey).GetChatClient(deployment).AsIChatClient()` |
-| `Anthropic` | `new AnthropicClient { ApiKey = apiKey }.AsIChatClient(model, maxTokens)` |
 
-`Microsoft.Extensions.AI.IChatClient` ortak arayüz — üç SDK'nın native client'ı bu interface'e adapte edilir.
+`Microsoft.Extensions.AI.IChatClient` ortak arayüz — iki SDK'nın native client'ı bu interface'e adapte edilir.
 
 ### `CreateReasoningChatClient`
 
@@ -40,8 +39,6 @@ Standart client'a ek:
 - `ReasoningModel` / `ReasoningDeployment` yoksa standart model/deployment'a düşer
 - `decorate` parametresi ile telemetri decorator inject edilebilir; `null` ise iç client doğrudan kullanılır
 - Oluşturulan `ReasoningChatClient` içinde `ModelName` ve `ReasoningEffort` saklanır
-
-**Anthropic özel davranışı:** Anthropic Messages API `reasoning_effort` parametresini desteklemez. `ReasoningChatClient` bu değeri OpenAI o-series'e özgü header olarak gönderir; Anthropic sessizce ignore eder — API hatası oluşmaz. Bu nedenle Anthropic provider'da standart ve reasoning model davranışı özdeştir; derin düşünme için "extended thinking" destekli bir model kullanılmalıdır.
 
 ### `decorate` parametresi
 
@@ -126,7 +123,7 @@ Bu sayede iptal ile gerçek hata ayırt edilir.
 
 **Port:** `IReasoningChatClient`
 
-OpenAI o-series modelleri (veya Anthropic extended thinking) için — derin düşünme modeli wrapper'ı.
+OpenAI o-series modelleri için — derin düşünme modeli wrapper'ı.
 
 ### Constructor
 
@@ -196,7 +193,6 @@ private ChatOptions BuildOptions() => new()
 
 - **OpenAI o-series:** Native destekler — `low/medium/high` derin düşünme miktarını ayarlar
 - **Azure OpenAI o-series:** OpenAI ile aynı
-- **Anthropic:** Sessizce yok sayar — "extended thinking" otomatik
 
 ---
 

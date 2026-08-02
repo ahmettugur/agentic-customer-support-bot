@@ -19,8 +19,6 @@ PlanningAgent'ın seçtiği agent ve gerekçeleri:
 ```csharp
 public class PlanningResult
 {
-    public string DetectedIntent { get; set; }            // "OrderInquiry"
-    public double IntentConfidence { get; set; }          // 0.0-1.0
     public List<string> SupportingEvidence { get; set; }  // Kullanıcı mesajından alıntılar
 
     public string SelectedAgent { get; set; }             // "OrderAgent"
@@ -39,6 +37,8 @@ public class RejectedAlternative
     public string Reason { get; set; } = "";
 }
 ```
+
+**Niyet sahipliği:** PlanningAgent **routing-only**'dir — niyet tespiti yapmaz. Niyet ReasoningService'in tekil sorumluluğudur (`ReasoningResult.Intent`); PlanningAgent reasoning hint'indeki intent'i nihai karar kabul eder ve buna göre ajan seçer.
 
 ### NeedsClarification flow
 

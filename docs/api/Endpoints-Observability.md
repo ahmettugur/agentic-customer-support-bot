@@ -48,7 +48,7 @@ LLM kullanım ve maliyet snapshot'ı.
 ### `GET /telemetry/cost/models`
 
 ```json
-{ "knownModels": ["gpt-4o-mini", "gpt-4o", "claude-haiku-4", "default"] }
+{ "knownModels": ["gpt-4o-mini", "gpt-4o", "default"] }
 ```
 
 `ITelemetryPort.GetKnownModels()` — pricing tablosundaki key'ler. UI dropdown için.
@@ -86,7 +86,7 @@ Reasoning trace audit — debug ve replay için. Admin scope.
   "completedAt": "2026-05-24T10:00:02.5Z",
   "durationMs": 2500,
   "reasoning": { "analysis": "...", "intent": "OrderInquiry", "confidence": "yüksek" },
-  "planning": { "detectedIntent": "OrderInquiry", "selectedAgent": "OrderAgent" },
+  "planning": { "selectedAgent": "OrderAgent", "needsClarification": false },
   "agentVisits": [
     { "agentName": "PlanningAgent", "durationMs": 230 },
     { "agentName": "OrderAgent", "durationMs": 1400 }

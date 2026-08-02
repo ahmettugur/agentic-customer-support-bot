@@ -152,7 +152,8 @@ if (planning.NeedsClarification)
 **İzlenecek:**
 - `planning.SelectedAgent` — beklenen agent mı?
 - `planning.AlternativesRejected` — niye diğerleri elendi?
-- `planning.IntentConfidence` — threshold (0.7) altında mı?
+- `planning.NeedsClarification` — `true` ise ResponseAgent'a düşer (artık sayısal eşik yok, bkz. [reasoning.md §4](reasoning.md))
+- `reasoning.ConfidenceScore` — `ReasoningSanityChecker`'ın iç tutarlılık kontrollerinde kullanılır
 
 ### 5. Specialist + PreToolCheck — `CustomerSupportChatManager.cs`
 
@@ -300,7 +301,7 @@ await _sse.WriteAsync("done", new { sessionId }, ct);
 1. Log'da `[ReasoningResultParser] JSON parse failed` var mı?
 2. `rawJson` değişkenine bak — LLM `` ```json `` fence'siz veya bozuk format mı döndü?
 3. `ReasoningResultParser.ExtractJsonBlock` — fence'siz JSON'u yakalamayı dener
-4. Anthropic kullanıyorsan → `max_tokens` çok düşük olabilir → JSON kesiliyor
+4. Model `max_tokens`'e takılmış olabilir → JSON kesiliyor; daha yüksek limit dene
 
 **Önleme:** Prompt'un sonunda örnek JSON ver. `temperature: 0.1` ile deterministic.
 

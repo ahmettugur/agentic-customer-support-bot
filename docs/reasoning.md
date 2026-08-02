@@ -31,7 +31,7 @@ Her katman **farklı bir reasoning ihtiyacına** karşılık gelir — biri olma
 | **Deterministic + LLM hybrid** | `IdExtractor`, `SessionStateExtractor` | Ucuz ve %100 doğru olabilen işleri LLM'e bırakma |
 | **Chain-of-Thought (CoT)** | `ReasoningAgent` → `ReasoningResult.Steps[]` | Görünür akıl yürütme, debug + audit |
 | **Self-Reflection / Sanity Check** | `ReasoningAgent` → `SanityIssues[]` | LLM kendi tutarsızlığını fark etsin |
-| **Confidence-Aware Routing** | `PlanningAgent` → `IntentConfidence` threshold | Belirsiz durumda specialist çağırma, soru sor |
+| **Confidence-Aware Routing** | `PlanningAgent` → `needsClarification` kararı | Belirsiz durumda specialist çağırma, soru sor |
 | **ReAct (Reason + Act)** | Specialist agents → `PreToolCheck` + Tool + `PostToolReflection` | Tool çağrısından önce doğrula, sonra yorumla |
 | **Decomposition** | `ReasoningResult.SubTasks[]` | Compound query'leri parçala (örn. "1 ve 2") |
 | **Grounding** | `ReasoningStep.Grounding` | Her step'in kaynağı (regex/DB/history/assumption) |
@@ -176,23 +176,25 @@ Bu sayede LLM kendi hatasını fark edip düzeltir. Tek-shot bekleyip kötü out
 
 **Problem:** PlanningAgent emin değilse ne yapmalı? Yanlış agent seçince specialist hata fırlatır, kullanıcı kötü deneyim yaşar.
 
-### Çözüm: Confidence threshold + clarification fallback
+> **Mimari not:** Intent tespiti ve onun confidence'ı artık **yalnızca `ReasoningService`'in** sorumluluğu (`ReasoningResult.Intent`/`ConfidenceScore`) — PlanningAgent kendi `intentConfidence` alanını **üretmiyor** (eskiden üretiyordu, `PlanningResult`'tan kaldırıldı). PlanningAgent, reasoning hint'indeki intent'i nihai karar kabul edip yalnızca planlama/routing yapar. Bu yüzden aşağıdaki akış artık bir **sayısal eşik** değil, PlanningAgent'ın kendi `needsClarification` (bool) kararına dayanır.
+
+### Çözüm: `needsClarification` kararı + clarification fallback
 
 ```
 PlanningAgent çıktısı:
-  IntentConfidence = 0.45
+  needsClarification = true
+  clarificationQuestion = "Siparişin numarası 1030 formatında mı?"
        ↓
-  Threshold = 0.7
-       ↓
-  0.45 < 0.7 → specialist çağırma
-       ↓
-  NeedsClarification = true
-  ClarificationQuestion = "Siparişin numarası 1030 formatında mı?"
+  PlanRoutingStrategy: needsClarification=true → ResponseAgent'a yönlendir
+       (eskiden ayrıca IntentConfidence < PlanConfidenceThreshold koşulu da vardı —
+        kaldırıldı; WorkflowGuardOptions.PlanConfidenceThreshold artık mevcut değil)
        ↓
   ResponseAgent kullanıcıya soru sorar
        ↓
   Bir sonraki turn'de tekrar PlanningAgent (daha çok bağlam ile)
 ```
+
+`ReasoningResult.ConfidenceScore` hâlâ var ve kullanılıyor — ama routing kararı için değil, `ReasoningSanityChecker`'ın iç tutarlılık kontrolleri için (ör. "confidence yüksek ama gerekli bilgi eksik" gibi uyarılar).
 
 ### Niçin clarification "asked > guessed"
 
@@ -493,7 +495,7 @@ Kullanıcı: **"5 ve 7 durumu nedir?"**
 
 [3] PlanningAgent
     Her subtask için → OrderAgent
-    intentConfidence: 0.92 → threshold OK, clarification yok
+    needsClarification: false (reasoning.confidenceScore=0.92 zaten yüksek)
 
 [4] Specialist Agents (paralel — yan-etkisiz)
     OrderAgent #1:
@@ -606,9 +608,9 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
   },
 
   // ─── 3. PlanningAgent ───
+  // NOT: detectedIntent/intentConfidence artık PlanningAgent çıktısında YOK — intent
+  // yukarıdaki reasoning.intent'ten (ReasoningResult.Intent) geliyor, tek sahibi o.
   "planning": {
-    "detectedIntent": "Complaint",
-    "intentConfidence": 0.95,
     "supportingEvidence": [
       "şikayet açmak istiyorum",
       "hasarlı ürün"
@@ -690,7 +692,7 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
 | **Deterministic preprocessing** | `regex` grounding'li step #1 — `001`, `1` LLM'siz çıkarıldı |
 | **Chain-of-Thought** | `reasoning.steps[]` — 4 adım, her biri action + grounding + confidence ile |
 | **Sanity check** | `sanityIssues: []` — bu örnekte temiz; uyumsuzluk olsaydı Replan tetiklenirdi |
-| **Confidence-aware routing** | `intentConfidence: 0.95` > 0.7 threshold → clarification yok, direkt specialist |
+| **Confidence-aware routing** | `reasoning.confidenceScore: 0.95` yüksek, `planning.needsClarification: false` → clarification yok, direkt specialist |
 | **Grounding** | `regex` (×2), `session_state`, `derived` — sadece 1 step `derived`, çoğunluk delilli |
 | **ReAct (3 faz)** | ComplaintAgent: `preToolCheck.canProceed=true` → tool call → `postToolReflection.status=done` |
 | **HITL approval gate** | `complaint_registration_tool` high-risk → 3.2 saniye admin onayı beklendi |

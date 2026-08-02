@@ -70,7 +70,9 @@ public class EvaluationRunnerTests
         var distributedLock = new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 }));
         var sessionManager = new InMemorySessionManager(distributedLock);
 
-        return new EvaluationRunner(team, reasoningService, sessionManager, traceStore);
+        return new EvaluationRunner(
+            team, reasoningService, sessionManager, traceStore,
+            chatClient, Options.Create(new EvaluationQualityOptions()));
     }
 
     // ─── LoadScenarios ───

@@ -86,7 +86,7 @@ public class WorkflowResponseExtractorTests
     public void ParseTerminationReasonFromResult_ReasonValue_ReturnsLowercase()
     {
         WorkflowResponseExtractor.ParseTerminationReasonFromResult(
-            "TERMINATE: reason=Success").Should().Be("success");
+            "TERMINATE: reason=Completed").Should().Be("completed");
     }
 
     [Fact]
@@ -100,6 +100,52 @@ public class WorkflowResponseExtractorTests
     public void ParseTerminationReasonFromResult_NoReason_ReturnsNull()
     {
         WorkflowResponseExtractor.ParseTerminationReasonFromResult("Plain text").Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("completed")]
+    [InlineData("awaiting_user_input")]
+    [InlineData("escalation_needed")]
+    [InlineData("not_found")]
+    [InlineData("error")]
+    [InlineData("max_messages_reached")]
+    [InlineData("repeated_tool_call_guard")]
+    [InlineData("timeout")]
+    public void ParseTerminationReasonFromResult_KnownReasons_ReturnCanonical(string reason)
+    {
+        WorkflowResponseExtractor.ParseTerminationReasonFromResult(
+            $"TERMINATE: reason={reason}").Should().Be(reason);
+    }
+
+    [Theory]
+    [InlineData("COMPLETED", "completed")]
+    [InlineData("Escalation_Needed", "escalation_needed")]
+    [InlineData("AWAITING_USER_INPUT", "awaiting_user_input")]
+    public void ParseTerminationReasonFromResult_CaseVariations_Normalized(string raw, string expected)
+    {
+        WorkflowResponseExtractor.ParseTerminationReasonFromResult(
+            $"TERMINATE: reason={raw}").Should().Be(expected);
+    }
+
+    [Fact]
+    public void ParseTerminationReasonFromResult_UnknownReason_ReturnsNull()
+    {
+        // Bilinmeyen reason → null; çağıran taraf ReasonCompleted fallback'ini uygular.
+        WorkflowResponseExtractor.ParseTerminationReasonFromResult(
+            "TERMINATE: reason=success").Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseTerminationReasonFromResult_UnknownReasonParenForm_ReturnsNull()
+    {
+        WorkflowResponseExtractor.ParseTerminationReasonFromResult(
+            "TERMINATE (bottan_sikildim)").Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseTerminationReasonFromResult_EmptyInput_ReturnsNull()
+    {
+        WorkflowResponseExtractor.ParseTerminationReasonFromResult("").Should().BeNull();
     }
 
     [Fact]

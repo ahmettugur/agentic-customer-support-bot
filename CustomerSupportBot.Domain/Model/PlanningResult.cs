@@ -5,18 +5,15 @@
 namespace CustomerSupportBot.Domain.Model;
 
 /// <summary>
-/// PlanningAgent'ın yapılandırılmış çıktısı — niyet analizi, seçilen ajan,
-/// Reddedilen alternatifler ve clarification ihtiyacı.
+/// PlanningAgent'ın yapılandırılmış çıktısı — routing kararı (seçilen ajan,
+/// reddedilen alternatifler, clarification ihtiyacı).
+/// Intent tespiti bu modelde YOKTUR: intent'in tek sahibi ReasoningService'tir
+/// (<see cref="ReasoningResult.Intent"/>); PlanningAgent reasoning hint'indeki
+/// intent'i nihai karar kabul edip yalnızca planlama/routing yapar.
 /// </summary>
 public class PlanningResult
 {
-    /// <summary>Algılanan niyet.</summary>
-    public string DetectedIntent { get; set; } = "";
-
-    /// <summary>Niyet güven skoru 0.0 - 1.0.</summary>
-    public double IntentConfidence { get; set; } = 0.5;
-
-    /// <summary>Niyetin dayandığı kanıtlar (kullanıcı metninden alıntılar).</summary>
+    /// <summary>Routing kararının dayandığı kanıtlar (kullanıcı metninden alıntılar).</summary>
     public List<string> SupportingEvidence { get; set; } = new();
 
     /// <summary>Seçilen ajan (ör. "ProductAgent").</summary>

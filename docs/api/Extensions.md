@@ -96,7 +96,6 @@ Provider'a göre default model adı:
 ```
 AiProvider.OpenAI      → options.OpenAI.Model
 AiProvider.AzureOpenAI → options.AzureOpenAI.Deployment
-AiProvider.Anthropic   → options.Anthropic.Model
 ```
 
 Reasoning model için `ReasoningDeployment` / `ReasoningModel` öncelikli, yoksa standart model fallback.

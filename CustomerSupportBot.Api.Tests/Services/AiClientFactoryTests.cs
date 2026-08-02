@@ -34,14 +34,6 @@ public class AiClientFactoryTests
     }
 
     [Fact]
-    public void Anthropic_NoApiKey_Throws()
-    {
-        var opts = new AiOptions { Provider = AiProvider.Anthropic, Anthropic = { Model = "claude-x" } };
-        Action act = () => AiClientFactory.CreateStandardChatClient(opts);
-        act.Should().Throw<InvalidOperationException>().WithMessage("*Anthropic*");
-    }
-
-    [Fact]
     public void OpenAI_WithKey_BuildsClient()
     {
         var opts = new AiOptions
@@ -79,17 +71,5 @@ public class AiClientFactoryTests
         var opts = new AiOptions { Provider = AiProvider.AzureOpenAI, AzureOpenAI = { Deployment = "d" } };
         Action act = () => AiClientFactory.CreateReasoningChatClient(opts);
         act.Should().Throw<InvalidOperationException>();
-    }
-
-    [Fact]
-    public void Reasoning_Anthropic_WithKey_BuildsClient()
-    {
-        var opts = new AiOptions
-        {
-            Provider = AiProvider.Anthropic,
-            Anthropic = { ApiKey = "stub", Model = "claude-x", ReasoningModel = "claude-x", MaxTokens = 1024 }
-        };
-        var client = AiClientFactory.CreateReasoningChatClient(opts);
-        client.Should().NotBeNull();
     }
 }

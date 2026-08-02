@@ -166,7 +166,8 @@ public sealed class OrderToolsService : IOrderToolsService
     {
         if (string.IsNullOrWhiteSpace(orderId))
             return ToolResult.ValidationError("Sipariş numarası boş olamaz.", WellKnown.ToolParameterNames.OrderId);
-        if (string.IsNullOrWhiteSpace(reason) || reason.Length < 5)
+        // Trim: boşluk dolgusuyla ("a    ") min-uzunluk kuralı aşılamamalı.
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
             return ToolResult.ValidationError("İptal sebebi en az 5 karakter olmalıdır.", WellKnown.ToolParameterNames.Reason);
 
         var order = _orders.Get(orderId);
@@ -197,7 +198,8 @@ public sealed class OrderToolsService : IOrderToolsService
     {
         if (string.IsNullOrWhiteSpace(orderId))
             return ToolResult.ValidationError("Sipariş numarası boş olamaz.", WellKnown.ToolParameterNames.OrderId);
-        if (string.IsNullOrWhiteSpace(reason) || reason.Length < 5)
+        // Trim: boşluk dolgusuyla ("a    ") min-uzunluk kuralı aşılamamalı.
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
             return ToolResult.ValidationError("İade sebebi en az 5 karakter olmalıdır.", WellKnown.ToolParameterNames.Reason);
 
         var order = _orders.Get(orderId);

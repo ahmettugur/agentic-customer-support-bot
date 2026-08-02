@@ -34,7 +34,7 @@ public sealed class OpenAiEmbeddingAdapter : IEmbeddingPort
         var emb = memoryOptions.Value.Embedding;
         Dimension = emb.Dimension;
 
-        // Embedding sadece OpenAI / Azure OpenAI üzerinden — Anthropic'te embedding yok.
+        // Embedding OpenAI / Azure OpenAI üzerinden yapılır.
         // Provider hangisi olursa olsun, key'i olan ilk client'ı seçiyoruz (fallback).
         // Hiçbiri yoksa _client null kalır; çağrı sırasında açıklayıcı hata atılır.
         try

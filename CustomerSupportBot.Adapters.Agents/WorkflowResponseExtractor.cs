@@ -7,6 +7,7 @@ using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Agents;
 
@@ -173,18 +174,36 @@ public static class WorkflowResponseExtractor
         return false;
     }
 
-    public static string? ParseTerminationReasonFromResult(string text)
+    /// <summary>
+    /// Sonuç metninden TERMINATE reason'ını çıkarır ve <see cref="WellKnown.Termination.KnownReasons"/>
+    /// kümesiyle doğrular. Bilinen reason → kanonik (küçük harf) değer; bilinmeyen reason →
+    /// warning log + <c>null</c> (çağıran taraf <see cref="WellKnown.Termination.ReasonCompleted"/>
+    /// fallback'ini uygular). Marker hiç yoksa da <c>null</c> döner.
+    /// </summary>
+    public static string? ParseTerminationReasonFromResult(string text, ILogger? logger = null)
     {
         if (string.IsNullOrEmpty(text)) return null;
 
         try
         {
+            string? raw = null;
             var match = Regex.Match(text, @"TERMINATE[:\s]+reason\s*=\s*([a-zA-Z_]+)", RegexOptions.IgnoreCase, RegexTimeout);
-            if (match.Success) return match.Groups[1].Value.ToLowerInvariant();
+            if (match.Success)
+            {
+                raw = match.Groups[1].Value.ToLowerInvariant();
+            }
+            else
+            {
+                match = Regex.Match(text, @"TERMINATE\s*\(([^)]+)\)", RegexOptions.IgnoreCase, RegexTimeout);
+                if (match.Success) raw = match.Groups[1].Value.Trim().ToLowerInvariant();
+            }
 
-            match = Regex.Match(text, @"TERMINATE\s*\(([^)]+)\)", RegexOptions.IgnoreCase, RegexTimeout);
-            if (match.Success) return match.Groups[1].Value.Trim().ToLowerInvariant();
+            if (raw == null) return null;
+            if (WellKnown.Termination.KnownReasons.Contains(raw)) return raw;
 
+            logger?.LogWarning(
+                "Bilinmeyen TERMINATE reason '{Reason}' — '{Fallback}' olarak ele alınacak.",
+                raw, WellKnown.Termination.ReasonCompleted);
             return null;
         }
         catch (RegexMatchTimeoutException)

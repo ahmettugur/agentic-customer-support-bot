@@ -30,6 +30,20 @@ public class EvaluationScenario
 
     public List<CriterionSpec> SuccessCriteria { get; set; } = new();
     public string? KnownFailureMode { get; set; }
+
+    /// <summary>
+    /// Senaryo kaç kez koşturulsun (non-determinism ölçümü). 1 (varsayılan) = eski davranış,
+    /// tek koşu. 1'den büyükse <see cref="ScenarioResult.RepetitionOutcomes"/>/<see cref="ScenarioResult.RepetitionPassRate"/>
+    /// doldurulur.
+    /// </summary>
+    public int Repetitions { get; set; } = 1;
+
+    /// <summary>
+    /// MEAI kalite değerlendiricileri — "relevance", "coherence". Boşsa hiç çalıştırılmaz.
+    /// Global olarak <c>EvaluationQualityOptions.Enabled=false</c> ise (varsayılan) senaryo bunu
+    /// istese bile atlanır — gerçek LLM-judge çağrısı gerektirdiği için maliyetli, opt-in.
+    /// </summary>
+    public List<string> QualityChecks { get; set; } = new();
 }
 
 /// <summary>YAML'da <c>expected_tool_calls</c> altında tanımlanan tek bir tool çağrı beklentisi.</summary>
@@ -89,6 +103,18 @@ public class ScenarioResult
     public List<string> ToolsCalled { get; set; } = new();
     public long DurationMs { get; set; }
     public string? Error { get; set; }
+
+    /// <summary>Kaç kez koşturuldu (bkz. <see cref="EvaluationScenario.Repetitions"/>). 1 = tek koşu, eski davranış.</summary>
+    public int Repetitions { get; set; } = 1;
+
+    /// <summary>
+    /// Repetitions &gt; 1 ise her koşunun <see cref="Passed"/> sonucu, sırasıyla. 1 koşuda null —
+    /// tek-koşu senaryolarda bu alanı doldurup ekstra JSON gürültüsü üretmemek için.
+    /// </summary>
+    public List<bool>? RepetitionOutcomes { get; set; }
+
+    /// <summary>Repetitions &gt; 1 ise koşuların kaçının geçtiğinin oranı (0.0–1.0) — non-determinism ölçüsü.</summary>
+    public double? RepetitionPassRate { get; set; }
 }
 
 public class CriterionResult

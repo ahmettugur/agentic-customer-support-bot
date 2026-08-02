@@ -67,11 +67,11 @@ public static class ApplicationServiceCollectionExtensions
             .Validate(o => o.MaxDuplicateToolCalls > 0, "WorkflowGuards:MaxDuplicateToolCalls pozitif olmalı.")
             .Validate(o => o.MaxIterations > 0, "WorkflowGuards:MaxIterations pozitif olmalı.")
             .Validate(o => o.MaxHandoffsPerAgent > 0, "WorkflowGuards:MaxHandoffsPerAgent pozitif olmalı.")
-            .Validate(o => o.PlanConfidenceThreshold is >= 0 and <= 1,
-                "WorkflowGuards:PlanConfidenceThreshold 0-1 aralığında olmalı.")
             .ValidateOnStart();
 
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
+
+        services.Configure<EvaluationQualityOptions>(configuration.GetSection(EvaluationQualityOptions.SectionName));
     }
 
     private static void AddDrivingPorts(this IServiceCollection services)
@@ -147,6 +147,9 @@ public static class ApplicationServiceCollectionExtensions
 
     private static void AddMemoryServices(this IServiceCollection services, IConfiguration configuration)
     {
+        // Retrieval içeriğini sanitize eden yardımcı — memory açık/kapalı her durumda kayıtlı.
+        services.AddSingleton<IContextSanitizer, ContextSanitizer>();
+
         var memOpts = configuration.GetSection(SemanticMemoryOptions.SectionName)
                           .Get<SemanticMemoryOptions>() ?? new SemanticMemoryOptions();
         if (memOpts.Enabled)

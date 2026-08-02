@@ -5,8 +5,8 @@
 // yeniden kullanılmadı — PostToolReflection.StatusEnum gibi salt-okunur computed
 // property'ler JSON schema'ya sızıp modele anlamsız bir alan gösterirdi. Bu tipler
 // yalnızca beklenen JSON şeklini tanımlar; asıl parse hâlâ SpecialistReasoningParser
-// üzerinden yapılır (bkz. specialist agent dosyalarındaki not — Anthropic bridge'i
-// ResponseFormat'ı okumadığı için parser'ın defensive fence/alan bazlı mantığı kalkmadı).
+// üzerinden yapılır (provider strict schema'yı honor etmezse parser'ın defensive
+// fence/alan bazlı mantığı yedek güvence olarak duruyor).
 
 using System.Text.Json;
 

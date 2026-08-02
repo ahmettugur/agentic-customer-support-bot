@@ -50,7 +50,7 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      INFRASTRUCTURE                              │
-│  AiClientFactory → { OpenAI | AzureOpenAI | Anthropic }          │
+│  AiClientFactory → { OpenAI | AzureOpenAI }                        │
 │    ├─ IChatClient            (chat / specialist / response)        │
 │    └─ ReasoningChatClient    (o-series / reasoning deployment)     │
 │  PostgreSQL (sessions/traces/approvals/escalations/ratings/auth) │
@@ -260,7 +260,6 @@ CustomerSupport.slnx
 ├── CustomerSupportBot.Adapters.AI/      ← Katman 3e: AI sağlayıcı adaptörü
 │   ├── OpenAi/                          # OpenAI IChatClient implementasyonu
 │   ├── AzureOpenAi/                     # Azure OpenAI IChatClient implementasyonu
-│   ├── Anthropic/                       # Anthropic IChatClient implementasyonu
 │   ├── Chat/                            # TelemetryChatClient, ReasoningChatClient
 │   ├── Qdrant/                          # Qdrant vector store (IVectorMemoryPort, IEmbeddingPort)
 │   ├── Realtime/                        # gpt-realtime-2 WebSocket köprüsü
@@ -369,7 +368,7 @@ AiOptions             (IOptions)   ─┐  ← GetSection("AI") (Provider + alt 
 IChatClient           (singleton)  ─┤  → AiClientFactory.CreateStandardChatClient(opts)
                                     │     → opsiyonel TelemetryChatClient sarmalama
 ReasoningChatClient   (singleton)  ─┤  → AiClientFactory.CreateReasoningChatClient(opts)
-                                    │     (Provider'a göre OpenAI / AzureOpenAI / Anthropic)
+                                    │     (Provider'a göre OpenAI / AzureOpenAI)
 SemanticMemoryService (singleton)  ─┤  → Qdrant + embedding (SemanticMemory.Enabled ise)
 KnowledgeBaseIngestor (hosted)     ─┘  → startup'ta Api/KnowledgeBase/*.md → Qdrant
 
@@ -546,10 +545,10 @@ Bkz. `Models/StreamEvent.cs` — tüm tip sabitleri.
 
 ## İki LLM, iki rol
 
-Tasarımda **iki ayrı chat client** kullanılır. Her ikisi de `AiClientFactory` tarafından seçili sağlayıcı (OpenAI / Azure OpenAI / Anthropic) için üretilir:
+Tasarımda **iki ayrı chat client** kullanılır. Her ikisi de `AiClientFactory` tarafından seçili sağlayıcı (OpenAI / Azure OpenAI) için üretilir:
 
-1. **`IChatClient`** (default: OpenAI → `gpt-5.4`, Azure → deployment config, Anthropic → `claude-haiku-4-5`) — tüm ajanlar, ConversationSummaryProvider, RewriteRoutingMessage, LessonMiner.
-2. **`ReasoningChatClient`** (default: OpenAI → `gpt-5.4-nano`, Azure → reasoning deployment, Anthropic → reasoning modeli) — **sadece** `ReasoningService` kullanır; OpenAI/Azure'da `reasoning_effort` parametresi gönderilir.
+1. **`IChatClient`** (default: OpenAI → `gpt-5.4`, Azure → deployment config) — tüm ajanlar, ConversationSummaryProvider, RewriteRoutingMessage, LessonMiner.
+2. **`ReasoningChatClient`** (default: OpenAI → `gpt-5.4-nano`, Azure → reasoning deployment) — **sadece** `ReasoningService` kullanır; OpenAI/Azure'da `reasoning_effort` parametresi gönderilir.
 
 Bu ayrım sayesinde:
 - Ön-analiz (niyet tespiti, requiredInfo) `reasoning_effort` destekli ayrı bir modelde (varsayılan `gpt-5.4-nano`) yapılır.
@@ -615,7 +614,6 @@ appsettings.json → AI:Provider
 |-------|-------------|------------------|----------------|
 | `OpenAI` | `gpt-5.4` | `gpt-5.4-nano` | `AI:OpenAI:ApiKey` |
 | `AzureOpenAI` | deployment config | reasoning deployment | `AI:AzureOpenAI:Endpoint`, `ApiKey` |
-| `Anthropic` | `claude-haiku-4-5` | `claude-haiku-4-5` | `AI:Anthropic:ApiKey` |
 
 **Karar noktası:** `AiClientFactory.CreateStandardChatClient()` ve `CreateReasoningChatClient()` — `AI:Provider` değerine göre sadece ilgili sağlayıcının alt bloğundaki alanlar zorunlu kılınır.
 

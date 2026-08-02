@@ -14,7 +14,7 @@ Her specialist ajanın `BuildInner` static metodunda `ChatOptions.ResponseFormat
 ## Sorumlulukları
 
 - Specialist çıktısının beklenen JSON şeklini tanımlamak: `preToolCheck`, `resultConfidence`, `resultNotes`, `postToolReflection`.
-- `SpecialistReasoningSchemaOptions.CamelCase`: `JsonNamingPolicy.CamelCase` ile C# `PascalCase` property adlarını (`DetectedIntent` vb.) JSON'da beklenen `camelCase` adlara (`detectedIntent`) çevirmek.
+- `SpecialistReasoningSchemaOptions.CamelCase`: `JsonNamingPolicy.CamelCase` ile C# `PascalCase` property adlarını (`ResultConfidence` vb.) JSON'da beklenen `camelCase` adlara (`resultConfidence`) çevirmek.
 
 **Üstlenmediği işler:** Gerçek JSON parse (`SpecialistReasoningParser` yapar — bu şema yalnızca modelin ne üreteceğini kısıtlar, üretileni okumaz).
 
@@ -30,7 +30,7 @@ Her specialist ajanın `BuildInner` static metodunda `ChatOptions.ResponseFormat
 
 **`SelectedTool` ve `OptionalParams` alanları neden var:** Bu iki alan `SpecialistReasoningParser` tarafından hiç okunmaz — yalnızca bazı ajanların promptlarında (özellikle `OrderAgent`'ın 6 aday tool'u arasından seçim gerekçesini netleştirmesi için `selectedTool`; `ComplaintAgent`/`HumanHandoffAgent`'ın `customer_id` gibi otomatik türetilen alanları `missingParams`'a saymaması için `optionalParams`) model muhakemesini netleştiren reasoning-scaffold alanlarıdır. Şemadan çıkarılmadılar çünkü strict mode altında modelin bu ek alanları hâlâ (isteğe bağlı olarak) üretebilmesi model doğruluğuna katkı sağlıyor.
 
-**Anthropic uyarısı:** `Microsoft.Agents.AI.Anthropic` bridge'i `ChatOptions.ResponseFormat`'ı hiç okumuyor (decompile ile doğrulandı) — o path'te bu şema sessizce no-op olur, `SpecialistReasoningParser`'ın defensive fence-temizleme + alan-bazlı parse mantığı tek güvence olarak kalır (bu yüzden hiç kaldırılmadı).
+**Parser güvencesi:** Provider strict schema'yı herhangi bir nedenle honor etmezse bu şema sessizce no-op olabilir — bu yüzden `SpecialistReasoningParser`'ın defensive fence-temizleme + alan-bazlı parse mantığı yedek güvence olarak duruyor (hiç kaldırılmadı).
 
 ## Metotlar / Üyeler
 

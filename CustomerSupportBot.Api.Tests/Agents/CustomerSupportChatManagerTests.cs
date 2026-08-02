@@ -87,9 +87,9 @@ public class CustomerSupportChatManagerTests
     public async Task SelectNextAgent_AfterPlan_RoutesToSelectedSpecialist()
     {
         var mgr = BuildManager();
-        var planJson = "{\"intent\":\"order_inquiry\",\"selectedAgent\":\"" +
+        var planJson = "{\"selectedAgent\":\"" +
                        WellKnown.AgentNames.Order +
-                       "\",\"intentConfidence\":0.95,\"needsClarification\":false}";
+                       "\",\"needsClarification\":false}";
         var history = new List<ChatMessage>
         {
             new(ChatRole.User, "siparişimi sor"),
@@ -103,9 +103,9 @@ public class CustomerSupportChatManagerTests
     public async Task SelectNextAgent_HandoffLimitExceeded_FallsBackToResponse()
     {
         var mgr = BuildManager(new WorkflowGuardOptions { MaxHandoffsPerAgent = 1 });
-        var planJson = "{\"intent\":\"order_inquiry\",\"selectedAgent\":\"" +
+        var planJson = "{\"selectedAgent\":\"" +
                        WellKnown.AgentNames.Order +
-                       "\",\"intentConfidence\":0.95,\"needsClarification\":false}";
+                       "\",\"needsClarification\":false}";
         var history = new List<ChatMessage>
         {
             new(ChatRole.User, "soru"),

@@ -97,6 +97,61 @@ public class SubTaskOrchestratorTests
         SubTaskOrchestrator.CreateSubTaskReasoning(parent, sub).NextAction.Should().Be("salt iş");
     }
 
+    // ─── VerifiedEntities propagation — bkz. WorkflowRunner.ResolveExtractedIds ile aynı bug sınıfı:
+    // FormatSubTaskQuery'nin "açıklama (order_id=1042)" biçimindeki sentetik metni IdExtractor'ın
+    // Türkçe bağlam-kelimesi regex'iyle uyumlu değil; subTask.Entities zaten doğru veriyi taşıyor,
+    // CreateSubTaskReasoning bunu VerifiedEntities'e geri çevirmezse kaybolur.
+
+    [Fact]
+    public void CreateSubTaskReasoning_PropagatesOrderIdFromSubTaskEntities()
+    {
+        var parent = new ReasoningResult();
+        var sub = new SubTask
+        {
+            Description = "1042'yi iptal et",
+            Entities = new() { ["order_id"] = "1042" }
+        };
+
+        var derived = SubTaskOrchestrator.CreateSubTaskReasoning(parent, sub);
+
+        derived.VerifiedEntities.Should().NotBeNull();
+        derived.VerifiedEntities!.OrderId.Should().NotBeNull();
+        derived.VerifiedEntities.OrderId!.Value.Should().Be("1042");
+        derived.VerifiedEntities.CustomerId.Should().BeNull();
+    }
+
+    [Fact]
+    public void CreateSubTaskReasoning_PropagatesAllThreeEntityTypes()
+    {
+        var parent = new ReasoningResult();
+        var sub = new SubTask
+        {
+            Entities = new()
+            {
+                ["order_id"] = "1030",
+                ["customer_id"] = "1027",
+                ["complaint_id"] = "1001"
+            }
+        };
+
+        var derived = SubTaskOrchestrator.CreateSubTaskReasoning(parent, sub);
+
+        derived.VerifiedEntities!.OrderId!.Value.Should().Be("1030");
+        derived.VerifiedEntities.CustomerId!.Value.Should().Be("1027");
+        derived.VerifiedEntities.ComplaintId!.Value.Should().Be("1001");
+    }
+
+    [Fact]
+    public void CreateSubTaskReasoning_NoEntities_VerifiedEntitiesIsNull()
+    {
+        var parent = new ReasoningResult();
+        var sub = new SubTask { Description = "genel görev" };
+
+        var derived = SubTaskOrchestrator.CreateSubTaskReasoning(parent, sub);
+
+        derived.VerifiedEntities.Should().BeNull();
+    }
+
     [Fact]
     public void FormatSubTaskQuery_NoEntities_DescriptionOnly()
     {

@@ -94,14 +94,13 @@ PlanningResultParser.TryParse(lastMessage.Text)
     ├─► null          → Parse başarısız → ResponseAgent    branch: "plan_parse_failed"
     │
     ├─► NeedsClarification = true  → ResponseAgent         branch: "plan_clarification"
-    ├─► IntentConfidence < eşik    → ResponseAgent         branch: "plan_clarification"
     │
     ├─► SelectedAgent bilinmiyor   → ResponseAgent         branch: "plan_unknown_agent"
     │
     └─► SelectedAgent biliniyor    → İlgili specialist ajan branch: "plan"
 ```
 
-**`PlanConfidenceThreshold`:** `WorkflowGuardOptions.PlanConfidenceThreshold` değerinin altındaki güven skoru netleştirme isteğine yönlendirir.
+**Belirsizlik kuralı:** Clarification kararı artık bir güven skoru eşiğine değil, yalnızca planın `NeedsClarification` flag'ine bağlıdır — PlanningAgent emin olmadığında bu flag'i kendisi set eder.
 
 ## Strateji 3: `ReflectionRoutingStrategy`
 
@@ -172,11 +171,11 @@ Turn 1:
   → FirstTurnStrategy: PlanningAgent'tan mesaj yok → PlanningAgent seçildi [first_turn]
 
 PlanningAgent yanıtı:
-  { "selected_agent": "OrderAgent", "intent_confidence": 0.92 }
+  { "selected_agent": "OrderAgent", "needs_clarification": false }
 
 Turn 2:
   lastMessage.AuthorName = "PlanningAgent"
-  → PlanRoutingStrategy: parse başarılı, confidence=0.92 ≥ eşik, agent=OrderAgent
+  → PlanRoutingStrategy: parse başarılı, needsClarification=false, agent=OrderAgent
   → OrderAgent seçildi [plan]
 
 OrderAgent yanıtı:

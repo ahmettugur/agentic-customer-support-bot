@@ -156,14 +156,27 @@ public static class TaskStatuses
 public static class Termination
 {
     public const string Marker = "TERMINATE";
+
+    // LLM (ResponseAgent) tarafından üretilen reason'lar
+    // (response-agent.md prompt'undaki listeyle birebir hizalı)
     public const string ReasonCompleted = "completed";
+    public const string ReasonAwaitingUserInput = "awaiting_user_input";
+    public const string ReasonEscalationNeeded = "escalation_needed";
+    public const string ReasonNotFound = "not_found";
+    public const string ReasonError = "error";
+
+    // Sistem (guard) tarafından üretilen reason'lar — LLM bunları üretmez
     public const string ReasonMaxMessages = "max_messages_reached";
     public const string ReasonRepeatedToolCall = "repeated_tool_call_guard";
     public const string ReasonTimeout = "timeout";
+
+    // Bilinen tüm reason değerleri (case-insensitive) —
+    // WorkflowResponseExtractor.ParseTerminationReasonFromResult bu kümeyle doğrular
+    public static readonly IReadOnlySet<string> KnownReasons;
 }
 ```
 
-LLM yanıtın sonuna `TERMINATE` yazınca workflow sonlanır.
+LLM yanıtın sonuna `TERMINATE` yazınca workflow sonlanır. Bilinmeyen bir reason parse edilirse warning log'lanır ve `completed` fallback'i uygulanır.
 
 ### EscalationActions
 

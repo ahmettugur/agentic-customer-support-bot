@@ -1,6 +1,6 @@
 // Adapters.AI/ExceptionTranslator.cs
 // AI provider infrastructure exception'larını domain exception'larına çevirir.
-// OpenAI, Azure OpenAI, Anthropic ve Qdrant hatalarını tutarlı domain exception'larına dönüştürür.
+// OpenAI, Azure OpenAI ve Qdrant hatalarını tutarlı domain exception'larına dönüştürür.
 
 using System.ClientModel;
 using CustomerSupportBot.Domain.Exceptions;

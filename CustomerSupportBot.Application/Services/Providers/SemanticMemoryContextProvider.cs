@@ -4,6 +4,7 @@
 
 using System.Text;
 
+using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Memory;
 using CustomerSupportBot.Domain.Model;
@@ -16,6 +17,7 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
 {
     private readonly SemanticMemoryService _memory;
     private readonly ISessionManager _sessionRepository;
+    private readonly IContextSanitizer _sanitizer;
     private readonly ILogger<SemanticMemoryContextProvider> _logger;
 
     public string Name => "SemanticMemory";
@@ -24,10 +26,12 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
     public SemanticMemoryContextProvider(
         SemanticMemoryService memory,
         ISessionManager sessionRepository,
+        IContextSanitizer sanitizer,
         ILogger<SemanticMemoryContextProvider> logger)
     {
         _memory = memory;
         _sessionRepository = sessionRepository;
+        _sanitizer = sanitizer;
         _logger = logger;
     }
 
@@ -75,17 +79,21 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
         }
     }
 
-    private static void AppendHits(StringBuilder sb, IReadOnlyList<MemorySearchHit> hits, ref int budget)
+    private void AppendHits(StringBuilder sb, IReadOnlyList<MemorySearchHit> hits, ref int budget)
     {
         foreach (var h in hits)
         {
             if (budget <= 100) break;
-            var title = h.Document.Title ?? h.Document.Source ?? "(kaynaksız)";
+            var title = _sanitizer.Sanitize(h.Document.Title ?? h.Document.Source ?? "(kaynaksız)");
             var src = h.Document.Source ?? "?";
-            var snippet = h.Document.Text;
+            // Önce sanitize, sonra bütçe kırpması, en sonda wrap — fence asla bölünmez.
+            var snippet = _sanitizer.Sanitize(h.Document.Text);
             if (snippet.Length > Math.Min(budget - 80, 500)) snippet = snippet[..Math.Min(budget - 80, 500)] + "…";
+            var wrapped = _sanitizer.WrapRetrieved(
+                snippet.Replace("\n", " ").Trim(),
+                h.Document.Kind.ToString().ToLowerInvariant());
             sb.AppendLine($"- **[{title}]** _(score={h.Score:F2}, kaynak={src})_");
-            sb.AppendLine($"  {snippet.Replace("\n", " ").Trim()}");
+            sb.AppendLine($"  {wrapped}");
             budget -= snippet.Length + title.Length + 20;
         }
     }

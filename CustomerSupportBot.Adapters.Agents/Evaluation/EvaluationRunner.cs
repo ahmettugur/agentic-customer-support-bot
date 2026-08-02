@@ -11,6 +11,10 @@ using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.AI.Evaluation;
+using Microsoft.Extensions.AI.Evaluation.Quality;
+using Microsoft.Extensions.Options;
+using ChatResponse = Microsoft.Extensions.AI.ChatResponse;
 
 namespace CustomerSupportBot.Adapters.Agents.Evaluation;
 
@@ -20,17 +24,23 @@ public class EvaluationRunner : IEvaluationPort
     private readonly IReasoningPort _reasoningService;
     private readonly ISessionManager _sessionManager;
     private readonly IReasoningTraceStore _traceStore;
+    private readonly IChatClient _chatClient;
+    private readonly EvaluationQualityOptions _qualityOptions;
 
     public EvaluationRunner(
         IAgentTeamPort team,
         IReasoningPort reasoningService,
         ISessionManager sessionManager,
-        IReasoningTraceStore traceStore)
+        IReasoningTraceStore traceStore,
+        IChatClient chatClient,
+        IOptions<EvaluationQualityOptions> qualityOptions)
     {
         _team = team;
         _reasoningService = reasoningService;
         _sessionManager = sessionManager;
         _traceStore = traceStore;
+        _chatClient = chatClient;
+        _qualityOptions = qualityOptions.Value;
     }
 
     /// <summary>
@@ -60,10 +70,47 @@ public class EvaluationRunner : IEvaluationPort
         return runResult;
     }
 
-    /// <summary>Tek bir senaryoyu çalıştırır.</summary>
+    /// <summary>
+    /// Tek bir senaryoyu çalıştırır. <see cref="EvaluationScenario.Repetitions"/> 1'den büyükse
+    /// senaryo N kez ayrı ayrı koşturulur (non-determinism ölçümü) ve ilk koşunun sonucu, tüm
+    /// koşuların pass/fail dağılımıyla (<see cref="ScenarioResult.RepetitionOutcomes"/>/
+    /// <see cref="ScenarioResult.RepetitionPassRate"/>) zenginleştirilerek döndürülür.
+    /// </summary>
     public async Task<ScenarioResult> RunScenarioAsync(
         EvaluationScenario scenario,
         CancellationToken ct = default)
+    {
+        if (scenario.Repetitions <= 1)
+            return await RunSingleAsync(scenario, ct);
+
+        var runs = new List<ScenarioResult>();
+        for (var i = 0; i < scenario.Repetitions; i++)
+        {
+            if (ct.IsCancellationRequested) break;
+            runs.Add(await RunSingleAsync(scenario, ct));
+        }
+
+        return AggregateRepetitions(runs);
+    }
+
+    /// <summary>
+    /// N koşunun sonuçlarını tek bir <see cref="ScenarioResult"/>'a indirger: ilk koşunun
+    /// tüm alanları (Response, CriteriaResults vb.) korunur, üstüne Repetitions/RepetitionOutcomes/
+    /// RepetitionPassRate eklenir. Saf/deterministik — LLM veya I/O gerektirmez, ayrı test edilebilir.
+    /// </summary>
+    internal static ScenarioResult AggregateRepetitions(List<ScenarioResult> runs)
+    {
+        var primary = runs[0];
+        primary.Repetitions = runs.Count;
+        primary.RepetitionOutcomes = runs.Select(r => r.Passed).ToList();
+        primary.RepetitionPassRate = runs.Count == 0 ? 0.0 : runs.Count(r => r.Passed) / (double)runs.Count;
+        return primary;
+    }
+
+    /// <summary>Senaryonun TEK bir koşusu — eski (repetitions öncesi) davranışın kendisi.</summary>
+    private async Task<ScenarioResult> RunSingleAsync(
+        EvaluationScenario scenario,
+        CancellationToken ct)
     {
         var result = new ScenarioResult
         {
@@ -156,6 +203,16 @@ public class EvaluationRunner : IEvaluationPort
                 if (intentMatch) result.PassedCriteria++;
             }
 
+            if (scenario.QualityChecks.Count > 0)
+            {
+                foreach (var qc in scenario.QualityChecks)
+                {
+                    var qcResult = await RunQualityCheckAsync(qc, scenario.Query, response, ct);
+                    result.CriteriaResults.Add(qcResult);
+                    if (qcResult.Passed) result.PassedCriteria++;
+                }
+            }
+
             result.TotalCriteria = result.CriteriaResults.Count;
         }
         catch (Exception ex)
@@ -165,6 +222,63 @@ public class EvaluationRunner : IEvaluationPort
 
         result.DurationMs = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
         return result;
+    }
+
+    /// <summary>
+    /// MEAI LLM-judge kalite değerlendiricisini (relevance/coherence) çalıştırır.
+    /// <see cref="EvaluationQualityOptions.Enabled"/> false ise (varsayılan) gerçek LLM çağrısı
+    /// yapmadan <c>Skipped="quality_checks_disabled"</c> döner — her koşum ek bir judge-model
+    /// çağrısı gerektirdiği için maliyetli, opt-in bir özellik.
+    /// </summary>
+    internal async Task<CriterionResult> RunQualityCheckAsync(
+        string checkName, string query, string? response, CancellationToken ct)
+    {
+        var criterionLabel = $"quality_{checkName}";
+
+        if (!_qualityOptions.Enabled)
+        {
+            return new CriterionResult
+            {
+                Criterion = criterionLabel,
+                Passed = false,
+                Skipped = "quality_checks_disabled",
+                Evaluation = "EvaluationQuality:Enabled=false (appsettings.json) — LLM-judge çağrısı atlandı"
+            };
+        }
+
+        IEvaluator evaluator = checkName.ToLowerInvariant() switch
+        {
+            "relevance" => new RelevanceEvaluator(),
+            "coherence" => new CoherenceEvaluator(),
+            _ => throw new ArgumentOutOfRangeException(nameof(checkName), checkName,
+                "Desteklenen quality check'ler: relevance, coherence")
+        };
+
+        var chatConfig = new ChatConfiguration(_chatClient);
+        var messages = new[] { new ChatMessage(ChatRole.User, query) };
+        var modelResponse = new ChatResponse(new ChatMessage(ChatRole.Assistant, response ?? ""));
+
+        var evalResult = await evaluator.EvaluateAsync(messages, modelResponse, chatConfig, cancellationToken: ct);
+        var metric = evalResult.Metrics.Values.OfType<NumericMetric>().FirstOrDefault();
+
+        if (metric is null)
+        {
+            return new CriterionResult
+            {
+                Criterion = criterionLabel,
+                Passed = false,
+                Skipped = "manual_review_needed",
+                Evaluation = "MEAI evaluator metrik döndürmedi (diagnostics için trace'e bakın)"
+            };
+        }
+
+        var failed = metric.Interpretation?.Failed ?? true;
+        return new CriterionResult
+        {
+            Criterion = criterionLabel,
+            Passed = !failed,
+            Evaluation = $"score={metric.Value}, rating={metric.Interpretation?.Rating}, reason={metric.Reason}"
+        };
     }
 
     private static string SimplifyAgentName(string name)

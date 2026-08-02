@@ -84,6 +84,8 @@ Tags:  { "intent": "order_inquiry", "rating": "5" }
 
 Bu dokümanlar ileriki oturumlarda `SemanticMemoryContextProvider` tarafından benzer sorularda geri getirilir.
 
+> 🔒 **Sanitizasyon (write-time):** `userQuery` ve `finalResponse` belleğe yazılmadan önce `IContextSanitizer.Sanitize` uygulanır — newline dışındaki C0/C1 kontrol karakterleri temizlenir, `<!-- ... -->` HTML comment blokları kaldırılır, aşırı uzunluk kırpılır. Okuma tarafında ayrıca `<retrieved_data>` fence uygulanır (çift katman, bkz. ContextPipeline.md).
+
 ---
 
 ## KnowledgeBaseIngestionService

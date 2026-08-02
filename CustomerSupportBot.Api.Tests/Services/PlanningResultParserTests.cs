@@ -37,8 +37,6 @@ public class PlanningResultParserTests
         var input = """
             ```json
             {
-                "detectedIntent": "order_inquiry",
-                "intentConfidence": 0.85,
                 "selectedAgent": "OrderAgent",
                 "rationale": "User asked about order status",
                 "needsClarification": false
@@ -49,8 +47,6 @@ public class PlanningResultParserTests
         var plan = PlanningResultParser.TryParse(input);
 
         plan.Should().NotBeNull();
-        plan.DetectedIntent.Should().Be("order_inquiry");
-        plan.IntentConfidence.Should().Be(0.85);
         plan.SelectedAgent.Should().Be("OrderAgent");
         plan.NeedsClarification.Should().BeFalse();
     }
@@ -59,41 +55,29 @@ public class PlanningResultParserTests
     public void TryParse_PlainJson_ParsesCorrectly()
     {
         var input = """
-            {"selectedAgent":"ProductAgent","intentConfidence":0.9,"detectedIntent":"product_info"}
+            {"selectedAgent":"ProductAgent","taskDescription":"Ürün listesini getir"}
             """;
 
         var plan = PlanningResultParser.TryParse(input);
 
         plan.Should().NotBeNull();
         plan.SelectedAgent.Should().Be("ProductAgent");
-        plan.IntentConfidence.Should().Be(0.9);
+        plan.TaskDescription.Should().Be("Ürün listesini getir");
     }
 
     [Fact]
-    public void TryParse_StringConfidence_ConvertedToScore()
+    public void TryParse_LegacyIntentFields_Ignored()
     {
-        var input = """{"intentConfidence":"yüksek","selectedAgent":"X"}""";
-        var plan = PlanningResultParser.TryParse(input);
-        plan.Should().NotBeNull();
-        plan.IntentConfidence.Should().BeGreaterThan(0.5);
-    }
+        // Intent'in tek sahibi ReasoningService — eski şemadan kalan
+        // detectedIntent/intentConfidence alanları parse edilmez, sessizce yok sayılır.
+        var input = """
+            {"selectedAgent":"OrderAgent","detectedIntent":"order_inquiry","intentConfidence":0.85}
+            """;
 
-    [Fact]
-    public void TryParse_ConfidenceClampedToValidRange()
-    {
-        var input = """{"intentConfidence":2.5,"selectedAgent":"X"}""";
         var plan = PlanningResultParser.TryParse(input);
-        plan.Should().NotBeNull();
-        plan.IntentConfidence.Should().Be(1.0);
-    }
 
-    [Fact]
-    public void TryParse_NegativeConfidence_ClampedToZero()
-    {
-        var input = """{"intentConfidence":-0.5,"selectedAgent":"X"}""";
-        var plan = PlanningResultParser.TryParse(input);
         plan.Should().NotBeNull();
-        plan.IntentConfidence.Should().Be(0.0);
+        plan.SelectedAgent.Should().Be("OrderAgent");
     }
 
     [Fact]
@@ -142,14 +126,5 @@ public class PlanningResultParserTests
         plan.Should().NotBeNull();
         plan.SupportingEvidence.Should().HaveCount(2);
         plan.SupportingEvidence.Should().Contain("evidence 1");
-    }
-
-    [Fact]
-    public void TryParse_DefaultConfidenceIsHalf()
-    {
-        var input = """{"selectedAgent":"X"}""";
-        var plan = PlanningResultParser.TryParse(input);
-        plan.Should().NotBeNull();
-        plan.IntentConfidence.Should().Be(0.5);
     }
 }

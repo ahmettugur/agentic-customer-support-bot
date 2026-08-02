@@ -105,7 +105,7 @@ private static IChatClient WrapWithTelemetry(IServiceProvider sp, IChatClient in
 }
 ```
 
-`ResolveStandardModel`/`ResolveReasoningModel` iki ayrı metottur (tek bir `ResolveModelHint` helper'ı yoktur) — her ikisi de `AiOptions.Provider`'a göre OpenAI/AzureOpenAI/Anthropic model adını seçer.
+`ResolveStandardModel`/`ResolveReasoningModel` iki ayrı metottur (tek bir `ResolveModelHint` helper'ı yoktur) — her ikisi de `AiOptions.Provider`'a göre OpenAI/AzureOpenAI model adını seçer.
 
 ### Neden?
 

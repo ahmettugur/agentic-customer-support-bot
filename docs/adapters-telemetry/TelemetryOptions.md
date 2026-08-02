@@ -67,7 +67,6 @@ Maliyet hesaplaması için kritik bölüm:
     "Pricing": {
       "gpt-4o-mini":    { "InputPer1K": 0.00015, "OutputPer1K": 0.0006 },
       "gpt-4o":         { "InputPer1K": 0.005,   "OutputPer1K": 0.015 },
-      "claude-haiku":   { "InputPer1K": 0.0008,  "OutputPer1K": 0.004 },
       "openai_default": { "InputPer1K": 0.001,   "OutputPer1K": 0.002 },
       "default":        { "InputPer1K": 0.0005,  "OutputPer1K": 0.001 }
     }
@@ -94,7 +93,7 @@ Pricing = new(StringComparer.OrdinalIgnoreCase);
 
 ### Güncel fiyatlar
 
-⚠️ Fiyatlar **manuel güncellenmelidir**. OpenAI/Anthropic fiyat değiştirirse `appsettings.json` güncellenir; kod değişmez. Üretimde environment variable / Azure App Configuration ile yönetilebilir.
+⚠️ Fiyatlar **manuel güncellenmelidir**. OpenAI fiyat değiştirirse `appsettings.json` güncellenir; kod değişmez. Üretimde environment variable / Azure App Configuration ile yönetilebilir.
 
 Tahmini güncel fiyatlar (2025-01):
 
@@ -103,8 +102,6 @@ Tahmini güncel fiyatlar (2025-01):
 | `gpt-4o-mini` | 0.00015 | 0.0006 |
 | `gpt-4o` | 0.0025 | 0.01 |
 | `gpt-4-turbo` | 0.01 | 0.03 |
-| `claude-haiku-4` | 0.0008 | 0.004 |
-| `claude-sonnet-4` | 0.003 | 0.015 |
 
 ---
 

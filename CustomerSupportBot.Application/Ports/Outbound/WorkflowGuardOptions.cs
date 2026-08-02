@@ -29,9 +29,4 @@ public class WorkflowGuardOptions
     /// Aynı specialist agent'a yapılabilecek maksimum dinamik handoff sayısı (ping-pong koruması).
     /// </summary>
     public int MaxHandoffsPerAgent { get; set; } = 2;
-
-    /// <summary>
-    /// Planning sonucunda intent confidence bu eşiğin altındaysa clarification yoluna sap.
-    /// </summary>
-    public double PlanConfidenceThreshold { get; set; } = 0.7;
 }

@@ -52,6 +52,7 @@ public class ReasoningService : IReasoningPort
             var text = await _reasoningClient.CompleteAsync(messages, ct);
             var result = ReasoningResultParser.Parse(text);
             result.SanityIssues = _sanityChecker.Check(result, verified);
+            result.VerifiedEntities = verified;
             return result;
         }
         catch (Exception ex)
@@ -65,7 +66,8 @@ public class ReasoningService : IReasoningPort
                 RequiredInfo = new List<string>(),
                 Confidence = WellKnown.Confidence.Low,
                 ConfidenceScore = 0.3,
-                NextAction = "workflow'a düşük güvenle devam et"
+                NextAction = "workflow'a düşük güvenle devam et",
+                VerifiedEntities = verified
             };
         }
     }
@@ -150,6 +152,7 @@ public class ReasoningService : IReasoningPort
         }
 
         result.SanityIssues = _sanityChecker.Check(result, verified);
+        result.VerifiedEntities = verified;
 
         yield return new StreamEvent(StreamEventTypes.ReasoningComplete, result);
     }

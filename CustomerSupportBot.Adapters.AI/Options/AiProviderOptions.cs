@@ -8,8 +8,7 @@ namespace CustomerSupportBot.Adapters.AI;
 public enum AiProvider
 {
     OpenAI,
-    AzureOpenAI,
-    Anthropic
+    AzureOpenAI
 }
 
 /// <summary>
@@ -23,7 +22,6 @@ public sealed class AiOptions
 
     public OpenAiOptions OpenAI { get; set; } = new();
     public AzureOpenAiOptions AzureOpenAI { get; set; } = new();
-    public AnthropicOptions Anthropic { get; set; } = new();
     public RealtimeOptions Realtime { get; set; } = new();
 }
 
@@ -66,13 +64,4 @@ public sealed class AzureOpenAiOptions
     public string? Deployment { get; set; }
     public string? ReasoningDeployment { get; set; }
     public string? ReasoningEffort { get; set; }
-}
-
-/// <summary>Anthropic Claude settings.</summary>
-public sealed class AnthropicOptions
-{
-    public string? ApiKey { get; set; }
-    public string? Model { get; set; }
-    public string? ReasoningModel { get; set; }
-    public int MaxTokens { get; set; }
 }

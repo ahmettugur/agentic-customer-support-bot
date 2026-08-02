@@ -67,14 +67,12 @@ public static class AiServicesExtensions
     private static string ResolveStandardModel(AiOptions options) => options.Provider switch
     {
         AiProvider.AzureOpenAI => options.AzureOpenAI.Deployment ?? "(unknown)",
-        AiProvider.Anthropic   => options.Anthropic.Model ?? "(unknown)",
         _                      => options.OpenAI.Model ?? "(unknown)"
     };
 
     private static string ResolveReasoningModel(AiOptions options) => options.Provider switch
     {
         AiProvider.AzureOpenAI => options.AzureOpenAI.ReasoningDeployment ?? options.AzureOpenAI.Deployment ?? "(unknown)",
-        AiProvider.Anthropic   => options.Anthropic.ReasoningModel ?? options.Anthropic.Model ?? "(unknown)",
         _                      => options.OpenAI.ReasoningModel ?? options.OpenAI.Model ?? "(unknown)"
     };
 }

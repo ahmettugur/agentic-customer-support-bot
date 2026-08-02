@@ -1,4 +1,4 @@
-﻿# Agentic Müşteri Destek Botu
+# Agentic Müşteri Destek Botu
 
 **Microsoft Agents Framework (MAF)** ve **.NET 10** üzerine inşa edilmiş, agentik mimarili bir müşteri destek chatbot'u.
 
@@ -149,7 +149,7 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 | Framework | .NET 10 (ASP.NET Core Minimal API) |
 | Ajan Framework | Microsoft Agents Framework (MAF) 1.4.0 |
 | AI Soyutlamaları | `Microsoft.Extensions.AI` |
-| LLM Sağlayıcı | OpenAI (`gpt-5.4`, `gpt-5.4-nano`) / Azure OpenAI / Anthropic (`claude-haiku-4-5`) |
+| LLM Sağlayıcı | OpenAI (`gpt-5.4`, `gpt-5.4-nano`) / Azure OpenAI |
 | Embedding | OpenAI `text-embedding-3-large` (3072-dim) |
 | Vector Store | **Qdrant** (gRPC, Cosine distance) |
 | Kalıcı Veri | PostgreSQL 16 (EF Core 10) + Redis (opsiyonel) |
@@ -376,7 +376,7 @@ Her proje için: README + her sınıf/dosya grubu için ayrı doküman.
 | [`docs/domain/`](docs/domain/README.md) | Domain modeller, services (parser/state machine/extractor), WellKnown |
 | [`docs/application/`](docs/application/README.md) | Port servisleri, agent'lar, reasoning, HITL, routing, workflow executor |
 | [`docs/adapters-agents/`](docs/adapters-agents/README.md) | MAF agent ekibi, tool kayıtları, approval gate |
-| [`docs/adapters-ai/`](docs/adapters-ai/README.md) | OpenAI/Azure/Anthropic chat, embedding, Qdrant vector, Realtime voice |
+| [`docs/adapters-ai/`](docs/adapters-ai/README.md) | OpenAI/Azure chat, embedding, Qdrant vector, Realtime voice |
 | [`docs/adapters-persistence/`](docs/adapters-persistence/README.md) | InMemory + Postgres adaptörleri, EF Core, hybrid cache pattern, auth |
 | [`docs/adapters-redis/`](docs/adapters-redis/README.md) | Distributed lock (RedLock), pub/sub message bus |
 | [`docs/adapters-telemetry/`](docs/adapters-telemetry/README.md) | OpenTelemetry pipeline, cost calculator, LLM intercept decorator |

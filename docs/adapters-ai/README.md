@@ -2,10 +2,9 @@
 
 LLM, embedding, vector store ve gerçek zamanlı ses altyapısı için adapter katmanı.
 
-Üç sağlayıcı desteklenir:
+İki sağlayıcı desteklenir:
 - **OpenAI** (GPT-4o, GPT-4-turbo, o1-mini reasoning, vb.)
 - **Azure OpenAI** (aynı modeller, Azure deployment'lar)
-- **Anthropic** (Claude Opus, Sonnet, Haiku)
 
 Ek hizmetler:
 - **OpenAI Embedding API** — text-embedding-3-small/large
@@ -19,7 +18,7 @@ Ek hizmetler:
 ```
 CustomerSupportBot.Adapters.AI/
 ├── Chat/
-│   ├── AiClientFactory.cs              ← Provider switch (OpenAI/Azure/Anthropic)
+│   ├── AiClientFactory.cs              ← Provider switch (OpenAI/Azure)
 │   ├── GeneralChatClientAdapter.cs     ← IGeneralChatClient
 │   └── ReasoningChatClient.cs          ← IReasoningChatClient (o-series reasoning)
 ├── OpenAi/
@@ -73,7 +72,7 @@ Tek `AI:Provider` config değeri uygulamanın hangi sağlayıcıya gideceğini b
 ```json
 {
   "AI": {
-    "Provider": "OpenAI",   // veya "AzureOpenAI", "Anthropic"
+    "Provider": "OpenAI",   // veya "AzureOpenAI"
     "OpenAI": {
       "ApiKey": "sk-...",
       "Model": "gpt-4o-mini",
@@ -85,12 +84,6 @@ Tek `AI:Provider` config değeri uygulamanın hangi sağlayıcıya gideceğini b
       "ApiKey": "...",
       "Deployment": "gpt-4o-mini-prod",
       "ReasoningDeployment": "o1-mini-prod"
-    },
-    "Anthropic": {
-      "ApiKey": "sk-ant-...",
-      "Model": "claude-haiku-4-5-20251001",
-      "ReasoningModel": "claude-sonnet-4-6",
-      "MaxTokens": 4096
     },
     "Realtime": {
       "Enabled": true,
@@ -112,7 +105,7 @@ Tek `AI:Provider` config değeri uygulamanın hangi sağlayıcıya gideceğini b
 `AddAiAdapters` **`IChatClient`'ı kayıt etmez** — bu sorumluluk `Api` katmanına bırakılmıştır.
 
 Neden? `IChatClient` `Adapters.Telemetry/TelemetryChatClient` ile sarmalanmalı. Bu compose adımı:
-- `Adapters.AI` → asıl client'ı sağlar (OpenAI/Azure/Anthropic)
+- `Adapters.AI` → asıl client'ı sağlar (OpenAI/Azure)
 - `Adapters.Telemetry` → decorator (TelemetryChatClient)
 - `Api` (Composition Root) → ikisini birleştirir
 
@@ -133,7 +126,7 @@ TelemetryChatClient (decorator)
    ↓
 Microsoft.Extensions.AI.IChatClient
    ↓
-Provider SDK (OpenAI / Azure / Anthropic)
+Provider SDK (OpenAI / Azure)
    ↓
 HTTPS API
 ```
@@ -169,6 +162,5 @@ OpenAI Realtime WebSocket
 | `Microsoft.Extensions.AI` | `IChatClient` interface |
 | `Microsoft.Agents.AI.OpenAI` | OpenAI istemcisi (OpenAI SDK'yı transitive getirir — doğrudan `OpenAI` paket referansı yoktur) |
 | `Azure.AI.OpenAI` | Azure OpenAI SDK |
-| `Microsoft.Agents.AI.Anthropic` | Anthropic istemcisi |
 | `Qdrant.Client` | Qdrant gRPC client |
 | `System.Net.WebSockets` | Realtime WS bağlantısı |

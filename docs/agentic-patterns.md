@@ -63,13 +63,12 @@ User query → PlanningAgent (plan üret) → Specialist (tool çağır) → Res
 
 **Tanım**: Gelen isteği N uzman arasında en uygun olana yönlendiren ajan. Intent classification ile confidence üretir.
 
-**Gerçekleme**: PlanningAgent'ın `selectedAgent` + `intentConfidence` alanları:
+**Gerçekleme**: Intent tespiti/confidence `ReasoningService`'in sorumluluğu (`ReasoningResult.Intent`/`ConfidenceScore`, workflow'dan önce çalışır); PlanningAgent bu nihai intent'i devralıp yalnızca `selectedAgent` + `needsClarification` kararını üretir:
 
 ```json
 {
-  "detectedIntent": "sipariş_sorgulama",
-  "intentConfidence": 0.95,
   "selectedAgent": "OrderAgent",
+  "needsClarification": false,
   "alternativesRejected": [
     { "agent": "ComplaintAgent", "reason": "şikayet iması yok" }
   ]
@@ -78,7 +77,7 @@ User query → PlanningAgent (plan üret) → Specialist (tool çağır) → Res
 
 **Dosya**: `CustomerSupportBot.Api/Prompts/agents/planning-agent.md`
 
-**Confidence-aware routing**: `< 0.7` ise ResponseAgent'a düşür (clarification). Detay → [application/ReasoningPipeline.md](application/ReasoningPipeline.md).
+**Confidence-aware routing**: Artık sayısal bir eşik yok — PlanningAgent `needsClarification=true` derse ResponseAgent'a düşer (clarification). Detay → [reasoning.md §4](reasoning.md).
 
 **Neden?** Belirsiz bir niyeti yanlış specialist'e yönlendirmek, kullanıcının sorusunu atlamaktan daha zararlı. Düşük confidence = "emin değilim, sor".
 

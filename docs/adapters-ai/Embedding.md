@@ -44,18 +44,18 @@ public bool IsConfigured { get; }    // _client null değil
 
 **Neden bu kadar esnek?**
 
-Chat için Anthropic kullanılsa bile **embedding için OpenAI gerekir** (Anthropic embedding API'sı yok). Bu fallback şunu sağlar:
+Seçili chat sağlayıcısının embedding config'i eksik olsa bile, elde başka bir sağlayıcının key'i varsa semantic memory yine çalışsın diye. Örneğin:
 
 ```json
 {
   "AI": {
-    "Provider": "Anthropic",
-    "OpenAI": { "ApiKey": "sk-..." }   // sadece embedding için
+    "Provider": "AzureOpenAI",
+    "OpenAI": { "ApiKey": "sk-..." }   // Azure embedding config'i yoksa buna düşer
   }
 }
 ```
 
-`Adapter chat'i Anthropic'ten, embedding'i OpenAI'dan alır. Anthropic key olmasa bile semantic memory çalışır.
+Adapter chat'i Azure'dan, embedding'i OpenAI'dan alır — eksik config semantic memory'yi devre dışı bırakmaz.
 
 ### IsConfigured == false
 

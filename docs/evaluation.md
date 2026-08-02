@@ -75,9 +75,12 @@ scenarios:
 | `expected_intent` | Hayır | Beklenen reasoning intent'i (ör. `"sipariş_sorgulama"`, `"şikayet"`) |
 | `expected_behavior` | Hayır | Beklenen davranış tipi (ör. `clarification_request`) |
 | `expected_agents` | Hayır | Beklenen agent geçiş sırası |
-| `expected_tools` | Hayır | Beklenen tool çağrıları |
+| `expected_tools` | Hayır | Beklenen tool çağrıları (isim listesi — `no_extra_tool_calls` için) |
+| `expected_tool_calls` | Hayır | İsim+argüman beklentisi — `[{name, arguments}]` (`tool_call_args_match` kriteri için, bkz. §3) |
 | `success_criteria` | Evet | Yapılandırılmış (typed) değerlendirme kuralları (§3) |
 | `known_failure_mode` | Hayır | Bilinen hata kategorisi (ör. `routing_error`, `hallucination`) |
+| `repetitions` | Hayır | Senaryo kaç kez koşturulsun (non-determinism ölçümü). Varsayılan `1`. Bkz. §4a. |
+| `quality_checks` | Hayır | MEAI LLM-judge kalite kontrolleri — `["relevance", "coherence"]`. Varsayılan boş. Bkz. §4b. |
 | `turns` | Hayır | **Bilinen sınırlama:** YAML'da tanımlanabilir ama `EvaluationScenario`/`EvaluationRunner` bunu okumuyor — çok-turlu senaryolar (S12, S22, S23) bugün fiilen tek-turlu (`query`) gibi çalışır. Ayrı bir iş olarak ele alınmadı. |
 
 ### Senaryo Kategorileri (evaluation-scenarios.yaml'dan)
@@ -158,6 +161,49 @@ Her senaryo **izole session** içinde çalışır (birbirinden bağımsız):
 - **Agent trace**: `trace.AgentVisits` üzerinden ziyaret edilen agent'ları derler
 - **Tool listesi**: `trace.ToolCalls` (gerçek `ToolInvocation.ToolName` listesi) doğrudan kullanılır — daha önce agent adından tool adı tahmin eden bir heuristic vardı, redesign'da doğru veri kaynağına geçildi
 
+### 4a. `repetitions` — Non-determinism Ölçümü
+
+`scenario.Repetitions > 1` ise `EvaluationRunner.RunScenarioAsync`, senaryoyu N kez ayrı ayrı (her seferinde yeni izole session) koşturur ve sonuçları tek bir `ScenarioResult`'a indirger:
+
+```
+RunScenarioAsync(scenario)
+    ├─ Repetitions <= 1 → tek koşu, eski davranış (RunSingleAsync)
+    └─ Repetitions > 1  → N × RunSingleAsync → AggregateRepetitions(runs)
+            ├─ İlk koşunun tüm alanları (Response, CriteriaResults, ToolsCalled...) korunur
+            ├─ Repetitions = N
+            ├─ RepetitionOutcomes = [koşu1.Passed, koşu2.Passed, ...]
+            └─ RepetitionPassRate = geçen koşu sayısı / N
+```
+
+`AggregateRepetitions` saf/deterministik bir fonksiyon (LLM veya I/O gerektirmez) — `EvaluationRunner.AggregateRepetitions` olarak `internal static`, doğrudan unit test edilebilir (bkz. `EvaluationRunnerRepetitionsAndQualityTests.cs`).
+
+**Maliyet uyarısı:** her repetition tam bir workflow koşusudur (reasoning + GroupChat) — `repetitions: 5` demek o senaryo için 5× LLM maliyeti demektir. Varsayılan `1`, bilinçli olarak yüksek tutulmamalı.
+
+### 4b. `quality_checks` — MEAI LLM-judge Kalite Kontrolleri
+
+`scenario.QualityChecks` (`["relevance", "coherence"]`) set'liyse, `RunSingleAsync` kriter değerlendirmesinin sonunda her check için `Microsoft.Extensions.AI.Evaluation.Quality`'nin gerçek `RelevanceEvaluator`/`CoherenceEvaluator`'ını çalıştırır — bunlar 1-5 arası bir skor üreten, ayrı bir "judge" LLM çağrısı yapan değerlendiricilerdir (skor < 4 → `Failed=true`, `Microsoft.Extensions.AI.Evaluation`'ın kendi `InterpretScore()` kuralı).
+
+```
+RunQualityCheckAsync("relevance", query, response)
+    ├─ EvaluationQualityOptions.Enabled == false (appsettings.json "EvaluationQuality": {"Enabled": false}, VARSAYILAN)
+    │       → CriterionResult { Skipped = "quality_checks_disabled" } — LLM çağrısı YAPILMAZ
+    │
+    └─ Enabled == true
+            → new ChatConfiguration(chatClient) + RelevanceEvaluator/CoherenceEvaluator.EvaluateAsync(...)
+            → CriterionResult { Passed = (score >= 4), Evaluation = "score=..., rating=..., reason=..." }
+```
+
+Sonuç, diğer kriterler gibi `ScenarioResult.CriteriaResults`'a `quality_relevance`/`quality_coherence` adıyla eklenir ve `PassedCriteria`/`TotalCriteria`'ya dahil edilir.
+
+**Neden varsayılan kapalı:** her çağrı gerçek bir ek LLM isteği (judge modeli) — hem maliyetli hem yavaş. CI'da ayrı, isteğe bağlı bir job'da `EvaluationQuality:Enabled=true` ile açılması önerilir; günlük geliştirme akışında kapalı kalmalı.
+
+```json
+// appsettings.json
+"EvaluationQuality": {
+  "Enabled": false
+}
+```
+
 ---
 
 ## 5. ScenarioRunContext
@@ -170,7 +216,7 @@ Her senaryo **izole session** içinde çalışır (birbirinden bağımsız):
 | `TerminationReason` | `string?` | `trace.TerminationReason` |
 | `DetectedIntent` | `string?` | `reasoning.Intent` |
 | `IterationCount` | `int` | `trace.IterationCount` |
-| `ToolsCalled` | `List<string>` | Agent→tool mapping'den türetilmiş |
+| `ToolsCalled` | `List<string>` | `trace.ToolCalls` (gerçek `ToolInvocation.ToolName` listesi) |
 | `AgentsVisited` | `List<string>` | `trace.AgentVisits` (basitleştirilmiş isimler) |
 | `ExpectedTools` | `List<string>` | Senaryo tanımından (`expected_tools`) |
 | `SpecialistReasonings` | `List<SpecialistReasoning>` | `trace.SpecialistReasonings` |

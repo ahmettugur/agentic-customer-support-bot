@@ -111,8 +111,6 @@ public class WorkflowResponseExtractorOutputTests
         var planningJson = """
         ```json
         {
-          "detectedIntent": "order_inquiry",
-          "intentConfidence": 0.9,
           "selectedAgent": "OrderAgent",
           "needsClarification": false
         }

@@ -10,14 +10,14 @@ Her `IChatClient` çağrısını sarmalar; span açar, token sayar, maliyet hesa
 
 ## Neden decorator?
 
-`Microsoft.Extensions.AI.IChatClient` standart arayüz; OpenAI, Anthropic, Ollama vb. her provider bu arayüzü implement eder. Decorator pattern ile:
+`Microsoft.Extensions.AI.IChatClient` standart arayüz; OpenAI, Azure OpenAI vb. her provider bu arayüzü implement eder. Decorator pattern ile:
 
 ```
 Specialist Agent
    ↓ IChatClient çağrısı
 TelemetryChatClient (decorator)        ← Span + metric + cost
    ↓ base.GetResponseAsync()
-OpenAIChatClient / AnthropicChatClient ← Asıl LLM çağrısı
+OpenAIChatClient / AzureOpenAIChatClient ← Asıl LLM çağrısı
    ↓ HTTP request
 Provider API
 ```
@@ -34,7 +34,7 @@ public TelemetryChatClient(
     ICostCalculatorPort costCalculator,      // USD hesaplama
     CostUsageStore usageStore,               // In-memory aggregate
     string modelHint,                        // Default model adı
-    string provider,                         // "openai", "anthropic", ...
+    string provider,                         // "openai", "azureopenai", ...
     ILogger<TelemetryChatClient> logger,
     ILlmCallPersistencePort? persistence = null   // Opsiyonel DB kaydı
 )

@@ -103,6 +103,14 @@ public class ReasoningResult
     public double SentimentScore { get; set; } = 0.5;
 
     /// <summary>
+    /// <see cref="Services.Reasoning.EntityVerifier"/>'ın query+history+session+DB birleştirerek
+    /// ürettiği doğrulanmış entity sonucu. WorkflowRunner'ın kendi başına (yalnızca güncel
+    /// query'den, geçmişten habersiz) entity çıkarımı yapmak yerine bunu yeniden kullanması
+    /// için buraya taşınır — tek doğruluk kaynağı burasıdır.
+    /// </summary>
+    public VerifiedEntities? VerifiedEntities { get; set; }
+
+    /// <summary>
     /// <see cref="ConfidenceScore"/>'un type-safe enum karşılığı.
     /// </summary>
     public ConfidenceLevel ConfidenceLevel => ConfidenceScore switch
