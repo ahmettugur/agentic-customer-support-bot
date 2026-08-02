@@ -386,4 +386,189 @@ public class CustomerSupportTeamTests
         r.PostToolReflection.HandoffReason.Should().Be("orijinal neden");
         r.PostToolReflection.MissingContext.Should().BeEquivalentTo(["müşteri numarası", "sipariş geçmişi"]);
     }
+
+    // EnsureSideEffectToolCompletion — order_placement_tool/order_cancel_tool/return_request_tool
+    // (OrderAgent) ve complaint_registration_tool (ComplaintAgent) BAŞARIYLA çağrıldığında görevin
+    // tamamlandığının (status=done) LLM'in reflection'ından bağımsız garanti altına alındığını
+    // test eder (Bulgu #5 — EnsureHumanHandoffEscalation ile aynı desen, ters yönde; başlangıçta
+    // yalnızca order_cancel_tool'a eklenmişti, sonra tüm HITL onaylı yan-etkili tool'lara
+    // genelleştirildi). Private static olduğu için reflection ile çağrılıyor.
+
+    private static void InvokeEnsureSideEffectToolCompletion(
+        IEnumerable<ChatMessage> messages, List<SpecialistReasoning> reasonings, string agentName, IReadOnlySet<string> toolNames)
+    {
+        var method = typeof(WorkflowRunner).GetMethod(
+            "EnsureSideEffectToolCompletion", BindingFlags.Static | BindingFlags.NonPublic)!;
+        method.Invoke(null, [messages, reasonings, agentName, toolNames]);
+    }
+
+    private static List<ChatMessage> ToolCallAndResultMessages(string toolName, bool success) =>
+    [
+        new(ChatRole.Assistant, new List<AIContent>
+        {
+            new FunctionCallContent("call1", toolName,
+                new Dictionary<string, object?> { ["orderId"] = "1030", ["reason"] = "vazgeçtim" })
+        }),
+        new(ChatRole.Tool, new List<AIContent>
+        {
+            new FunctionResultContent("call1", new ToolResult { Success = success, Message = "sonuç" })
+        })
+    ];
+
+    public static IEnumerable<object[]> OrderAgentSideEffectToolCases =>
+    [
+        [WellKnown.ToolNames.OrderPlacement],
+        [WellKnown.ToolNames.OrderCancel],
+        [WellKnown.ToolNames.ReturnRequest]
+    ];
+
+    private static readonly HashSet<string> OrderAgentSideEffectTools = new(StringComparer.Ordinal)
+    {
+        WellKnown.ToolNames.OrderPlacement, WellKnown.ToolNames.OrderCancel, WellKnown.ToolNames.ReturnRequest
+    };
+
+    private static readonly HashSet<string> ComplaintAgentSideEffectTools = new(StringComparer.Ordinal)
+    {
+        WellKnown.ToolNames.ComplaintRegistration
+    };
+
+    [Theory]
+    [MemberData(nameof(OrderAgentSideEffectToolCases))]
+    public void EnsureSideEffectToolCompletion_OrderAgentTool_SucceededButReflectionMissing_SynthesizesDone(string toolName)
+    {
+        var reasonings = new List<SpecialistReasoning>();
+
+        InvokeEnsureSideEffectToolCompletion(
+            ToolCallAndResultMessages(toolName, success: true), reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].AgentName.Should().Be(WellKnown.AgentNames.Order);
+        reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.Done);
+        reasonings[0].PostToolReflection!.TaskComplete.Should().BeTrue();
+    }
+
+    [Fact]
+    public void EnsureSideEffectToolCompletion_ComplaintRegistration_SucceededButReflectionMissing_SynthesizesDone()
+    {
+        var reasonings = new List<SpecialistReasoning>();
+
+        InvokeEnsureSideEffectToolCompletion(
+            ToolCallAndResultMessages(WellKnown.ToolNames.ComplaintRegistration, success: true),
+            reasonings, WellKnown.AgentNames.Complaint, ComplaintAgentSideEffectTools);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].AgentName.Should().Be(WellKnown.AgentNames.Complaint);
+        reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.Done);
+        reasonings[0].PostToolReflection!.TaskComplete.Should().BeTrue();
+    }
+
+    [Fact]
+    public void EnsureSideEffectToolCompletion_ToolSucceededButWrongStatus_OverridesToDone()
+    {
+        var reasonings = new List<SpecialistReasoning>
+        {
+            new()
+            {
+                AgentName = WellKnown.AgentNames.Order,
+                PostToolReflection = new PostToolReflection
+                {
+                    Status = WellKnown.TaskStatuses.NeedsFollowUp,
+                    Summary = "orijinal özet"
+                }
+            }
+        };
+
+        InvokeEnsureSideEffectToolCompletion(
+            ToolCallAndResultMessages(WellKnown.ToolNames.OrderCancel, success: true),
+            reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.Done);
+        reasonings[0].PostToolReflection!.Summary.Should().Be("orijinal özet"); // mevcut özet korunur
+    }
+
+    [Fact]
+    public void EnsureSideEffectToolCompletion_ToolSucceededAndReflectionAlreadyCorrect_LeavesUnchanged()
+    {
+        var original = new SpecialistReasoning
+        {
+            AgentName = WellKnown.AgentNames.Order,
+            PostToolReflection = new PostToolReflection { Status = WellKnown.TaskStatuses.Done, TaskComplete = true }
+        };
+        var reasonings = new List<SpecialistReasoning> { original };
+
+        InvokeEnsureSideEffectToolCompletion(
+            ToolCallAndResultMessages(WellKnown.ToolNames.OrderCancel, success: true),
+            reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].Should().BeSameAs(original); // dokunulmadı
+    }
+
+    [Fact]
+    public void EnsureSideEffectToolCompletion_ToolFailed_NoOp()
+    {
+        // Bilinçli asimetri: başarısızlık yönünde ASLA zorlanmaz — bkz. metodun XML doc'u.
+        var reasonings = new List<SpecialistReasoning>
+        {
+            new()
+            {
+                AgentName = WellKnown.AgentNames.Order,
+                PostToolReflection = new PostToolReflection { Status = WellKnown.TaskStatuses.NeedsFollowUp }
+            }
+        };
+
+        InvokeEnsureSideEffectToolCompletion(
+            ToolCallAndResultMessages(WellKnown.ToolNames.OrderCancel, success: false),
+            reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
+
+        reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.NeedsFollowUp);
+    }
+
+    [Fact]
+    public void EnsureSideEffectToolCompletion_ToolNotCalled_NoOp()
+    {
+        var reasonings = new List<SpecialistReasoning>();
+        var msg = new ChatMessage(ChatRole.Assistant, "sipariş durumu: kargoda");
+
+        InvokeEnsureSideEffectToolCompletion([msg], reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
+
+        reasonings.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EnsureSideEffectToolCompletion_ComplaintToolCalled_DoesNotAffectOrderAgentSet()
+    {
+        // complaint_registration_tool, OrderAgentSideEffectTools içinde YOK — OrderAgent
+        // çağrısı için invoke edilirse no-op olmalı (yanlış tool setiyle eşleşmemeli).
+        var reasonings = new List<SpecialistReasoning>();
+
+        InvokeEnsureSideEffectToolCompletion(
+            ToolCallAndResultMessages(WellKnown.ToolNames.ComplaintRegistration, success: true),
+            reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
+
+        reasonings.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void EnsureSideEffectToolCompletion_ResultIsJsonElement_StillDetectsSuccess()
+    {
+        // AIFunctionFactory sonucu serileştirme yoluna bağlı olarak JsonElement de olabilir.
+        var json = System.Text.Json.JsonDocument.Parse("""{"success":true,"message":"ok"}""").RootElement;
+        var messages = new List<ChatMessage>
+        {
+            new(ChatRole.Assistant, new List<AIContent>
+            {
+                new FunctionCallContent("call1", WellKnown.ToolNames.OrderCancel,
+                    new Dictionary<string, object?> { ["orderId"] = "1030" })
+            }),
+            new(ChatRole.Tool, new List<AIContent> { new FunctionResultContent("call1", json) })
+        };
+        var reasonings = new List<SpecialistReasoning>();
+
+        InvokeEnsureSideEffectToolCompletion(messages, reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.Done);
+    }
 }
