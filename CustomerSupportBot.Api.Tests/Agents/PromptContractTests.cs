@@ -196,8 +196,12 @@ public class PromptContractTests
         foreach (var key in new[] { "TimeoutSeconds", "MaxIterations", "MaxHandoffsPerAgent", "MaxDuplicateToolCalls" })
         {
             var value = guards.GetProperty(key).GetInt32();
-            doc.Should().Contain($"<code>{key}</code></td><td class=\"num\">{value}</td>",
-                $"'{key}' dokümanda appsettings'teki etkin değeriyle ({value}) görünmeli");
+
+            // Biçimden bağımsız eşleşme: HTML formatlayıcıları etiketleri ayrı satırlara
+            // bölebiliyor, bu yüzden aradaki boşluk esnek bırakılır. (Tam-eşleşme kullanan
+            // ilk sürüm, dosya yeniden biçimlendirildiğinde içerik doğru olduğu hâlde kırıldı.)
+            Regex.IsMatch(doc, $@"<code>{Regex.Escape(key)}</code>\s*</td>\s*<td class=""num"">{value}</td>")
+                .Should().BeTrue($"'{key}' dokümanda appsettings'teki etkin değeriyle ({value}) görünmeli");
         }
     }
 
