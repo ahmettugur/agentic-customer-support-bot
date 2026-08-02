@@ -16,6 +16,7 @@
 // Aşağıdaki testler sözleşmenin İKİ UCUNU birden kontrol eder: kodun ürettiği metin ile
 // prompt dosyasının beklediği metin. Biri değişip diğeri değişmezse test kırmızıya döner.
 
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Domain.Model;
@@ -183,6 +184,31 @@ public class PromptContractTests
     }
 
     [Fact]
+    public void ArchitectureDoc_GuardValues_MatchAppSettings()
+    {
+        // Doküman guard tablosunda ETKİN değerleri göstermeli — sınıf varsayılanlarını değil.
+        // İlk yazımda TimeoutSeconds için sınıf varsayılanı (60) yazılmıştı; appsettings'teki
+        // gerçek değer 180. Bu test o karışıklığı tekrarlanamaz kılar.
+        var doc = SourceOf("docs/agent-architecture.html");
+        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("CustomerSupportBot.Api/appsettings.json")));
+
+        var guards = settings.RootElement.GetProperty("WorkflowGuards");
+        foreach (var key in new[] { "TimeoutSeconds", "MaxIterations", "MaxHandoffsPerAgent", "MaxDuplicateToolCalls" })
+        {
+            var value = guards.GetProperty(key).GetInt32();
+            doc.Should().Contain($"<code>{key}</code></td><td class=\"num\">{value}</td>",
+                $"'{key}' dokümanda appsettings'teki etkin değeriyle ({value}) görünmeli");
+        }
+    }
+
+    [Fact]
+    public void ArchitectureDoc_AgentCount_MatchesWellKnown()
+    {
+        var doc = SourceOf("docs/agent-architecture.html");
+        doc.Should().Contain($"<b>{WellKnown.AgentNames.All.Length}</b> ajan");
+    }
+
+    [Fact]
     public void ArchitectureDoc_IsSelfContained()
     {
         // Repo hiçbir yerde CDN kullanmıyor; doküman çevrimdışı ve dosya sisteminden
@@ -191,6 +217,16 @@ public class PromptContractTests
 
         Regex.IsMatch(doc, @"(src|href)\s*=\s*""https?://").Should().BeFalse(
             "agent-architecture.html harici script/stil/font yüklememeli");
+    }
+
+    private static string RepoPath(string repoRelativePath)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, repoRelativePath)))
+            dir = dir.Parent;
+
+        dir.Should().NotBeNull($"repo kökü bulunamadı ({repoRelativePath} aranıyordu)");
+        return Path.Combine(dir!.FullName, repoRelativePath);
     }
 
     private static string SourceOf(string repoRelativePath)

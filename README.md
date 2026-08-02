@@ -17,7 +17,7 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 - **Parallel SubTask Execution** — Compound query'lerde (ör. "1030 ve 1042 durumu") yan-etkisiz alt görevler (Product/OrderInquiry) `Task.WhenAll` ile paralel çalışır; yan-etkili olanlar (OrderPlacement/Complaint) HITL gate'i nedeniyle sıralı kalır. p50 latency düşer.
 - **SLA / Response Time Guardian** — Bekleyen onay ve açık eskalasyonları periyodik tarayan `BackgroundService`. Eşik aşılan onaylar `AutoReject`, eskalasyonların önceliği otomatik **bir kademe yükseltilir** (Low→Normal→High→Critical). Admin `/sla/status` ve `/sla/events` endpoint'lerinden görür.
 - **Sesli Konuşma Modu (Realtime) — çift kanal** — OpenAI Realtime API (`gpt-realtime-1.5`) üzerinden iki ayrı sesli mod:
-  - **🎤 Sesli Asistan (köprü)** — model sadece STT/TTS köprüsü; **text chat ile aynı** 7-ajanlı MAF pipeline'ı (reasoning, HITL, tool routing) çalışır. Tüm tool'lar (sipariş aç, şikayet, vb.) destekli.
+  - **🎤 Sesli Asistan (köprü)** — model sadece STT/TTS köprüsü; **text chat ile aynı** 6-ajanlı MAF pipeline'ı (reasoning, HITL, tool routing) çalışır. Tüm tool'lar (sipariş aç, şikayet, vb.) destekli.
   - **⚡ Hızlı Sesli (native)** — model **kendisi** function calling yapar; sadece okuma-only tool'lar (ürün/sipariş sorgu) açıktır. ~3-5× daha hızlı, ~70% daha ucuz. Yan-etkili istek gelirse model kullanıcıyı yazılı sohbete yönlendirir (HITL korunur).
   Detay → [`docs/adapters-ai/Realtime.md`](docs/adapters-ai/Realtime.md).
 
@@ -50,7 +50,7 @@ https://github.com/user-attachments/assets/9cf6ba41-7fa1-49da-ad9b-251ea4b3ae65
 
 ## Genel Bakış
 
-Bu proje, müşteri desteği için **çok ajanlı orkestrasyon** desenini gösterir. Tek bir monolitik LLM çağrısı yerine, sistem yapılandırılmış bir iş akışı içinde işbirliği yapan 7 uzman ajan kullanır:
+Bu proje, müşteri desteği için **çok ajanlı orkestrasyon** desenini gösterir. Tek bir monolitik LLM çağrısı yerine, sistem yapılandırılmış bir iş akışı içinde işbirliği yapan 6 uzman ajan kullanır:
 
 1. **PlanningAgent** — Kullanıcı sorgusunu doğru uzmana yönlendirir.
 2. **Uzman Ajanlar** (Product, Order, Complaint) — Alan görevlerini tool çağrıları ile gerçekleştirir.
@@ -87,7 +87,7 @@ Temel yetenekler:
 ┌───────────────┐  ┌────────────────┐  ┌─────────────┐  ┌────────┐
 │ ReasoningSvc  │  │ CustomerSupp.  │  │ TraceStore  │  │ Admin  │
 │  (reasoning)  │─▶│ Team           │  │ (Postgres/  │  │ (HITL) │
-└───┬───────────┘  │ (7 agents +    │  │  InMemory)  │  └────────┘
+└───┬───────────┘  │ (6 agents +    │  │  InMemory)  │  └────────┘
     │              │  ChatManager   │
     │              │  + Phase 4b     │
     │              │  orchestration) │

@@ -196,6 +196,7 @@
   <nav class="rail" aria-label="İçindekiler">
     <a href="#akis"><span class="n">01</span>İstek yaşam döngüsü</a>
     <a href="#ajanlar"><span class="n">02</span>Ajanlar ve tool'lar</a>
+    <a href="#baglam"><span class="n">02b</span>Bağlam kurulumu</a>
     <a href="#routing"><span class="n">03</span>Routing</a>
     <a href="#orkestrasyon"><span class="n">04</span>Orkestrasyon</a>
     <a href="#hitl"><span class="n">05</span>HITL onay kapısı</a>
@@ -284,12 +285,31 @@
       </div>
 
       <ol class="stages">
+        <li><b>Oturum çözümleme</b> — <code>GetOrCreate(sessionId)</code> ve konuşma geçmişi yüklenir. Streaming yolda istemciye önce bir <code>session</code> event'i gönderilir.</li>
+        <li><b>Canlı devralma kontrolü</b> — oturum <em>Human</em> modundaysa (admin sohbeti devralmış) bot <b>hiç çalışmaz</b>: mesaj geçmişe yazılır, admin paneline iletilir ve akış burada biter.</li>
         <li><b>InputGuard</b> — uzunluk, görünmez/RTL karakter, enjeksiyon kalıpları, HTML/script, ID enumeration. Reddedilirse istek LLM'e hiç ulaşmaz. Dört giriş noktasının (chat, chat/stream, realtime bridge, realtime native) hepsinde çalışır.</li>
         <li><b>ReasoningService</b> — niyet, güven skoru, adımlar ve alt görevler üretir. İçinde <code>EntityVerifier</code> sorgu + geçmiş + oturum durumu + DB'yi birleştirip <code>VerifiedEntities</code>'i kurar; <code>ReasoningSanityChecker</code> tutarsızlıkları işaretler.</li>
+        <li><b>ApprovalContext scope</b> — <code>sessionId</code>/<code>traceId</code>/sorgu ambient bir kapsama yazılır. HITL onay kaydının hangi oturuma ve konuşmaya ait olduğunu bu taşır; tool katmanı workflow'dan parametre almadan buradan okur.</li>
         <li><b>CustomerSupportTeam</b> — bileşik sorgu mu tek sorgu mu olduğuna karar verip <code>DecomposedRunner</code> veya <code>WorkflowRunner</code>'a yönlendiren ince kabuk.</li>
-        <li><b>WorkflowRunner</b> — system mesajlarını kurar (bağlam &rarr; reasoning özeti &rarr; entity hint &rarr; geçmiş &rarr; replan notu &rarr; sorgu), GroupChat workflow'unu başlatır, event akışını trace'e ve stream event'lerine çevirir.</li>
+        <li><b>WorkflowRunner</b> — system mesajlarını kurar (bağlam &rarr; reasoning özeti &rarr; entity hint &rarr; geçmiş &rarr; replan notu &rarr; sorgu — bkz. <a href="#baglam">02b</a>), GroupChat workflow'unu başlatır, event akışını trace'e ve stream event'lerine çevirir.</li>
         <li><b>TurnFinalizer</b> — eskalasyonları işler, ajan ziyaretlerini kaydeder, epizodik belleği ve müşteri profilini günceller, trace'i kapatır.</li>
+        <li>
+          <b>Geçmişe yazma</b> — <code>AddExchange</code> kullanıcı mesajını ve yanıtı geçmişe ekler; aynı çağrı içinde
+          <code>SessionStateExtractor</code> tur sayacını, niyeti, duygu durumunu, konuşma fazını ve ID'leri
+          <b>kalıcı oturum durumuna</b> işler.
+          <br>
+          <span style="color:var(--accent)">⚠ Bu adım workflow'dan <b>sonra</b> çalışır</span> — yani ajanlar
+          çalışırken kullanıcının o anki mesajı henüz geçmişte değildir. Bağlam sağlayıcılarının güncel sorguyu
+          geçmişten okuyamamasının sebebi budur; sorgu onlara ayrı parametre olarak geçirilir.
+        </li>
       </ol>
+
+      <div class="note">
+        <span class="tag">Streaming farkı</span>
+        <code>/chat/stream</code> aynı adımları izler, ek olarak her aşamayı SSE event'i olarak yayınlar
+        (<code>session</code>, reasoning delta'ları, ajan durumları, yanıt delta'ları) ve tur sonunda
+        duygu-durum uyarısı üretebilir. Adım sırası ve geçmişe yazmanın en sonda olması aynıdır.
+      </div>
 
       <div class="note">
         <span class="tag">Tek doğruluk kaynağı</span>
@@ -379,6 +399,59 @@
         Veritabanına yazan dört tool'un dördü de onay kapısından geçer — kapsamda boşluk yok.
         Eşleme tek kaynakta tutulur: <code>WellKnown.SideEffectToolOwners</code>.
       </p>
+    </section>
+
+    <!-- 02b -->
+    <section id="baglam">
+      <h2><span class="n">02b</span>Ajanlar ne görüyor — bağlam kurulumu</h2>
+      <p class="lede">
+        Ajanlar yalnızca kullanıcının mesajını almaz. <code>WorkflowRunner.BuildWorkflowMessagesAsync</code>
+        workflow'a gidecek mesaj listesini şu <b>sırayla</b> kurar; ilk dördü system rolündedir,
+        yani ajanlar bunları talimat ağırlığında görür.
+      </p>
+
+      <div class="scroll">
+        <table>
+          <thead><tr><th>#</th><th>Mesaj</th><th>Rol</th><th>Kaynağı</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td>Oturum bağlamı</td><td>System</td><td><code>ContextPipeline</code> — aşağıdaki sağlayıcıların birleşimi</td></tr>
+            <tr><td class="num">2</td><td>Reasoning özeti</td><td>System</td><td><code>BuildReasoningSummaryHint</code> — niyet, adımlar, güven</td></tr>
+            <tr><td class="num">3</td><td>Entity hint</td><td>System</td><td><code>ResolveExtractedIds</code> → <code>IdExtractor.BuildHintMessage</code></td></tr>
+            <tr><td class="num">4</td><td>Konuşma geçmişi</td><td>User/Assistant</td><td>Oturum geçmişi</td></tr>
+            <tr><td class="num">5</td><td>Replan notu <em>(varsa)</em></td><td>System</td><td>Admin "yeniden planla" tetiği — tek kullanımlık</td></tr>
+            <tr><td class="num">6</td><td>Kullanıcı sorgusu</td><td>User</td><td>Bu turun mesajı</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Bağlam sağlayıcıları (Order sırasıyla)</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Order</th><th>Sağlayıcı</th><th>Ne katar</th></tr></thead>
+          <tbody>
+            <tr><td class="num">5</td><td><code>ConversationSummary</code></td><td>Geçmiş 8 mesajı aşınca LLM ile özetlenir (token tasarrufu)</td></tr>
+            <tr><td class="num">6</td><td><code>CustomerProfile</code></td><td>Kalıcı müşteri profili — sık niyetler, dil/ton tercihi, son puanlar</td></tr>
+            <tr><td class="num">7</td><td><code>SemanticMemory</code></td><td><b>Bilgi tabanı + onaylanmış dersler</b> — vektör aramayla getirilir</td></tr>
+            <tr><td class="num">10</td><td><code>CustomerContext</code></td><td>Müşterinin sipariş/şikayet özeti (DB'den)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <span class="tag">Self-Improving Loop bağlantısı</span>
+        Admin panelinde <b>onaylanan</b> dersler burada devreye girer: vektör hafızaya yazılır
+        ve sonraki turlarda <code>SemanticMemory</code> sağlayıcısı kullanıcının o anki sorusuna
+        semantik yakın olanları çeker. Onaylanmamış öneriler ajanlara hiç ulaşmaz.
+        Getirilenler tur başına <code>TopK</code> ve ortak bir karakter bütçesiyle sınırlıdır.
+      </div>
+
+      <div class="note">
+        <span class="tag">Enjeksiyon savunması</span>
+        Bilgi tabanı ve ders içerikleri <code>&lt;retrieved_data&gt;</code> fence'i içine
+        sarmalanır ve kapanış etiketi nötrleştirilir. Ajan prompt'ları bu bloğun <b>veri</b>
+        olduğunu, talimat olmadığını açıkça belirtir — retrieve edilen metinde "önceki
+        talimatları yok say" gibi ifadeler geçse bile uygulanmaz.
+      </div>
     </section>
 
     <!-- 03 -->
@@ -635,12 +708,16 @@
     <!-- 07 -->
     <section id="guards">
       <h2><span class="n">07</span>Guard'lar ve limitler</h2>
-      <p class="lede">Hepsi <code>WorkflowGuardOptions</code> üzerinden yapılandırılır.</p>
+      <p class="lede">
+        Hepsi <code>WorkflowGuardOptions</code> üzerinden yapılandırılır. Aşağıdaki değerler
+        <code>appsettings.json</code>'daki <b>etkin</b> ayarlardır (sınıf varsayılanları farklı
+        olabilir — ör. <code>TimeoutSeconds</code> kodda 60, config'te 180).
+      </p>
       <div class="scroll">
         <table>
           <thead><tr><th>Ayar</th><th>Varsayılan</th><th>Neyi engeller</th></tr></thead>
           <tbody>
-            <tr><td><code>TimeoutSeconds</code></td><td class="num">60</td><td>Askıda kalan workflow; kooperatif durdurma denenir</td></tr>
+            <tr><td><code>TimeoutSeconds</code></td><td class="num">180</td><td>Askıda kalan workflow; kooperatif durdurma denenir</td></tr>
             <tr><td><code>MaxIterations</code></td><td class="num">20</td><td>Sonsuz ajan turu</td></tr>
             <tr><td><code>MaxHandoffsPerAgent</code></td><td class="num">2</td><td>İki uzmanın birbirine top atması</td></tr>
             <tr><td><code>MaxDuplicateToolCalls</code></td><td class="num">3</td><td>Aynı tool'un kısır döngüde tekrarı</td></tr>
