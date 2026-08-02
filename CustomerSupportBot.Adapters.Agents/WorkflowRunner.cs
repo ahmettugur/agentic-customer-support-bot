@@ -842,7 +842,7 @@ internal sealed class WorkflowRunner
 
         if (session != null)
         {
-            var context = await _contextPipeline.BuildContextAsync(session);
+            var context = await _contextPipeline.BuildContextAsync(session, query);
             if (!string.IsNullOrWhiteSpace(context))
             {
                 messages.Add(new ChatMessage(ChatRole.System,

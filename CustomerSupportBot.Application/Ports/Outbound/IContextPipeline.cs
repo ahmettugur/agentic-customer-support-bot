@@ -8,5 +8,5 @@ namespace CustomerSupportBot.Application.Ports.Outbound;
 /// </summary>
 public interface IContextPipeline
 {
-    Task<string> BuildContextAsync(AgentSession session);
+    Task<string> BuildContextAsync(AgentSession session, string currentQuery);
 }

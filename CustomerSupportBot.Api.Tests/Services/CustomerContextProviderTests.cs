@@ -24,7 +24,7 @@ public class CustomerContextProviderTests
     public async Task NoCustomerId_ReturnsNull()
     {
         var session = new AgentSession { SessionId = "s1" };
-        var ctx = await _provider.GetContextAsync(session);
+        var ctx = await _provider.GetContextAsync(session, "test sorgusu");
         ctx.Should().BeNull();
     }
 
@@ -33,7 +33,7 @@ public class CustomerContextProviderTests
     {
         var session = new AgentSession { SessionId = "s1" };
         session.State.CustomerId = "1008";
-        var ctx = await _provider.GetContextAsync(session);
+        var ctx = await _provider.GetContextAsync(session, "test sorgusu");
         ctx.Should().NotBeNull();
         ctx.Should().Contain("1008");
         ctx.Should().Contain("Toplam sipariş");
@@ -44,7 +44,7 @@ public class CustomerContextProviderTests
     {
         var session = new AgentSession { SessionId = "s1" };
         session.State.CustomerId = "9999";
-        var ctx = await _provider.GetContextAsync(session);
+        var ctx = await _provider.GetContextAsync(session, "test sorgusu");
         ctx.Should().NotBeNull();
         ctx.Should().Contain("bulunamad");
     }

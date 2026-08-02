@@ -17,7 +17,7 @@ public class CustomerProfileContextProviderTests
         var provider = Build(store);
 
         var session = new AgentSession { SessionId = "s", State = new SessionState() };
-        var ctx = await provider.GetContextAsync(session);
+        var ctx = await provider.GetContextAsync(session, "test sorgusu");
         ctx.Should().BeNull();
     }
 
@@ -28,7 +28,7 @@ public class CustomerProfileContextProviderTests
         var provider = Build(store);
 
         var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1001" } };
-        var ctx = await provider.GetContextAsync(session);
+        var ctx = await provider.GetContextAsync(session, "test sorgusu");
         ctx.Should().BeNull();
     }
 
@@ -40,7 +40,7 @@ public class CustomerProfileContextProviderTests
 
         var provider = Build(store);
         var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1001" } };
-        var ctx = await provider.GetContextAsync(session);
+        var ctx = await provider.GetContextAsync(session, "test sorgusu");
         ctx.Should().BeNull();
     }
 
@@ -69,7 +69,7 @@ public class CustomerProfileContextProviderTests
 
         var provider = Build(store);
         var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1027" } };
-        var ctx = await provider.GetContextAsync(session);
+        var ctx = await provider.GetContextAsync(session, "test sorgusu");
 
         ctx.Should().NotBeNull();
         ctx.Should().Contain("Profili")

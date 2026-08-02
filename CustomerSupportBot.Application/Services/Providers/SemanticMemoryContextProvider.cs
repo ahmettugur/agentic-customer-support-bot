@@ -16,7 +16,6 @@ namespace CustomerSupportBot.Application.Services.Providers;
 public sealed class SemanticMemoryContextProvider : IContextProvider
 {
     private readonly SemanticMemoryService _memory;
-    private readonly ISessionManager _sessionRepository;
     private readonly IContextSanitizer _sanitizer;
     private readonly ILogger<SemanticMemoryContextProvider> _logger;
 
@@ -25,23 +24,25 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
 
     public SemanticMemoryContextProvider(
         SemanticMemoryService memory,
-        ISessionManager sessionRepository,
         IContextSanitizer sanitizer,
         ILogger<SemanticMemoryContextProvider> logger)
     {
         _memory = memory;
-        _sessionRepository = sessionRepository;
         _sanitizer = sanitizer;
         _logger = logger;
     }
 
-    public async Task<string?> GetContextAsync(AgentSession session)
+    public async Task<string?> GetContextAsync(AgentSession session, string currentQuery)
     {
         if (!_memory.Enabled) return null;
 
-        var history = _sessionRepository.GetHistory(session.SessionId);
-        var lastUserMsg = history.LastOrDefault(m => m.Role == ConversationRoles.User);
-        var query = lastUserMsg?.Text;
+        // Kullanıcının BU turdaki mesajıyla aranır.
+        //
+        // Eskiden sorgu oturum geçmişinin son kullanıcı mesajından okunuyordu; ancak geçmiş
+        // workflow bittikten SONRA yazıldığı için güncel mesaj o anda henüz orada olmuyordu.
+        // Sonuç: ilk turda hiç retrieval yapılmıyor, sonraki turlarda arama bir önceki turun
+        // sorusuyla yapılıyordu. Sorgu artık doğrudan parametre olarak geliyor.
+        var query = currentQuery;
         if (string.IsNullOrWhiteSpace(query)) return null;
 
         try

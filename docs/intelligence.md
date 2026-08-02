@@ -28,7 +28,7 @@ Bu doküman, bot'un dört "akıllı" katmanını detaylı anlatır:
                          ▼
         ┌────────────────────────────────────┐
         │ SemanticMemoryContextProvider      │
-        │   1. last user message  → embed    │
+        │   1. güncel kullanıcı mesajı → embed│
         │   2. Knowledge top-K + Lessons top-K│
         │   3. citation'lı context blok üret │
         └──────────┬─────────────────────────┘

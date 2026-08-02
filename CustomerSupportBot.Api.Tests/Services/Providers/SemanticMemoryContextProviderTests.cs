@@ -18,10 +18,13 @@ public class SemanticMemoryContextProviderTests
         var memory = new SemanticMemoryService(store, embedder, new ContextSanitizer(),
             Options.Create(new SemanticMemoryOptions { Enabled = true }),
             NullLogger<SemanticMemoryService>.Instance);
-        return new SemanticMemoryContextProvider(memory, sessions, new ContextSanitizer(),
+        return new SemanticMemoryContextProvider(
+            memory, new ContextSanitizer(),
             NullLogger<SemanticMemoryContextProvider>.Instance);
     }
 
+    // NOT: Arama sorgusu artık GetContextAsync'e parametre olarak geçiliyor; geçmiş yalnızca
+    // oturumun var olması için kuruluyor (bkz. IContextProvider.currentQuery belgesi).
     private static ISessionManager SessionWithUserQuery(string query)
     {
         var sessions = Substitute.For<ISessionManager>();
@@ -46,7 +49,7 @@ public class SemanticMemoryContextProviderTests
         var provider = Build(store, SessionWithUserQuery("iade koşulları"));
         var session = new AgentSession { SessionId = "s", State = new SessionState() };
 
-        var ctx = await provider.GetContextAsync(session);
+        var ctx = await provider.GetContextAsync(session, "iade koşulları");
 
         ctx.Should().NotBeNull();
         ctx.Should().Contain("<retrieved_data source=\"knowledge\">İade süresi 14 gündür.</retrieved_data>");
@@ -70,7 +73,7 @@ public class SemanticMemoryContextProviderTests
         var provider = Build(store, SessionWithUserQuery("soru"));
         var session = new AgentSession { SessionId = "s", State = new SessionState() };
 
-        var ctx = await provider.GetContextAsync(session);
+        var ctx = await provider.GetContextAsync(session, "soru");
 
         ctx.Should().NotBeNull();
         // Payload fence içinde kalıyor: gerçek kapanış etiketi sadece sondaki fence.
@@ -91,7 +94,7 @@ public class SemanticMemoryContextProviderTests
         var provider = Build(store, SessionWithUserQuery("soru"));
         var session = new AgentSession { SessionId = "s", State = new SessionState() };
 
-        var ctx = await provider.GetContextAsync(session);
+        var ctx = await provider.GetContextAsync(session, "soru");
         ctx.Should().BeNull();
     }
 }

@@ -188,6 +188,47 @@ public class CustomerSupportTeamTests
         messages.Should().Contain(m => m.Text == "şimdiki");
     }
 
+    /// <summary>
+    /// Bağlam sağlayıcılarına hangi sorgunun geçtiğini yakalar.
+    /// </summary>
+    private sealed class QueryCapturingProvider : IContextProvider
+    {
+        public string? SeenQuery { get; private set; }
+        public string Name => "QueryCapture";
+        public int Order => 1;
+        public Task<string?> GetContextAsync(AgentSession session, string currentQuery)
+        {
+            SeenQuery = currentQuery;
+            return Task.FromResult<string?>(null);
+        }
+    }
+
+    [Fact]
+    public async Task BuildWorkflowMessagesAsync_PassesCurrentQueryToContextProviders()
+    {
+        // KABLOLAMA testi. Sağlayıcı seviyesindeki testler provider'ı doğrudan çağırdığı için
+        // WorkflowRunner sorguyu geçirmeyi bıraksa bile yeşil kalıyor — mutasyon denemesinde
+        // bu boşluk fiilen görüldü. Burası zincirin WorkflowRunner → ContextPipeline →
+        // IContextProvider ucunu kilitler.
+        //
+        // Sorgu geçmişten okunamaz: geçmiş workflow bittikten SONRA yazılıyor. Bu yüzden
+        // parametrenin gerçekten taşınması semantik hafıza retrieval'ının doğruluğu için şart.
+        var capture = new QueryCapturingProvider();
+        var d = BuildDeps();
+        var pipeline = new ContextPipeline([capture], NullLogger<ContextPipeline>.Instance);
+        var factory = new AgentTeamFactory(d.ChatClient, d.Prompts, d.ApprovalGate, d.Tools, d.Guards, d.LoggerFactory);
+        var finalizer = new TurnFinalizer(d.TraceStore, d.ApprovalGate, d.LoggerFactory, semanticMemory: null, profileService: null);
+        var runner = new WorkflowRunner(
+            factory, finalizer, pipeline, d.ChatClient, d.Guards, d.TraceStore, d.Prompts,
+            d.ApprovalGate, d.UiHint, d.ApprovalContext, d.LoggerFactory);
+
+        var session = new AgentSession { SessionId = "s1", State = new SessionState() };
+        await runner.BuildWorkflowMessagesAsync("iade süresi ne kadar?", null, session, null);
+
+        capture.SeenQuery.Should().Be("iade süresi ne kadar?",
+            "kullanıcının bu turdaki mesajı bağlam sağlayıcılarına geçirilmeli");
+    }
+
     [Fact]
     public async Task BuildWorkflowMessagesAsync_WithExtractableId_AddsEntityHint()
     {

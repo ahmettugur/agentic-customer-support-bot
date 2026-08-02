@@ -36,7 +36,7 @@ public class ConversationSummaryProvider : IContextProvider
         _logger = logger;
     }
 
-    public async Task<string?> GetContextAsync(AgentSession session)
+    public async Task<string?> GetContextAsync(AgentSession session, string currentQuery)
     {
         var history = _sessionRepository.GetHistory(session.SessionId);
         if (history.Count < SummaryThreshold)

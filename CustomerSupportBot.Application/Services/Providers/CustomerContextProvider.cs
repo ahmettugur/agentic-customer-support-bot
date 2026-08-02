@@ -26,7 +26,7 @@ public class CustomerContextProvider : IContextProvider
     public string Name => "CustomerContext";
     public int Order => 10;
 
-    public Task<string?> GetContextAsync(AgentSession session)
+    public Task<string?> GetContextAsync(AgentSession session, string currentQuery)
     {
         var customerId = session.State.CustomerId;
         if (string.IsNullOrWhiteSpace(customerId))

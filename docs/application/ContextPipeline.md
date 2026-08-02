@@ -16,7 +16,7 @@ _providers = providers.OrderBy(p => p.Order);
 
 // BuildContextAsync: hepsi paralel çalışır
 var tasks = providerList.Select(async p => {
-    var ctx = await p.GetContextAsync(session);
+    var ctx = await p.GetContextAsync(session, currentQuery);
     return (Order: p.Order, Context: ctx);
 });
 var results = await Task.WhenAll(tasks);
@@ -38,11 +38,22 @@ public interface IContextProvider
 {
     string Name  { get; }   // Loglama için tanımlayıcı ad
     int    Order { get; }   // Küçük = daha önce (sistemin birleştirme sırasında)
-    Task<string?> GetContextAsync(AgentSession session);
+    Task<string?> GetContextAsync(AgentSession session, string currentQuery);
 }
 ```
 
 `GetContextAsync` null veya boş string döndürebilir — bu durumda provider'ın katkısı atlanır.
+
+> ⚠️ **`currentQuery` neden ayrı parametre?** Kullanıcının o turdaki mesajı oturum geçmişinden
+> okunamaz: geçmiş (`AddExchange`/`PersistExchange`) workflow **bittikten sonra** yazılır,
+> dolayısıyla bağlam kurulurken güncel mesaj henüz orada değildir.
+>
+> Bu parametre yokken `SemanticMemoryContextProvider` sorguyu geçmişteki son kullanıcı
+> mesajından tahmin ediyordu. Sonuç: ilk turda **hiç** retrieval yapılmıyor, sonraki turlarda
+> arama **bir önceki turun** sorusuyla yapılıyordu — hem bilgi tabanı hem onaylanmış dersler
+> yanlış sorguyla getiriliyordu. Regresyon koruması: `SemanticMemoryRetrievalQueryTests`
+> (provider davranışı) ve `CustomerSupportTeamTests.BuildWorkflowMessagesAsync_PassesCurrentQueryToContextProviders`
+> (WorkflowRunner → pipeline kablolaması).
 
 ---
 

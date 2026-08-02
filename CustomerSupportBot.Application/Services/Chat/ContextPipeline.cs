@@ -22,7 +22,7 @@ public class ContextPipeline : IContextPipeline
         _logger = logger;
     }
 
-    public async Task<string> BuildContextAsync(AgentSession session)
+    public async Task<string> BuildContextAsync(AgentSession session, string currentQuery)
     {
         // Providers bağımsızdır — hepsi paralel çalıştırılır; hata veren atlanır.
         var providerList = _providers.ToList(); // Order zaten ctor'da uygulandı
@@ -30,7 +30,7 @@ public class ContextPipeline : IContextPipeline
         {
             try
             {
-                var ctx = await p.GetContextAsync(session);
+                var ctx = await p.GetContextAsync(session, currentQuery);
                 if (!string.IsNullOrWhiteSpace(ctx))
                     _logger.LogDebug("Context provider '{Name}' bağlam üretti ({Length} karakter)",
                         p.Name, ctx.Length);

@@ -31,7 +31,7 @@ public sealed class CustomerProfileContextProvider : IContextProvider
         _logger = logger;
     }
 
-    public Task<string?> GetContextAsync(AgentSession session)
+    public Task<string?> GetContextAsync(AgentSession session, string currentQuery)
     {
         var customerId = session.State.CustomerId;
         if (string.IsNullOrWhiteSpace(customerId)) return Task.FromResult<string?>(null);
