@@ -88,16 +88,48 @@ public static class WellKnown
     }
 
     /// <summary>
-    /// Yüksek riskli yan etkili tool'lar — admin onayında gerekçe (audit trail) zorunludur.
-    /// Bu liste frontend (admin.js HIGH_RISK_TOOLS) ile senkron tutulmalı.
+    /// Yan etkili (veritabanına YAZAN) tool → o tool'u sahiplenen ajan eşlemesi.
+    /// <b>Bu sözlük tek doğruluk kaynağıdır</b> — <see cref="HighRiskTools"/>,
+    /// <see cref="SideEffectToolsOf"/> ve <c>ApprovalGateService.ResolveAgentName</c>
+    /// hepsi buradan türetilir. Yeni bir yazma tool'u eklendiğinde <b>yalnızca burası</b>
+    /// güncellenir.
+    ///
+    /// <para>
+    /// Eskiden aynı bilgi beş ayrı yerde elle tekrarlanıyordu (bu liste,
+    /// ResolveAgentName switch'i, WorkflowRunner'daki iki ajan-bazlı set, Blazor admin
+    /// panelindeki HighRiskTools ve appsettings). Kaçınılmaz olan oldu: panel listesi
+    /// order_cancel_tool + return_request_tool eklendiğinde güncellenmeyi kaçırdı ve
+    /// bu tool'ların onayı "gerekçe isteğe bağlı" gösterilip backend'den 400 dönmesine
+    /// yol açtı. Frontend artık kendi listesini tutmuyor —
+    /// <see cref="ApprovalRequest.ReasonRequired"/> ile sunucudan öğreniyor.
+    /// </para>
     /// </summary>
-    public static readonly IReadOnlySet<string> HighRiskTools = new HashSet<string>
-    {
-        ToolNames.OrderPlacement,
-        ToolNames.OrderCancel,
-        ToolNames.ReturnRequest,
-        ToolNames.ComplaintRegistration
-    };
+    public static readonly IReadOnlyDictionary<string, string> SideEffectToolOwners =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [ToolNames.OrderPlacement]        = AgentNames.Order,
+            [ToolNames.OrderCancel]           = AgentNames.Order,
+            [ToolNames.ReturnRequest]         = AgentNames.Order,
+            [ToolNames.ComplaintRegistration] = AgentNames.Complaint
+        };
+
+    /// <summary>
+    /// Yüksek riskli yan etkili tool'lar — admin onayında gerekçe (audit trail) zorunludur.
+    /// <see cref="SideEffectToolOwners"/>'dan türetilir; elle senkron tutulacak ikinci bir
+    /// liste değildir.
+    /// </summary>
+    public static readonly IReadOnlySet<string> HighRiskTools =
+        SideEffectToolOwners.Keys.ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Belirtilen ajanın sahiplendiği yan etkili tool'lar. <see cref="SideEffectToolOwners"/>'dan
+    /// türetilir — WorkflowRunner'ın ajan başına tuttuğu elle yazılmış setlerin yerini alır.
+    /// </summary>
+    public static IReadOnlySet<string> SideEffectToolsOf(string agentName) =>
+        SideEffectToolOwners
+            .Where(kv => string.Equals(kv.Value, agentName, StringComparison.OrdinalIgnoreCase))
+            .Select(kv => kv.Key)
+            .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>Görev tamamlanma durumları — PostToolReflection.Status ve NormalizeStatus.</summary>
     public static class TaskStatuses

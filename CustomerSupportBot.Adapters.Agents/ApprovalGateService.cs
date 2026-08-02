@@ -132,14 +132,13 @@ public class ApprovalGateService
     /// Hangi ajanın hangi tool'u sahiplendiğini çözer — <c>ToolApprovalRequestContent</c>
     /// sadece tool adını taşıdığı için (workflow hangi ajanın turduğunu doğrudan söylemiyor),
     /// bu eşleme admin panelinde "hangi ajan istiyor" bilgisini göstermek için gerekiyor.
+    /// Eşleme <see cref="WellKnown.SideEffectToolOwners"/>'dan okunur — burada ayrıca
+    /// elle sürdürülen bir switch tutulmaz.
     /// </summary>
-    public static string ResolveAgentName(string toolName) => toolName switch
-    {
-        WellKnown.ToolNames.OrderPlacement or WellKnown.ToolNames.OrderCancel or WellKnown.ToolNames.ReturnRequest
-            => WellKnown.AgentNames.Order,
-        WellKnown.ToolNames.ComplaintRegistration => WellKnown.AgentNames.Complaint,
-        _ => "UnknownAgent"
-    };
+    public static string ResolveAgentName(string toolName) =>
+        WellKnown.SideEffectToolOwners.TryGetValue(toolName, out var agentName)
+            ? agentName
+            : "UnknownAgent";
 
     /// <summary>
     /// Bir onay talebi oluşturur (veya aynı imzalı bekleyen bir talep varsa onu yeniden kullanır)
@@ -152,6 +151,7 @@ public class ApprovalGateService
         string toolName,
         string agentName,
         IDictionary<string, object?>? parameters,
+        string? justification,
         CancellationToken ct)
     {
         var paramsDict = parameters is null
@@ -183,7 +183,11 @@ public class ApprovalGateService
                 ToolName = toolName,
                 AgentName = agentName,
                 Parameters = paramsDict,
-                Justification = string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName)
+                // Çağıran taraf (WorkflowRunner) o an trace'te bulunan gerçek gerekçeyi
+                // (PlanningAgent rationale'ı) geçer; yoksa jenerik şablona düşülür.
+                Justification = string.IsNullOrWhiteSpace(justification)
+                    ? string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName)
+                    : justification
             };
             await _approvalQueue.CreateAsync(req, ct);
         }

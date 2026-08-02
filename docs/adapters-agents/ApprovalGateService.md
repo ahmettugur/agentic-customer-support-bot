@@ -51,7 +51,7 @@ Framework'ün native HITL mekanizmasına geçiş, hexagonal mimariyi bilinçli o
 | `WrapIfRequiresApproval(toolName, inner)` (private) | Config'de onay gerekiyorsa `ApprovalRequiredAIFunction` ile sarmalar, değilse tool'u olduğu gibi döner. |
 | `RequiresApproval(toolName)` (private) | `ApprovalOptions.Enabled && ToolsRequiringApproval.Contains(toolName)`. |
 | `ResolveAgentName(toolName)` (static) | Tool adından ajan adını çözer (`OrderPlacement`/`OrderCancel`/`ReturnRequest` → Order, `ComplaintRegistration` → Complaint, diğer → `"UnknownAgent"`). |
-| `RequestApprovalAsync(toolName, agentName, parameters, ct)` | Onay talebi oluşturur/yeniden kullanır, kararı bekler, `ApprovalDecisionResult` döner. İptal edilirse `(false, "İstek iptal edildi")`. |
+| `RequestApprovalAsync(toolName, agentName, parameters, justification, ct)` | Onay talebi oluşturur/yeniden kullanır, kararı bekler, `ApprovalDecisionResult` döner. İptal edilirse `(false, "İstek iptal edildi")`. `justification` boş gelirse jenerik `"{agent} bu tool'u çağırmak istiyor."` şablonuna düşülür — çağıran (`WorkflowRunner.ResolveApprovalJustification`) normalde PlanningAgent rationale'ını geçer. |
 | `ProcessPendingEscalations(trace, userQuery, finalResponse)` | `EscalationPolicyService`'e delege eder. |
 | `BuildParamSignature(parameters)` (private static) | Parametre sözlüğünden deterministik, alfabetik sıralı bir imza string'i üretir (duplicate istek tespiti için). |
 | `ApprovalDecisionResult` (record) | `(bool Approved, string? Reason)`. |

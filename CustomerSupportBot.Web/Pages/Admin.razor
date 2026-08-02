@@ -104,7 +104,9 @@
         <section id="panel-approvals" class="tab-content @ActiveCls("approvals")" role="tabpanel" aria-labelledby="tab-approvals">
             <div class="tab-header">
                 <h2>Onay Bekleyen Tool Çağrıları</h2>
-                <p class="muted">LLM bir yan etkili tool çağırmak istiyor. Onay verilmezse <strong>60 saniye</strong> sonra otomatik reddedilir.</p>
+                @* Süre sunucudan gelir (ApprovalRequest.TimeoutSeconds) — config değişirse panel de değişir. *@
+                @{ var timeoutHint = _pendingApprovals.Count > 0 ? _pendingApprovals[0].TimeoutSeconds : 60; }
+                <p class="muted">LLM bir yan etkili tool çağırmak istiyor. Onay verilmezse <strong>@timeoutHint saniye</strong> sonra otomatik reddedilir.</p>
             </div>
             <div class="cards-list">
                 @if (_pendingApprovals.Count == 0) { <div class="empty-state">Onay bekleyen istek yok.</div> }
@@ -120,7 +122,32 @@
                             <div class="card-body">
                                 <div class="card-row"><span class="label">Agent:</span> <span>@a.AgentName</span></div>
                                 <div class="card-row"><span class="label">Kullanıcı:</span> <span class="user-query">@a.UserQuery</span></div>
-                                <div class="card-row"><span class="label">Session:</span> <code class="session-id">@ShortId(a.SessionId)</code></div>
+
+                                @* Tool argümanları — kararın dayanağı. Hangi sipariş, hangi gerekçe. *@
+                                @{ var paramFields = ParseJsonFields(a.Parameters); }
+                                @if (paramFields is not null)
+                                {
+                                    <div class="card-row card-row-top"><span class="label">Parametreler:</span></div>
+                                    <div class="param-list">
+                                        @foreach (var (k, v) in paramFields)
+                                        {
+                                            <div class="param-row"><span class="param-key">@k</span><span class="param-val">@v</span></div>
+                                        }
+                                    </div>
+                                }
+
+                                @if (!string.IsNullOrWhiteSpace(a.Justification))
+                                {
+                                    <div class="card-row"><span class="label">Gerekçe:</span> <span class="justification">@a.Justification</span></div>
+                                }
+
+                                <div class="card-row">
+                                    <span class="label">Session:</span> <code class="session-id">@ShortId(a.SessionId)</code>
+                                    @if (!string.IsNullOrWhiteSpace(a.TraceId))
+                                    {
+                                        <a class="trace-link" href="@($"/replay?traceId={Uri.EscapeDataString(a.TraceId)}")" target="_blank" rel="noopener">trace ↗</a>
+                                    }
+                                </div>
                             </div>
                             <footer class="card-actions">
                                 <button class="btn-primary" @onclick='() => ShowApprovePrompt(a)'>✓ Onayla</button>

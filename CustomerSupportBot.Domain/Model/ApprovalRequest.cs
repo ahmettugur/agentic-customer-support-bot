@@ -42,7 +42,18 @@ public class ApprovalRequest
     /// <summary>Kullanıcı sorusu (bağlam için).</summary>
     public string? UserQuery { get; set; }
 
-    /// <summary>Opsiyonel: LLM'in bu tool'u çağırma gerekçesi (preToolCheck.reasoning).</summary>
+    /// <summary>
+    /// Admin'e gösterilen "bu tool neden çağrılıyor" gerekçesi — pratikte PlanningAgent'ın
+    /// routing rationale'ı (bkz. <c>WorkflowRunner.ResolveApprovalJustification</c>).
+    ///
+    /// <para>
+    /// NOT: Bu alan eskiden "preToolCheck.reasoning" olarak belgelenmişti ama öyle
+    /// doldurulamaz — <c>preToolCheck</c>, uzman ajanın FINAL yapılandırılmış JSON'ının
+    /// parçasıdır (yanında <c>postToolReflection</c> ile birlikte, yani tool çalıştıktan
+    /// sonra üretilir); onay ise tool çalışmadan önce tetiklenir. O anda mevcut olan en
+    /// bilgilendirici gerekçe planlama turunun rationale'ıdır.
+    /// </para>
+    /// </summary>
     public string? Justification { get; set; }
 
     /// <summary>İsteğin oluşturulma zamanı.</summary>
@@ -62,5 +73,20 @@ public class ApprovalRequest
 
     /// <summary>Bu request için timeout (saniye). Config'ten gelir.</summary>
     public int TimeoutSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Bu tool'un onaylanması için gerekçe (audit trail) zorunlu mu — yani
+    /// <see cref="WellKnown.HighRiskTools"/> içinde mi. Salt-okunur ve türetilmiş;
+    /// JSON'a serileştirilerek admin paneline gider.
+    ///
+    /// <para>
+    /// Amaç: panelin aynı listeyi kendi tarafında tekrar tutmasını önlemek. Panel eskiden
+    /// kendi <c>HighRiskTools</c> kopyasını tutuyordu ve bu kopya sunucudaki listeyle
+    /// senkronu kaybetmişti — order_cancel_tool/return_request_tool için "gerekçe isteğe
+    /// bağlı" gösterilip onay backend'de 400 (<c>approval_reason_required</c>) ile
+    /// reddediliyordu. Karar tek yerde (sunucuda) verilir, panel sadece uygular.
+    /// </para>
+    /// </summary>
+    public bool ReasonRequired => WellKnown.HighRiskTools.Contains(ToolName);
 }
 

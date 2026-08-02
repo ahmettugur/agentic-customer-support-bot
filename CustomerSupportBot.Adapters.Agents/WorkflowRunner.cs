@@ -95,7 +95,7 @@ internal sealed class WorkflowRunner
 
             if (evt is RequestInfoEvent requestInfo)
             {
-                await HandleRequestInfoEventAsync(run, requestInfo, effectiveCt);
+                await HandleRequestInfoEventAsync(run, requestInfo, st, effectiveCt);
                 continue;
             }
 
@@ -177,7 +177,7 @@ internal sealed class WorkflowRunner
 
             if (evt is RequestInfoEvent requestInfo)
             {
-                await HandleRequestInfoEventAsync(run, requestInfo, effectiveCt);
+                await HandleRequestInfoEventAsync(run, requestInfo, st, effectiveCt);
                 continue;
             }
 
@@ -278,7 +278,7 @@ internal sealed class WorkflowRunner
     /// marker uzunluğu kadar güvenlik payı tutulur; yalnızca kesinlikle marker'a ait olmadığı
     /// bilinen kısım hemen yayınlanır.
     /// </summary>
-    private sealed class ResponseStreamFilter
+    internal sealed class ResponseStreamFilter
     {
         private const string Marker = "TERMINATE";
         private readonly StringBuilder _pending = new();
@@ -570,7 +570,7 @@ internal sealed class WorkflowRunner
     /// devreye giremez.
     /// </para>
     /// </summary>
-    private static void EnsureHumanHandoffEscalation(
+    internal static void EnsureHumanHandoffEscalation(
         IEnumerable<ChatMessage> messages, List<SpecialistReasoning> reasonings)
     {
         if (!WorkflowResponseExtractor.ContainsHumanHandoffToolCall(messages)) return;
@@ -600,23 +600,17 @@ internal sealed class WorkflowRunner
     }
 
     /// <summary>
-    /// OrderAgent'ın sahip olduğu, HITL onayından geçen yan-etkili tool'lar — bkz.
-    /// <see cref="EnsureSideEffectToolCompletion"/> ve <c>WellKnown.HighRiskTools</c>
-    /// (admin.js HIGH_RISK_TOOLS ile senkron tutulan aynı liste, orada tek bir set olarak
-    /// tutuluyor; burada hangi tool'un hangi ajana ait olduğunu ayırt etmek gerektiği için
-    /// ajan bazında ikiye bölünüyor).
+    /// Ajan başına, HITL onayından geçen yan-etkili tool'lar — bkz.
+    /// <see cref="EnsureSideEffectToolCompletion"/>. Elle yazılmış set yerine
+    /// <see cref="WellKnown.SideEffectToolsOf"/> ile tek kaynaktan
+    /// (<see cref="WellKnown.SideEffectToolOwners"/>) türetilir; yeni bir yazma tool'u
+    /// eklendiğinde burada değişiklik gerekmez.
     /// </summary>
-    private static readonly IReadOnlySet<string> OrderAgentSideEffectTools = new HashSet<string>(StringComparer.Ordinal)
-    {
-        WellKnown.ToolNames.OrderPlacement,
-        WellKnown.ToolNames.OrderCancel,
-        WellKnown.ToolNames.ReturnRequest
-    };
+    private static readonly IReadOnlySet<string> OrderAgentSideEffectTools =
+        WellKnown.SideEffectToolsOf(WellKnown.AgentNames.Order);
 
-    private static readonly IReadOnlySet<string> ComplaintAgentSideEffectTools = new HashSet<string>(StringComparer.Ordinal)
-    {
-        WellKnown.ToolNames.ComplaintRegistration
-    };
+    private static readonly IReadOnlySet<string> ComplaintAgentSideEffectTools =
+        WellKnown.SideEffectToolsOf(WellKnown.AgentNames.Complaint);
 
     /// <summary>
     /// <see cref="EnsureHumanHandoffEscalation"/> ile AYNI "tek yönlü kod garantisi" deseni,
@@ -646,7 +640,7 @@ internal sealed class WorkflowRunner
     /// ama çağırsa bile "en az biri başarılı → done" yeterli bir garanti.
     /// </para>
     /// </summary>
-    private static void EnsureSideEffectToolCompletion(
+    internal static void EnsureSideEffectToolCompletion(
         IEnumerable<ChatMessage> messages,
         List<SpecialistReasoning> reasonings,
         string agentName,
@@ -742,7 +736,8 @@ internal sealed class WorkflowRunner
     /// kalır; bu, bugünkü sürümde sadece approval-request türü beklendiği için kabul edilen bir
     /// sınır durumdur.
     /// </summary>
-    private async Task HandleRequestInfoEventAsync(StreamingRun run, RequestInfoEvent requestInfo, CancellationToken ct)
+    private async Task HandleRequestInfoEventAsync(
+        StreamingRun run, RequestInfoEvent requestInfo, TraceState st, CancellationToken ct)
     {
         if (!requestInfo.Request.TryGetDataAs<ToolApprovalRequestContent>(out var approvalRequest))
             return;
@@ -754,11 +749,42 @@ internal sealed class WorkflowRunner
             toolName: functionCall.Name,
             agentName: ApprovalGateService.ResolveAgentName(functionCall.Name),
             parameters: functionCall.Arguments,
+            justification: ResolveApprovalJustification(st),
             ct);
 
         var responseContent = approvalRequest.CreateResponse(decision.Approved, decision.Reason);
         var externalResponse = requestInfo.Request.CreateResponse(responseContent);
         await run.SendResponseAsync(externalResponse);
+    }
+
+    /// <summary>
+    /// Admin'e "bu tool neden çağrılıyor" sorusunun cevabı olarak gösterilecek gerekçeyi seçer.
+    ///
+    /// <para>
+    /// <b>Neden preToolCheck.reasoning DEĞİL:</b> uzman ajanın <c>preToolCheck</c> alanı, final
+    /// yapılandırılmış JSON çıktısının parçasıdır (aynı nesnede <c>postToolReflection</c> da var,
+    /// yani tanımı gereği tool ÇALIŞTIKTAN sonra üretilir). Onay ise tool çalışmadan önceki ara
+    /// turda tetiklenir — o anda böyle bir alan henüz mevcut değildir. Bu yüzden onay kaydına
+    /// uzmanın kendi gerekçesi konulamaz.
+    /// </para>
+    ///
+    /// <para>
+    /// O anda gerçekten elde olan en bilgilendirici gerekçe PlanningAgent'ın routing
+    /// rationale'ıdır: planlama turu uzman turundan ÖNCE tamamlandığı için trace'e çoktan
+    /// işlenmiştir. Yoksa ReasoningService'in analizine, o da yoksa jenerik şablona düşülür.
+    /// </para>
+    /// </summary>
+    private static string ResolveApprovalJustification(TraceState st)
+    {
+        var planningRationale = st.Trace.Planning?.Rationale;
+        if (!string.IsNullOrWhiteSpace(planningRationale))
+            return planningRationale;
+
+        var reasoningRationale = st.Trace.Reasoning?.Rationale;
+        if (!string.IsNullOrWhiteSpace(reasoningRationale))
+            return reasoningRationale;
+
+        return string.Empty; // ApprovalGateService jenerik şablona düşer
     }
 
     private static async IAsyncEnumerable<(WorkflowEvent? evt, string? error)>
@@ -806,7 +832,7 @@ internal sealed class WorkflowRunner
     /// veya mesaj sırasını değiştirirken ilgili prompt dosyalarının da gözden geçirilmesi gerekir;
     /// derleyici/test bu bağlantıyı doğrulamaz.
     /// </summary>
-    private async Task<List<ChatMessage>> BuildWorkflowMessagesAsync(
+    internal async Task<List<ChatMessage>> BuildWorkflowMessagesAsync(
         string query,
         List<ConversationMessage>? conversationHistory,
         AgentSession? session,
@@ -906,7 +932,7 @@ internal sealed class WorkflowRunner
         }
     }
 
-    private string BuildReasoningSummaryHint(ReasoningResult r)
+    internal string BuildReasoningSummaryHint(ReasoningResult r)
     {
         var linesBuilder = new StringBuilder();
 

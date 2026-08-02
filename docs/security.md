@@ -168,7 +168,7 @@ Kullanıcı mesajı → InputGuard.Inspect(query)
 
 ### 4.1 HITL Approval Gate
 
-Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`) çalıştırılmadan önce admin onayı gerektirir.
+Veritabanına **yazan dört tool** çalıştırılmadan önce admin onayı gerektirir. (Diğer tool'lar — `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`, `product_inquiry_tool`, `product_list_tool`, `human_handoff_tool` — salt okuma yapar veya DB'ye hiç dokunmaz, onay gerektirmez.)
 
 ```json
 {
@@ -176,6 +176,8 @@ Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`) çal
     "Enabled": true,
     "ToolsRequiringApproval": [
       "order_placement_tool",
+      "order_cancel_tool",
+      "return_request_tool",
       "complaint_registration_tool"
     ],
     "TimeoutSeconds": 60,
@@ -185,6 +187,23 @@ Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`) çal
 ```
 
 `ApprovalGateService`, tool lambda'larını sararak `Enabled=true` ise onay bekletir, `false` ise pass-through yapar. Timeout sonrası `AutoApproveOnTimeout` ayarına göre otomatik onay veya red uygulanır.
+
+#### Yüksek risk / gerekçe zorunluluğu — tek doğruluk kaynağı
+
+Yukarıdaki dört tool aynı zamanda **yüksek riskli** sayılır: onaylanırken admin'in gerekçe (audit trail) yazması zorunludur (`AdminEndpoints`, `AgentPanelEndpoints` → 400 `approval_reason_required`).
+
+Bu eşleme **yalnızca** `WellKnown.SideEffectToolOwners` sözlüğünde tanımlıdır (tool → sahibi ajan). Ondan türetilenler:
+
+| Türetilen | Kullanan |
+|---|---|
+| `WellKnown.HighRiskTools` | gerekçe zorunluluğu kontrolü |
+| `WellKnown.SideEffectToolsOf(agent)` | `WorkflowRunner.EnsureSideEffectToolCompletion` |
+| `ApprovalGateService.ResolveAgentName` | admin panelinde "hangi ajan istiyor" |
+| `ApprovalRequest.ReasonRequired` (serileşir) | Blazor admin paneli |
+
+> ⚠️ Yeni bir yazma tool'u eklenirken **`SideEffectToolOwners` ve `appsettings` → `ToolsRequiringApproval`** güncellenir; başka hiçbir yerde liste tutulmaz.
+>
+> Bu yapı bir üretim bug'ından sonra kuruldu: admin paneli kendi `HighRiskTools` kopyasını tutuyordu ve `order_cancel_tool` + `return_request_tool` eklendiğinde güncellenmeyi kaçırdı. Panel bu tool'lar için gerekçeyi *"isteğe bağlı"* gösteriyor, admin boş bırakınca backend 400 dönüyor, HITL workflow'u duraklattığı için müşterinin iptal/iade talebi timeout'a kadar asılı kalıyordu. Panel artık liste tutmuyor, `ApprovalRequest.ReasonRequired` bayrağını uyguluyor. İnvariant `WellKnownTests` ile kilitli.
 
 ### 4.2 Tool Idempotency
 

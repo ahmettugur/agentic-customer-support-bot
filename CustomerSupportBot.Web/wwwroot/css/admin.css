@@ -306,6 +306,52 @@
 
 .user-query { color: var(--color-text); }
 
+/* Onay kartı — tool argümanları, gerekçe ve trace linki.
+   Admin kararı bu verilere dayanır (hangi sipariş, neden çağrıldı). */
+.card-row-top { margin-bottom: 2px; }
+
+.param-list {
+    margin: 0 0 6px 80px;          /* .label min-width ile hizalı */
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 6px 10px;
+}
+
+.param-row {
+    display: flex;
+    gap: var(--space-2);
+    align-items: baseline;
+    padding: 2px 0;
+}
+.param-row + .param-row { border-top: 1px solid var(--color-border); }
+
+.param-key {
+    min-width: 96px;
+    color: var(--color-text-secondary);
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+}
+
+.param-val {
+    color: var(--color-text);
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.justification {
+    color: var(--color-text-secondary);
+    font-style: italic;
+}
+
+.trace-link {
+    margin-left: var(--space-2);
+    font-size: 11px;
+    color: var(--color-primary);
+    text-decoration: none;
+}
+.trace-link:hover { text-decoration: underline; }
+
 .card-params {
     margin-top: var(--space-3);
     background: var(--color-surface-alt);

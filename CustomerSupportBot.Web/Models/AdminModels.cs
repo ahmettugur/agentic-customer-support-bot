@@ -8,12 +8,23 @@ public sealed record ApprovalRequest(
     string? AgentName,
     string? UserQuery,
     string? SessionId,
+    // Tool'un ÇAĞRILACAĞI argümanlar (ör. {orderId, reason}). Admin'in kararı verirken
+    // gördüğü en kritik veri — hangi siparişin iptal edildiğini bu alan söyler.
     object? Parameters,
     string Status,
     DateTimeOffset RequestedAt,
     DateTimeOffset? DecidedAt,
     string? DecidedBy,
-    string? DecisionReason
+    string? DecisionReason,
+    // Sunucu tarafında WellKnown.HighRiskTools'tan türetilir (ApprovalRequest.ReasonRequired) —
+    // panel yüksek riskli tool listesinin kendi kopyasını tutmaz, senkron kayması olamaz.
+    bool ReasonRequired = false,
+    // Bu tool'un neden çağrıldığı — PlanningAgent'ın routing rationale'ı.
+    string? Justification = null,
+    // Reasoning trace'e derin link için (TraceDetailPanel / Replay).
+    string? TraceId = null,
+    // Otomatik red süresi; panelde sabit "60 saniye" yazmak yerine sunucudan okunur.
+    int TimeoutSeconds = 60
 );
 
 // ─── Escalations ─────────────────────────────────────────────────────────────

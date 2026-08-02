@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Security.Claims;
 using CustomerSupportBot.Web.Models;
 using CustomerSupportBot.Web.Services;
@@ -51,8 +52,11 @@ public partial class Admin
     private bool       _showPromptModal;
     private bool       _promptRequired;
 
-    // Yüksek riskli tool'lar — backend ile senkron (WellKnown.HighRiskTools)
-    private static readonly HashSet<string> HighRiskTools = ["order_placement_tool", "complaint_registration_tool"];
+    // NOT: Burada eskiden yüksek riskli tool'ların yerel bir kopyası tutuluyordu ve bu kopya
+    // sunucudaki WellKnown.HighRiskTools ile senkronunu kaybetmişti (order_cancel_tool ve
+    // return_request_tool eksikti) — bu tool'lar için gerekçe "isteğe bağlı" gösteriliyor,
+    // admin boş bırakınca backend 400 approval_reason_required dönüyordu. Karar artık
+    // sunucuda veriliyor: ApprovalRequest.ReasonRequired.
 
     // ── Takeover pending state ──────────────────────────────────────────────────
     private EscalationRequest? _pendingTakeoverEsc;
@@ -181,7 +185,7 @@ public partial class Admin
 
     private void ShowApprovePrompt(ApprovalRequest a)
     {
-        var required = HighRiskTools.Contains(a.ToolName);
+        var required = a.ReasonRequired;
         var label = required
             ? "Onay gerekçesi (zorunlu — yüksek riskli işlem)"
             : "Onay notu (isteğe bağlı)";
@@ -499,6 +503,34 @@ public partial class Admin
     // ── Helpers ───────────────────────────────────────────────────────────────
     private static string ShortId(string? id) =>
         id is null ? "—" : id[..Math.Min(8, id.Length)] + "…";
+
+    /// <summary>
+    /// Onay kartındaki tool argümanlarını (ApprovalRequest.Parameters) alan-alan gösterilebilir
+    /// hale getirir. Sunucu <c>Dictionary&lt;string, object?&gt;</c> gönderiyor; DTO'da
+    /// <c>object?</c> olduğu için istemcide <see cref="JsonElement"/> olarak çözülür.
+    /// Nesne değilse veya boşsa null döner (kart o bölümü hiç çizmez).
+    /// Replay.razor'daki aynı isimli yardımcının string yerine JsonElement alan karşılığı.
+    /// </summary>
+    private static List<(string Key, string Value)>? ParseJsonFields(object? parameters)
+    {
+        if (parameters is not JsonElement root || root.ValueKind != JsonValueKind.Object)
+            return null;
+
+        var list = new List<(string, string)>();
+        foreach (var prop in root.EnumerateObject())
+        {
+            var val = prop.Value.ValueKind switch
+            {
+                JsonValueKind.String => prop.Value.GetString() ?? "",
+                JsonValueKind.True   => "true",
+                JsonValueKind.False  => "false",
+                JsonValueKind.Null   => "—",
+                _                    => prop.Value.GetRawText()
+            };
+            list.Add((prop.Name, val));
+        }
+        return list.Count > 0 ? list : null;
+    }
 
     private static string FmtRelative(DateTimeOffset dt)
     {

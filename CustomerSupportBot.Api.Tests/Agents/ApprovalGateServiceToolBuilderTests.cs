@@ -250,6 +250,7 @@ public class ApprovalGateServiceToolBuilderTests
             WellKnown.ToolNames.OrderPlacement,
             WellKnown.AgentNames.Order,
             new Dictionary<string, object?> { ["customerId"] = "9009" },
+            justification: null,
             TestContext.Current.CancellationToken);
 
         decision.Approved.Should().BeFalse();
@@ -272,6 +273,7 @@ public class ApprovalGateServiceToolBuilderTests
             WellKnown.ToolNames.ComplaintRegistration,
             WellKnown.AgentNames.Complaint,
             new Dictionary<string, object?> { ["orderId"] = "1042" },
+            justification: null,
             TestContext.Current.CancellationToken);
 
         decision.Approved.Should().BeTrue();
@@ -293,6 +295,7 @@ public class ApprovalGateServiceToolBuilderTests
             WellKnown.ToolNames.OrderPlacement,
             WellKnown.AgentNames.Order,
             parameters: null,
+            justification: null,
             TestContext.Current.CancellationToken);
 
         decision.Approved.Should().BeTrue();
