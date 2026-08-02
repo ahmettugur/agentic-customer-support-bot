@@ -166,10 +166,16 @@ POST /memory/ingest                              # KB'yi yeniden tara
   "Enabled": true,
   "MinRatingForLesson": 3,
   "RecentTracesToScan": 50,
-  "MiningIntervalHours": 24,
   "RequireApprovalBeforeActivation": true
 }
 ```
+
+> ⚠️ **Tarama yalnızca manueldir.** Tek tetikleyici admin panelindeki "Yeni Tarama Çalıştır"
+> düğmesidir (`POST /improvements/mine`); zamanlanmış bir arka plan servisi **yoktur**.
+> Burada eskiden `MiningIntervalHours: 24` ayarı duruyordu ama onu okuyan hiçbir kod yoktu —
+> "günde bir otomatik taranır" izlenimi veren ölü bir ayardı ve kaldırıldı. Otomatik tarama
+> istenirse önce `LessonMiningHostedService` yazılmalı (bkz. Gelecek İşler), ayar ondan sonra
+> geri eklenmelidir.
 
 ### 2.4 Endpoints (admin-only)
 
@@ -343,5 +349,5 @@ docker compose up -d postgres qdrant
 
 - Episodic memory'i `SemanticMemoryContextProvider`'a dahil etmek (şu an sadece KB + Lessons context'e dönüyor)
 - `PostgresLessonStore` — Proposed lesson'lar restart'ta da kalsın
-- LessonMiningHostedService — `MiningIntervalHours`'a göre cron tarzı otomatik mining
+- LessonMiningHostedService — cron tarzı otomatik mining (şu an tarama yalnızca manuel; ilgili ayar da bu yüzden kaldırıldı)
 - Replay'de "Edit & re-run from this step" — trace'in bir noktasından prompt değiştirip yeniden çalıştırma

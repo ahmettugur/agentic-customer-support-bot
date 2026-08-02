@@ -84,13 +84,37 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
         if (!Enabled || string.IsNullOrWhiteSpace(query)) return Array.Empty<MemorySearchHit>();
 
         var vec = await _embedder.EmbedAsync(query, ct);
+        return await SearchByVectorAsync(kind, vec, topK, minScore, ct);
+    }
+
+    /// <summary>
+    /// Hazır bir sorgu vektörüyle arama yapar — embedding çağrısını atlar.
+    ///
+    /// <para>
+    /// Aynı sorguyu birden fazla koleksiyonda aratan çağıranlar için: <see cref="SearchAsync"/>
+    /// her çağrıda sorguyu yeniden embed ediyor. <c>SemanticMemoryContextProvider</c> her turda
+    /// Knowledge ve Lesson koleksiyonlarını aynı kullanıcı mesajıyla arıyordu, yani tur başına
+    /// AYNI metin iki kez embed ediliyordu (embedder'da cache yok). Bir kez embed edip bu
+    /// metodu iki kez çağırmak embedding maliyetini yarıya indirir.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<MemorySearchHit>> SearchByVectorAsync(
+        MemoryKind kind, float[] queryVector, int? topK = null, float? minScore = null,
+        CancellationToken ct = default)
+    {
+        if (!Enabled || queryVector.Length == 0) return Array.Empty<MemorySearchHit>();
+
         return await _store.SearchAsync(
-            CollectionFor(kind), vec,
+            CollectionFor(kind), queryVector,
             topK ?? _options.Retrieval.TopK,
             minScore ?? _options.Retrieval.MinScore,
             tagFilter: null,
             ct: ct);
     }
+
+    /// <summary>Sorgu metnini vektöre çevirir — çok koleksiyonlu aramada tek sefer kullanılır.</summary>
+    public Task<float[]> EmbedQueryAsync(string query, CancellationToken ct = default)
+        => _embedder.EmbedAsync(query, ct);
 
     /// <summary>Bir trace tamamlandığında çağrılır — episodik bellek yazımı.</summary>
     public Task WriteEpisodeAsync(string sessionId, string traceId, string userQuery,

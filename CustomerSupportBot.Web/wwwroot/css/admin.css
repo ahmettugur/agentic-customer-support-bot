@@ -306,6 +306,30 @@
 
 .user-query { color: var(--color-text); }
 
+/* Onaylı ama vektör hafızaya yazılamamış ders — sessizce etkisiz kaldığı için
+   görünür bir uyarı ve tek tıkla yeniden deneme sunulur. */
+.lesson-inactive {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    padding: 8px 12px;
+    border: 1px solid var(--color-warning, #b45309);
+    border-left: 3px solid var(--color-warning, #b45309);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
+    font-size: 13px;
+    line-height: 1.5;
+}
+.lesson-inactive > span { flex: 1 1 260px; }
+
+.btn-sm {
+    padding: 4px 10px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
 /* Onay kartı — tool argümanları, gerekçe ve trace linki.
    Admin kararı bu verilere dayanır (hangi sipariş, neden çağrıldı). */
 .card-row-top { margin-bottom: 2px; }

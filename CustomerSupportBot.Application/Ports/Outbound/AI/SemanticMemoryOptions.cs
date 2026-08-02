@@ -52,6 +52,23 @@ public sealed class SemanticMemoryOptions
     }
 }
 
+/// <summary>
+/// Self-Improving Loop ayarları.
+///
+/// <para>
+/// <b>Tarama yalnızca MANUELDİR</b> — admin panelindeki "Yeni Tarama Çalıştır" düğmesi
+/// (<c>POST /improvements/mine</c>) dışında tetikleyen bir şey yoktur. Zamanlanmış bir
+/// background service bulunmuyor; bu bilinçli bir tercih, çünkü otomatik tarama hem LLM
+/// maliyeti üretir hem de kimsenin bakmadığı bir onay kuyruğu biriktirir.
+/// </para>
+///
+/// <para>
+/// NOT: Burada eskiden bir <c>MiningIntervalHours = 24</c> ayarı vardı ama onu okuyan
+/// hiçbir kod yoktu — "günde bir otomatik taranır" izlenimi veren ölü bir ayardı.
+/// Zamanlanmış tarama istenirse önce bir hosted service yazılmalı, ayar ondan sonra
+/// geri eklenmelidir.
+/// </para>
+/// </summary>
 public sealed class SelfImprovementOptions
 {
     public const string SectionName = "SelfImprovement";
@@ -60,7 +77,6 @@ public sealed class SelfImprovementOptions
     /// <summary>Bu yıldız sayısının altındaki konuşmalar lesson adayı olur.</summary>
     public int MinRatingForLesson { get; set; } = 3;
     public int RecentTracesToScan { get; set; } = 50;
-    public int MiningIntervalHours { get; set; } = 24;
     public bool RequireApprovalBeforeActivation { get; set; } = true;
 }
 

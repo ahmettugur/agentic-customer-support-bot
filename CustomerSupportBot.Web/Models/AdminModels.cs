@@ -175,5 +175,9 @@ public sealed record LessonProposal(
     string Status,
     string? DecidedBy,
     DateTimeOffset? DecidedAt,
-    string? DecisionReason
+    string? DecisionReason,
+    // Onaylanan ders vektör hafızaya yazıldıysa dolu olur. Approved olduğu hâlde BOŞ ise
+    // ders yalnızca DB'de durur ve konuşmalara hiç context olarak girmez — yani onay
+    // pratikte etkisizdir (LessonMiner.ApproveAsync vektör yazım hatasını yutar).
+    string? VectorMemoryId = null
 );

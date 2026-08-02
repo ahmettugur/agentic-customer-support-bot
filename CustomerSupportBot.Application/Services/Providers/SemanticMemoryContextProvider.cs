@@ -46,8 +46,15 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
 
         try
         {
-            var kbTask = _memory.SearchAsync(MemoryKind.Knowledge, query);
-            var lessonsTask = _memory.SearchAsync(MemoryKind.Lesson, query);
+            // Sorgu BİR KEZ embed edilir, iki koleksiyonda da aynı vektörle aranır.
+            // Eskiden iki ayrı SearchAsync çağrısı vardı ve her biri kendi içinde aynı metni
+            // yeniden embed ediyordu — embedder'da cache olmadığı için tur başına iki
+            // embedding çağrısı (ve iki kat maliyet) oluşuyordu.
+            var queryVector = await _memory.EmbedQueryAsync(query);
+            if (queryVector.Length == 0) return null;
+
+            var kbTask = _memory.SearchByVectorAsync(MemoryKind.Knowledge, queryVector);
+            var lessonsTask = _memory.SearchByVectorAsync(MemoryKind.Lesson, queryVector);
             await Task.WhenAll(kbTask, lessonsTask);
 
             var kb = kbTask.Result;

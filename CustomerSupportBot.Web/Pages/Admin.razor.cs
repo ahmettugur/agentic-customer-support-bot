@@ -101,6 +101,11 @@ public partial class Admin
     private async Task SwitchTabAsync(string tab)
     {
         _activeTab = tab;
+        // Sekme değişimi ELLE yapılan, seyrek bir işlem — burada rozet verisini de tazelemek
+        // kota açısından önemsiz. Buna karşılık RefreshActiveTabAsync artık rozetlerle
+        // çakışan istekleri tekrarlamıyor, dolayısıyla elle geçişte veri bayat kalmasın diye
+        // bu çağrı gerekli.
+        await RefreshBadgesAsync();
         await RefreshActiveTabAsync();
     }
 
@@ -127,10 +132,12 @@ public partial class Admin
             switch (_activeTab)
             {
                 case "approvals":
-                    _pendingApprovals = await AdminApi.GetPendingApprovalsAsync();
+                    // RefreshBadgesAsync bekleyen onayları zaten çekti — otomatik yenilemede
+                    // aynı turda ikinci kez istemek boşa kota harcıyordu (bkz. AutoRefreshInterval).
                     break;
                 case "escalations":
-                    _openEscalations   = await AdminApi.GetOpenEscalationsAsync();
+                    // _openEscalations da RefreshBadgesAsync'ten geliyor; burada yalnızca
+                    // yalnızca bu sekmeye özel olan kapanmış liste çekilir.
                     var recent         = await AdminApi.GetRecentEscalationsAsync(30);
                     _closedEscalations = recent.Where(e => e.Status is "resolved" or "dismissed").ToList();
                     break;
@@ -439,12 +446,35 @@ public partial class Admin
     }
 
     // ── Improvements ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Onaylı ama vektör hafızaya yazılamamış bir dersin yazımını yeniden dener.
+    /// Aynı approve ucu çağrılır — <c>LessonMiner.ApproveAsync</c> bu durumu (Approved +
+    /// VectorMemoryId boş) bir yeniden deneme olarak tanır ve mevcut karar gerekçesini korur.
+    /// </summary>
+    private async Task RetryLessonMemoryAsync(string lessonId)
+    {
+        await AdminApi.ApproveLessonAsync(lessonId, reason: null);
+        _approvedLessons = await AdminApi.GetLessonsAsync("Approved");
+
+        var still = _approvedLessons.FirstOrDefault(l => l.Id == lessonId);
+        if (still is not null && string.IsNullOrEmpty(still.VectorMemoryId))
+            Toast.ShowError("Hafızaya yazılamadı. Semantik hafıza kapalı ya da vektör veritabanına erişilemiyor olabilir.");
+        else
+            Toast.ShowSuccess("Ders hafızaya yazıldı; artık konuşmalarda kullanılacak.");
+    }
+
     private async Task MineImprovementsAsync()
     {
         _miningInProgress = true;
         _miningStats      = null;
         var (candidates, proposed, error) = await AdminApi.MineImprovementsAsync();
-        _miningStats      = $"Son tarama: {candidates} aday → {proposed} yeni öneri{(error is not null ? " · HATA: " + error : "")}";
+        // Hata varsa sayaçlar anlamsız (-1) — "0 aday bulundu" gibi yanlış bir sonuç gösterme.
+        _miningStats = error is not null
+            ? $"Tarama çalıştırılamadı — {error}"
+            : candidates == 0
+                ? "Son tarama: incelenecek yeni aday trace bulunamadı."
+                : $"Son tarama: {candidates} aday → {proposed} yeni öneri.";
         _miningInProgress = false;
         _proposedLessons  = await AdminApi.GetLessonsAsync("Proposed");
     }
@@ -467,6 +497,24 @@ public partial class Admin
     }
 
     // ── Timer ─────────────────────────────────────────────────────────────────
+    /// <summary>
+    /// Otomatik yenileme aralığı.
+    ///
+    /// <para>
+    /// Eskiden 3 saniyeydi ve panel kendi kendini rate-limit'liyordu: her tick'te
+    /// RefreshBadgesAsync (3 istek) + RefreshActiveTabAsync (1-2 istek) çalışıyor, yani
+    /// dakikada ~100 istek üretiliyordu. Sunucudaki "general" politikası ise IP başına
+    /// <b>60 istek/dakika</b>. Sonuç: panel açık durduğu sürece kota tükeniyor ve
+    /// "Yeni Tarama Çalıştır" gibi butonlar HTTP 429 alıyordu.
+    /// </para>
+    ///
+    /// <para>
+    /// 15 saniyede 4 tick/dakika × ~4 istek = ~16 istek/dakika — limitin çok altında,
+    /// manuel işlemlere bol pay bırakıyor. Admin paneli için 15 sn hâlâ "canlı" hissettirir.
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan AutoRefreshInterval = TimeSpan.FromSeconds(15);
+
     private void StartAutoRefresh()
     {
         _refreshTimer?.Dispose();
@@ -484,7 +532,7 @@ public partial class Admin
             catch (ObjectDisposedException) { }
             catch (TaskCanceledException) { }
             catch (Exception ex) { Console.Error.WriteLine($"[AutoRefresh] {ex}"); }
-        }, null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+        }, null, AutoRefreshInterval, AutoRefreshInterval);
     }
 
     private void OnAutoRefreshChanged()

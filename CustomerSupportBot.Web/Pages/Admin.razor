@@ -736,6 +736,17 @@
                                         @if (l.DecisionReason is not null) { <span> · @l.DecisionReason</span> }
                                     </p>
                                 }
+                                @* Onaylı ama vektör hafızaya yazılamamış ders sessizce etkisiz kalır —
+                                   yalnızca DB'de durur, konuşmalara context olarak hiç girmez. *@
+                                @if (l.Status == "Approved" && string.IsNullOrEmpty(l.VectorMemoryId))
+                                {
+                                    <div class="lesson-inactive">
+                                        <span>⚠️ Onaylandı ama hafızaya yazılamadı — bu ders şu anda <strong>etkisiz</strong>.</span>
+                                        <button class="btn-secondary btn-sm" @onclick="() => RetryLessonMemoryAsync(l.Id)">
+                                            Hafızaya yeniden yaz
+                                        </button>
+                                    </div>
+                                }
                             </div>
                         </article>
                     }

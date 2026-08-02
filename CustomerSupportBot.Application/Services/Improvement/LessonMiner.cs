@@ -10,6 +10,7 @@
 // Çıktı JSON şeması:
 //   { "lessons": [ { "title", "lesson", "observation", "suggestedAgent" } ] }
 
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -96,13 +97,33 @@ public sealed class LessonMiner
         }
 
         var parsed = TryParseLessons(llmText);
+
+        // Mükerrer koruması: aynı trace kümesi üzerinde tarama tekrar çalıştırıldığında
+        // model neredeyse aynı dersleri yeniden üretir. Daha önce görülmüş (Proposed veya
+        // Approved) bir başlık tekrar eklenmez — aksi halde onay kuyruğu kopyalarla dolar.
+        // Reddedilenler kasıtlı olarak hariç: admin bir dersi reddettiyse, aynı sorun tekrar
+        // gözlemlendiğinde yeniden önerilebilmeli.
+        var existingTitles = _lessonStore.GetAll(500)
+            .Where(l => l.Status != LessonStatus.Rejected)
+            .Select(l => l.Title.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var added = new List<Lesson>();
+        var skippedDuplicates = 0;
         foreach (var l in parsed)
         {
-            l.SourceTraceIds.AddRange(picked.Select(t => t.TraceId));
+            if (!existingTitles.Add(l.Title.Trim())) { skippedDuplicates++; continue; }
+
+            // Parse aşamasında SourceTraceIds'e 1-tabanlı numaralar konmuştu; gerçek ID'lere çevir.
+            l.SourceTraceIds = ResolveSourceTraces(l.SourceTraceIds, picked);
             _lessonStore.Add(l);
             added.Add(l);
         }
+
+        if (skippedDuplicates > 0)
+            _logger.LogInformation(
+                "LessonMiner: {Count} mükerrer ders önerisi atlandı (aynı başlık zaten mevcut).",
+                skippedDuplicates);
 
         _logger.LogInformation("LessonMiner: {Cand} aday → {Added} lesson önerisi üretildi.",
             picked.Count, added.Count);
@@ -119,12 +140,21 @@ public sealed class LessonMiner
     public async Task<bool> ApproveAsync(string lessonId, string decidedBy, string? reason, CancellationToken ct = default)
     {
         var lesson = _lessonStore.Get(lessonId);
-        if (lesson is null || lesson.Status != LessonStatus.Proposed) return false;
+        if (lesson is null) return false;
+
+        // Normal yol: Proposed → Approved.
+        // İkinci yol (yeniden deneme): ders zaten Approved ama vektör yazımı başarısız olmuş
+        // (aşağıdaki catch bloğu hatayı yutuyor). Bu durumda ders DB'de "onaylı" görünür ama
+        // hiçbir konuşmaya context olarak girmez — yani pratikte etkisizdir. Vektör deposu
+        // tekrar erişilebilir olduğunda aynı çağrı yazımı yeniden dener.
+        var isRetry = lesson.Status == LessonStatus.Approved
+                      && string.IsNullOrEmpty(lesson.VectorMemoryId);
+        if (lesson.Status != LessonStatus.Proposed && !isRetry) return false;
 
         lesson.Status = LessonStatus.Approved;
         lesson.DecidedBy = decidedBy;
         lesson.DecidedAt = DateTime.UtcNow;
-        lesson.DecisionReason = reason;
+        if (!isRetry) lesson.DecisionReason = reason;
 
         // VectorStore Lessons collection'a yaz — sonraki konuşmalar context olarak alır
         if (_memory is { Enabled: true })
@@ -175,14 +205,30 @@ public sealed class LessonMiner
         sb.AppendLine("Her trace'i analiz et ve sistemin gelecekte daha iyi olabilmesi için somut, uygulanabilir DERS'ler çıkar.");
         sb.AppendLine();
         sb.AppendLine("Yanıtın SADECE şu şemada JSON olmalı:");
-        sb.AppendLine("""{ "lessons": [ { "title": "...", "lesson": "X durumunda Y yap", "observation": "...", "suggestedAgent": "ProductAgent|null" } ] }""");
+        sb.AppendLine("""{ "lessons": [ { "title": "...", "lesson": "X durumunda Y yap", "observation": "...", "suggestedAgent": "<ajan adı veya null>", "traces": [1, 3] } ] }""");
+        sb.AppendLine();
+
+        // suggestedAgent: tek örnek yerine geçerli değerlerin TAMAMI verilir.
+        // Eskiden şemada yalnızca "ProductAgent|null" yazıyordu ve model bu tek örneğe
+        // demirleyip alakasız dersleri de ProductAgent'a atıyordu.
+        sb.AppendLine($"suggestedAgent yalnızca şunlardan biri olabilir (veya null): " +
+                      $"{string.Join(", ", WellKnown.AgentNames.All)}");
+        sb.AppendLine("Hangi ajanın sorumlu olduğundan emin değilsen null yaz — yanlış ajan atamak boş bırakmaktan kötüdür.");
+        sb.AppendLine();
+
+        // traces: dersin hangi trace'lerden çıktığını modelin kendisi bildirir.
+        // Trace ID'leri GUID olduğu için modele tekrar ettirmek hem israf hem hataya açık;
+        // bunun yerine aşağıdaki 1..N numaraları kullanılır ve kod tarafında ID'ye çevrilir.
+        sb.AppendLine("traces: dersi çıkardığın trace'lerin numaralarını yaz (aşağıdaki [n] etiketleri).");
+        sb.AppendLine("Yalnızca dersi gerçekten destekleyen trace'leri listele, hepsini yazma.");
         sb.AppendLine();
         sb.AppendLine("--- TRACE'LER ---");
 
-        foreach (var t in traces)
+        for (var i = 0; i < traces.Count; i++)
         {
+            var t = traces[i];
             sb.AppendLine();
-            sb.AppendLine($"### TRACE {t.TraceId} (session={t.SessionId})");
+            sb.AppendLine($"### [{i + 1}] TRACE {t.TraceId} (session={t.SessionId})");
             sb.AppendLine($"- Soru: {Trim(t.UserQuery, 240)}");
             sb.AppendLine($"- Yanıt: {Trim(t.FinalResponse ?? "(yok)", 240)}");
             sb.AppendLine($"- Sonlanma: {t.TerminationReason ?? "?"} | Hata: {t.Error ?? "yok"}");
@@ -225,10 +271,12 @@ public sealed class LessonMiner
                 Title = l.Title ?? "(başlıksız)",
                 LessonText = l.Lesson ?? "",
                 Observation = l.Observation ?? "",
-                SuggestedAgent = string.IsNullOrWhiteSpace(l.SuggestedAgent) ||
-                                  l.SuggestedAgent.Equals("null", StringComparison.OrdinalIgnoreCase)
-                    ? null
-                    : l.SuggestedAgent
+                SuggestedAgent = NormalizeAgent(l.SuggestedAgent),
+                // Trace numaraları burada saklanır; MineAsync gerçek ID'lere çevirir
+                // (parse aşamasında picked listesine erişim yok).
+                SourceTraceIds = (l.Traces ?? new List<int>())
+                    .Select(n => n.ToString(CultureInfo.InvariantCulture))
+                    .ToList()
             })
             .Where(l => !string.IsNullOrWhiteSpace(l.LessonText))
             .ToList();
@@ -239,6 +287,48 @@ public sealed class LessonMiner
                 text.Length > 300 ? text[..300] : text);
             return new();
         }
+    }
+
+    /// <summary>
+    /// LLM'in verdiği ajan adını <see cref="WellKnown.AgentNames.All"/> listesine karşı doğrular.
+    /// Tanınmayan bir ad <c>null</c>'a çevrilir — yanlış ajan etiketi, boş etiketten daha
+    /// yanıltıcıdır (panelde rozet olarak gösteriliyor ve dersin hangi ajanı ilgilendirdiği
+    /// izlenimini veriyor). Eşleşme büyük/küçük harf duyarsız, dönen değer kanonik yazımdır.
+    /// </summary>
+    internal static string? NormalizeAgent(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        var trimmed = raw.Trim();
+        if (trimmed.Equals("null", StringComparison.OrdinalIgnoreCase)) return null;
+
+        return WellKnown.AgentNames.All.FirstOrDefault(
+            a => a.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// LLM'in bildirdiği 1-tabanlı trace numaralarını gerçek trace ID'lerine çevirir.
+    /// Aralık dışı numaralar atılır. Model hiç geçerli numara vermediyse
+    /// <b>tüm</b> incelenen trace'lere düşülür — eski (her derse hepsini yazan) davranış,
+    /// artık yalnızca fallback olarak.
+    /// </summary>
+    private static List<string> ResolveSourceTraces(
+        IReadOnlyList<string> reportedIndexes, List<ReasoningTrace> picked)
+    {
+        var resolved = new List<string>();
+        foreach (var raw in reportedIndexes)
+        {
+            if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)
+                && n >= 1 && n <= picked.Count)
+            {
+                var id = picked[n - 1].TraceId;
+                if (!resolved.Contains(id, StringComparer.Ordinal)) resolved.Add(id);
+            }
+        }
+
+        return resolved.Count > 0
+            ? resolved
+            : picked.Select(t => t.TraceId).ToList();
     }
 
     private static string? ExtractJson(string s)
@@ -259,6 +349,9 @@ public sealed class LessonMiner
         public string? Lesson { get; set; }
         public string? Observation { get; set; }
         public string? SuggestedAgent { get; set; }
+
+        /// <summary>Dersi destekleyen trace'lerin 1-tabanlı numaraları (prompt'taki [n] etiketleri).</summary>
+        public List<int>? Traces { get; set; }
     }
 }
 
