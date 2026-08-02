@@ -683,6 +683,7 @@ appsettings.json → Prompts:RootPath (opsiyonel)
 
 ## Çapraz referanslar
 
+- **Ajan haritası (görsel): kim hangi tool'u çağırıyor, routing/HITL nasıl işliyor?** → [agent-architecture.html](agent-architecture.html) — tarayıcıda açın
 - **Her class/interface ne iş yapar?** → [class-reference.md](class-reference.md)
 - **HTTP endpoint şemaları + SSE event payload'ları** → [api/](api/README.md)
 - **Agent davranışı + iç sub-component anatomisi** → [adapters-agents/](adapters-agents/README.md)

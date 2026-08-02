@@ -367,6 +367,10 @@ agentic-customer-support-bot/
 
 `docs/` altında Türkçe yazılmış detaylı teknik dokümantasyon bulunur. İki katman:
 
+> 🧭 **Hızlı başlangıç — ajan mimarisi görsel haritası:** [`docs/agent-architecture.html`](docs/agent-architecture.html)
+> Hangi ajan hangi tool'u çağırıyor, routing kararı nasıl alınıyor, HITL onayı akışı nerede durduruyor.
+> Tek dosya, harici bağımlılık yok — tarayıcıda doğrudan açılır.
+
 ### Proje-bazlı (hexagonal mimari haritası)
 
 Her proje için: README + her sınıf/dosya grubu için ayrı doküman.
