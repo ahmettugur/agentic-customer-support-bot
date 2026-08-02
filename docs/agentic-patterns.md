@@ -593,7 +593,7 @@ Bu sistemde **iki farklı HITL mekanizması** vardır ve birbirlerini tamamlar:
 - Tool wrapper: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs` (bkz. `BuildOrderPlacementTool`, `BuildComplaintRegistrationTool`, `RequestApprovalAsync`)
 - Config: `CustomerSupportBot.Application/Ports/Driven/ApprovalOptions.cs` (`appsettings.json > "HumanInTheLoop"`)
 - Endpoints: `/approvals/pending`, `/approvals/{id}/approve`, `/approvals/{id}/reject`
-- UI: `CustomerSupportBot.Api/wwwroot/admin.html` + `js/admin.js` — 3sn auto-refresh
+- UI: `CustomerSupportBot.Web/Pages/Admin.razor` (Blazor WASM) — 15sn auto-refresh
 
 **Context propagation** — tool lambda'sı session/trace/query bağlamını `AsyncLocal<ApprovalContext>` üzerinden alır; ChatEndpoints her workflow öncesi `CustomerSupportTeam.SetApprovalContext(...)` çağırır.
 

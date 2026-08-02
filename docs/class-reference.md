@@ -145,7 +145,7 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
 ### `ContextPipeline` + `IContextProvider` — `Services/ContextPipeline.cs`, `Services/IContextProvider.cs`
 
-**Interface `IContextProvider`** — her sağlayıcı bir `Name`, `Order` (öncelik), `GetContextAsync(session)` metodu uygular.
+**Interface `IContextProvider`** — her sağlayıcı bir `Name`, `Order` (öncelik), `GetContextAsync(session, currentQuery)` metodu uygular. `currentQuery` kullanıcının o turdaki mesajıdır — oturum geçmişinden okunamaz, çünkü geçmiş workflow bittikten sonra yazılır (bkz. [ContextPipeline.md](application/ContextPipeline.md)).
 
 **`ContextPipeline.BuildContextAsync(session)` → string** — tüm kayıtlı provider'ları `Order`'a göre sıralı çalıştırır ve üretilen metinleri `\n\n` ile birleştirir. Bir provider exception fırlatırsa loglanır ve atlanır.
 

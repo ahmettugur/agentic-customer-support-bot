@@ -157,7 +157,7 @@ POST /memory/ingest                              # KB'yi yeniden tara
 | `ILessonStore` / `InMemoryLessonStore` | `Application/Ports/Driven/` + `Adapters.Persistence/InMemory/` |
 | `LessonMiner` (mine + approve + reject) | `Application/Services/Improvement/LessonMiner.cs` |
 | `ImprovementsEndpoints` | `Api/Endpoints/ImprovementsEndpoints.cs` |
-| Admin UI | `wwwroot/admin.html` (Improvements tab) + `wwwroot/js/improvements.js` |
+| Admin UI | `CustomerSupportBot.Web/Pages/Admin.razor` — Improvements sekmesi (Blazor WASM) |
 
 ### 2.3 Yapılandırma
 
@@ -219,7 +219,7 @@ Bir trace'in (`Models/ReasoningTrace`) içeriği zaten zengin: `Reasoning`, `Pla
 
 ### 3.2 Sayfa
 
-`/replay.html?traceId=<guid>` — admin auth gerekir (auth.js sayfa yüklenirken token kontrol eder).
+`/replay?traceId=<guid>` — admin auth gerekir (Blazor: `Pages/Replay.razor`).
 
 ### 3.3 Timeline Adımları
 
@@ -247,7 +247,7 @@ Yeni endpoint **gerekmedi** — mevcut `GET /traces/{traceId}` kullanılır. Rep
 ### 3.6 Replay → Lesson Pipeline
 
 Admin bir replay sırasında problem fark ettiğinde:
-1. Trace'i replay'de inceler (`/replay.html?traceId=...`)
+1. Trace'i replay'de inceler (`/replay?traceId=...`)
 2. Admin paneli → Improvements → "Yeni Tarama Çalıştır"
 3. LessonMiner bu trace'i (düşük puanlıysa veya hatalıysa) yakalar
 4. LLM ders önerir → admin approve → Qdrant'a yazılır
@@ -256,7 +256,7 @@ Admin bir replay sırasında problem fark ettiğinde:
 ### 3.7 Dosyalar
 
 ```
-wwwroot/replay.html        # iskelet
+CustomerSupportBot.Web/Pages/Replay.razor   # Blazor sayfası
 wwwroot/css/replay.css     # timeline + detail pane stili
 wwwroot/js/replay.js       # TraceReplay class (load + buildSteps + render + transport)
 ```
@@ -331,7 +331,7 @@ docker compose up -d postgres qdrant
 3. `dotnet run --project CustomerSupportBot`
 4. Startup log'u: `KnowledgeBase ingest tamamlandı: N chunk`
 5. Sohbet et → her trace tamamlanışta episodic memory'e yazım
-6. `/admin.html` → Improvements → "Yeni Tarama Çalıştır" → öneriler
+6. `/admin` → Improvements → "Yeni Tarama Çalıştır" → öneriler
 
 ### 5.3 Sorun Giderme
 

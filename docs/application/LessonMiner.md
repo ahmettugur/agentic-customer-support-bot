@@ -57,13 +57,33 @@ En yeni 8 aday seçilir (token bütçesi sınırı). Her trace için şu bilgile
       "title": "Kısa başlık",
       "lesson": "X durumunda Y yapılmalıdır",
       "observation": "Gözlemlenen sorun açıklaması",
-      "suggestedAgent": "ProductAgent | null"
+      "suggestedAgent": "<ajan adı> | null",
+      "traces": [1, 3]
     }
   ]
 }
 ```
 
 JSON parse başarısız olursa (LLM bozuk yanıt dönerse) boş liste döner, hata loglanır.
+
+**`suggestedAgent` doğrulanır.** Değer `WellKnown.AgentNames.All`'a karşı kontrol edilir
+(`NormalizeAgent`); tanınmayan bir ad `null`'a düşer. Prompt'ta da geçerli ajanların **tamamı**
+listelenir — eskiden şemada tek örnek olarak `ProductAgent` yazıyordu ve model alakasız
+dersleri de oraya etiketliyordu. Panelde rozet olarak gösterildiği için yanlış ajan adı,
+boş bırakmaktan daha yanıltıcıdır.
+
+**`traces` dersin kanıtını işaretler.** Model dersi destekleyen trace'lerin 1-tabanlı
+numaralarını bildirir (prompt'taki `[n]` etiketleri); `ResolveSourceTraces` bunları gerçek
+ID'lere çevirir. GUID'leri modele tekrar ettirmek hem token israfı hem hataya açık olurdu.
+Model hiç geçerli numara vermezse incelenen tüm trace'lere düşülür.
+
+> Eskiden kod her derse incelenen 8 trace'in **hepsini** yazıyordu; paneldeki "kaynak trace"
+> linkleri bu yüzden gerçek kanıta işaret etmiyordu.
+
+**Mükerrer koruması.** Daha önce görülmüş (Proposed veya Approved) bir başlık tekrar eklenmez —
+aynı trace kümesi üzerinde tarama yeniden çalıştırıldığında model neredeyse aynı dersleri
+üretir ve onay kuyruğu kopyalarla dolardı. Reddedilenler kasıtlı olarak hariçtir: admin bir
+dersi reddettiyse aynı sorun tekrar gözlemlendiğinde yeniden önerilebilmelidir.
 
 ---
 
@@ -89,6 +109,7 @@ Task<bool> ApproveAsync(string lessonId, string decidedBy, string? reason, Cance
 **Akış:**
 ```
 1. ILessonStore.Get(lessonId) → status == Proposed kontrolü
+   (VEYA yeniden deneme: status == Approved ama VectorMemoryId boş — aşağıya bakın)
 2. lesson.Status = Approved
 3. lesson.DecidedBy / DecidedAt / DecisionReason güncelle
 4. SemanticMemory.Enabled == true?
@@ -98,6 +119,13 @@ Task<bool> ApproveAsync(string lessonId, string decidedBy, string? reason, Cance
       - Tags: { "agent": suggestedAgent }
    → SemanticMemoryService.UpsertAsync(doc)
    → lesson.VectorMemoryId = doc.Id
+
+> ⚠️ **"Onaylı ama etkisiz" durumu.** Vektör yazımı başarısız olursa hata yutulur ve ders yine
+> `Approved` işaretlenir; ders DB'de onaylı görünür ama hiçbir konuşmaya context olarak
+> girmez. Ayırt edici sinyal `VectorMemoryId`'nin boş kalmasıdır. Admin paneli bu durumu uyarı
+> + "Hafızaya yeniden yaz" butonu olarak gösterir ve aynı approve ucunu tekrar çağırır;
+> `ApproveAsync` yalnızca bu özel durumda yeniden denemeye izin verir (ilk onay gerekçesi
+> korunur, zaten hafızada olan ders mükerrer yazıma karşı reddedilir).
    (Hata olursa Warning log + status yine Approved — VectorStore opsiyonel)
 5. ILessonStore.Update(lesson)
 6. true döner
@@ -137,11 +165,17 @@ MineAsync()
 {
   "SelfImprovement": {
     "Enabled": true,
-    "RecentTracesToScan": 100,
-    "MinRatingForLesson": 2
+    "RecentTracesToScan": 50,
+    "MinRatingForLesson": 3,
+    "RequireApprovalBeforeActivation": true
   }
 }
 ```
+
+> **Tarama yalnızca manueldir.** Tek tetikleyici admin panelindeki "Yeni Tarama Çalıştır"
+> düğmesidir (`POST /improvements/mine`); zamanlanmış bir arka plan servisi yoktur. Burada
+> eskiden `MiningIntervalHours: 24` ayarı duruyordu ama onu okuyan hiçbir kod yoktu — ölü bir
+> ayardı ve kaldırıldı.
 
 | Ayar | Açıklama |
 |------|---------|

@@ -14,7 +14,6 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 - **OpenTelemetry + Maliyet Telemetrisi** — Tüm LLM çağrıları, ajan adımları ve tool kullanımları için OTLP-uyumlu trace + metric (Jaeger/Prometheus/Grafana). Model bazlı USD maliyet ve token muhasebesi.
 - **Per-Customer Personalization Memory** — Her müşteri için kalıcı profil (sık niyet, ürün ilgi alanları, dil/ton tercihi, son rating'ler). Heuristik güncelleme + admin tetikli LLM consolidate. Profil ContextPipeline üzerinden tüm ajanlara enjekte edilir.
 - **Smart Routing & Skills-Based Escalation** — Eskalasyon oluştuğunda intent + müşteri profili üzerinden gerekli skill tag'leri çıkarılır ve `IHumanAgentRegistry`'deki temsilciler arasında en iyi skill + dil + load match'iyle aday önerilir. Manuel re-route + load tracking + auto-decrement.
-- **Low-Code Workflow Designer** — Admin'in JSON tabanlı mini iş akışları (trigger keywords, regex extractor, respond/lookup/branch/setVariable adımları) tanımlayıp çalıştırabildiği deterministik (LLM-siz) "fast path" motoru. `wwwroot/workflow-designer.html` küçük UI.
 - **Parallel SubTask Execution** — Compound query'lerde (ör. "1030 ve 1042 durumu") yan-etkisiz alt görevler (Product/OrderInquiry) `Task.WhenAll` ile paralel çalışır; yan-etkili olanlar (OrderPlacement/Complaint) HITL gate'i nedeniyle sıralı kalır. p50 latency düşer.
 - **SLA / Response Time Guardian** — Bekleyen onay ve açık eskalasyonları periyodik tarayan `BackgroundService`. Eşik aşılan onaylar `AutoReject`, eskalasyonların önceliği otomatik **bir kademe yükseltilir** (Low→Normal→High→Critical). Admin `/sla/status` ve `/sla/events` endpoint'lerinden görür.
 - **Sesli Konuşma Modu (Realtime) — çift kanal** — OpenAI Realtime API (`gpt-realtime-1.5`) üzerinden iki ayrı sesli mod:
@@ -75,8 +74,8 @@ Temel yetenekler:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        FRONTEND (wwwroot/)                          │
-│         index.html + chat-ui.js   — SSE streaming UI              │
+│           FRONTEND — CustomerSupportBot.Web (Blazor WASM)          │
+│         Chat.razor — SSE streaming UI · ayrı host (:5288)          │
 └─────────────────────────────┬────────────────────────────────────┘
                               │ HTTP / SSE
 ┌─────────────────────────────▼────────────────────────────────────┐
@@ -261,8 +260,8 @@ Bot iki HITL modunu destekler:
 3. **Eskalasyon Yönetimi** — Skill-based routing ile eskalasyonlar uygun temsilciye otomatik önerilir veya admin dropdown'dan manuel atama yapar.
 
 **Erişim noktaları**:
-- Admin paneli: `/admin.html` — eskalasyon atama, onay, live takeover, analytics
-- Agent paneli: `/admin.html` (Agent JWT ile giriş) — yalnızca atanmış ve atanmamış eskalasyonlar görünür; "Atama Yap" butonu gizlenir
+- Admin paneli: `/admin` — eskalasyon atama, onay, live takeover, analytics
+- Agent paneli: `/admin` (Agent JWT ile giriş) — yalnızca atanmış ve atanmamış eskalasyonlar görünür; "Atama Yap" butonu gizlenir
 
 ---
 
@@ -294,10 +293,10 @@ Bot üç ek "akıllı" katman içerir:
 - Admin **Approve** ettiğinde lesson Qdrant `Lessons` collection'a yazılır → sonraki konuşmalarda `SemanticMemoryContextProvider` üzerinden context'e döner. Loop kapanır.
 - Yapılandırma: `appsettings.json > SelfImprovement`.
 - Endpoints (admin): `/improvements/mine`, `/improvements?status=...`, `/improvements/{id}/approve|reject`.
-- Admin UI: `/admin.html` → **Improvements** sekmesi.
+- Admin UI: `/admin` → **Improvements** sekmesi.
 
 ### ▶ Replay UI
-- `/replay.html` — bir trace'i adım adım yeniden oynatmaya yarayan görsel araç.
+- `/replay?traceId=<guid>` — bir trace'i adım adım yeniden oynatmaya yarayan görsel araç (Blazor).
 - Timeline: `Init → Reasoning → Planning → AgentVisits + SpecialistReasonings + ToolCalls (chronological) → Final`
 - Play / pause / step / hız (0.5×–5×) / deep-link (`?traceId=...`).
 - Trace dashboard'tan ve admin panelinden "▶ Replay" linki ile erişilebilir.
@@ -354,7 +353,7 @@ agentic-customer-support-bot/
 │   │   ├── agents/                          # planning-agent.md, product-inquiry-agent.md, ...
 │   │   └── services/                        # reasoning-system.md, entity-hints.md, ...
 │   ├── KnowledgeBase/                       # RAG dökümanı: iade politikası, kargo, SSS
-│   └── wwwroot/                             # index.html, admin.html, replay.html, js/, css/
+│   └── (arayüz ayrı projede: CustomerSupportBot.Web — Blazor WASM)
 │
 └── CustomerSupportBot.Api.Tests/             # Entegrasyon + değerlendirme testleri
     ├── Evaluation/

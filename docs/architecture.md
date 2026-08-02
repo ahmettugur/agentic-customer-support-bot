@@ -6,8 +6,8 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        FRONTEND (wwwroot/)                        │
-│         index.html + chat-ui.js   — SSE streaming UI              │
+│           FRONTEND — CustomerSupportBot.Web (Blazor WASM)         │
+│         Chat.razor — SSE streaming UI · ayrı host (:5288)         │
 └─────────────────────────────┬────────────────────────────────────┘
                               │ HTTP / SSE
 ┌─────────────────────────────▼────────────────────────────────────┐
@@ -69,7 +69,7 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │  Self-Improving Loop                                              │
 │    ├─ LessonMiner (low-rated/error trace → LLM → Lesson proposals)│
 │    └─ Approve → Qdrant cs_lessons → next conversation context    │
-│  Replay UI (`/replay.html?traceId=...`) — step-by-step trace player│
+│  Replay UI (`/replay?traceId=...`) — step-by-step trace player     │
 │                                                                   │
 │  Detay: docs/intelligence.md                                      │
 └─────────────────────────────────────────────────────────────────┘
@@ -314,12 +314,12 @@ CustomerSupport.slnx
 │   ├── Infrastructure/                  # API katmanı yardımcıları
 │   │   ├── SseWriter.cs                 # SSE event helper
 │   │   └── ScenarioLoader.cs            # Evaluation senaryo yükleyici
-│   └── wwwroot/                         # Statik frontend
-│       ├── index.html
-│       ├── admin.html                   # admin paneli (Improvements tab dahil)
-│       ├── replay.html                  # trace step-by-step replay UI
-│       ├── css/styles.css
-│       └── js/chat-ui.js / improvements.js / replay.js / traces.js
+│   └── (statik frontend YOK — arayüz CustomerSupportBot.Web'e taşındı)
+│
+├── CustomerSupportBot.Web/              ← Blazor WebAssembly arayüz (ayrı host)
+│   ├── Pages/                           # Chat, Admin, Traces, Replay, Sla, Login
+│   ├── Models/                          # API DTO'ları (proje referansı yok, HTTP ile konuşur)
+│   └── wwwroot/css, js/
 │
 └── CustomerSupportBot.Api.Tests/        ← Test projesi
     ├── Agents/                          # MAF ajan testleri

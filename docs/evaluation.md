@@ -281,7 +281,7 @@ Sonuç, diğer kriterler gibi `ScenarioResult.CriteriaResults`'a `quality_releva
 
 ## 7. Admin UI
 
-`/admin.html` → "Evaluation" sekmesi:
+`/admin` → "Evaluation" sekmesi:
 
 - **Senaryo listesi**: Tüm tanımlı senaryolar, kategori bilgileriyle
 - **Çalıştır butonu**: Toplu çalıştırma

@@ -52,15 +52,15 @@ dotnet run
 |---|---|
 | `http://localhost:5021/` | Müşteri chat arayüzü |
 | `http://localhost:5021/login.html` | JWT giriş sayfası (dev default: `admin` / `Admin123!`) |
-| `http://localhost:5021/admin.html` | Admin paneli (HITL, eskalasyon, replan, traces, evaluation, improvements) |
+| `http://localhost:5288/admin` | Admin paneli (HITL, eskalasyon, replan, traces, evaluation, improvements) — Blazor WASM (`CustomerSupportBot.Web`), API'den ayrı host |
 | `http://localhost:5021/traces.html` | Trace dashboard |
-| `http://localhost:5021/replay.html` | Trace step-by-step replay |
+| `http://localhost:5288/replay` | Trace step-by-step replay (Blazor) |
 | `http://localhost:5021/sla.html` | SLA durumu monitör |
 
 ### İlk akış denemesi
 
 1. Müşteri sayfasında "1 siparişim nerede?" yaz → `OrderAgent` çalışır.
-2. Yeni sekmede `/admin.html` aç → "Traces" sekmesinden son trace'i gör.
+2. Yeni sekmede `http://localhost:5288/admin` aç → "Traces" sekmesinden son trace'i gör.
 3. "Bir Dell XPS 15 sipariş edebilir miyim?" yaz → `order_placement_tool` onay bekler → admin "Approvals" sekmesinden onayla.
 
 ---
@@ -278,7 +278,7 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
 | `index.html` + `js/app.js` | Müşteri chat penceresi; `/chat/stream` SSE + persistent `/chat/events/{sid}` |
 | `js/chat-ui.js` | Mesaj/typing/banner/rating widget render |
 | `js/chat-api-client.js` | `fetch` + SSE parse |
-| `admin.html` + `js/admin.js` | Admin tüm sekmeler: Approvals, Escalations, Active Chats, Analytics, Traces, Evaluation |
+| `CustomerSupportBot.Web` — `Pages/Admin.razor` | Admin tüm sekmeler: Approvals, Escalations, Active Chats, Analytics, Improvements. **Not:** admin arayüzü Blazor WebAssembly'ye taşındı; eski `admin.html`/`js/admin.js` artık yok. |
 | `js/traces.js` | Trace dashboard auto-refresh |
 
 ### Backend orchestrator katmanı
@@ -468,7 +468,7 @@ Tam SSE event sözleşmeleri → [api/](api/Endpoints-Chat.md).
 
 ## 7. Admin paneli akışları
 
-`http://localhost:5021/admin.html` — sekmeli arayüz:
+`http://localhost:5288/admin` — sekmeli arayüz:
 
 ### Sekmeler
 
@@ -580,7 +580,7 @@ Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 
 ### Trace dashboard
 
-`/admin.html` → "Traces" → her workflow turu için:
+`/admin` → "Traces" → her workflow turu için:
 
 - Reasoning JSON (intent, steps, sanity issues)
 - Agent dizilimi (PlanningAgent → Specialist → ResponseAgent)

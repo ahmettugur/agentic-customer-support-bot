@@ -388,7 +388,9 @@ public class LoyaltyContextProvider : IContextProvider
     public string Name => "LoyaltyContext";
     public int Order => 20;  // CustomerContextProvider'dan (10) sonra
 
-    public async Task<string?> GetContextAsync(AgentSession session)
+    // currentQuery: kullanıcının BU turdaki mesajı. Geçmişten okunamaz — geçmiş workflow
+    // bittikten sonra yazılır. Semantic retrieval yapan sağlayıcılar bunu kullanmalı.
+    public async Task<string?> GetContextAsync(AgentSession session, string currentQuery)
     {
         var customerId = session.State.CustomerId;
         if (string.IsNullOrWhiteSpace(customerId)) return null;

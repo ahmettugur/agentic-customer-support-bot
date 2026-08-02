@@ -280,7 +280,7 @@ protected override void OnInitialized()
 }
 ```
 
-3 saniyede bir yenileme. Badge'ler: kaç pending approval, kaç open escalation vb.
+15 saniyede bir yenileme (`AutoRefreshInterval`). Eskiden 3 saniyeydi ve panel dakikada ~100 istek üretip sunucudaki 60/dk'lık `general` rate limit'ini kendi tüketiyordu; manuel işlemler HTTP 429 alıyordu. Badge'ler: kaç pending approval, kaç open escalation vb.
 
 UI'da toggle:
 
