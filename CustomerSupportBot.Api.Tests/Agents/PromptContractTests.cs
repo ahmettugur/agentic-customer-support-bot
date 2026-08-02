@@ -202,6 +202,27 @@ public class PromptContractTests
     }
 
     [Fact]
+    public void ArchitectureDoc_SlaThresholds_MatchAppSettings()
+    {
+        // SLA eşikleri doküman tablosunda sayı olarak yazılı; config değişirse sunumdaki
+        // rakam yanlışa döner. Guard değerleriyle aynı sapma sınıfı.
+        var doc = SourceOf("docs/agent-architecture.html");
+        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("CustomerSupportBot.Api/appsettings.json")));
+        var sla = settings.RootElement.GetProperty("Sla");
+
+        foreach (var (group, key) in new[]
+                 {
+                     ("Approvals", "WarnAfterSeconds"), ("Approvals", "BreachAfterSeconds"),
+                     ("Escalations", "WarnAfterSeconds"), ("Escalations", "BreachAfterSeconds")
+                 })
+        {
+            var value = sla.GetProperty(group).GetProperty(key).GetInt32();
+            doc.Should().Contain($">{value} sn<",
+                $"SLA {group}.{key} ({value} sn) dokümanda görünmeli");
+        }
+    }
+
+    [Fact]
     public void ArchitectureDoc_AgentCount_MatchesWellKnown()
     {
         var doc = SourceOf("docs/agent-architecture.html");
