@@ -230,6 +230,44 @@ public class PromptContractTests
     }
 
     [Fact]
+    public void ArchitectureDoc_AllSectionsLiveInsideMain()
+    {
+        // YERLEŞİM SÖZLEŞMESİ. .wrap bir CSS grid'idir (geniş ekranda 200px ray + içerik).
+        // Yalnızca header/nav/main/footer onun doğrudan çocuğu olmalı. Bir <section> yanlışlıkla
+        // </main> DIŞINDA kalırsa grid onu kendi hücresine yerleştirir ve ray sütununun üstüne
+        // biner — sayfa canlıda gözle görülür şekilde bozulur.
+        //
+        // Bu gerçekten yaşandı: 09-12 bölümleri <footer> öncesine eklenirken </main> dışında
+        // kaldı. Etiket sayımı ve nesting kontrolü bunu YAKALAMADI; ikisi de geçerliydi.
+        var doc = SourceOf("docs/agent-architecture.html");
+
+        var mainOpen = doc.IndexOf("<main>", StringComparison.Ordinal);
+        var mainClose = doc.IndexOf("</main>", StringComparison.Ordinal);
+        mainOpen.Should().BeGreaterThan(0, "<main> bulunmalı");
+        mainClose.Should().BeGreaterThan(mainOpen, "</main> <main>'den sonra gelmeli");
+
+        foreach (Match m in Regex.Matches(doc, @"<section id=""([^""]+)"""))
+        {
+            m.Index.Should().BeInRange(mainOpen, mainClose,
+                $"'{m.Groups[1].Value}' bölümü <main> içinde olmalı — dışarıda kalırsa grid yerleşimi bozulur");
+        }
+    }
+
+    [Fact]
+    public void ArchitectureDoc_EverySectionIsReachableFromNav()
+    {
+        // Yeni bölüm eklenip yan menüye link konmazsa sayfa gezilemez hâle gelir;
+        // tersi (var olmayan id'ye link) ise ölü bağlantı üretir.
+        var doc = SourceOf("docs/agent-architecture.html");
+
+        var sectionIds = Regex.Matches(doc, @"<section id=""([^""]+)""").Select(m => m.Groups[1].Value).ToHashSet();
+        var navTargets = Regex.Matches(doc, @"<a href=""#([^""]+)""").Select(m => m.Groups[1].Value).ToHashSet();
+
+        navTargets.Should().BeSubsetOf(sectionIds, "her iç bağlantı var olan bir bölüme işaret etmeli");
+        sectionIds.Should().BeSubsetOf(navTargets, "her bölümün yan menüde bir bağlantısı olmalı");
+    }
+
+    [Fact]
     public void ArchitectureDoc_IsSelfContained()
     {
         // Repo hiçbir yerde CDN kullanmıyor; doküman çevrimdışı ve dosya sisteminden
