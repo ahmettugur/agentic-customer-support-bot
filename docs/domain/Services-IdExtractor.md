@@ -37,11 +37,25 @@ ID'ler prefix (`ORD-`, `CMP-`) olmadan sadece **4 veya daha fazla haneli sayı**
 |---|---|---|
 | `order_id` | `\b(\d{4,})\b` | `sipari[sş]` (sipariş) |
 | `complaint_id` | `\b(\d{4,})\b` | `şikayet` |
-| `customer_id` | `\b(\d{4,})\b` | `mü[sş]teri` veya `numaram` |
+| `customer_id` | `\b(\d{4,})\b` | `mü[sş]teri`, veya **sahiplenilmemiş** `numaram` |
 
 Sayı ile bağlam kelimesi arasındaki pencere ±60 karakterdir.
 
 **Tüm kelime desenleri case-insensitive.**
+
+### `numaram` sahiplenmesi (önemli)
+
+`numaram` tek başına müşteri sinyalidir (*"numaram 1025"*), ancak bir entity niteleyicisi tarafından sahiplenilmişse **değildir**: *"sipariş numaram 1041"* = "benim **sipariş** numaram". Bu, `CustomerKeyword` desenindeki negatif lookbehind'larla sağlanır (.NET değişken uzunluklu lookbehind destekler):
+
+```
+\bmü[sş]teri|(?<!\bsipari[sş]\w*\s)(?<!\bşikayet\w*\s)\bnumaram\b
+```
+
+> ⚠️ **Neden gerekli — canlıda gözlemlenen hata.** Seçim, sayıya en yakın bağlam kelimesine göre yapılır. *"Sipariş numaram 1041"* cümlesinde `numaram` sayıya 1 karakter, `sipariş` ise 9 karakter uzaktadır; sahiplenme dışlanmadığında müşteri kazanıyor ve **sipariş numarası `customer_id` sanılıyordu**.
+>
+> Etkisi yalnızca prompt hint'iyle sınırlı değildi: [`SessionStateExtractor`](Services-SessionStateExtractor.md) bu sonucu **kalıcı** oturum durumuna yazıyor (`state.CustomerId`). Yani tek bir yanlış sınıflandırma, sonraki **tüm** turlarda `EntityVerifier`'a bir "kaynak" ve `CustomerContextProvider`'a sipariş/şikayet geçmişi sorgusu olarak yanlış müşteri kimliği besliyordu — üstelik `LastMentionedOrderId` de hiç set edilmiyordu.
+>
+> Regresyon koruması: `IdExtractorTests` (sahiplenme kuralı) ve `SessionStateExtractorTests` (kalıcı state sonucu).
 
 ---
 

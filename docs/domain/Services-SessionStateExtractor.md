@@ -37,7 +37,12 @@ State'i **in-place** günceller.
 ### Yapılan iş
 
 1. **ID çıkarımı** (`IdExtractor` çağrısı)
-   - `customer_id`, `order_id`, `complaint_id` → `CollectedInfo` Dict
+   - `customer_id` → `state.CustomerId` (kullanıcı mesajında yoksa bot yanıtından, yalnızca hâlâ `null` ise)
+   - `order_id` → `CollectedInfo["LastMentionedOrderId"]`
+
+   > ⚠️ **Buradaki yanlış sınıflandırma kalıcıdır.** Diğer `IdExtractor` çağrıları (ör. `WorkflowRunner`'ın prompt hint'i) tek turluktur; burası ise **oturum durumuna yazar**. `state.CustomerId` sonraki her turda `EntityVerifier`'a bir kaynak ve `CustomerContextProvider`'a sipariş/şikayet geçmişi sorgusu olarak gider — yani tek bir hatalı tur bütün oturumu zehirler.
+   >
+   > Canlıda tam olarak bu yaşandı: *"Sipariş numaram 1041."* cümlesinde sipariş numarası `state.CustomerId`'ye yazılıyor, `LastMentionedOrderId` ise hiç set edilmiyordu. Kök neden ve düzeltme: [`IdExtractor` — `numaram` sahiplenmesi](Services-IdExtractor.md). Regresyon koruması `SessionStateExtractorTests`.
 2. **Intent tespiti**
    - `WellKnown.IntentKeywords` tablosundan keyword match
    - Özel kurallar: `"sipariş"` + (`"durum"` veya `"takip"` veya `"nerede"`) → `OrderInquiry`

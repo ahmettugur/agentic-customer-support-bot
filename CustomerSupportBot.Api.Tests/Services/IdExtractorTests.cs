@@ -130,4 +130,41 @@ public class IdExtractorTests
         hint.Should().NotBeNull();
         hint.Should().Contain("get_last_order_tool");
     }
+
+    // ─── "numaram" sahiplenmesi — canlıda gözlemlenen regresyon ────────────────────
+    // "Sipariş numaram 1041" = "benim SİPARİŞ numaram". Mesafe tabanlı seçimde "numaram"
+    // sayıya "sipariş"ten daha yakın olduğu için (boşluk 1'e karşı 9) sayı customer_id
+    // sanılıyordu. Etkisi yalnızca prompt hint'i değildi: SessionStateExtractor bu sonucu
+    // KALICI session state'ine yazıp (state.CustomerId) sonraki tüm turlarda EntityVerifier
+    // ve CustomerContextProvider'a yanlış müşteri kimliği besliyordu.
+
+    [Theory]
+    [InlineData("Sipariş numaram 1041.")]
+    [InlineData("Sipariş numaram 1041")]
+    [InlineData("siparis numaram 1041")]
+    [InlineData("siparişimin numaram 1041")]
+    public void Extract_OrderQualifiedNumaram_IsOrderIdNotCustomerId(string text)
+    {
+        var r = IdExtractor.Extract(text);
+        r.OrderId.Should().Be("1041");
+        r.CustomerId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Extract_ComplaintQualifiedNumaram_IsComplaintIdNotCustomerId()
+    {
+        var r = IdExtractor.Extract("şikayet numaram 1001");
+        r.ComplaintId.Should().Be("1001");
+        r.CustomerId.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("müşteri numaram 1025")]
+    [InlineData("numaram 1025")]          // niteleyicisiz → müşteri varsayımı korunur
+    public void Extract_UnqualifiedOrCustomerNumaram_StaysCustomerId(string text)
+    {
+        var r = IdExtractor.Extract(text);
+        r.CustomerId.Should().Be("1025");
+        r.OrderId.Should().BeNull();
+    }
 }

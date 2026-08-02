@@ -34,8 +34,20 @@ public static class IdExtractor
         @"\bşikayet", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Müşteri bağlam kelimeleri
+    //
+    // "numaram" TEK BAŞINA müşteri sinyalidir ("numaram 1025"), ancak bir entity niteleyicisi
+    // tarafından sahiplenilmişse DEĞİLDİR: "sipariş numaram 1041" = "benim SİPARİŞ numaram".
+    // Negatif lookbehind'lar bu sahiplenmeyi dışlar (.NET değişken uzunluklu lookbehind destekler).
+    //
+    // Neden gerekli: mesafe tabanlı seçimde "numaram" sayıya "sipariş"ten daha yakın kalıyordu
+    // ("Sipariş numaram 1041" → müşteri boşluğu 1, sipariş boşluğu 9) ve sayı customer_id
+    // sanılıyordu. Bu yalnızca prompt hint'ini değil, SessionStateExtractor üzerinden KALICI
+    // session state'ini de zehirliyordu: state.CustomerId sipariş numarasıyla doldurulup
+    // sonraki tüm turlarda EntityVerifier'a ve CustomerContextProvider'a yanlış müşteri
+    // kimliği besliyordu.
     private static readonly Regex CustomerKeyword = new(
-        @"\bmü[sş]teri|\bnumaram\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"\bmü[sş]teri|(?<!\bsipari[sş]\w*\s)(?<!\bşikayet\w*\s)\bnumaram\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>
     /// Metinden tüm ID türlerini çıkarır. Her alan tek bir değer döner
