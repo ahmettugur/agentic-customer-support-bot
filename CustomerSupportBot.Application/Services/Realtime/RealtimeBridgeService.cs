@@ -29,6 +29,28 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
     // Volatile: event pump yazar, browser pump okur — lock gerekmez.
     private volatile bool _assistantSpeaking;
 
+    /// <summary>
+    /// Kullanıcı transkripti alındıktan sonra agent pipeline'ı (reasoning + workflow) sürerken
+    /// true. <see cref="_assistantSpeaking"/> bu pencereyi KAPSAMAZ: bridge modunda
+    /// <c>create_response=false</c> olduğu için asistan ancak pipeline bitince
+    /// <c>SpeakTextAsync</c> ile konuşmaya başlar, yani "kullanıcı sustu" ile "asistan konuşuyor"
+    /// arasında saniyeler süren sessiz bir aralık vardır.
+    ///
+    /// <para>
+    /// Bu aralık korumasız bırakıldığında canlıda şu hata görüldü: mikrofon OpenAI'ye akmaya
+    /// devam ediyor, <c>semantic_vad</c> sessizlik/gürültüde tetikleniyor ve transkripsiyon
+    /// modeli — <c>TranscriptionPrompt</c> ile domain sözlüğüne yönlendirildiği için — boş
+    /// dönmek yerine makul görünen bir cümle uyduruyordu ("Merhaba, müşteri numaram 1025.").
+    /// Bu sahte transkript hem sohbete kullanıcı balonu olarak düşüyor hem de ikinci bir
+    /// pipeline başlatıp ilk turun event akışıyla karışıyordu (ilk turun reasoning paneli
+    /// yarım JSON'da kilitli kalıyordu).
+    /// </para>
+    /// </summary>
+    private volatile bool _turnInFlight;
+
+    /// <summary>Mikrofon sesi OpenAI'ye iletilmemeli mi — asistan konuşuyor VEYA tur işleniyor.</summary>
+    private bool IsBusy => _assistantSpeaking || _turnInFlight;
+
     public RealtimeBridgeService(
         IRealtimeVoiceTransport client,
         IAgentTeamPort team,
@@ -104,7 +126,9 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
                     return;
 
                 case BrowserMessageKind.Binary:
-                    if (!_assistantSpeaking)
+                    // IsBusy: asistan konuşuyor VEYA pipeline sürüyor. İkincisi olmadan
+                    // sessiz pipeline penceresi OpenAI'ye akıp sahte transkript üretiyordu.
+                    if (!IsBusy)
                         await _client.SendAudioChunkAsync(msg.Data!, ct);
                     break;
 
@@ -164,8 +188,27 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
                 {
                     var transcript = evt.Transcript;
                     if (string.IsNullOrWhiteSpace(transcript)) break;
+
+                    // İkinci savunma katmanı: mikrofon zaten IsBusy iken susturuluyor, ama
+                    // susturma ANINDAN ÖNCE OpenAI'ye ulaşmış ses için transkript hâlâ
+                    // gecikmeli gelebilir. Bu transkript ne sohbete yazılır ne de yeni bir
+                    // pipeline başlatır — aksi halde tek turda iki pipeline aynı kanala
+                    // paralel event basıp reasoning panelini bozuyordu.
+                    if (_turnInFlight)
+                    {
+                        _logger.LogInformation(
+                            "RealtimeBridge: tur işlenirken gelen transkript yok sayıldı session={Sid} len={Len}",
+                            session.SessionId, transcript.Length);
+                        break;
+                    }
+
                     await channel.SendJsonAsync(new { type = "user_transcript", text = transcript }, ct);
-                    // Fire-and-forget: agent pipeline sürerken yeni ses alınmaya devam edilir.
+
+                    // Bayrak send'DEN SONRA set edilir: send fırlarsa bayrak hiç set edilmemiş
+                    // olur. Aksi sırada, sıfırlamayı yapan finally'e hiç girilmediği için bayrak
+                    // true kilitlenir ve mikrofon kalıcı olarak susardı.
+                    // Fire-and-forget: event pump bloklanmamalı; sıfırlama handler'ın finally'sinde.
+                    _turnInFlight = true;
                     _ = HandleUserTranscriptAsync(channel, session, transcript, ct);
                     break;
                 }
@@ -268,6 +311,12 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
         {
             _logger.LogError(ex, "RealtimeBridge: transcript handler hatası session={Sid}", sessionId);
             await channel.SendJsonAsync(new { type = "error", message = "İşlem sırasında hata oluştu." }, ct);
+        }
+        finally
+        {
+            // KRİTİK: her çıkış yolunda (başarı, guard reddi, iptal, hata) sıfırlanmalı —
+            // aksi halde mikrofon kalıcı olarak susturulmuş kalır ve oturum sağır olur.
+            _turnInFlight = false;
         }
     }
 

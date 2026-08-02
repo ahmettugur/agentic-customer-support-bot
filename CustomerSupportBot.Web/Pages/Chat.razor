@@ -169,13 +169,22 @@
                                             {
                                                 @RenderReasoningBody(msg.ReasoningData.Value)
                                             }
-                                            else if (msg.IsStreaming)
-                                            {
-                                                <div class="reasoning-section-text">@ExtractAnalysisFromPartialJson(msg.ReasoningText)</div>
-                                            }
                                             else
                                             {
-                                                <div class="reasoning-section-text">@msg.ReasoningText</div>
+                                                @* reasoning_complete gelmemiş (akış sürüyor ya da tur yarıda
+                                                   kaldı). HER İKİ durumda da yalnızca analysis alanı gösterilir —
+                                                   eskiden akış bittiği hâlde ReasoningData boşsa ham JSON olduğu
+                                                   gibi ekrana basılıyordu; canlıda eşzamanlı iki tur çakışınca
+                                                   kullanıcı yarım kesilmiş JSON metni gördü. *@
+                                                var partial = ExtractAnalysisFromPartialJson(msg.ReasoningText);
+                                                @if (!string.IsNullOrWhiteSpace(partial))
+                                                {
+                                                    <div class="reasoning-section-text">@partial</div>
+                                                }
+                                                else if (!msg.IsStreaming)
+                                                {
+                                                    <div class="reasoning-section-text muted">Düşünce süreci tamamlanamadı.</div>
+                                                }
                                             }
                                         </div>
                                     </details>

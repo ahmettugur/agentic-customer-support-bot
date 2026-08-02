@@ -41,10 +41,22 @@ public sealed class RealtimeOptions
     public int MaxResponseTokens { get; set; } = 4096;
     public string TranscriptionModel { get; set; } = "gpt-4o-transcribe";
     public string? TranscriptionLanguage { get; set; } = "tr";
+    /// <summary>
+    /// ASR'ye verilen alan ipucu. <b>Örnek numara/cümle YAZMAYIN.</b>
+    ///
+    /// <para>
+    /// Bu prompt eskiden somut örnekler içeriyordu ("müşteri numarası (1008, 1027 gibi...)").
+    /// Transkripsiyon modeli sessizlik veya gürültüde boş dönmek yerine prompt'un sözlüğünden
+    /// olası bir cümle uyduruyor; örnekler verildiğinde bu halüsinasyon domain'e birebir
+    /// benzeyen, gerçek gibi görünen bir cümleye dönüşüyordu. Canlıda kullanıcı hiçbir şey
+    /// söylemeden sohbete "Merhaba, müşteri numaram 1025." düştü (prompt'taki 1008/1027
+    /// örneklerinin komşusu bir sayı) ve bu sahte metin bir agent turu başlattı.
+    /// Alan/dil ipucu bırakıldı, tohumlayıcı örnekler kaldırıldı.
+    /// </para>
+    /// </summary>
     public string TranscriptionPrompt { get; set; } =
-        "Müşteri destek görüşmesi. Sipariş numarası (1030, 1042 gibi 4+ haneli rakam), müşteri numarası " +
-        "(1008, 1027 gibi 4+ haneli rakam), ürün adları (Coffee, Laptop, Smartphone, Dell XPS), " +
-        "kargo, iade, şikayet, sipariş durumu konuları geçer. Türkçe konuşulur.";
+        "Müşteri destek görüşmesi. Sipariş, kargo, iade, şikayet ve ürün konuları geçer. " +
+        "Sipariş ve müşteri numaraları rakamla söylenir. Türkçe konuşulur.";
 }
 
 /// <summary>OpenAI public API settings.</summary>

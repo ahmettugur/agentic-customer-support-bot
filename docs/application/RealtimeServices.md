@@ -39,16 +39,21 @@ Tarayıcıdan gelen ham ses verisini OpenAI Realtime API'ye iletir, transkripsiy
 IBrowserChannel ←→ RealtimeBridgeService ←→ IRealtimeVoiceTransport (OpenAI)
 
 PumpBrowserAsync (Task)
-  Browser Binary → _assistantSpeaking == false? → SendAudioChunkAsync
+  Browser Binary → IsBusy == false? → SendAudioChunkAsync
+                   (IsBusy = _assistantSpeaking || _turnInFlight)
   Browser Text   → interrupt / stop
 
 HandleEventsAsync (Task)
   ResponseCreated       → _assistantSpeaking = true
   SpeechStarted/Stopped → browser'a ilet
   InputTranscriptCompleted →
-    InputGuard.Inspect(transcript)
+    _turnInFlight ? → yok say (log) ve çık
+    browser'a user_transcript gönder
+    _turnInFlight = true
+    InputGuard.Inspect(transcript)   [HandleUserTranscriptAsync içinde]
       Reject → SpeakTextAsync(hata mesajı) + erken çık
-      Allow  → HandleUserTranscriptAsync (fire-and-forget)
+      Allow  → reasoning + workflow
+    finally → _turnInFlight = false
   AudioDelta            → browser'a binary gönder
   AssistantTextDelta    → browser'a text gönder
   ResponseDone/Cancelled → _assistantSpeaking = false
@@ -69,7 +74,22 @@ Full bot pipeline — chat ile aynı mantık:
 
 ### Half-duplex gating
 
-`_assistantSpeaking` (volatile bool) ile tarayıcıdan gelen ses, asistan konuşurken OpenAI'ye iletilmez. Bu sayede asistan kendi sesini duyarak döngüye girmez.
+Tarayıcıdan gelen ses **`IsBusy`** iken OpenAI'ye iletilmez. `IsBusy` iki bayrağın birleşimidir:
+
+| Bayrak | Kapattığı pencere |
+|---|---|
+| `_assistantSpeaking` | Asistan konuşurken — kendi sesini duyup döngüye girmesini engeller |
+| `_turnInFlight` | Transkript alındıktan sonra agent pipeline (reasoning + workflow) sürerken |
+
+> ⚠️ **`_turnInFlight` neden gerekli:** bridge modunda `create_response=false` olduğu için asistan ancak pipeline bitince `SpeakTextAsync` ile konuşur. Yani "kullanıcı sustu" ile "asistan konuşuyor" arasında **saniyeler süren sessiz bir aralık** vardır ve bu aralıkta `_assistantSpeaking` hâlâ `false`'tur.
+>
+> Bu aralık korumasızken canlıda şu hata görüldü: mikrofon akmaya devam ediyor, `semantic_vad` sessizlik/gürültüde tetikleniyor ve transkripsiyon modeli — `AiProviderOptions.TranscriptionPrompt` ile domain sözlüğüne yönlendirildiği için — boş dönmek yerine makul görünen bir cümle uyduruyordu (*"Merhaba, müşteri numaram 1025."*; prompt'ta örnek olarak verilen 1008/1027'nin komşusu). Sahte transkript hem sohbete kullanıcı balonu olarak düşüyor hem de **ikinci bir pipeline** başlatıp ilk turun event akışıyla karışıyordu — ilk turun `reasoning_complete`'i kaybolduğu için paneli yarım JSON'da kilitli kalıyordu.
+>
+> Üç katmanlı düzeltme: (1) `TranscriptionPrompt`'tan tohumlayıcı örnek numaralar çıkarıldı, (2) `_turnInFlight` mikrofonu pipeline boyunca susturuyor, (3) buna rağmen gecikmeli gelen transkript `HandleEventsAsync`'te düşürülüyor (eşzamanlı tur imkânsız).
+
+> `_turnInFlight`, `HandleUserTranscriptAsync`'in **`finally`** bloğunda sıfırlanır — başarı, guard reddi, iptal ve hata yollarının hepsinde. Sıfırlanmazsa mikrofon kalıcı susar ve oturum sağır olur. Aynı sebeple bayrak `user_transcript` gönderimiNDEN SONRA set edilir: gönderim fırlarsa `finally`'e hiç girilmeyeceği için bayrak kilitlenirdi.
+
+`RealtimeNativeService`'te bu ek bayrak **yoktur ve gerekmez** — orada `create_response=true` olduğu için model konuşmaya hemen başlar, sessiz aralık oluşmaz.
 
 ---
 
