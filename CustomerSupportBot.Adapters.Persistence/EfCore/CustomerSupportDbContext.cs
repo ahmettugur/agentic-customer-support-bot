@@ -8,6 +8,7 @@ using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Improvement;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Knowledge;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Personalization;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +49,9 @@ public sealed class CustomerSupportDbContext : DbContext
 
     // ─── improvement schema ───
     public DbSet<LessonEntity> Lessons => Set<LessonEntity>();
+
+    // ─── knowledge schema ───
+    public DbSet<KnowledgeArticleEntity> KnowledgeArticles => Set<KnowledgeArticleEntity>();
 
     // ─── analytics schema (sla) ───
     public DbSet<SlaEventEntity> SlaEvents => Set<SlaEventEntity>();

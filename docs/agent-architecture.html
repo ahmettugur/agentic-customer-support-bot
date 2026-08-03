@@ -1675,6 +1675,20 @@
           LLM'in doğası gereği değişken çıktısı için kararlılık ölçülür.
         </p>
 
+        <h3>Bilgi tabanı yönetimi</h3>
+        <p>
+          Ajanların yanıt üretirken kaynak aldığı kurumsal bilgi iki yerden gelir: repoya
+          konan markdown dosyaları ve <b>panelden yönetilen makaleler</b>. İkincisi destek
+          ekibinin geliştirici beklemeden içerik ekleyip düzeltebilmesi içindir; makale
+          kaydedildiği anda parçalara bölünüp anlamsal aramaya indekslenir.
+        </p>
+        <div class="note">
+          <span class="tag">Taslak &ne; yayında</span>
+          Yalnızca yayındaki makaleler indekslenir. Bir makale yayından kaldırıldığında veya
+          silindiğinde parçaları indeksten de temizlenir — aksi halde ajanlar kaldırılmış
+          metni kaynak göstermeye devam ederdi.
+        </div>
+
         <h3>Self-Improving Loop</h3>
         <p>
           Düşük puanlı veya hatalı turlar taranır, LLM bunlardan <b>ders önerileri</b> çıkarır.

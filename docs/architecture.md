@@ -182,6 +182,7 @@ CustomerSupport.slnx
 │       │   ├── SemanticMemoryContextProvider.cs  # Qdrant RAG (Order=20)
 │       │   └── CustomerProfileContextProvider.cs # Per-customer profil (Order=15)
 │       ├── Memory/                      # Semantic memory facade + KnowledgeBaseIngestionService
+│       │                                #  + KnowledgeArticleService (panelden yönetilen makaleler)
 │       ├── Improvement/                 # Self-improving loop (LessonMiner)
 │       ├── Personalization/             # Per-customer profil yönetimi
 │       ├── Routing/                     # SkillsBasedRouter + RoutingOptions
@@ -238,7 +239,7 @@ CustomerSupport.slnx
 │   │   #    sadece Postgres implementasyonuna sahip — InMemory versiyonu yok
 │   ├── FileSystem/
 │   │   ├── FileSystemPromptRepository.cs # IPromptRepository → disk'ten MD yükleme
-│   │   ├── FileSystemKnowledgeBaseSource.cs # IKnowledgeBaseSource
+│   │   ├── FileSystemKnowledgeBaseSource.cs # IKnowledgeBaseSource (salt-okunur MD tohumu)
 │   │   └── PromptOptions.cs             # Prompts:RootPath yapılandırması
 │   ├── Auth/                            # BCryptPasswordHasher, JwtAccessTokenProvider, TokenService
 │   │   ├── EfCore/Auth/                 # EfUserAuthRepository, EfRefreshTokenRepository
@@ -281,7 +282,7 @@ CustomerSupport.slnx
 │   │   ├── AgentsEndpoints.cs           # /agents — temsilci registry CRUD
 │   │   ├── AnalyticsEndpoints.cs        # /analytics/dashboard + /sessions/.../rating
 │   │   ├── EvaluationEndpoints.cs       # /eval/scenarios + /eval/run
-│   │   ├── MemoryEndpoints.cs           # /memory/stats|search|ingest (admin)
+│   │   ├── MemoryEndpoints.cs           # /memory/stats|search|ingest + /memory/articles CRUD (admin)
 │   │   ├── ImprovementsEndpoints.cs     # /improvements/* (admin self-improve loop)
 │   │   ├── PersonalizationEndpoints.cs  # /customers — CustomerProfile CRUD
 │   │   ├── SlaEndpoints.cs              # /sla/status + /sla/events (admin)
@@ -317,7 +318,7 @@ CustomerSupport.slnx
 │   └── (statik frontend YOK — arayüz CustomerSupportBot.Web'e taşındı)
 │
 ├── CustomerSupportBot.Web/              ← Blazor WebAssembly arayüz (ayrı host)
-│   ├── Pages/                           # Chat, Admin, Traces, Replay, Sla, Login
+│   ├── Pages/                           # Chat, Admin, Traces, Replay, Sla, Knowledge, Login
 │   ├── Models/                          # API DTO'ları (proje referansı yok, HTTP ile konuşur)
 │   └── wwwroot/css, js/
 │
@@ -329,19 +330,21 @@ CustomerSupport.slnx
     └── Evaluation/                      # Senaryo değerlendirme testleri
 
 └── CustomerSupportBot.Web/              ← Blazor WASM frontend (bağımsız proje)
-    ├── Program.cs                       # DI + HttpClient kaydı (6 API service)
+    ├── Program.cs                       # DI + HttpClient kaydı (7 API service)
     ├── Services/                        # Backend API client sınıfları
     │   ├── AdminApiService.cs           # /approvals, /escalations, /chat-sessions, /agents
     │   ├── AnalyticsApiService.cs       # /analytics
     │   ├── ChatApiService.cs            # /chat, /sessions
     │   ├── TracesApiService.cs          # /traces
     │   ├── SlaApiService.cs             # /sla
+    │   ├── KnowledgeApiService.cs       # /memory/articles
     │   ├── AuthService.cs               # Login/logout/refresh
     │   ├── AppAuthStateProvider.cs      # Blazor AuthenticationStateProvider
     │   ├── AuthTokenStore.cs            # localStorage token yönetimi
     │   └── AuthorizedHttpClientHandler # JWT auto-inject DelegatingHandler
     └── Models/                          # Web katmanına özgü view model'lar
         ├── AdminModels.cs               # Admin panel record'ları
+        ├── KnowledgeModels.cs           # Bilgi tabanı makale DTO'ları
         └── TraceDetailModels.cs         # Trace replay model'ları
 ```
 

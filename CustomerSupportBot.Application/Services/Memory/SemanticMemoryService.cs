@@ -76,6 +76,13 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
         _logger.LogInformation("Memory upsert: kind={Kind} count={Count}", kind, docs.Count);
     }
 
+    /// <summary>Tek dokümanı indeksten siler.</summary>
+    public async Task DeleteAsync(MemoryKind kind, string documentId, CancellationToken ct = default)
+    {
+        if (!Enabled || string.IsNullOrWhiteSpace(documentId)) return;
+        await _store.DeleteAsync(CollectionFor(kind), documentId, ct);
+    }
+
     /// <summary>Bir collection'da semantic search.</summary>
     public async Task<IReadOnlyList<MemorySearchHit>> SearchAsync(
         MemoryKind kind, string query, int? topK = null, float? minScore = null,

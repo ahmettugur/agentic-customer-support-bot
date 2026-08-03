@@ -55,5 +55,6 @@ builder.Services.AddScoped<AnalyticsApiService>();
 builder.Services.AddScoped<ChatApiService>();
 builder.Services.AddScoped<TracesApiService>();
 builder.Services.AddScoped<SlaApiService>();
+builder.Services.AddScoped<KnowledgeApiService>();
 
 await builder.Build().RunAsync();

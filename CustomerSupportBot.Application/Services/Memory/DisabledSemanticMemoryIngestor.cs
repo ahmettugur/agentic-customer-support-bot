@@ -15,4 +15,5 @@ public sealed class DisabledSemanticMemoryIngestor : ISemanticMemoryIngestor
     public bool IsConfigured => false;
     public Task EnsureCollectionsAsync(CancellationToken ct = default) => Task.CompletedTask;
     public Task UpsertManyAsync(MemoryKind kind, IReadOnlyList<MemoryDocument> docs, CancellationToken ct = default) => Task.CompletedTask;
+    public Task DeleteAsync(MemoryKind kind, string documentId, CancellationToken ct = default) => Task.CompletedTask;
 }

@@ -168,5 +168,9 @@ public static class ApplicationServiceCollectionExtensions
             services.AddSingleton<IMemoryPort, DisabledMemoryPort>();
             services.AddSingleton<IContextProvider, NoopContextProvider>();
         }
+
+        // Makale yönetimi memory kapalıyken de çalışır (kaydeder, indekslemez) —
+        // panelin erişilebilirliği vector store'un durumuna bağlı olmamalı.
+        services.AddSingleton<IKnowledgeBasePort, KnowledgeArticleService>();
     }
 }

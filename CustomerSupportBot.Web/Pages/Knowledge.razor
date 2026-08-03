@@ -1,0 +1,260 @@
+@page "/knowledge"
+@attribute [Authorize]
+@layout AdminLayout
+@inject KnowledgeApiService KnowledgeApi
+@inject ToastService Toast
+
+<link rel="stylesheet" href="css/knowledge.css" />
+
+<div class="kb-container">
+    <div class="kb-toolbar">
+        <h1>📚 Bilgi Tabanı</h1>
+        <div class="kb-toolbar-actions">
+            <input class="kb-search" type="search" placeholder="Başlık veya içerikte ara…"
+                   @bind="_filter" @bind:event="oninput" aria-label="Makalelerde ara" />
+            <button class="kb-btn kb-btn-primary" @onclick="StartNew">+ Yeni Makale</button>
+        </div>
+    </div>
+
+    <p class="kb-hint">
+        Yayındaki makaleler parçalara bölünüp anlamsal aramaya indekslenir; ajanlar yanıt
+        üretirken bunları kaynak olarak kullanır. Taslaklar indekslenmez.
+    </p>
+
+    <div class="kb-layout">
+        <aside class="kb-list" aria-label="Makale listesi">
+            @if (_loading)
+            {
+                <div class="kb-empty">Yükleniyor…</div>
+            }
+            else if (Filtered.Count == 0)
+            {
+                <div class="kb-empty">
+                    @(_articles.Count == 0 ? "Henüz makale yok. “Yeni Makale” ile başlayın." : "Aramayla eşleşen makale yok.")
+                </div>
+            }
+            else
+            {
+                @foreach (var a in Filtered)
+                {
+                    <button type="button"
+                            class="kb-item @(_editing?.Id == a.Id ? "selected" : "")"
+                            @onclick="() => SelectAsync(a)">
+                        <span class="kb-item-title">@a.Title</span>
+                        <span class="kb-item-meta">
+                            <span class="kb-badge @(a.IsPublished ? "published" : "draft")">
+                                @(a.IsPublished ? "Yayında" : "Taslak")
+                            </span>
+                            @if (a.Category is { Length: > 0 })
+                            {
+                                <span class="kb-badge category">@a.Category</span>
+                            }
+                            <span class="kb-item-date">@a.UpdatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                        </span>
+                    </button>
+                }
+            }
+        </aside>
+
+        <section class="kb-editor" aria-label="Makale düzenleyici">
+            @if (_editing is null)
+            {
+                <div class="kb-empty kb-empty-editor">
+                    Düzenlemek için soldan bir makale seçin veya yeni bir tane oluşturun.
+                </div>
+            }
+            else
+            {
+                <div class="kb-field">
+                    <label for="kb-title">Başlık</label>
+                    <input id="kb-title" class="kb-input" @bind="_editing.Title" @bind:event="oninput"
+                           maxlength="256" placeholder="ör. Kargo teslimat süreleri" />
+                </div>
+
+                <div class="kb-field-row">
+                    <div class="kb-field">
+                        <label for="kb-category">Kategori <span class="kb-optional">(isteğe bağlı)</span></label>
+                        <input id="kb-category" class="kb-input" @bind="_editing.Category" @bind:event="oninput"
+                               maxlength="64" placeholder="ör. kargo" />
+                    </div>
+                    <div class="kb-field kb-field-toggle">
+                        <label class="kb-checkbox">
+                            <input type="checkbox" @bind="_editing.IsPublished" />
+                            <span>Yayında</span>
+                        </label>
+                        <span class="kb-optional">Kapalıyken ajanlar bu makaleyi göremez.</span>
+                    </div>
+                </div>
+
+                <div class="kb-field kb-field-grow">
+                    <label for="kb-content">İçerik <span class="kb-optional">(Markdown)</span></label>
+                    <textarea id="kb-content" class="kb-textarea" @bind="_editing.Content" @bind:event="oninput"
+                              placeholder="Paragrafları boş satırla ayırın — parçalama paragraf sınırlarını korur."></textarea>
+                </div>
+
+                <div class="kb-status">
+                    @if (!IsNew)
+                    {
+                        <span>
+                            İndeks: <b>@_editing.IndexedChunkCount</b> parça
+                            @if (_editing.IndexedChunkCount == 0 && _editing.IsPublished)
+                            {
+                                <span class="kb-warn">· aranabilir değil</span>
+                            }
+                        </span>
+                        @if (_editing.UpdatedBy is { Length: > 0 })
+                        {
+                            <span>Son düzenleyen: <b>@_editing.UpdatedBy</b></span>
+                        }
+                    }
+                    else
+                    {
+                        <span>Yeni makale — henüz kaydedilmedi.</span>
+                    }
+                </div>
+
+                <div class="kb-actions">
+                    <button class="kb-btn kb-btn-primary" @onclick="SaveAsync" disabled="@(_busy || !CanSave)">
+                        @(_busy ? "Kaydediliyor…" : "Kaydet")
+                    </button>
+                    <button class="kb-btn" @onclick="CancelEdit" disabled="@_busy">Vazgeç</button>
+
+                    @if (!IsNew)
+                    {
+                        <span class="kb-actions-spacer"></span>
+                        @if (_confirmingDelete)
+                        {
+                            <span class="kb-confirm">Silinsin mi?</span>
+                            <button class="kb-btn kb-btn-danger" @onclick="DeleteAsync" disabled="@_busy">Evet, sil</button>
+                            <button class="kb-btn" @onclick="() => _confirmingDelete = false" disabled="@_busy">Hayır</button>
+                        }
+                        else
+                        {
+                            <button class="kb-btn kb-btn-danger-outline" @onclick="() => _confirmingDelete = true"
+                                    disabled="@_busy">Sil</button>
+                        }
+                    }
+                </div>
+            }
+        </section>
+    </div>
+</div>
+
+@code {
+    private List<KnowledgeArticleDto> _articles = [];
+    private KnowledgeArticleDto? _editing;
+    private string _filter = "";
+    private bool _loading = true;
+    private bool _busy;
+    private bool _confirmingDelete;
+
+    /// <summary>Kaydedilmemiş makalenin Id'si boştur — güncelleme değil oluşturma yapılır.</summary>
+    private bool IsNew => _editing is not null && string.IsNullOrEmpty(_editing.Id);
+
+    private bool CanSave => _editing is not null
+        && !string.IsNullOrWhiteSpace(_editing.Title)
+        && !string.IsNullOrWhiteSpace(_editing.Content);
+
+    private List<KnowledgeArticleDto> Filtered
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_filter)) return _articles;
+            var q = _filter.Trim();
+            return _articles
+                .Where(a => a.Title.Contains(q, StringComparison.OrdinalIgnoreCase)
+                         || a.Content.Contains(q, StringComparison.OrdinalIgnoreCase)
+                         || (a.Category?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false))
+                .ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        _articles = await KnowledgeApi.ListAsync();
+        _loading = false;
+    }
+
+    private void StartNew()
+    {
+        _confirmingDelete = false;
+        _editing = new KnowledgeArticleDto { IsPublished = true };
+    }
+
+    // Düzenleme kopya üzerinde yapılır: "Vazgeç" listedeki kaydı bozmamalı.
+    private Task SelectAsync(KnowledgeArticleDto article)
+    {
+        _confirmingDelete = false;
+        _editing = article.Clone();
+        return Task.CompletedTask;
+    }
+
+    private void CancelEdit()
+    {
+        _confirmingDelete = false;
+        _editing = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_editing is null || !CanSave) return;
+
+        _busy = true;
+        try
+        {
+            var input = new KnowledgeArticleInput
+            {
+                Title = _editing.Title,
+                Content = _editing.Content,
+                Category = _editing.Category,
+                IsPublished = _editing.IsPublished
+            };
+
+            var result = IsNew
+                ? await KnowledgeApi.CreateAsync(input)
+                : await KnowledgeApi.UpdateAsync(_editing.Id, input);
+
+            await ReloadAsync();
+            _editing = result.Article?.Clone();
+
+            if (result.Indexed)
+                Toast.ShowSuccess("Makale kaydedildi ve indekslendi.");
+            else
+                Toast.ShowWarning(result.Warning ?? "Makale kaydedildi ancak indekslenmedi.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_editing is null || IsNew) return;
+
+        _busy = true;
+        try
+        {
+            await KnowledgeApi.DeleteAsync(_editing.Id);
+            _editing = null;
+            _confirmingDelete = false;
+            await ReloadAsync();
+            Toast.ShowSuccess("Makale silindi ve indeksten kaldırıldı.");
+        }
+        catch (Exception ex)
+        {
+            Toast.ShowError(ex.Message);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

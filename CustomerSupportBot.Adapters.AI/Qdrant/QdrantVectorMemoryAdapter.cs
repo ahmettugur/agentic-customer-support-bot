@@ -160,7 +160,7 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
     {
         try
         {
-            await _client.DeleteAsync(collection, ToPointId(id).Uuid is { } _ ? Guid.Parse(id) : Guid.Empty,
+            await _client.DeleteAsync(collection, ToPointGuid(id),
                 cancellationToken: ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -184,15 +184,21 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
 
     // ─── helpers ───
 
-    private static PointId ToPointId(string id)
+    private static PointId ToPointId(string id) => new() { Uuid = ToPointGuid(id).ToString() };
+
+    /// <summary>
+    /// Doküman id'sini Qdrant point GUID'ine çevirir. Upsert ve delete <b>aynı</b> eşlemeyi
+    /// kullanmak zorunda; aksi halde silme yanlış noktayı hedefler.
+    /// </summary>
+    internal static Guid ToPointGuid(string id)
     {
         // Qdrant point id ya UUID ya da uint64. GUID kullanıyoruz; parse edemezsek deterministik hash → guid.
-        if (Guid.TryParse(id, out var g)) return new PointId { Uuid = g.ToString() };
+        if (Guid.TryParse(id, out var g)) return g;
         // Stable hash → guid v5-benzeri
         var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(id));
         var guidBytes = new byte[16];
         Array.Copy(bytes, guidBytes, 16);
-        return new PointId { Uuid = new Guid(guidBytes).ToString() };
+        return new Guid(guidBytes);
     }
 
     private static MemoryDocument HydrateDocument(IDictionary<string, Value> payload)

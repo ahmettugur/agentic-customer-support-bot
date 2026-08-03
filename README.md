@@ -217,7 +217,12 @@ curl -X POST http://localhost:5021/chat/ \
 | `/escalations/{id}/resolve` | `POST` | Bir yükseltmeyi çöz |
 | `/memory/stats` | `GET` | Qdrant collection sayıları + embedding config (admin) |
 | `/memory/search?kind=knowledge&q=...` | `GET` | Semantic memory'de arama (admin) |
-| `/memory/ingest` | `POST` | KnowledgeBase/*.md dosyalarını yeniden ingest et (admin) |
+| `/memory/ingest` | `POST` | KnowledgeBase/*.md dosyalarını + yayındaki makaleleri yeniden ingest et (admin) |
+| `/memory/articles` | `GET` | Bilgi tabanı makalelerini listele (admin) |
+| `/memory/articles/{id}` | `GET` | Tek makale (admin) |
+| `/memory/articles` | `POST` | Makale oluştur; yayındaysa anında indekslenir (admin) |
+| `/memory/articles/{id}` | `PUT` | Makale güncelle; indeks tazelenir, artık chunk'lar silinir (admin) |
+| `/memory/articles/{id}` | `DELETE` | Makaleyi ve indeksteki tüm parçalarını sil (admin) |
 | `/improvements/mine` | `POST` | Düşük puanlı/hatalı trace'leri tarayıp lesson aday üret (admin) |
 | `/improvements?status=Proposed` | `GET` | Lesson'ları listele (Proposed / Approved / Rejected) |
 | `/improvements/{id}/approve` | `POST` | Lesson'ı onayla → Qdrant Lessons collection'a yaz |
@@ -281,6 +286,7 @@ Bot üç ek "akıllı" katman içerir:
 
 ### 🧠 Semantic Memory (Qdrant + RAG)
 - `KnowledgeBase/*.md` dosyaları (iade politikası, kargo, SSS) startup'ta chunk'lara bölünür, embedding'lenir ve **Qdrant**'a yazılır.
+- **Panelden yönetilen makaleler** (`knowledge.articles` tablosu) ikinci bir Knowledge kaynağıdır: destek ekibi `/knowledge` ekranından ekler/düzenler, kaydedildiği anda indekslenir. Dosyalar salt-okunur bir tohum, makaleler ise çalışma zamanında yazılabilir kaynaktır (dosyalar build çıktısına kopyalandığı için runtime'da düzenlenemez). Yalnızca **yayındaki** makaleler indekslenir; yayından kaldırma veya silme, parçaları indeksten de temizler.
 - Her workflow tamamlandığında **episodik bellek** (soru + yanıt + intent) yazılır.
 - `SemanticMemoryContextProvider` her sorguda Knowledge + Lessons aramasını context pipeline'a enjekte eder (citation'lı).
 - Embedding sağlayıcı: OpenAI / Azure OpenAI (`text-embedding-3-large`, 3072-dim).
