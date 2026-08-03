@@ -55,6 +55,14 @@ public class EntityVerifier
         // 1) Query'den çıkar
         var queryIds = IdExtractor.Extract(query ?? "");
 
+        // 1b) Bağlamsız (varsayımla atanmış) customer_id'yi, konuşmanın son gerçek bağlamına
+        // göre yeniden sınıflandır (ör. "sipariş numaram 1042" → "pekiş 1043" turu, 1043'ü de
+        // sipariş sayar). Aynı mantık SessionStateExtractor tarafından da kullanılır — bu
+        // yüzden Domain katmanında (IdExtractor.ApplyContextContinuity) paylaşımlı.
+        // history kronolojik (eski → yeni) sıralıdır; FindLastUnambiguousKind en yeniden
+        // en eskiye bekler.
+        IdExtractor.ApplyContextContinuity(queryIds, history is null ? null : Enumerable.Reverse(history).Select(m => m.Text));
+
         // 2) History'den çıkar (en son turdan en eskiye) — query'de yoksa bu turdakileri kullan
         var historyIds = ExtractFromHistory(history);
 
@@ -82,6 +90,18 @@ public class EntityVerifier
         {
             var source = queryIds.ComplaintId != null ? EntitySource.Query : EntitySource.History;
             result.ComplaintId = VerifyComplaint(complaintIdValue, source);
+        }
+
+        // Aynı numara hem sipariş hem şikayet olarak yorumlanmışsa ve sipariş tarafı DB'de
+        // doğrulandıysa, şikayet yorumunu düşür — yoksa sahte "DB'de bulunamadı" uyarısı çıkıyor.
+        if (result.ComplaintId is { Verification: EntityVerification.NotFoundInDb }
+            && result.OrderId is { Verification: EntityVerification.Verified }
+            && result.ComplaintId.Value == result.OrderId.Value)
+        {
+            _logger.LogDebug(
+                "EntityVerifier: {Id} şikayet olarak bulunamadı ama sipariş olarak doğrulandı — şikayet yorumu düşürüldü.",
+                result.ComplaintId.Value);
+            result.ComplaintId = null;
         }
 
         // 5) Türetilmiş alanlar — sadece verified customer varsa

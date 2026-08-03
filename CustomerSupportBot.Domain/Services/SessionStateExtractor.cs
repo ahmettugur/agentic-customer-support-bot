@@ -15,12 +15,25 @@ public static class SessionStateExtractor
     /// <summary>
     /// Bir konuşma turundaki user ve bot mesajlarından state bilgilerini günceller.
     /// </summary>
-    public static void ExtractAndApply(SessionState state, string userMessage, string botResponse)
+    /// <param name="priorHistory">
+    /// Bu turdan ÖNCEKİ konuşma turları (eski → yeni sıralı, opsiyonel). Verilirse,
+    /// <paramref name="userMessage"/> bağlamsız (varsayımla) bir customer_id çıkarırsa
+    /// (ör. "sipariş numaram 1030" turundan sonra sadece "1030" yazılması) önceki turun
+    /// gerçek bağlamına göre yeniden sınıflandırılır — aksi halde sipariş numarası
+    /// state.CustomerId'ye kalıcı olarak yazılıp sonraki turları da zehirler.
+    /// </param>
+    public static void ExtractAndApply(
+        SessionState state, string userMessage, string botResponse,
+        IReadOnlyList<ConversationMessage>? priorHistory = null)
     {
         state.TurnCount++;
 
         // ID çıkarma — IdExtractor üzerinden (Türkçe bağlam + 4+ haneli rakam)
         var extracted = IdExtractor.Extract(userMessage);
+        IdExtractor.ApplyContextContinuity(
+            extracted,
+            priorHistory is null ? null : Enumerable.Reverse(priorHistory).Select(m => m.Text));
+
         if (!string.IsNullOrEmpty(extracted.CustomerId))
             state.CustomerId = extracted.CustomerId;
         else if (state.CustomerId is null)

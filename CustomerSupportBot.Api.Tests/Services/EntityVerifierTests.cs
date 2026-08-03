@@ -124,4 +124,100 @@ public class EntityVerifierTests
         var block = EntityVerifier.BuildPromptBlock(verified);
         block.Should().Contain("bulunamad");
     }
+
+    // ─── Bağlamsız sayının önceki tur bağlamını takip etmesi ────────────────────────
+    // Canlıda gözlemlenen senaryo: "sipariş numaram 1030" turundan sonra kullanıcı
+    // sadece "peki 1030" (ya da tek başına "1030") yazınca IdExtractor bağlam bulamadığı
+    // için 1030'u customer_id sanıyordu (1030 müşteri olarak DB'de yok → "bulunamadı"
+    // yanıtı, oysa sipariş 1030 gerçekten mevcuttu). DB'ye "hangi tabloda var" diye
+    // sormak yerine (order/customer/complaint aynı sayı aralığını paylaşabilir)
+    // konuşmanın bağlamı takip edilir.
+
+    [Theory]
+    [InlineData("1030")]
+    [InlineData("peki 1030")]
+    public void Verify_AmbiguousFollowUp_AfterOrderContext_ResolvesAsOrder(string followUp)
+    {
+        var history = new List<ConversationMessage>
+        {
+            new(ConversationRoles.User, "sipariş numaram 1030"),
+            new(ConversationRoles.Assistant, "1030 numaralı siparişinizi kontrol ettim: Teslim Edildi.")
+        };
+
+        var result = _verifier.Verify(followUp, EmptySession(), history);
+
+        result.OrderId.Should().NotBeNull();
+        result.OrderId!.Value.Should().Be("1030");
+        result.OrderId.Verification.Should().Be(EntityVerification.Verified);
+        result.OrderId.Source.Should().Be(EntitySource.Query);
+        result.CustomerId.Should().BeNull("1030 sipariş bağlamında yorumlanmalı, müşteriye kaymamalı");
+    }
+
+    [Fact]
+    public void Verify_AmbiguousFollowUp_AfterComplaintContext_ResolvesAsComplaint()
+    {
+        var history = new List<ConversationMessage>
+        {
+            new(ConversationRoles.User, "şikayet numaram 1001")
+        };
+
+        var result = _verifier.Verify("peki 1001", EmptySession(), history);
+
+        result.ComplaintId.Should().NotBeNull();
+        result.ComplaintId!.Value.Should().Be("1001");
+        result.CustomerId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Verify_AmbiguousQuery_NoHistory_StillDefaultsToCustomerId()
+    {
+        // Geriye dönük uyumluluk: gerçekten bağlam yoksa (ilk mesaj) eski davranış korunur.
+        var result = _verifier.Verify("1008", EmptySession());
+
+        result.CustomerId.Should().NotBeNull();
+        result.CustomerId!.Value.Should().Be("1008");
+        result.OrderId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Verify_AmbiguousFollowUp_PriorContextItselfAmbiguous_StillDefaultsToCustomerId()
+    {
+        // Önceki tur da bağlamsız bir varsayımdı (kendisi "numaram"sız bir sayı) — bu bağlam
+        // kurmaz, iki tur üst üste customer_id varsayımında kalınmalı.
+        var history = new List<ConversationMessage> { new(ConversationRoles.User, "1008") };
+
+        var result = _verifier.Verify("1027", EmptySession(), history);
+
+        result.CustomerId.Should().NotBeNull();
+        result.CustomerId!.Value.Should().Be("1027");
+        result.OrderId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Verify_ExplicitCustomerQuery_NeverReclassifiedByHistory()
+    {
+        // "müşteri" kelimesi açık bir sinyaldir — geçmişte sipariş bağlamı olsa bile
+        // bu tur AÇIKÇA müşteri sorgusu; reclassification tetiklenmemeli.
+        var history = new List<ConversationMessage> { new(ConversationRoles.User, "sipariş numaram 1030") };
+
+        var result = _verifier.Verify("müşteri 1008 bilgisi", EmptySession(), history);
+
+        result.CustomerId.Should().NotBeNull();
+        result.CustomerId!.Value.Should().Be("1008");
+    }
+
+    // ─── Aynı numaranın hem sipariş hem şikayet olarak yorumlanması ─────────────────
+    // Aynı sayı iki numara olarak metinde geçip biri sipariş biri şikayet bağlamında
+    // yorumlanırsa ve sipariş tarafı DB'de doğrulanmışsa, şikayet yorumu (ki DB'de
+    // bulunamayacaktır) sahte bir "bulunamadı" uyarısına yol açmasın diye düşürülür.
+
+    [Fact]
+    public void Verify_SameNumberAsOrderAndComplaint_OrderVerified_DropsComplaintInterpretation()
+    {
+        var result = _verifier.Verify("sipariş 1030 ile ilgili şikayet 1030", EmptySession());
+
+        result.OrderId.Should().NotBeNull();
+        result.OrderId!.Verification.Should().Be(EntityVerification.Verified);
+        result.ComplaintId.Should().BeNull("1030 gerçek bir şikayet kaydı değil, sahte uyarı üretmemeli");
+    }
 }

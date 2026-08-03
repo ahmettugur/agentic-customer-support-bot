@@ -114,12 +114,17 @@ public static class IdExtractor
 
             if (orderGap is null && complaintGap is null && customerGap is null)
             {
-                // Bağlam yok — kısa sorgularda (≤5 token) customer_id varsay
+                // Bağlam yok — kısa sorgularda (≤5 token) customer_id varsay.
+                // Zayıf bir tahmin: çağıran (EntityVerifier) konuşma geçmişinde daha güçlü
+                // bir bağlam (ör. önceki turda sipariş sorgusu) bulursa bunu geçersiz kılabilir.
                 var tokenCount = text.Split(
                     [' ', '\t', '\n', ',', ';'],
                     StringSplitOptions.RemoveEmptyEntries).Length;
                 if (tokenCount <= 5)
+                {
                     result.CustomerId = singleNum;
+                    result.IsCustomerIdAssumed = true;
+                }
             }
             else
             {
@@ -142,6 +147,63 @@ public static class IdExtractor
         }
 
         return result;
+    }
+
+    /// <summary>Konuşma geçmişinde bulunabilecek entity türleri.</summary>
+    public enum ExtractedKind { Order, Complaint, Customer }
+
+    /// <summary>
+    /// Konuşma geçmişinde geriye doğru, GERÇEK bağlam kelimesiyle (varsayım değil) tespit
+    /// edilmiş son entity türünü bulur. Yalnızca "kısa sorguda tek sayı → customer_id"
+    /// varsayımıyla atanmış (IsCustomerIdAssumed=true) mesajlar atlanır — onlar bağlam
+    /// kurmaz, kendileri de belirsizdir. Bulunamazsa null.
+    /// </summary>
+    /// <param name="priorTexts">En yeniden en eskiye sıralı önceki mesaj metinleri.</param>
+    public static ExtractedKind? FindLastUnambiguousKind(IEnumerable<string>? priorTexts)
+    {
+        if (priorTexts is null) return null;
+
+        foreach (var text in priorTexts)
+        {
+            if (string.IsNullOrWhiteSpace(text)) continue;
+
+            var ids = Extract(text);
+            if (ids.OrderId != null) return ExtractedKind.Order;
+            if (ids.ComplaintId != null) return ExtractedKind.Complaint;
+            if (ids.CustomerId != null && !ids.IsCustomerIdAssumed) return ExtractedKind.Customer;
+            // ids.CustomerId varsayımla atanmışsa (veya hiç id yoksa) bu mesaj bağlam
+            // kurmaz — daha eskiye bakmaya devam et.
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Query'de bağlam yoktu, sayı sadece "kısa mesaj → customer_id" varsayımıyla
+    /// atandıysa (IsCustomerIdAssumed) bu ZAYIF bir tahmindir. Konuşmanın son gerçek
+    /// bağlamı varsa (ör. bir önceki turda "sipariş numaram 1042"), kullanıcının o
+    /// bağlamı sürdürdüğünü varsaymak DB'ye "hangi tabloda var" diye sormaktan daha
+    /// güvenilirdir — sipariş/müşteri/şikayet ID'leri aynı sayı aralığını paylaşabilir.
+    /// <paramref name="ids"/> yerinde (in-place) değiştirilir.
+    /// </summary>
+    /// <param name="priorTexts">En yeniden en eskiye sıralı önceki mesaj metinleri.</param>
+    public static void ApplyContextContinuity(ExtractedIds ids, IEnumerable<string>? priorTexts)
+    {
+        if (!ids.IsCustomerIdAssumed) return;
+
+        var lastKind = FindLastUnambiguousKind(priorTexts);
+        if (lastKind == ExtractedKind.Order)
+        {
+            ids.OrderId = ids.CustomerId;
+            ids.CustomerId = null;
+            ids.IsCustomerIdAssumed = false;
+        }
+        else if (lastKind == ExtractedKind.Complaint)
+        {
+            ids.ComplaintId = ids.CustomerId;
+            ids.CustomerId = null;
+            ids.IsCustomerIdAssumed = false;
+        }
     }
 
     /// <summary>

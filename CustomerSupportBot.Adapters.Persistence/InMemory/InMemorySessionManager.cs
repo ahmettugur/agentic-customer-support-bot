@@ -79,9 +79,11 @@ public class InMemorySessionManager : ISessionManager
         Update(session);
     }
 
-    private void ExtractAndUpdateStateCore(AgentSession session, string userMessage, string botResponse)
+    private void ExtractAndUpdateStateCore(
+        AgentSession session, string userMessage, string botResponse,
+        IReadOnlyList<ConversationMessage>? priorHistory = null)
     {
-        SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse);
+        SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse, priorHistory);
         Update(session);
     }
 
@@ -102,8 +104,12 @@ public class InMemorySessionManager : ISessionManager
     public void AddExchange(string sessionId, string userQuery, string assistantResponse)
     {
         var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
+        List<ConversationMessage> priorHistorySnapshot;
         lock (history)
         {
+            // Bu turdan ÖNCEKİ geçmiş — SessionStateExtractor'ın bağlam takibi için
+            // (eklemeden önce alınmalı, yoksa "önceki tur" bu turun kendisi olur).
+            priorHistorySnapshot = new List<ConversationMessage>(history);
             history.Add(new ConversationMessage(ConversationRoles.User, userQuery));
             history.Add(new ConversationMessage(ConversationRoles.Assistant, assistantResponse));
         }
@@ -114,7 +120,7 @@ public class InMemorySessionManager : ISessionManager
         _sessions[sessionId] = session;
 
         // State çıkarma
-        ExtractAndUpdateState(sessionId, userQuery, assistantResponse);
+        ExtractAndUpdateStateCore(session, userQuery, assistantResponse, priorHistorySnapshot);
     }
 
     public void ClearSession(string sessionId)

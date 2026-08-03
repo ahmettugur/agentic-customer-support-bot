@@ -123,9 +123,11 @@ public sealed class PostgresSessionManager : ISessionManager
         Update(session);
     }
 
-    private void ExtractAndUpdateStateCore(AgentSession session, string userMessage, string botResponse)
+    private void ExtractAndUpdateStateCore(
+        AgentSession session, string userMessage, string botResponse,
+        IReadOnlyList<ConversationMessage>? priorHistory = null)
     {
-        SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse);
+        SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse, priorHistory);
         Update(session);
     }
 
@@ -149,8 +151,12 @@ public sealed class PostgresSessionManager : ISessionManager
         EnsureSessionHydrated(sessionId);
 
         var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
+        List<ConversationMessage> priorHistorySnapshot;
         lock (history)
         {
+            // Bu turdan ÖNCEKİ geçmiş — SessionStateExtractor'ın bağlam takibi için
+            // (eklemeden önce alınmalı, yoksa "önceki tur" bu turun kendisi olur).
+            priorHistorySnapshot = new List<ConversationMessage>(history);
             history.Add(new ConversationMessage(ConversationRoles.User, userQuery));
             history.Add(new ConversationMessage(ConversationRoles.Assistant, assistantResponse));
         }
@@ -167,7 +173,7 @@ public sealed class PostgresSessionManager : ISessionManager
             throw ExceptionTranslator.Translate(ex, $"Mesaj kaydedilemedi: {sessionId}");
         }
 
-        ExtractAndUpdateState(sessionId, userQuery, assistantResponse);
+        ExtractAndUpdateStateCore(session, userQuery, assistantResponse, priorHistorySnapshot);
     }
 
     public void AppendAssistantMessage(string sessionId, string text)

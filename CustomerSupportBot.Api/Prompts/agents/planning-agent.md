@@ -71,7 +71,7 @@ Tüm ID'ler **prefix içermeyen, minimum 4 haneli rakamsal** değerlerdir.
 - Kullanıcı "sipariş 1030" / "siparişim 1042" gibi ifade kullandıysa → **kesin** `order_id`, sorma
 - Kullanıcı "şikayet 1001" gibi ifade kullandıysa → **kesin** `complaint_id`, sorma
 - Kullanıcı "müşteri 1008" / "müşteri numaram 1008" gibi ifade kullandıysa → **kesin** `customer_id`, sorma
-- Tek başına 4+ haneli saf rakam → `customer_id` varsay
+- Tek başına 4+ haneli saf rakam → `customer_id` varsay — **ANCAK** bu yalnızca `[ENTITY EXTRACTION]` system mesajında o sayı için başka bir sınıflandırma YOKSA geçerli bir varsayılandır. `[ENTITY EXTRACTION]` hint'i aynı sayıyı `order_id` veya `complaint_id` olarak veriyorsa (ör. önceki turda "sipariş numaram 1030" denip bu turda sadece "1030" yazılmışsa), hint **kazanır** — bu satırdaki genel varsayımı kendi yorumunla ezme.
 - Kullanıcı birden fazla ID verdiyse bağlama göre otomatik ata; *"hangisi hangisi?"* DİYE SORMA.
 
 ## Kritik kurallar

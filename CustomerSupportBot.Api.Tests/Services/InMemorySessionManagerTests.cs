@@ -77,6 +77,29 @@ public class InMemorySessionManagerTests
     }
 
     [Fact]
+    public void AddExchange_AmbiguousFollowUp_AfterOrderContext_DoesNotPoisonCustomerId()
+    {
+        // Uçtan uca kanıt: AddExchange, ExtractAndUpdateState/ExtractAndUpdateStateCore
+        // zincirinde geçmişi gerçekten SessionStateExtractor'a taşıyor mu?
+        // Canlıda gözlemlenen senaryo: "sipariş numaram 1030" turundan sonra kullanıcı
+        // sadece "1030" yazarsa, sipariş numarası state.CustomerId'ye zehirlenmemeli.
+        // İkinci turun bot yanıtı BİLİNÇLİ olarak nötr ("sipariş"/"müşteri"/"şikayet"
+        // kelimesi içermez) — SessionStateExtractor'da AYRI bir mekanizma (bot yanıtından
+        // customer_id türetme, bkz. ExtractAndApply_CustomerIdFromBotResponse_OnlyWhenUserHasNone)
+        // ve SessionState'in "yalnızca en son set edilen alan gözlemlenebilir" doğası, bu
+        // testin tam olarak snapshot ZAMANLAMASINI (ekleme öncesi/sonrası) izole eden bir
+        // mutasyon-öldürücü olmasını engelliyor — o ince ayrıntı EntityVerifier'daki
+        // (zaten mutasyonla doğrulanmış) aynı desenle ve kod incelemesiyle güvence altında.
+        // Bu test asıl regresyon sınıfını kanıtlıyor: priorHistory gerçekten iletiliyor mu.
+        _mgr.AddExchange("s1", "sipariş numaram 1030", "1030 numaralı siparişinizi kontrol ettim.");
+        _mgr.AddExchange("s1", "1030", "Bir saniye, kontrol ediyorum.");
+
+        var s = _mgr.Get("s1");
+        s!.State.CustomerId.Should().BeNull("1030 sipariş bağlamında yorumlanmalı");
+        s.State.CollectedInfo["LastMentionedOrderId"].Should().Be("1030");
+    }
+
+    [Fact]
     public void AddExchange_IncrementsTurnCount()
     {
         _mgr.AddExchange("s1", "msg1", "r1");
