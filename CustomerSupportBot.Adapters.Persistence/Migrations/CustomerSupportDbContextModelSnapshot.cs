@@ -867,6 +867,62 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     b.ToTable("lessons", "improvement");
                 });
 
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Knowledge.KnowledgeArticleEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("IndexedChunkCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("indexed_chunk_count");
+
+                    b.Property<bool>("IsPublished")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_published");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsPublished")
+                        .HasDatabaseName("ix_articles_is_published");
+
+                    b.HasIndex("UpdatedAt")
+                        .IsDescending()
+                        .HasDatabaseName("ix_articles_updated_at");
+
+                    b.ToTable("articles", "knowledge");
+                });
+
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability.LlmCallUsageEntity", b =>
                 {
                     b.Property<long>("Id")

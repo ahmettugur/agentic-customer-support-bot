@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,8 +12,12 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // ── Model dışı nesneler (1/2) ────────────────────────────────────
             // "und-u-ks-level1" collation'ı ICU provider ile oluştur.
-            // Tablo oluşturulmadan önce çalışmalı; IF NOT EXISTS idempotent yapar.
+            // EF modeli bu collation'ı yalnızca KULLANIR (catalog.categories.name ve
+            // catalog.products.name üzerinde UseCollation), oluşturmaz — scaffold edilen
+            // migration'da yer almaz. Tablolardan ÖNCE çalışmak zorunda, aksi
+            // halde CREATE TABLE "collation does not exist" ile patlar.
             migrationBuilder.Sql("""
                 CREATE COLLATION IF NOT EXISTS "und-u-ks-level1"
                     (provider = icu, locale = 'und-u-ks-level1', deterministic = false);
@@ -21,6 +25,9 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
 
             migrationBuilder.EnsureSchema(
                 name: "hitl");
+
+            migrationBuilder.EnsureSchema(
+                name: "knowledge");
 
             migrationBuilder.EnsureSchema(
                 name: "chat");
@@ -42,9 +49,6 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
 
             migrationBuilder.EnsureSchema(
                 name: "auth");
-
-            migrationBuilder.EnsureSchema(
-                name: "workflow");
 
             migrationBuilder.CreateTable(
                 name: "approval_requests",
@@ -69,6 +73,26 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_approval_requests", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "articles",
+                schema: "knowledge",
+                columns: table => new
+                {
+                    id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    title = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    content = table.Column<string>(type: "text", nullable: false),
+                    category = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    is_published = table.Column<bool>(type: "boolean", nullable: false),
+                    indexed_chunk_count = table.Column<int>(type: "integer", nullable: false),
+                    created_at = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamptz", nullable: false),
+                    updated_by = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_articles", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
@@ -387,28 +411,6 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "workflow_definitions",
-                schema: "workflow",
-                columns: table => new
-                {
-                    id = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
-                    name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    description = table.Column<string>(type: "text", nullable: false),
-                    version = table.Column<int>(type: "integer", nullable: false),
-                    is_active = table.Column<bool>(type: "boolean", nullable: false),
-                    trigger_keywords = table.Column<string>(type: "jsonb", nullable: false),
-                    input_patterns = table.Column<string>(type: "jsonb", nullable: false),
-                    steps = table.Column<string>(type: "jsonb", nullable: false),
-                    created_at = table.Column<DateTime>(type: "timestamptz", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamptz", nullable: false),
-                    updated_by = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_workflow_definitions", x => x.id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "products",
                 schema: "catalog",
                 columns: table => new
@@ -520,6 +522,19 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                 schema: "hitl",
                 table: "approval_requests",
                 columns: new[] { "status", "requested_at" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_articles_is_published",
+                schema: "knowledge",
+                table: "articles",
+                column: "is_published");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_articles_updated_at",
+                schema: "knowledge",
+                table: "articles",
+                column: "updated_at",
+                descending: new bool[0]);
 
             migrationBuilder.CreateIndex(
                 name: "ix_bridge_messages_message_id",
@@ -702,19 +717,31 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                 column: "username",
                 unique: true);
 
-            migrationBuilder.CreateIndex(
-                name: "ix_workflow_definitions_is_active",
-                schema: "workflow",
-                table: "workflow_definitions",
-                column: "is_active");
+            // ── Model dışı nesneler (2/2) ────────────────────────────────────
+            // ComplaintRepository.Create, complaints.code için catalog.complaint_seq'ten
+            // nextval() ile ID üretiyor (ComplaintConfiguration.Code = ValueGeneratedNever,
+            // yani EF kendi identity/sequence'ini oluşturmuyor — orders.code'un aksine).
+            // Model bu sequence'i tanımadığı için scaffold edilen migration'da yer almaz;
+            // düşerse şikayet kaydı runtime'da 42P01 ("relation does not exist") verir.
+            // START WITH 1006: PersistenceHydrator.SeedDefaultComplaintsAsync seed verisi
+            // 1001-1005 arası kodlarla explicit insert yapıyor; çakışmayı önlemek için
+            // sequence bir sonraki değerden başlıyor.
+            migrationBuilder.Sql(
+                "CREATE SEQUENCE IF NOT EXISTS catalog.complaint_seq START WITH 1006;");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("DROP SEQUENCE IF EXISTS catalog.complaint_seq;");
+
             migrationBuilder.DropTable(
                 name: "approval_requests",
                 schema: "hitl");
+
+            migrationBuilder.DropTable(
+                name: "articles",
+                schema: "knowledge");
 
             migrationBuilder.DropTable(
                 name: "bridge_messages",
@@ -775,10 +802,6 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
             migrationBuilder.DropTable(
                 name: "sla_events",
                 schema: "analytics");
-
-            migrationBuilder.DropTable(
-                name: "workflow_definitions",
-                schema: "workflow");
 
             migrationBuilder.DropTable(
                 name: "sessions",

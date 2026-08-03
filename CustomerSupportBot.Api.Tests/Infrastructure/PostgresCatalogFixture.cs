@@ -68,11 +68,11 @@ public sealed class PostgresCatalogFixture : IAsyncLifetime
 
         await ctx.SaveChangesAsync();
 
-        // ComplaintRepository.Create nextval('catalog.complaint_seq') kullanıyor;
-        // orders.code ise identity kolonu.
+        // catalog.complaint_seq BİLEREK burada yaratılmıyor: ComplaintRepository.Create
+        // ona nextval() ile bağımlı ve sequence'i InitialCreate migration'ı oluşturuyor.
+        // Fixture kendi kopyasını yaratırsa migration'dan düşmesi testlerde görünmez olur —
+        // sequence'in migration'da unutulduğu asıl hata (42P01) tam olarak böyle kaçmıştı.
         await ctx.Database.ExecuteSqlRawAsync(
-            "CREATE SEQUENCE IF NOT EXISTS catalog.order_seq START WITH 1082; " +
-            "CREATE SEQUENCE IF NOT EXISTS catalog.complaint_seq START WITH 1006; " +
             "SELECT setval(pg_get_serial_sequence('catalog.products','id'), (SELECT MAX(id) FROM catalog.products)); " +
             // Seed satırları AÇIK kod değerleriyle (1030, 1042, …) eklendiği için identity
             // sequence'leri ilerlemiyor ve yeni kayıtlar 1'den başlıyordu — seed'in üstüne
