@@ -9,10 +9,15 @@
 //
 // Bu store cache'i yetkili kabul eder; DB sadece dayanıklılık için. Restart'ta
 // PersistenceHydrator (Faz 2 sonu) önceden hydrate eder.
+//
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - Rating kaydı küçük/sınırlı olduğu için Submit() sonrası TAM kayıt yayınlanır.
 
 using System.Collections.Concurrent;
+using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Analytics;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -21,18 +26,24 @@ namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
 public sealed class PostgresRatingStore : IRatingStore
 {
+    private const string ChannelSubmitted = "csbot:rating:submitted";
+
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresRatingStore> _logger;
+    private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, ConversationRating> _cache = new();
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
 
     public PostgresRatingStore(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
+        IMessageBusPort messageBus,
         ILogger<PostgresRatingStore> logger)
     {
         _dbFactory = dbFactory;
+        _messageBus = messageBus;
         _logger = logger;
+        _messageBus.Subscribe(ChannelSubmitted, OnRemoteSubmitted);
     }
 
     public ConversationRating Submit(string sessionId, int stars, string? feedback)
@@ -61,6 +72,7 @@ public sealed class PostgresRatingStore : IRatingStore
 
         // 2) Cache update.
         _cache.AddOrUpdate(sessionId, rating, (_, _) => rating);
+        PublishSubmitted(rating);
 
         _logger.LogInformation(
             "[Rating] Session {SessionId} rated {Stars} stars. Feedback: {Feedback}",
@@ -161,6 +173,33 @@ public sealed class PostgresRatingStore : IRatingStore
         }
 
         _logger.LogInformation("[Rating] Cache hydrate tamam: {Count} kayıt", rows.Count);
+    }
+
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void PublishSubmitted(ConversationRating rating)
+    {
+        var payload = new { nodeId = _messageBus.NodeId, rating };
+        _messageBus.Publish(ChannelSubmitted, JsonSerializer.Serialize(payload));
+    }
+
+    private void OnRemoteSubmitted(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var rating = JsonSerializer.Deserialize<ConversationRating>(root.GetProperty("rating").GetRawText());
+            if (rating is null) return;
+
+            _cache[rating.SessionId] = rating;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Rating] Redis OnRemoteSubmitted parse hatası");
+        }
     }
 }
 

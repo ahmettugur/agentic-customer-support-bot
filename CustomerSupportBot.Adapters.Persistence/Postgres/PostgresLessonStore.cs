@@ -1,11 +1,15 @@
 // Services/Persistence/PostgresLessonStore.cs
 // Hibrit Lesson store — in-memory cache + PostgreSQL write-through.
 // Singleton servis ⇒ DbContext'i IDbContextFactory üzerinden açar.
+//
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - Lesson kaydı küçük/sınırlı olduğu için Add/Update sonrası TAM kayıt yayınlanır.
 
 using System.Collections.Concurrent;
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Improvement;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using CustomerSupportBot.Domain.Model.Improvement;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -14,8 +18,11 @@ namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
 public sealed class PostgresLessonStore : ILessonStore
 {
+    private const string ChannelUpserted = "csbot:lesson:upserted";
+
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresLessonStore> _logger;
+    private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, Lesson> _cache = new();
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
@@ -24,10 +31,13 @@ public sealed class PostgresLessonStore : ILessonStore
 
     public PostgresLessonStore(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
+        IMessageBusPort messageBus,
         ILogger<PostgresLessonStore> logger)
     {
         _dbFactory = dbFactory;
+        _messageBus = messageBus;
         _logger = logger;
+        _messageBus.Subscribe(ChannelUpserted, OnRemoteUpserted);
     }
 
     public void Add(Lesson lesson)
@@ -42,6 +52,7 @@ public sealed class PostgresLessonStore : ILessonStore
             throw;
         }
         _cache[lesson.Id] = lesson;
+        PublishUpserted(lesson);
     }
 
     public Lesson? Get(string id)
@@ -62,6 +73,7 @@ public sealed class PostgresLessonStore : ILessonStore
             throw;
         }
         _cache[lesson.Id] = lesson;
+        PublishUpserted(lesson);
     }
 
     public IReadOnlyList<Lesson> GetByStatus(LessonStatus status)
@@ -171,5 +183,32 @@ public sealed class PostgresLessonStore : ILessonStore
         CreatedAt = e.CreatedAt,
         VectorMemoryId = e.VectorMemoryId
     };
+
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void PublishUpserted(Lesson lesson)
+    {
+        var payload = new { nodeId = _messageBus.NodeId, lesson };
+        _messageBus.Publish(ChannelUpserted, JsonSerializer.Serialize(payload, _json));
+    }
+
+    private void OnRemoteUpserted(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var lesson = JsonSerializer.Deserialize<Lesson>(root.GetProperty("lesson").GetRawText(), _json);
+            if (lesson is null) return;
+
+            _cache[lesson.Id] = lesson;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Lesson] Redis OnRemoteUpserted parse hatası");
+        }
+    }
 }
 

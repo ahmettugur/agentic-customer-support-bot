@@ -266,6 +266,9 @@ public sealed class PostgresChatBridge : IChatBridge
         }
         catch (Exception ex)
         {
+            // Flag'i geri al — aksi halde geçici bir DB hatası bu session'ı process ömrü
+            // boyunca "hydrate edildi ama boş" olarak kalıcı hale getirir.
+            _hydratedSessions.TryRemove(sessionId, out _);
             _logger.LogError(ex, "[Bridge] Session hydrate başarısız. Session={Session}", sessionId);
         }
     }

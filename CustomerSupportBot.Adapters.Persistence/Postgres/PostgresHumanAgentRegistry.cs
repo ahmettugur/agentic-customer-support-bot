@@ -6,11 +6,18 @@
 //   - Lazy hydrate: ilk read'de tüm kayıtlar DB'den cache'e çekilir.
 //   - Create/Update/Delete: DB + cache senkron güncellenir.
 //   - IncrementLoad/DecrementLoad: cache üzerinden per-agent lock + DB UPDATE.
+//
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - HumanAgent kaydı küçük/sınırlı olduğu için (ChatModeRegistry'deki gibi) her
+//     değişiklikte TAM kayıt yayınlanır — delta gerekmiyor.
+//   - Create/Update/IncrementLoad/DecrementLoad → csbot:humanagent:upserted.
+//   - Delete → csbot:humanagent:deleted.
 
 using System.Collections.Concurrent;
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -19,18 +26,26 @@ namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
 public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
 {
+    private const string ChannelUpserted = "csbot:humanagent:upserted";
+    private const string ChannelDeleted = "csbot:humanagent:deleted";
+
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresHumanAgentRegistry> _logger;
+    private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, HumanAgent> _agents = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
 
     public PostgresHumanAgentRegistry(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
+        IMessageBusPort messageBus,
         ILogger<PostgresHumanAgentRegistry> logger)
     {
         _dbFactory = dbFactory;
+        _messageBus = messageBus;
         _logger = logger;
+        _messageBus.Subscribe(ChannelUpserted, OnRemoteUpserted);
+        _messageBus.Subscribe(ChannelDeleted, OnRemoteDeleted);
     }
 
     // ─── IHumanAgentRegistry ───
@@ -70,6 +85,7 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
 
         UpsertToDb(agent);
         _agents[agent.Id] = agent;
+        PublishUpserted(agent);
         return agent;
     }
 
@@ -94,6 +110,7 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
             existing.Priority = input.Priority.Value;
 
         UpsertToDb(existing);
+        PublishUpserted(existing);
         return existing;
     }
 
@@ -116,6 +133,7 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
         {
             _logger.LogError(ex, "[Routing] HumanAgent DELETE başarısız. Id={Id}", id);
         }
+        PublishDeleted(id);
         return true;
     }
 
@@ -129,6 +147,7 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
             a.LastAssignedAt = DateTime.UtcNow;
         }
         UpdateLoadInDb(id, a.CurrentLoad, a.LastAssignedAt);
+        PublishUpserted(a);
         return true;
     }
 
@@ -141,6 +160,7 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
             a.CurrentLoad = Math.Max(a.CurrentLoad - 1, 0);
         }
         UpdateLoadInDb(id, a.CurrentLoad, a.LastAssignedAt);
+        PublishUpserted(a);
         return true;
     }
 
@@ -183,12 +203,15 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
                     _agents[e.Id] = MapToModel(e);
 
                 _logger.LogInformation("[Routing] {Count} human agent DB'den yüklendi", entities.Count);
+                // _hydrated yalnızca başarıdan sonra set edilir — aksi halde geçici bir DB
+                // hatası bu registry'yi process ömrü boyunca "hydrate edildi ama boş" bırakır
+                // ve bir sonraki çağrı DB'yi tekrar denemeden geçer.
+                _hydrated = true;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[Routing] HumanAgent hydration başarısız");
             }
-            _hydrated = true;
         }
     }
 
@@ -288,6 +311,58 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
             .Select(s => s.Trim().ToLowerInvariant())
             .Distinct(StringComparer.Ordinal)
             .ToList();
+    }
+
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void PublishUpserted(HumanAgent agent)
+    {
+        var payload = new { nodeId = _messageBus.NodeId, agent };
+        _messageBus.Publish(ChannelUpserted, JsonSerializer.Serialize(payload));
+    }
+
+    private void OnRemoteUpserted(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var agent = JsonSerializer.Deserialize<HumanAgent>(root.GetProperty("agent").GetRawText());
+            if (agent is null) return;
+
+            _agents[agent.Id] = agent;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Routing] Redis OnRemoteUpserted parse hatası");
+        }
+    }
+
+    private void PublishDeleted(string id)
+    {
+        var payload = new { nodeId = _messageBus.NodeId, id };
+        _messageBus.Publish(ChannelDeleted, JsonSerializer.Serialize(payload));
+    }
+
+    private void OnRemoteDeleted(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var id = root.GetProperty("id").GetString();
+            if (id is null) return;
+
+            _agents.TryRemove(id, out _);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Routing] Redis OnRemoteDeleted parse hatası");
+        }
     }
 }
 

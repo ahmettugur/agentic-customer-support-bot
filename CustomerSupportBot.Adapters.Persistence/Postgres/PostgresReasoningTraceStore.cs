@@ -11,11 +11,19 @@
 // olan eski trace'leri Error="terminated_by_restart" olarak işaretler.
 //
 // Okuma stratejisi: Cache primary; cache miss → DB fallback (Get yalnız).
+//
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - Update() YAYINLAMAZ — DB write-storm önlemiyle aynı gerekçeyle (workflow
+//     boyunca onlarca kez çağrılır), her seferinde Redis'e büyük trace JSON'u
+//     yayınlamak aynı sorunu Redis'e taşırdı.
+//   - StartTrace (skeleton) ve Complete (tam snapshot) — DB'ye de yazılan, düşük
+//     frekanslı noktalar — TAM trace'i yayınlar.
 
 using System.Collections.Concurrent;
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -24,8 +32,12 @@ namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
 public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
 {
+    private const string ChannelStarted = "csbot:trace:started";
+    private const string ChannelCompleted = "csbot:trace:completed";
+
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresReasoningTraceStore> _logger;
+    private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, ReasoningTrace> _byId = new();
     private readonly ConcurrentQueue<string> _insertionOrder = new();
     private readonly int _maxCacheCapacity;
@@ -34,12 +46,16 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
 
     public PostgresReasoningTraceStore(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
+        IMessageBusPort messageBus,
         ILogger<PostgresReasoningTraceStore> logger,
         int maxCacheCapacity = 500)
     {
         _dbFactory = dbFactory;
+        _messageBus = messageBus;
         _logger = logger;
         _maxCacheCapacity = maxCacheCapacity;
+        _messageBus.Subscribe(ChannelStarted, OnRemoteStarted);
+        _messageBus.Subscribe(ChannelCompleted, OnRemoteCompleted);
     }
 
     public ReasoningTrace StartTrace(string sessionId, string userQuery)
@@ -65,6 +81,7 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
             // Cache'te tut — workflow kesintisiz devam etsin.
         }
 
+        PublishStarted(trace);
         return trace;
     }
 
@@ -93,6 +110,8 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
         {
             _logger.LogError(ex, "[Trace] Complete UPDATE başarısız. TraceId={TraceId}", traceId);
         }
+
+        PublishCompleted(trace);
     }
 
     public ReasoningTrace? Get(string traceId)
@@ -292,6 +311,49 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
         }
 
         _logger.LogInformation("[Trace] Cache hydrate: {Count} trace", rows.Count);
+    }
+
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void PublishStarted(ReasoningTrace trace)
+    {
+        var payload = new { nodeId = _messageBus.NodeId, trace };
+        _messageBus.Publish(ChannelStarted, JsonSerializer.Serialize(payload));
+    }
+
+    private void OnRemoteStarted(string val) => ApplyRemoteTrace(val, isStarted: true);
+
+    private void PublishCompleted(ReasoningTrace trace)
+    {
+        var payload = new { nodeId = _messageBus.NodeId, trace };
+        _messageBus.Publish(ChannelCompleted, JsonSerializer.Serialize(payload));
+    }
+
+    private void OnRemoteCompleted(string val) => ApplyRemoteTrace(val, isStarted: false);
+
+    private void ApplyRemoteTrace(string val, bool isStarted)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var trace = JsonSerializer.Deserialize<ReasoningTrace>(root.GetProperty("trace").GetRawText());
+            if (trace is null) return;
+
+            var isNew = !_byId.ContainsKey(trace.TraceId);
+            _byId[trace.TraceId] = trace;
+            if (isNew)
+            {
+                _insertionOrder.Enqueue(trace.TraceId);
+                TrimCache();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Trace] Redis OnRemote{Event} parse hatası", isStarted ? "Started" : "Completed");
+        }
     }
 }
 

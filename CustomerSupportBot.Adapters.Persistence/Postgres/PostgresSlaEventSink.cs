@@ -2,10 +2,16 @@
 // Hibrit SLA Event sink — in-memory ring buffer + PostgreSQL write-through.
 // Son 500 olay bellekte tutulur; LastEmittedAt aynı target+severity için
 // tekrar event üretilmesini engeller. Singleton servis.
+//
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - Record() sonrası TAM event yayınlanır — uzak pod'lar kendi ring buffer'ına
+//     ekler ve EventRecorded'ı tetikler (SLA dashboard'un canlı akışı için önemli).
 
 using System.Collections.Concurrent;
+using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Analytics;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -14,8 +20,11 @@ namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
 public sealed class PostgresSlaEventSink : ISlaEventSink
 {
+    private const string ChannelRecorded = "csbot:sla:recorded";
+
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresSlaEventSink> _logger;
+    private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentQueue<SlaEvent> _events = new();
     private readonly ConcurrentDictionary<string, DateTime> _lastEmittedAt = new();
     private readonly object _hydrationLock = new();
@@ -26,10 +35,13 @@ public sealed class PostgresSlaEventSink : ISlaEventSink
 
     public PostgresSlaEventSink(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
+        IMessageBusPort messageBus,
         ILogger<PostgresSlaEventSink> logger)
     {
         _dbFactory = dbFactory;
+        _messageBus = messageBus;
         _logger = logger;
+        _messageBus.Subscribe(ChannelRecorded, OnRemoteRecorded);
     }
 
     public void Record(SlaEvent evt)
@@ -55,6 +67,8 @@ public sealed class PostgresSlaEventSink : ISlaEventSink
 
         try { EventRecorded?.Invoke(this, evt); }
         catch (Exception ex) { _logger.LogWarning(ex, "EventRecorded handler failed"); }
+
+        PublishRecorded(evt);
     }
 
     public IReadOnlyList<SlaEvent> GetRecent(int count = 100)
@@ -138,5 +152,37 @@ public sealed class PostgresSlaEventSink : ISlaEventSink
 
     private static string Key(string kind, string targetId, string severity)
         => $"{kind}|{targetId}|{severity}";
+
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void PublishRecorded(SlaEvent evt)
+    {
+        var payload = new { nodeId = _messageBus.NodeId, evt };
+        _messageBus.Publish(ChannelRecorded, JsonSerializer.Serialize(payload));
+    }
+
+    private void OnRemoteRecorded(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var evt = JsonSerializer.Deserialize<SlaEvent>(root.GetProperty("evt").GetRawText());
+            if (evt is null) return;
+
+            _events.Enqueue(evt);
+            while (_events.Count > Capacity && _events.TryDequeue(out _)) { }
+            _lastEmittedAt[Key(evt.Kind, evt.TargetId, evt.Severity)] = evt.Timestamp;
+
+            try { EventRecorded?.Invoke(this, evt); }
+            catch (Exception ex) { _logger.LogWarning(ex, "EventRecorded handler (remote) failed"); }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[SLA] Redis OnRemoteRecorded parse hatası");
+        }
+    }
 }
 

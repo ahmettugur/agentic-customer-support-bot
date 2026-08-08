@@ -1,11 +1,15 @@
 // Services/Persistence/PostgresCustomerProfileStore.cs
 // Hibrit CustomerProfile store — in-memory cache + PostgreSQL write-through.
 // Singleton servis ⇒ DbContext'i IDbContextFactory üzerinden açar.
+//
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - Profil kaydı küçük/sınırlı olduğu için Upsert/Delete sonrası TAM kayıt yayınlanır.
 
 using System.Collections.Concurrent;
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Personalization;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -14,8 +18,12 @@ namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
 public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
 {
+    private const string ChannelUpserted = "csbot:customerprofile:upserted";
+    private const string ChannelDeleted = "csbot:customerprofile:deleted";
+
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresCustomerProfileStore> _logger;
+    private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, CustomerProfile> _cache =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly object _hydrationLock = new();
@@ -25,10 +33,14 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
 
     public PostgresCustomerProfileStore(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
+        IMessageBusPort messageBus,
         ILogger<PostgresCustomerProfileStore> logger)
     {
         _dbFactory = dbFactory;
+        _messageBus = messageBus;
         _logger = logger;
+        _messageBus.Subscribe(ChannelUpserted, OnRemoteUpserted);
+        _messageBus.Subscribe(ChannelDeleted, OnRemoteDeleted);
     }
 
     public CustomerProfile? Get(string customerId)
@@ -72,6 +84,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
         }
 
         _cache[profile.CustomerId] = profile;
+        PublishUpserted(profile);
     }
 
     public bool Delete(string customerId)
@@ -89,7 +102,9 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
                 "[CustomerProfile] DB DELETE başarısız. CustomerId={CustomerId}", customerId);
         }
 
-        return _cache.TryRemove(customerId, out _);
+        var removed = _cache.TryRemove(customerId, out _);
+        PublishDeleted(customerId);
+        return removed;
     }
 
     public IReadOnlyList<CustomerProfile> List(int take = 100)
@@ -217,5 +232,58 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
         LastInteractionAt = e.LastInteractionAt,
         LastConsolidatedAt = e.LastConsolidatedAt
     };
+
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void PublishUpserted(CustomerProfile profile)
+    {
+        var payload = new { nodeId = _messageBus.NodeId, profile };
+        _messageBus.Publish(ChannelUpserted, JsonSerializer.Serialize(payload, _json));
+    }
+
+    private void OnRemoteUpserted(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var profile = JsonSerializer.Deserialize<CustomerProfile>(
+                root.GetProperty("profile").GetRawText(), _json);
+            if (profile is null) return;
+
+            _cache[profile.CustomerId] = profile;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[CustomerProfile] Redis OnRemoteUpserted parse hatası");
+        }
+    }
+
+    private void PublishDeleted(string customerId)
+    {
+        var payload = new { nodeId = _messageBus.NodeId, customerId };
+        _messageBus.Publish(ChannelDeleted, JsonSerializer.Serialize(payload));
+    }
+
+    private void OnRemoteDeleted(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var customerId = root.GetProperty("customerId").GetString();
+            if (customerId is null) return;
+
+            _cache.TryRemove(customerId, out _);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[CustomerProfile] Redis OnRemoteDeleted parse hatası");
+        }
+    }
 }
 

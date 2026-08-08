@@ -13,11 +13,22 @@
 // Basitlik için ExtractAndUpdateState içindeki regex/duygu/intent kuralları
 // InMemorySessionManager'dan birebir kopyalandı (tek doğruluk kaynağı için
 // ortak helper'a refactor Faz 4 cleanup'ında düşünülebilir).
+//
+// Yatay ölçeklendirme (Redis pub/sub):
+//   - Session state (küçük, sınırlı boyut) Update() sonrası TAM olarak yayınlanır —
+//     ChatModeRegistry/EscalationSink'teki desenle aynı.
+//   - Mesaj geçmişi TAM listeyi değil, sadece DELTA'yı yayınlar (her mesajda büyüyen
+//     bir listenin tamamını göndermek israf olurdu). Uzak pod bu session'ı daha önce
+//     hiç görmediyse delta'yı yok sayar — ilk gerçek erişimde EnsureSessionHydrated
+//     zaten DB'den TAM geçmişi çekip cache'i baştan kuracaktır (bkz. HydrateSessionAsync,
+//     list.Clear() + DB'den yeniden doldurma), yani delta'dan doğan eksik/kısmi liste
+//     kendi kendini onarır.
 
 using System.Collections.Concurrent;
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
+using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using Microsoft.EntityFrameworkCore;
@@ -27,9 +38,14 @@ namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
 public sealed class PostgresSessionManager : ISessionManager
 {
+    private const string ChannelSessionUpdated = "csbot:session:updated";
+    private const string ChannelHistoryChanged = "csbot:session:history";
+    private const string ChannelSessionCleared = "csbot:session:cleared";
+
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresSessionManager> _logger;
     private readonly IAppDistributedLock _distributedLock;
+    private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
     private readonly ConcurrentDictionary<string, List<ConversationMessage>> _messageHistory = new();
     private readonly ConcurrentDictionary<string, byte> _hydratedSessions = new();
@@ -39,11 +55,16 @@ public sealed class PostgresSessionManager : ISessionManager
     public PostgresSessionManager(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
         IAppDistributedLock distributedLock,
+        IMessageBusPort messageBus,
         ILogger<PostgresSessionManager> logger)
     {
         _dbFactory = dbFactory;
         _distributedLock = distributedLock;
+        _messageBus = messageBus;
         _logger = logger;
+        _messageBus.Subscribe(ChannelSessionUpdated, OnRemoteSessionUpdated);
+        _messageBus.Subscribe(ChannelHistoryChanged, OnRemoteHistoryChanged);
+        _messageBus.Subscribe(ChannelSessionCleared, OnRemoteSessionCleared);
     }
 
     // ─── ISessionManager ───
@@ -90,6 +111,7 @@ public sealed class PostgresSessionManager : ISessionManager
                 "[Session] UPSERT başarısız. Id={Id}", session.SessionId);
             throw ExceptionTranslator.Translate(ex, $"Session güncellenemedi: {session.SessionId}");
         }
+        PublishSessionUpdated(session);
     }
 
     public IReadOnlyList<AgentSession> GetAll()
@@ -172,6 +194,11 @@ public sealed class PostgresSessionManager : ISessionManager
                 "[Session] AddExchange INSERT başarısız. Session={Session}", sessionId);
             throw ExceptionTranslator.Translate(ex, $"Mesaj kaydedilemedi: {sessionId}");
         }
+        PublishHistoryAppended(sessionId,
+        [
+            new ConversationMessage(ConversationRoles.User, userQuery),
+            new ConversationMessage(ConversationRoles.Assistant, assistantResponse)
+        ]);
 
         ExtractAndUpdateStateCore(session, userQuery, assistantResponse, priorHistorySnapshot);
     }
@@ -215,6 +242,12 @@ public sealed class PostgresSessionManager : ISessionManager
                 "[Session] AppendAssistantMessage DB başarısız. Session={Session}", sessionId);
             throw ExceptionTranslator.Translate(ex, $"Assistant mesajı kaydedilemedi: {sessionId}");
         }
+
+        var assistantMsg = new ConversationMessage(ConversationRoles.Assistant, text);
+        if (replacedLastEmpty)
+            PublishHistoryReplacedLast(sessionId, assistantMsg);
+        else
+            PublishHistoryAppended(sessionId, [assistantMsg]);
     }
 
     public void AppendUserMessage(string sessionId, string text)
@@ -242,6 +275,7 @@ public sealed class PostgresSessionManager : ISessionManager
                 "[Session] AppendUserMessage DB başarısız. Session={Session}", sessionId);
             throw ExceptionTranslator.Translate(ex, $"Kullanıcı mesajı kaydedilemedi: {sessionId}");
         }
+        PublishHistoryAppended(sessionId, [new ConversationMessage(ConversationRoles.User, text)]);
     }
 
     public void ClearSession(string sessionId)
@@ -257,6 +291,7 @@ public sealed class PostgresSessionManager : ISessionManager
                 "[Session] ClearSession DB başarısız. Session={Session}", sessionId);
             throw ExceptionTranslator.Translate(ex, $"Session silinemedi: {sessionId}");
         }
+        PublishSessionCleared(sessionId);
     }
 
     public List<SessionInfo> GetAllSessions()
@@ -442,6 +477,10 @@ public sealed class PostgresSessionManager : ISessionManager
         try { HydrateSessionAsync(sessionId).GetAwaiter().GetResult(); }
         catch (Exception ex)
         {
+            // Flag'i geri al — aksi halde geçici bir DB hatası (timeout, deadlock) bu
+            // session'ı process ömrü boyunca "hydrate edildi ama boş" olarak kalıcı hale
+            // getirir; bir sonraki istek DB'yi tekrar denemeden geçmişsiz devam eder.
+            _hydratedSessions.TryRemove(sessionId, out _);
             _logger.LogError(ex, "[Session] Hydrate başarısız. Id={Id}", sessionId);
         }
     }
@@ -533,5 +572,136 @@ public sealed class PostgresSessionManager : ISessionManager
         _logger.LogInformation("[Session] Metadata hydrate: {Count} session", sessions.Count);
     }
 
+    // ─── Redis cross-pod handlers ─────────────────────────────────────────────
+
+    private void PublishSessionUpdated(AgentSession session)
+    {
+        var payload = new
+        {
+            nodeId = _messageBus.NodeId,
+            sessionId = session.SessionId,
+            createdAt = session.CreatedAt,
+            lastActivity = session.LastActivity,
+            state = session.State
+        };
+        _messageBus.Publish(ChannelSessionUpdated, JsonSerializer.Serialize(payload));
+    }
+
+    private void OnRemoteSessionUpdated(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var sessionId = root.GetProperty("sessionId").GetString()!;
+            var state = JsonSerializer.Deserialize<SessionState>(root.GetProperty("state").GetRawText())
+                ?? new SessionState();
+
+            _sessions[sessionId] = new AgentSession
+            {
+                SessionId = sessionId,
+                CreatedAt = root.GetProperty("createdAt").GetDateTime(),
+                LastActivity = root.GetProperty("lastActivity").GetDateTime(),
+                State = state
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Session] Redis OnRemoteSessionUpdated parse hatası");
+        }
+    }
+
+    /// <summary>
+    /// Mesaj geçmişine DELTA yayınlar (tam listeyi değil) — bkz. dosya başındaki
+    /// "Yatay ölçeklendirme" notu.
+    /// </summary>
+    private void PublishHistoryAppended(string sessionId, IReadOnlyList<ConversationMessage> messages)
+    {
+        var payload = new
+        {
+            nodeId = _messageBus.NodeId,
+            sessionId,
+            op = "append",
+            messages
+        };
+        _messageBus.Publish(ChannelHistoryChanged, JsonSerializer.Serialize(payload));
+    }
+
+    private void PublishHistoryReplacedLast(string sessionId, ConversationMessage message)
+    {
+        var payload = new
+        {
+            nodeId = _messageBus.NodeId,
+            sessionId,
+            op = "replaceLast",
+            messages = new[] { message }
+        };
+        _messageBus.Publish(ChannelHistoryChanged, JsonSerializer.Serialize(payload));
+    }
+
+    private void OnRemoteHistoryChanged(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var sessionId = root.GetProperty("sessionId").GetString()!;
+            var op = root.GetProperty("op").GetString();
+            var incoming = JsonSerializer.Deserialize<List<ConversationMessage>>(
+                root.GetProperty("messages").GetRawText()) ?? [];
+            if (incoming.Count == 0) return;
+
+            // Bu session bu pod'da hiç görülmediyse eklemiyoruz — kısmi/eksik bir liste
+            // oluşturmak yerine ilk gerçek erişimde EnsureSessionHydrated'ın DB'den TAM
+            // geçmişi çekmesine bırakıyoruz.
+            if (!_messageHistory.TryGetValue(sessionId, out var history)) return;
+
+            lock (history)
+            {
+                if (op == "replaceLast" && history.Count > 0
+                    && history[^1].Role == ConversationRoles.Assistant)
+                {
+                    history[^1] = incoming[0];
+                }
+                else
+                {
+                    history.AddRange(incoming);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Session] Redis OnRemoteHistoryChanged parse hatası");
+        }
+    }
+
+    private void PublishSessionCleared(string sessionId)
+    {
+        var payload = new { nodeId = _messageBus.NodeId, sessionId };
+        _messageBus.Publish(ChannelSessionCleared, JsonSerializer.Serialize(payload));
+    }
+
+    private void OnRemoteSessionCleared(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var sessionId = root.GetProperty("sessionId").GetString()!;
+            _sessions.TryRemove(sessionId, out _);
+            _messageHistory.TryRemove(sessionId, out _);
+            _hydratedSessions.TryRemove(sessionId, out _);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Session] Redis OnRemoteSessionCleared parse hatası");
+        }
+    }
 }
 
