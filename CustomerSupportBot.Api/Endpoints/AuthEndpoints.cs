@@ -35,6 +35,28 @@ public static class AuthEndpoints
         })
         .RequireAuthorization();
 
+        group.MapPost("/customer/register",
+            async (CustomerRegisterRequest req, ICustomerAuthService customerAuth, ITokenService tokens) =>
+        {
+            var (user, error) = await customerAuth.RegisterAsync(req.Email, req.Password, req.CustomerId);
+            if (user is null) return Results.BadRequest(new { error });
+
+            var auth = await tokens.IssueAsync(user);
+            return Results.Ok(auth);
+        })
+        .AllowAnonymous();
+
+        group.MapPost("/customer/login",
+            async (CustomerLoginRequest req, ICustomerAuthService customerAuth, ITokenService tokens) =>
+        {
+            var user = await customerAuth.AuthenticateAsync(req.Email, req.Password);
+            if (user is null) return Results.Unauthorized();
+
+            var auth = await tokens.IssueAsync(user);
+            return Results.Ok(auth);
+        })
+        .AllowAnonymous();
+
         return app;
     }
 }

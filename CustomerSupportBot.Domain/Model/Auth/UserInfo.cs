@@ -11,4 +11,5 @@ public sealed record UserInfo(
     string? LinkedAgentId,
     bool IsActive,
     DateTime CreatedAt,
-    DateTime? LastLoginAt);
+    DateTime? LastLoginAt,
+    string? LinkedCustomerId = null);

@@ -40,6 +40,31 @@ public sealed class EfUserAuthRepository : IUserAuthRepository
         await ctx.SaveChangesAsync(ct);
     }
 
+    public async Task<UserInfo?> CreateAsync(
+        string username, string passwordHash, string role, string? linkedCustomerId, CancellationToken ct = default)
+    {
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+
+        var exists = await ctx.Users.AnyAsync(u => u.Username == username, ct);
+        if (exists) return null;
+
+        var entity = new Entities.Auth.UserEntity
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Username = username,
+            PasswordHash = passwordHash,
+            Role = role,
+            LinkedCustomerId = linkedCustomerId,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        ctx.Users.Add(entity);
+        await ctx.SaveChangesAsync(ct);
+
+        return Map(entity);
+    }
+
     private static UserInfo Map(Entities.Auth.UserEntity e) =>
-        new(e.Id, e.Username, e.PasswordHash, e.Role, e.LinkedAgentId, e.IsActive, e.CreatedAt, e.LastLoginAt);
+        new(e.Id, e.Username, e.PasswordHash, e.Role, e.LinkedAgentId, e.IsActive, e.CreatedAt, e.LastLoginAt,
+            e.LinkedCustomerId);
 }

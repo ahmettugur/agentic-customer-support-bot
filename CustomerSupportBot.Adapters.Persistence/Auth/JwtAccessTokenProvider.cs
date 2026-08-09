@@ -41,6 +41,8 @@ public sealed class JwtAccessTokenProvider : IJwtAccessTokenProvider
         };
         if (!string.IsNullOrWhiteSpace(user.LinkedAgentId))
             claims.Add(new Claim("linked_agent_id", user.LinkedAgentId));
+        if (!string.IsNullOrWhiteSpace(user.LinkedCustomerId))
+            claims.Add(new Claim("linked_customer_id", user.LinkedCustomerId));
 
         var token = new JwtSecurityToken(
             issuer: _options.Issuer,

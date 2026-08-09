@@ -22,8 +22,21 @@ public class AgentSession
 /// </summary>
 public class SessionState
 {
-    /// <summary>Tanımlanan müşteri kimlik numarası (ör: "1001").</summary>
+    /// <summary>
+    /// LLM'in konuşma metninden çıkarım yaptığı müşteri kimlik numarası (ör: "1001").
+    /// Bu alan her turda yeniden yazılabilir (bkz. SessionStateExtractor) — kullanıcı
+    /// başkasının numarasını söyleyebileceği için GÜVENLİ DEĞİLDİR, sadece kişiselleştirme/
+    /// bağlam amaçlıdır. Onay gerektiren aksiyonlar (sipariş/iade/iptal) bunun yerine
+    /// <see cref="AuthenticatedCustomerId"/>'yi kullanır.
+    /// </summary>
     public string? CustomerId { get; set; }
+
+    /// <summary>
+    /// Login'li müşterinin JWT'den doğrulanmış kimlik numarası. LLM çıkarımından
+    /// (<see cref="CustomerId"/>) farklı olarak login sonrası bir kez set edilir ve
+    /// oturum boyunca YENİDEN YAZILMAZ — onay gerektiren tool'ların tek güvenilir kaynağı budur.
+    /// </summary>
+    public string? AuthenticatedCustomerId { get; set; }
 
     /// <summary>Mevcut kullanıcı niyeti (ör: "sipariş_sorgulama", "ürün_bilgisi").</summary>
     public string? CurrentIntent { get; set; }

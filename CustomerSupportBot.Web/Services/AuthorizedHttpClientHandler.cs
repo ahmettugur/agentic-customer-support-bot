@@ -31,12 +31,14 @@ public sealed class AuthorizedHttpClientHandler(
             return response;
 
         // 401 — refresh dene
+        var lastKnownRole = (await store.ReadAsync())?.Role;
         var refreshed = await authService.TryRefreshAsync();
         if (refreshed is null)
         {
             authState.NotifyStateChanged();
             var returnTo = Uri.EscapeDataString(nav.Uri);
-            nav.NavigateTo($"/login?return={returnTo}", forceLoad: false);
+            var loginPage = lastKnownRole == "Customer" ? "/customer-login" : "/login";
+            nav.NavigateTo($"{loginPage}?return={returnTo}", forceLoad: false);
             return response;
         }
 

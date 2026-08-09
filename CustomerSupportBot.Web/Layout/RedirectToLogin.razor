@@ -4,6 +4,12 @@
     protected override void OnInitialized()
     {
         var returnTo = Uri.EscapeDataString(Nav.Uri);
-        Nav.NavigateTo($"/login?return={returnTo}", forceLoad: false);
+        // Admin/agent sayfaları (/admin/*) staff login'e, geri kalan her şey (chat = "/")
+        // müşteri login'ine yönlendirilir — iki farklı kimlik/rol alanı, iki farklı giriş sayfası.
+        var relativePath = Nav.ToBaseRelativePath(Nav.Uri);
+        var target = relativePath.StartsWith("admin", StringComparison.OrdinalIgnoreCase)
+            ? "/login"
+            : "/customer-login";
+        Nav.NavigateTo($"{target}?return={returnTo}", forceLoad: false);
     }
 }

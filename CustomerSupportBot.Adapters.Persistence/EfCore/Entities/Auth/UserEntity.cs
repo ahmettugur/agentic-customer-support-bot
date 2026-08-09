@@ -11,6 +11,9 @@ public sealed class UserEntity
     public string Role { get; set; } = "Admin";
     /// <summary>Agent rolündeki kullanıcının bağlı olduğu HumanAgent kaydı (opsiyonel).</summary>
     public string? LinkedAgentId { get; set; }
+
+    /// <summary>Customer rolündeki kullanıcının bağlı olduğu CustomerEntity.Id (opsiyonel).</summary>
+    public string? LinkedCustomerId { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }

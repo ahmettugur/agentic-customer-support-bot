@@ -38,6 +38,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<UserEntity>
             .HasColumnName("linked_agent_id")
             .HasMaxLength(32);
 
+        builder.Property(u => u.LinkedCustomerId)
+            .HasColumnName("linked_customer_id")
+            .HasMaxLength(32);
+
         builder.Property(u => u.IsActive)
             .HasColumnName("is_active")
             .HasDefaultValue(true)

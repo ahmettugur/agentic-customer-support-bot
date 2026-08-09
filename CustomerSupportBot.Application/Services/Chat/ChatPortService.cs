@@ -46,19 +46,34 @@ public sealed class ChatPortService : IChatPort
     public async Task<ChatResponse> HandleAsync(ChatRequest request, CancellationToken ct = default)
     {
         var query = request.Query;
-        var session = _sessions.GetOrCreate(request.SessionId);
+        var session = await _sessions.GetOrCreateAsync(request.SessionId, ct);
         var sessionId = session.SessionId;
-        var history = _sessions.GetHistory(sessionId);
+        await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
+        var history = await _sessions.GetHistoryAsync(sessionId, ct);
 
         var reasoningResult = await _reasoning.ReasonAsync(query, session, history, ct);
 
-        using var approvalScope = _approvalContext.SetScope(sessionId, null, query);
+        using var approvalScope = _approvalContext.SetScope(sessionId, null, query, session.State.AuthenticatedCustomerId);
         var response = await _team.RunAsync(query, history, session, reasoningResult, ct);
 
-        _sessionState.UpdateSessionIntent(session, reasoningResult.Intent);
-        _sessions.AddExchange(sessionId, query, response);
+        await _sessionState.UpdateSessionIntentAsync(session, reasoningResult.Intent, ct);
+        await _sessions.AddExchangeAsync(sessionId, query, response, ct);
 
         return new ChatResponse(response, sessionId, reasoningResult);
+    }
+
+    /// <summary>
+    /// Login'li müşterinin JWT'den doğrulanmış kimliğini session'a bir kez bağlar — bir sonraki
+    /// turlarda tekrar yazılmaz (session zaten bağlıysa no-op), böylece onay gerektiren tool'lar
+    /// için güvenilir tek kaynak kalıcı olur.
+    /// </summary>
+    private async Task BindAuthenticatedCustomerAsync(AgentSession session, string? customerId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(customerId) || session.State.AuthenticatedCustomerId is not null)
+            return;
+
+        session.State.AuthenticatedCustomerId = customerId;
+        await _sessions.UpdateAsync(session, ct);
     }
 
     /// <inheritdoc/>
@@ -67,8 +82,9 @@ public sealed class ChatPortService : IChatPort
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var query = request.Query;
-        var session = _sessions.GetOrCreate(request.SessionId);
+        var session = await _sessions.GetOrCreateAsync(request.SessionId, ct);
         var sessionId = session.SessionId;
+        await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
 
         yield return new StreamEvent(StreamEventTypes.Session, new SessionEventPayload(sessionId));
 
@@ -84,13 +100,13 @@ public sealed class ChatPortService : IChatPort
             });
             if (!string.IsNullOrWhiteSpace(query))
             {
-                _sessions.AddExchange(sessionId, query, "");
+                await _sessions.AddExchangeAsync(sessionId, query, "", ct);
                 _chatBridge.PublishUserMessage(sessionId, query);
             }
             yield break;
         }
 
-        var history = _sessions.GetHistory(sessionId);
+        var history = await _sessions.GetHistoryAsync(sessionId, ct);
 
         // Reasoning stream
         ReasoningResult? reasoningResult = null;
@@ -100,12 +116,12 @@ public sealed class ChatPortService : IChatPort
             if (evt.Type == StreamEventTypes.ReasoningComplete && evt.Data is ReasoningResult rr)
             {
                 reasoningResult = rr;
-                _sessionState.UpdateSessionIntent(session, rr.Intent);
+                await _sessionState.UpdateSessionIntentAsync(session, rr.Intent, ct);
                 _sessionState.UpdateSessionSentiment(session, rr);
             }
         }
 
-        using var approvalScope = _approvalContext.SetScope(sessionId, null, query);
+        using var approvalScope = _approvalContext.SetScope(sessionId, null, query, session.State.AuthenticatedCustomerId);
 
         // Workflow stream
         var responseBuilder = new System.Text.StringBuilder();
@@ -119,7 +135,7 @@ public sealed class ChatPortService : IChatPort
         }
 
         var fullResponse = responseBuilder.ToString().TrimEnd();
-        _sessionState.PersistExchange(sessionId, query, fullResponse, _chatBridge);
+        await _sessionState.PersistExchangeAsync(sessionId, query, fullResponse, _chatBridge, ct);
 
         // Sentiment events
         var alert = _sessionState.CheckSentimentAlert(session);

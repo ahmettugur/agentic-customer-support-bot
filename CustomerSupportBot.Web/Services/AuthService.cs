@@ -11,13 +11,36 @@ public sealed class AuthService(HttpClient http, AuthTokenStore store)
     public async Task<AuthTokenData> LoginAsync(string username, string password)
     {
         var response = await http.PostAsJsonAsync("/auth/login", new { username, password });
+        return await ReadAuthResponseAsync(response, "Login başarısız");
+    }
 
+    public async Task<AuthTokenData> CustomerLoginAsync(string email, string password)
+    {
+        var response = await http.PostAsJsonAsync("/auth/customer/login", new { email, password });
+        return await ReadAuthResponseAsync(response, "Giriş başarısız");
+    }
+
+    public async Task<AuthTokenData> CustomerRegisterAsync(string email, string password, string customerId)
+    {
+        var response = await http.PostAsJsonAsync("/auth/customer/register", new { email, password, customerId });
+        return await ReadAuthResponseAsync(response, "Kayıt başarısız");
+    }
+
+    private async Task<AuthTokenData> ReadAuthResponseAsync(HttpResponseMessage response, string errorPrefix)
+    {
         if (!response.IsSuccessStatusCode)
         {
-            var msg = await response.Content.ReadAsStringAsync();
+            string? msg = null;
+            try
+            {
+                var errorBody = await response.Content.ReadFromJsonAsync<ErrorBody>();
+                msg = errorBody?.Error;
+            }
+            catch { /* body JSON değilse (ör. boş 401) alttaki generic mesaja düş */ }
+
             throw new InvalidOperationException(
                 string.IsNullOrWhiteSpace(msg)
-                    ? $"Login başarısız (HTTP {(int)response.StatusCode})"
+                    ? $"{errorPrefix} (HTTP {(int)response.StatusCode})"
                     : msg);
         }
 
@@ -89,4 +112,6 @@ public sealed class AuthService(HttpClient http, AuthTokenStore store)
             tcs.SetResult();
         }
     }
+
+    private sealed record ErrorBody(string? Error);
 }

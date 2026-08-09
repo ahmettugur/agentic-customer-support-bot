@@ -1,0 +1,149 @@
+@page "/customer-login"
+@layout EmptyLayout
+@inject AuthService AuthSvc
+@inject AppAuthStateProvider AuthState
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+
+<link rel="stylesheet" href="css/login.css" />
+
+<div class="login-page-wrap">
+    <div class="login-card">
+        <div class="login-logo" aria-hidden="true">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+        </div>
+        <h1>@(_mode == Mode.Register ? "Hesap Oluştur" : "Müşteri Girişi")</h1>
+        <p class="subtitle">Customer Support Bot</p>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="login-error visible" role="alert" aria-live="polite">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                @_error
+            </div>
+        }
+
+        <EditForm Model="_model" OnValidSubmit="HandleSubmitAsync" class="login-form">
+            <DataAnnotationsValidator />
+
+            <label for="email">E-posta</label>
+            <InputText id="email" @bind-Value="_model.Email"
+                       autocomplete="email" autofocus
+                       aria-required="true" />
+
+            <label for="password">Parola</label>
+            <div class="password-wrapper">
+                <InputText id="password" type="@(_showPassword ? "text" : "password")"
+                           @bind-Value="_model.Password"
+                           autocomplete="@(_mode == Mode.Register ? "new-password" : "current-password")"
+                           aria-required="true" />
+                <button type="button" class="btn-show-password"
+                        @onclick="() => _showPassword = !_showPassword"
+                        aria-label="@(_showPassword ? "Parolayı gizle" : "Parolayı göster")"
+                        title="@(_showPassword ? "Gizle" : "Göster")">
+                    @if (_showPassword)
+                    {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" x2="23" y1="1" y2="23"/></svg>
+                    }
+                    else
+                    {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    }
+                </button>
+            </div>
+
+            @if (_mode == Mode.Register)
+            {
+                <label for="customerId">Müşteri Kimlik Numarası</label>
+                <InputText id="customerId" @bind-Value="_model.CustomerId"
+                           placeholder="ör. 1027"
+                           aria-required="true" />
+            }
+
+            <button type="submit" id="loginBtn" disabled="@_loading"
+                    aria-busy="@_loading">
+                @if (_loading)
+                {
+                    <span class="login-spinner" aria-hidden="true"></span>
+                }
+                @(_loading ? "İşleniyor…" : (_mode == Mode.Register ? "Hesap Oluştur" : "Giriş Yap"))
+            </button>
+        </EditForm>
+
+        <p class="login-footer">
+            @if (_mode == Mode.Register)
+            {
+                <span>Zaten hesabın var mı? <a href="javascript:void(0)" @onclick="() => SwitchMode(Mode.Login)">Giriş yap</a></span>
+            }
+            else
+            {
+                <span>Hesabın yok mu? <a href="javascript:void(0)" @onclick="() => SwitchMode(Mode.Register)">Kayıt ol</a></span>
+            }
+        </p>
+    </div>
+</div>
+
+@code {
+    private enum Mode { Login, Register }
+    private Mode _mode = Mode.Login;
+
+    private readonly LoginModel _model = new();
+    private string? _error;
+    private bool _loading;
+    private bool _showPassword;
+
+    private string _returnUrl = "/";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = new Uri(Nav.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var returnParam = query["return"];
+        if (!string.IsNullOrWhiteSpace(returnParam))
+            _returnUrl = returnParam;
+
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated == true)
+            Nav.NavigateTo(_returnUrl, forceLoad: false);
+    }
+
+    private void SwitchMode(Mode mode)
+    {
+        _mode = mode;
+        _error = null;
+    }
+
+    private async Task HandleSubmitAsync()
+    {
+        _error = null;
+        _loading = true;
+
+        try
+        {
+            if (_mode == Mode.Register)
+                await AuthSvc.CustomerRegisterAsync(_model.Email, _model.Password, _model.CustomerId);
+            else
+                await AuthSvc.CustomerLoginAsync(_model.Email, _model.Password);
+
+            AuthState.NotifyStateChanged();
+            Nav.NavigateTo(_returnUrl, forceLoad: false);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private sealed class LoginModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string CustomerId { get; set; } = string.Empty;
+    }
+}

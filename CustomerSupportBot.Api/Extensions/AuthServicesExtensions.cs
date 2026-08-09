@@ -22,6 +22,7 @@ public static class AuthServicesExtensions
         services.AddScoped<IJwtAccessTokenProvider, JwtAccessTokenProvider>();
         services.AddScoped<ITokenService, TokenPortService>();
         services.AddScoped<IUserService, Application.Services.Auth.UserService>();
+        services.AddScoped<ICustomerAuthService, Application.Services.Auth.CustomerAuthService>();
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
@@ -60,6 +61,7 @@ public static class AuthServicesExtensions
             options.AddPolicy("Admin", p => p.RequireRole("Admin"));
             options.AddPolicy("Agent", p => p.RequireRole("Agent"));
             options.AddPolicy("AdminOrAgent", p => p.RequireRole("Admin", "Agent"));
+            options.AddPolicy("Customer", p => p.RequireRole("Customer"));
         });
 
         return services;

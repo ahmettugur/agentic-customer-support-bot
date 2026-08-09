@@ -9,3 +9,7 @@ public sealed record RefreshRequest(string RefreshToken);
 
 public sealed record LogoutRequest(string RefreshToken);
 
+public sealed record CustomerRegisterRequest(string Email, string Password, string CustomerId);
+
+public sealed record CustomerLoginRequest(string Email, string Password);
+
