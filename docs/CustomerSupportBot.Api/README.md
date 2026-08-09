@@ -76,6 +76,9 @@ CustomerSupportBot.Api/
 | [Endpoints-Admin.md](Endpoints-Admin.md) | /approvals, /escalations, /chat-sessions, /agents, /agent/* |
 | [Endpoints-Observability.md](Endpoints-Observability.md) | /traces, /telemetry, /analytics, /sla, /eval |
 | [Endpoints-Improvements.md](Endpoints-Improvements.md) | /improvements, /memory, /customers |
+| [Prompts.md](Prompts.md) | LLM prompt template dizini |
+| [KnowledgeBase.md](KnowledgeBase.md) | Startup KB içerik dosyaları |
+| [PortAliases.md](PortAliases.md) | Global using direktifleri |
 
 ---
 

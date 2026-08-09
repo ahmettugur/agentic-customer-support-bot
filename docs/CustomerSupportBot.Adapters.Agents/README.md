@@ -20,6 +20,8 @@ CustomerSupportBot.Adapters.Agents/
 ├── CustomerSupportTeam.cs          # IAgentTeamPort implementasyonu — kompozisyon kökü (ince yönlendirici)
 ├── AgentTeamFactory.cs             # 6 ajanı örnekler, her koşu için taze Workflow üretir
 ├── WorkflowRunner.cs               # Gerçek orkestratör — tek sorgu koşusu, trace, HITL köprüsü, streaming
+├── WorkflowMessageBuilder.cs       # Workflow'a giden system/user mesajlarının inşası
+├── WorkflowTraceEventProcessor.cs  # Workflow event'lerini trace yan etkilerine çeviren işlemci
 ├── DecomposedRunner.cs             # Compound query orkestrasyonu (paralel/sıralı alt-görevler)
 ├── TurnFinalizer.cs                # Tur-sonu yan etkileri (eskalasyon, bellek, profil, trace kapatma)
 ├── CustomerSupportChatManager.cs   # MAF GroupChatManager — ajan seçimi ve sonlandırma
@@ -84,6 +86,8 @@ Evaluation/EvaluationRunner  ── IAgentTeamPort üzerinden CustomerSupportTea
 | [CustomerSupportTeam](CustomerSupportTeam.md) | Kompozisyon kökü — `IAgentTeamPort` implementasyonu, ince yönlendirici |
 | [AgentTeamFactory](AgentTeamFactory.md) | 6 ajanı örnekler, taze `Workflow` üretir |
 | [WorkflowRunner](WorkflowRunner.md) | Gerçek orkestratör — tek sorgu koşusu, trace, HITL köprüsü, streaming |
+| [WorkflowMessageBuilder](WorkflowMessageBuilder.md) | Workflow'a giden system/user mesajlarının inşası |
+| [WorkflowTraceEventProcessor](WorkflowTraceEventProcessor.md) | Workflow event'lerini trace yan etkilerine çeviren işlemci |
 | [DecomposedRunner](DecomposedRunner.md) | Compound query orkestrasyonu |
 | [TurnFinalizer](TurnFinalizer.md) | Tur-sonu yan etkileri |
 | [CustomerSupportChatManager](CustomerSupportChatManager.md) | MAF GroupChatManager; ajan seçimi, sonlandırma korumaları |

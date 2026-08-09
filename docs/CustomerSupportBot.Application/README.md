@@ -35,6 +35,14 @@
 | Gelen mesaj güvenlik filtresi | [InputGuard](InputGuard.md) |
 | AsyncLocal HITL context taşıyıcı | [ApprovalContextAccessor](ApprovalContextAccessor.md) |
 | Sesli konuşma (Bridge ve Native mod) | [RealtimeServices](RealtimeServices.md) |
+| Prompt injection koruması (retrieval fence) | [ContextSanitizer](ContextSanitizer.md) |
+| Semantic memory devre dışı fallback | [DisabledSemanticMemoryIngestor](DisabledSemanticMemoryIngestor.md) |
+| Knowledge base makale CRUD | [KnowledgeArticleService](KnowledgeArticleService.md) |
+| UI hint event toplama | [UiHintEmitter](UiHintEmitter.md) |
+| Yan etkili tool mükerrer çağrı koruması | [SideEffectIdempotencyCache](SideEffectIdempotencyCache.md) |
+| Konuşma özeti context provider | [ConversationSummaryProvider](ConversationSummaryProvider.md) |
+| Semantik bellek context provider | [SemanticMemoryContextProvider](SemanticMemoryContextProvider.md) |
+| SLA süresi değerlendirici | [SlaPolicyEvaluator](SlaPolicyEvaluator.md) |
 
 ## Klasör yapısı
 

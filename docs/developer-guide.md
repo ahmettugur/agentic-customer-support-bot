@@ -30,7 +30,7 @@ Bu doküman geliştiricilerin en sık ihtiyaç duyacağı iş senaryolarını **
 - .NET 10 SDK
 - Aşağıdaki AI sağlayıcılardan **biri** için erişim:
   - **OpenAI** (chat + o-series reasoning)
-  - **Azure OpenAI** (`gpt-5.1` deployment + reasoning deployment)
+  - **Azure OpenAI** (`gpt-5.4` deployment + reasoning deployment)
 
 **Sağlayıcı seçimi**: `appsettings.json > AI:Provider` (`OpenAI` | `AzureOpenAI`). Yapılandırma sınıfı: `CustomerSupportBot.Adapters.AI/Options/AiProviderOptions.cs`.
 
@@ -48,7 +48,7 @@ dotnet user-secrets set "AI:OpenAI:ApiKey"      "sk-..."
 dotnet user-secrets set "AI:Provider"               "AzureOpenAI"
 dotnet user-secrets set "AI:AzureOpenAI:Endpoint"   "https://<resource>.openai.azure.com"
 dotnet user-secrets set "AI:AzureOpenAI:ApiKey"     "..."
-# Deployment isimleri appsettings.json'dan okunur (default: gpt-5.1)
+# Deployment isimleri appsettings.json'dan okunur (default: gpt-5.4)
 
 # Sunucu
 dotnet run --project CustomerSupportBot.Api
@@ -837,7 +837,7 @@ curl http://localhost:5021/traces/recent?count=5 | jq '.[0]'
 
 **Olası sebep**: `ReasoningService.ReasonAsync` exception fırlatıyor → fallback devreye giriyor.
 
-**Kontrol**: Log'larda `"Reasoning başarısız"` mesajı var mı? O-series / reasoning deployment erişimi yoksa kullanılan sağlayıcıya göre `appsettings.json > AI:OpenAI:ReasoningModel` / `AI:AzureOpenAI:ReasoningDeployment` alanını mevcut bir modele çekin (örn. `gpt-4o-mini`).
+**Kontrol**: Log'larda `"Reasoning başarısız"` mesajı var mı? O-series / reasoning deployment erişimi yoksa kullanılan sağlayıcıya göre `appsettings.json > AI:OpenAI:ReasoningModel` / `AI:AzureOpenAI:ReasoningDeployment` alanını mevcut bir modele çekin (örn. `gpt-5.4-nano`).
 
 ### "Hallucination yakalanmıyor"
 

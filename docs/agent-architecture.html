@@ -801,15 +801,17 @@
             <code>EntityVerifier</code> sorgu + geçmiş + oturum durumu + DB'yi birleştirip
             <code>VerifiedEntities</code>'i kurar; <code>ReasoningSanityChecker</code> tutarsızlıkları işaretler.
           </li>
-          <li><b>ApprovalContext scope</b> — <code>sessionId</code>/<code>traceId</code>/sorgu ambient bir kapsama
-            yazılır. HITL onay kaydının hangi oturuma ve konuşmaya ait olduğunu bu taşır; tool katmanı workflow'dan
-            parametre almadan buradan okur.</li>
+          <li><b>ApprovalContext scope</b> — <code>sessionId</code>/<code>traceId</code>/sorgu/<code>customerId</code>
+            ambient bir kapsama yazılır. HITL onay kaydının hangi oturuma, konuşmaya ve <b>kimliği doğrulanmış
+            müşteriye</b> ait olduğunu bu taşır; tool katmanı workflow'dan parametre almadan buradan okur —
+            <code>customerId</code> artık LLM'e hiç sorulmaz (bkz. <a href="#garanti">08</a>).</li>
           <li><b>CustomerSupportTeam</b> — bileşik sorgu mu tek sorgu mu olduğuna karar verip
             <code>DecomposedRunner</code> veya <code>WorkflowRunner</code>'a yönlendiren ince kabuk.
           </li>
-          <li><b>WorkflowRunner</b> — system mesajlarını kurar (bağlam &rarr; reasoning özeti &rarr; entity hint &rarr;
-            geçmiş &rarr; replan notu &rarr; sorgu — bkz. <a href="#baglam">02b</a>), GroupChat workflow'unu başlatır,
-            event akışını trace'e ve stream event'lerine çevirir.</li>
+          <li><b>WorkflowRunner</b> — orkestrasyona odaklanır: <code>WorkflowMessageBuilder</code> ile system
+            mesajlarını kurdurur (bağlam &rarr; reasoning özeti &rarr; entity hint &rarr; geçmiş &rarr; replan notu
+            &rarr; sorgu — bkz. <a href="#baglam">02b</a>), GroupChat workflow'unu başlatır, event akışını
+            <code>WorkflowTraceEventProcessor</code>'a devredip trace'e ve stream event'lerine çevirtir.</li>
           <li><b>TurnFinalizer</b> — eskalasyonları işler, ajan ziyaretlerini kaydeder, epizodik belleği ve müşteri
             profilini günceller, trace'i kapatır.</li>
           <li>
@@ -999,7 +1001,7 @@
       <section id="baglam">
         <h2><span class="n">02b</span>Ajanlar ne görüyor — bağlam kurulumu</h2>
         <p class="lede">
-          Ajanlar yalnızca kullanıcının mesajını almaz. <code>WorkflowRunner.BuildWorkflowMessagesAsync</code>
+          Ajanlar yalnızca kullanıcının mesajını almaz. <code>WorkflowMessageBuilder.BuildWorkflowMessagesAsync</code>
           workflow'a gidecek mesaj listesini şu <b>sırayla</b> kurar; ilk dördü system rolündedir,
           yani ajanlar bunları talimat ağırlığında görür.
         </p>
@@ -1270,14 +1272,19 @@
       <section id="hitl">
         <h2><span class="n">05</span>HITL — insan onay kapısı</h2>
         <p class="lede">
-          Yan etkili tool'lar <code>ApprovalRequiredAIFunction</code> ile sarmalanır. Framework bu
-          tool'ları <em>çalıştırmadan önce</em> workflow superstep'ini duraklatır; bekleyen taraf bir
-          <code>Task</code> değil, gerçek ve checkpoint'lenebilir bir duraklama.
+          Yan etkili dört tool (sipariş verme, şikayet kaydı, sipariş iptali, iade) artık MAF'ın native
+          <code>ApprovalRequiredAIFunction</code>/<code>RequestInfoEvent</code> duraklamasını kullanmıyor —
+          bu mekanizma workflow superstep'ini <em>o isteğin ömrü boyunca</em> bloklardı, 50-100+ eşzamanlı
+          onay biriktiğinde admin yetişemeyip istekler sessizce zaman aşımına düşüyordu.
+          <code>ApprovalGateService.ExecuteWithApprovalGateAsync</code> artık kararı beklemeden
+          <code>IApprovalQueue.CreateAsync</code> ile kaydı oluşturur ve turu <b>hemen</b> "onaya gönderildi"
+          mesajıyla bitirir; gerçek iş, admin karar verdiği an <code>IApprovalExecutionRouter</code> üzerinden
+          <em>ayrıca</em> tetiklenir.
         </p>
 
         <div class="diagram">
-          <p class="diagram-cap">Onay sekansı — order_cancel_tool örneği</p>
-          <svg viewBox="0 0 940 470" role="img" aria-label="HITL onay sekans diyagramı">
+          <p class="diagram-cap">Onay akışı — order_cancel_tool örneği (bloklamayan model)</p>
+          <svg viewBox="0 0 940 520" role="img" aria-label="HITL onay akış diyagramı">
             <defs>
               <marker id="a3" viewBox="0 0 8 8" refX="7.5" refY="4" markerWidth="6.5" markerHeight="6.5"
                 orient="auto-start-reverse">
@@ -1288,39 +1295,39 @@
             <!-- yaşam çizgisi başlıkları -->
             <rect x="14" y="8" width="118" height="30" rx="4" class="d-node" />
             <text x="73" y="28" text-anchor="middle" class="d-lane">OrderAgent</text>
-            <rect x="198" y="8" width="140" height="30" rx="4" class="d-node" />
-            <text x="268" y="28" text-anchor="middle" class="d-lane">Framework</text>
-            <rect x="404" y="8" width="148" height="30" rx="4" class="d-node" />
-            <text x="478" y="28" text-anchor="middle" class="d-lane">WorkflowRunner</text>
-            <rect x="618" y="8" width="132" height="30" rx="4" class="d-node" />
-            <text x="684" y="28" text-anchor="middle" class="d-lane">ApprovalQueue</text>
+            <rect x="198" y="8" width="180" height="30" rx="4" class="d-node" />
+            <text x="288" y="28" text-anchor="middle" class="d-lane">ApprovalGateService</text>
+            <rect x="444" y="8" width="148" height="30" rx="4" class="d-node" />
+            <text x="518" y="28" text-anchor="middle" class="d-lane">ApprovalQueue</text>
+            <rect x="658" y="8" width="120" height="30" rx="4" class="d-node" />
+            <text x="718" y="28" text-anchor="middle" class="d-lane">Chat (SSE)</text>
             <rect x="816" y="8" width="110" height="30" rx="4" class="d-accent" />
             <text x="871" y="28" text-anchor="middle" class="d-lane">Admin</text>
 
             <!-- yaşam çizgileri -->
-            <path d="M73,38  V452" class="d-dash" />
-            <path d="M268,38 V452" class="d-dash" />
-            <path d="M478,38 V452" class="d-dash" />
-            <path d="M684,38 V452" class="d-dash" />
-            <path d="M871,38 V452" class="d-dash" />
+            <path d="M73,38  V500" class="d-dash" />
+            <path d="M288,38 V500" class="d-dash" />
+            <path d="M518,38 V500" class="d-dash" />
+            <path d="M718,38 V500" class="d-dash" />
+            <path d="M871,38 V500" class="d-dash" />
 
             <!-- 1 -->
-            <path d="M73,72 H262" class="d-line" marker-end="url(#a3)" />
+            <path d="M73,72 H282" class="d-line" marker-end="url(#a3)" />
             <text x="80" y="66" class="d-sub">order_cancel_tool(orderId, reason)</text>
 
-            <!-- duraklama bandı -->
-            <rect x="196" y="88" width="360" height="46" rx="5" class="d-band" />
-            <text x="376" y="106" text-anchor="middle" class="d-t-a">⏸ superstep duraklar</text>
-            <text x="376" y="122" text-anchor="middle" class="d-sub">RequestInfoEvent — tool ÇALIŞTIRILMAZ</text>
-            <path d="M268,134 H472" class="d-line" marker-end="url(#a3)" />
-
             <!-- 2 -->
-            <path d="M478,168 H678" class="d-line" marker-end="url(#a3)" />
-            <text x="486" y="162" class="d-sub">RequestApprovalAsync(tool, argümanlar, gerekçe)</text>
+            <path d="M288,106 H512" class="d-line" marker-end="url(#a3)" />
+            <text x="296" y="100" class="d-sub">CreateAsync(ApprovalRequest) — tool ÇALIŞTIRILMAZ</text>
 
-            <!-- 3 -->
-            <path d="M684,206 H865" class="d-line" marker-end="url(#a3)" />
-            <text x="692" y="200" class="d-sub">SSE bildirim</text>
+            <!-- turu hemen bitiren bant -->
+            <rect x="196" y="122" width="200" height="46" rx="5" class="d-band" />
+            <text x="296" y="140" text-anchor="middle" class="d-t-a">turn burada biter</text>
+            <text x="296" y="156" text-anchor="middle" class="d-sub">"Talebiniz onaya gönderildi"</text>
+            <path d="M288,168 H79" class="d-line" marker-end="url(#a3)" />
+
+            <!-- 3 SSE bildirim admine -->
+            <path d="M518,206 H865" class="d-line" marker-end="url(#a3)" />
+            <text x="526" y="200" class="d-sub">SSE bildirim</text>
 
             <!-- admin kutusu -->
             <rect x="596" y="222" width="330" height="44" rx="5" class="d-node" />
@@ -1328,34 +1335,49 @@
             <text x="761" y="254" text-anchor="middle" class="d-sub">planlama gerekçesi, trace derin linki</text>
 
             <!-- 4 -->
-            <path d="M871,296 H690" class="d-line" marker-end="url(#a3)" />
-            <text x="864" y="290" text-anchor="end" class="d-sub">Onayla + zorunlu gerekçe / Reddet</text>
+            <path d="M871,296 H524" class="d-line" marker-end="url(#a3)" />
+            <text x="864" y="290" text-anchor="end" class="d-sub">Onayla + zorunlu gerekçe / Reddet — dakikalar, saatler, gün(ler) sonra olabilir</text>
 
-            <!-- 5 -->
-            <path d="M684,334 H484" class="d-line" marker-end="url(#a3)" />
-            <text x="676" y="328" text-anchor="end" class="d-sub">karar</text>
+            <!-- 5 execution router -->
+            <rect x="386" y="312" width="264" height="46" rx="5" class="d-band" />
+            <text x="518" y="330" text-anchor="middle" class="d-t-a">DecideAsync → IApprovalExecutionRouter</text>
+            <text x="518" y="346" text-anchor="middle" class="d-sub">onaylandıysa gerçek iş ŞİMDİ çalışır</text>
 
-            <!-- 6 -->
-            <path d="M478,372 H274" class="d-line" marker-end="url(#a3)" />
-            <text x="470" y="366" text-anchor="end" class="d-sub">SendResponseAsync — superstep devam eder</text>
+            <!-- 6 sonuç session'a yazılır -->
+            <path d="M518,380 H82" class="d-line" marker-end="url(#a3)" />
+            <text x="510" y="374" text-anchor="end" class="d-sub">ExecutionResult session geçmişine yazılır (asistan mesajı)</text>
 
-            <!-- 7 sonuç -->
-            <path d="M268,410 H79" class="d-line" marker-end="url(#a3)" />
-            <text x="260" y="404" text-anchor="end" class="d-sub">onaylandı: tool çalışır, JSON zarfı</text>
-            <path d="M268,442 H79" class="d-line" marker-end="url(#a3)" />
-            <text x="260" y="436" text-anchor="end" class="d-sub">reddedildi: "Tool call invocation rejected. …" — düz
-              metin</text>
+            <!-- 7 approval_resolved bildirimi -->
+            <path d="M518,414 H726" class="d-line" marker-end="url(#a3)" />
+            <text x="526" y="408" class="d-sub">approval_resolved (bağlıysa anlık; değilse "unseen")</text>
+
+            <!-- 8 sonuç -->
+            <rect x="196" y="430" width="522" height="46" rx="5" class="d-band" />
+            <text x="457" y="448" text-anchor="middle" class="d-t-a">badge + kalıcı "geçmiş işlemlerim" görünümü</text>
+            <text x="457" y="464" text-anchor="middle" class="d-sub">müşteri sekmeyi kapatıp açsa da, sonucu hep bulur</text>
           </svg>
         </div>
 
         <ul class="plain">
-          <li><b>Zaman aşımı</b> — karar verilmezse süre sonunda otomatik reddedilir
-            (<code>AutoApproveOnTimeout=false</code>).</li>
+          <li><b>Zaman aşımı yok, "eskime" var</b> — eski 60sn/oto-red mekanizması kaldırıldı; admin
+            kararı dakikalar sonra da, günler sonra da verebilir. <code>StaleApprovalSweepService</code>
+            15 dakikada bir bekleyenleri tarar, <code>ApprovalOptions.StalePendingHours</code>'ı
+            (varsayılan 72 saat) aşanları <code>decidedBy:"system", reason:"stale"</code> ile otomatik
+            reddeder — bu da normal karar akışıyla aynı <code>IApprovalExecutionRouter</code>/bildirim
+            yolundan geçer.</li>
           <li><b>Gerekçe zorunluluğu</b> — dört yüksek riskli tool'un onayında admin gerekçe yazmak zorundadır; karar
             sunucuda verilip panele <code>ReasonRequired</code> olarak bildirilir.</li>
           <li><b>Panelde görünen</b> — tool argümanları alan-alan, PlanningAgent'ın routing gerekçesi ve trace'e derin link.</li>
-        <li><b>Red formatı farklıdır</b> — reddedilen çağrının sonucu JSON zarfı değil düz bir cümledir; uzman
-            prompt'ları bunu ayrıca ele alır.</li>
+          <li><b>Bildirim iki katmanlı</b> — bağlıyken (<code>/chat/events/{sessionId}</code> kalıcı SSE)
+            <code>approval_resolved</code> anlık gelir; bağlı değilken sayfa yeniden açıldığında
+            <code>GET /chat-sessions/{sessionId}/approvals/unseen</code> ile "okunmamış" olarak
+            görünür. Ayrıca <code>GET /customer/approvals/history</code> ile bekleyen/onaylanan/reddedilen
+            farketmeksizin müşterinin TÜM geçmişi kalıcı olarak sorgulanabilir — "görüldü" işaretlenmesi
+            bu listeden hiçbir şeyi düşürmez.</li>
+          <li><b>Çift yürütme koruması</b> — aynı session'da aynı tool + aynı parametrelerle bekleyen bir
+            talep varsa (LLM tool çağrısını tekrarlarsa) yeni kayıt açılmaz, mevcut olan döner; kararın
+            kendisi (Pending→Approved/Rejected geçişi) kısa bir kilit altında yapılır, gerçek iş bu kilidin
+            <em>dışında</em> yürütülür.</li>
         </ul>
       </section>
 
@@ -1487,6 +1509,14 @@
                 <td>HITL onay kapısı</td>
                 <td>Yazan hiçbir tool insan onayı olmadan çalışamaz</td>
                 <td>Kesin blok</td>
+              </tr>
+              <tr>
+                <td><code>customerId</code> = JWT claim</td>
+                <td>Yan etkili tool'lar <code>customerId</code>'yi model parametresi olarak almaz;
+                  <code>ResolveAuthenticatedCustomerId</code> yalnızca <code>linked_customer_id</code> JWT
+                  claim'inden okur ve <code>ApprovalContext</code>'e yazar — kullanıcı metinde başka bir
+                  müşteri numarası söylese bile işlem kendi hesabına bağlı kalır</td>
+                <td>Kesin blok — client body/route'undan customerId asla güvenilir alınmaz</td>
               </tr>
               <tr>
                 <td><code>RemoveTechnicalJsonBlocks</code></td>
@@ -1715,7 +1745,8 @@
 
     <footer class="end">
       Kaynak: AgentTeamFactory · CustomerSupportChatManager · Routing.cs · WorkflowRunner ·
-      ApprovalGateService · EscalationPolicyService · WellKnown<br>
+      WorkflowTraceEventProcessor · WorkflowMessageBuilder · ApprovalGateService ·
+      ApprovalExecutionRouter · StaleApprovalSweepService · EscalationPolicyService · WellKnown<br>
       İlgili dokümanlar: architecture.md · adapters-agents/ · security.md
     </footer>
   </div>

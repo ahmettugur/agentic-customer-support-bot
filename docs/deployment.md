@@ -78,9 +78,12 @@ postgres:
   environment:
     POSTGRES_USER: postgres
     POSTGRES_PASSWORD: <password>
+    PGDATA: /var/lib/postgresql/data
   volumes:
-    - postgres_data:/var/lib/postgresql/data
+    - postgres_data:/var/lib/postgresql
 ```
+
+> **Postgres 18+ uyumu**: Volume `/var/lib/postgresql`'e mount edilir (alt dizin değil), `PGDATA` ile veri dizini explicit olarak `/var/lib/postgresql/data` alt dizinine yönlendirilir. Bu sayede `pg_upgrade --link` mount sınırı sorunlarına takılmaz. Detay: [docker-library/postgres#37](https://github.com/docker-library/postgres/issues/37).
 
 Uygulama varsayılan olarak PostgreSQL kullanır (`Persistence:Provider = "Postgres"`). Development ortamında migration'lar otomatik çalışır (`MigrateIfDevelopmentAsync`).
 

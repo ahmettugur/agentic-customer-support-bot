@@ -22,12 +22,51 @@ MAF (`Microsoft.Agents.AI` framework) üzerine kurulu **2 orkestrasyon sınıfı
 
 Sistemin merkezi orkestratörü. **6 MAF `ChatClientAgent`**'ı (Planning + 4 specialist + Response) ctor'da yaratır, tüm tool'ları kaydeder ve `AgentWorkflowBuilder.CreateGroupChatBuilderWith(...)` ile workflow derler. İki genel metod:
 
-- **`RunAsync(query, history?, session?, reasoning?)`** — non-streaming. Compound query algılayıp `RunDecomposedAsync`'a ayrılabilir. Final string response döner, ResponseAgent TERMINATE marker'ı temizlenmiş.
-- **`RunStreamingAsync(...)`** — SSE için event stream üretir (`agent`, `response_start`, `response_delta`, `response_complete`). Compound query'de `RunDecomposedStreamingAsync`'a düşer.
+- **`RunAsync(query, history?, session?, reasoning?)`** — non-streaming. Compound query algılayıp `DecomposedRunner.RunDecomposedAsync`'a delege edebilir. Final string response döner.
+- **`RunStreamingAsync(...)`** — SSE için event stream üretir. Compound query'de `DecomposedRunner.RunDecomposedStreamingAsync`'a düşer.
 
-**Compound query helper'ları**: `RunDecomposedAsync`, `RunDecomposedStreamingAsync` — `SubTaskOrchestrator.Partition` ile gruplandırılmış alt görevler çalıştırılır. Paralel gruplar `Task.WhenAll` + `SemaphoreSlim` ile sınırlandırılır, sıralı gruplar biri bitmeden diğeri başlamaz. Sonuçlar `SubTaskOrchestrator.AggregateSubTaskResults` ile birleştirilir.
+**Delegasyon**: Tekil workflow yürütmesi `WorkflowRunner`'a, compound query orkestrasyonu `DecomposedRunner`'a ayrılmıştır. `CustomerSupportTeam` artık yalnızca agent oluşturma, tool kayıt ve üst seviye dispatch sorumluluğunu taşır.
 
 **Bağımlılıklar**: `IChatClient`, `IContextPipeline`, `IOptions<WorkflowGuardOptions>`, `IOptions<ParallelExecutionOptions>`, `IReasoningTraceStore`, `IPromptRepository`, `ApprovalGateService`, `ICustomerSupportToolsService`, `IUiHintEmitter`, `ILoggerFactory`, `ISemanticMemoryWriter?`, `ICustomerProfileService?`.
+
+---
+
+### `WorkflowRunner` — `Agents/WorkflowRunner.cs`
+
+Tekil (non-decomposed) workflow yürütücüsü. `CustomerSupportTeam`'in agent'larını ve `CustomerSupportChatManager`'ı kullanarak bir MAF GroupChat workflow çalıştırır:
+
+- **`RunWorkflowAsync(query, history, session, reasoning, ct)`** — non-streaming, final response string döner.
+- **`RunWorkflowStreamingAsync(...)`** — SSE event stream üretir (`agent`, `response_start`, `response_delta`, `response_complete`).
+
+Workflow timeout'u `WorkflowGuardOptions.TimeoutSeconds` ile `CancellationTokenSource` üzerinden uygulanır. `WorkflowMessageBuilder` ile prompt mesajları hazırlanır; `WorkflowTraceEventProcessor` ile trace güncellemesi yapılır; `WorkflowResponseExtractor` ile ResponseAgent çıktısı temizlenir.
+
+---
+
+### `DecomposedRunner` — `Agents/DecomposedRunner.cs`
+
+Compound query (bileşik sorgu) orkestratörü. `ReasoningResult.SubTasks` listesini `SubTaskOrchestrator.Partition` ile paralel/sıralı gruplara ayırır ve her alt görevi `WorkflowRunner` üzerinden çalıştırır:
+
+- **`RunDecomposedAsync(query, history, session, reasoning, ct)`** — non-streaming, aggregated response döner.
+- **`RunDecomposedStreamingAsync(...)`** — iç workflow event'leri ve subtask sınır event'leri forward edilir.
+
+**Paralel gruplama**: `ParallelExecutionOptions.Enabled=true` ise yan-etkisiz (read-only) subtask'ler `Task.WhenAll` + `SemaphoreSlim(MaxConcurrency)` ile paralel, yan-etkili olanlar sıralı çalışır.
+
+---
+
+### `WorkflowMessageBuilder` — `Agents/WorkflowMessageBuilder.cs`
+
+Workflow öncesinde MAF agent'larına gönderilecek system/user mesaj listesini hazırlar:
+
+- `ContextPipeline` ile müşteri bağlamı, konuşma özeti, RAG context birleştirilir.
+- `IdExtractor` hint mesajı eklenir.
+- Reasoning hint (intent, requiredInfo, subTasks) enjekte edilir.
+- Replan flag aktifse `ReplanPlanningHint` + admin notu prepend edilir.
+
+---
+
+### `WorkflowTraceEventProcessor` — `Agents/WorkflowTraceEventProcessor.cs`
+
+MAF framework'ünden gelen `ChatMessage` event'lerini `ReasoningTrace`'e köprüler. Her agent/tool invocation'ını trace'e yazar: `AgentVisits[]`, `ToolCalls[]`, `SpecialistReasonings[]`. Agent mesajlarından `SpecialistReasoningParser` ile structured reasoning çıkarır.
 
 ---
 

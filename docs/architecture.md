@@ -192,10 +192,14 @@ CustomerSupport.slnx
 │       └── Evaluation/                  # CriteriaEvaluator, EvaluationRunner
 │
 ├── CustomerSupportBot.Adapters.Agents/  ← Katman 3a: MAF ajan adaptörü
-│   ├── CustomerSupportTeam.cs           # 6 agent + MAF workflow builder + timeout'lu streaming/non-streaming pump (IOptions<T> ile yapılandırılır)
+│   ├── CustomerSupportTeam.cs           # 6 agent + MAF workflow builder + delegasyon (IOptions<T> ile yapılandırılır)
+│   ├── WorkflowRunner.cs                # Tekil workflow yürütücüsü (agent invocation + streaming pump)
+│   ├── DecomposedRunner.cs              # Compound query orkestratörü (paralel/sıralı grup yürütme)
 │   ├── CustomerSupportChatManager.cs    # GroupChatManager türevi — seçim + terminasyon
 │   ├── ApprovalGateService.cs           # HITL approval gate (routing'i EscalationPolicyService'e delege eder)
 │   ├── WorkflowResponseExtractor.cs     # MAF workflow çıktı temizleme (regex timeout korumalı)
+│   ├── WorkflowMessageBuilder.cs        # System/user prompt inşası (reasoning hint + context + replan)
+│   ├── WorkflowTraceEventProcessor.cs   # MAF event → ReasoningTrace köprüsü
 │   ├── PortAliases.cs                   # Global using direktifleri
 │   ├── ExceptionTranslator.cs           # MAF → Domain exception çevirici
 │   ├── DependencyInjection/             # AgentsAdapterServiceCollectionExtensions

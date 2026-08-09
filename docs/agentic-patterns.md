@@ -114,7 +114,7 @@ Reason   → postToolReflection {status: "done", handoffSuggestion: "ResponseAge
 
 | Seviye | Şema | Üretici | Parser |
 |---|---|---|---|
-| Global reasoning | `ReasoningResult` | `ReasoningService` (o4-mini) | `ReasoningService.ParseReasoning` |
+| Global reasoning | `ReasoningResult` | `ReasoningService` (gpt-5.4-nano) | `ReasoningService.ParseReasoning` |
 | Planning | `PlanningResult` | PlanningAgent | `PlanningResultParser` |
 | Specialist | `SpecialistReasoning` | 4 specialist | `SpecialistReasoningParser` |
 
@@ -508,35 +508,43 @@ Tespit edilen her issue `result.SanityIssues` listesine eklenir, trace'e yazıl�
 
 ---
 
-## 19. Task Orchestration (Sequential Sub-Workflow Runs)
+## 19. Task Orchestration (Parallel/Sequential Sub-Workflow Runs)
 
-**Tanım**: Alt görevlerin her birini ayrı bir alt-workflow run'ı olarak yürütme ve sonuçları birleştirme. Kod katmanında "loop over subtasks → recursive run → aggregate" deseni.
+**Tanım**: Alt görevlerin her birini ayrı bir alt-workflow run'ı olarak yürütme ve sonuçları birleştirme. Kod katmanında "partition → parallel/sequential group runs → aggregate" deseni.
 
-**Gerçekleme**: `CustomerSupportTeam.RunDecomposedAsync` / `RunDecomposedStreamingAsync`:
+**Gerçekleme**: `DecomposedRunner.RunDecomposedAsync` / `RunDecomposedStreamingAsync`:
 
 ```csharp
+// CustomerSupportTeam.cs — delegasyon
 if (ShouldDecompose(reasoning))
-    return await RunDecomposedAsync(query, history, session, reasoning!);
+    return await _decomposed.RunDecomposedAsync(query, history, session, reasoning!, ct);
 
-private async Task<string> RunDecomposedAsync(...)
+// DecomposedRunner.cs — orkestrasyon
+public async Task<string> RunDecomposedAsync(...)
 {
-    foreach (var subTask in reasoning.SubTasks.OrderBy(s => s.Order))
+    var groups = SubTaskOrchestrator.Partition(reasoning.SubTasks, _parallelOptions);
+    foreach (var group in groups)  // paralel veya sıralı
     {
-        var subQuery = BuildSubQuery(subTask);
-        var subReasoning = DeriveSubReasoning(parent, subTask);  // SubTasks=[]
-        var subResponse = await RunAsync(subQuery, runningHistory, session, subReasoning);
-        parts.Add(FormatSubResult(subTask, subResponse));
-        runningHistory.Add(user+assistant msgs);  // continuity
+        if (group.IsParallel)
+            await Task.WhenAll(group.Tasks.Select(t => RunSubTask(t, ...)));
+        else
+            foreach (var task in group.Tasks)
+                await RunSubTask(task, ...);
     }
-    return JoinAggregatedParts(parts);
+    return SubTaskOrchestrator.AggregateSubTaskResults(collected);
 }
 ```
 
-**Dosya**: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:912-1192`
+**Dosyalar**:
+- `CustomerSupportBot.Adapters.Agents/DecomposedRunner.cs` — compound query orkestratörü
+- `CustomerSupportBot.Adapters.Agents/WorkflowRunner.cs` — tekil workflow yürütücüsü
+- `CustomerSupportBot.Application/Services/Reasoning/SubTaskOrchestrator.cs` — gruplama + sonuç birleştirme
+- `CustomerSupportBot.Application/Ports/Outbound/ParallelExecutionOptions.cs` — yapılandırma
 
 **Karakteristikleri**:
 
-- **Sıralı** (paralel değil) — her alt görev bitince sıradaki başlar.
+- **Paralel/sıralı gruplama** — `SubTaskOrchestrator.Partition` yan-etkisiz (read-only) alt görevleri paralel, yan-etkili olanları sıralı gruplara ayırır. `ParallelExecutionOptions.Enabled=false` ise tümü sıralı çalışır.
+- **Paralel eşzamanlılık sınırı** — `SemaphoreSlim` ile `ParallelExecutionOptions.MaxConcurrency` kadar task aynı anda çalışır.
 - **Continuity** — önceki alt görev sonucu history'ye eklenir, sonraki subtask context olarak görür.
 - **Recursion-safe** — derived reasoning'in `SubTasks=[]` olması sonsuz döngüyü engeller.
 - **Streaming uyumlu** — iç workflow event'leri forward edilir; sadece final response aggregated olarak yayın.
@@ -819,7 +827,7 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
 > *"Ucuz modelle dene, güvensizsen pahalı modele geç"*.
 
 - **Avantaj**: Ortalama maliyet düşer.
-- **Biz neden uygulamadık?** Zaten *iki model kullanıyoruz* (o4-mini reasoning + gpt-4o chat) ama bu **rol bazlı** ayrım, güven bazlı cascading değil. Cascading için her LLM çağrısının **confidence output**'u olmalı ve routing güncellenmeli. Karmaşıklık/getiri oranı düşük.
+- **Biz neden uygulamadık?** Zaten *iki model kullanıyoruz* (gpt-5.4-nano reasoning + gpt-5.4 chat) ama bu **rol bazlı** ayrım, güven bazlı cascading değil. Cascading için her LLM çağrısının **confidence output**'u olmalı ve routing güncellenmeli. Karmaşıklık/getiri oranı düşük.
 - **Ne zaman ekleriz?** Çok düşük latency bir ticari satış noktası olursa.
 
 ### Parallel Sub-Task Execution
@@ -918,4 +926,4 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
 | **Grounded Reasoning** | `CustomerSupportBot.Application/Services/EntityVerifier.cs`, `CustomerSupportBot.Domain/Model/VerifiedEntities.cs`, `CustomerSupportBot.Api/Prompts/services/reasoning-system.md` |
 | **Sanity Checking** | `CustomerSupportBot.Application/Services/ReasoningSanityChecker.cs`, `CustomerSupportBot.Domain/Model/ReasoningIssue.cs` |
 | **Task Decomposition** | `CustomerSupportBot.Domain/Model/SubTask.cs`, `CustomerSupportBot.Application/Services/ReasoningService.cs` (ParseSubTasks), `CustomerSupportBot.Api/Prompts/services/reasoning-system.md` |
-| **Task Orchestration** | `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:912-1192` (`RunDecomposedAsync`, helper'lar) |
+| **Task Orchestration** | `CustomerSupportBot.Adapters.Agents/DecomposedRunner.cs` (`RunDecomposedAsync`), `WorkflowRunner.cs`, `SubTaskOrchestrator.cs` |

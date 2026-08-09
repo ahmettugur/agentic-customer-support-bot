@@ -20,6 +20,9 @@ Application katmanının **driven port** sözleşmelerini (ISessionManager, IApp
 | Auth adaptörleri (JWT, BCrypt, EF) | [AuthAdapters.md](AuthAdapters.md) |
 | Dosya sistemi adaptörleri | [FileSystemAdapters.md](FileSystemAdapters.md) |
 | Exception çevirici | [ExceptionTranslator.md](ExceptionTranslator.md) |
+| Demo veri seed servisi | [DemoDataSeeder.md](DemoDataSeeder.md) |
+| Northwind statik seed verisi | [NorthwindSeedData.md](NorthwindSeedData.md) |
+| Stale approval temizleme servisi | [StaleApprovalSweepService.md](StaleApprovalSweepService.md) |
 
 ---
 
