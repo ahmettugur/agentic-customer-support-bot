@@ -34,7 +34,7 @@ public sealed class HitlEventPortService : IHitlEventPort
 
     public IHitlEventSubscription SubscribeToChatEvents(string sessionId, Func<string, object, Task> onEvent)
     {
-        return new ChatEventSubscription(_modeRegistry, _escalations, sessionId, onEvent, _logger);
+        return new ChatEventSubscription(_modeRegistry, _escalations, _approvals, sessionId, onEvent, _logger);
     }
 
     private sealed class ApprovalEscalationSubscription : IHitlEventSubscription
@@ -117,25 +117,45 @@ public sealed class HitlEventPortService : IHitlEventPort
     {
         private readonly IChatModeRegistry _modeRegistry;
         private readonly IEscalationSink _escalations;
+        private readonly IApprovalQueue _approvals;
         private readonly string _sessionId;
         private readonly Func<string, object, Task> _onEvent;
         private readonly EventHandler<ChatSessionState> _modeHandler;
         private readonly EventHandler<EscalationRequest> _escCreatedHandler;
         private readonly EventHandler<EscalationRequest> _escDecidedHandler;
+        private readonly EventHandler<ApprovalRequest> _approvalDecidedHandler;
         private readonly ILogger _logger;
 
         public ChatEventSubscription(
             IChatModeRegistry modeRegistry,
             IEscalationSink escalations,
+            IApprovalQueue approvals,
             string sessionId,
             Func<string, object, Task> onEvent,
             ILogger logger)
         {
             _modeRegistry = modeRegistry;
             _escalations = escalations;
+            _approvals = approvals;
             _sessionId = sessionId;
             _onEvent = onEvent;
             _logger = logger;
+
+            // Bloklamayan onay modeli: tool çağrısı artık admin kararını beklemiyor, bu yüzden
+            // sonucu kullanıcıya kalıcı chat bağlantısı üzerinden (badge/toast) burada iletiriz.
+            _approvalDecidedHandler = (_, req) =>
+            {
+                if (req.SessionId != _sessionId) return;
+                FireAndForget(_onEvent(StreamEventTypes.ApprovalResolved, new
+                {
+                    id = req.Id,
+                    status = req.Status.ToString().ToLowerInvariant(),
+                    reason = req.DecisionReason,
+                    decidedBy = req.DecidedBy,
+                    executionResult = req.ExecutionResult
+                }));
+            };
+            _approvals.RequestDecided += _approvalDecidedHandler;
 
             _modeHandler = (_, s) =>
             {
@@ -190,6 +210,7 @@ public sealed class HitlEventPortService : IHitlEventPort
             _modeRegistry.ModeChanged -= _modeHandler;
             _escalations.RequestCreated -= _escCreatedHandler;
             _escalations.RequestDecided -= _escDecidedHandler;
+            _approvals.RequestDecided -= _approvalDecidedHandler;
         }
 
         private void FireAndForget(Task task)

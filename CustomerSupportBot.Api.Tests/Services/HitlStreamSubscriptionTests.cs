@@ -1,5 +1,6 @@
 using System.Text;
 using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Api.Tests.Helpers;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,7 +22,7 @@ public class HitlEventPortServiceTests
     {
         var queue = new InMemoryApprovalQueue(
             Options.Create(new ApprovalOptions()),
-            NullLogger<InMemoryApprovalQueue>.Instance);
+            new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
         var modeRegistry = new InMemoryChatModeRegistry(NullLogger<InMemoryChatModeRegistry>.Instance);
         return (queue, sink, modeRegistry);

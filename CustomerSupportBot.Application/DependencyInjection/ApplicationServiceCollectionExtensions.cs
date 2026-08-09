@@ -118,6 +118,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ChatPortService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
+        services.AddSingleton<IApprovalExecutionRouter, ApprovalExecutionRouter>();
         services.AddSingleton<IUiHintEmitter, UiHintEmitter>();
         services.AddSingleton<IReplanService, ReplanService>();
         services.AddSingleton<SessionStateService>();

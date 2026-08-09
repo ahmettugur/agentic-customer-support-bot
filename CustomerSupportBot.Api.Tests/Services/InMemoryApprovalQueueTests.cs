@@ -1,5 +1,6 @@
 // Tests/Services/InMemoryApprovalQueueTests.cs
 
+using CustomerSupportBot.Api.Tests.Helpers;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -15,7 +16,7 @@ public class InMemoryApprovalQueueTests
             TimeoutSeconds = timeout,
             AutoApproveOnTimeout = autoApprove
         });
-        return new InMemoryApprovalQueue(opts, NullLogger<InMemoryApprovalQueue>.Instance);
+        return new InMemoryApprovalQueue(opts, new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
     }
 
     private static ApprovalRequest NewReq(string id = "a1") => new()

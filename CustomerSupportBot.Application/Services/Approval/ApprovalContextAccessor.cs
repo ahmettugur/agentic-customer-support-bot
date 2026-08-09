@@ -12,10 +12,10 @@ public sealed class ApprovalContextAccessor : IApprovalContextAccessor
 
     public ApprovalContext? Context => _current.Value;
 
-    public IDisposable SetScope(string? sessionId, string? traceId, string? userQuery)
+    public IDisposable SetScope(string? sessionId, string? traceId, string? userQuery, string? customerId = null)
     {
         var previous = _current.Value;
-        _current.Value = new ApprovalContext(sessionId, traceId, userQuery);
+        _current.Value = new ApprovalContext(sessionId, traceId, userQuery, CustomerId: customerId);
         return new ContextScope(previous);
     }
 

@@ -40,6 +40,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
     private readonly ILogger<PostgresApprovalQueue> _logger;
     private readonly IMessageBusPort _messageBus;
     private readonly IAppDistributedLock _distributedLock;
+    private readonly IApprovalExecutionRouter _executionRouter;
     private readonly ConcurrentDictionary<string, QueueEntry> _entries = new();
     private readonly object _hydrationLock = new();
     private volatile bool _hydrated;
@@ -54,11 +55,13 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         IOptions<ApprovalOptions> options,
         IMessageBusPort messageBus,
         IAppDistributedLock distributedLock,
+        IApprovalExecutionRouter executionRouter,
         ILogger<PostgresApprovalQueue> logger)
     {
         _dbFactory = dbFactory;
         _options = options.Value;
         _distributedLock = distributedLock;
+        _executionRouter = executionRouter;
         _messageBus = messageBus;
         _logger = logger;
         _messageBus.Subscribe("csbot:approval:created", OnRemoteCreated);
@@ -96,6 +99,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             nodeId = _messageBus.NodeId,
             id = request.Id,
             sessionId = request.SessionId,
+            customerId = request.CustomerId,
             traceId = request.TraceId,
             toolName = request.ToolName,
             agentName = request.AgentName,
@@ -186,6 +190,25 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             entry.Request.DecidedBy = string.IsNullOrWhiteSpace(decidedBy) ? WellKnown.Defaults.Admin : decidedBy;
             entry.Request.DecisionReason = reason;
 
+            // Onaylandıysa gerçek iş burada, karar anında tetiklenir — tool çağrısı artık
+            // bunu beklemiyor (bkz. ApprovalGateService.ExecuteWithApprovalGateAsync).
+            // Distributed lock scope'u içinde olduğu için aynı isteğin iki pod'da eş zamanlı
+            // yürütülmesi mümkün değil.
+            if (approved)
+            {
+                try
+                {
+                    var outcome = await _executionRouter.ExecuteAsync(entry.Request, ct).ConfigureAwait(false);
+                    entry.Request.ExecutionResult = outcome.Message;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[HITL] Approval execution başarısız. Id={Id}", id);
+                    entry.Request.ExecutionResult = "İşlem yürütülürken bir hata oluştu.";
+                }
+                entry.Request.ExecutedAt = DateTime.UtcNow;
+            }
+
             try { await UpdateAsync(entry.Request).ConfigureAwait(false); }
             catch (Exception ex)
             {
@@ -209,7 +232,9 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
                 approved,
                 decidedBy = entry.Request.DecidedBy,
                 reason = entry.Request.DecisionReason,
-                decidedAt = entry.Request.DecidedAt
+                decidedAt = entry.Request.DecidedAt,
+                executionResult = entry.Request.ExecutionResult,
+                executedAt = entry.Request.ExecutedAt
             });
 
             return true;
@@ -244,6 +269,43 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
     {
         EnsureHydrated();
         return _entries.TryGetValue(id, out var entry) ? entry.Request : null;
+    }
+
+    public IReadOnlyList<ApprovalRequest> GetUnseenForSession(string sessionId)
+    {
+        EnsureHydrated();
+        return _entries.Values
+            .Select(e => e.Request)
+            .Where(r =>
+                string.Equals(r.SessionId, sessionId, StringComparison.Ordinal)
+                && r.Status != ApprovalStatus.Pending
+                && r.CustomerSeenAt is null)
+            .OrderBy(r => r.DecidedAt)
+            .ToList();
+    }
+
+    public async Task MarkSeenAsync(string id, CancellationToken ct = default)
+    {
+        EnsureHydrated();
+        if (!_entries.TryGetValue(id, out var entry) || entry.Request.CustomerSeenAt is not null) return;
+
+        entry.Request.CustomerSeenAt = DateTime.UtcNow;
+        try { await UpdateAsync(entry.Request).ConfigureAwait(false); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Approval CustomerSeenAt UPDATE başarısız. Id={Id}", id);
+        }
+    }
+
+    public IReadOnlyList<ApprovalRequest> GetHistoryForCustomer(string customerId, int count = 100)
+    {
+        EnsureHydrated();
+        return _entries.Values
+            .Select(e => e.Request)
+            .Where(r => string.Equals(r.CustomerId, customerId, StringComparison.Ordinal))
+            .OrderByDescending(r => r.RequestedAt)
+            .Take(count)
+            .ToList();
     }
 
     /// <summary>
@@ -298,6 +360,9 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             existing.DecidedAt = req.DecidedAt;
             existing.DecidedBy = req.DecidedBy;
             existing.DecisionReason = req.DecisionReason;
+            existing.ExecutionResult = req.ExecutionResult;
+            existing.ExecutedAt = req.ExecutedAt;
+            existing.CustomerSeenAt = req.CustomerSeenAt;
         }
         await ctx.SaveChangesAsync();
     }
@@ -306,6 +371,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
     {
         Id = req.Id,
         SessionId = req.SessionId,
+        CustomerId = req.CustomerId,
         TraceId = req.TraceId,
         ToolName = req.ToolName,
         AgentName = req.AgentName,
@@ -317,7 +383,10 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         Status = req.Status.ToString(),
         DecidedBy = req.DecidedBy,
         DecisionReason = req.DecisionReason,
-        TimeoutSeconds = req.TimeoutSeconds
+        TimeoutSeconds = req.TimeoutSeconds,
+        ExecutionResult = req.ExecutionResult,
+        ExecutedAt = req.ExecutedAt,
+        CustomerSeenAt = req.CustomerSeenAt
     };
 
     private static ApprovalRequest ToDomain(ApprovalRequestEntity e)
@@ -334,6 +403,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         {
             Id = e.Id,
             SessionId = e.SessionId,
+            CustomerId = e.CustomerId,
             TraceId = e.TraceId,
             ToolName = e.ToolName,
             AgentName = e.AgentName,
@@ -345,7 +415,10 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             Status = status,
             DecidedBy = e.DecidedBy,
             DecisionReason = e.DecisionReason,
-            TimeoutSeconds = e.TimeoutSeconds
+            TimeoutSeconds = e.TimeoutSeconds,
+            ExecutionResult = e.ExecutionResult,
+            ExecutedAt = e.ExecutedAt,
+            CustomerSeenAt = e.CustomerSeenAt
         };
     }
 
@@ -411,6 +484,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             {
                 Id = id,
                 SessionId = root.TryGetProperty("sessionId", out var s) ? s.GetString() : null,
+                CustomerId = root.TryGetProperty("customerId", out var cid) ? cid.GetString() : null,
                 TraceId = root.TryGetProperty("traceId", out var tr) ? tr.GetString() : null,
                 ToolName = root.GetProperty("toolName").GetString() ?? "",
                 AgentName = root.TryGetProperty("agentName", out var an) ? an.GetString() : null,
@@ -452,6 +526,10 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             entry.Request.DecidedBy = root.TryGetProperty("decidedBy", out var db) ? db.GetString() : null;
             entry.Request.DecisionReason = root.TryGetProperty("reason", out var r) && r.ValueKind != JsonValueKind.Null
                 ? r.GetString() : null;
+            entry.Request.ExecutionResult = root.TryGetProperty("executionResult", out var er) && er.ValueKind != JsonValueKind.Null
+                ? er.GetString() : null;
+            entry.Request.ExecutedAt = root.TryGetProperty("executedAt", out var ea) && ea.ValueKind != JsonValueKind.Null
+                ? ea.GetDateTime() : null;
 
             entry.Tcs.TrySetResult(entry.Request);
 

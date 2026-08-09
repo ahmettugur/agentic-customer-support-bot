@@ -32,6 +32,13 @@ public class ApprovalOptions
     public bool AutoApproveOnTimeout { get; set; } = false;
 
     /// <summary>
+    /// Bloklamayan onay modelinde (tool artık admin kararını beklemiyor) <see cref="TimeoutSeconds"/>
+    /// anlamsızlaşır — bunun yerine periyodik bir sweep servisi, bu kadar saat yanıtsız kalan
+    /// Pending kayıtları otomatik reddeder.
+    /// </summary>
+    public int StalePendingHours { get; set; } = 72;
+
+    /// <summary>
     /// Escalation sink feature flag. Kapatılırsa needs_escalation status'u
     /// Yalnızca metin olarak kalır (eski davranış).
     /// </summary>

@@ -9,16 +9,15 @@ using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Tests.Agents;
 
-// NOT: HITL onay bekletme mantığı artık ApprovalRequiredAIFunction + FunctionInvokingChatClient
-// tarafından yönetiliyor (framework seviyesinde), tool lambda'sının içinde DEĞİL. Bu yüzden
-// AIFunction.InvokeAsync'i doğrudan çağırmak onay kapısını hiç tetiklemez — ApprovalRequiredAIFunction
-// saf bir işaretleyicidir, InvokeCoreAsync'i doğrudan iç fonksiyona delege eder (bkz.
-// BuildOrderPlacementTool_WrappedFunction_InvokeAsyncBypassesGate testi). Bu yüzden testler artık
-// iki ayrı seviyeyi doğruluyor: (1) Build*Tool()'un doğru koşullarda sarmalayıp sarmalamadığı,
-// (2) RequestApprovalAsync'in (artık WorkflowRunner tarafından çağrılan public metot) IApprovalQueue
-// ile doğru etkileşimi. Gerçek uçtan uca ("LLM tool çağırmaya karar verir → framework duraklatır →
-// admin onaylar → workflow devam eder") akışı, çalışan bir workflow + gerçek LLM gerektirir; bu
-// birim testlerinin kapsamı dışındadır.
+// NOT: Bloklamayan onay modeli (#48) — onay gerektiren 4 tool (sipariş/iptal/iade/şikayet)
+// artık ApprovalRequiredAIFunction ile SARILMIYOR ve admin kararını beklemiyor.
+// ApprovalGateService.ExecuteWithApprovalGateAsync, onay gerekiyorsa IApprovalQueue.CreateAsync
+// ile kaydı oluşturup HEMEN "onaya gönderildi" (pending) ToolResult'ı döner — gerçek iş tool
+// çağrısı anında ÇALIŞTIRILMAZ, admin karar verdiğinde IApprovalExecutionRouter üzerinden
+// DecideAsync anında tetiklenir (bkz. ApprovalExecutionRouter/PostgresApprovalQueue testleri).
+// customerId artık LLM'e sorulan bir parametre DEĞİL — ApprovalContextAccessor'daki (JWT'den
+// gelen) CustomerId kullanılır (bkz. #54), bu yüzden customerId gerektiren tool'ları test
+// ederken context SetScope ile kurulmalı.
 [Collection("PostgresCatalog")]
 public class ApprovalGateServiceToolBuilderTests
 {
@@ -29,11 +28,12 @@ public class ApprovalGateServiceToolBuilderTests
         _fixture = fixture;
     }
 
-    private ApprovalGateService Build(ApprovalOptions opts, IApprovalQueue? queue = null)
+    private ApprovalGateService Build(
+        ApprovalOptions opts, IApprovalQueue? queue = null, ApprovalContextAccessor? contextAccessor = null)
     {
         queue ??= new InMemoryApprovalQueue(
             Options.Create(opts),
-            NullLogger<InMemoryApprovalQueue>.Instance);
+            new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
         var escalationPolicy = new EscalationPolicyService(
             sink, Options.Create(opts));
@@ -41,7 +41,7 @@ public class ApprovalGateServiceToolBuilderTests
             queue,
             Options.Create(opts),
             sink,
-            new ApprovalContextAccessor(),
+            contextAccessor ?? new ApprovalContextAccessor(),
             TestFactory.CreateToolsService(_fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo),
             escalationPolicy);
     }
@@ -62,94 +62,122 @@ public class ApprovalGateServiceToolBuilderTests
         return (false, raw?.ToString() ?? "");
     }
 
-    // ── Build*Tool() sarmalama kararı ───────────────────────────────────────────
+    // ── Bloklamayan onay: tool artık admin kararını beklemiyor ─────────────────────
 
     [Fact]
-    public void BuildOrderPlacementTool_ApprovalRequired_WrapsWithApprovalRequiredAIFunction()
+    public async Task BuildOrderPlacementTool_ApprovalRequired_ReturnsPendingWithoutExecutingTool()
     {
         var opts = new ApprovalOptions
         {
             Enabled = true,
             ToolsRequiringApproval = new() { WellKnown.ToolNames.OrderPlacement }
         };
-        var svc = Build(opts);
+        // Auto-decide YOK — DecideAsync hiç çağrılmıyor, kayıt Pending kalmalı.
+        var queue = new InMemoryApprovalQueue(
+            Options.Create(opts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
+        var contextAccessor = new ApprovalContextAccessor();
+        using var scope = contextAccessor.SetScope("s1", null, "sipariş ver", "9011");
+        var svc = Build(opts, queue, contextAccessor);
+        var fn = svc.BuildOrderPlacementTool();
 
-        svc.BuildOrderPlacementTool().Should().BeOfType<ApprovalRequiredAIFunction>();
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
+        {
+            ["productName"] = product,
+            ["quantity"] = 1
+        }), TestContext.Current.CancellationToken);
+
+        var (success, message) = ParseResult(result);
+        success.Should().BeTrue("pending dönüş de bir ToolResult.Ok'tur — tool başarısız olmadı, sadece ertelendi");
+        message.Should().Contain("onaya gönderildi");
+
+        queue.GetPending().Should().ContainSingle(p => p.ToolName == WellKnown.ToolNames.OrderPlacement);
     }
 
     [Fact]
-    public void BuildOrderPlacementTool_ApprovalDisabled_NotWrapped()
-    {
-        var opts = new ApprovalOptions { Enabled = false };
-        var svc = Build(opts);
-
-        svc.BuildOrderPlacementTool().Should().NotBeOfType<ApprovalRequiredAIFunction>();
-    }
-
-    [Fact]
-    public void BuildOrderPlacementTool_ToolNotInList_NotWrapped()
-    {
-        var opts = new ApprovalOptions { Enabled = true, ToolsRequiringApproval = new() };
-        var svc = Build(opts);
-
-        svc.BuildOrderPlacementTool().Should().NotBeOfType<ApprovalRequiredAIFunction>();
-    }
-
-    [Fact]
-    public void BuildComplaintRegistrationTool_ApprovalRequired_WrapsWithApprovalRequiredAIFunction()
+    public async Task BuildComplaintRegistrationTool_ApprovalRequired_ReturnsPendingWithoutExecutingTool()
     {
         var opts = new ApprovalOptions
         {
             Enabled = true,
             ToolsRequiringApproval = new() { WellKnown.ToolNames.ComplaintRegistration }
         };
-        var svc = Build(opts);
+        var queue = new InMemoryApprovalQueue(
+            Options.Create(opts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
+        var svc = Build(opts, queue);
+        var fn = svc.BuildComplaintRegistrationTool();
 
-        svc.BuildComplaintRegistrationTool().Should().BeOfType<ApprovalRequiredAIFunction>();
+        var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
+        {
+            ["orderId"] = "1030",
+            ["complaintText"] = "onaya düşmesi beklenen şikayet metni"
+        }), TestContext.Current.CancellationToken);
+
+        var (success, message) = ParseResult(result);
+        success.Should().BeTrue();
+        message.Should().Contain("onaya gönderildi");
+        queue.GetPending().Should().ContainSingle(p => p.ToolName == WellKnown.ToolNames.ComplaintRegistration);
     }
 
     [Fact]
-    public void BuildComplaintRegistrationTool_ApprovalDisabled_NotWrapped()
-    {
-        var opts = new ApprovalOptions { Enabled = false };
-        var svc = Build(opts);
-
-        svc.BuildComplaintRegistrationTool().Should().NotBeOfType<ApprovalRequiredAIFunction>();
-    }
-
-    [Fact]
-    public void BuildOrderCancelTool_ApprovalRequired_WrapsWithApprovalRequiredAIFunction()
+    public async Task BuildOrderCancelTool_ApprovalRequired_ReturnsPendingWithoutExecutingTool()
     {
         var opts = new ApprovalOptions
         {
             Enabled = true,
             ToolsRequiringApproval = new() { WellKnown.ToolNames.OrderCancel }
         };
-        var svc = Build(opts);
+        var queue = new InMemoryApprovalQueue(
+            Options.Create(opts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
+        var svc = Build(opts, queue);
+        var fn = svc.BuildOrderCancelTool();
 
-        svc.BuildOrderCancelTool().Should().BeOfType<ApprovalRequiredAIFunction>();
+        var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
+        {
+            ["orderId"] = "1030",
+            ["reason"] = "müşteri vazgeçti"
+        }), TestContext.Current.CancellationToken);
+
+        var (success, message) = ParseResult(result);
+        success.Should().BeTrue();
+        message.Should().Contain("onaya gönderildi");
+        queue.GetPending().Should().ContainSingle(p => p.ToolName == WellKnown.ToolNames.OrderCancel);
     }
 
     [Fact]
-    public void BuildReturnRequestTool_ApprovalRequired_WrapsWithApprovalRequiredAIFunction()
+    public async Task BuildReturnRequestTool_ApprovalRequired_ReturnsPendingWithoutExecutingTool()
     {
         var opts = new ApprovalOptions
         {
             Enabled = true,
             ToolsRequiringApproval = new() { WellKnown.ToolNames.ReturnRequest }
         };
-        var svc = Build(opts);
+        var queue = new InMemoryApprovalQueue(
+            Options.Create(opts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
+        var svc = Build(opts, queue);
+        var fn = svc.BuildReturnRequestTool();
 
-        svc.BuildReturnRequestTool().Should().BeOfType<ApprovalRequiredAIFunction>();
+        var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
+        {
+            ["orderId"] = "1042",
+            ["reason"] = "ürün kusurlu"
+        }), TestContext.Current.CancellationToken);
+
+        var (success, message) = ParseResult(result);
+        success.Should().BeTrue();
+        message.Should().Contain("onaya gönderildi");
+        queue.GetPending().Should().ContainSingle(p => p.ToolName == WellKnown.ToolNames.ReturnRequest);
     }
 
-    // ── InvokeAsync doğrudan çağrıldığında (gate'siz path) tool gerçekten çalışıyor mu ──
+    // ── Onay gerekmiyorsa tool doğrudan çalışır ─────────────────────────────────
 
     [Fact]
     public async Task BuildOrderPlacementTool_ApprovalDisabled_PassesThroughToTool()
     {
         var opts = new ApprovalOptions { Enabled = false };
-        var svc = Build(opts);
+        var contextAccessor = new ApprovalContextAccessor();
+        using var scope = contextAccessor.SetScope("s1", null, "sipariş ver", "9007");
+        var svc = Build(opts, contextAccessor: contextAccessor);
         var fn = svc.BuildOrderPlacementTool();
 
         var product = _fixture.ProductRepo.GetAll().First().Name;
@@ -157,8 +185,7 @@ public class ApprovalGateServiceToolBuilderTests
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
             ["productName"] = product,
-            ["quantity"] = 1,
-            ["customerId"] = $"9007"
+            ["quantity"] = 1
         }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
@@ -172,45 +199,17 @@ public class ApprovalGateServiceToolBuilderTests
             Enabled = true,
             ToolsRequiringApproval = new()
         };
-        var svc = Build(opts);
+        var contextAccessor = new ApprovalContextAccessor();
+        using var scope = contextAccessor.SetScope("s1", null, "sipariş ver", "9008");
+        var svc = Build(opts, contextAccessor: contextAccessor);
         var fn = svc.BuildOrderPlacementTool();
         var product = _fixture.ProductRepo.GetAll().First().Name;
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
             ["productName"] = product,
-            ["quantity"] = 1,
-            ["customerId"] = $"9008"
+            ["quantity"] = 1
         }), TestContext.Current.CancellationToken);
-        var (success, _) = ParseResult(result);
-        success.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task BuildOrderPlacementTool_WrappedFunction_InvokeAsyncBypassesGate_DelegatesDirectlyToInnerTool()
-    {
-        // ApprovalRequiredAIFunction saf bir işaretleyicidir (DelegatingAIFunction.InvokeCoreAsync
-        // doğrudan iç fonksiyona delege eder) — gerçek engelleme FunctionInvokingChatClient'ta
-        // olur, burada değil. Bu test o davranışı belgeliyor: InvokeAsync'i doğrudan çağırmak
-        // (ör. bir test, ya da normal chat-completion pipeline'ı dışındaki bir kod yolu) onay
-        // kapısını devre dışı bırakır ve gerçek tool'u çalıştırır.
-        var opts = new ApprovalOptions
-        {
-            Enabled = true,
-            ToolsRequiringApproval = new() { WellKnown.ToolNames.OrderPlacement }
-        };
-        var svc = Build(opts);
-        var fn = svc.BuildOrderPlacementTool();
-        fn.Should().BeOfType<ApprovalRequiredAIFunction>();
-
-        var product = _fixture.ProductRepo.GetAll().First().Name;
-        var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
-        {
-            ["productName"] = product,
-            ["quantity"] = 1,
-            ["customerId"] = "9011"
-        }), TestContext.Current.CancellationToken);
-
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
     }
@@ -225,14 +224,14 @@ public class ApprovalGateServiceToolBuilderTests
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
             ["orderId"] = "1030",
-            ["complaintText"] = $"şikayet metni unique {Guid.NewGuid()} buraya yazıldı",
-            ["customerId"] = "1027"
+            ["complaintText"] = $"şikayet metni unique {Guid.NewGuid()} buraya yazıldı"
         }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
     }
 
     // ── RequestApprovalAsync — WorkflowRunner'ın RequestInfoEvent köprüsünden çağırdığı metot ──
+    // (Bu 4 tool artık bu yolu kullanmıyor, ama metod başka onay senaryoları için hâlâ var.)
 
     [Fact]
     public async Task RequestApprovalAsync_Rejected_ReturnsApprovedFalseWithReason()
@@ -240,7 +239,7 @@ public class ApprovalGateServiceToolBuilderTests
         var opts = new ApprovalOptions { Enabled = true, TimeoutSeconds = 5 };
         var queue = new InMemoryApprovalQueue(
             Options.Create(opts),
-            NullLogger<InMemoryApprovalQueue>.Instance);
+            new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
         queue.RequestCreated += (_, req) =>
             _ = queue.DecideAsync(req.Id, approved: false, decidedBy: "test", reason: "test_reject");
 
@@ -263,7 +262,7 @@ public class ApprovalGateServiceToolBuilderTests
         var opts = new ApprovalOptions { Enabled = true, TimeoutSeconds = 5 };
         var queue = new InMemoryApprovalQueue(
             Options.Create(opts),
-            NullLogger<InMemoryApprovalQueue>.Instance);
+            new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
         queue.RequestCreated += (_, req) =>
             _ = queue.DecideAsync(req.Id, approved: true, decidedBy: "test", reason: "ok");
 
@@ -285,7 +284,7 @@ public class ApprovalGateServiceToolBuilderTests
         var opts = new ApprovalOptions { Enabled = true, TimeoutSeconds = 5 };
         var queue = new InMemoryApprovalQueue(
             Options.Create(opts),
-            NullLogger<InMemoryApprovalQueue>.Instance);
+            new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
         queue.RequestCreated += (_, req) =>
             _ = queue.DecideAsync(req.Id, approved: true, decidedBy: "test", reason: null);
 

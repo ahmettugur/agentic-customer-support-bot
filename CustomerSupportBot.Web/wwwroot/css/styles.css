@@ -322,6 +322,151 @@ body {
     border-color: var(--color-border-strong);
 }
 
+.approval-notifications {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.btn-approval-bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.btn-approval-bell:hover {
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    border-color: var(--color-border-strong);
+}
+
+.approval-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    border-radius: var(--radius-full);
+    background: var(--color-danger, #e5484d);
+    color: #fff;
+}
+
+.approval-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 300px;
+    max-height: 360px;
+    overflow-y: auto;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg, 0 8px 24px rgba(0,0,0,0.18));
+    z-index: 40;
+    padding: var(--space-2);
+}
+
+.approval-panel-empty {
+    padding: var(--space-3);
+    text-align: center;
+    color: var(--color-text-secondary);
+    font-size: 13px;
+}
+
+.approval-panel-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--space-2);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--color-border);
+}
+.approval-panel-item + .approval-panel-item {
+    margin-top: 4px;
+}
+.approval-panel-item.approval-approved {
+    border-left-color: var(--color-success, #30a46c);
+    background: var(--color-surface-alt);
+}
+.approval-panel-item.approval-rejected {
+    border-left-color: var(--color-danger, #e5484d);
+    background: var(--color-surface-alt);
+}
+.approval-panel-item.approval-expired {
+    border-left-color: var(--color-text-secondary);
+    background: var(--color-surface-alt);
+}
+.approval-panel-item.approval-pending {
+    border-left-color: var(--color-accent, #f5a623);
+    background: var(--color-surface-alt);
+}
+.approval-status {
+    font-size: 12px;
+    font-weight: 600;
+}
+.approval-message {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}
+.approval-date {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    opacity: 0.8;
+}
+
+.approval-panel-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: var(--space-2);
+}
+.approval-panel-back {
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+}
+.approval-panel-back:hover {
+    color: var(--color-text);
+}
+.approval-panel-history-link {
+    display: block;
+    width: 100%;
+    margin-top: var(--space-2);
+    padding: var(--space-2);
+    background: none;
+    border: none;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    text-align: center;
+    cursor: pointer;
+}
+.approval-panel-history-link:hover {
+    color: var(--color-text);
+}
+
 .btn-new-chat {
     display: inline-flex;
     align-items: center;

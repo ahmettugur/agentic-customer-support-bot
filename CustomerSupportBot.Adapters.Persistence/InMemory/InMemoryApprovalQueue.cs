@@ -19,6 +19,7 @@ public class InMemoryApprovalQueue : IApprovalQueue
     private readonly ConcurrentDictionary<string, QueueEntry> _entries = new();
     private readonly ConcurrentQueue<string> _order = new(); // FIFO + history
     private readonly ApprovalOptions _options;
+    private readonly IApprovalExecutionRouter _executionRouter;
     private readonly ILogger<InMemoryApprovalQueue> _logger;
     private const int HistoryCapacity = 200;
 
@@ -27,9 +28,11 @@ public class InMemoryApprovalQueue : IApprovalQueue
 
     public InMemoryApprovalQueue(
         IOptions<ApprovalOptions> options,
+        IApprovalExecutionRouter executionRouter,
         ILogger<InMemoryApprovalQueue> logger)
     {
         _options = options.Value;
+        _executionRouter = executionRouter;
         _logger = logger;
     }
 
@@ -87,29 +90,49 @@ public class InMemoryApprovalQueue : IApprovalQueue
         }
     }
 
-    public Task<bool> DecideAsync(
+    public async Task<bool> DecideAsync(
         string id, bool approved, string? decidedBy = null, string? reason = null, CancellationToken ct = default)
     {
-        if (!_entries.TryGetValue(id, out var entry)) return Task.FromResult(false);
+        if (!_entries.TryGetValue(id, out var entry)) return false;
+
+        // Status'ü Pending'den çıkarmak eşzamanlı ikinci bir DecideAsync çağrısını
+        // (double-decision) burada, senkron olarak engeller — asenkron yürütme
+        // ADIMI kilidin DIŞINDA olsa da, bu kontrol yeterli çünkü bir kez Approved/Rejected'a
+        // geçtikten sonra hiçbir çağrı ikinci kez buraya giremez.
         lock (entry.Lock)
         {
-            if (entry.Request.Status != ApprovalStatus.Pending) return Task.FromResult(false);
+            if (entry.Request.Status != ApprovalStatus.Pending) return false;
 
             entry.Request.Status = approved ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
             entry.Request.DecidedAt = DateTime.UtcNow;
             entry.Request.DecidedBy = string.IsNullOrWhiteSpace(decidedBy) ? WellKnown.Defaults.Admin : decidedBy;
             entry.Request.DecisionReason = reason;
-
-            _logger.LogInformation(
-                "[HITL] Approval decision: id={Id}, approved={Approved}, by={By}",
-                id, approved, entry.Request.DecidedBy);
-
-            try { RequestDecided?.Invoke(this, entry.Request); }
-            catch (Exception ex) { _logger.LogWarning(ex, "RequestDecided handler failed"); }
-
-            entry.Tcs.TrySetResult(entry.Request);
-            return Task.FromResult(true);
         }
+
+        if (approved)
+        {
+            try
+            {
+                var outcome = await _executionRouter.ExecuteAsync(entry.Request, ct).ConfigureAwait(false);
+                entry.Request.ExecutionResult = outcome.Message;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[HITL] Approval execution başarısız. Id={Id}", id);
+                entry.Request.ExecutionResult = "İşlem yürütülürken bir hata oluştu.";
+            }
+            entry.Request.ExecutedAt = DateTime.UtcNow;
+        }
+
+        _logger.LogInformation(
+            "[HITL] Approval decision: id={Id}, approved={Approved}, by={By}",
+            id, approved, entry.Request.DecidedBy);
+
+        try { RequestDecided?.Invoke(this, entry.Request); }
+        catch (Exception ex) { _logger.LogWarning(ex, "RequestDecided handler failed"); }
+
+        entry.Tcs.TrySetResult(entry.Request);
+        return true;
     }
 
     public IReadOnlyList<ApprovalRequest> GetPending() =>
@@ -128,6 +151,31 @@ public class InMemoryApprovalQueue : IApprovalQueue
 
     public ApprovalRequest? Get(string id) =>
         _entries.TryGetValue(id, out var entry) ? entry.Request : null;
+
+    public IReadOnlyList<ApprovalRequest> GetUnseenForSession(string sessionId) =>
+        _entries.Values
+            .Select(e => e.Request)
+            .Where(r =>
+                string.Equals(r.SessionId, sessionId, StringComparison.Ordinal)
+                && r.Status != ApprovalStatus.Pending
+                && r.CustomerSeenAt is null)
+            .OrderBy(r => r.DecidedAt)
+            .ToList();
+
+    public Task MarkSeenAsync(string id, CancellationToken ct = default)
+    {
+        if (_entries.TryGetValue(id, out var entry))
+            entry.Request.CustomerSeenAt = DateTime.UtcNow;
+        return Task.CompletedTask;
+    }
+
+    public IReadOnlyList<ApprovalRequest> GetHistoryForCustomer(string customerId, int count = 100) =>
+        _entries.Values
+            .Select(e => e.Request)
+            .Where(r => string.Equals(r.CustomerId, customerId, StringComparison.Ordinal))
+            .OrderByDescending(r => r.RequestedAt)
+            .Take(count)
+            .ToList();
 
     private void TrimHistory()
     {

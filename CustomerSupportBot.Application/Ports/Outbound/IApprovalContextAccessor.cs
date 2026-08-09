@@ -7,7 +7,7 @@ namespace CustomerSupportBot.Application.Ports.Outbound;
 public interface IApprovalContextAccessor
 {
     ApprovalContext? Context { get; }
-    IDisposable SetScope(string? sessionId, string? traceId, string? userQuery);
+    IDisposable SetScope(string? sessionId, string? traceId, string? userQuery, string? customerId = null);
 
     /// <summary>
     /// Mevcut ambient bağlamda şu an fiilen çalışan uzman ajanın adını günceller
@@ -18,4 +18,5 @@ public interface IApprovalContextAccessor
     void SetCurrentAgent(string? agentName);
 }
 
-public sealed record ApprovalContext(string? SessionId, string? TraceId, string? UserQuery, string? AgentName = null);
+public sealed record ApprovalContext(
+    string? SessionId, string? TraceId, string? UserQuery, string? AgentName = null, string? CustomerId = null);

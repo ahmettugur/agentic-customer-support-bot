@@ -3,6 +3,8 @@
 // öncelik yükseltmesi. SlaPortService (Application katmanı) doğrudan test edilir;
 // SlaGuardianService artık ince bir tetikleyici olduğundan ayrıca test edilmez.
 
+using CustomerSupportBot.Api.Tests.Helpers;
+using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.Sla;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +22,7 @@ public class SlaGuardianServiceTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.Configure<ApprovalOptions>(o => o.TimeoutSeconds = 600);
+        services.AddSingleton<IApprovalExecutionRouter, NoopApprovalExecutionRouter>();
         services.AddSingleton<IApprovalQueue, InMemoryApprovalQueue>();
         services.AddSingleton<IEscalationSink, InMemoryEscalationSink>();
         services.AddSingleton<ISlaEventSink, InMemorySlaEventSink>();

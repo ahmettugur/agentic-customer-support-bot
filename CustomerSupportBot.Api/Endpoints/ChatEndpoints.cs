@@ -5,6 +5,7 @@
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -12,9 +13,12 @@ public static class ChatEndpoints
 {
     public static IEndpointRouteBuilder MapChatEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/chat/", HandleChatAsync).RequireRateLimiting("chat");
-        app.MapPost("/chat/stream", HandleChatStreamAsync).RequireRateLimiting("chat");
-        app.MapGet("/chat/events/{sessionId}", HandleChatEventsAsync);
+        app.MapPost("/chat/", HandleChatAsync).RequireRateLimiting("chat").RequireAuthorization("Customer");
+        app.MapPost("/chat/stream", HandleChatStreamAsync).RequireRateLimiting("chat").RequireAuthorization("Customer");
+        app.MapGet("/chat/events/{sessionId}", HandleChatEventsAsync).RequireAuthorization("Customer");
+        app.MapGet("/chat-sessions/{sessionId}/approvals/unseen", HandleGetUnseenApprovalsAsync).RequireAuthorization("Customer");
+        app.MapPost("/chat-sessions/{sessionId}/approvals/{id}/seen", HandleMarkApprovalSeenAsync).RequireAuthorization("Customer");
+        app.MapGet("/customer/approvals/history", HandleGetApprovalHistoryAsync).RequireAuthorization("Customer");
         return app;
     }
 
@@ -51,7 +55,11 @@ public static class ChatEndpoints
                 request.SessionId, string.Join(",", guardResult.Flags));
         }
 
-        var safeRequest = request with { Query = guardResult.SanitizedInput };
+        var safeRequest = request with
+        {
+            Query = guardResult.SanitizedInput,
+            CustomerId = ResolveAuthenticatedCustomerId(httpContext)
+        };
         // İstemci bağlantıyı keserse reasoning/workflow zinciri de iptal edilir —
         // aksi halde LLM çağrısı WorkflowGuards:TimeoutSeconds süresince boşa çalışır.
         var response = await chatPort.HandleAsync(safeRequest, httpContext.RequestAborted);
@@ -99,7 +107,11 @@ public static class ChatEndpoints
                 request.SessionId, string.Join(",", guardResult.Flags));
         }
 
-        var safeRequest = request with { Query = guardResult.SanitizedInput };
+        var safeRequest = request with
+        {
+            Query = guardResult.SanitizedInput,
+            CustomerId = ResolveAuthenticatedCustomerId(httpContext)
+        };
 
         using var sse = new SseForwarder(response, httpContext.RequestAborted);
 
@@ -132,6 +144,14 @@ public static class ChatEndpoints
         await sse.WriteDoneAsync(resolvedSessionId);
     }
 
+    /// <summary>
+    /// Onay gerektiren tool'ların (sipariş/iade/iptal/şikayet) customerId'yi kullanıcının
+    /// yazdığı metinden değil, kimlik doğrulanmış JWT claim'inden almasını sağlar — client
+    /// body'sindeki hiçbir alandan customerId GÜVENİLİR olarak alınmaz.
+    /// </summary>
+    private static string? ResolveAuthenticatedCustomerId(HttpContext httpContext) =>
+        httpContext.User.FindFirst("linked_customer_id")?.Value;
+
     private static string ExtractSessionId(object? data)
     {
         if (data == null) return "";
@@ -159,5 +179,61 @@ public static class ChatEndpoints
 
         using var sse = new SseForwarder(response, httpContext.RequestAborted);
         await orchestrator.ExecuteAsync(sessionId, sse, httpContext.RequestAborted);
+    }
+
+    /// <summary>
+    /// Kullanıcı chat'e (yeni sekme/sayfa yenileme sonrası) döndüğünde, bağlı değilken
+    /// kaçırdığı onay sonuçlarını (bloklamayan onay modeli — bkz. ApprovalGateService)
+    /// çekmek için. Badge/bildirim UI'ı sayfa açılışında bunu çağırır.
+    /// </summary>
+    private static IResult HandleGetUnseenApprovalsAsync(string sessionId, IApprovalQueue approvals)
+    {
+        var unseen = approvals.GetUnseenForSession(sessionId)
+            .Select(r => new
+            {
+                id = r.Id,
+                toolName = r.ToolName,
+                status = r.Status.ToString().ToLowerInvariant(),
+                decisionReason = r.DecisionReason,
+                executionResult = r.ExecutionResult,
+                decidedAt = r.DecidedAt
+            });
+        return Results.Ok(unseen);
+    }
+
+    private static async Task<IResult> HandleMarkApprovalSeenAsync(
+        string sessionId, string id, IApprovalQueue approvals, CancellationToken ct)
+    {
+        var request = approvals.Get(id);
+        if (request is null || request.SessionId != sessionId) return Results.NotFound();
+
+        await approvals.MarkSeenAsync(id, ct);
+        return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Kalıcı "geçmiş işlemlerim" görünümü — bekleyen/onaylanmış/reddedilmiş fark etmeksizin
+    /// bu müşterinin TÜM onay taleplerini döner. Unseen endpoint'inin aksine görüldükten sonra
+    /// da listede kalmaya devam eder (badge sayacına dahil değil, salt-okunur bir geçmiş).
+    /// customerId route/body'den değil JWT claim'inden okunur — başka bir müşterinin
+    /// geçmişini URL değiştirerek görme ihtimali yok.
+    /// </summary>
+    private static IResult HandleGetApprovalHistoryAsync(HttpContext httpContext, IApprovalQueue approvals)
+    {
+        var customerId = ResolveAuthenticatedCustomerId(httpContext);
+        if (string.IsNullOrWhiteSpace(customerId)) return Results.Ok(Array.Empty<object>());
+
+        var history = approvals.GetHistoryForCustomer(customerId)
+            .Select(r => new
+            {
+                id = r.Id,
+                toolName = r.ToolName,
+                status = r.Status.ToString().ToLowerInvariant(),
+                decisionReason = r.DecisionReason,
+                executionResult = r.ExecutionResult,
+                requestedAt = r.RequestedAt,
+                decidedAt = r.DecidedAt
+            });
+        return Results.Ok(history);
     }
 }

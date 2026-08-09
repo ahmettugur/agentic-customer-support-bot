@@ -9,9 +9,10 @@ window.__scrollToBottom = function (id) {
     requestAnimationFrame(function () { el.scrollTop = el.scrollHeight; });
 };
 
-window.__chatSetup = function (ref, apiBase) {
+window.__chatSetup = function (ref, apiBase, authToken) {
     apiBase = (apiBase || '').replace(/\/+$/, '');
     window._blazorChatRef = ref;
+    window._authToken = authToken || null;
 
     // Ajan-isim haritasının tek doğruluk kaynağı C# tarafı (Chat.razor._agentNameMap) —
     // burada elle kopya tutmak yerine bir kez JSInterop ile çekip cache'liyoruz.
@@ -206,9 +207,11 @@ window.__chatSetup = function (ref, apiBase) {
         (async function () {
             try {
                 var url = apiBase + '/chat/stream';
+                var headers = { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' };
+                if (window._authToken) headers['Authorization'] = 'Bearer ' + window._authToken;
                 var r = await fetch(url, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+                    headers: headers,
                     body: JSON.stringify({ query: query, sessionId: sessionId || null }),
                     signal: ctrl.signal
                 });
@@ -255,9 +258,12 @@ window.__chatSetup = function (ref, apiBase) {
     // ── Persistent EventSource (uses absolute API URL) ────────────────────────
     window._startPersistentEvents = function (sid) {
         if (window._chatEs) window._chatEs.close();
-        var es = new EventSource(apiBase + '/chat/events/' + encodeURIComponent(sid));
+        // EventSource header desteklemez — token'ı query string ile taşıyoruz
+        // (bkz. AuthServicesExtensions.cs OnMessageReceived, access_token'ı bearer olarak okuyor).
+        var tokenQs = window._authToken ? '?access_token=' + encodeURIComponent(window._authToken) : '';
+        var es = new EventSource(apiBase + '/chat/events/' + encodeURIComponent(sid) + tokenQs);
         window._chatEs = es;
-        ['human_joined', 'human_left', 'bot_typing', 'human_message', 'handoff_pending', 'handoff_cleared'].forEach(function (t) {
+        ['human_joined', 'human_left', 'bot_typing', 'human_message', 'handoff_pending', 'handoff_cleared', 'approval_resolved'].forEach(function (t) {
             es.addEventListener(t, function (e) {
                 ref.invokeMethodAsync('OnPersistentEvent', t, e.data || '{}');
             });

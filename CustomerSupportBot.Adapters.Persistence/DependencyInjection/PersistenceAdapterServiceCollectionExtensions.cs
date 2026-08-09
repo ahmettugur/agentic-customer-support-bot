@@ -25,6 +25,8 @@ public static class PersistenceAdapterServiceCollectionExtensions
 
         PersistenceServiceCollectionExtensions.AddCustomerSupportPersistence(services, pgConnection);
         services.AddHostedService<PersistenceHydrator>();
+        services.AddHostedService<DemoDataSeeder>();
+        services.AddHostedService<StaleApprovalSweepService>();
 
         services.AddScoped<IUserAuthRepository, EfUserAuthRepository>();
         services.AddScoped<IRefreshTokenRepository, EfRefreshTokenRepository>();

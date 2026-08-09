@@ -23,7 +23,7 @@ public class ApprovalGateServiceEscalationTests
     {
         var queue = new InMemoryApprovalQueue(
             Options.Create(_opts),
-            NullLogger<InMemoryApprovalQueue>.Instance);
+            new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
         var escalationPolicy = new EscalationPolicyService(
             _sink, Options.Create(_opts));
         return new ApprovalGateService(
@@ -36,7 +36,7 @@ public class ApprovalGateServiceEscalationTests
     }
 
     [Fact]
-    public void ProcessPendingEscalations_FeatureDisabled_NoOp()
+    public async Task ProcessPendingEscalations_FeatureDisabled_NoOp()
     {
         _opts.EscalationEnabled = false;
         var svc = BuildService();
@@ -57,12 +57,12 @@ public class ApprovalGateServiceEscalationTests
             }
         };
 
-        svc.ProcessPendingEscalations(trace, "soru", "yanıt");
+        await svc.ProcessPendingEscalationsAsync(trace, "soru", "yanıt");
         _sink.GetOpen().Should().BeEmpty();
     }
 
     [Fact]
-    public void ProcessPendingEscalations_NoCandidates_NoOp()
+    public async Task ProcessPendingEscalations_NoCandidates_NoOp()
     {
         var svc = BuildService();
         var trace = new ReasoningTrace
@@ -77,12 +77,12 @@ public class ApprovalGateServiceEscalationTests
                 }
             }
         };
-        svc.ProcessPendingEscalations(trace, "soru", "yanıt");
+        await svc.ProcessPendingEscalationsAsync(trace, "soru", "yanıt");
         _sink.GetOpen().Should().BeEmpty();
     }
 
     [Fact]
-    public void ProcessPendingEscalations_NeedsEscalation_CreatesEscalation()
+    public async Task ProcessPendingEscalations_NeedsEscalation_CreatesEscalation()
     {
         var svc = BuildService();
         var trace = new ReasoningTrace
@@ -103,7 +103,7 @@ public class ApprovalGateServiceEscalationTests
             }
         };
 
-        svc.ProcessPendingEscalations(trace, "soru", "yanıt");
+        await svc.ProcessPendingEscalationsAsync(trace, "soru", "yanıt");
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
         open[0].Reason.Should().Be("manuel inceleme");
@@ -111,7 +111,7 @@ public class ApprovalGateServiceEscalationTests
     }
 
     [Fact]
-    public void ProcessPendingEscalations_DuplicateSessionSameAgent_SecondSkipped()
+    public async Task ProcessPendingEscalations_DuplicateSessionSameAgent_SecondSkipped()
     {
         var svc = BuildService();
         var trace = new ReasoningTrace
@@ -131,7 +131,7 @@ public class ApprovalGateServiceEscalationTests
             }
         };
 
-        svc.ProcessPendingEscalations(trace, "q", "r");
+        await svc.ProcessPendingEscalationsAsync(trace, "q", "r");
         // Aynı session + aynı ajan (Complaint) zaten açık eskalasyonu varken ikinci
         // çağrı skip edilmeli.
         var trace2 = new ReasoningTrace
@@ -150,14 +150,14 @@ public class ApprovalGateServiceEscalationTests
                 }
             }
         };
-        svc.ProcessPendingEscalations(trace2, "q", "r");
+        await svc.ProcessPendingEscalationsAsync(trace2, "q", "r");
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
         open[0].Reason.Should().Be("ilk");
     }
 
     [Fact]
-    public void ProcessPendingEscalations_SameSessionDifferentAgent_BothCreated()
+    public async Task ProcessPendingEscalations_SameSessionDifferentAgent_BothCreated()
     {
         // Dedup ajan bazlı olmalı — aynı sohbette farklı bir ajandan (bağımsız bir konuda)
         // gelen ikinci bir eskalasyon, ilk ajanın açık eskalasyonu tarafından bastırılmamalı.
@@ -178,7 +178,7 @@ public class ApprovalGateServiceEscalationTests
                 }
             }
         };
-        svc.ProcessPendingEscalations(trace, "q", "r");
+        await svc.ProcessPendingEscalationsAsync(trace, "q", "r");
 
         var trace2 = new ReasoningTrace
         {
@@ -196,7 +196,7 @@ public class ApprovalGateServiceEscalationTests
                 }
             }
         };
-        svc.ProcessPendingEscalations(trace2, "q", "r");
+        await svc.ProcessPendingEscalationsAsync(trace2, "q", "r");
 
         var open = _sink.GetOpen();
         open.Should().HaveCount(2);
@@ -205,7 +205,7 @@ public class ApprovalGateServiceEscalationTests
     }
 
     [Fact]
-    public void ProcessPendingEscalations_TruncatesLongResponse()
+    public async Task ProcessPendingEscalations_TruncatesLongResponse()
     {
         var svc = BuildService();
         var trace = new ReasoningTrace
@@ -226,14 +226,14 @@ public class ApprovalGateServiceEscalationTests
         };
 
         var longResponse = new string('x', 1000);
-        svc.ProcessPendingEscalations(trace, "q", longResponse);
+        await svc.ProcessPendingEscalationsAsync(trace, "q", longResponse);
         var esc = _sink.GetOpen()[0];
         esc.ResponseSummary!.Length.Should().BeLessThanOrEqualTo(501);
         esc.ResponseSummary.Should().EndWith("…");
     }
 
     [Fact]
-    public void ProcessPendingEscalations_TraceLevelDedup_LastReasoningWins()
+    public async Task ProcessPendingEscalations_TraceLevelDedup_LastReasoningWins()
     {
         var svc = BuildService();
         var trace = new ReasoningTrace
@@ -262,7 +262,7 @@ public class ApprovalGateServiceEscalationTests
             }
         };
 
-        svc.ProcessPendingEscalations(trace, "q", "r");
+        await svc.ProcessPendingEscalationsAsync(trace, "q", "r");
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
         open[0].Reason.Should().Be("son_neden");

@@ -52,78 +52,117 @@ public class ApprovalGateService
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ApprovalGateService>.Instance;
     }
 
-    public AIFunction BuildOrderPlacementTool()
-    {
-        var inner = AIFunctionFactory.Create(
-            (
+    /// <summary>
+    /// customerId artık LLM'e sorulan bir parametre DEĞİL — kullanıcı metninde başka bir
+    /// müşteri numarası söylese bile bu tool'lar her zaman login'li kullanıcının doğrulanmış
+    /// kimliğini (<see cref="IApprovalContextAccessor"/> → JWT claim) kullanır. Bu, eskiden
+    /// var olan "kullanıcı başkasının müşteri numarasını söyleyip işlem yaptırabilir" açığını kapatır.
+    /// </summary>
+    private string CurrentCustomerId => _contextAccessor.Context?.CustomerId ?? "";
+
+    public AIFunction BuildOrderPlacementTool() =>
+        AIFunctionFactory.Create(
+            async (
                 [System.ComponentModel.Description("Sipariş verilecek ürünün adı")] string productName,
-                [System.ComponentModel.Description("Sipariş adedi")] int? quantity,
-                [System.ComponentModel.Description("Müşteri kimlik numarası (zorunlu)")] string customerId) =>
-                _tools.OrderPlacementTool(productName, quantity, customerId),
+                [System.ComponentModel.Description("Sipariş adedi")] int? quantity) =>
+                await ExecuteWithApprovalGateAsync(
+                    WellKnown.ToolNames.OrderPlacement,
+                    new Dictionary<string, object?> { ["productName"] = productName, ["quantity"] = quantity, ["customerId"] = CurrentCustomerId },
+                    () => _tools.OrderPlacementTool(productName, quantity, CurrentCustomerId)),
             name: WellKnown.ToolNames.OrderPlacement,
             description:
-                "Yeni sipariş oluşturur. Ürün adı, adet ve müşteri kimlik numarası zorunludur. " +
-                "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
+                "Yeni sipariş oluşturur. Ürün adı ve adet zorunludur; müşteri kimliği login'den otomatik alınır. " +
+                "Bu tool HITL approval gate'inden geçer — admin onaya gönderilir, sonucu bildirim olarak dönülür.");
 
-        return WrapIfRequiresApproval(WellKnown.ToolNames.OrderPlacement, inner);
-    }
-
-    public AIFunction BuildComplaintRegistrationTool()
-    {
-        var inner = AIFunctionFactory.Create(
-            (
+    public AIFunction BuildComplaintRegistrationTool() =>
+        AIFunctionFactory.Create(
+            async (
                 [System.ComponentModel.Description("Şikayetin ilişkili olduğu sipariş numarası (zorunlu)")] string orderId,
-                [System.ComponentModel.Description("Şikayet açıklaması (zorunlu, en az 10 karakter)")] string complaintText,
-                [System.ComponentModel.Description("Müşteri kimlik numarası (opsiyonel)")] string? customerId) =>
-                _tools.ComplaintRegistrationTool(orderId, complaintText, customerId),
+                [System.ComponentModel.Description("Şikayet açıklaması (zorunlu, en az 10 karakter)")] string complaintText) =>
+                await ExecuteWithApprovalGateAsync(
+                    WellKnown.ToolNames.ComplaintRegistration,
+                    new Dictionary<string, object?> { ["orderId"] = orderId, ["complaintText"] = complaintText, ["customerId"] = CurrentCustomerId },
+                    () => _tools.ComplaintRegistrationTool(orderId, complaintText, CurrentCustomerId)),
             name: WellKnown.ToolNames.ComplaintRegistration,
             description:
-                "Müşteri şikayetini sipariş numarasıyla kaydeder. order_id ve description zorunludur. " +
-                "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
+                "Müşteri şikayetini sipariş numarasıyla kaydeder. order_id ve description zorunludur; müşteri kimliği " +
+                "login'den otomatik alınır. Bu tool HITL approval gate'inden geçer — admin onaya gönderilir, sonucu bildirim olarak dönülür.");
 
-        return WrapIfRequiresApproval(WellKnown.ToolNames.ComplaintRegistration, inner);
-    }
-
-    public AIFunction BuildOrderCancelTool()
-    {
-        var inner = AIFunctionFactory.Create(
-            (
+    public AIFunction BuildOrderCancelTool() =>
+        AIFunctionFactory.Create(
+            async (
                 [System.ComponentModel.Description("İptal edilecek sipariş numarası (zorunlu, ör. '1030')")] string orderId,
                 [System.ComponentModel.Description("İptal sebebi (zorunlu, en az 5 karakter)")] string reason) =>
-                _tools.OrderCancelTool(orderId, reason),
+                await ExecuteWithApprovalGateAsync(
+                    WellKnown.ToolNames.OrderCancel,
+                    new Dictionary<string, object?> { ["orderId"] = orderId, ["reason"] = reason },
+                    () => _tools.OrderCancelTool(orderId, reason)),
             name: WellKnown.ToolNames.OrderCancel,
             description:
                 "Mevcut bir siparişi iptal eder. Sadece 'İşleniyor' veya 'Kargolandı' durumundaki siparişler iptal edilebilir. " +
-                "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
+                "Bu tool HITL approval gate'inden geçer — admin onaya gönderilir, sonucu bildirim olarak dönülür.");
 
-        return WrapIfRequiresApproval(WellKnown.ToolNames.OrderCancel, inner);
-    }
-
-    public AIFunction BuildReturnRequestTool()
-    {
-        var inner = AIFunctionFactory.Create(
-            (
+    public AIFunction BuildReturnRequestTool() =>
+        AIFunctionFactory.Create(
+            async (
                 [System.ComponentModel.Description("İade talep edilecek sipariş numarası (zorunlu, ör. '1042')")] string orderId,
                 [System.ComponentModel.Description("İade sebebi (zorunlu, en az 5 karakter)")] string reason) =>
-                _tools.ReturnRequestTool(orderId, reason),
+                await ExecuteWithApprovalGateAsync(
+                    WellKnown.ToolNames.ReturnRequest,
+                    new Dictionary<string, object?> { ["orderId"] = orderId, ["reason"] = reason },
+                    () => _tools.ReturnRequestTool(orderId, reason)),
             name: WellKnown.ToolNames.ReturnRequest,
             description:
                 "Teslim edilmiş bir sipariş için iade talebi oluşturur. Sadece 'Teslim Edildi' durumundaki " +
                 "ve 14 gün içindeki siparişler iade edilebilir. " +
-                "Bu tool HITL approval gate'inden geçer — admin onayı bekler.");
-
-        return WrapIfRequiresApproval(WellKnown.ToolNames.ReturnRequest, inner);
-    }
+                "Bu tool HITL approval gate'inden geçer — admin onaya gönderilir, sonucu bildirim olarak dönülür.");
 
     /// <summary>
-    /// Tool'u sadece config'de onay gerektiriyorsa <see cref="ApprovalRequiredAIFunction"/> ile
-    /// sarmalar — FunctionInvokingChatClient bu işaretli tool'ları gerçekten çağırmadan önce
-    /// bir <c>ToolApprovalRequestContent</c> üretip workflow'un duraklamasını sağlıyor.
-    /// Onay kapalıysa (<see cref="ApprovalOptions.Enabled"/>=false) veya bu tool listede yoksa
-    /// eski davranış korunur: tool doğrudan çalışır.
+    /// Onay gerekmiyorsa tool'u doğrudan çalıştırır. Onay gerekiyorsa <see cref="IApprovalQueue.CreateAsync"/>
+    /// ile kaydı oluşturur ve KARARI BEKLEMEDEN hemen "onaya gönderildi" sonucunu döner — turn burada biter.
+    /// Gerçek iş (execute), admin karar verdiğinde <see cref="IApprovalExecutionRouter"/> üzerinden ayrıca
+    /// tetiklenir (bkz. <c>PostgresApprovalQueue.DecideAsync</c>/<c>InMemoryApprovalQueue.DecideAsync</c>);
+    /// sonucu kullanıcıya bir bildirim/badge olarak ulaşır, bu turda değil.
     /// </summary>
-    private AIFunction WrapIfRequiresApproval(string toolName, AIFunction inner) =>
-        RequiresApproval(toolName) ? new ApprovalRequiredAIFunction(inner) : inner;
+    private async Task<ToolResult> ExecuteWithApprovalGateAsync(
+        string toolName,
+        Dictionary<string, object?> parameters,
+        Func<ToolResult> executeDirectly)
+    {
+        if (!RequiresApproval(toolName))
+            return executeDirectly();
+
+        var ctx = _contextAccessor.Context;
+        var agentName = ResolveAgentName(toolName);
+
+        // Aynı session'da aynı imzalı bekleyen bir talep varsa (ör. LLM tool çağrısını
+        // tekrarladı) yenisini oluşturmak yerine mevcut kaydı döneriz — onaylandığında
+        // gerçek iş bir kez tetiklensin diye.
+        var paramSig = BuildParamSignature(parameters);
+        var existing = ctx?.SessionId is { Length: > 0 } sid
+            ? _approvalQueue.GetPending().FirstOrDefault(p =>
+                  string.Equals(p.SessionId, sid, StringComparison.Ordinal)
+               && string.Equals(p.ToolName, toolName, StringComparison.Ordinal)
+               && string.Equals(BuildParamSignature(p.Parameters), paramSig, StringComparison.Ordinal))
+            : null;
+
+        var req = existing ?? new ApprovalRequest
+        {
+            SessionId = ctx?.SessionId,
+            CustomerId = ctx?.CustomerId,
+            TraceId = ctx?.TraceId,
+            UserQuery = ctx?.UserQuery,
+            ToolName = toolName,
+            AgentName = agentName,
+            Parameters = parameters,
+            Justification = string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName),
+            TimeoutSeconds = _approvalOptions.TimeoutSeconds
+        };
+        if (existing is null)
+            await _approvalQueue.CreateAsync(req);
+
+        return ToolResult.Ok(string.Format(WellKnown.FallbackMessages.ApprovalPending, req.Id));
+    }
 
     private bool RequiresApproval(string toolName) =>
         _approvalOptions.Enabled && _approvalOptions.ToolsRequiringApproval.Contains(toolName);
@@ -204,9 +243,10 @@ public class ApprovalGateService
         }
     }
 
-    public void ProcessPendingEscalations(ReasoningTrace trace, string userQuery, string finalResponse)
+    public async Task ProcessPendingEscalationsAsync(
+        ReasoningTrace trace, string userQuery, string finalResponse, CancellationToken ct = default)
     {
-        _escalationPolicy.ProcessPendingEscalations(trace, userQuery, finalResponse);
+        await _escalationPolicy.ProcessPendingEscalationsAsync(trace, userQuery, finalResponse, ct);
     }
 
     private static string BuildParamSignature(IReadOnlyDictionary<string, object?> parameters)

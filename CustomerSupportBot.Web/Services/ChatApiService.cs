@@ -50,8 +50,60 @@ public sealed class ChatApiService(HttpClient http)
         }
     }
 
+    public async Task<List<UnseenApproval>> GetUnseenApprovalsAsync(string sessionId)
+    {
+        try
+        {
+            var result = await http.GetFromJsonAsync<List<UnseenApproval>>(
+                $"/chat-sessions/{sessionId}/approvals/unseen");
+            return result ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    public async Task MarkApprovalSeenAsync(string sessionId, string approvalId)
+    {
+        try
+        {
+            await http.PostAsync($"/chat-sessions/{sessionId}/approvals/{approvalId}/seen", null);
+        }
+        catch { /* bildirim state'i sadece UI'da kalır, kritik değil */ }
+    }
+
+    public async Task<List<ApprovalHistoryItem>> GetApprovalHistoryAsync()
+    {
+        try
+        {
+            var result = await http.GetFromJsonAsync<List<ApprovalHistoryItem>>("/customer/approvals/history");
+            return result ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
 }
 
 public sealed record RatingResponse(int Stars, string? Feedback);
 public sealed record SessionInfo(string SessionId, DateTimeOffset LastActivity, int MessageCount);
 public sealed record SessionMessage(string Role, string Content, DateTimeOffset Timestamp);
+
+public sealed record UnseenApproval(
+    string Id,
+    string ToolName,
+    string Status,
+    string? DecisionReason,
+    string? ExecutionResult,
+    DateTimeOffset? DecidedAt);
+
+public sealed record ApprovalHistoryItem(
+    string Id,
+    string ToolName,
+    string Status,
+    string? DecisionReason,
+    string? ExecutionResult,
+    DateTimeOffset RequestedAt,
+    DateTimeOffset? DecidedAt);

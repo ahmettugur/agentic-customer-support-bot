@@ -27,6 +27,13 @@ public class ApprovalRequest
     /// <summary>Hangi workflow/session bu talebi üretti.</summary>
     public string? SessionId { get; set; }
 
+    /// <summary>
+    /// Login'li müşterinin doğrulanmış kimliği (bkz. SessionState.AuthenticatedCustomerId).
+    /// SessionId'ye ek bir bağ — müşteri farklı bir sekmede/session'da tekrar login olsa bile
+    /// gelecekte müşteri bazlı sorgulama (ör. "tüm hesabına ait bildirimler") için temel oluşturur.
+    /// </summary>
+    public string? CustomerId { get; set; }
+
     /// <summary>Trace ID — admin panelinden bağlam görmek için.</summary>
     public string? TraceId { get; set; }
 
@@ -73,6 +80,22 @@ public class ApprovalRequest
 
     /// <summary>Bu request için timeout (saniye). Config'ten gelir.</summary>
     public int TimeoutSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// Onaylandıktan sonra gerçek işin (sipariş iptali vb.) yürütme sonucu —
+    /// <see cref="IApprovalExecutionRouter"/> tarafından doldurulur. Reddedilen/expire olan
+    /// isteklerde null kalır (yürütülmedi).
+    /// </summary>
+    public string? ExecutionResult { get; set; }
+
+    /// <summary>Yürütmenin tamamlandığı zaman (null → henüz yürütülmedi veya onaylanmadı).</summary>
+    public DateTime? ExecutedAt { get; set; }
+
+    /// <summary>
+    /// Müşterinin bu kararı/sonucu (bildirim/badge olarak) gördüğü zaman. Null ise "unseen" —
+    /// kullanıcı chat'e dönüp geçmiş bildirimlerini çektiğinde bu alan doldurulur.
+    /// </summary>
+    public DateTime? CustomerSeenAt { get; set; }
 
     /// <summary>
     /// Bu tool'un onaylanması için gerekçe (audit trail) zorunlu mu — yani

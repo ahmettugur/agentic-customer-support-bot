@@ -214,6 +214,7 @@ public static class WellKnown
         public const string RoutingRewrite = "Talebinizi inceliyorum. Lütfen müşteri kimlik numaranızı paylaşır mısınız?";
         public const string ApprovalRejected = "İşlem onaylanmadı";
         public const string ComplaintRejected = "Şikayet kaydı onaylanmadı";
+        public const string ApprovalPending = "Talebiniz onaya gönderildi (Kayıt: {0}). Sonucu bildirim olarak alacaksınız, beklemenize gerek yok.";
         public const string RequestCancelled = "İstek iptal edildi (timeout veya bağlantı koptu)";
         public const string NewChat = "Yeni sohbet";
         public const string HumanJoined = "Müşteri temsilcisi {0} sohbete katıldı.";

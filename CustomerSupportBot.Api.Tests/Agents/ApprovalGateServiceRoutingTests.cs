@@ -27,7 +27,7 @@ public class ApprovalGateServiceRoutingTests
     private (ApprovalGateService svc, IHumanAgentRegistry registry, ICustomerProfileStore profiles, ISessionManager sessions)
         BuildWithRouting(RoutingOptions? routingOpts = null)
     {
-        var queue = new InMemoryApprovalQueue(Options.Create(_opts), NullLogger<InMemoryApprovalQueue>.Instance);
+        var queue = new InMemoryApprovalQueue(Options.Create(_opts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
         var routingWrapper = Options.Create(routingOpts ?? new RoutingOptions
         {
             IntentSkillMap = new(StringComparer.OrdinalIgnoreCase)
@@ -85,13 +85,13 @@ public class ApprovalGateServiceRoutingTests
     };
 
     [Fact]
-    public void Routing_AssignsBestMatchedAgentAndIncrementsLoad()
+    public async Task Routing_AssignsBestMatchedAgentAndIncrementsLoad()
     {
         var (svc, registry, _, sessions) = BuildWithRouting();
-        var session = sessions.GetOrCreate("s1");
+        var session = await sessions.GetOrCreateAsync("s1", TestContext.Current.CancellationToken);
         session.State.CustomerId = "1001";
 
-        svc.ProcessPendingEscalations(TraceFor("s1", "şikayet", WellKnown.AgentNames.Complaint),
+        await svc.ProcessPendingEscalationsAsync(TraceFor("s1", "şikayet", WellKnown.AgentNames.Complaint),
             "şikayetim var", "yanıt");
 
         var open = _sink.GetOpen();
@@ -106,7 +106,7 @@ public class ApprovalGateServiceRoutingTests
     }
 
     [Fact]
-    public void Routing_CustomerProfileVipFlag_FeedsIntoSkills()
+    public async Task Routing_CustomerProfileVipFlag_FeedsIntoSkills()
     {
         var routingOpts = new RoutingOptions
         {
@@ -119,7 +119,7 @@ public class ApprovalGateServiceRoutingTests
             }
         };
         var (svc, _, profiles, sessions) = BuildWithRouting(routingOpts);
-        var session = sessions.GetOrCreate("s2");
+        var session = await sessions.GetOrCreateAsync("s2", TestContext.Current.CancellationToken);
         session.State.CustomerId = "9011";
 
         profiles.Upsert(new CustomerSupportBot.Domain.Model.Memory.CustomerProfile
@@ -129,7 +129,7 @@ public class ApprovalGateServiceRoutingTests
             AdminNote = "VIP müşteri"
         });
 
-        svc.ProcessPendingEscalations(TraceFor("s2", "şikayet", WellKnown.AgentNames.Complaint),
+        await svc.ProcessPendingEscalationsAsync(TraceFor("s2", "şikayet", WellKnown.AgentNames.Complaint),
             "şikayet", "yanıt");
 
         var open = _sink.GetOpen();
@@ -138,13 +138,13 @@ public class ApprovalGateServiceRoutingTests
     }
 
     [Fact]
-    public void Routing_NoActiveAgents_SuggestedAgentIdIsNull()
+    public async Task Routing_NoActiveAgents_SuggestedAgentIdIsNull()
     {
         var routingOpts = new RoutingOptions { SeedAgents = new() }; // boş
         var (svc, _, _, sessions) = BuildWithRouting(routingOpts);
-        sessions.GetOrCreate("s3").State.CustomerId = "C";
+        (await sessions.GetOrCreateAsync("s3", TestContext.Current.CancellationToken)).State.CustomerId = "C";
 
-        svc.ProcessPendingEscalations(TraceFor("s3", "şikayet", WellKnown.AgentNames.Complaint),
+        await svc.ProcessPendingEscalationsAsync(TraceFor("s3", "şikayet", WellKnown.AgentNames.Complaint),
             "test", "yanıt");
 
         var open = _sink.GetOpen();

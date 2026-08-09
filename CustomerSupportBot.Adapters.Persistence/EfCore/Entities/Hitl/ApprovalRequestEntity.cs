@@ -9,6 +9,7 @@ public sealed class ApprovalRequestEntity
 {
     public string Id { get; set; } = "";
     public string? SessionId { get; set; }
+    public string? CustomerId { get; set; }
     public string? TraceId { get; set; }
     public string ToolName { get; set; } = "";
     public string? AgentName { get; set; }
@@ -24,4 +25,11 @@ public sealed class ApprovalRequestEntity
     public string? DecidedBy { get; set; }
     public string? DecisionReason { get; set; }
     public int TimeoutSeconds { get; set; }
+
+    /// <summary>Onaylandıysa gerçek işin yürütme sonucu (bkz. IApprovalExecutionRouter).</summary>
+    public string? ExecutionResult { get; set; }
+    public DateTime? ExecutedAt { get; set; }
+
+    /// <summary>Müşterinin bu kararı bir bildirim/badge olarak gördüğü zaman (null → unseen).</summary>
+    public DateTime? CustomerSeenAt { get; set; }
 }

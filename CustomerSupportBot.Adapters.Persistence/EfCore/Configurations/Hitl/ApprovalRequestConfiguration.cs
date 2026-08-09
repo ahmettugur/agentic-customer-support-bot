@@ -25,6 +25,10 @@ internal sealed class ApprovalRequestConfiguration : IEntityTypeConfiguration<Ap
             .HasColumnName("session_id")
             .HasMaxLength(64);
 
+        builder.Property(a => a.CustomerId)
+            .HasColumnName("customer_id")
+            .HasMaxLength(32);
+
         builder.Property(a => a.TraceId)
             .HasColumnName("trace_id")
             .HasMaxLength(64);
@@ -74,10 +78,24 @@ internal sealed class ApprovalRequestConfiguration : IEntityTypeConfiguration<Ap
             .HasColumnName("timeout_seconds")
             .IsRequired();
 
+        builder.Property(a => a.ExecutionResult)
+            .HasColumnName("execution_result");
+
+        builder.Property(a => a.ExecutedAt)
+            .HasColumnName("executed_at")
+            .HasColumnType("timestamptz");
+
+        builder.Property(a => a.CustomerSeenAt)
+            .HasColumnName("customer_seen_at")
+            .HasColumnType("timestamptz");
+
         builder.HasIndex(a => new { a.Status, a.RequestedAt })
             .HasDatabaseName("ix_approvals_status_requested_at");
 
         builder.HasIndex(a => a.SessionId)
             .HasDatabaseName("ix_approvals_session_id");
+
+        builder.HasIndex(a => a.CustomerId)
+            .HasDatabaseName("ix_approvals_customer_id");
     }
 }
