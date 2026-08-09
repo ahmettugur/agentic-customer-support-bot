@@ -1,0 +1,921 @@
+<title>Agentic Destek Botu — Canlı Senaryo</title>
+<style>
+  :root {
+    --bg: #f6f2ea;
+    --surface: #ffffff;
+    --surface-2: #efe8da;
+    --border: #ddd3bf;
+    --ink: #211d17;
+    --ink-dim: #7a7164;
+    --accent: #b5622a;
+    --accent-ink: #ffffff;
+    --agent: #2f6e63;
+    --agent-soft: #e3efec;
+    --human: #4a5486;
+    --human-soft: #e6e8f4;
+    --ok: #3f8f5f;
+    --ok-soft: #e2f0e6;
+    --warn: #b3791f;
+    --warn-soft: #f3e6c9;
+    --danger: #b23b3b;
+    --danger-soft: #f5e0de;
+    --shadow: 0 1px 2px rgba(33, 29, 23, 0.06), 0 8px 24px -12px rgba(33, 29, 23, 0.18);
+    --radius: 10px;
+    --dur: 260ms;
+    --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17140f;
+      --surface: #1e1a13;
+      --surface-2: #241f17;
+      --border: #3a3226;
+      --ink: #f3ecdf;
+      --ink-dim: #a89d89;
+      --accent: #dd8a4d;
+      --accent-ink: #221204;
+      --agent: #5cab9d;
+      --agent-soft: #1c2b28;
+      --human: #8791c9;
+      --human-soft: #21233c;
+      --ok: #5cb37f;
+      --ok-soft: #1c2e21;
+      --warn: #d9a748;
+      --warn-soft: #362a12;
+      --danger: #d9685f;
+      --danger-soft: #35201d;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17140f;
+    --surface: #1e1a13;
+    --surface-2: #241f17;
+    --border: #3a3226;
+    --ink: #f3ecdf;
+    --ink-dim: #a89d89;
+    --accent: #dd8a4d;
+    --accent-ink: #221204;
+    --agent: #5cab9d;
+    --agent-soft: #1c2b28;
+    --human: #8791c9;
+    --human-soft: #21233c;
+    --ok: #5cb37f;
+    --ok-soft: #1c2e21;
+    --warn: #d9a748;
+    --warn-soft: #362a12;
+    --danger: #d9685f;
+    --danger-soft: #35201d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.6);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root { --dur: 0ms; }
+    * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    padding: clamp(14px, 3vw, 32px);
+    display: flex;
+    justify-content: center;
+  }
+
+  .display {
+    font-family: Iowan Old Style, Palatino Linotype, Palatino, Georgia, "Noto Serif", serif;
+  }
+
+  .mono {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 1180px;
+    display: grid;
+    grid-template-columns: 188px minmax(0, 1fr) 268px;
+    grid-template-areas:
+      "header header header"
+      "agents chat   ops"
+      "ctrl   ctrl   ctrl";
+    gap: 14px;
+  }
+
+  @media (max-width: 860px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "header"
+        "agents"
+        "chat"
+        "ops"
+        "ctrl";
+    }
+    .rail-agents { flex-direction: row; overflow-x: auto; }
+    .rail-agents .chip { flex: 0 0 auto; }
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    grid-area: header;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .title-block h1 {
+    margin: 0;
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: 0.1px;
+    text-wrap: balance;
+  }
+
+  .title-block p {
+    margin: 3px 0 0;
+    color: var(--ink-dim);
+    font-size: 13px;
+  }
+
+  .phases {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .phase-chip {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--ink-dim);
+    cursor: pointer;
+    transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  }
+
+  .phase-chip:hover { border-color: var(--accent); color: var(--ink); }
+  .phase-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .phase-chip[data-current="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+
+  /* ---------- Agent rail ---------- */
+  .rail-agents {
+    grid-area: agents;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .rail-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-dim);
+    margin: 0 0 4px 2px;
+  }
+
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    opacity: 0.55;
+    transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease), border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  }
+
+  .chip .mono-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex: none;
+    background: var(--agent-soft);
+    color: var(--agent);
+  }
+  .chip[data-role="human"] .mono-badge { background: var(--human-soft); color: var(--human); }
+
+  .chip .label { font-size: 13px; font-weight: 600; }
+  .chip .sub { font-size: 11px; color: var(--ink-dim); display: block; }
+
+  .chip[data-active="true"] {
+    opacity: 1;
+    background: var(--agent-soft);
+    border-color: var(--agent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--agent) 16%, transparent);
+  }
+  .chip[data-active="true"][data-role="human"] {
+    background: var(--human-soft);
+    border-color: var(--human);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--human) 18%, transparent);
+  }
+
+  /* ---------- Chat panel ---------- */
+  .chat-panel {
+    grid-area: chat;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    min-height: 480px;
+  }
+
+  .chat-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .chat-head .who {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink-dim);
+    flex: none;
+    transition: background var(--dur) var(--ease);
+  }
+  .dot[data-state="bot"] { background: var(--agent); }
+  .dot[data-state="connecting"] {
+    background: var(--warn);
+    animation: pulse 1.1s ease-in-out infinite;
+  }
+  .dot[data-state="human"] { background: var(--human); }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 45%, transparent); }
+    50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--warn) 0%, transparent); }
+  }
+
+  .transcript {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 10px 6px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 560px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .transcript::-webkit-scrollbar { width: 8px; }
+  .transcript::-webkit-scrollbar-track { background: transparent; }
+  .transcript::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 999px;
+    border: 2px solid var(--surface);
+    background-clip: padding-box;
+  }
+  .transcript::-webkit-scrollbar-thumb:hover { background-color: var(--ink-dim); }
+
+  .msg-row { display: flex; flex-direction: column; max-width: 78%; }
+  .msg-row[data-from="customer"] { align-self: flex-end; align-items: flex-end; }
+  .msg-row[data-from="bot"],
+  .msg-row[data-from="admin"] { align-self: flex-start; align-items: flex-start; }
+
+  .bubble {
+    padding: 10px 13px;
+    border-radius: 13px;
+    font-size: 14.5px;
+    line-height: 1.5;
+    text-wrap: pretty;
+    animation: rise var(--dur) var(--ease) both;
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-row[data-from="customer"] .bubble {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-bottom-right-radius: 3px;
+  }
+  .msg-row[data-from="bot"] .bubble {
+    background: var(--agent-soft);
+    border: 1px solid color-mix(in srgb, var(--agent) 30%, var(--border));
+    border-bottom-left-radius: 3px;
+  }
+  .msg-row[data-from="admin"] .bubble {
+    background: var(--human-soft);
+    border: 1px solid color-mix(in srgb, var(--human) 30%, var(--border));
+    border-bottom-left-radius: 3px;
+  }
+
+  .meta {
+    font-size: 11px;
+    color: var(--ink-dim);
+    margin: 4px 4px 0;
+  }
+
+  .msg-row[data-from="system"] {
+    align-self: center;
+    max-width: 92%;
+  }
+  .msg-row[data-from="system"] .bubble {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--ink-dim);
+    font-size: 12.5px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    text-align: center;
+  }
+  .msg-row[data-from="system"][data-tone="danger"] .bubble { border-color: var(--danger); color: var(--danger); }
+  .msg-row[data-from="system"][data-tone="ok"] .bubble { border-color: var(--ok); color: var(--ok); }
+
+  .typing {
+    display: inline-flex;
+    gap: 3px;
+    align-items: center;
+    padding: 2px 3px;
+  }
+  .typing span {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: currentColor;
+    opacity: 0.5;
+    animation: bounce 1s infinite ease-in-out;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.15s; }
+  .typing span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-3px); opacity: 0.9; }
+  }
+
+  .summary-card {
+    align-self: center;
+    max-width: 92%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    animation: rise var(--dur) var(--ease) both;
+  }
+  .summary-card h3 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .summary-card ul {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 13px;
+    color: var(--ink-dim);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .summary-card strong { color: var(--ink); }
+
+  /* ---------- Ops rail ---------- */
+  .rail-ops {
+    grid-area: ops;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 13px 14px;
+  }
+
+  .card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .badge-count {
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-size: 11px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    padding: 0 5px;
+    transition: transform var(--dur) var(--ease);
+  }
+  .badge-count[data-empty="true"] { display: none; }
+
+  .connection-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .empty-note {
+    font-size: 12.5px;
+    color: var(--ink-dim);
+    font-style: italic;
+  }
+
+  .approval-card {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--warn);
+    border-radius: 8px;
+    padding: 10px 11px;
+    background: var(--warn-soft);
+    animation: rise var(--dur) var(--ease) both;
+    transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+  }
+  .approval-card[data-status="approved"] {
+    border-left-color: var(--ok);
+    background: var(--ok-soft);
+  }
+  .approval-card .a-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .approval-card .a-order { font-weight: 700; font-size: 13px; }
+  .approval-card .a-status {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+    color: var(--warn);
+  }
+  .approval-card[data-status="approved"] .a-status { color: var(--ok); }
+  .approval-card .a-field { font-size: 12px; color: var(--ink-dim); margin-top: 5px; }
+  .approval-card .a-field b { color: var(--ink); font-weight: 600; }
+
+  .history-list { display: flex; flex-direction: column; gap: 7px; margin-top: 2px; }
+  .history-item {
+    font-size: 12px;
+    color: var(--ink-dim);
+    border-top: 1px solid var(--border);
+    padding-top: 7px;
+    animation: rise var(--dur) var(--ease) both;
+  }
+  .history-item b { color: var(--ok); font-weight: 600; }
+
+  /* ---------- Controls ---------- */
+  .controls {
+    grid-area: ctrl;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--ink);
+    padding: 8px 13px;
+    cursor: pointer;
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), transform 120ms var(--ease);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:active { transform: translateY(1px); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn[data-variant="primary"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .progress-wrap {
+    flex: 1;
+    min-width: 140px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 999px;
+    transition: width var(--dur) var(--ease);
+  }
+  .step-label {
+    font-size: 11.5px;
+    color: var(--ink-dim);
+    white-space: nowrap;
+  }
+</style>
+
+<div class="app" id="app">
+  <header>
+    <div class="title-block">
+      <h1 class="display">Agentic Destek Botu — Canlı Senaryo</h1>
+      <p>Sohbet · Onay akışı (HITL) · Müşteri temsilcisine devir — tek oturum üzerinden</p>
+    </div>
+    <nav class="phases" id="phaseNav" aria-label="Senaryo bölümleri"></nav>
+  </header>
+
+  <aside class="rail-agents" id="railAgents">
+    <p class="rail-title">Ajanlar</p>
+  </aside>
+
+  <section class="chat-panel">
+    <div class="chat-head">
+      <div class="who">
+        <span class="dot" id="connDot" data-state="bot"></span>
+        <span id="connLabel">Bot aktif</span>
+      </div>
+      <span class="mono" style="font-size:11px;color:var(--ink-dim);">Ahmet Tügür · #S-4471</span>
+    </div>
+    <div class="transcript" id="transcript"></div>
+  </section>
+
+  <aside class="rail-ops">
+    <div class="card">
+      <div class="card-title-row">
+        <p class="rail-title" style="margin:0;">Bağlantı</p>
+      </div>
+      <span class="connection-pill">
+        <span class="dot" id="connDot2" data-state="bot"></span>
+        <span id="connLabel2">Bot aktif</span>
+      </span>
+    </div>
+
+    <div class="card">
+      <div class="card-title-row">
+        <p class="rail-title" style="margin:0;">Onay Talebi</p>
+        <span class="badge-count" id="badgeCount" data-empty="true">0</span>
+      </div>
+      <div id="approvalSlot"><p class="empty-note">Şu an bekleyen onay yok.</p></div>
+    </div>
+
+    <div class="card">
+      <p class="rail-title">Geçmiş İşlemlerim</p>
+      <div class="history-list" id="historyList">
+        <p class="empty-note">Henüz kayıt yok.</p>
+      </div>
+    </div>
+  </aside>
+
+  <div class="controls">
+    <button class="btn" id="btnReset" title="Baştan başlat">⟲ Baştan</button>
+    <button class="btn" id="btnPrev" title="Önceki adım">‹ Geri</button>
+    <button class="btn" data-variant="primary" id="btnPlay">▶ Oynat</button>
+    <button class="btn" id="btnNext" title="Sonraki adım">İleri ›</button>
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <span class="step-label mono" id="stepLabel">Adım 0 / 0</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const AGENTS = [
+    { key: "planning", label: "Planlama Ajanı", init: "PL" },
+    { key: "order", label: "Sipariş Ajanı", init: "SP" },
+    { key: "product", label: "Ürün Ajanı", init: "ÜR" },
+    { key: "complaint", label: "Şikayet Ajanı", init: "ŞK" },
+    { key: "response", label: "Yanıt Ajanı", init: "YN" },
+    { key: "human", label: "İnsan Temsilci", init: "AH", role: "human" }
+  ];
+
+  const PHASES = [
+    { key: "sohbet", label: "Sohbet" },
+    { key: "onay", label: "Onay" },
+    { key: "devir", label: "Devir" },
+    { key: "ozet", label: "Özet" }
+  ];
+
+  // Her adım, önceki duruma göre BİRİKİMLİ olarak uygulanır (baştan replay edilir).
+  const STEPS = [
+    { phase: "sohbet", agent: "planning" },
+    { phase: "sohbet", agent: "product",
+      message: { from: "customer", text: "Merhaba, PowerLine Kablosuz Şarj Pedi ne zaman elime ulaşır?" } },
+    { phase: "sohbet", agent: "response",
+      message: { from: "bot", tag: "Ürün Ajanı", text: "Merhaba Ahmet! PowerLine Kablosuz Şarj Pedi stokta — sipariş onaylandıktan sonra 1-2 iş günü içinde kargoya verilir." } },
+
+    { phase: "onay", agent: "order",
+      message: { from: "customer", text: "Aslında geçen haftaki #10248 numaralı siparişimi iptal etmek istiyorum, yanlış ürün seçmişim." } },
+    { phase: "onay", agent: "response",
+      message: { from: "bot", tag: "Sipariş Ajanı", text: "Anladım. #10248 siparişinizin iptali için onay talebi oluşturdum, sonucunu size bildirim olarak ileteceğim." },
+      approval: { status: "pending", order: "#10248", reason: "Yanlış ürün seçimi", when: "az önce" } },
+    { phase: "onay",
+      message: { from: "system", tone: "info", text: "Onay bekleniyor — turu bloklamaz, sohbete devam edebilirsiniz." } },
+    { phase: "onay", agent: "product",
+      message: { from: "customer", text: "Bu arada X100 kulaklığın garantisi kaç yıl?" } },
+    { phase: "onay", agent: "response",
+      message: { from: "bot", tag: "Ürün Ajanı", text: "X100 kulaklık 2 yıl resmi garanti kapsamındadır." } },
+    { phase: "onay",
+      approval: { status: "approved", order: "#10248", reason: "Yanlış ürün seçimi", decidedBy: "Ahmet · Yönetici", decidedNote: "Politikaya uygun, 14 gün içinde talep edilmiş", when: "2 saat sonra" },
+      badge: 1 },
+    { phase: "onay",
+      message: { from: "system", tone: "ok", text: "✅ #10248 siparişiniz iptal edildi ve tutar iade sürecine alındı." },
+      badge: 0,
+      history: "#10248 iptali <b>onaylandı</b> — 2 saat sonra, iade süreci başladı." },
+
+    { phase: "devir", agent: "complaint",
+      message: { from: "customer", text: "Bu üçüncü kez oluyor, gerçekten sinirlerim bozuldu. Biriyle konuşmam lazım." },
+      sentiment: true },
+    { phase: "devir",
+      message: { from: "system", tone: "danger", text: "Olumsuz duygu tespit edildi → eskalasyon tetiklendi" },
+      connection: { state: "connecting", label: "Bağlanıyor…" } },
+    { phase: "devir", agent: "human",
+      connection: { state: "human", label: "Ahmet bağlandı" },
+      message: { from: "system", tone: "ok", text: "Oturum \"Human\" moduna geçti — bot bu oturumda çalışmayacak." } },
+    { phase: "devir",
+      message: { from: "admin", tag: "Ahmet · Müşteri Temsilcisi", text: "Merhaba Ahmet, ben Ahmet. Buradan devralıyorum, yaşadığınız sorunu birlikte çözelim." } },
+
+    { phase: "ozet", summary: true }
+  ];
+
+  const els = {
+    railAgents: document.getElementById("railAgents"),
+    phaseNav: document.getElementById("phaseNav"),
+    transcript: document.getElementById("transcript"),
+    connDot: document.getElementById("connDot"),
+    connLabel: document.getElementById("connLabel"),
+    connDot2: document.getElementById("connDot2"),
+    connLabel2: document.getElementById("connLabel2"),
+    approvalSlot: document.getElementById("approvalSlot"),
+    badgeCount: document.getElementById("badgeCount"),
+    historyList: document.getElementById("historyList"),
+    btnReset: document.getElementById("btnReset"),
+    btnPrev: document.getElementById("btnPrev"),
+    btnNext: document.getElementById("btnNext"),
+    btnPlay: document.getElementById("btnPlay"),
+    progressFill: document.getElementById("progressFill"),
+    stepLabel: document.getElementById("stepLabel")
+  };
+
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Ajan rayı oluştur
+  AGENTS.forEach(a => {
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.dataset.key = a.key;
+    if (a.role) chip.dataset.role = a.role;
+    chip.innerHTML =
+      '<span class="mono-badge">' + a.init + '</span>' +
+      '<span><span class="label">' + a.label + '</span></span>';
+    els.railAgents.appendChild(chip);
+  });
+
+  // Faz navigasyonu oluştur
+  PHASES.forEach(p => {
+    const btn = document.createElement("button");
+    btn.className = "phase-chip";
+    btn.type = "button";
+    btn.textContent = p.label;
+    btn.dataset.phase = p.key;
+    btn.addEventListener("click", () => {
+      const idx = STEPS.findIndex(s => s.phase === p.key);
+      if (idx >= 0) { stop(); goTo(idx); }
+    });
+    els.phaseNav.appendChild(btn);
+  });
+
+  let index = -1;      // uygulanan son adım
+  let timer = null;
+  let lastRenderedIndex = -1; // typing efekti kararı için
+
+  function applyState(uptoIndex) {
+    const state = {
+      agent: null,
+      connection: { state: "bot", label: "Bot aktif" },
+      approval: null,
+      badge: 0,
+      history: [],
+      messages: [],
+      phase: null,
+      sentimentLast: false
+    };
+    for (let i = 0; i <= uptoIndex; i++) {
+      const s = STEPS[i];
+      if (!s) continue;
+      if (s.phase) state.phase = s.phase;
+      if (s.agent) state.agent = s.agent;
+      if (s.connection) state.connection = s.connection;
+      if (s.approval) state.approval = s.approval;
+      if (typeof s.badge === "number") state.badge = s.badge;
+      if (s.history) state.history.push(s.history);
+      if (s.message) state.messages.push(Object.assign({ step: i }, s.message));
+      state.sentimentLast = !!s.sentiment && i === uptoIndex;
+      if (s.summary && i === uptoIndex) state.showSummary = true;
+    }
+    return state;
+  }
+
+  function render(showTyping) {
+    const state = applyState(index);
+
+    // Ajanlar
+    els.railAgents.querySelectorAll(".chip").forEach(chip => {
+      chip.dataset.active = String(chip.dataset.key === state.agent);
+    });
+
+    // Faz navigasyonu
+    els.phaseNav.querySelectorAll(".phase-chip").forEach(btn => {
+      btn.dataset.current = String(btn.dataset.phase === state.phase);
+    });
+
+    // Bağlantı
+    els.connDot.dataset.state = state.connection.state;
+    els.connLabel.textContent = state.connection.label;
+    els.connDot2.dataset.state = state.connection.state;
+    els.connLabel2.textContent = state.connection.label;
+
+    // Onay kartı
+    if (state.approval) {
+      const a = state.approval;
+      const approved = a.status === "approved";
+      els.approvalSlot.innerHTML =
+        '<div class="approval-card" data-status="' + a.status + '">' +
+          '<div class="a-top"><span class="a-order">Sipariş İptali · ' + a.order + '</span>' +
+          '<span class="a-status">' + (approved ? "Onaylandı" : "Bekliyor") + '</span></div>' +
+          '<div class="a-field"><b>Gerekçe:</b> ' + a.reason + '</div>' +
+          (approved
+            ? '<div class="a-field"><b>Karar veren:</b> ' + a.decidedBy + '</div>' +
+              '<div class="a-field"><b>Not:</b> ' + a.decidedNote + '</div>' +
+              '<div class="a-field">' + a.when + '</div>'
+            : '<div class="a-field">Yönetici onayı bekleniyor · ' + a.when + '</div>') +
+        '</div>';
+    } else {
+      els.approvalSlot.innerHTML = '<p class="empty-note">Şu an bekleyen onay yok.</p>';
+    }
+
+    // Bildirim rozeti
+    els.badgeCount.textContent = String(state.badge);
+    els.badgeCount.dataset.empty = String(state.badge === 0);
+
+    // Geçmiş
+    els.historyList.innerHTML = state.history.length
+      ? state.history.map(h => '<div class="history-item">' + h + '</div>').join("")
+      : '<p class="empty-note">Henüz kayıt yok.</p>';
+
+    // Transkript
+    const rows = state.messages.map(renderMessage).join("");
+    const summary = state.showSummary ? renderSummary() : "";
+    els.transcript.innerHTML = rows + summary;
+
+    if (showTyping && !reduceMotion) {
+      const last = state.messages[state.messages.length - 1];
+      if (last && (last.from === "bot" || last.from === "admin")) {
+        const rowsEls = els.transcript.querySelectorAll(".msg-row");
+        const lastRow = rowsEls[rowsEls.length - 1];
+        if (lastRow) {
+          const bubble = lastRow.querySelector(".bubble");
+          const realHTML = bubble.innerHTML;
+          bubble.innerHTML = '<span class="typing"><span></span><span></span><span></span></span>';
+          setTimeout(() => { bubble.innerHTML = realHTML; }, 480);
+        }
+      }
+    }
+
+    els.transcript.scrollTop = els.transcript.scrollHeight;
+
+    // Kontroller
+    const total = STEPS.length;
+    els.stepLabel.textContent = "Adım " + (index + 1) + " / " + total;
+    els.progressFill.style.width = (((index + 1) / total) * 100) + "%";
+    els.btnPrev.disabled = index <= 0;
+    els.btnNext.disabled = index >= total - 1;
+
+    lastRenderedIndex = index;
+  }
+
+  function renderMessage(m) {
+    const tone = m.tone ? ' data-tone="' + m.tone + '"' : "";
+    if (m.from === "system") {
+      return '<div class="msg-row" data-from="system"' + tone + '><div class="bubble">' + m.text + '</div></div>';
+    }
+    const tag = m.tag ? '<div class="meta">' + m.tag + '</div>' : "";
+    return '<div class="msg-row" data-from="' + m.from + '"><div class="bubble">' + m.text + '</div>' + tag + '</div>';
+  }
+
+  function renderSummary() {
+    return '<div class="summary-card">' +
+      '<h3 class="display">Bu senaryonun gösterdiği üç garanti</h3>' +
+      '<ul>' +
+        '<li><strong>Bloklamayan onay</strong> — sipariş iptali onaya gönderildiği an sohbet devam etti; sonuç saatler sonra bile olsa bildirim + kalıcı geçmiş olarak ulaştı.</li>' +
+        '<li><strong>Kimliği doğrulanmış müşteri</strong> — customerId sohbetten değil, girişteki JWT\'den geldi; onay kaydı hep doğru hesaba bağlı kaldı.</li>' +
+        '<li><strong>Sorunsuz insan devri</strong> — olumsuz duygu tespit edilince oturum "Human" moduna geçti, bot devre dışı kaldı, temsilci aynı geçmişle devam etti.</li>' +
+      '</ul>' +
+    '</div>';
+  }
+
+  function goTo(newIndex, animate) {
+    const clamped = Math.max(0, Math.min(STEPS.length - 1, newIndex));
+    const forward = animate && clamped === index + 1;
+    index = clamped;
+    render(forward);
+  }
+
+  function next() {
+    if (index >= STEPS.length - 1) { stop(); return; }
+    goTo(index + 1, true);
+  }
+  function prev() { stop(); goTo(index - 1, false); }
+  function reset() { stop(); goTo(0, false); }
+
+  function play() {
+    if (timer) return;
+    if (index >= STEPS.length - 1) index = -1;
+    els.btnPlay.textContent = "⏸ Duraklat";
+    timer = setInterval(() => {
+      if (index >= STEPS.length - 1) { stop(); return; }
+      next();
+    }, 2400);
+  }
+  function stop() {
+    if (timer) clearInterval(timer);
+    timer = null;
+    els.btnPlay.textContent = "▶ Oynat";
+  }
+
+  els.btnPlay.addEventListener("click", () => (timer ? stop() : play()));
+  els.btnNext.addEventListener("click", () => { stop(); next(); });
+  els.btnPrev.addEventListener("click", prev);
+  els.btnReset.addEventListener("click", reset);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") { stop(); next(); }
+    if (e.key === "ArrowLeft") { stop(); prev(); }
+    if (e.key === " ") { e.preventDefault(); timer ? stop() : play(); }
+  });
+
+  goTo(0, false);
+})();
+</script>
