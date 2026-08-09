@@ -21,7 +21,11 @@ public sealed class AuthorizedHttpClientHandler(
         if (request.RequestUri?.AbsolutePath.StartsWith("/auth/") == true)
             return await base.SendAsync(request, cancellationToken);
 
-        var token = await store.GetAccessTokenAsync();
+        // İsteği başlatan sayfanın (geçerli route) hangi kimlik alanına ait olduğu —
+        // staff ve customer token'ları ayrı tutulduğu için bu, hangisinin ekleneceğini belirler.
+        var scope = AuthScopeRouter.Resolve(nav.ToBaseRelativePath(nav.Uri));
+
+        var token = await store.GetAccessTokenAsync(scope);
         if (token is not null)
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
@@ -31,13 +35,12 @@ public sealed class AuthorizedHttpClientHandler(
             return response;
 
         // 401 — refresh dene
-        var lastKnownRole = (await store.ReadAsync())?.Role;
-        var refreshed = await authService.TryRefreshAsync();
+        var refreshed = await authService.TryRefreshAsync(scope);
         if (refreshed is null)
         {
             authState.NotifyStateChanged();
             var returnTo = Uri.EscapeDataString(nav.Uri);
-            var loginPage = lastKnownRole == "Customer" ? "/customer-login" : "/login";
+            var loginPage = scope == AuthScope.Customer ? "/customer-login" : "/login";
             nav.NavigateTo($"{loginPage}?return={returnTo}", forceLoad: false);
             return response;
         }

@@ -62,7 +62,7 @@
 
     private async Task LogoutAsync()
     {
-        await AuthSvc.LogoutAsync();
+        await AuthSvc.LogoutAsync(AuthScope.Staff);
         AuthState.NotifyStateChanged();
         Nav.NavigateTo("/login", forceLoad: false);
     }

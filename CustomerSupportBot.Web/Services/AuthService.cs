@@ -11,22 +11,22 @@ public sealed class AuthService(HttpClient http, AuthTokenStore store)
     public async Task<AuthTokenData> LoginAsync(string username, string password)
     {
         var response = await http.PostAsJsonAsync("/auth/login", new { username, password });
-        return await ReadAuthResponseAsync(response, "Login başarısız");
+        return await ReadAuthResponseAsync(response, "Login başarısız", AuthScope.Staff);
     }
 
     public async Task<AuthTokenData> CustomerLoginAsync(string email, string password)
     {
         var response = await http.PostAsJsonAsync("/auth/customer/login", new { email, password });
-        return await ReadAuthResponseAsync(response, "Giriş başarısız");
+        return await ReadAuthResponseAsync(response, "Giriş başarısız", AuthScope.Customer);
     }
 
     public async Task<AuthTokenData> CustomerRegisterAsync(string email, string password, string customerId)
     {
         var response = await http.PostAsJsonAsync("/auth/customer/register", new { email, password, customerId });
-        return await ReadAuthResponseAsync(response, "Kayıt başarısız");
+        return await ReadAuthResponseAsync(response, "Kayıt başarısız", AuthScope.Customer);
     }
 
-    private async Task<AuthTokenData> ReadAuthResponseAsync(HttpResponseMessage response, string errorPrefix)
+    private async Task<AuthTokenData> ReadAuthResponseAsync(HttpResponseMessage response, string errorPrefix, AuthScope scope)
     {
         if (!response.IsSuccessStatusCode)
         {
@@ -47,13 +47,13 @@ public sealed class AuthService(HttpClient http, AuthTokenStore store)
         var data = await response.Content.ReadFromJsonAsync<AuthTokenData>()
             ?? throw new InvalidOperationException("Sunucudan geçersiz yanıt alındı.");
 
-        await store.WriteAsync(data);
+        await store.WriteAsync(scope, data);
         return data;
     }
 
-    public async Task LogoutAsync()
+    public async Task LogoutAsync(AuthScope scope)
     {
-        var current = await store.ReadAsync();
+        var current = await store.ReadAsync(scope);
         if (current?.RefreshToken is not null)
         {
             try
@@ -67,25 +67,25 @@ public sealed class AuthService(HttpClient http, AuthTokenStore store)
             catch { /* ignore */ }
         }
 
-        await store.WriteAsync(null);
+        await store.WriteAsync(scope, null);
     }
 
-    private Task? _refreshTask;
+    // Scope başına en fazla bir refresh çağrısı — paralel istekler aynı Task'e biner.
+    private readonly Dictionary<AuthScope, Task?> _refreshTasks = new();
 
-    public async Task<AuthTokenData?> TryRefreshAsync()
+    public async Task<AuthTokenData?> TryRefreshAsync(AuthScope scope)
     {
-        var current = await store.ReadAsync();
+        var current = await store.ReadAsync(scope);
         if (current?.RefreshToken is null) return null;
 
-        // Paralel çağrıları birleştir
-        if (_refreshTask is not null)
+        if (_refreshTasks.TryGetValue(scope, out var inFlight) && inFlight is not null)
         {
-            await _refreshTask;
-            return await store.ReadAsync();
+            await inFlight;
+            return await store.ReadAsync(scope);
         }
 
         var tcs = new TaskCompletionSource();
-        _refreshTask = tcs.Task;
+        _refreshTasks[scope] = tcs.Task;
 
         try
         {
@@ -94,12 +94,12 @@ public sealed class AuthService(HttpClient http, AuthTokenStore store)
 
             if (!response.IsSuccessStatusCode)
             {
-                await store.WriteAsync(null);
+                await store.WriteAsync(scope, null);
                 return null;
             }
 
             var next = await response.Content.ReadFromJsonAsync<AuthTokenData>();
-            await store.WriteAsync(next);
+            await store.WriteAsync(scope, next);
             return next;
         }
         catch
@@ -108,7 +108,7 @@ public sealed class AuthService(HttpClient http, AuthTokenStore store)
         }
         finally
         {
-            _refreshTask = null;
+            _refreshTasks[scope] = null;
             tcs.SetResult();
         }
     }

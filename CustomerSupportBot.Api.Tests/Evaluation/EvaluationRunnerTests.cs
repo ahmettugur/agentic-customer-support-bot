@@ -6,6 +6,7 @@ using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Adapters.Agents.Evaluation;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Adapters.Redis;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Api.Tests.Helpers;
 using CustomerSupportBot.Api.Tests.Infrastructure;
 using Microsoft.Extensions.AI;
@@ -52,7 +53,8 @@ public class EvaluationRunnerTests
             prompts, approvalGate, tools,
             new CustomerSupportBot.Application.Services.UiHint.UiHintEmitter(new ApprovalContextAccessor()),
             new ApprovalContextAccessor(),
-            NullLoggerFactory.Instance);
+            NullLoggerFactory.Instance,
+            Substitute.For<ICustomerRepository>());
 
         var reasoningClient = new ReasoningChatClient(chatClient, "gpt-test", "low");
         var entityVerifier = new EntityVerifier(

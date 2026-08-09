@@ -3,9 +3,11 @@
 // (bağlam, reasoning özeti, entity hint, replan notu, sipariş yönlendirme mesajının
 // yeniden yazımı). Orkestrasyon (event loop) WorkflowRunner'da kalır.
 
+using System.Globalization;
 using System.Text;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
@@ -20,17 +22,23 @@ internal sealed class WorkflowMessageBuilder
     private readonly IPromptRepository _prompts;
     private readonly IChatClient _chatClient;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly ICustomerRepository _customers;
+    private readonly TimeProvider _clock;
 
     public WorkflowMessageBuilder(
         IContextPipeline contextPipeline,
         IPromptRepository prompts,
         IChatClient chatClient,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        ICustomerRepository customers,
+        TimeProvider? clock = null)
     {
         _contextPipeline = contextPipeline;
         _prompts = prompts;
         _chatClient = chatClient;
         _loggerFactory = loggerFactory;
+        _customers = customers;
+        _clock = clock ?? TimeProvider.System;
     }
 
     /// <summary>
@@ -49,6 +57,12 @@ internal sealed class WorkflowMessageBuilder
         ReasoningResult? reasoning)
     {
         var messages = new List<ChatMessage>();
+
+        var identityHint = await BuildIdentityHintAsync(session);
+        if (!string.IsNullOrWhiteSpace(identityHint))
+        {
+            messages.Add(new ChatMessage(ChatRole.System, identityHint));
+        }
 
         if (session != null)
         {
@@ -89,6 +103,29 @@ internal sealed class WorkflowMessageBuilder
         messages.Add(new ChatMessage(ChatRole.User, query));
 
         return messages;
+    }
+
+    /// <summary>
+    /// Kimliği doğrulanmış müşterinin adı soyadı ve bugünün tarihi — ajanların "siz kimsiniz"
+    /// veya tarihe bağlı ("yarın", "bu ay") ifadeleri doğru yorumlayabilmesi için. İsim,
+    /// <see cref="SessionState.AuthenticatedCustomerId"/> (JWT'den, LLM'e sorulmadan gelen) üzerinden
+    /// çözülür — LLM'in metinden çıkardığı <see cref="SessionState.CustomerId"/> kullanılmaz.
+    /// </summary>
+    private async Task<string?> BuildIdentityHintAsync(AgentSession? session)
+    {
+        var today = _clock.GetLocalNow().ToString("d MMMM yyyy, dddd", new CultureInfo("tr-TR"));
+
+        string? fullName = null;
+        var authenticatedId = session?.State.AuthenticatedCustomerId;
+        if (!string.IsNullOrWhiteSpace(authenticatedId) && long.TryParse(authenticatedId, out var customerId))
+        {
+            fullName = await _customers.GetFullNameAsync(customerId);
+        }
+
+        return string.IsNullOrWhiteSpace(fullName)
+            ? $"Bugünün tarihi: {today}."
+            : $"Şu an sizinle görüşen, kimliği doğrulanmış müşteri: {fullName}. Bugünün tarihi: {today}. " +
+              "Uygun olduğunda müşteriye adıyla hitap edebilir, tarihe bağlı taleplerde bu tarihi esas alabilirsiniz.";
     }
 
     /// <summary>

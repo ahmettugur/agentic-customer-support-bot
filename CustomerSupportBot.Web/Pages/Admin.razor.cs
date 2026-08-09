@@ -89,7 +89,7 @@ public partial class Admin
     {
         if (!firstRender) return;
         _dotNetRef = DotNetObjectReference.Create(this);
-        var token   = await TokenStore.GetAccessTokenAsync() ?? "";
+        var token   = await TokenStore.GetAccessTokenAsync(AuthScope.Staff) ?? "";
         var apiBase = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
         await JS.InvokeVoidAsync("loadScript", "/js/admin-chat-bridge.js", "js-admin-chat-bridge");
         await JS.InvokeVoidAsync("__adminChatSetup", token, apiBase);

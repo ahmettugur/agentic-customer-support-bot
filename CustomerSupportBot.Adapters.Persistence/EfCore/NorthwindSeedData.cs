@@ -234,7 +234,7 @@ public static class NorthwindSeedData
         new() { Id = 1024, FullName = "Maria Larsson",        Email = "maria.larsson@example.com",      Phone = "+46-0695-34 67 22"},
         new() { Id = 1025, FullName = "Peter Franken",        Email = "peter.franken@example.com",      Phone = "+49-089-0877310"  },
         new() { Id = 1026, FullName = "Carine Schmitt",       Email = "carine.schmitt@example.com",     Phone = "+33-99.74.44.60"  },
-        new() { Id = 1027, FullName = "Paolo Accorti",        Email = "paolo.accorti@example.com",      Phone = "+39-011-4988260"  },
+        new() { Id = 1027, FullName = "Ahmet Tügür",          Email = "ahmet.tugur@example.com",      Phone = "+39-011-4988260"  },
         new() { Id = 1028, FullName = "Lino Rodriguez",       Email = "lino.rodriguez@example.com",     Phone = "+351-2-202346"    },
         new() { Id = 1029, FullName = "Eduardo Saavedra",     Email = "eduardo.saavedra@example.com",   Phone = "+34-93-203 4560"  },
     ];

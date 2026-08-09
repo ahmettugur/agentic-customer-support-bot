@@ -16,4 +16,13 @@ public sealed class CustomerRepository : ICustomerRepository
         using var ctx = _dbFactory.CreateDbContext();
         return ctx.Customers.Any(c => c.Id == customerId);
     }
+
+    public async Task<string?> GetFullNameAsync(long customerId, CancellationToken ct = default)
+    {
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        return await ctx.Customers
+            .Where(c => c.Id == customerId)
+            .Select(c => c.FullName)
+            .FirstOrDefaultAsync(ct);
+    }
 }

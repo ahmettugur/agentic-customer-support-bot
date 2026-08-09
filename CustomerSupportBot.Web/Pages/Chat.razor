@@ -670,7 +670,7 @@
         _apiBase   = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
         // chat-bridge.js ham fetch/EventSource kullanıyor (Blazor HttpClient'in Authorization
         // header'ı otomatik eklediği pipeline'ın dışında) — token'ı JS tarafına elle taşıyoruz.
-        var authToken = await TokenStore.GetAccessTokenAsync();
+        var authToken = await TokenStore.GetAccessTokenAsync(AuthScope.Customer);
         await JS.InvokeVoidAsync("loadScript", "/js/chat-bridge.js", "js-chat-bridge");
         await JS.InvokeVoidAsync("__chatSetup", _dotNetRef, _apiBase, authToken);
 

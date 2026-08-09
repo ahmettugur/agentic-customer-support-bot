@@ -131,7 +131,7 @@ public sealed class DemoDataSeeder : IHostedService
 
     /// <summary>
     /// Demo/deneme amaçlı bir müşteri login hesabı — Northwind seed'indeki CustomerId=1027
-    /// (Paolo Accorti) kaydına bağlı. Böylece Chat sayfasını login akışıyla denemek için
+    /// (Ahmet Tügür) kaydına bağlı. Böylece Chat sayfasını login akışıyla denemek için
     /// önce manuel kayıt olmaya gerek kalmaz.
     /// </summary>
     private async Task SeedDefaultCustomerAccountAsync(CancellationToken ct)

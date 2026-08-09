@@ -4,12 +4,13 @@
     protected override void OnInitialized()
     {
         var returnTo = Uri.EscapeDataString(Nav.Uri);
-        // Admin/agent sayfaları (/admin/*) staff login'e, geri kalan her şey (chat = "/")
-        // müşteri login'ine yönlendirilir — iki farklı kimlik/rol alanı, iki farklı giriş sayfası.
+        // İki farklı kimlik/rol alanı, iki farklı giriş sayfası — hangisine
+        // yönlendirileceği AuthScopeRouter ile (AppAuthStateProvider'daki ile aynı
+        // mantıkla) belirlenir.
         var relativePath = Nav.ToBaseRelativePath(Nav.Uri);
-        var target = relativePath.StartsWith("admin", StringComparison.OrdinalIgnoreCase)
-            ? "/login"
-            : "/customer-login";
+        var target = AuthScopeRouter.Resolve(relativePath) == AuthScope.Customer
+            ? "/customer-login"
+            : "/login";
         Nav.NavigateTo($"{target}?return={returnTo}", forceLoad: false);
     }
 }

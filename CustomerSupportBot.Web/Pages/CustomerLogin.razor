@@ -89,7 +89,11 @@
     private enum Mode { Login, Register }
     private Mode _mode = Mode.Login;
 
-    private readonly LoginModel _model = new();
+    private readonly LoginModel _model = new()
+    {
+        Email = "paolo.accorti@example.com",
+        Password = "Customer123!"
+    };
     private string? _error;
     private bool _loading;
     private bool _showPassword;
@@ -104,8 +108,12 @@
         if (!string.IsNullOrWhiteSpace(returnParam))
             _returnUrl = returnParam;
 
+        // Sadece Customer rolüyle authenticated ise geri yönlendir — aksi halde
+        // (ör. localStorage'da kalmış bir Admin/Agent token'ı) Chat.razor'un
+        // Customer-only Authorize'ı yeniden reddedip buraya geri atar ve sonsuz
+        // "/" ↔ "/customer-login" döngüsü oluşur.
         var state = await AuthStateProvider.GetAuthenticationStateAsync();
-        if (state.User.Identity?.IsAuthenticated == true)
+        if (state.User.IsInRole("Customer"))
             Nav.NavigateTo(_returnUrl, forceLoad: false);
     }
 

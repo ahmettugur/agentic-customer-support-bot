@@ -16,6 +16,7 @@
 // internal zaten assembly dışına çıkmadığı için genel API yüzeyi genişlemiyor.
 
 using CustomerSupportBot.Adapters.Agents;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Api.Tests.Helpers;
@@ -96,7 +97,8 @@ public class CustomerSupportTeamTests
             d.Tools,
             d.UiHint,
             d.ApprovalContext,
-            d.LoggerFactory);
+            d.LoggerFactory,
+            Substitute.For<ICustomerRepository>());
     }
 
     private AgentTeamFactory BuildAgentTeamFactory(IChatClient? chatClient = null)
@@ -108,7 +110,9 @@ public class CustomerSupportTeamTests
     private WorkflowMessageBuilder BuildMessageBuilder(IChatClient? chatClient = null, IContextPipeline? pipeline = null)
     {
         var d = BuildDeps(chatClient);
-        return new WorkflowMessageBuilder(pipeline ?? d.ContextPipeline, d.Prompts, d.ChatClient, d.LoggerFactory);
+        return new WorkflowMessageBuilder(
+            pipeline ?? d.ContextPipeline, d.Prompts, d.ChatClient, d.LoggerFactory,
+            Substitute.For<ICustomerRepository>());
     }
 
     [Fact]

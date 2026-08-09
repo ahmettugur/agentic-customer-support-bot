@@ -4,18 +4,20 @@ using System.Text.Json;
 namespace CustomerSupportBot.Web.Services;
 
 /// <summary>
-/// localStorage'da saklanan JWT token verilerini yönetir.
-/// auth.js'teki STORAGE_KEY = 'cs.auth' ile uyumludur.
+/// localStorage'da saklanan JWT token verilerini yönetir. Staff (Admin/Agent) ve
+/// Customer token'ları ayrı anahtarlarda tutulur, böylece aynı tarayıcıda ikisi de
+/// aynı anda aktif olabilir ve birbirinin oturumunu ezmez.
 /// </summary>
 public sealed class AuthTokenStore(IJSRuntime js)
 {
-    private const string StorageKey = "cs.auth";
+    private static string KeyFor(AuthScope scope) =>
+        scope == AuthScope.Customer ? "cs.auth.customer" : "cs.auth.staff";
 
-    public async Task<AuthTokenData?> ReadAsync()
+    public async Task<AuthTokenData?> ReadAsync(AuthScope scope)
     {
         try
         {
-            var raw = await js.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+            var raw = await js.InvokeAsync<string?>("localStorage.getItem", KeyFor(scope));
             if (string.IsNullOrWhiteSpace(raw)) return null;
             return JsonSerializer.Deserialize<AuthTokenData>(raw, JsonOptions);
         }
@@ -25,21 +27,21 @@ public sealed class AuthTokenStore(IJSRuntime js)
         }
     }
 
-    public async Task WriteAsync(AuthTokenData? data)
+    public async Task WriteAsync(AuthScope scope, AuthTokenData? data)
     {
         if (data is null)
         {
-            await js.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+            await js.InvokeVoidAsync("localStorage.removeItem", KeyFor(scope));
         }
         else
         {
             var json = JsonSerializer.Serialize(data, JsonOptions);
-            await js.InvokeVoidAsync("localStorage.setItem", StorageKey, json);
+            await js.InvokeVoidAsync("localStorage.setItem", KeyFor(scope), json);
         }
     }
 
-    public async Task<string?> GetAccessTokenAsync()
-        => (await ReadAsync())?.AccessToken;
+    public async Task<string?> GetAccessTokenAsync(AuthScope scope)
+        => (await ReadAsync(scope))?.AccessToken;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

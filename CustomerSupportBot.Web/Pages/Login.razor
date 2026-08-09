@@ -84,8 +84,11 @@
         if (!string.IsNullOrWhiteSpace(returnParam))
             _returnUrl = returnParam;
 
+        // Sadece staff rolüyle (Admin/Agent) authenticated ise geri yönlendir — aksi
+        // halde (ör. localStorage'da kalmış bir Customer token'ı) admin sayfaları
+        // yeniden reddedip buraya geri atar ve sonsuz döngü oluşur (bkz. CustomerLogin.razor).
         var state = await AuthStateProvider.GetAuthenticationStateAsync();
-        if (state.User.Identity?.IsAuthenticated == true)
+        if (state.User.IsInRole("Admin") || state.User.IsInRole("Agent"))
             Nav.NavigateTo(_returnUrl, forceLoad: false);
     }
 
