@@ -245,7 +245,7 @@ public static class NorthwindSeedData
         new() { Code=1002, OrderId=1038, CustomerId=1028, Complaint="Sipariş tahmini teslimat süresini aştı.",                  Status=WellKnown.ComplaintStatuses.Pending    },
         new() { Code=1003, OrderId=1040, CustomerId=1010, Complaint="Gönderilen ürün sipariş ettiğimden farklı.",              Status=WellKnown.ComplaintStatuses.InProgress },
         new() { Code=1004, OrderId=1048, CustomerId=1008, Complaint="Ürünün son kullanma tarihi geçmişti.",                    Status=WellKnown.ComplaintStatuses.Resolved   },
-        new() { Code=1005, OrderId=1060, CustomerId=1008, Complaint="Paket eksik geldi, iki ürün yerine bir ürün teslim alındı.", Status=WellKnown.ComplaintStatuses.Pending },
+        new() { Code=1005, OrderId=1030, CustomerId=1027, Complaint="Paket eksik geldi, iki ürün yerine bir ürün teslim alındı.", Status=WellKnown.ComplaintStatuses.Pending },
     ];
 
     private static DateTime D(int y, int m, int d) =>
