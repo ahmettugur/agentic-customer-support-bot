@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CustomerSupportBot.Adapters.Persistence.Migrations
 {
     [DbContext(typeof(CustomerSupportDbContext))]
-    [Migration("20260803174800_InitialCreate")]
+    [Migration("20260809131008_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -189,6 +189,11 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("linked_agent_id");
+
+                    b.Property<string>("LinkedCustomerId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("linked_customer_id");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -589,6 +594,15 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("agent_name");
 
+                    b.Property<string>("CustomerId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("customer_id");
+
+                    b.Property<DateTime?>("CustomerSeenAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("customer_seen_at");
+
                     b.Property<DateTime?>("DecidedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("decided_at");
@@ -601,6 +615,14 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     b.Property<string>("DecisionReason")
                         .HasColumnType("text")
                         .HasColumnName("decision_reason");
+
+                    b.Property<DateTime?>("ExecutedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("executed_at");
+
+                    b.Property<string>("ExecutionResult")
+                        .HasColumnType("text")
+                        .HasColumnName("execution_result");
 
                     b.Property<string>("Justification")
                         .HasColumnType("text")
@@ -646,6 +668,9 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .HasColumnName("user_query");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CustomerId")
+                        .HasDatabaseName("ix_approvals_customer_id");
 
                     b.HasIndex("SessionId")
                         .HasDatabaseName("ix_approvals_session_id");

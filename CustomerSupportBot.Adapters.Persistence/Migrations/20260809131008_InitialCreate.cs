@@ -57,6 +57,7 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                 {
                     id = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     session_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    customer_id = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
                     trace_id = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     tool_name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     agent_name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
@@ -68,7 +69,10 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     status = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: false),
                     decided_by = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
                     decision_reason = table.Column<string>(type: "text", nullable: true),
-                    timeout_seconds = table.Column<int>(type: "integer", nullable: false)
+                    timeout_seconds = table.Column<int>(type: "integer", nullable: false),
+                    execution_result = table.Column<string>(type: "text", nullable: true),
+                    executed_at = table.Column<DateTime>(type: "timestamptz", nullable: true),
+                    customer_seen_at = table.Column<DateTime>(type: "timestamptz", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -401,6 +405,7 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     password_hash = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
                     role = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     linked_agent_id = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
+                    linked_customer_id = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: true),
                     is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     created_at = table.Column<DateTime>(type: "timestamptz", nullable: false),
                     last_login_at = table.Column<DateTime>(type: "timestamptz", nullable: true)
@@ -510,6 +515,12 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_approvals_customer_id",
+                schema: "hitl",
+                table: "approval_requests",
+                column: "customer_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_approvals_session_id",
@@ -723,7 +734,7 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
             // yani EF kendi identity/sequence'ini oluşturmuyor — orders.code'un aksine).
             // Model bu sequence'i tanımadığı için scaffold edilen migration'da yer almaz;
             // düşerse şikayet kaydı runtime'da 42P01 ("relation does not exist") verir.
-            // START WITH 1006: PersistenceHydrator.SeedDefaultComplaintsAsync seed verisi
+            // START WITH 1006: DemoDataSeeder.SeedDefaultComplaintsAsync seed verisi
             // 1001-1005 arası kodlarla explicit insert yapıyor; çakışmayı önlemek için
             // sequence bir sonraki değerden başlıyor.
             migrationBuilder.Sql(
