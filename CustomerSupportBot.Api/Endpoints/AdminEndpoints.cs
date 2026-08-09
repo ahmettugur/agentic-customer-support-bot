@@ -154,14 +154,15 @@ public static class AdminEndpoints
         //   - Müşteriye "yeniden yönlendiriliyorsunuz" sistem mesajı gönder (not İÇİNDE değil)
         //   - Arka planda son müşteri mesajını PlanningAgent'a gönder, yanıtı bridge'le müşteriye yayınla
         app.MapPost("/escalations/{id}/replan",
-            (string id,
+            async (string id,
              ReplanInput? body,
-             IChatSessionPort chatSessions) =>
+             IChatSessionPort chatSessions,
+             CancellationToken ct) =>
         {
             var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy)
                 ? WellKnown.Defaults.Admin : body!.RequestedBy!;
             var note = string.IsNullOrWhiteSpace(body?.Note) ? null : body!.Note!.Trim();
-            var result = chatSessions.ReplanEscalation(id, requestedBy, note);
+            var result = await chatSessions.ReplanEscalationAsync(id, requestedBy, note, ct);
             if (!result.Success)
             {
                 return result.ErrorCode == "invalid_request"
@@ -181,14 +182,15 @@ public static class AdminEndpoints
 
         // Aktif sohbet panelinden "Yeniden Planla" — eskalasyon olmadan da kullanılabilir
         app.MapPost("/chat-sessions/{sid}/replan",
-            (string sid,
+            async (string sid,
              ReplanInput? body,
-             IChatSessionPort chatSessions) =>
+             IChatSessionPort chatSessions,
+             CancellationToken ct) =>
         {
             var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy)
                 ? WellKnown.Defaults.Admin : body!.RequestedBy!;
             var note = string.IsNullOrWhiteSpace(body?.Note) ? null : body!.Note!.Trim();
-            var result = chatSessions.ReplanSession(sid, requestedBy, note);
+            var result = await chatSessions.ReplanSessionAsync(sid, requestedBy, note, ct);
             if (!result.Success)
             {
                 return Results.NotFound(new { error = result.ErrorMessage });
@@ -216,9 +218,9 @@ public static class AdminEndpoints
                 Results.Json(chatSessions.GetHistory(sid, take)));
 
         app.MapGet("/chat-sessions/{sid}/sentiment",
-            (string sid, IChatSessionPort chatSessions) =>
+            async (string sid, IChatSessionPort chatSessions, CancellationToken ct) =>
         {
-            var sentiment = chatSessions.GetSentiment(sid);
+            var sentiment = await chatSessions.GetSentimentAsync(sid, ct);
             if (sentiment == null) return Results.NotFound(new { error = "Session bulunamadı." });
             return Results.Json(new
             {
@@ -263,9 +265,10 @@ public static class AdminEndpoints
         });
 
         app.MapPost("/chat-sessions/{sid}/messages",
-            (string sid,
+            async (string sid,
              ChatAdminMessageInput? body,
-             IChatSessionPort chatSessions) =>
+             IChatSessionPort chatSessions,
+             CancellationToken ct) =>
         {
             if (body == null)
                 return Results.BadRequest(new { error = "text zorunlu." });
@@ -273,7 +276,7 @@ public static class AdminEndpoints
             var agent = string.IsNullOrWhiteSpace(body.HumanAgent)
                 ? (chatSessions.GetStateOrDefault(sid).HumanAgent ?? WellKnown.Defaults.Admin)
                 : body.HumanAgent;
-            var result = chatSessions.SendAdminMessage(sid, agent, body.Text);
+            var result = await chatSessions.SendAdminMessageAsync(sid, agent, body.Text, ct);
             if (!result.Success)
                 return Results.BadRequest(new { error = result.ErrorMessage });
 

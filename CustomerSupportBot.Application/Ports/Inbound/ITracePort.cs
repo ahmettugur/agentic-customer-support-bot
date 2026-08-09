@@ -26,6 +26,6 @@ public interface ITracePort
     IReadOnlyList<ReasoningTrace> GetRecentTraces(int count = 20);
     ReasoningTrace? GetTrace(string traceId);
     IReadOnlyList<ReasoningTrace> GetTracesBySession(string sessionId);
-    IReadOnlyList<TracedSessionSummary> GetSessionsSummary();
+    Task<IReadOnlyList<TracedSessionSummary>> GetSessionsSummaryAsync(CancellationToken ct = default);
     TraceStatsSummary GetStats();
 }

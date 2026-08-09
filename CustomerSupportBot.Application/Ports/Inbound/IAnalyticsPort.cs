@@ -20,11 +20,11 @@ public interface IAnalyticsPort
     IReadOnlyList<ConversationRating> GetAllRatings();
 
     /// <summary>Özet istatistikler (ortalama puan, toplam sayı vb.).</summary>
-    object GetSummary();
+    Task<object> GetSummaryAsync(CancellationToken ct = default);
 
     /// <summary>Tüm dashboard istatistiklerini döner.</summary>
-    AnalyticsDashboard GetDashboard();
+    Task<AnalyticsDashboard> GetDashboardAsync(CancellationToken ct = default);
 
     /// <summary>Tek bir oturum için detaylı analytics döner.</summary>
-    SessionAnalytics? GetSessionAnalytics(string sessionId);
+    Task<SessionAnalytics?> GetSessionAnalyticsAsync(string sessionId, CancellationToken ct = default);
 }

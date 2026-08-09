@@ -44,9 +44,9 @@ public sealed class ChatSessionPortService : IChatSessionPort
     public IReadOnlyList<ChatBridgeMessage> GetHistory(string sessionId, int take = 50) =>
         _chatBridge.GetHistory(sessionId, take);
 
-    public ChatSessionSentimentSnapshot? GetSentiment(string sessionId)
+    public async Task<ChatSessionSentimentSnapshot?> GetSentimentAsync(string sessionId, CancellationToken ct = default)
     {
-        var session = _sessions.Get(sessionId);
+        var session = await _sessions.GetAsync(sessionId, ct);
         if (session is null)
         {
             return null;
@@ -146,7 +146,8 @@ public sealed class ChatSessionPortService : IChatSessionPort
         return new ChatSessionReleaseResult(sessionId, resolved);
     }
 
-    public ChatSessionMessageResult SendAdminMessage(string sessionId, string humanAgent, string text)
+    public async Task<ChatSessionMessageResult> SendAdminMessageAsync(
+        string sessionId, string humanAgent, string text, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -167,13 +168,14 @@ public sealed class ChatSessionPortService : IChatSessionPort
         var trimmedText = text.Trim();
         _chatBridge.PublishAdminMessage(sessionId, humanAgent, trimmedText);
         var agentLabel = string.IsNullOrWhiteSpace(humanAgent) ? "Temsilci" : humanAgent;
-        _sessions.AppendUserMessage(sessionId, $"[🧑‍💼 {agentLabel}]: {trimmedText}");
+        await _sessions.AppendUserMessageAsync(sessionId, $"[🧑‍💼 {agentLabel}]: {trimmedText}", ct);
         return new ChatSessionMessageResult(sessionId);
     }
 
-    public ChatSessionReplanResult ReplanSession(string sessionId, string requestedBy, string? note)
+    public async Task<ChatSessionReplanResult> ReplanSessionAsync(
+        string sessionId, string requestedBy, string? note, CancellationToken ct = default)
     {
-        var session = _sessions.Get(sessionId);
+        var session = await _sessions.GetAsync(sessionId, ct);
         if (session is null)
         {
             return new ChatSessionReplanResult(
@@ -187,7 +189,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
         }
 
         ApplyReplanState(session, requestedBy, note);
-        _sessions.Update(session);
+        await _sessions.UpdateAsync(session, ct);
 
         var resolved = ResolveOpenEscalationsForSession(sessionId, requestedBy, note);
         var releasedFromHuman = ReleaseIfHumanMode(sessionId);
@@ -205,7 +207,8 @@ public sealed class ChatSessionPortService : IChatSessionPort
             releasedFromHuman);
     }
 
-    public ChatSessionReplanResult ReplanEscalation(string escalationId, string requestedBy, string? note)
+    public async Task<ChatSessionReplanResult> ReplanEscalationAsync(
+        string escalationId, string requestedBy, string? note, CancellationToken ct = default)
     {
         var escalation = _escalations.Get(escalationId);
         if (escalation is null)
@@ -232,7 +235,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
                 ErrorMessage: "Eskalasyona bağlı bir session yok.");
         }
 
-        var session = _sessions.Get(escalation.SessionId);
+        var session = await _sessions.GetAsync(escalation.SessionId, ct);
         if (session is null)
         {
             return new ChatSessionReplanResult(
@@ -246,7 +249,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
         }
 
         ApplyReplanState(session, requestedBy, note);
-        _sessions.Update(session);
+        await _sessions.UpdateAsync(session, ct);
 
         var resolved = _escalations.Decide(
             escalationId,

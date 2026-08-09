@@ -69,7 +69,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
             return;
         }
 
-        var session = _sessionManager.GetOrCreate(sessionId);
+        var session = await _sessionManager.GetOrCreateAsync(sessionId, ct);
         await _client.ConfigureNativeSessionAsync(ct);
 
         await channel.SendJsonAsync(new

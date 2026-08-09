@@ -45,10 +45,10 @@ public sealed class ReplanService : IReplanService
     {
         try
         {
-            var session = _sessions.Get(sessionId);
+            var session = await _sessions.GetAsync(sessionId, ct);
             if (session == null) return;
 
-            var history = _sessions.GetHistory(sessionId);
+            var history = await _sessions.GetHistoryAsync(sessionId, ct);
             var lastUserQuery = history.LastOrDefault(m => m.Role == ConversationRoles.User)?.Text;
 
             // Admin notu varsa onu öncelikli query olarak kullan — Reasoning/Planning
@@ -67,7 +67,7 @@ public sealed class ReplanService : IReplanService
             {
                 var reasoningResult = await _reasoning.ReasonAsync(effectiveQuery, session, history, ct);
 
-                using var approvalScope = _approvalContext.SetScope(sessionId, null, effectiveQuery);
+                using var approvalScope = _approvalContext.SetScope(sessionId, null, effectiveQuery, session.State.AuthenticatedCustomerId);
                 var response = await _team.RunAsync(effectiveQuery, history, session, reasoningResult, ct);
 
                 if (string.IsNullOrWhiteSpace(response))
@@ -76,7 +76,7 @@ public sealed class ReplanService : IReplanService
                     return;
                 }
 
-                _sessions.AppendAssistantMessage(sessionId, response);
+                await _sessions.AppendAssistantMessageAsync(sessionId, response, ct);
                 _bridge.PublishBotMessage(sessionId, response);
             }
             finally

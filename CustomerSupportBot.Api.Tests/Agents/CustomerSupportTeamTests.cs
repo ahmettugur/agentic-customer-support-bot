@@ -62,7 +62,7 @@ public class CustomerSupportTeamTests
         var approvalOpts = new ApprovalOptions { Enabled = false };
         var queue = new InMemoryApprovalQueue(
             Options.Create(approvalOpts),
-            NullLogger<InMemoryApprovalQueue>.Instance);
+            new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
         var tools = TestFactory.CreateToolsService(_fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo);
         var escalationPolicy = new EscalationPolicyService(sink, Options.Create(approvalOpts));
@@ -105,14 +105,10 @@ public class CustomerSupportTeamTests
         return new AgentTeamFactory(d.ChatClient, d.Prompts, d.ApprovalGate, d.Tools, d.Guards, d.LoggerFactory);
     }
 
-    private WorkflowRunner BuildWorkflowRunner(IChatClient? chatClient = null)
+    private WorkflowMessageBuilder BuildMessageBuilder(IChatClient? chatClient = null, IContextPipeline? pipeline = null)
     {
         var d = BuildDeps(chatClient);
-        var factory = new AgentTeamFactory(d.ChatClient, d.Prompts, d.ApprovalGate, d.Tools, d.Guards, d.LoggerFactory);
-        var finalizer = new TurnFinalizer(d.TraceStore, d.ApprovalGate, d.LoggerFactory, semanticMemory: null, profileService: null);
-        return new WorkflowRunner(
-            factory, finalizer, d.ContextPipeline, d.ChatClient, d.Guards, d.TraceStore, d.Prompts,
-            d.ApprovalGate, d.UiHint, d.ApprovalContext, d.LoggerFactory);
+        return new WorkflowMessageBuilder(pipeline ?? d.ContextPipeline, d.Prompts, d.ChatClient, d.LoggerFactory);
     }
 
     [Fact]
@@ -144,7 +140,7 @@ public class CustomerSupportTeamTests
     [Fact]
     public void BuildReasoningSummaryHint_WithReasoning_ReturnsNonEmpty()
     {
-        var runner = BuildWorkflowRunner();
+        var builder = BuildMessageBuilder();
 
         var reasoning = new ReasoningResult
         {
@@ -156,16 +152,16 @@ public class CustomerSupportTeamTests
                 new() { Description = "Sipariş ID kontrol" }
             }
         };
-        var hint = runner.BuildReasoningSummaryHint(reasoning);
+        var hint = builder.BuildReasoningSummaryHint(reasoning);
         hint.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
     public async Task BuildWorkflowMessagesAsync_WithoutSession_ReturnsUserMessage()
     {
-        var runner = BuildWorkflowRunner();
+        var builder = BuildMessageBuilder();
 
-        var messages = await runner.BuildWorkflowMessagesAsync("merhaba", null, null, null);
+        var messages = await builder.BuildWorkflowMessagesAsync("merhaba", null, null, null);
         messages.Should().NotBeNull();
         messages.Should().NotBeEmpty();
         messages.Last().Role.Should().Be(ChatRole.User);
@@ -175,14 +171,14 @@ public class CustomerSupportTeamTests
     [Fact]
     public async Task BuildWorkflowMessagesAsync_WithHistory_IncludesPreviousMessages()
     {
-        var runner = BuildWorkflowRunner();
+        var builder = BuildMessageBuilder();
 
         var history = new List<ConversationMessage>
         {
             new(ConversationRoles.User, "önceki mesaj"),
             new(ConversationRoles.Assistant, "önceki yanıt"),
         };
-        var messages = await runner.BuildWorkflowMessagesAsync("şimdiki", history, null, null);
+        var messages = await builder.BuildWorkflowMessagesAsync("şimdiki", history, null, null);
 
         messages.Should().Contain(m => m.Text == "önceki mesaj");
         messages.Should().Contain(m => m.Text == "şimdiki");
@@ -214,16 +210,11 @@ public class CustomerSupportTeamTests
         // Sorgu geçmişten okunamaz: geçmiş workflow bittikten SONRA yazılıyor. Bu yüzden
         // parametrenin gerçekten taşınması semantik hafıza retrieval'ının doğruluğu için şart.
         var capture = new QueryCapturingProvider();
-        var d = BuildDeps();
         var pipeline = new ContextPipeline([capture], NullLogger<ContextPipeline>.Instance);
-        var factory = new AgentTeamFactory(d.ChatClient, d.Prompts, d.ApprovalGate, d.Tools, d.Guards, d.LoggerFactory);
-        var finalizer = new TurnFinalizer(d.TraceStore, d.ApprovalGate, d.LoggerFactory, semanticMemory: null, profileService: null);
-        var runner = new WorkflowRunner(
-            factory, finalizer, pipeline, d.ChatClient, d.Guards, d.TraceStore, d.Prompts,
-            d.ApprovalGate, d.UiHint, d.ApprovalContext, d.LoggerFactory);
+        var builder = BuildMessageBuilder(pipeline: pipeline);
 
         var session = new AgentSession { SessionId = "s1", State = new SessionState() };
-        await runner.BuildWorkflowMessagesAsync("iade süresi ne kadar?", null, session, null);
+        await builder.BuildWorkflowMessagesAsync("iade süresi ne kadar?", null, session, null);
 
         capture.SeenQuery.Should().Be("iade süresi ne kadar?",
             "kullanıcının bu turdaki mesajı bağlam sağlayıcılarına geçirilmeli");
@@ -232,9 +223,9 @@ public class CustomerSupportTeamTests
     [Fact]
     public async Task BuildWorkflowMessagesAsync_WithExtractableId_AddsEntityHint()
     {
-        var runner = BuildWorkflowRunner();
+        var builder = BuildMessageBuilder();
 
-        var messages = await runner.BuildWorkflowMessagesAsync("sipariş 1030 nerede?", null, null, null);
+        var messages = await builder.BuildWorkflowMessagesAsync("sipariş 1030 nerede?", null, null, null);
 
         // Entity hint genelde System rolünde eklenir
         messages.Should().Contain(m => m.Role == ChatRole.System);

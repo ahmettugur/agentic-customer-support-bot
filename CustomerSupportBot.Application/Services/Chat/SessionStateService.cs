@@ -28,21 +28,21 @@ public sealed class SessionStateService
     /// <summary>
     /// Reasoning sonucundaki intent'i session state'e yazar.
     /// </summary>
-    public void UpdateSessionIntent(AgentSession session, string? intent)
+    public async Task UpdateSessionIntentAsync(AgentSession session, string? intent, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(intent) || intent == WellKnown.Intents.Unknown) return;
 
         // Aynı session'a çakışan (çift-submit, çoklu sekme) eşzamanlı isteklerde
         // state mutasyonu — bkz. UpdateSessionSentiment'teki ConsecutiveNegativeTurns
-        // yorumu için aynı gerekçe. ISessionManager.GetOrCreate/Get aynı sessionId için
-        // hep AYNI AgentSession referansını döndürür, bu yüzden session nesnesinin
+        // yorumu için aynı gerekçe. ISessionManager.GetOrCreateAsync/GetAsync aynı sessionId
+        // için hep AYNI AgentSession referansını döndürür, bu yüzden session nesnesinin
         // kendisi kilit anahtarı olarak güvenle kullanılabilir (bkz.
         // WorkflowRunner.ConsumeForceReplanHint'teki aynı kalıp).
         lock (session)
         {
             session.State.CurrentIntent = intent;
         }
-        _sessionManager.Update(session);
+        await _sessionManager.UpdateAsync(session, ct);
     }
 
     /// <summary>
@@ -76,15 +76,16 @@ public sealed class SessionStateService
     /// <summary>
     /// Konuşmayı (exchange) session history'ye kaydeder ve ChatBridge'e bildirir.
     /// </summary>
-    public void PersistExchange(
+    public async Task PersistExchangeAsync(
         string sessionId,
         string query,
         string response,
-        IChatBridge chatBridge)
+        IChatBridge chatBridge,
+        CancellationToken ct = default)
     {
         if (!string.IsNullOrWhiteSpace(response))
         {
-            _sessionManager.AddExchange(sessionId, query, response);
+            await _sessionManager.AddExchangeAsync(sessionId, query, response, ct);
             chatBridge.RecordBotExchange(sessionId, query, response);
         }
     }

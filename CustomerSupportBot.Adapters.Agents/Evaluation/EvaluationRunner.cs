@@ -124,7 +124,7 @@ public class EvaluationRunner : IEvaluationPort
         try
         {
             // İzole session — her senaryo kendi bağlamında çalışsın
-            var session = _sessionManager.GetOrCreate(null);
+            var session = await _sessionManager.GetOrCreateAsync(null, ct);
 
             // Reasoning'i ÖNCE çalıştır ki PlanningAgent ön-analiz bağlamını alsın.
             // Senaryo tek-turlu çalışır, history boş; imzada named arg ile cancellation

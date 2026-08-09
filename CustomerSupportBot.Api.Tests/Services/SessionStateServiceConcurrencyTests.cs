@@ -76,7 +76,7 @@ public class SessionStateServiceConcurrencyTests
         var session = new AgentSession { SessionId = "s1" };
 
         var tasks = Enumerable.Range(0, 50)
-            .Select(i => Task.Run(() => svc.UpdateSessionIntent(session, $"intent_{i}")));
+            .Select(i => Task.Run(() => svc.UpdateSessionIntentAsync(session, $"intent_{i}")));
 
         await Task.WhenAll(tasks);
 

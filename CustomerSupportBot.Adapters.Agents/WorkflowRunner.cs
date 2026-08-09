@@ -1,17 +1,15 @@
 // Adapters.Agents/WorkflowRunner.cs
 // Tek bir (decompose edilmemiş) kullanıcı sorgusu için GroupChat workflow koşusu:
-// mesaj hazırlığı, workflow execution, trace toplama ve stream event üretimi.
+// workflow execution + event loop orkestrasyonu. Mesaj hazırlığı WorkflowMessageBuilder'a,
+// trace/event işleme WorkflowTraceEventProcessor'a taşındı (#47 — bölme) — bu sınıf artık
+// yalnızca "koşuyu başlat, event'leri dinle, anormal sonlanmayı yönet" sorumluluğunu taşır.
 // Compound query'lerin alt görevlere bölünmesi DecomposedRunner'ın sorumluluğundadır —
 // o da her alt görev için bu sınıfın RunAsync/RunStreamingAsync'ini çağırır.
 
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Text.Json;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
-using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Domain.Services;
 using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -23,40 +21,34 @@ internal sealed class WorkflowRunner
 {
     private readonly AgentTeamFactory _factory;
     private readonly TurnFinalizer _finalizer;
-    private readonly IContextPipeline _contextPipeline;
-    private readonly IChatClient _chatClient;
     private readonly WorkflowGuardOptions _guards;
     private readonly IReasoningTraceStore _traceStore;
-    private readonly IPromptRepository _prompts;
     private readonly ApprovalGateService _approvalGate;
     private readonly IUiHintEmitter _uiHint;
-    private readonly IApprovalContextAccessor _approvalContext;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly WorkflowTraceEventProcessor _traceProcessor;
+    private readonly WorkflowMessageBuilder _messageBuilder;
 
     public WorkflowRunner(
         AgentTeamFactory factory,
         TurnFinalizer finalizer,
-        IContextPipeline contextPipeline,
-        IChatClient chatClient,
         WorkflowGuardOptions guards,
         IReasoningTraceStore traceStore,
-        IPromptRepository prompts,
         ApprovalGateService approvalGate,
         IUiHintEmitter uiHint,
-        IApprovalContextAccessor approvalContext,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        WorkflowTraceEventProcessor traceProcessor,
+        WorkflowMessageBuilder messageBuilder)
     {
         _factory = factory;
         _finalizer = finalizer;
-        _contextPipeline = contextPipeline;
-        _chatClient = chatClient;
         _guards = guards;
         _traceStore = traceStore;
-        _prompts = prompts;
         _approvalGate = approvalGate;
         _uiHint = uiHint;
-        _approvalContext = approvalContext;
         _loggerFactory = loggerFactory;
+        _traceProcessor = traceProcessor;
+        _messageBuilder = messageBuilder;
     }
 
     /// <summary>Bkz. <see cref="IAgentTeamPort.GetWorkflowDiagram"/>.</summary>
@@ -69,14 +61,14 @@ internal sealed class WorkflowRunner
         ReasoningResult? reasoning,
         CancellationToken ct)
     {
-        var messages = await BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
+        var messages = await _messageBuilder.BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
 
         using var timeoutCts = new CancellationTokenSource(
             TimeSpan.FromSeconds(_guards.TimeoutSeconds));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
         var effectiveCt = linkedCts.Token;
 
-        var st = StartTraceState(session, query, reasoning);
+        var st = _traceProcessor.StartTraceState(session, query, reasoning);
 
         var workflow = _factory.CreateWorkflow();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
@@ -105,7 +97,7 @@ internal sealed class WorkflowRunner
                 break;
             }
 
-            ApplyTraceEvent(st, evt);
+            _traceProcessor.ApplyTraceEvent(st, evt);
         }
 
         var outcome = await FinalizeAbnormalTerminationAsync(run, st, query, timeoutCts, ct, workflowError);
@@ -134,7 +126,7 @@ internal sealed class WorkflowRunner
 
         if (WorkflowResponseExtractor.ContainsAgentRoutingMessage(result))
         {
-            result = await RewriteRoutingMessageAsync(result, query, ct);
+            result = await _messageBuilder.RewriteRoutingMessageAsync(result, query, ct);
         }
 
         await _finalizer.FinalizeAsync(st.Trace, session, query, result, terminationReason);
@@ -151,14 +143,14 @@ internal sealed class WorkflowRunner
     {
         var sessionId = session?.SessionId ?? string.Empty;
 
-        var messages = await BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
+        var messages = await _messageBuilder.BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
 
         using var timeoutCts = new CancellationTokenSource(
             TimeSpan.FromSeconds(_guards.TimeoutSeconds));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
         var effectiveCt = linkedCts.Token;
 
-        var st = StartTraceState(session, query, reasoning);
+        var st = _traceProcessor.StartTraceState(session, query, reasoning);
 
         var workflow = _factory.CreateWorkflow();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
@@ -189,7 +181,7 @@ internal sealed class WorkflowRunner
 
             // Yalnızca gözlemlenebilir bir değişiklik varsa (ajan durumu, gerçek zamanlı
             // yanıt delta'sı) stream event yayınlanır.
-            foreach (var surfaced in ApplyTraceEvent(st, evt))
+            foreach (var surfaced in _traceProcessor.ApplyTraceEvent(st, evt))
                 yield return surfaced;
 
             // Tool çağrıları sırasında biriken UI ipuçlarını (ör. category_picker) hemen yayınla
@@ -224,7 +216,7 @@ internal sealed class WorkflowRunner
         result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(result);
 
         if (WorkflowResponseExtractor.ContainsAgentRoutingMessage(result))
-            result = await RewriteRoutingMessageAsync(result, query, effectiveCt);
+            result = await _messageBuilder.RewriteRoutingMessageAsync(result, query, effectiveCt);
 
         await _finalizer.FinalizeAsync(st.Trace, session, query, result, terminationReason);
 
@@ -250,65 +242,6 @@ internal sealed class WorkflowRunner
             new { text = result, terminationReason });
     }
 
-    /// <summary>
-    /// Tek bir workflow koşusunun trace toplama durumu.
-    /// </summary>
-    private sealed class TraceState
-    {
-        public required ReasoningTrace Trace { get; init; }
-        public Dictionary<string, AgentVisit> ActiveVisits { get; } = new();
-        public string? LastAgentSignature { get; set; }
-        public int IterationCount { get; set; }
-        public string Result { get; set; } = "";
-
-        /// <summary>
-        /// ResponseAgent'ın gerçek token akışından en az bir karakter yayınlandıysa true —
-        /// bu turda <see cref="StreamEventTypes.ResponseStart"/> zaten gönderilmiş demektir,
-        /// döngü sonrası kod tekrar göndermemeli ve StreamTextInChunksAsync yapay
-        /// parçalamasına başvurmamalıdır.
-        /// </summary>
-        public bool ResponseStreamStarted { get; set; }
-        public ResponseStreamFilter ResponseFilter { get; } = new();
-    }
-
-    /// <summary>
-    /// ResponseAgent'ın ham token akışını kullanıcıya göndermeden önce "TERMINATE: reason=..."
-    /// işaretinden (ve ondan sonra gelen self-critique JSON bloğundan, bkz. response-agent.md)
-    /// arındırır. Chunk sınırları marker'ı bölebileceği için (ör. "...cevap TERM" + "INATE...")
-    /// marker uzunluğu kadar güvenlik payı tutulur; yalnızca kesinlikle marker'a ait olmadığı
-    /// bilinen kısım hemen yayınlanır.
-    /// </summary>
-    internal sealed class ResponseStreamFilter
-    {
-        private const string Marker = "TERMINATE";
-        private readonly StringBuilder _pending = new();
-        private bool _cutoff;
-
-        public string Feed(string chunk)
-        {
-            if (_cutoff || string.IsNullOrEmpty(chunk)) return "";
-
-            _pending.Append(chunk);
-            var text = _pending.ToString();
-
-            var idx = text.IndexOf(Marker, StringComparison.OrdinalIgnoreCase);
-            if (idx >= 0)
-            {
-                _cutoff = true;
-                var safe = text[..idx];
-                _pending.Clear();
-                return safe;
-            }
-
-            var emitLen = Math.Max(0, text.Length - (Marker.Length - 1));
-            if (emitLen == 0) return "";
-
-            var toEmit = text[..emitLen];
-            _pending.Remove(0, emitLen);
-            return toEmit;
-        }
-    }
-
     private enum RunOutcomeKind { Completed, TimedOut, Cancelled, Error }
 
     private readonly record struct RunOutcome(RunOutcomeKind Kind, string? ErrorMessage);
@@ -317,7 +250,7 @@ internal sealed class WorkflowRunner
     /// Event döngüsü bittikten sonra anormal sonlanma durumlarını (timeout/iptal/hata) tek yerde
     /// ele alır — <see cref="RunAsync"/> ve <see cref="RunStreamingAsync"/> arasında bu blok
     /// birebir kopyaydı ve zamanla sessizce sapmıştı: non-streaming iptal dalı
-    /// <c>ProcessPendingEscalations</c>'ı hiç çağırmıyordu, streaming dalı çağırıyordu (timeout
+    /// <c>ProcessPendingEscalationsAsync</c>'i hiç çağırmıyordu, streaming dalı çağırıyordu (timeout
     /// ve hata dalları ikisinde de çağırıyordu). Bu tutarsızlığın hangisinin "doğru" olduğuna
     /// karar vermek yerine — timeout/hata/streaming-iptal üçünün ortak davranışı (eskalasyonu
     /// işle) çoğunluk kuralıyla tek doğru davranış kabul edildi, non-streaming iptal buna
@@ -326,7 +259,7 @@ internal sealed class WorkflowRunner
     /// </summary>
     private async Task<RunOutcome> FinalizeAbnormalTerminationAsync(
         StreamingRun run,
-        TraceState st,
+        WorkflowTraceEventProcessor.TraceState st,
         string query,
         CancellationTokenSource timeoutCts,
         CancellationToken originalCt,
@@ -337,7 +270,7 @@ internal sealed class WorkflowRunner
         if (timeoutCts.IsCancellationRequested && !originalCt.IsCancellationRequested)
         {
             await StopRunGracefullyAsync(run);
-            _approvalGate.ProcessPendingEscalations(st.Trace, query, "");
+            await _approvalGate.ProcessPendingEscalationsAsync(st.Trace, query, "");
             _traceStore.Complete(st.Trace.TraceId,
                 terminationReason: WellKnown.Termination.ReasonTimeout,
                 error: $"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı");
@@ -347,7 +280,7 @@ internal sealed class WorkflowRunner
         if (originalCt.IsCancellationRequested)
         {
             await StopRunGracefullyAsync(run);
-            _approvalGate.ProcessPendingEscalations(st.Trace, query, "");
+            await _approvalGate.ProcessPendingEscalationsAsync(st.Trace, query, "");
             _traceStore.Complete(st.Trace.TraceId,
                 terminationReason: "cancelled",
                 error: "İstek çağıran tarafından iptal edildi.");
@@ -356,347 +289,12 @@ internal sealed class WorkflowRunner
 
         if (workflowError != null)
         {
-            _approvalGate.ProcessPendingEscalations(st.Trace, query, "");
+            await _approvalGate.ProcessPendingEscalationsAsync(st.Trace, query, "");
             _traceStore.Complete(st.Trace.TraceId, terminationReason: "error", error: workflowError);
             return new RunOutcome(RunOutcomeKind.Error, workflowError);
         }
 
         return new RunOutcome(RunOutcomeKind.Completed, null);
-    }
-
-    private TraceState StartTraceState(AgentSession? session, string query, ReasoningResult? reasoning)
-    {
-        var trace = _traceStore.StartTrace(session?.SessionId ?? "anonymous", query);
-        if (reasoning != null)
-        {
-            trace.Reasoning = reasoning;
-            _traceStore.Update(trace);
-        }
-        return new TraceState { Trace = trace };
-    }
-
-    private static readonly List<StreamEvent> NoEvents = new();
-
-    /// <summary>
-    /// Bir workflow event'inin trace yan etkilerini uygular ve varsa bu event'ten
-    /// kaynaklanan (boş olabilir) stream event listesini döner. Çağıran taraf streaming
-    /// değilse (RunAsync) dönüş değerini yok sayabilir.
-    /// </summary>
-    private List<StreamEvent> ApplyTraceEvent(TraceState st, WorkflowEvent evt)
-    {
-        switch (evt)
-        {
-            case ExecutorInvokedEvent invoked:
-            {
-                var executorId = invoked.ExecutorId ?? "unknown";
-                if (WorkflowResponseExtractor.IsInternalWorkflowExecutor(executorId)) return NoEvents;
-
-                // GroupChatHost her turda seçilmeyen tüm ajanlara da geçmişlerini senkron
-                // tutmak için mesaj yollar (BroadcastAsync) — bu da Invoked/Completed
-                // event çiftini tetikler ama ajan gerçekte çalışmaz. Süreye bakarak ayırt
-                // etmek güvenilir değil (gerçek ajanlar da bazen <1ms'de tamamlanabiliyor);
-                // asıl ayırt edici framework'ün TEK gerçek-tur sinyali olan TurnToken'dır —
-                // sadece seçilen konuşmacı TurnToken alır, broadcast hedefleri ise düz
-                // ChatMessage listesi alır (bkz. GroupChatHost.TakeTurnAsync/BroadcastAsync).
-                if (invoked.Data is not TurnToken) return NoEvents;
-
-                st.IterationCount++;
-
-                var sig = $"{executorId}:running";
-                if (sig == st.LastAgentSignature) return NoEvents;
-                st.LastAgentSignature = sig;
-
-                // Tool çağrıları (ör. UI hint emisyonu) bu ajan adına etiketlensin —
-                // hangi ajanın hint ürettiğini stream event sırasına bağlı kalmadan bilelim.
-                _approvalContext.SetCurrentAgent(executorId);
-
-                // Visit'i sadece ActiveVisits'e kaydet; trace listesine CompletedEvent'te
-                // ekleyeceğiz.
-                st.ActiveVisits[executorId] = new AgentVisit
-                {
-                    AgentName = executorId,
-                    StartedAt = DateTime.UtcNow
-                };
-
-                return [new StreamEvent(StreamEventTypes.Agent, new { name = executorId, status = "running" })];
-            }
-
-            case ExecutorCompletedEvent completed:
-            {
-                var completedId = completed.ExecutorId ?? "unknown";
-                if (WorkflowResponseExtractor.IsInternalWorkflowExecutor(completedId)) return NoEvents;
-
-                // ActiveVisits'te kaydı yoksa bu, Invoked aşamasında TurnToken taşımadığı
-                // için zaten atlanmış bir broadcast/senkron tamamlanmasıdır — yok say.
-                if (!st.ActiveVisits.TryGetValue(completedId, out var visit)) return NoEvents;
-
-                var sig = $"{completedId}:done";
-                if (sig == st.LastAgentSignature) return NoEvents;
-                st.LastAgentSignature = sig;
-
-                visit.CompletedAt = DateTime.UtcNow;
-                st.ActiveVisits.Remove(completedId);
-                st.Trace.AgentVisits.Add(visit);
-
-                // Planning/specialist reasoning'i her gerçek turda ara-durumdan da çıkar
-                // (WorkflowOutputEvent'i beklemeden) — böylece timeout/hata ile workflow
-                // hiç tamamlanmasa bile o ana kadar toplanan reflection'lar (ör.
-                // needs_escalation) trace'e işlenmiş olur ve eskalasyon tetiklenebilir.
-                if (completed.Data is IEnumerable<ChatMessage> pendingMessages)
-                {
-                    var planning = WorkflowResponseExtractor.ExtractPlanning(pendingMessages);
-                    if (planning != null) st.Trace.Planning = planning;
-
-                    var reasonings = WorkflowResponseExtractor.ExtractSpecialistReasonings(pendingMessages);
-
-                    if (completedId.StartsWith(WellKnown.AgentNames.HumanHandoff, StringComparison.OrdinalIgnoreCase))
-                        EnsureHumanHandoffEscalation(pendingMessages, reasonings);
-
-                    if (completedId.StartsWith(WellKnown.AgentNames.Order, StringComparison.OrdinalIgnoreCase))
-                        EnsureSideEffectToolCompletion(pendingMessages, reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
-
-                    if (completedId.StartsWith(WellKnown.AgentNames.Complaint, StringComparison.OrdinalIgnoreCase))
-                        EnsureSideEffectToolCompletion(pendingMessages, reasonings, WellKnown.AgentNames.Complaint, ComplaintAgentSideEffectTools);
-
-                    if (reasonings.Count > 0) MergeSpecialistReasonings(st.Trace, reasonings);
-                }
-
-                _traceStore.Update(st.Trace);
-
-                return [new StreamEvent(StreamEventTypes.Agent, new { name = completedId, status = "done" })];
-            }
-
-            // AgentResponseUpdateEvent, WorkflowOutputEvent'ten türer — daha spesifik olduğu
-            // için switch'te ondan ÖNCE kontrol edilmeli. TurnToken(emitEvents:true) her
-            // ajan turunda gerçek zamanlı LLM token delta'larını bu event tipiyle yayınlar
-            // (bkz. AIAgentHostExecutor.InvokeAgentAsync). Sadece ResponseAgent'ın delta'ları
-            // kullanıcıya gösterilir — diğer ajanların (Planning/Order/Complaint/HumanHandoff)
-            // ham çıktısı yapılandırılmış JSON reasoning'dir, kullanıcıya asla akıtılmamalı.
-            case AgentResponseUpdateEvent updateEvt:
-            {
-                var executorId = updateEvt.ExecutorId ?? "";
-                if (!executorId.StartsWith(WellKnown.AgentNames.Response, StringComparison.OrdinalIgnoreCase))
-                    return NoEvents;
-
-                var chunk = updateEvt.Update.Text;
-                if (string.IsNullOrEmpty(chunk)) return NoEvents;
-
-                var safeText = st.ResponseFilter.Feed(chunk);
-                if (safeText.Length == 0) return NoEvents;
-
-                var results = new List<StreamEvent>();
-                if (!st.ResponseStreamStarted)
-                {
-                    st.ResponseStreamStarted = true;
-                    results.Add(new StreamEvent(StreamEventTypes.ResponseStart, new { terminationReason = (string?)null }));
-                }
-                results.Add(new StreamEvent(StreamEventTypes.ResponseDelta, new TextDeltaPayload(safeText)));
-                return results;
-            }
-
-            case WorkflowOutputEvent output:
-            {
-                st.Result = WorkflowResponseExtractor.ExtractResultFromOutput(output);
-                var planning = WorkflowResponseExtractor.ExtractPlanningFromOutput(output);
-                if (planning != null) st.Trace.Planning = planning;
-                var specialistReasonings =
-                    WorkflowResponseExtractor.ExtractSpecialistReasoningsFromOutput(output);
-
-                // Son güvence: turun tamamı burada görünür durumda — ExecutorCompletedEvent
-                // aşamasında bir sebeple (event kaçırma, sıralama) yakalanamamışsa bile
-                // human_handoff_tool çağrısı burada da kontrol edilir.
-                if (output.Data is IEnumerable<ChatMessage> allMessages)
-                {
-                    EnsureHumanHandoffEscalation(allMessages, specialistReasonings);
-                    EnsureSideEffectToolCompletion(allMessages, specialistReasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
-                    EnsureSideEffectToolCompletion(allMessages, specialistReasonings, WellKnown.AgentNames.Complaint, ComplaintAgentSideEffectTools);
-                }
-
-                if (specialistReasonings.Count > 0)
-                    MergeSpecialistReasonings(st.Trace, specialistReasonings);
-                if (planning != null || specialistReasonings.Count > 0)
-                    _traceStore.Update(st.Trace);
-                return NoEvents;
-            }
-
-            default:
-                return NoEvents;
-        }
-    }
-
-    /// <summary>
-    /// Ajan başına en güncel reasoning'i tutarak birleştirir — aynı ajan hem ara-durumda
-    /// (ExecutorCompletedEvent) hem final WorkflowOutputEvent'te görülebildiği için dedup
-    /// gerekir; aksi halde eskalasyon adayı listesi mükerrer kayıt üretir.
-    /// </summary>
-    private static void MergeSpecialistReasonings(ReasoningTrace trace, List<SpecialistReasoning> incoming)
-    {
-        foreach (var r in incoming)
-        {
-            var idx = trace.SpecialistReasonings.FindIndex(x =>
-                string.Equals(x.AgentName, r.AgentName, StringComparison.OrdinalIgnoreCase));
-            if (idx >= 0) trace.SpecialistReasonings[idx] = r;
-            else trace.SpecialistReasonings.Add(r);
-        }
-    }
-
-    private const string HandoffFallbackSummary =
-        "Kullanıcı insan temsilciyle görüşme talep etti (human_handoff_tool çağrıldı).";
-
-    private const string HandoffFallbackReason =
-        "human_handoff_tool çağrıldı ama LLM reflection'ı needs_escalation olarak " +
-        "işaretlemedi; sistem garantisiyle düzeltildi.";
-
-    /// <summary>
-    /// Kullanıcı açıkça insan temsilci istediğinde (human_handoff_tool çağrıldığında)
-    /// eskalasyonun oluşmasını KOD İLE garanti eder — LLM'in postToolReflection'da
-    /// <c>status=needs_escalation</c> yazmayı unutmasına/yanlış yazmasına bağlı kalmaz.
-    /// EscalationPolicyService.ProcessPendingEscalations SADECE bu status'e bakarak
-    /// eskalasyon açtığı için, model reflection JSON'unu yanlış üretirse kullanıcı
-    /// "temsilci bağlanacak" mesajı alır ama admin panelinde hiçbir kayıt oluşmazdı —
-    /// sessiz bir başarısızlık noktasıydı.
-    ///
-    /// <para>
-    /// Bilinçli takas: garanti TEK YÖNLÜ. Tool çağrısı da bir LLM kararı olduğu için, model
-    /// handoff tool'unu gereksiz çağırıp reflection'da "aslında gerek yok" dese bile kayıt
-    /// açılır. Müşteri desteğinde kaçırılan eskalasyonun maliyeti fazladan eskalasyondan
-    /// yüksek olduğu ve admin panelinde dismiss yolu bulunduğu için bu yön tercih edildi.
-    /// Panelde gürültü artarsa bakılacak ilk yer burasıdır.
-    /// </para>
-    ///
-    /// <para>
-    /// Bilinen kapsam dışı köşe: HumanHandoffAgent turu uçuş hâlindeyken workflow timeout'a
-    /// takılırsa tool çağrısı hiç tamamlanmadığı için FunctionCallContent oluşmaz ve garanti
-    /// devreye giremez.
-    /// </para>
-    /// </summary>
-    internal static void EnsureHumanHandoffEscalation(
-        IEnumerable<ChatMessage> messages, List<SpecialistReasoning> reasonings)
-    {
-        if (!WorkflowResponseExtractor.ContainsHumanHandoffToolCall(messages)) return;
-
-        var existing = reasonings.FirstOrDefault(r =>
-            string.Equals(r.AgentName, WellKnown.AgentNames.HumanHandoff, StringComparison.OrdinalIgnoreCase));
-
-        if (existing is null)
-        {
-            existing = new SpecialistReasoning { AgentName = WellKnown.AgentNames.HumanHandoff };
-            reasonings.Add(existing);
-        }
-
-        var reflection = existing.PostToolReflection ??= new PostToolReflection();
-
-        // LLM zaten doğru işaretlemiş — hiçbir alanına dokunma.
-        if (reflection.StatusEnum == TaskCompletionStatus.NeedsEscalation) return;
-
-        // Yerinde düzelt (remove+replace DEĞİL): PreToolCheck, ResultConfidence, ResultNotes
-        // ve MissingContext gibi LLM'in ürettiği diğer alanlar korunur. MissingContext ayrıca
-        // fonksiyonel — EscalationPolicyService bunu doğrudan EscalationRequest'e kopyalıyor,
-        // dolayısıyla kaybı admin'in gördüğü kayıttan "hangi bilgi eksikti"yi silerdi.
-        reflection.Status = WellKnown.TaskStatuses.NeedsEscalation;
-        reflection.TaskComplete = false;
-        if (string.IsNullOrWhiteSpace(reflection.Summary)) reflection.Summary = HandoffFallbackSummary;
-        if (string.IsNullOrWhiteSpace(reflection.HandoffReason)) reflection.HandoffReason = HandoffFallbackReason;
-    }
-
-    /// <summary>
-    /// Ajan başına, HITL onayından geçen yan-etkili tool'lar — bkz.
-    /// <see cref="EnsureSideEffectToolCompletion"/>. Elle yazılmış set yerine
-    /// <see cref="WellKnown.SideEffectToolsOf"/> ile tek kaynaktan
-    /// (<see cref="WellKnown.SideEffectToolOwners"/>) türetilir; yeni bir yazma tool'u
-    /// eklendiğinde burada değişiklik gerekmez.
-    /// </summary>
-    private static readonly IReadOnlySet<string> OrderAgentSideEffectTools =
-        WellKnown.SideEffectToolsOf(WellKnown.AgentNames.Order);
-
-    private static readonly IReadOnlySet<string> ComplaintAgentSideEffectTools =
-        WellKnown.SideEffectToolsOf(WellKnown.AgentNames.Complaint);
-
-    /// <summary>
-    /// <see cref="EnsureHumanHandoffEscalation"/> ile AYNI "tek yönlü kod garantisi" deseni,
-    /// ama TERS yönde: orada "tool çağrıldıysa eskale et" idi, burada "tool BAŞARIYLA
-    /// tamamlandıysa görevi tamamlandı say". Bu yan-etkili tool'ların (order_placement_tool,
-    /// order_cancel_tool, return_request_tool, complaint_registration_tool — hepsi
-    /// <c>WellKnown.HighRiskTools</c>'ta ve HITL onayından geçiyor) sonuçlarındaki
-    /// <see cref="ToolResult.Success"/> alanı deterministik bir sinyal; LLM'in reflection'ı
-    /// başarılı bir işlemi yanlışlıkla needs_followup/failed olarak işaretlerse müşteri
-    /// "işlem yapılamadı" gibi yanlış-negatif bir yanıt alabilir ya da gereksiz bir ek tur
-    /// (replan) tetiklenebilirdi.
-    ///
-    /// <para>
-    /// Bilinçli asimetri: yalnızca BAŞARI yönünde düzeltilir. Tool başarısız olduysa veya sonucu
-    /// belirlenemiyorsa (ör. <see cref="FunctionResultContent.Result"/> ne <see cref="ToolResult"/>
-    /// ne tanınan bir <see cref="JsonElement"/> şemasında) hiç dokunulmaz — ters yönde zorlamak
-    /// (başarısızlığı "done" yapmak) müşteriye gerçekleşmemiş bir işlemi "oldu" demek gibi çok
-    /// daha riskli, tersine dönmesi zor bir hata olurdu. human_handoff'taki "kaçırılan eskalasyon
-    /// > fazladan eskalasyon" takasının buradaki karşılığı: "kaçırılan başarı bildirimi (fazladan
-    /// tur) &lt; yanlış başarı bildirimi (gerçekleşmemiş bir işlemi müşteriye onaylamak)".
-    /// </para>
-    ///
-    /// <para>
-    /// <paramref name="toolNames"/> içindeki BİRDEN FAZLA tool'dan biri başarılı olsa bile tek bir
-    /// reflection kaydı üzerinde çalışılır (agentName başına bir <see cref="SpecialistReasoning"/>)
-    /// — bir turda aynı ajanın birden fazla side-effect tool'u art arda çağırması beklenmez,
-    /// ama çağırsa bile "en az biri başarılı → done" yeterli bir garanti.
-    /// </para>
-    /// </summary>
-    internal static void EnsureSideEffectToolCompletion(
-        IEnumerable<ChatMessage> messages,
-        List<SpecialistReasoning> reasonings,
-        string agentName,
-        IReadOnlySet<string> toolNames)
-    {
-        var contents = messages.SelectMany(m => m.Contents).ToList();
-
-        var relevantCallIds = contents.OfType<FunctionCallContent>()
-            .Where(fc => toolNames.Contains(fc.Name))
-            .Select(fc => fc.CallId)
-            .ToHashSet(StringComparer.Ordinal);
-        if (relevantCallIds.Count == 0) return;
-
-        var succeeded = contents.OfType<FunctionResultContent>()
-            .Where(fr => relevantCallIds.Contains(fr.CallId))
-            .Any(fr => TryGetToolResultSuccess(fr.Result) == true);
-        if (!succeeded) return;
-
-        var existing = reasonings.FirstOrDefault(r =>
-            string.Equals(r.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
-
-        if (existing is null)
-        {
-            existing = new SpecialistReasoning { AgentName = agentName };
-            reasonings.Add(existing);
-        }
-
-        var reflection = existing.PostToolReflection ??= new PostToolReflection();
-
-        // LLM zaten doğru işaretlemiş — hiçbir alanına dokunma. NOT: Status'un varsayılan
-        // değeri de "done" olduğu için (bkz. PostToolReflection.Status) yalnızca Status'e
-        // bakmak yeterli değil — TaskComplete kontrol edilmezse taze/boş bir reflection
-        // (varsayılan Status=done, TaskComplete=false) burada erkenden atlanır ve
-        // TaskComplete hiç true'ya çekilmez.
-        if (reflection.StatusEnum == TaskCompletionStatus.Done && reflection.TaskComplete) return;
-
-        reflection.Status = WellKnown.TaskStatuses.Done;
-        reflection.TaskComplete = true;
-        if (string.IsNullOrWhiteSpace(reflection.Summary))
-            reflection.Summary = "İşlem başarıyla tamamlandı (sistem garantisiyle status=done'a düzeltildi).";
-    }
-
-    /// <summary>
-    /// AIFunctionFactory sonucu bazen ham <see cref="ToolResult"/> nesnesi, bazen (serileştirme
-    /// yoluna bağlı olarak) <see cref="JsonElement"/> olarak taşır — ikisini de tek yerde
-    /// normalize eder (bkz. mevcut test yardımcısı ApprovalGateServiceToolBuilderTests.ParseResult
-    /// ile aynı desen).
-    /// </summary>
-    private static bool? TryGetToolResultSuccess(object? raw)
-    {
-        if (raw is ToolResult tr) return tr.Success;
-        if (raw is JsonElement je && je.ValueKind == JsonValueKind.Object &&
-            je.TryGetProperty("success", out var s) &&
-            (s.ValueKind == JsonValueKind.True || s.ValueKind == JsonValueKind.False))
-            return s.GetBoolean();
-        return null;
     }
 
     /// <summary>
@@ -735,9 +333,13 @@ internal sealed class WorkflowRunner
     /// tür request'ler eklerse) sessizce atlanır — hiçbir yanıt gönderilmez, o superstep askıda
     /// kalır; bu, bugünkü sürümde sadece approval-request türü beklendiği için kabul edilen bir
     /// sınır durumdur.
+    ///
+    /// NOT: Bu köprü artık yalnızca (varsa) hâlâ ApprovalRequiredAIFunction ile sarılı tool'lar
+    /// için tetiklenir — sipariş/iade/iptal/şikayet tool'ları (bkz. ApprovalGateService) artık
+    /// bloklamayan modele geçti ve bu event'i hiç üretmiyor.
     /// </summary>
     private async Task HandleRequestInfoEventAsync(
-        StreamingRun run, RequestInfoEvent requestInfo, TraceState st, CancellationToken ct)
+        StreamingRun run, RequestInfoEvent requestInfo, WorkflowTraceEventProcessor.TraceState st, CancellationToken ct)
     {
         if (!requestInfo.Request.TryGetDataAs<ToolApprovalRequestContent>(out var approvalRequest))
             return;
@@ -749,42 +351,12 @@ internal sealed class WorkflowRunner
             toolName: functionCall.Name,
             agentName: ApprovalGateService.ResolveAgentName(functionCall.Name),
             parameters: functionCall.Arguments,
-            justification: ResolveApprovalJustification(st),
+            justification: WorkflowTraceEventProcessor.ResolveApprovalJustification(st),
             ct);
 
         var responseContent = approvalRequest.CreateResponse(decision.Approved, decision.Reason);
         var externalResponse = requestInfo.Request.CreateResponse(responseContent);
         await run.SendResponseAsync(externalResponse);
-    }
-
-    /// <summary>
-    /// Admin'e "bu tool neden çağrılıyor" sorusunun cevabı olarak gösterilecek gerekçeyi seçer.
-    ///
-    /// <para>
-    /// <b>Neden preToolCheck.reasoning DEĞİL:</b> uzman ajanın <c>preToolCheck</c> alanı, final
-    /// yapılandırılmış JSON çıktısının parçasıdır (aynı nesnede <c>postToolReflection</c> da var,
-    /// yani tanımı gereği tool ÇALIŞTIKTAN sonra üretilir). Onay ise tool çalışmadan önceki ara
-    /// turda tetiklenir — o anda böyle bir alan henüz mevcut değildir. Bu yüzden onay kaydına
-    /// uzmanın kendi gerekçesi konulamaz.
-    /// </para>
-    ///
-    /// <para>
-    /// O anda gerçekten elde olan en bilgilendirici gerekçe PlanningAgent'ın routing
-    /// rationale'ıdır: planlama turu uzman turundan ÖNCE tamamlandığı için trace'e çoktan
-    /// işlenmiştir. Yoksa ReasoningService'in analizine, o da yoksa jenerik şablona düşülür.
-    /// </para>
-    /// </summary>
-    private static string ResolveApprovalJustification(TraceState st)
-    {
-        var planningRationale = st.Trace.Planning?.Rationale;
-        if (!string.IsNullOrWhiteSpace(planningRationale))
-            return planningRationale;
-
-        var reasoningRationale = st.Trace.Reasoning?.Rationale;
-        if (!string.IsNullOrWhiteSpace(reasoningRationale))
-            return reasoningRationale;
-
-        return string.Empty; // ApprovalGateService jenerik şablona düşer
     }
 
     private static async IAsyncEnumerable<(WorkflowEvent? evt, string? error)>
@@ -822,187 +394,4 @@ internal sealed class WorkflowRunner
             await enumerator.DisposeAsync();
         }
     }
-
-    /// <summary>
-    /// Burada üretilen sistem mesajlarının (bağlam, reasoning özeti, entity hint, replan notu)
-    /// içeriği ve sırası, `CustomerSupportBot.Api/Prompts/agents/*.md` altındaki specialist
-    /// prompt'larıyla BELGESİZ (kod dışında yazılı olmayan) bir sözleşme oluşturur — ör. entity
-    /// hint'in metni (<see cref="IdExtractor.BuildHintMessage"/>) "order_id MEVCUT" gibi belirli
-    /// ifadeler kullanır ve prompt'lar bu ifadeleri örnek/talimat olarak referans alır. Bu metni
-    /// veya mesaj sırasını değiştirirken ilgili prompt dosyalarının da gözden geçirilmesi gerekir;
-    /// derleyici/test bu bağlantıyı doğrulamaz.
-    /// </summary>
-    internal async Task<List<ChatMessage>> BuildWorkflowMessagesAsync(
-        string query,
-        List<ConversationMessage>? conversationHistory,
-        AgentSession? session,
-        ReasoningResult? reasoning)
-    {
-        var messages = new List<ChatMessage>();
-
-        if (session != null)
-        {
-            var context = await _contextPipeline.BuildContextAsync(session, query);
-            if (!string.IsNullOrWhiteSpace(context))
-            {
-                messages.Add(new ChatMessage(ChatRole.System,
-                    $"Aşağıdaki bağlam bilgileri mevcut oturum hakkındadır. " +
-                    $"Bu bilgileri yanıtlarınızda dikkate alın:\n\n{context}"));
-            }
-        }
-
-        if (reasoning != null)
-        {
-            var hint = BuildReasoningSummaryHint(reasoning);
-            if (!string.IsNullOrWhiteSpace(hint))
-            {
-                messages.Add(new ChatMessage(ChatRole.System, hint));
-            }
-        }
-
-        var extractedIds = ResolveExtractedIds(query, reasoning);
-        var entityHint = IdExtractor.BuildHintMessage(extractedIds);
-        if (!string.IsNullOrWhiteSpace(entityHint))
-        {
-            messages.Add(new ChatMessage(ChatRole.System, entityHint));
-        }
-
-        if (conversationHistory is { Count: > 0 })
-            messages.AddRange(conversationHistory.Select(m => new ChatMessage(ToChatRole(m.Role), m.Text)));
-
-        var replanHint = ConsumeForceReplanHint(session);
-        if (replanHint != null)
-        {
-            messages.Add(new ChatMessage(ChatRole.System, replanHint));
-        }
-
-        messages.Add(new ChatMessage(ChatRole.User, query));
-
-        return messages;
-    }
-
-    /// <summary>
-    /// Workflow'a gidecek ENTITY EXTRACTION hint'i için ID kaynağını çözer.
-    /// <c>reasoning.VerifiedEntities</c> mevcutsa (ReasoningService zaten <see cref="EntityVerifier"/>
-    /// ile query+geçmiş+session+DB'yi birleştirip doğrulamış) o kullanılır — <c>IdExtractor.Extract(query)</c>
-    /// yalnızca GÜNCEL mesaja bakar, önceki turdaki bağlamı (ör. "peki 1043" gibi bağlam kelimesiz
-    /// bir takip mesajını) tamamen kaçırır. Bu yüzden bu iki yol tutarsız çalışıyordu: reasoning
-    /// aşaması "1043"ü doğru bağlamda çözebilirken, workflow'un kendi (query-only) çıkarımı aynı
-    /// sayıyı bağlamsız görüp "kısa mesaj → customer_id" varsayılanına düşüyor, specialist'e yanlış
-    /// tool'u (get_last_order_tool yerine order_status_tool gerekirken) önerip yanlış-negatif
-    /// "sipariş bulunamadı" yanıtı ürettiriyordu. <c>reasoning</c> null ise (ör. bazı çağıranlar
-    /// reasoning'i atlıyor) eski (query-only) davranışa düşülür.
-    /// </summary>
-    internal static ExtractedIds ResolveExtractedIds(string query, ReasoningResult? reasoning)
-    {
-        var verified = reasoning?.VerifiedEntities;
-        if (verified is null || !verified.HasAny)
-            return IdExtractor.Extract(query);
-
-        return new ExtractedIds
-        {
-            OrderId = verified.OrderId?.Value,
-            CustomerId = verified.CustomerId?.Value,
-            ComplaintId = verified.ComplaintId?.Value
-        };
-    }
-
-    /// <summary>
-    /// ForceReplanNextTurn bayrağını atomik olarak okur ve temizler — tek kullanımlık (one-shot)
-    /// olması gerektiği için birden fazla eşzamanlı çağrının (paralel alt-görevler veya aynı
-    /// session'a gelen eşzamanlı istekler) aynı flag'i birden çok kez tüketmesini engeller.
-    /// </summary>
-    private static string? ConsumeForceReplanHint(AgentSession? session)
-    {
-        if (session is null) return null;
-
-        lock (session)
-        {
-            if (!session.State.ForceReplanNextTurn) return null;
-
-            var hint = WellKnown.FallbackMessages.ReplanPlanningHint;
-            if (!string.IsNullOrWhiteSpace(session.State.ReplanNote))
-            {
-                hint += $"\n\n📌 Admin notu (sadece sana, müşteri görmez): \"{session.State.ReplanNote}\"";
-            }
-
-            session.State.ForceReplanNextTurn = false;
-            session.State.ReplanNote = null;
-            return hint;
-        }
-    }
-
-    internal string BuildReasoningSummaryHint(ReasoningResult r)
-    {
-        var linesBuilder = new StringBuilder();
-
-        if (!string.IsNullOrWhiteSpace(r.Analysis))
-            linesBuilder.AppendLine($"- Analiz: {r.Analysis}");
-        if (!string.IsNullOrWhiteSpace(r.Intent) && r.Intent != WellKnown.Intents.Unknown)
-            linesBuilder.AppendLine($"- Niyet (nihai — ReasoningService kararı): {r.Intent}");
-        if (r.Steps.Count > 0)
-            linesBuilder.AppendLine($"- Önerilen adımlar: {string.Join(" → ", r.Steps.Select(s => s.Description))}");
-        if (r.RequiredInfo.Count > 0)
-            linesBuilder.AppendLine($"- Gerekli olduğu tahmin edilen bilgiler: {string.Join(", ", r.RequiredInfo)}");
-        if (!string.IsNullOrWhiteSpace(r.NextAction))
-            linesBuilder.AppendLine($"- Önerilen sonraki aksiyon: {r.NextAction}");
-
-        if (r.SubTasks.Count >= 2)
-        {
-            linesBuilder.AppendLine(
-                $"- ⚠️ COMPOUND QUERY: {r.SubTasks.Count} alt göreve ayrıştırıldı. " +
-                "PlanningAgent olarak her birini SIRAYLA aynı yanıtta yönlendir:");
-            foreach (var sub in r.SubTasks.OrderBy(s => s.Order))
-            {
-                var entStr = sub.Entities.Count > 0
-                    ? $" [{string.Join(", ", sub.Entities.Select(kv => $"{kv.Key}={kv.Value}"))}]"
-                    : "";
-                linesBuilder.AppendLine(
-                    $"    {sub.Order}. {sub.TargetAgent}: {sub.Description}{entStr}");
-            }
-        }
-
-        var reasoningLines = linesBuilder.ToString().TrimEnd();
-        return _prompts.Render("services/reasoning-hint", new Dictionary<string, string?>
-        {
-            ["REASONING_LINES"] = reasoningLines
-        });
-    }
-
-    private async Task<string> RewriteRoutingMessageAsync(
-        string routingMessage, string originalQuery, CancellationToken ct)
-    {
-        try
-        {
-            var prompt = new List<ChatMessage>
-            {
-                new(ChatRole.System, _prompts.Get("services/routing-rewrite-system")),
-                new(ChatRole.User, _prompts.Render(
-                    "services/routing-rewrite-user",
-                    new Dictionary<string, string?>
-                    {
-                        ["ORIGINAL_QUERY"] = originalQuery,
-                        ["ROUTING_MESSAGE"] = routingMessage
-                    }))
-            };
-
-            var response = await _chatClient.GetResponseAsync(prompt, cancellationToken: ct);
-            return response.Text ?? WellKnown.FallbackMessages.RoutingRewrite;
-        }
-        catch (Exception ex)
-        {
-            // Sessizce yutmak, sürekli patlayan bir LLM çağrısını görünmez kılıyordu —
-            // kullanıcı hep aynı fallback'i görür, sebebi hiçbir yere yazılmazdı.
-            _loggerFactory.CreateLogger<WorkflowRunner>().LogWarning(
-                ex, "Routing mesajı yeniden yazılamadı; fallback mesaj kullanılıyor.");
-            return WellKnown.FallbackMessages.RoutingRewrite;
-        }
-    }
-
-    private static ChatRole ToChatRole(string role) => role switch
-    {
-        ConversationRoles.User   => ChatRole.User,
-        ConversationRoles.System => ChatRole.System,
-        _                        => ChatRole.Assistant
-    };
 }

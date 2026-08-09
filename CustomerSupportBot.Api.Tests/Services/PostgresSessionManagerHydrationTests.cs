@@ -51,11 +51,12 @@ public class PostgresSessionManagerHydrationTests
     [Fact]
     public async Task Get_ExistingSessionRow_HydratesFromDb()
     {
+        var ct = TestContext.Current.CancellationToken;
         var sessionId = $"hydrate-{Guid.NewGuid():N}";
         await InsertSessionRowAsync(sessionId, "1027");
 
         var mgr = NewManager(_fixture.DbFactory);
-        var session = mgr.Get(sessionId);
+        var session = await mgr.GetAsync(sessionId, ct);
 
         session.Should().NotBeNull();
         session!.State.CustomerId.Should().Be("1027");
@@ -66,17 +67,18 @@ public class PostgresSessionManagerHydrationTests
     {
         // Asıl regresyon: ilk çağrı DB hatasıyla başarısız olur. Flag doğru geri
         // alınmıyorsa ikinci çağrı DB'yi HİÇ denemez ve session hep null/boş kalır.
+        var ct = TestContext.Current.CancellationToken;
         var sessionId = $"hydrate-retry-{Guid.NewGuid():N}";
         await InsertSessionRowAsync(sessionId, "1008");
 
         var flaky = new FlakyDbContextFactory(_fixture.DbFactory, failuresRemaining: 1);
         var mgr = NewManager(flaky);
 
-        var firstAttempt = mgr.Get(sessionId);
+        var firstAttempt = await mgr.GetAsync(sessionId, ct);
         firstAttempt.Should().BeNull(
             "ilk deneme DB hatasıyla başarısız olmalı — bu sırada session hiç cache'e girmemeli");
 
-        var secondAttempt = mgr.Get(sessionId);
+        var secondAttempt = await mgr.GetAsync(sessionId, ct);
         secondAttempt.Should().NotBeNull(
             "flag geri alınmadıysa ikinci deneme DB'yi hiç sorgulamaz ve session sonsuza dek null kalırdı");
         secondAttempt!.State.CustomerId.Should().Be("1008");
@@ -85,13 +87,14 @@ public class PostgresSessionManagerHydrationTests
     [Fact]
     public async Task AddExchange_PersistsHistory_VisibleAfterRehydration()
     {
+        var ct = TestContext.Current.CancellationToken;
         var sessionId = $"exchange-{Guid.NewGuid():N}";
         var mgr1 = NewManager(_fixture.DbFactory);
-        mgr1.AddExchange(sessionId, "merhaba", "size nasıl yardımcı olabilirim");
+        await mgr1.AddExchangeAsync(sessionId, "merhaba", "size nasıl yardımcı olabilirim", ct);
 
         // Yeni bir manager instance'ı — cache boş, geçmişi DB'den hydrate etmek zorunda.
         var mgr2 = NewManager(_fixture.DbFactory);
-        var history = mgr2.GetHistory(sessionId);
+        var history = await mgr2.GetHistoryAsync(sessionId, ct);
 
         history.Should().HaveCount(2);
         history[0].Text.Should().Be("merhaba");
@@ -105,8 +108,9 @@ public class PostgresSessionManagerHydrationTests
     // ulaştığını kanıtlıyor — DB'den kaçak bir hydrate ile yanlışlıkla geçme ihtimali yok.
 
     [Fact]
-    public void Update_PublishesSessionState_VisibleOnOtherPodWithoutDbAccess()
+    public async Task Update_PublishesSessionState_VisibleOnOtherPodWithoutDbAccess()
     {
+        var ct = TestContext.Current.CancellationToken;
         var hub = new InMemoryMessageBusHub();
         var sessionId = $"sync-{Guid.NewGuid():N}";
 
@@ -116,11 +120,11 @@ public class PostgresSessionManagerHydrationTests
         var reader = new PostgresSessionManager(
             neverReachesDb, _lock, hub.CreateNode(), NullLogger<PostgresSessionManager>.Instance);
 
-        var session = writer.GetOrCreate(sessionId);
+        var session = await writer.GetOrCreateAsync(sessionId, ct);
         session.State.CustomerId = "1027";
-        writer.Update(session);
+        await writer.UpdateAsync(session, ct);
 
-        var seenByReader = reader.Get(sessionId);
+        var seenByReader = await reader.GetAsync(sessionId, ct);
 
         seenByReader.Should().NotBeNull(
             "reader'ın DB'si her zaman hata veriyor — bu değer yalnızca Redis pub/sub üzerinden gelebilir");
@@ -128,14 +132,15 @@ public class PostgresSessionManagerHydrationTests
     }
 
     [Fact]
-    public void AddExchange_PublishesHistoryDelta_VisibleOnOtherPodWithoutFurtherDbAccess()
+    public async Task AddExchange_PublishesHistoryDelta_VisibleOnOtherPodWithoutFurtherDbAccess()
     {
+        var ct = TestContext.Current.CancellationToken;
         var hub = new InMemoryMessageBusHub();
         var sessionId = $"sync-history-{Guid.NewGuid():N}";
 
         var writer = new PostgresSessionManager(
             _fixture.DbFactory, _lock, hub.CreateNode(), NullLogger<PostgresSessionManager>.Instance);
-        writer.GetOrCreate(sessionId); // DB'de session satırı oluşturulur
+        await writer.GetOrCreateAsync(sessionId, ct); // DB'de session satırı oluşturulur
 
         var reader = new PostgresSessionManager(
             _fixture.DbFactory, _lock, hub.CreateNode(), NullLogger<PostgresSessionManager>.Instance);
@@ -146,13 +151,13 @@ public class PostgresSessionManagerHydrationTests
         // gerçekten gider (session satırı var, mesaj yok → boş liste cache'lenir) ve
         // _hydratedSessions flag'i BU SESSION İÇİN KALICI OLARAK set edilir — sonraki hiçbir
         // çağrı bu session için DB'ye tekrar gitmez (bkz. EnsureSessionHydrated).
-        reader.GetHistory(sessionId).Should().BeEmpty();
+        (await reader.GetHistoryAsync(sessionId, ct)).Should().BeEmpty();
 
-        writer.AddExchange(sessionId, "merhaba", "size nasıl yardımcı olabilirim");
+        await writer.AddExchangeAsync(sessionId, "merhaba", "size nasıl yardımcı olabilirim", ct);
 
         // Reader zaten hydrate edilmiş olduğu için bu çağrı DB'ye BİR DAHA gitmez —
         // aşağıdaki iki mesaj yalnızca Redis delta'sından (OnRemoteHistoryChanged) gelebilir.
-        var seenByReader = reader.GetHistory(sessionId);
+        var seenByReader = await reader.GetHistoryAsync(sessionId, ct);
 
         seenByReader.Should().HaveCount(2);
         seenByReader[0].Text.Should().Be("merhaba");

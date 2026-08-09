@@ -28,7 +28,7 @@ public class SemanticMemoryContextProviderTests
     private static ISessionManager SessionWithUserQuery(string query)
     {
         var sessions = Substitute.For<ISessionManager>();
-        sessions.GetHistory(Arg.Any<string>())
+        sessions.GetHistoryAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new List<ConversationMessage> { new(ConversationRoles.User, query) });
         return sessions;
     }

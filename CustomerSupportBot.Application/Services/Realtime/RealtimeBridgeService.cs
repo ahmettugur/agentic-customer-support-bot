@@ -85,7 +85,7 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
             return;
         }
 
-        var session = _sessionManager.GetOrCreate(sessionId);
+        var session = await _sessionManager.GetOrCreateAsync(sessionId, ct);
         await _client.ConfigureBridgeSessionAsync(ct);
 
         await channel.SendJsonAsync(new
@@ -264,7 +264,7 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
 
             await channel.SendJsonAsync(new { type = "workflow_start" }, ct);
 
-            var history = _sessionManager.GetHistory(sessionId);
+            var history = await _sessionManager.GetHistoryAsync(sessionId, ct);
 
             ReasoningResult? finalReasoning = null;
             await foreach (var evt in _reasoningService.ReasonStreamingAsync(safeQuery, session, history, ct))
@@ -276,12 +276,12 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
                     if (!string.IsNullOrWhiteSpace(rr.Intent) && rr.Intent != WellKnown.Intents.Unknown)
                     {
                         session.State.CurrentIntent = rr.Intent;
-                        _sessionManager.Update(session);
+                        await _sessionManager.UpdateAsync(session, ct);
                     }
                 }
             }
 
-            using var approvalScope = _approvalContext.SetScope(sessionId, null, safeQuery);
+            using var approvalScope = _approvalContext.SetScope(sessionId, null, safeQuery, session.State.AuthenticatedCustomerId);
             var responseBuilder = new StringBuilder();
             await foreach (var evt in _team.RunStreamingAsync(safeQuery, history, session, finalReasoning, ct))
             {
@@ -296,7 +296,7 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
 
             if (!string.IsNullOrWhiteSpace(responseText))
             {
-                _sessionManager.AddExchange(sessionId, safeQuery, responseText);
+                await _sessionManager.AddExchangeAsync(sessionId, safeQuery, responseText, ct);
                 _chatBridge.RecordBotExchange(sessionId, safeQuery, responseText);
             }
 

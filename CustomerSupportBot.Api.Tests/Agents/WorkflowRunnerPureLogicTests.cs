@@ -24,9 +24,9 @@ public class WorkflowRunnerPureLogicTests
     // WorkflowRunner içindeki internal nested class; InternalsVisibleTo sayesinde doğrudan
     // örneklenip çağrılıyor (reflection yok → yeniden adlandırma derleme zamanında yakalanır).
 
-    private static WorkflowRunner.ResponseStreamFilter NewFilter() => new();
+    private static WorkflowTraceEventProcessor.ResponseStreamFilter NewFilter() => new();
 
-    private static string Feed(WorkflowRunner.ResponseStreamFilter filter, string chunk)
+    private static string Feed(WorkflowTraceEventProcessor.ResponseStreamFilter filter, string chunk)
         => filter.Feed(chunk);
 
     [Fact]
@@ -73,7 +73,7 @@ public class WorkflowRunnerPureLogicTests
 
     private static void InvokeEnsureHumanHandoffEscalation(
         IEnumerable<ChatMessage> messages, List<SpecialistReasoning> reasonings)
-        => WorkflowRunner.EnsureHumanHandoffEscalation(messages, reasonings);
+        => WorkflowTraceEventProcessor.EnsureHumanHandoffEscalation(messages, reasonings);
 
     private static ChatMessage HumanHandoffToolCallMessage() =>
         new(ChatRole.Assistant, new List<AIContent>
@@ -201,7 +201,7 @@ public class WorkflowRunnerPureLogicTests
 
     private static void InvokeEnsureSideEffectToolCompletion(
         IEnumerable<ChatMessage> messages, List<SpecialistReasoning> reasonings, string agentName, IReadOnlySet<string> toolNames)
-        => WorkflowRunner.EnsureSideEffectToolCompletion(messages, reasonings, agentName, toolNames);
+        => WorkflowTraceEventProcessor.EnsureSideEffectToolCompletion(messages, reasonings, agentName, toolNames);
 
     private static List<ChatMessage> ToolCallAndResultMessages(string toolName, bool success) =>
     [

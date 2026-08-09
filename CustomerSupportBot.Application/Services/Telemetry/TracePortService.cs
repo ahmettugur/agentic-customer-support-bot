@@ -28,29 +28,29 @@ public sealed class TracePortService : ITracePort
     public IReadOnlyList<ReasoningTrace> GetTracesBySession(string sessionId)
         => _traces.GetBySession(sessionId);
 
-    public IReadOnlyList<TracedSessionSummary> GetSessionsSummary()
+    public async Task<IReadOnlyList<TracedSessionSummary>> GetSessionsSummaryAsync(CancellationToken ct = default)
     {
         var allTraces = _traces.GetRecent(500);
-        return allTraces
-            .GroupBy(t => t.SessionId)
-            .Select(g =>
-            {
-                var traces = g.OrderByDescending(t => t.StartedAt).ToList();
-                var firstQuery = traces.LastOrDefault()?.UserQuery;
-                var title = firstQuery != null
-                    ? (firstQuery.Length > 60 ? firstQuery[..60] + "…" : firstQuery)
-                    : "Yeni Oturum";
-                var messageCount = _sessions.GetHistory(g.Key).Count;
-                return new TracedSessionSummary(
-                    g.Key,
-                    title,
-                    traces.Count,
-                    traces.First().StartedAt,
-                    traces.First().UserQuery,
-                    messageCount);
-            })
-            .OrderByDescending(s => s.LastTraceAt)
-            .ToList();
+        var result = new List<TracedSessionSummary>();
+
+        foreach (var g in allTraces.GroupBy(t => t.SessionId))
+        {
+            var traces = g.OrderByDescending(t => t.StartedAt).ToList();
+            var firstQuery = traces.LastOrDefault()?.UserQuery;
+            var title = firstQuery != null
+                ? (firstQuery.Length > 60 ? firstQuery[..60] + "…" : firstQuery)
+                : "Yeni Oturum";
+            var history = await _sessions.GetHistoryAsync(g.Key, ct);
+            result.Add(new TracedSessionSummary(
+                g.Key,
+                title,
+                traces.Count,
+                traces.First().StartedAt,
+                traces.First().UserQuery,
+                history.Count));
+        }
+
+        return result.OrderByDescending(s => s.LastTraceAt).ToList();
     }
 
     public TraceStatsSummary GetStats()

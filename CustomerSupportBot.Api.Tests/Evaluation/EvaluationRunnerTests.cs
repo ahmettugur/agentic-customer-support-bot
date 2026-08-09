@@ -36,7 +36,7 @@ public class EvaluationRunnerTests
         var traceStore = new InMemoryReasoningTraceStore();
         var approvalOpts = new ApprovalOptions { Enabled = false };
         var queue = new InMemoryApprovalQueue(
-            Options.Create(approvalOpts), NullLogger<InMemoryApprovalQueue>.Instance);
+            Options.Create(approvalOpts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
         var sink = new InMemoryEscalationSink(NullLogger<InMemoryEscalationSink>.Instance);
         var tools = TestFactory.CreateToolsService(_fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo);
         var escalationPolicy = new EscalationPolicyService(

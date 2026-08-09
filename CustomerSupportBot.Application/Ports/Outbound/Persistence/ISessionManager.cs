@@ -15,27 +15,29 @@ public class SessionInfo
 
 /// <summary>
 /// Oturum ve konuşma geçmişi kalıcılığı için secondary (driven) port.
+/// Tamamen async — Postgres implementasyonu bu sayede sync-over-async
+/// (.GetAwaiter().GetResult()) blocking'e ihtiyaç duymaz.
 ///</summary>
 public interface ISessionManager
 {
     // ─── Session yönetimi ───
 
-    AgentSession GetOrCreate(string? sessionId);
-    AgentSession? Get(string sessionId);
-    void Update(AgentSession session);
-    IReadOnlyList<AgentSession> GetAll();
+    Task<AgentSession> GetOrCreateAsync(string? sessionId, CancellationToken ct = default);
+    Task<AgentSession?> GetAsync(string sessionId, CancellationToken ct = default);
+    Task UpdateAsync(AgentSession session, CancellationToken ct = default);
+    Task<IReadOnlyList<AgentSession>> GetAllAsync(CancellationToken ct = default);
     Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default);
 
     // ─── Konuşma geçmişi ───
 
-    List<ConversationMessage> GetHistory(string sessionId);
-    void AddExchange(string sessionId, string userMessage, string botResponse);
-    void AppendAssistantMessage(string sessionId, string text);
-    void AppendUserMessage(string sessionId, string text);
-    void ClearSession(string sessionId);
-    List<SessionInfo> GetAllSessions();
+    Task<List<ConversationMessage>> GetHistoryAsync(string sessionId, CancellationToken ct = default);
+    Task AddExchangeAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default);
+    Task AppendAssistantMessageAsync(string sessionId, string text, CancellationToken ct = default);
+    Task AppendUserMessageAsync(string sessionId, string text, CancellationToken ct = default);
+    Task ClearSessionAsync(string sessionId, CancellationToken ct = default);
+    Task<List<SessionInfo>> GetAllSessionsAsync(CancellationToken ct = default);
 
     // ─── State extraction ───
 
-    void ExtractAndUpdateState(string sessionId, string userMessage, string botResponse);
+    Task ExtractAndUpdateStateAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default);
 }

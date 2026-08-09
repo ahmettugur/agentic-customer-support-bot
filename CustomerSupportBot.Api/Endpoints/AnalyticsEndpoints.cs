@@ -14,14 +14,14 @@ public static class AnalyticsEndpoints
     public static IEndpointRouteBuilder MapAnalyticsEndpoints(this IEndpointRouteBuilder app)
     {
         // ─── ANALYTICS DASHBOARD (admin-only) ───
-        app.MapGet("/analytics/dashboard", (IAnalyticsPort analytics) =>
-            Results.Json(analytics.GetDashboard()))
+        app.MapGet("/analytics/dashboard", async (IAnalyticsPort analytics, CancellationToken ct) =>
+            Results.Json(await analytics.GetDashboardAsync(ct)))
             .RequireAuthorization("Admin");
 
         // GET /analytics/session/{sid} — Tek bir oturum için detaylı analytics
-        app.MapGet("/analytics/session/{sid}", (string sid, IAnalyticsPort analytics) =>
+        app.MapGet("/analytics/session/{sid}", async (string sid, IAnalyticsPort analytics, CancellationToken ct) =>
         {
-            var result = analytics.GetSessionAnalytics(sid);
+            var result = await analytics.GetSessionAnalyticsAsync(sid, ct);
             return result == null
                 ? Results.NotFound(new { error = "Session bulunamadı." })
                 : Results.Json(result);
@@ -30,9 +30,9 @@ public static class AnalyticsEndpoints
 
         // ─── CONVERSATION RATING (public — kullanıcı oturum açmadan rating bırakır) ───
         app.MapPost("/sessions/{sid}/rating",
-            (string sid, RatingInput body, IAnalyticsPort analytics) =>
+            async (string sid, RatingInput body, IAnalyticsPort analytics, CancellationToken ct) =>
             {
-                if (analytics.GetSessionAnalytics(sid) == null)
+                if (await analytics.GetSessionAnalyticsAsync(sid, ct) == null)
                     return Results.NotFound(new { error = "Session bulunamadı." });
 
                 if (body.Stars < 1 || body.Stars > 5)

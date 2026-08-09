@@ -44,7 +44,8 @@ public class EscalationPolicyService
     /// Reasoning trace'ten eskalasyon adaylarını belirler, dedup uygular,
     /// routing kararı alır ve eskalasyon kaydı oluşturur.
     /// </summary>
-    public void ProcessPendingEscalations(ReasoningTrace trace, string userQuery, string finalResponse)
+    public async Task ProcessPendingEscalationsAsync(
+        ReasoningTrace trace, string userQuery, string finalResponse, CancellationToken ct = default)
     {
         if (!_options.EscalationEnabled) return;
 
@@ -107,7 +108,7 @@ public class EscalationPolicyService
                         : finalResponse
                 };
 
-                ApplyRoutingDecision(newRequest, trace, sr.AgentName);
+                await ApplyRoutingDecisionAsync(newRequest, trace, sr.AgentName, ct);
                 _escalationSink.Create(newRequest);
 
                 if (!string.IsNullOrWhiteSpace(newRequest.SuggestedAgentId))
@@ -120,10 +121,11 @@ public class EscalationPolicyService
         }
     }
 
-    private void ApplyRoutingDecision(
+    private async Task ApplyRoutingDecisionAsync(
         EscalationRequest req,
         ReasoningTrace trace,
-        string? agentName)
+        string? agentName,
+        CancellationToken ct)
     {
         if (_router == null) return;
         try
@@ -132,7 +134,8 @@ public class EscalationPolicyService
             string? customerId = null;
             if (!string.IsNullOrWhiteSpace(trace.SessionId) && _sessionManager != null)
             {
-                customerId = _sessionManager.Get(trace.SessionId!)?.State.CustomerId;
+                var session = await _sessionManager.GetAsync(trace.SessionId!, ct);
+                customerId = session?.State.CustomerId;
             }
             if (!string.IsNullOrWhiteSpace(customerId) && _profileStore != null)
             {

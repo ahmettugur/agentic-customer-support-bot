@@ -43,10 +43,12 @@ public class CustomerSupportTeam : IAgentTeamPort
 
         var factory = new AgentTeamFactory(chatClient, prompts, approvalGate, tools, guards, loggerFactory);
         var finalizer = new TurnFinalizer(traceStore, approvalGate, loggerFactory, semanticMemory, profileService);
+        var traceProcessor = new WorkflowTraceEventProcessor(traceStore, approvalContext);
+        var messageBuilder = new WorkflowMessageBuilder(contextPipeline, prompts, chatClient, loggerFactory);
 
         _runner = new WorkflowRunner(
-            factory, finalizer, contextPipeline, chatClient, guards, traceStore, prompts,
-            approvalGate, uiHint, approvalContext, loggerFactory);
+            factory, finalizer, guards, traceStore,
+            approvalGate, uiHint, loggerFactory, traceProcessor, messageBuilder);
 
         _decomposed = new DecomposedRunner(_runner, parallelOptions.Value, uiHint, approvalContext);
     }

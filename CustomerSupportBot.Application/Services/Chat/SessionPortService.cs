@@ -25,43 +25,43 @@ public sealed class SessionPortService : ISessionPort
         _logger = logger;
     }
 
-    public AgentSession GetOrCreateSession(string? sessionId)
+    public async Task<AgentSession> GetOrCreateSessionAsync(string? sessionId, CancellationToken ct = default)
     {
-        var session = _sessions.GetOrCreate(sessionId);
+        var session = await _sessions.GetOrCreateAsync(sessionId, ct);
         _logger.LogDebug("Session retrieved/created: {SessionId}", session.SessionId);
         return session;
     }
 
-    public AgentSession? GetSession(string sessionId)
+    public Task<AgentSession?> GetSessionAsync(string sessionId, CancellationToken ct = default)
     {
-        return _sessions.Get(sessionId);
+        return _sessions.GetAsync(sessionId, ct);
     }
 
-    public void UpdateSession(AgentSession session)
+    public async Task UpdateSessionAsync(AgentSession session, CancellationToken ct = default)
     {
-        _sessions.Update(session);
+        await _sessions.UpdateAsync(session, ct);
         _logger.LogDebug("Session updated: {SessionId}", session.SessionId);
     }
 
-    public IReadOnlyList<SessionInfo> GetAllSessions()
+    public async Task<IReadOnlyList<SessionInfo>> GetAllSessionsAsync(CancellationToken ct = default)
     {
-        return _sessions.GetAllSessions();
+        return await _sessions.GetAllSessionsAsync(ct);
     }
 
-    public List<ConversationMessage> GetHistory(string sessionId)
+    public Task<List<ConversationMessage>> GetHistoryAsync(string sessionId, CancellationToken ct = default)
     {
-        return _sessions.GetHistory(sessionId);
+        return _sessions.GetHistoryAsync(sessionId, ct);
     }
 
-    public void AddExchange(string sessionId, string userMessage, string botResponse)
+    public async Task AddExchangeAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default)
     {
-        _sessions.AddExchange(sessionId, userMessage, botResponse);
+        await _sessions.AddExchangeAsync(sessionId, userMessage, botResponse, ct);
         _logger.LogDebug("Exchange added to session: {SessionId}", sessionId);
     }
 
-    public void ExtractAndUpdateState(string sessionId, string userMessage, string botResponse)
+    public Task ExtractAndUpdateStateAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default)
     {
-        _sessions.ExtractAndUpdateState(sessionId, userMessage, botResponse);
+        return _sessions.ExtractAndUpdateStateAsync(sessionId, userMessage, botResponse, ct);
     }
 
     public async Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default)

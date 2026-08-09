@@ -124,10 +124,10 @@ public class PromptContractTests
         Prompt("agents/planning-agent").Should().Contain(label,
             "planning-agent.md bu etikete adıyla atıf yapıyor");
 
-        // Kod tarafı: WorkflowRunner.BuildReasoningSummaryHint aynı etiketi üretir.
+        // Kod tarafı: WorkflowMessageBuilder.BuildReasoningSummaryHint aynı etiketi üretir.
         // Metot instance olduğu ve tüm bağımlılıkları gerektirdiği için (Docker'lı fixture)
         // burada kaynak dosya üzerinden doğrulanır — amaç iki ucun senkronunu korumak.
-        SourceOf("CustomerSupportBot.Adapters.Agents/WorkflowRunner.cs")
+        SourceOf("CustomerSupportBot.Adapters.Agents/WorkflowMessageBuilder.cs")
             .Should().Contain(label,
                 "BuildReasoningSummaryHint bu etiketi üretmeli");
     }

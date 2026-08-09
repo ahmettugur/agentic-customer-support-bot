@@ -25,8 +25,8 @@ public static class TraceEndpoints
             Results.Json(tracePort.GetTracesBySession(sessionId)));
 
         // GET /traces/sessions — Session bazlı trace özeti (dashboard session sidebar için)
-        app.MapGet("/traces/sessions", (ITracePort tracePort) =>
-            Results.Json(tracePort.GetSessionsSummary()));
+        app.MapGet("/traces/sessions", async (ITracePort tracePort, CancellationToken ct) =>
+            Results.Json(await tracePort.GetSessionsSummaryAsync(ct)));
 
         // GET /traces/stats — Aggregate istatistikler
         app.MapGet("/traces/stats", (ITracePort tracePort) =>

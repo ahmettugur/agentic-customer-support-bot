@@ -13,71 +13,74 @@ public class InMemorySessionManagerTests
     private readonly InMemorySessionManager _mgr = new(_lock);
 
     [Fact]
-    public void GetOrCreateSession_NewId_CreatesSession()
+    public async Task GetOrCreateSession_NewId_CreatesSession()
     {
-        var s = _mgr.GetOrCreate("s1");
+        var s = await _mgr.GetOrCreateAsync("s1", TestContext.Current.CancellationToken);
         s.Should().NotBeNull();
         s.SessionId.Should().Be("s1");
         s.State.Should().NotBeNull();
     }
 
     [Fact]
-    public void GetOrCreateSession_ExistingId_ReturnsSame()
+    public async Task GetOrCreateSession_ExistingId_ReturnsSame()
     {
-        var s1 = _mgr.GetOrCreate("s1");
-        var s2 = _mgr.GetOrCreate("s1");
+        var s1 = await _mgr.GetOrCreateAsync("s1", TestContext.Current.CancellationToken);
+        var s2 = await _mgr.GetOrCreateAsync("s1", TestContext.Current.CancellationToken);
         s1.Should().BeSameAs(s2);
     }
 
     [Fact]
-    public void GetOrCreateSession_NullId_GeneratesNewId()
+    public async Task GetOrCreateSession_NullId_GeneratesNewId()
     {
-        var s = _mgr.GetOrCreate(null);
+        var s = await _mgr.GetOrCreateAsync(null, TestContext.Current.CancellationToken);
         s.SessionId.Should().NotBeNullOrEmpty();
     }
 
     [Fact]
-    public void GetSession_Unknown_ReturnsNull()
+    public async Task GetSession_Unknown_ReturnsNull()
     {
-        _mgr.Get("unknown").Should().BeNull();
+        (await _mgr.GetAsync("unknown", TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     [Fact]
-    public void AddExchange_BuildsHistory()
+    public async Task AddExchange_BuildsHistory()
     {
-        _mgr.AddExchange("s1", "merhaba", "selam");
-        _mgr.AddExchange("s1", "yardım", "tabii");
+        var ct = TestContext.Current.CancellationToken;
+        await _mgr.AddExchangeAsync("s1", "merhaba", "selam", ct);
+        await _mgr.AddExchangeAsync("s1", "yardım", "tabii", ct);
 
-        var history = _mgr.GetHistory("s1");
+        var history = await _mgr.GetHistoryAsync("s1", ct);
         history.Should().HaveCount(4);
         history[0].Text.Should().Be("merhaba");
         history[1].Text.Should().Be("selam");
     }
 
     [Fact]
-    public void GetHistory_UnknownSession_EmptyList()
+    public async Task GetHistory_UnknownSession_EmptyList()
     {
-        _mgr.GetHistory("unknown").Should().BeEmpty();
+        (await _mgr.GetHistoryAsync("unknown", TestContext.Current.CancellationToken)).Should().BeEmpty();
     }
 
     [Fact]
-    public void ExtractAndUpdateState_CapturesCustomerId()
+    public async Task ExtractAndUpdateState_CapturesCustomerId()
     {
-        _mgr.AddExchange("s1", "müşteri numaram 1027", "merhaba");
-        var s = _mgr.Get("s1");
+        var ct = TestContext.Current.CancellationToken;
+        await _mgr.AddExchangeAsync("s1", "müşteri numaram 1027", "merhaba", ct);
+        var s = await _mgr.GetAsync("s1", ct);
         s!.State.CustomerId.Should().Be("1027");
     }
 
     [Fact]
-    public void ExtractAndUpdateState_CapturesOrderId()
+    public async Task ExtractAndUpdateState_CapturesOrderId()
     {
-        _mgr.AddExchange("s1", "sipariş 1030 nerede?", "siparişiniz yolda");
-        var s = _mgr.Get("s1");
+        var ct = TestContext.Current.CancellationToken;
+        await _mgr.AddExchangeAsync("s1", "sipariş 1030 nerede?", "siparişiniz yolda", ct);
+        var s = await _mgr.GetAsync("s1", ct);
         s!.State.CollectedInfo.Should().ContainKey("LastMentionedOrderId");
     }
 
     [Fact]
-    public void AddExchange_AmbiguousFollowUp_AfterOrderContext_DoesNotPoisonCustomerId()
+    public async Task AddExchange_AmbiguousFollowUp_AfterOrderContext_DoesNotPoisonCustomerId()
     {
         // Uçtan uca kanıt: AddExchange, ExtractAndUpdateState/ExtractAndUpdateStateCore
         // zincirinde geçmişi gerçekten SessionStateExtractor'a taşıyor mu?
@@ -91,58 +94,64 @@ public class InMemorySessionManagerTests
         // mutasyon-öldürücü olmasını engelliyor — o ince ayrıntı EntityVerifier'daki
         // (zaten mutasyonla doğrulanmış) aynı desenle ve kod incelemesiyle güvence altında.
         // Bu test asıl regresyon sınıfını kanıtlıyor: priorHistory gerçekten iletiliyor mu.
-        _mgr.AddExchange("s1", "sipariş numaram 1030", "1030 numaralı siparişinizi kontrol ettim.");
-        _mgr.AddExchange("s1", "1030", "Bir saniye, kontrol ediyorum.");
+        var ct = TestContext.Current.CancellationToken;
+        await _mgr.AddExchangeAsync("s1", "sipariş numaram 1030", "1030 numaralı siparişinizi kontrol ettim.", ct);
+        await _mgr.AddExchangeAsync("s1", "1030", "Bir saniye, kontrol ediyorum.", ct);
 
-        var s = _mgr.Get("s1");
+        var s = await _mgr.GetAsync("s1", ct);
         s!.State.CustomerId.Should().BeNull("1030 sipariş bağlamında yorumlanmalı");
         s.State.CollectedInfo["LastMentionedOrderId"].Should().Be("1030");
     }
 
     [Fact]
-    public void AddExchange_IncrementsTurnCount()
+    public async Task AddExchange_IncrementsTurnCount()
     {
-        _mgr.AddExchange("s1", "msg1", "r1");
-        _mgr.AddExchange("s1", "msg2", "r2");
-        _mgr.Get("s1")!.State.TurnCount.Should().Be(2);
+        var ct = TestContext.Current.CancellationToken;
+        await _mgr.AddExchangeAsync("s1", "msg1", "r1", ct);
+        await _mgr.AddExchangeAsync("s1", "msg2", "r2", ct);
+        (await _mgr.GetAsync("s1", ct))!.State.TurnCount.Should().Be(2);
     }
 
     [Fact]
-    public void ClearSession_RemovesData()
+    public async Task ClearSession_RemovesData()
     {
-        _mgr.AddExchange("s1", "x", "y");
-        _mgr.ClearSession("s1");
-        _mgr.Get("s1").Should().BeNull();
-        _mgr.GetHistory("s1").Should().BeEmpty();
+        var ct = TestContext.Current.CancellationToken;
+        await _mgr.AddExchangeAsync("s1", "x", "y", ct);
+        await _mgr.ClearSessionAsync("s1", ct);
+        (await _mgr.GetAsync("s1", ct)).Should().BeNull();
+        (await _mgr.GetHistoryAsync("s1", ct)).Should().BeEmpty();
     }
 
     [Fact]
-    public void AppendAssistantMessage_AppendsToHistory()
+    public async Task AppendAssistantMessage_AppendsToHistory()
     {
-        _mgr.GetOrCreate("s1");
-        _mgr.AppendAssistantMessage("s1", "agent yanıtı");
-        var h = _mgr.GetHistory("s1");
+        var ct = TestContext.Current.CancellationToken;
+        await _mgr.GetOrCreateAsync("s1", ct);
+        await _mgr.AppendAssistantMessageAsync("s1", "agent yanıtı", ct);
+        var h = await _mgr.GetHistoryAsync("s1", ct);
         h.Should().HaveCount(1);
         h[0].Text.Should().Be("agent yanıtı");
     }
 
     [Fact]
-    public void AppendAssistantMessage_FillsEmptyPlaceholder()
+    public async Task AppendAssistantMessage_FillsEmptyPlaceholder()
     {
-        _mgr.AddExchange("s1", "user", "");
-        _mgr.AppendAssistantMessage("s1", "real reply");
-        var h = _mgr.GetHistory("s1");
+        var ct = TestContext.Current.CancellationToken;
+        await _mgr.AddExchangeAsync("s1", "user", "", ct);
+        await _mgr.AppendAssistantMessageAsync("s1", "real reply", ct);
+        var h = await _mgr.GetHistoryAsync("s1", ct);
         h.Should().HaveCount(2);
         h[1].Text.Should().Be("real reply");
     }
 
     [Fact]
-    public void UpdateSession_UpdatesLastActivity()
+    public async Task UpdateSession_UpdatesLastActivity()
     {
-        var s = _mgr.GetOrCreate("s1");
+        var ct = TestContext.Current.CancellationToken;
+        var s = await _mgr.GetOrCreateAsync("s1", ct);
         var before = s.LastActivity;
         Thread.Sleep(5);
-        _mgr.Update(s);
+        await _mgr.UpdateAsync(s, ct);
         s.LastActivity.Should().BeAfter(before);
     }
 }

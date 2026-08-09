@@ -38,7 +38,7 @@ public class ConversationSummaryProvider : IContextProvider
 
     public async Task<string?> GetContextAsync(AgentSession session, string currentQuery)
     {
-        var history = _sessionRepository.GetHistory(session.SessionId);
+        var history = await _sessionRepository.GetHistoryAsync(session.SessionId);
         if (history.Count < SummaryThreshold)
             return null;
 
@@ -56,7 +56,7 @@ public class ConversationSummaryProvider : IContextProvider
         {
             var summary = await SummarizeAsync(oldMessages);
             session.State.ConversationSummary = summary;
-            _sessionRepository.Update(session);
+            await _sessionRepository.UpdateAsync(session);
 
             _logger.LogInformation(
                 "Konuşma özetlendi: {OldCount} mesaj → {SummaryLength} karakter",

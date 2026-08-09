@@ -33,7 +33,7 @@ public class WorkflowRunnerEntityResolutionTests
             }
         };
 
-        var result = WorkflowRunner.ResolveExtractedIds("peki 1043", reasoning);
+        var result = WorkflowMessageBuilder.ResolveExtractedIds("peki 1043", reasoning);
 
         result.OrderId.Should().Be("1043");
         result.CustomerId.Should().BeNull();
@@ -43,7 +43,7 @@ public class WorkflowRunnerEntityResolutionTests
     public void ResolveExtractedIds_NoVerifiedEntities_FallsBackToQueryOnlyExtraction()
     {
         // reasoning null (bazı çağrı yolları reasoning'i atlıyor olabilir) — eski davranış korunur.
-        var result = WorkflowRunner.ResolveExtractedIds("sipariş 1042 durumu", reasoning: null);
+        var result = WorkflowMessageBuilder.ResolveExtractedIds("sipariş 1042 durumu", reasoning: null);
 
         result.OrderId.Should().Be("1042");
     }
@@ -53,7 +53,7 @@ public class WorkflowRunnerEntityResolutionTests
     {
         var reasoning = new ReasoningResult(); // VerifiedEntities null
 
-        var result = WorkflowRunner.ResolveExtractedIds("sipariş 1042 durumu", reasoning);
+        var result = WorkflowMessageBuilder.ResolveExtractedIds("sipariş 1042 durumu", reasoning);
 
         result.OrderId.Should().Be("1042");
     }
@@ -64,7 +64,7 @@ public class WorkflowRunnerEntityResolutionTests
         var reasoning = new ReasoningResult { VerifiedEntities = new VerifiedEntities() }; // HasAny=false
 
         // "peki 1043" bağlamsız kısa mesaj → query-only fallback customer_id varsayar.
-        var result = WorkflowRunner.ResolveExtractedIds("peki 1043", reasoning);
+        var result = WorkflowMessageBuilder.ResolveExtractedIds("peki 1043", reasoning);
 
         result.CustomerId.Should().Be("1043");
         result.OrderId.Should().BeNull();
@@ -83,7 +83,7 @@ public class WorkflowRunnerEntityResolutionTests
             }
         };
 
-        var result = WorkflowRunner.ResolveExtractedIds("herhangi bir sorgu", reasoning);
+        var result = WorkflowMessageBuilder.ResolveExtractedIds("herhangi bir sorgu", reasoning);
 
         result.OrderId.Should().Be("1030");
         result.CustomerId.Should().Be("1027");

@@ -61,11 +61,11 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         return _ratings.GetAll();
     }
 
-    public object GetSummary()
+    public async Task<object> GetSummaryAsync(CancellationToken ct = default)
     {
         var allRatings = _ratings.GetAll();
-        var sessionInfos = _sessions.GetAllSessions();
-        var allSessions = _sessions.GetAll();
+        var sessionInfos = await _sessions.GetAllSessionsAsync(ct);
+        var allSessions = await _sessions.GetAllAsync(ct);
         var recentApprovals = _approvals.GetRecent(200);
         var recentEscalations = _escalations.GetRecent(200);
 
@@ -98,11 +98,11 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         return summary;
     }
 
-    public AnalyticsDashboard GetDashboard()
+    public async Task<AnalyticsDashboard> GetDashboardAsync(CancellationToken ct = default)
     {
         var dashboard = new AnalyticsDashboard();
 
-        var allSessions = _sessions.GetAllSessions();
+        var allSessions = await _sessions.GetAllSessionsAsync(ct);
         dashboard.TotalSessions = allSessions.Count;
         dashboard.TotalMessages = allSessions.Sum(s => s.MessageCount);
         dashboard.AverageSessionMessages = allSessions.Count > 0
@@ -147,7 +147,7 @@ public sealed class AnalyticsPortService : IAnalyticsPort
 
         foreach (var s in allSessions)
         {
-            var session = _sessions.Get(s.SessionId);
+            var session = await _sessions.GetAsync(s.SessionId, ct);
             if (session == null) continue;
             var state = session.State;
 
@@ -179,13 +179,13 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         return dashboard;
     }
 
-    public SessionAnalytics? GetSessionAnalytics(string sessionId)
+    public async Task<SessionAnalytics?> GetSessionAnalyticsAsync(string sessionId, CancellationToken ct = default)
     {
-        var session = _sessions.Get(sessionId);
+        var session = await _sessions.GetAsync(sessionId, ct);
         if (session == null) return null;
 
         var state = session.State;
-        var history = _sessions.GetHistory(sessionId);
+        var history = await _sessions.GetHistoryAsync(sessionId, ct);
 
         var result = new SessionAnalytics
         {

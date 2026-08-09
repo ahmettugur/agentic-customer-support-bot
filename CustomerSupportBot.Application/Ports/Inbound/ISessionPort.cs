@@ -8,12 +8,12 @@ namespace CustomerSupportBot.Application.Ports.Inbound;
 /// </summary>
 public interface ISessionPort
 {
-    AgentSession GetOrCreateSession(string? sessionId);
-    AgentSession? GetSession(string sessionId);
-    void UpdateSession(AgentSession session);
-    IReadOnlyList<SessionInfo> GetAllSessions();
-    List<ConversationMessage> GetHistory(string sessionId);
-    void AddExchange(string sessionId, string userMessage, string botResponse);
-    void ExtractAndUpdateState(string sessionId, string userMessage, string botResponse);
+    Task<AgentSession> GetOrCreateSessionAsync(string? sessionId, CancellationToken ct = default);
+    Task<AgentSession?> GetSessionAsync(string sessionId, CancellationToken ct = default);
+    Task UpdateSessionAsync(AgentSession session, CancellationToken ct = default);
+    Task<IReadOnlyList<SessionInfo>> GetAllSessionsAsync(CancellationToken ct = default);
+    Task<List<ConversationMessage>> GetHistoryAsync(string sessionId, CancellationToken ct = default);
+    Task AddExchangeAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default);
+    Task ExtractAndUpdateStateAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default);
     Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default);
 }

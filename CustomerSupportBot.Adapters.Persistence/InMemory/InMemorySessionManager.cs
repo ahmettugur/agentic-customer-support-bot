@@ -1,5 +1,7 @@
 // Services/InMemorySessionManager.cs
-// ISessionManager'ın bellek içi implementasyonu.
+// ISessionManager'ın bellek içi implementasyonu. Gerçek I/O yok, bu yüzden async
+// metodlar Task.FromResult/Task.CompletedTask ile senkron tamamlanır — arayüz
+// PostgresSessionManager ile ortak olduğu için async imzalar korunur.
 
 using System.Collections.Concurrent;
 using CustomerSupportBot.Domain.Model;
@@ -23,52 +25,55 @@ public class InMemorySessionManager : ISessionManager
         _distributedLock = distributedLock;
     }
 
-    // ─── ISessionManager (eski ISessionManager) ───
+    // ─── ISessionManager ───
 
-    public AgentSession GetOrCreate(string? sessionId)
+    public Task<AgentSession> GetOrCreateAsync(string? sessionId, CancellationToken ct = default)
     {
         sessionId ??= Guid.NewGuid().ToString();
 
-        return _sessions.GetOrAdd(sessionId, id => new AgentSession
+        var session = _sessions.GetOrAdd(sessionId, id => new AgentSession
         {
             SessionId = id,
             CreatedAt = DateTime.Now,
             LastActivity = DateTime.Now,
             State = new SessionState()
         });
+        return Task.FromResult(session);
     }
 
-    public AgentSession? Get(string sessionId)
+    public Task<AgentSession?> GetAsync(string sessionId, CancellationToken ct = default)
     {
-        return _sessions.TryGetValue(sessionId, out var session) ? session : null;
+        return Task.FromResult(_sessions.TryGetValue(sessionId, out var session) ? session : null);
     }
 
-    public void Update(AgentSession session)
+    public Task UpdateAsync(AgentSession session, CancellationToken ct = default)
     {
         session.LastActivity = DateTime.Now;
         _sessions[session.SessionId] = session;
+        return Task.CompletedTask;
     }
 
-    public IReadOnlyList<AgentSession> GetAll()
+    public Task<IReadOnlyList<AgentSession>> GetAllAsync(CancellationToken ct = default)
     {
-        return _sessions.Values.ToList();
+        return Task.FromResult<IReadOnlyList<AgentSession>>(_sessions.Values.ToList());
     }
 
-    public void ExtractAndUpdateState(string sessionId, string userMessage, string botResponse)
+    public async Task ExtractAndUpdateStateAsync(
+        string sessionId, string userMessage, string botResponse, CancellationToken ct = default)
     {
-        var session = Get(sessionId);
+        var session = await GetAsync(sessionId, ct).ConfigureAwait(false);
         if (session == null) return;
 
         // Lock gerekmez — aynı session için aynı anda tek bot pipeline çalışır.
         // ConcurrentDictionary bireysel okuma/yazma için thread-safe'dir.
         // Non-atomic read-modify-write işlemleri MutateStateAsync üzerinden yapılmalıdır.
-        ExtractAndUpdateStateCore(session, userMessage, botResponse);
+        await ExtractAndUpdateStateCoreAsync(session, userMessage, botResponse, null, ct).ConfigureAwait(false);
     }
 
     public async Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default)
     {
         if (mutator == null) throw new ArgumentNullException(nameof(mutator));
-        var session = Get(sessionId);
+        var session = await GetAsync(sessionId, ct).ConfigureAwait(false);
         if (session == null) return;
 
         await using var handle = await _distributedLock
@@ -76,32 +81,33 @@ public class InMemorySessionManager : ISessionManager
             .ConfigureAwait(false);
 
         mutator(session.State);
-        Update(session);
+        await UpdateAsync(session, ct).ConfigureAwait(false);
     }
 
-    private void ExtractAndUpdateStateCore(
+    private async Task ExtractAndUpdateStateCoreAsync(
         AgentSession session, string userMessage, string botResponse,
-        IReadOnlyList<ConversationMessage>? priorHistory = null)
+        IReadOnlyList<ConversationMessage>? priorHistory, CancellationToken ct)
     {
         SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse, priorHistory);
-        Update(session);
+        await UpdateAsync(session, ct).ConfigureAwait(false);
     }
 
     // ─── Konuşma geçmişi ───
 
-    public List<ConversationMessage> GetHistory(string sessionId)
+    public Task<List<ConversationMessage>> GetHistoryAsync(string sessionId, CancellationToken ct = default)
     {
         if (_messageHistory.TryGetValue(sessionId, out var history))
         {
             lock (history)
             {
-                return new List<ConversationMessage>(history);
+                return Task.FromResult(new List<ConversationMessage>(history));
             }
         }
-        return new List<ConversationMessage>();
+        return Task.FromResult(new List<ConversationMessage>());
     }
 
-    public void AddExchange(string sessionId, string userQuery, string assistantResponse)
+    public async Task AddExchangeAsync(
+        string sessionId, string userQuery, string assistantResponse, CancellationToken ct = default)
     {
         var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
         List<ConversationMessage> priorHistorySnapshot;
@@ -115,21 +121,23 @@ public class InMemorySessionManager : ISessionManager
         }
 
         // Oturumun var olduğundan emin ol
-        var session = GetOrCreate(sessionId);
+        var session = await GetOrCreateAsync(sessionId, ct).ConfigureAwait(false);
         session.LastActivity = DateTime.Now;
         _sessions[sessionId] = session;
 
         // State çıkarma
-        ExtractAndUpdateStateCore(session, userQuery, assistantResponse, priorHistorySnapshot);
+        await ExtractAndUpdateStateCoreAsync(session, userQuery, assistantResponse, priorHistorySnapshot, ct)
+            .ConfigureAwait(false);
     }
 
-    public void ClearSession(string sessionId)
+    public Task ClearSessionAsync(string sessionId, CancellationToken ct = default)
     {
         _sessions.TryRemove(sessionId, out _);
         _messageHistory.TryRemove(sessionId, out _);
+        return Task.CompletedTask;
     }
 
-    public void AppendAssistantMessage(string sessionId, string text)
+    public async Task AppendAssistantMessageAsync(string sessionId, string text, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
 
@@ -150,12 +158,12 @@ public class InMemorySessionManager : ISessionManager
             }
         }
 
-        var session = GetOrCreate(sessionId);
+        var session = await GetOrCreateAsync(sessionId, ct).ConfigureAwait(false);
         session.LastActivity = DateTime.Now;
         _sessions[sessionId] = session;
     }
 
-    public void AppendUserMessage(string sessionId, string text)
+    public async Task AppendUserMessageAsync(string sessionId, string text, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
 
@@ -165,19 +173,19 @@ public class InMemorySessionManager : ISessionManager
             history.Add(new ConversationMessage(ConversationRoles.User, text));
         }
 
-        var session = GetOrCreate(sessionId);
+        var session = await GetOrCreateAsync(sessionId, ct).ConfigureAwait(false);
         session.LastActivity = DateTime.Now;
         _sessions[sessionId] = session;
     }
 
-    public List<SessionInfo> GetAllSessions()
+    public async Task<List<SessionInfo>> GetAllSessionsAsync(CancellationToken ct = default)
     {
         var result = new List<SessionInfo>();
 
         foreach (var kvp in _sessions)
         {
             var session = kvp.Value;
-            var history = GetHistory(kvp.Key);
+            var history = await GetHistoryAsync(kvp.Key, ct).ConfigureAwait(false);
             var firstUserMsg = history.FirstOrDefault(m => m.Role == ConversationRoles.User)?.Text;
 
             result.Add(new SessionInfo
@@ -195,4 +203,3 @@ public class InMemorySessionManager : ISessionManager
     }
 
 }
-

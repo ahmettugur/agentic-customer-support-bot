@@ -52,7 +52,7 @@ internal sealed class TurnFinalizer
         string result,
         string terminationReason)
     {
-        _approvalGate.ProcessPendingEscalations(trace, query, result);
+        await _approvalGate.ProcessPendingEscalationsAsync(trace, query, result);
         PopulateAgentVisitOutputs(trace, result);
         WriteEpisodicMemorySafe(trace, query, result);
         await UpdateCustomerProfileSafeAsync(session, trace, query, result);

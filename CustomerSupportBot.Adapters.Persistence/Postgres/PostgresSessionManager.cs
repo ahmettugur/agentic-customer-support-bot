@@ -1,6 +1,6 @@
 // Services/Persistence/PostgresSessionManager.cs
 // Hibrit cache + PostgreSQL oturum yöneticisi.
-// ISessionManager implementasyonu.
+// ISessionManager implementasyonu — tamamen async (sync-over-async blocking yok).
 //
 // Davranış (in-memory ile aynı API ve semantik):
 //   - Cache: ConcurrentDictionary<sessionId, AgentSession> + message history.
@@ -49,7 +49,7 @@ public sealed class PostgresSessionManager : ISessionManager
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
     private readonly ConcurrentDictionary<string, List<ConversationMessage>> _messageHistory = new();
     private readonly ConcurrentDictionary<string, byte> _hydratedSessions = new();
-    private readonly object _allHydrationLock = new();
+    private readonly SemaphoreSlim _allHydrationGate = new(1, 1);
     private volatile bool _allListHydrated;
 
     public PostgresSessionManager(
@@ -69,42 +69,48 @@ public sealed class PostgresSessionManager : ISessionManager
 
     // ─── ISessionManager ───
 
-    public AgentSession GetOrCreate(string? sessionId)
+    public async Task<AgentSession> GetOrCreateAsync(string? sessionId, CancellationToken ct = default)
     {
         sessionId ??= Guid.NewGuid().ToString();
-        EnsureSessionHydrated(sessionId);
+        await EnsureSessionHydratedAsync(sessionId, ct).ConfigureAwait(false);
 
-        return _sessions.GetOrAdd(sessionId, id =>
+        if (_sessions.TryGetValue(sessionId, out var existing))
+            return existing;
+
+        var session = new AgentSession
         {
-            var session = new AgentSession
-            {
-                SessionId = id,
-                CreatedAt = DateTime.Now,
-                LastActivity = DateTime.Now,
-                State = new SessionState()
-            };
-            try { UpsertSessionAsync(session).GetAwaiter().GetResult(); }
+            SessionId = sessionId,
+            CreatedAt = DateTime.Now,
+            LastActivity = DateTime.Now,
+            State = new SessionState()
+        };
+
+        if (_sessions.TryAdd(sessionId, session))
+        {
+            try { await UpsertSessionAsync(session).ConfigureAwait(false); }
             catch (Exception ex)
             {
-                _logger.LogError(ex,
-                    "[Session] UPSERT (create) başarısız. Id={Id}", id);
-                throw ExceptionTranslator.Translate(ex, $"Session oluşturulamadı: {id}");
+                _logger.LogError(ex, "[Session] UPSERT (create) başarısız. Id={Id}", sessionId);
+                throw ExceptionTranslator.Translate(ex, $"Session oluşturulamadı: {sessionId}");
             }
             return session;
-        });
+        }
+
+        // Eşzamanlı başka bir çağrı araya girdi — onun eklediği nesneyi kullan.
+        return _sessions.TryGetValue(sessionId, out var winner) ? winner : session;
     }
 
-    public AgentSession? Get(string sessionId)
+    public async Task<AgentSession?> GetAsync(string sessionId, CancellationToken ct = default)
     {
-        EnsureSessionHydrated(sessionId);
+        await EnsureSessionHydratedAsync(sessionId, ct).ConfigureAwait(false);
         return _sessions.TryGetValue(sessionId, out var s) ? s : null;
     }
 
-    public void Update(AgentSession session)
+    public async Task UpdateAsync(AgentSession session, CancellationToken ct = default)
     {
         session.LastActivity = DateTime.Now;
         _sessions[session.SessionId] = session;
-        try { UpsertSessionAsync(session).GetAwaiter().GetResult(); }
+        try { await UpsertSessionAsync(session).ConfigureAwait(false); }
         catch (Exception ex)
         {
             _logger.LogError(ex,
@@ -114,27 +120,28 @@ public sealed class PostgresSessionManager : ISessionManager
         PublishSessionUpdated(session);
     }
 
-    public IReadOnlyList<AgentSession> GetAll()
+    public async Task<IReadOnlyList<AgentSession>> GetAllAsync(CancellationToken ct = default)
     {
-        EnsureAllListHydrated();
+        await EnsureAllListHydratedAsync(ct).ConfigureAwait(false);
         return _sessions.Values.ToList();
     }
 
-    public void ExtractAndUpdateState(string sessionId, string userMessage, string botResponse)
+    public async Task ExtractAndUpdateStateAsync(
+        string sessionId, string userMessage, string botResponse, CancellationToken ct = default)
     {
-        var session = Get(sessionId);
+        var session = await GetAsync(sessionId, ct).ConfigureAwait(false);
         if (session is null) return;
 
         // Lock gerekmez — aynı session için aynı anda tek bot pipeline çalışır
         // (ConcurrentDictionary + in-memory cache). Sync-over-async lock pattern
         // thread pool starvation'a neden oluyordu.
-        ExtractAndUpdateStateCore(session, userMessage, botResponse);
+        await ExtractAndUpdateStateCoreAsync(session, userMessage, botResponse, null, ct).ConfigureAwait(false);
     }
 
     public async Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default)
     {
         if (mutator == null) throw new ArgumentNullException(nameof(mutator));
-        var session = Get(sessionId);
+        var session = await GetAsync(sessionId, ct).ConfigureAwait(false);
         if (session is null) return;
 
         await using var handle = await _distributedLock
@@ -142,22 +149,22 @@ public sealed class PostgresSessionManager : ISessionManager
             .ConfigureAwait(false);
 
         mutator(session.State);
-        Update(session);
+        await UpdateAsync(session, ct).ConfigureAwait(false);
     }
 
-    private void ExtractAndUpdateStateCore(
+    private async Task ExtractAndUpdateStateCoreAsync(
         AgentSession session, string userMessage, string botResponse,
-        IReadOnlyList<ConversationMessage>? priorHistory = null)
+        IReadOnlyList<ConversationMessage>? priorHistory, CancellationToken ct)
     {
         SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse, priorHistory);
-        Update(session);
+        await UpdateAsync(session, ct).ConfigureAwait(false);
     }
 
     // ─── Konuşma geçmişi ───
 
-    public List<ConversationMessage> GetHistory(string sessionId)
+    public async Task<List<ConversationMessage>> GetHistoryAsync(string sessionId, CancellationToken ct = default)
     {
-        EnsureSessionHydrated(sessionId);
+        await EnsureSessionHydratedAsync(sessionId, ct).ConfigureAwait(false);
         if (_messageHistory.TryGetValue(sessionId, out var history))
         {
             lock (history)
@@ -168,9 +175,10 @@ public sealed class PostgresSessionManager : ISessionManager
         return new List<ConversationMessage>();
     }
 
-    public void AddExchange(string sessionId, string userQuery, string assistantResponse)
+    public async Task AddExchangeAsync(
+        string sessionId, string userQuery, string assistantResponse, CancellationToken ct = default)
     {
-        EnsureSessionHydrated(sessionId);
+        await EnsureSessionHydratedAsync(sessionId, ct).ConfigureAwait(false);
 
         var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
         List<ConversationMessage> priorHistorySnapshot;
@@ -183,11 +191,11 @@ public sealed class PostgresSessionManager : ISessionManager
             history.Add(new ConversationMessage(ConversationRoles.Assistant, assistantResponse));
         }
 
-        var session = GetOrCreate(sessionId);
+        var session = await GetOrCreateAsync(sessionId, ct).ConfigureAwait(false);
         session.LastActivity = DateTime.Now;
         _sessions[sessionId] = session;
 
-        try { InsertExchangeAsync(sessionId, userQuery, assistantResponse).GetAwaiter().GetResult(); }
+        try { await InsertExchangeAsync(sessionId, userQuery, assistantResponse).ConfigureAwait(false); }
         catch (Exception ex)
         {
             _logger.LogError(ex,
@@ -200,13 +208,14 @@ public sealed class PostgresSessionManager : ISessionManager
             new ConversationMessage(ConversationRoles.Assistant, assistantResponse)
         ]);
 
-        ExtractAndUpdateStateCore(session, userQuery, assistantResponse, priorHistorySnapshot);
+        await ExtractAndUpdateStateCoreAsync(session, userQuery, assistantResponse, priorHistorySnapshot, ct)
+            .ConfigureAwait(false);
     }
 
-    public void AppendAssistantMessage(string sessionId, string text)
+    public async Task AppendAssistantMessageAsync(string sessionId, string text, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
-        EnsureSessionHydrated(sessionId);
+        await EnsureSessionHydratedAsync(sessionId, ct).ConfigureAwait(false);
 
         var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
         bool replacedLastEmpty;
@@ -227,14 +236,13 @@ public sealed class PostgresSessionManager : ISessionManager
             }
         }
 
-        var session = GetOrCreate(sessionId);
+        var session = await GetOrCreateAsync(sessionId, ct).ConfigureAwait(false);
         session.LastActivity = DateTime.Now;
         _sessions[sessionId] = session;
 
         try
         {
-            AppendAssistantMessageDbAsync(sessionId, text, replacedLastEmpty)
-                .GetAwaiter().GetResult();
+            await AppendAssistantMessageDbAsync(sessionId, text, replacedLastEmpty).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -250,10 +258,10 @@ public sealed class PostgresSessionManager : ISessionManager
             PublishHistoryAppended(sessionId, [assistantMsg]);
     }
 
-    public void AppendUserMessage(string sessionId, string text)
+    public async Task AppendUserMessageAsync(string sessionId, string text, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
-        EnsureSessionHydrated(sessionId);
+        await EnsureSessionHydratedAsync(sessionId, ct).ConfigureAwait(false);
 
         var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
         lock (history)
@@ -261,13 +269,13 @@ public sealed class PostgresSessionManager : ISessionManager
             history.Add(new ConversationMessage(ConversationRoles.User, text));
         }
 
-        var session = GetOrCreate(sessionId);
+        var session = await GetOrCreateAsync(sessionId, ct).ConfigureAwait(false);
         session.LastActivity = DateTime.Now;
         _sessions[sessionId] = session;
 
         try
         {
-            AppendUserMessageDbAsync(sessionId, text).GetAwaiter().GetResult();
+            await AppendUserMessageDbAsync(sessionId, text).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -278,13 +286,13 @@ public sealed class PostgresSessionManager : ISessionManager
         PublishHistoryAppended(sessionId, [new ConversationMessage(ConversationRoles.User, text)]);
     }
 
-    public void ClearSession(string sessionId)
+    public async Task ClearSessionAsync(string sessionId, CancellationToken ct = default)
     {
         _sessions.TryRemove(sessionId, out _);
         _messageHistory.TryRemove(sessionId, out _);
         _hydratedSessions.TryRemove(sessionId, out _);
 
-        try { DeleteSessionAsync(sessionId).GetAwaiter().GetResult(); }
+        try { await DeleteSessionAsync(sessionId).ConfigureAwait(false); }
         catch (Exception ex)
         {
             _logger.LogError(ex,
@@ -294,15 +302,15 @@ public sealed class PostgresSessionManager : ISessionManager
         PublishSessionCleared(sessionId);
     }
 
-    public List<SessionInfo> GetAllSessions()
+    public async Task<List<SessionInfo>> GetAllSessionsAsync(CancellationToken ct = default)
     {
-        EnsureAllListHydrated();
+        await EnsureAllListHydratedAsync(ct).ConfigureAwait(false);
 
         var result = new List<SessionInfo>();
         foreach (var kvp in _sessions)
         {
             var session = kvp.Value;
-            var history = GetHistory(kvp.Key);
+            var history = await GetHistoryAsync(kvp.Key, ct).ConfigureAwait(false);
             var firstUserMsg = history.FirstOrDefault(m => m.Role == ConversationRoles.User)?.Text;
 
             result.Add(new SessionInfo
@@ -469,12 +477,12 @@ public sealed class PostgresSessionManager : ISessionManager
     // Hydration
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void EnsureSessionHydrated(string sessionId)
+    private async Task EnsureSessionHydratedAsync(string sessionId, CancellationToken ct)
     {
         if (_hydratedSessions.ContainsKey(sessionId)) return;
         if (!_hydratedSessions.TryAdd(sessionId, 0)) return;
 
-        try { HydrateSessionAsync(sessionId).GetAwaiter().GetResult(); }
+        try { await HydrateSessionAsync(sessionId).ConfigureAwait(false); }
         catch (Exception ex)
         {
             // Flag'i geri al — aksi halde geçici bir DB hatası (timeout, deadlock) bu
@@ -524,21 +532,23 @@ public sealed class PostgresSessionManager : ISessionManager
         }
     }
 
-    private void EnsureAllListHydrated()
+    private async Task EnsureAllListHydratedAsync(CancellationToken ct)
     {
         if (_allListHydrated) return;
-        lock (_allHydrationLock)
+        await _allHydrationGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
             if (_allListHydrated) return;
-            try
-            {
-                HydrateAllSessionMetadataAsync().GetAwaiter().GetResult();
-                _allListHydrated = true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[Session] All-list hydrate başarısız.");
-            }
+            await HydrateAllSessionMetadataAsync().ConfigureAwait(false);
+            _allListHydrated = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Session] All-list hydrate başarısız.");
+        }
+        finally
+        {
+            _allHydrationGate.Release();
         }
     }
 
@@ -704,4 +714,3 @@ public sealed class PostgresSessionManager : ISessionManager
         }
     }
 }
-

@@ -11,16 +11,16 @@ public static class SessionEndpoints
     public static IEndpointRouteBuilder MapSessionEndpoints(this IEndpointRouteBuilder app)
     {
         // GET /sessions/ — Tüm oturumları listele (sidebar için)
-        app.MapGet("/sessions/", (ISessionPort sessionPort) =>
+        app.MapGet("/sessions/", async (ISessionPort sessionPort, CancellationToken ct) =>
         {
-            var sessions = sessionPort.GetAllSessions();
+            var sessions = await sessionPort.GetAllSessionsAsync(ct);
             return Results.Json(sessions);
         });
 
         // GET /sessions/{sessionId}/messages — Belirli oturumun mesajlarını getir
-        app.MapGet("/sessions/{sessionId}/messages", (string sessionId, ISessionPort sessionPort) =>
+        app.MapGet("/sessions/{sessionId}/messages", async (string sessionId, ISessionPort sessionPort, CancellationToken ct) =>
         {
-            var history = sessionPort.GetHistory(sessionId);
+            var history = await sessionPort.GetHistoryAsync(sessionId, ct);
             var messages = history.Select(m => new
             {
                 role = m.Role == ConversationRoles.User ? "user" : "bot",
@@ -30,9 +30,9 @@ public static class SessionEndpoints
         });
 
         // GET /sessions/{sessionId}/state — Oturum durumunu getir (debug/frontend için)
-        app.MapGet("/sessions/{sessionId}/state", (string sessionId, ISessionPort sessionPort) =>
+        app.MapGet("/sessions/{sessionId}/state", async (string sessionId, ISessionPort sessionPort, CancellationToken ct) =>
         {
-            var session = sessionPort.GetSession(sessionId);
+            var session = await sessionPort.GetSessionAsync(sessionId, ct);
             if (session == null)
                 return Results.NotFound();
 

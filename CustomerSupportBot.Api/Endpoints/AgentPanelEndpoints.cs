@@ -123,17 +123,18 @@ public static class AgentPanelEndpoints
 
         // ─── Yeniden Planla ───
         group.MapPost("/escalations/{id}/replan",
-            (string id,
+            async (string id,
              ReplanInput? body,
              HttpContext ctx,
-             IChatSessionPort chatSessions) =>
+             IChatSessionPort chatSessions,
+             CancellationToken ct) =>
         {
             var agentId = GetLinkedAgentId(ctx)
                 ?? ctx.User.FindFirstValue(ClaimTypes.Name)
                 ?? WellKnown.Defaults.Admin;
             var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy) ? agentId : body!.RequestedBy!;
             var note = string.IsNullOrWhiteSpace(body?.Note) ? null : body!.Note!.Trim();
-            var result = chatSessions.ReplanEscalation(id, requestedBy, note);
+            var result = await chatSessions.ReplanEscalationAsync(id, requestedBy, note, ct);
             if (!result.Success)
             {
                 return result.ErrorCode == "invalid_request"
@@ -266,8 +267,8 @@ public static class AgentPanelEndpoints
 
         // ─── Müşteriye mesaj gönder ───
         group.MapPost("/chat-sessions/{sid}/messages",
-            (string sid, ChatAdminMessageInput? body, HttpContext ctx,
-             IChatSessionPort chatSessions, IHumanAgentPort agents) =>
+            async (string sid, ChatAdminMessageInput? body, HttpContext ctx,
+             IChatSessionPort chatSessions, IHumanAgentPort agents, CancellationToken ct) =>
         {
             if (body == null)
                 return Results.BadRequest(new { error = "text zorunlu." });
@@ -278,7 +279,7 @@ public static class AgentPanelEndpoints
                 : agentId is not null
                     ? (agents.GetAgent(agentId)?.DisplayName ?? agentId)
                     : (chatSessions.GetStateOrDefault(sid).HumanAgent ?? "Agent");
-            var result = chatSessions.SendAdminMessage(sid, agentLabel, body.Text);
+            var result = await chatSessions.SendAdminMessageAsync(sid, agentLabel, body.Text, ct);
             if (!result.Success)
                 return Results.BadRequest(new { error = result.ErrorMessage });
 
@@ -292,9 +293,9 @@ public static class AgentPanelEndpoints
 
         // ─── Session sentiment (read-only) ───
         group.MapGet("/chat-sessions/{sid}/sentiment",
-            (string sid, IChatSessionPort chatSessions) =>
+            async (string sid, IChatSessionPort chatSessions, CancellationToken ct) =>
         {
-            var sentiment = chatSessions.GetSentiment(sid);
+            var sentiment = await chatSessions.GetSentimentAsync(sid, ct);
             if (sentiment is null) return Results.NotFound();
             return Results.Json(new
             {
@@ -306,17 +307,18 @@ public static class AgentPanelEndpoints
 
         // ─── Yeniden Planla (chat-sessions) ───
         group.MapPost("/chat-sessions/{sid}/replan",
-            (string sid,
+            async (string sid,
              ReplanInput? body,
              HttpContext ctx,
-             IChatSessionPort chatSessions) =>
+             IChatSessionPort chatSessions,
+             CancellationToken ct) =>
         {
             var agentId = GetLinkedAgentId(ctx)
                 ?? ctx.User.FindFirstValue(ClaimTypes.Name)
                 ?? WellKnown.Defaults.Admin;
             var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy) ? agentId : body!.RequestedBy!;
             var note = string.IsNullOrWhiteSpace(body?.Note) ? null : body!.Note!.Trim();
-            var result = chatSessions.ReplanSession(sid, requestedBy, note);
+            var result = await chatSessions.ReplanSessionAsync(sid, requestedBy, note, ct);
             if (!result.Success)
                 return Results.NotFound(new { error = result.ErrorMessage });
 
