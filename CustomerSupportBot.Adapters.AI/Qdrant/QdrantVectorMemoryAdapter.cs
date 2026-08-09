@@ -136,7 +136,7 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
         IReadOnlyList<ScoredPoint> hits;
         try
         {
-            hits = await _client.SearchAsync(
+            hits = await _client.QueryAsync(
                 collection, query, filter: filter,
                 limit: (ulong)topK,
                 cancellationToken: ct).ConfigureAwait(false);
