@@ -140,7 +140,7 @@ public sealed class DemoDataSeeder : IHostedService
         var hasher = GetService<IPasswordHasher>();
         if (dbFactory is null || hasher is null) return;
 
-        var email = _configuration["Auth:DefaultCustomerEmail"] ?? "paolo.accorti@example.com";
+        var email = _configuration["Auth:DefaultCustomerEmail"] ?? "ahmet.tugur@example.com";
         var password = _configuration["Auth:DefaultCustomerPassword"] ?? "Customer123!";
         var customerId = _configuration["Auth:DefaultCustomerLinkedId"] ?? "1027";
 
