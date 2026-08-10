@@ -55,6 +55,13 @@ public class ReasoningTrace
     /// <summary>Nihai yanıt metni (truncate edilmiş olabilir).</summary>
     public string? FinalResponse { get; set; }
 
+    /// <summary>
+    /// ResponseAgent'ın kendi yanıtına verdiği kalite notu. Kullanıcıya asla gösterilmez;
+    /// admin trace panelinde görünür ve LessonMiner'ın inceleme adayı seçiminde kullanılır.
+    /// Model bloğu üretmediyse veya bozuk ürettiyse <c>null</c> kalır — tur etkilenmez.
+    /// </summary>
+    public SelfCritique? SelfCritique { get; set; }
+
     /// <summary>Toplam iterasyon sayısı (MAF superstep count).</summary>
     public int IterationCount { get; set; }
 

@@ -273,14 +273,14 @@ else
     }
 
     @* ── Final Critique ── *@
-    @if (Trace.FinalCritique.HasValue)
+    @if (Trace.SelfCritique.HasValue)
     {
         <div class="trace-section @(IsCollapsed("critique") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("critique")'>
                 @Chev <span>🎯 Final Critique</span>
             </div>
             <div class="trace-section-body">
-                @RenderFinalCritique(Trace.FinalCritique.Value)
+                @RenderFinalCritique(Trace.SelfCritique.Value)
             </div>
         </div>
     }

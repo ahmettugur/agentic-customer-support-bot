@@ -191,6 +191,50 @@ public class PromptContractTests
             Prompt(key).Should().Contain(status, $"{key}.md bu status değerini adıyla kullanmalı");
     }
 
+    // ─── Halka 4c: selfCritique alanları ↔ parser ────────────────────────────────
+    // response-agent.md her yanıtta bu bloğu ürettiriyor; SelfCritiqueParser okuyup trace'e
+    // yazıyor ve LessonMiner inceleme adayı seçiminde kullanıyor. Prompt bir alan adını
+    // değiştirirse parser onu sessizce varsayılana düşürür — kalite sinyali kaybolur ama
+    // hiçbir şey patlamaz. Bu test o sessiz kaybı görünür kılar.
+
+    [Fact]
+    public void SelfCritiqueFields_InPromptAndParser_StayInSync()
+    {
+        var prompt = Prompt("agents/response-agent");
+
+        foreach (var field in new[]
+                 {
+                     "addressesUserQuery", "tone", "completeness", "hallucinationRisk",
+                     "sources", "issuesFound", "revisionNeeded", "revisionNotes"
+                 })
+        {
+            prompt.Should().Contain(field, $"response-agent.md '{field}' alanını istemeli");
+            SourceOf("CustomerSupportBot.Domain/Services/SelfCritiqueParser.cs")
+                .Should().Contain($"\"{field}\"", $"SelfCritiqueParser '{field}' alanını okumalı");
+        }
+
+        // Ton değerleri de ortak sözleşme — IsConcerning bunlara göre karar veriyor.
+        foreach (var tone in new[] { WellKnown.CritiqueTones.Robotic, WellKnown.CritiqueTones.Impolite })
+            prompt.Should().Contain(tone, $"response-agent.md '{tone}' tonunu tanımlamalı");
+    }
+
+    [Fact]
+    public void SelfCritique_IsActuallyConsumed_NotJustStripped()
+    {
+        // Bu blok uzun süre üretilip hiç okunmadı (yalnızca çıktıdan siliniyordu) ve prompt
+        // "sistem tarafından okunur" diye yanlış beyanda bulunuyordu. Tüketim zincirinin
+        // (parse → trace → LessonMiner) kopması hâlinde prompt yeniden yalan söylemeye başlar.
+        SourceOf("CustomerSupportBot.Adapters.Agents/WorkflowRunner.cs")
+            .Should().Contain("SelfCritiqueParser.TryParse", "ham çıktıdan parse edilmeli");
+        SourceOf("CustomerSupportBot.Domain/Model/ReasoningTrace.cs")
+            .Should().Contain("SelfCritique? SelfCritique", "trace'e yazılmalı");
+
+        // Yorum satırında geçmesi YETMEZ — aday seçimini gerçekten sürüklemeli.
+        SourceOf("CustomerSupportBot.Application/Services/Improvement/LessonMiner.cs")
+            .Should().Contain("SelfCritique?.IsConcerning",
+                "LessonMiner aday seçiminde bu sinyali kullanmalı; yalnızca yorumda anılması yeterli değil");
+    }
+
     // ─── Halka 5: Görsel mimari dokümanının tool matrisi ──────────────────────────
     // docs/agent-architecture.html tool↔ajan matrisini elle listeliyor. Bir tool eklenip
     // doküman güncellenmezse matris sessizce yanlışa döner — bu, admin panelindeki

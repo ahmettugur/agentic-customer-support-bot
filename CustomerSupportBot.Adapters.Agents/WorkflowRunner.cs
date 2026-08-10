@@ -10,6 +10,7 @@ using System.Runtime.CompilerServices;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Services;
 using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -121,6 +122,9 @@ internal sealed class WorkflowRunner
                 st.Result, _loggerFactory.CreateLogger<WorkflowRunner>())
             ?? WellKnown.Termination.ReasonCompleted;
 
+        // selfCritique HAM çıktıdan okunur — RemoveTechnicalJsonBlocks bloğu birazdan silecek.
+        st.Trace.SelfCritique = SelfCritiqueParser.TryParse(st.Result);
+
         var result = WorkflowResponseExtractor.RemoveTerminationMarkers(st.Result);
         result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(result);
 
@@ -211,6 +215,9 @@ internal sealed class WorkflowRunner
             WorkflowResponseExtractor.ParseTerminationReasonFromResult(
                 st.Result, _loggerFactory.CreateLogger<WorkflowRunner>())
             ?? WellKnown.Termination.ReasonCompleted;
+
+        // selfCritique HAM çıktıdan okunur — RemoveTechnicalJsonBlocks bloğu birazdan silecek.
+        st.Trace.SelfCritique = SelfCritiqueParser.TryParse(st.Result);
 
         var result = WorkflowResponseExtractor.RemoveTerminationMarkers(st.Result);
         result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(result);

@@ -260,6 +260,19 @@ public static class WellKnown
         public const string Intent = "intent";
     }
 
+    /// <summary>
+    /// <see cref="SelfCritique.Tone"/> değerleri — response-agent.md'deki `tone` listesiyle
+    /// birebir hizalı tutulmalı (PromptContractTests bunu doğrular).
+    /// </summary>
+    public static class CritiqueTones
+    {
+        public const string Appropriate = "appropriate";
+        public const string TooFormal = "too_formal";
+        public const string TooCasual = "too_casual";
+        public const string Robotic = "robotic";
+        public const string Impolite = "impolite";
+    }
+
     /// <summary>MAF sistem executor önekleri — kullanıcıya gösterilmez.</summary>
     public static class SystemExecutorPrefixes
     {

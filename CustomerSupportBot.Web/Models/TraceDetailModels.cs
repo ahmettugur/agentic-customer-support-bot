@@ -21,7 +21,7 @@ public sealed class TraceDetail
     public List<TraceToolCall> ToolCalls { get; init; } = [];
     public bool WasRevised { get; init; }
     public string? FirstDraftResponse { get; init; }
-    public JsonElement? FinalCritique { get; init; }
+    public JsonElement? SelfCritique { get; init; }
 }
 
 public sealed record TraceAgentVisit(

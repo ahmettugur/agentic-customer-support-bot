@@ -6,6 +6,9 @@
 //   - rating ≤ MinRatingForLesson olan oturumların son trace'i
 //   - termination_reason in {"error", "timeout"} olan trace'ler
 //   - sanity issue varsa critical/error severity
+//   - ResponseAgent'ın öz-eleştirisi (SelfCritique.IsConcerning) sorun işaret ediyorsa —
+//     diğer sinyaller kullanıcı şikayetine veya sistem hatasına bağlıyken bu, sessizce
+//     kötü kalan yanıtları da yakalar
 //
 // Çıktı JSON şeması:
 //   { "lessons": [ { "title", "lesson", "observation", "suggestedAgent" } ] }
@@ -72,7 +75,14 @@ public sealed class LessonMiner
             if (!string.IsNullOrEmpty(t.Error)) { candidates.Add(t); continue; }
             if (t.TerminationReason is "timeout" or "error") { candidates.Add(t); continue; }
             if (t.Reasoning?.SanityIssues?.Any(i => i.Severity == IssueSeverity.Error) == true)
-                candidates.Add(t);
+            {
+                candidates.Add(t); continue;
+            }
+            // ResponseAgent kendi yanıtını sorunlu işaretlediyse (halüsinasyon riski, eksiklik,
+            // robotik ton…) — kullanıcı düşük puan vermemiş olsa bile incelemeye değer.
+            // Diğer sinyaller ancak kullanıcı şikayet ettiğinde ya da sistem hata verdiğinde
+            // devreye giriyordu; bu, sessizce kötü yanıtları da yakalar.
+            if (t.SelfCritique?.IsConcerning == true) candidates.Add(t);
         }
 
         if (candidates.Count == 0)
@@ -237,6 +247,14 @@ public sealed class LessonMiner
                 sb.AppendLine($"- KullanıcıPuanı: {rating.Stars}★ — \"{Trim(rating.Feedback ?? "", 200)}\"");
             if (t.Reasoning?.SanityIssues?.Count > 0)
                 sb.AppendLine($"- SanityIssues: {string.Join("; ", t.Reasoning.SanityIssues.Select(i => $"[{i.Severity}] {i.Message}"))}");
+            if (t.SelfCritique is { } sc)
+            {
+                sb.AppendLine(
+                    $"- ResponseAgent öz-eleştirisi: ton={sc.Tone}, tamlık={sc.Completeness:0.00}, " +
+                    $"halüsinasyonRiski={sc.HallucinationRisk:0.00}, soruyuYanıtladı={sc.AddressesUserQuery}" +
+                    (sc.IssuesFound.Count > 0 ? $", sorunlar=[{string.Join("; ", sc.IssuesFound)}]" : "") +
+                    (string.IsNullOrWhiteSpace(sc.RevisionNotes) ? "" : $", düzeltmeNotu=\"{Trim(sc.RevisionNotes, 200)}\""));
+            }
             if (t.AgentVisits.Count > 0)
                 sb.AppendLine($"- Agents: {string.Join(" → ", t.AgentVisits.Select(v => v.AgentName))}");
         }
