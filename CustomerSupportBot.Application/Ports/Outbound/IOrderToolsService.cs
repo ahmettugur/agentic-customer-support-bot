@@ -10,6 +10,20 @@ public interface IOrderToolsService
     ToolResult OrderPlacementTool(string productName, int? quantity, string customerId);
 
     /// <summary>
+    /// Salt-okunur ön kontrol: sipariş var mı ve login'li müşteriye ait mi? Engel varsa
+    /// kullanıcıya dönecek <see cref="ToolResult"/>, yoksa <c>null</c>.
+    ///
+    /// <para>
+    /// HITL onaylı tool'larda (iptal/iade/şikayet) gerçek iş admin kararından SONRA çalışır;
+    /// sahiplik ihlali orada yakalanırsa talep önce admin kuyruğuna düşer, admin onaylar ve
+    /// işlem sessizce başarısız olur. Bu metot aynı kontrolü onay kaydı OLUŞTURULMADAN önce
+    /// yapıp kullanıcıya anında geri bildirim verir ve kuyruğu kirletmez. Yürütme anındaki
+    /// kontrolün YERİNE geçmez — durum iki an arasında değişebilir, ikisi birlikte çalışır.
+    /// </para>
+    /// </summary>
+    ToolResult? ValidateOrderActionable(string orderId, string customerId);
+
+    /// <summary>
     /// <paramref name="customerId"/> LLM parametresi DEĞİL — çağıran taraf (ApprovalGateService)
     /// bunu her zaman login'li kullanıcının doğrulanmış kimliğinden geçirir. Sipariş başka bir
     /// müşteriye aitse <see cref="WellKnown.ToolErrorCodes.CustomerIdMismatch"/> ile reddedilir.

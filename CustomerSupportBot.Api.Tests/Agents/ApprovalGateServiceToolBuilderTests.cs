@@ -104,7 +104,10 @@ public class ApprovalGateServiceToolBuilderTests
         };
         var queue = new InMemoryApprovalQueue(
             Options.Create(opts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
-        var svc = Build(opts, queue);
+        // Ön kontrol sahiplik doğruladığı için sipariş 1030'un gerçek sahibi (1027) olarak çağır.
+        var contextAccessor = new ApprovalContextAccessor();
+        using var scope = contextAccessor.SetScope("s1", null, "şikayet", "1027");
+        var svc = Build(opts, queue, contextAccessor);
         var fn = svc.BuildComplaintRegistrationTool();
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
@@ -129,7 +132,10 @@ public class ApprovalGateServiceToolBuilderTests
         };
         var queue = new InMemoryApprovalQueue(
             Options.Create(opts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
-        var svc = Build(opts, queue);
+        // Ön kontrol sahiplik doğruladığı için sipariş 1030'un gerçek sahibi (1027) olarak çağır.
+        var contextAccessor = new ApprovalContextAccessor();
+        using var scope = contextAccessor.SetScope("s1", null, "iptal", "1027");
+        var svc = Build(opts, queue, contextAccessor);
         var fn = svc.BuildOrderCancelTool();
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
@@ -154,7 +160,10 @@ public class ApprovalGateServiceToolBuilderTests
         };
         var queue = new InMemoryApprovalQueue(
             Options.Create(opts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
-        var svc = Build(opts, queue);
+        // Ön kontrol sahiplik doğruladığı için sipariş 1042'nin gerçek sahibi (1010) olarak çağır.
+        var contextAccessor = new ApprovalContextAccessor();
+        using var scope = contextAccessor.SetScope("s1", null, "iade", "1010");
+        var svc = Build(opts, queue, contextAccessor);
         var fn = svc.BuildReturnRequestTool();
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
@@ -228,6 +237,53 @@ public class ApprovalGateServiceToolBuilderTests
         }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
+    }
+
+    // ── Ön kontrol (preflight): baştan başarısız olacak talep onay kuyruğuna DÜŞMEMELİ ──
+    // Gerçek iş admin kararından sonra çalıştığı için, sahiplik ihlali yürütme anında
+    // yakalanırsa talep önce kuyruğa girer, admin'i meşgul eder, onaylanır ve ancak o zaman
+    // sessizce başarısız olur. Ön kontrol bunu kayıt oluşturmadan önce keser.
+
+    [Theory]
+    [InlineData(WellKnown.ToolNames.OrderCancel)]
+    [InlineData(WellKnown.ToolNames.ReturnRequest)]
+    [InlineData(WellKnown.ToolNames.ComplaintRegistration)]
+    public async Task ApprovalRequiredTools_ForeignOrder_RejectImmediatelyWithoutQueueing(string toolName)
+    {
+        var opts = new ApprovalOptions { Enabled = true, ToolsRequiringApproval = new() { toolName } };
+        var queue = new InMemoryApprovalQueue(
+            Options.Create(opts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
+        var contextAccessor = new ApprovalContextAccessor();
+
+        // Sipariş 9701'e ait; saldırgan 9999 olarak login.
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        using (contextAccessor.SetScope("s0", null, "sipariş ver", "9701"))
+        {
+            var seeder = Build(new ApprovalOptions { Enabled = false }, contextAccessor: contextAccessor);
+            await seeder.BuildOrderPlacementTool().InvokeAsync(new AIFunctionArguments(
+                new Dictionary<string, object?> { ["productName"] = product, ["quantity"] = 1 }),
+                TestContext.Current.CancellationToken);
+        }
+        var foreignOrderId = _fixture.OrderRepo.GetByCustomer("9701").Last().OrderId;
+
+        using var attacker = contextAccessor.SetScope("s1", null, "iptal et", "9999");
+        var svc = Build(opts, queue, contextAccessor);
+        var fn = toolName switch
+        {
+            WellKnown.ToolNames.OrderCancel => svc.BuildOrderCancelTool(),
+            WellKnown.ToolNames.ReturnRequest => svc.BuildReturnRequestTool(),
+            _ => svc.BuildComplaintRegistrationTool()
+        };
+        var args = toolName == WellKnown.ToolNames.ComplaintRegistration
+            ? new Dictionary<string, object?> { ["orderId"] = foreignOrderId, ["complaintText"] = "başkasının siparişi hakkında şikayet" }
+            : new Dictionary<string, object?> { ["orderId"] = foreignOrderId, ["reason"] = "başkasının siparişi" };
+
+        var result = await fn.InvokeAsync(new AIFunctionArguments(args), TestContext.Current.CancellationToken);
+
+        var (success, message) = ParseResult(result);
+        success.Should().BeFalse("ön kontrol talebi reddetmeli");
+        message.Should().NotContain("onaya gönderildi", "pending sonucu dönmemeli");
+        queue.GetPending().Should().BeEmpty("admin kuyruğu baştan başarısız taleple kirletilmemeli");
     }
 
     // ── Salt-okunur sipariş tool'ları: customerId LLM'e hiç parametre olarak gösterilmez,

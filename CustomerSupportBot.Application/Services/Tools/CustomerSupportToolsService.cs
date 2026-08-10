@@ -38,6 +38,9 @@ public sealed class CustomerSupportToolsService : ICustomerSupportToolsService
     public ToolResult OrderPlacementTool(string productName, int? quantity, string customerId)
         => _order.OrderPlacementTool(productName, quantity, customerId);
 
+    public ToolResult? ValidateOrderActionable(string orderId, string customerId)
+        => _order.ValidateOrderActionable(orderId, customerId);
+
     public ToolResult OrderStatusTool(string orderId, string customerId)
         => _order.OrderStatusTool(orderId, customerId);
 

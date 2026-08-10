@@ -82,7 +82,8 @@ public class ApprovalGateService
                 await ExecuteWithApprovalGateAsync(
                     WellKnown.ToolNames.ComplaintRegistration,
                     new Dictionary<string, object?> { ["orderId"] = orderId, ["complaintText"] = complaintText, ["customerId"] = CurrentCustomerId },
-                    () => _tools.ComplaintRegistrationTool(orderId, complaintText, CurrentCustomerId)),
+                    () => _tools.ComplaintRegistrationTool(orderId, complaintText, CurrentCustomerId),
+                    preflight: () => _tools.ValidateOrderActionable(orderId, CurrentCustomerId)),
             name: WellKnown.ToolNames.ComplaintRegistration,
             description:
                 "Müşteri şikayetini sipariş numarasıyla kaydeder. order_id ve description zorunludur; müşteri kimliği " +
@@ -96,7 +97,8 @@ public class ApprovalGateService
                 await ExecuteWithApprovalGateAsync(
                     WellKnown.ToolNames.OrderCancel,
                     new Dictionary<string, object?> { ["orderId"] = orderId, ["reason"] = reason, ["customerId"] = CurrentCustomerId },
-                    () => _tools.OrderCancelTool(orderId, reason, CurrentCustomerId)),
+                    () => _tools.OrderCancelTool(orderId, reason, CurrentCustomerId),
+                    preflight: () => _tools.ValidateOrderActionable(orderId, CurrentCustomerId)),
             name: WellKnown.ToolNames.OrderCancel,
             description:
                 "Mevcut bir siparişi iptal eder. Sadece 'İşleniyor' veya 'Kargolandı' durumundaki siparişler iptal edilebilir; " +
@@ -111,7 +113,8 @@ public class ApprovalGateService
                 await ExecuteWithApprovalGateAsync(
                     WellKnown.ToolNames.ReturnRequest,
                     new Dictionary<string, object?> { ["orderId"] = orderId, ["reason"] = reason, ["customerId"] = CurrentCustomerId },
-                    () => _tools.ReturnRequestTool(orderId, reason, CurrentCustomerId)),
+                    () => _tools.ReturnRequestTool(orderId, reason, CurrentCustomerId),
+                    preflight: () => _tools.ValidateOrderActionable(orderId, CurrentCustomerId)),
             name: WellKnown.ToolNames.ReturnRequest,
             description:
                 "Teslim edilmiş bir sipariş için iade talebi oluşturur. Sadece 'Teslim Edildi' durumundaki " +
@@ -155,14 +158,31 @@ public class ApprovalGateService
     /// Gerçek iş (execute), admin karar verdiğinde <see cref="IApprovalExecutionRouter"/> üzerinden ayrıca
     /// tetiklenir (bkz. <c>PostgresApprovalQueue.DecideAsync</c>/<c>InMemoryApprovalQueue.DecideAsync</c>);
     /// sonucu kullanıcıya bir bildirim/badge olarak ulaşır, bu turda değil.
+    ///
+    /// <para>
+    /// <paramref name="preflight"/> — onay kaydı OLUŞTURULMADAN önce çalışan salt-okunur ön kontrol
+    /// (ör. sipariş var mı, login'li müşteriye ait mi). Gerçek iş admin kararından sonra çalıştığı
+    /// için bu kontrol olmasaydı, baştan başarısız olacağı belli bir talep önce kuyruğa düşer,
+    /// admin'in zamanını harcar, onaylanır ve ancak o zaman sessizce başarısız olurdu. Yürütme
+    /// anındaki kontrolün YERİNE geçmez (durum arada değişebilir) — birlikte çalışırlar.
+    /// </para>
     /// </summary>
     private async Task<ToolResult> ExecuteWithApprovalGateAsync(
         string toolName,
         Dictionary<string, object?> parameters,
-        Func<ToolResult> executeDirectly)
+        Func<ToolResult> executeDirectly,
+        Func<ToolResult?>? preflight = null)
     {
         if (!RequiresApproval(toolName))
             return executeDirectly();
+
+        if (preflight?.Invoke() is { } blocked)
+        {
+            _logger.LogInformation(
+                "[HITL] Onay kaydı oluşturulmadı — ön kontrol reddetti tool={Tool} code={Code}",
+                toolName, blocked.Error?.Code);
+            return blocked;
+        }
 
         var ctx = _contextAccessor.Context;
         var agentName = ResolveAgentName(toolName);

@@ -111,10 +111,8 @@ public sealed class OrderToolsService : IOrderToolsService
     private static string OrderNotAccessibleMessage(string orderId) =>
         $"'{orderId}' numaralı sipariş bulunamadı.";
 
-    [Description("Sipariş durumunu sipariş numarasıyla sorgular. Sonuç ToolResult olarak döner.")]
-    public ToolResult OrderStatusTool(
-        [Description("Sorgulanacak sipariş numarası (örn: 1030)")] string orderId,
-        string customerId)
+    /// <inheritdoc />
+    public ToolResult? ValidateOrderActionable(string orderId, string customerId)
     {
         if (string.IsNullOrWhiteSpace(orderId))
             return ToolResult.ValidationError("Sipariş numarası boş olamaz.", WellKnown.ToolParameterNames.OrderId);
@@ -123,8 +121,23 @@ public sealed class OrderToolsService : IOrderToolsService
         if (order is null)
             return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, OrderNotAccessibleMessage(orderId));
 
+        // Sahiplik ihlali "bulunamadı" ile AYNI metni döner — bkz. OrderNotAccessibleMessage.
         if (!string.Equals(order.CustomerId, customerId, StringComparison.Ordinal))
-            return ToolResult.NotFound(WellKnown.ToolErrorCodes.CustomerIdMismatch, OrderNotAccessibleMessage(orderId));
+            return ToolResult.NotFound(
+                WellKnown.ToolErrorCodes.CustomerIdMismatch,
+                OrderNotAccessibleMessage(orderId));
+
+        return null;
+    }
+
+    [Description("Sipariş durumunu sipariş numarasıyla sorgular. Sonuç ToolResult olarak döner.")]
+    public ToolResult OrderStatusTool(
+        [Description("Sorgulanacak sipariş numarası (örn: 1030)")] string orderId,
+        string customerId)
+    {
+        if (ValidateOrderActionable(orderId, customerId) is { } blocked) return blocked;
+
+        var order = _orders.Get(orderId)!;
 
         return ToolResult.Ok(
             message: $"Sipariş No: {orderId}, Ürün: {order.Product}, Adet: {order.Quantity}, Durum: {order.Status}.",
@@ -189,15 +202,11 @@ public sealed class OrderToolsService : IOrderToolsService
         if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
             return ToolResult.ValidationError("İptal sebebi en az 5 karakter olmalıdır.", WellKnown.ToolParameterNames.Reason);
 
-        var order = _orders.Get(orderId);
-        if (order is null)
-            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, OrderNotAccessibleMessage(orderId));
+        // Varlık + sahiplik: ApprovalGateService bunu onay kaydından ÖNCE de çalıştırır;
+        // burada tekrar edilir çünkü durum iki an arasında değişmiş olabilir.
+        if (ValidateOrderActionable(orderId, customerId) is { } blocked) return blocked;
 
-        // Sahiplik ihlali "bulunamadı" ile AYNI metni döner — bkz. OrderNotAccessibleMessage.
-        if (!string.Equals(order.CustomerId, customerId, StringComparison.Ordinal))
-            return ToolResult.NotFound(
-                WellKnown.ToolErrorCodes.CustomerIdMismatch,
-                OrderNotAccessibleMessage(orderId));
+        var order = _orders.Get(orderId)!;
 
         if (order.Status == WellKnown.OrderStatuses.Cancelled)
             return ToolResult.Conflict(
@@ -228,15 +237,11 @@ public sealed class OrderToolsService : IOrderToolsService
         if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < 5)
             return ToolResult.ValidationError("İade sebebi en az 5 karakter olmalıdır.", WellKnown.ToolParameterNames.Reason);
 
-        var order = _orders.Get(orderId);
-        if (order is null)
-            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, OrderNotAccessibleMessage(orderId));
+        // Varlık + sahiplik: ApprovalGateService bunu onay kaydından ÖNCE de çalıştırır;
+        // burada tekrar edilir çünkü durum iki an arasında değişmiş olabilir.
+        if (ValidateOrderActionable(orderId, customerId) is { } blocked) return blocked;
 
-        // Sahiplik ihlali "bulunamadı" ile AYNI metni döner — bkz. OrderNotAccessibleMessage.
-        if (!string.Equals(order.CustomerId, customerId, StringComparison.Ordinal))
-            return ToolResult.NotFound(
-                WellKnown.ToolErrorCodes.CustomerIdMismatch,
-                OrderNotAccessibleMessage(orderId));
+        var order = _orders.Get(orderId)!;
 
         if (order.Status == WellKnown.OrderStatuses.ReturnRequested ||
             order.Status == WellKnown.OrderStatuses.ReturnApproved)
