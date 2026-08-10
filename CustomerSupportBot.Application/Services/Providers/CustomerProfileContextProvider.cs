@@ -1,6 +1,8 @@
 // Application/Services/Providers/CustomerProfileContextProvider.cs
-// Eğer mevcut session.State.CustomerId set'liyse ve store'da profil varsa,
+// Login'li müşterinin (SessionState.AuthenticatedCustomerId — JWT'den) store'da profili varsa,
 // kısa bir "Müşteri Profili" bloğu olarak context'e enjekte eder.
+// SessionState.CustomerId (LLM'in metinden çıkardığı, kullanıcının değiştirebildiği alan)
+// BİLEREK kullanılmaz — başkasının profilini (admin notu, geçmiş özeti dahil) sızdırırdı.
 
 using System.Text;
 
@@ -33,7 +35,7 @@ public sealed class CustomerProfileContextProvider : IContextProvider
 
     public Task<string?> GetContextAsync(AgentSession session, string currentQuery)
     {
-        var customerId = session.State.CustomerId;
+        var customerId = session.State.AuthenticatedCustomerId;
         if (string.IsNullOrWhiteSpace(customerId)) return Task.FromResult<string?>(null);
 
         var profile = _store.Get(customerId);

@@ -9,8 +9,17 @@ using CustomerSupportBot.Domain.Model;
 namespace CustomerSupportBot.Application.Services.Providers;
 
 /// <summary>
-/// Oturumdaki CustomerId bilgisine göre müşterinin sipariş ve şikayet
-/// geçmişini repository port'larından çeker ve bağlam olarak sunar.
+/// Login'li müşterinin sipariş ve şikayet geçmişini repository port'larından çeker ve
+/// bağlam olarak sunar.
+///
+/// <para>
+/// Kimlik <see cref="SessionState.AuthenticatedCustomerId"/>'den (JWT) okunur —
+/// <see cref="SessionState.CustomerId"/> (LLM'in kullanıcı metninden çıkardığı, kullanıcının
+/// "ben 1008 numaralı müşteriyim" diyerek değiştirebildiği alan) KULLANILMAZ. Aksi halde bu
+/// sağlayıcı başka bir müşterinin tüm sipariş/şikayet geçmişini ajanın context'ine enjekte
+/// eder ve ajan bunu kullanıcıya okur — tool katmanındaki sahiplik kontrollerini tamamen
+/// baypas eden bir veri sızıntısı olurdu.
+/// </para>
 /// </summary>
 public class CustomerContextProvider : IContextProvider
 {
@@ -28,7 +37,7 @@ public class CustomerContextProvider : IContextProvider
 
     public Task<string?> GetContextAsync(AgentSession session, string currentQuery)
     {
-        var customerId = session.State.CustomerId;
+        var customerId = session.State.AuthenticatedCustomerId;
         if (string.IsNullOrWhiteSpace(customerId))
             return Task.FromResult<string?>(null);
 

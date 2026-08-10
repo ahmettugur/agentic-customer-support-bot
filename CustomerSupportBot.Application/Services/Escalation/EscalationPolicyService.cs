@@ -135,7 +135,9 @@ public class EscalationPolicyService
             if (!string.IsNullOrWhiteSpace(trace.SessionId) && _sessionManager != null)
             {
                 var session = await _sessionManager.GetAsync(trace.SessionId!, ct);
-                customerId = session?.State.CustomerId;
+                // AuthenticatedCustomerId (JWT) — State.CustomerId DEĞİL: eskalasyon
+                // yönlendirmesi başkasının profiline göre yapılmamalı.
+                customerId = session?.State.AuthenticatedCustomerId;
             }
             if (!string.IsNullOrWhiteSpace(customerId) && _profileStore != null)
             {

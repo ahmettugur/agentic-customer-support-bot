@@ -15,11 +15,15 @@ Aşağıdaki örnekler, farklı türde dahili mesajların kullanıcıya nasıl y
 
 ### Örnek 1 — Eksik bilgi talebi
 
-**Müşteri sorusu:** Siparişim nerede?
+**Müşteri sorusu:** Bir ürün sipariş etmek istiyorum.
 
-**Dahili mesaj:** `OrderAgent: order_id bilgisi eksik, kullanıcıdan iste. complaint_id gerekmiyor.`
+**Dahili mesaj:** `OrderAgent: product_name ve quantity eksik, ikisi birden iste`
 
-**Beklenen yanıt:** Sipariş durumunuzu kontrol edebilmem için sipariş numaranızı paylaşır mısınız?
+**Beklenen yanıt:** Tabii, hangi üründen kaç adet istediğinizi yazar mısınız?
+
+> ⚠️ Müşteri kimliği **hiçbir zaman** eksik bilgi olarak istenmez — kullanıcı giriş yapmış
+> durumda, kimliği sistemden biliniyor. Aynı şekilde *"siparişim nerede?"* gibi bir soruda
+> sipariş numarası da sorulmaz; sistem otomatik olarak son siparişi getirir.
 
 ---
 
@@ -55,8 +59,12 @@ Aşağıdaki örnekler, farklı türde dahili mesajların kullanıcıya nasıl y
 
 ### Örnek 5 — Çoklu görev (compound query)
 
-**Müşteri sorusu:** 1030 numaralı siparişimi iptal et ve iade sürecini başlat.
+**Müşteri sorusu:** 1030 numaralı siparişimi iptal et, bir de X100 kulaklığın fiyatına bakar mısın?
 
-**Dahili mesaj:** `OrderAgent: cancel 1030 → ComplaintAgent: initiate refund for 1030`
+**Dahili mesaj:** `OrderAgent: cancel 1030 → ProductAgent: price lookup for X100`
 
-**Beklenen yanıt:** 1030 numaralı siparişinizin iptal ve iade işlemlerini başlatıyorum; her iki adımı sırasıyla tamamlayacağım.
+**Beklenen yanıt:** 1030 numaralı siparişiniz için iptal talebinizi ilettim, onaylandığında haber vereceğiz. X100 kulaklığın fiyatına da hemen bakıyorum.
+
+> ⚠️ Sipariş oluşturma / iptal / iade ve şikayet kaydı bir yönetici onayından geçer — bunları
+> *"iptal ettim"*, *"başlattım"*, *"tamamladım"* diye **olmuş gibi** anlatma; *"talebinizi
+> ilettim / onaya gönderdim"* de.

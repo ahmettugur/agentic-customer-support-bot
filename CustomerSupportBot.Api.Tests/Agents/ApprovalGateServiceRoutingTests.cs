@@ -89,7 +89,7 @@ public class ApprovalGateServiceRoutingTests
     {
         var (svc, registry, _, sessions) = BuildWithRouting();
         var session = await sessions.GetOrCreateAsync("s1", TestContext.Current.CancellationToken);
-        session.State.CustomerId = "1001";
+        session.State.AuthenticatedCustomerId = "1001";
 
         await svc.ProcessPendingEscalationsAsync(TraceFor("s1", "şikayet", WellKnown.AgentNames.Complaint),
             "şikayetim var", "yanıt");
@@ -120,7 +120,7 @@ public class ApprovalGateServiceRoutingTests
         };
         var (svc, _, profiles, sessions) = BuildWithRouting(routingOpts);
         var session = await sessions.GetOrCreateAsync("s2", TestContext.Current.CancellationToken);
-        session.State.CustomerId = "9011";
+        session.State.AuthenticatedCustomerId = "9011";
 
         profiles.Upsert(new CustomerSupportBot.Domain.Model.Memory.CustomerProfile
         {
@@ -142,7 +142,7 @@ public class ApprovalGateServiceRoutingTests
     {
         var routingOpts = new RoutingOptions { SeedAgents = new() }; // boş
         var (svc, _, _, sessions) = BuildWithRouting(routingOpts);
-        (await sessions.GetOrCreateAsync("s3", TestContext.Current.CancellationToken)).State.CustomerId = "C";
+        (await sessions.GetOrCreateAsync("s3", TestContext.Current.CancellationToken)).State.AuthenticatedCustomerId = "C";
 
         await svc.ProcessPendingEscalationsAsync(TraceFor("s3", "şikayet", WellKnown.AgentNames.Complaint),
             "test", "yanıt");

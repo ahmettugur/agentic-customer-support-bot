@@ -128,7 +128,10 @@ internal sealed class TurnFinalizer
     private async Task UpdateCustomerProfileSafeAsync(AgentSession? session, ReasoningTrace trace, string query, string response)
     {
         if (_profileService is null) return;
-        var customerId = session?.State.CustomerId;
+        // AuthenticatedCustomerId (JWT) — State.CustomerId DEĞİL: aksi halde kullanıcı
+        // "ben 1008'im" diyerek bu konuşmayı BAŞKA bir müşterinin kalıcı profiline
+        // yazdırabilir (profil özeti/ilgi alanları/dil tercihi kalıcı olarak bozulur).
+        var customerId = session?.State.AuthenticatedCustomerId;
         if (string.IsNullOrWhiteSpace(customerId)) return;
 
         var intent = trace.Reasoning?.Intent;

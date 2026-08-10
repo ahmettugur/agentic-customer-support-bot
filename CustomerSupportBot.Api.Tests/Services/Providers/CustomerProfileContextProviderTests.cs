@@ -27,7 +27,7 @@ public class CustomerProfileContextProviderTests
         var store = new InMemoryCustomerProfileStore();
         var provider = Build(store);
 
-        var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1001" } };
+        var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1001" } };
         var ctx = await provider.GetContextAsync(session, "test sorgusu");
         ctx.Should().BeNull();
     }
@@ -39,7 +39,7 @@ public class CustomerProfileContextProviderTests
         store.Upsert(new CustomerProfile { CustomerId = "1001", TotalTurns = 0 });
 
         var provider = Build(store);
-        var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1001" } };
+        var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1001" } };
         var ctx = await provider.GetContextAsync(session, "test sorgusu");
         ctx.Should().BeNull();
     }
@@ -68,7 +68,7 @@ public class CustomerProfileContextProviderTests
         });
 
         var provider = Build(store);
-        var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1027" } };
+        var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1027" } };
         var ctx = await provider.GetContextAsync(session, "test sorgusu");
 
         ctx.Should().NotBeNull();
@@ -78,6 +78,27 @@ public class CustomerProfileContextProviderTests
                   .And.Contain("VIP")
                   .And.Contain("order_inquiry")
                   .And.Match("*ortalama puan: 4*5*"); // (4+5+3)/3 = 4.0; culture-agnostic
+    }
+
+    [Fact]
+    public async Task LlmExtractedCustomerId_DoesNotLeakAnotherCustomersProfile()
+    {
+        // Profil bloğu admin notu ve geçmiş özeti gibi hassas alanlar taşır — kullanıcının
+        // metinde iddia ettiği kimlik (State.CustomerId) ile ASLA çekilmemeli.
+        var store = new InMemoryCustomerProfileStore();
+        store.Upsert(new CustomerProfile
+        {
+            CustomerId = "1008",
+            Summary = "başka müşterinin özeti",
+            AdminNote = "GİZLİ ADMIN NOTU",
+            TotalTurns = 10
+        });
+
+        var provider = Build(store);
+        var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1008" } };
+        var ctx = await provider.GetContextAsync(session, "profilimi göster");
+
+        ctx.Should().BeNull("LLM'in metinden çıkardığı kimlik profil erişimi için kullanılmamalı");
     }
 
     [Fact]

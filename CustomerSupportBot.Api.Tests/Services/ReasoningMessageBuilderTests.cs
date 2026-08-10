@@ -46,7 +46,7 @@ public class ReasoningMessageBuilderTests
     {
         var builder = new ReasoningMessageBuilder(_prompts);
         var session = new AgentSession { SessionId = "s1" };
-        session.State.CustomerId = "1027";
+        session.State.AuthenticatedCustomerId = "1027";
         var verified = new VerifiedEntities
         {
             CustomerId = new VerifiedEntity { Value = "1027", Verification = EntityVerification.Verified }
@@ -54,5 +54,25 @@ public class ReasoningMessageBuilderTests
 
         var msgs = builder.Build("soru", session, null, verified);
         msgs[0].Text.Should().Contain("1027");
+    }
+
+    [Fact]
+    public void Build_StateInfo_UsesAuthenticatedIdentity_NotLlmExtractedOne()
+    {
+        // STATE_INFO'daki "CustomerId:" satırı reasoning ajanının "kiminle konuşuyorum"
+        // algısını kurar. LLM'in kullanıcı metninden çıkardığı (kullanıcının "ben 1008'im"
+        // diyerek değiştirebildiği) State.CustomerId buraya sızarsa ajan yanlış kimlik
+        // üzerinden akıl yürütür.
+        var builder = new ReasoningMessageBuilder(_prompts);
+        var session = new AgentSession { SessionId = "s1" };
+        session.State.AuthenticatedCustomerId = "1027";
+        session.State.CustomerId = "1008";
+
+        var msgs = builder.Build("soru", session, null, new VerifiedEntities());
+
+        // NOT: prompt ŞABLONU "1008"i ID formatı örneği olarak zaten içeriyor — bu yüzden
+        // düz NotContain("1008") yanıltıcı olur; kontrol STATE_INFO satırına özel yapılır.
+        msgs[0].Text.Should().Contain("CustomerId: 1027");
+        msgs[0].Text.Should().NotContain("CustomerId: 1008");
     }
 }

@@ -57,7 +57,11 @@ public class ReasoningMessageBuilder
 
     private string BuildSystemPrompt(AgentSession session, VerifiedEntities verified, bool hasHistory)
     {
-        var stateInfo = $"CustomerId: {session.State.CustomerId ?? WellKnown.Intents.Unknown}, " +
+        // AuthenticatedCustomerId (JWT) — State.CustomerId DEĞİL. İkincisi LLM'in kullanıcı
+        // metninden çıkardığı, kullanıcının "ben 1008 numaralı müşteriyim" diyerek
+        // değiştirebildiği alandır; reasoning'e onu vermek ajanı yanlış kimlik üzerinden
+        // akıl yürütmeye iter (bkz. CustomerContextProvider'daki aynı düzeltme).
+        var stateInfo = $"CustomerId: {session.State.AuthenticatedCustomerId ?? WellKnown.Intents.Unknown}, " +
                         $"Phase: {session.State.Phase}, " +
                         $"TurnCount: {session.State.TurnCount}";
 
