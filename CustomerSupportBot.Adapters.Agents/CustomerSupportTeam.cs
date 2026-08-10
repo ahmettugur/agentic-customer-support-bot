@@ -7,7 +7,7 @@
 
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
-using CustomerSupportBot.Application.Ports.Outbound.Persistence;
+using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Application.Services.Reasoning;
 using CustomerSupportBot.Domain.Model;
 using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
@@ -37,7 +37,7 @@ public class CustomerSupportTeam : IAgentTeamPort
         IUiHintEmitter uiHint,
         IApprovalContextAccessor approvalContext,
         ILoggerFactory loggerFactory,
-        ICustomerRepository customers,
+        CustomerIdentityHintBuilder identityHint,
         ISemanticMemoryWriter? semanticMemory = null,
         ICustomerProfileService? profileService = null)
     {
@@ -46,7 +46,7 @@ public class CustomerSupportTeam : IAgentTeamPort
         var factory = new AgentTeamFactory(chatClient, prompts, approvalGate, tools, guards, loggerFactory);
         var finalizer = new TurnFinalizer(traceStore, approvalGate, loggerFactory, semanticMemory, profileService);
         var traceProcessor = new WorkflowTraceEventProcessor(traceStore, approvalContext);
-        var messageBuilder = new WorkflowMessageBuilder(contextPipeline, prompts, chatClient, loggerFactory, customers);
+        var messageBuilder = new WorkflowMessageBuilder(contextPipeline, prompts, chatClient, loggerFactory, identityHint);
 
         _runner = new WorkflowRunner(
             factory, finalizer, guards, traceStore,

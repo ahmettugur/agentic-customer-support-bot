@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Application.Services.Tools;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
@@ -31,6 +32,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
     private readonly ISessionManager _sessionManager;
     private readonly CustomerSupportToolsService _tools;
     private readonly IInputGuard _inputGuard;
+    private readonly CustomerIdentityHintBuilder _identityHint;
     private readonly IChatBridge _chatBridge;
     private readonly ILogger<RealtimeNativeService> _logger;
 
@@ -45,12 +47,14 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         CustomerSupportToolsService tools,
         IInputGuard inputGuard,
         IChatBridge chatBridge,
+        CustomerIdentityHintBuilder identityHint,
         ILogger<RealtimeNativeService> logger)
     {
         _client = client;
         _sessionManager = sessionManager;
         _tools = tools;
         _inputGuard = inputGuard;
+        _identityHint = identityHint;
         _chatBridge = chatBridge;
         _logger = logger;
     }
@@ -70,7 +74,11 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         }
 
         var session = await _sessionManager.GetOrCreateAsync(sessionId, ct);
-        await _client.ConfigureNativeSessionAsync(ct);
+
+        // Yazılı kanalda bu bilgi mesaj listesine system mesajı olarak giriyor; sesli modda
+        // mesaj listesi olmadığı için oturum talimatlarına ekleniyor (aynı kaynaktan üretilir).
+        var identityContext = await _identityHint.BuildAsync(session, ct);
+        await _client.ConfigureNativeSessionAsync(identityContext, ct);
 
         await channel.SendJsonAsync(new
         {

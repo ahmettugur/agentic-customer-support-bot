@@ -94,30 +94,26 @@ public sealed class RealtimeFunctionTools
         {
             type = "function",
             name = "get_last_order_tool",
-            description = "Bir müşterinin EN SON oluşturduğu siparişi getirir. Yan etkisi yoktur.",
+            description = "Görüşülen (login'li) müşterinin EN SON siparişini getirir. Parametre almaz — " +
+                          "müşteri kimliği oturumdan otomatik alınır. Yan etkisi yoktur.",
             parameters = new
             {
                 type = "object",
-                properties = new
-                {
-                    customer_id = new { type = "string", description = "Müşteri kimlik numarası (örn. '1008', '1027')" }
-                },
-                required = new[] { "customer_id" }
+                properties = new { },
+                required = Array.Empty<string>()
             }
         },
         new
         {
             type = "function",
             name = "get_all_orders_tool",
-            description = "Bir müşterinin TÜM siparişlerini listeler. Yan etkisi yoktur.",
+            description = "Görüşülen (login'li) müşterinin TÜM siparişlerini listeler. Parametre almaz — " +
+                          "müşteri kimliği oturumdan otomatik alınır. Yan etkisi yoktur.",
             parameters = new
             {
                 type = "object",
-                properties = new
-                {
-                    customer_id = new { type = "string", description = "Müşteri kimlik numarası (örn. '1008', '1027')" }
-                },
-                required = new[] { "customer_id" }
+                properties = new { },
+                required = Array.Empty<string>()
             }
         },
         new

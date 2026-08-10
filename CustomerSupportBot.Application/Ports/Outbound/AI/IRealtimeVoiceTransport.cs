@@ -20,8 +20,16 @@ public interface IRealtimeVoiceTransport : IAsyncDisposable
     /// <summary>Bridge modu session konfigürasyonunu gönderir (model otomatik yanıt vermez).</summary>
     Task ConfigureBridgeSessionAsync(CancellationToken ct);
 
-    /// <summary>Native modu session konfigürasyonunu gönderir (model kendi cevaplar + tool'lar açık).</summary>
-    Task ConfigureNativeSessionAsync(CancellationToken ct);
+    /// <summary>
+    /// Native modu session konfigürasyonunu gönderir (model kendi cevaplar + tool'lar açık).
+    /// </summary>
+    /// <param name="sessionContext">
+    /// Oturuma özel ek system talimatı — login'li müşterinin adı ve bugünün tarihi
+    /// (bkz. <c>CustomerIdentityHintBuilder</c>). Sabit talimatların SONUNA eklenir; null/boşsa
+    /// yalnızca sabit talimatlar gönderilir. Yazılı kanal bu bilgiyi mesaj listesine system
+    /// mesajı olarak koyuyor — sesli kanalda mesaj listesi olmadığı için buradan geçirilir.
+    /// </param>
+    Task ConfigureNativeSessionAsync(string? sessionContext, CancellationToken ct);
 
     /// <summary>Browser'dan gelen PCM16 audio chunk'ını base64 encode edip provider'a iletir.</summary>
     Task SendAudioChunkAsync(byte[] pcm16, CancellationToken ct);

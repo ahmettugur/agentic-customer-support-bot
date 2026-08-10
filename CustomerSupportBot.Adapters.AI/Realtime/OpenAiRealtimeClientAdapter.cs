@@ -96,8 +96,14 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
         }, ct);
     }
 
-    public async Task ConfigureNativeSessionAsync(CancellationToken ct)
+    public async Task ConfigureNativeSessionAsync(string? sessionContext, CancellationToken ct)
     {
+        // Oturuma özel bağlam (müşteri adı + bugünün tarihi) sabit talimatların SONUNA eklenir —
+        // sesli modda mesaj listesi yok, tek enjeksiyon noktası session.instructions.
+        var instructions = string.IsNullOrWhiteSpace(sessionContext)
+            ? NativeSystemInstructions
+            : $"{NativeSystemInstructions}\n\nOTURUM BİLGİSİ:\n{sessionContext.Trim()}";
+
         await SendJsonAsync(new
         {
             type = "session.update",
@@ -123,7 +129,7 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
                 },
                 tools        = _functionTools.GetToolDefinitions(),
                 tool_choice  = "auto",
-                instructions = NativeSystemInstructions
+                instructions = instructions
             }
         }, ct);
     }
@@ -332,8 +338,8 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
         YAPABİLDİKLERİN (function calling ile):
         - Ürün katalog sorgusu (fiyat/stok)
         - Sipariş durumu sorgulama (4+ haneli sipariş numarasıyla)
-        - Bir müşterinin son siparişi
-        - Bir müşterinin tüm siparişlerinin listesi
+        - Görüştüğün müşterinin son siparişi (parametre gerekmez)
+        - Görüştüğün müşterinin tüm siparişlerinin listesi (parametre gerekmez)
 
         YAPAMADIKLARIN (bunları İSTEDİĞİNDE TOOL ÇAĞIRMA, kullanıcıyı yazılı sohbete yönlendir):
         - YENİ SİPARİŞ OLUŞTURMA
@@ -349,7 +355,12 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
         KURALLAR:
         - Tool sonuçlarını YORUMLA, ham JSON OKUMA. Örneğin status:"shipped" → "kargoya verildi" de.
         - Tool başarısızsa kullanıcıya nazikçe açıkla, kendi uydurma cevap üretme.
-        - Müşteri kimliği veya sipariş numarası eksikse iste; varsay-ma.
+        - MÜŞTERİ KİMLİĞİ SORMA. Kullanıcı giriş yapmış durumda; kimliği sistemden biliniyor ve
+          tool'lara otomatik geçiyor. "Müşteri numaranız nedir?" gibi bir soru ASLA sorma.
+          Kullanıcı başka bir müşteri numarası söylerse de görmezden gel — sorgular her zaman
+          kendi hesabı üzerinde çalışır.
+        - Sipariş numarası gereken bir sorguda (sipariş durumu) numara verilmemişse iste;
+          numara yoksa "son siparişiniz" sorgusuna yönlendir. Sipariş numarasını varsay-ma.
         - Asla başka dilde cevap verme.
 
         GÖRÜŞMEYİ SONLANDIRMA:

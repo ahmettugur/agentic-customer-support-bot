@@ -17,6 +17,7 @@
 
 using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
+using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
 using CustomerSupportBot.Api.Tests.Helpers;
@@ -98,7 +99,7 @@ public class CustomerSupportTeamTests
             d.UiHint,
             d.ApprovalContext,
             d.LoggerFactory,
-            Substitute.For<ICustomerRepository>());
+            new CustomerIdentityHintBuilder(Substitute.For<ICustomerRepository>()));
     }
 
     private AgentTeamFactory BuildAgentTeamFactory(IChatClient? chatClient = null)
@@ -112,7 +113,7 @@ public class CustomerSupportTeamTests
         var d = BuildDeps(chatClient);
         return new WorkflowMessageBuilder(
             pipeline ?? d.ContextPipeline, d.Prompts, d.ChatClient, d.LoggerFactory,
-            Substitute.For<ICustomerRepository>());
+            new CustomerIdentityHintBuilder(Substitute.For<ICustomerRepository>()));
     }
 
     [Fact]

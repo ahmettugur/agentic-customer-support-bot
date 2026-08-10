@@ -54,7 +54,7 @@ public class EvaluationRunnerTests
             new CustomerSupportBot.Application.Services.UiHint.UiHintEmitter(new ApprovalContextAccessor()),
             new ApprovalContextAccessor(),
             NullLoggerFactory.Instance,
-            Substitute.For<ICustomerRepository>());
+            new CustomerIdentityHintBuilder(Substitute.For<ICustomerRepository>()));
 
         var reasoningClient = new ReasoningChatClient(chatClient, "gpt-test", "low");
         var entityVerifier = new EntityVerifier(
