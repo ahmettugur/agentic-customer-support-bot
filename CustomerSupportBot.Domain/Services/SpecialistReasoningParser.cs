@@ -124,6 +124,7 @@ public static class SpecialistReasoningParser
             WellKnown.TaskStatuses.NeedsEscalation or WellKnown.TaskStatuses.Escalation or WellKnown.TaskStatuses.Escalate => WellKnown.TaskStatuses.NeedsEscalation,
             WellKnown.TaskStatuses.Failed or WellKnown.TaskStatuses.Error or WellKnown.TaskStatuses.Fail => WellKnown.TaskStatuses.Failed,
             WellKnown.TaskStatuses.Partial or WellKnown.TaskStatuses.Incomplete => WellKnown.TaskStatuses.Partial,
+            WellKnown.TaskStatuses.PendingApproval or WellKnown.TaskStatuses.Pending => WellKnown.TaskStatuses.PendingApproval,
             _ => WellKnown.TaskStatuses.Done
         };
     }

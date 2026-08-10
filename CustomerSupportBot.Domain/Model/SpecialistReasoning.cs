@@ -64,6 +64,7 @@ public class PostToolReflection
         WellKnown.TaskStatuses.NeedsEscalation => TaskCompletionStatus.NeedsEscalation,
         WellKnown.TaskStatuses.Failed => TaskCompletionStatus.Failed,
         WellKnown.TaskStatuses.Partial => TaskCompletionStatus.Partial,
+        WellKnown.TaskStatuses.PendingApproval => TaskCompletionStatus.PendingApproval,
         _ => TaskCompletionStatus.Done
     };
 

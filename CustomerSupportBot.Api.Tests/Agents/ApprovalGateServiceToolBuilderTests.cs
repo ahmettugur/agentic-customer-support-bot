@@ -230,6 +230,80 @@ public class ApprovalGateServiceToolBuilderTests
         success.Should().BeTrue();
     }
 
+    // ── Salt-okunur sipariş tool'ları: customerId LLM'e hiç parametre olarak gösterilmez,
+    //    ApprovalContext'ten (JWT'den) alınır — bkz. #A1 güvenlik düzeltmesi.
+
+    [Fact]
+    public async Task BuildOrderStatusTool_UsesContextCustomerId_NotLlmParameter()
+    {
+        var opts = new ApprovalOptions { Enabled = false };
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var contextAccessor = new ApprovalContextAccessor();
+        using var placeScope = contextAccessor.SetScope("s1", null, "sipariş ver", "9601");
+        var svc = Build(opts, contextAccessor: contextAccessor);
+        var placed = await svc.BuildOrderPlacementTool().InvokeAsync(new AIFunctionArguments(
+            new Dictionary<string, object?> { ["productName"] = product, ["quantity"] = 1 }),
+            TestContext.Current.CancellationToken);
+        var orderId = ((JsonElement)placed!).GetProperty("data").GetProperty("orderId").GetString();
+
+        // Aynı context (customerId=9601) ile sorgulanırsa bulunmalı.
+        var ownFn = svc.BuildOrderStatusTool();
+        var ownResult = await ownFn.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["orderId"] = orderId }),
+            TestContext.Current.CancellationToken);
+        ParseResult(ownResult).success.Should().BeTrue();
+
+        // Başka bir müşterinin context'i ile aynı sipariş sorgulanırsa NotFound (mismatch sızdırmaz).
+        using var otherScope = contextAccessor.SetScope("s2", null, "sorgula", "9999");
+        var otherFn = svc.BuildOrderStatusTool();
+        var otherResult = await otherFn.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["orderId"] = orderId }),
+            TestContext.Current.CancellationToken);
+        ParseResult(otherResult).success.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task BuildGetLastOrderTool_TakesNoParameters_UsesContextCustomerId()
+    {
+        var opts = new ApprovalOptions { Enabled = false };
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var contextAccessor = new ApprovalContextAccessor();
+        using var scope = contextAccessor.SetScope("s1", null, "sipariş ver", "9602");
+        var svc = Build(opts, contextAccessor: contextAccessor);
+        await svc.BuildOrderPlacementTool().InvokeAsync(new AIFunctionArguments(
+            new Dictionary<string, object?> { ["productName"] = product, ["quantity"] = 1 }),
+            TestContext.Current.CancellationToken);
+
+        var fn = svc.BuildGetLastOrderTool();
+        var result = await fn.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?>()), TestContext.Current.CancellationToken);
+        ParseResult(result).success.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task BuildOrderCancelTool_ApprovalDisabled_RejectsWhenOrderBelongsToDifferentCustomer()
+    {
+        var opts = new ApprovalOptions { Enabled = false };
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var contextAccessor = new ApprovalContextAccessor();
+        using var placeScope = contextAccessor.SetScope("s1", null, "sipariş ver", "9603");
+        var svc = Build(opts, contextAccessor: contextAccessor);
+        var placed = await svc.BuildOrderPlacementTool().InvokeAsync(new AIFunctionArguments(
+            new Dictionary<string, object?> { ["productName"] = product, ["quantity"] = 1 }),
+            TestContext.Current.CancellationToken);
+        var orderId = ((JsonElement)placed!).GetProperty("data").GetProperty("orderId").GetString();
+
+        // Başka bir müşterinin context'i ile aynı siparişi iptal etmeye çalış.
+        using var attackerScope = contextAccessor.SetScope("s2", null, "iptal et", "9999");
+        var fn = svc.BuildOrderCancelTool();
+        var result = await fn.InvokeAsync(new AIFunctionArguments(
+            new Dictionary<string, object?> { ["orderId"] = orderId, ["reason"] = "başkasının siparişi" }),
+            TestContext.Current.CancellationToken);
+
+        ParseResult(result).success.Should().BeFalse();
+        _fixture.OrderRepo.Get(orderId!)!.Status.Should().NotBe(WellKnown.OrderStatuses.Cancelled);
+    }
+
     // ── RequestApprovalAsync — WorkflowRunner'ın RequestInfoEvent köprüsünden çağırdığı metot ──
     // (Bu 4 tool artık bu yolu kullanmıyor, ama metod başka onay senaryoları için hâlâ var.)
 

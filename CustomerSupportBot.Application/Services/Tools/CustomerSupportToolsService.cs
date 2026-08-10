@@ -38,8 +38,8 @@ public sealed class CustomerSupportToolsService : ICustomerSupportToolsService
     public ToolResult OrderPlacementTool(string productName, int? quantity, string customerId)
         => _order.OrderPlacementTool(productName, quantity, customerId);
 
-    public ToolResult OrderStatusTool(string orderId)
-        => _order.OrderStatusTool(orderId);
+    public ToolResult OrderStatusTool(string orderId, string customerId)
+        => _order.OrderStatusTool(orderId, customerId);
 
     public ToolResult GetLastOrderTool(string customerId)
         => _order.GetLastOrderTool(customerId);
@@ -47,11 +47,11 @@ public sealed class CustomerSupportToolsService : ICustomerSupportToolsService
     public ToolResult GetAllOrdersTool(string customerId)
         => _order.GetAllOrdersTool(customerId);
 
-    public ToolResult OrderCancelTool(string orderId, string reason)
-        => _order.OrderCancelTool(orderId, reason);
+    public ToolResult OrderCancelTool(string orderId, string reason, string customerId)
+        => _order.OrderCancelTool(orderId, reason, customerId);
 
-    public ToolResult ReturnRequestTool(string orderId, string reason)
-        => _order.ReturnRequestTool(orderId, reason);
+    public ToolResult ReturnRequestTool(string orderId, string reason, string customerId)
+        => _order.ReturnRequestTool(orderId, reason, customerId);
 
     // ─── IComplaintToolsService ───
     public ToolResult ComplaintRegistrationTool(string orderId, string complaintText, string? customerId = null)

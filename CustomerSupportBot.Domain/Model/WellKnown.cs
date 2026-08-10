@@ -139,6 +139,7 @@ public static class WellKnown
         public const string NeedsEscalation = "needs_escalation";
         public const string Failed = "failed";
         public const string Partial = "partial";
+        public const string PendingApproval = "pending_approval";
 
         // NormalizeStatus tarafından kabul edilen alias'lar
         public const string Completed = "completed";
@@ -151,6 +152,7 @@ public static class WellKnown
         public const string Error = "error";
         public const string Fail = "fail";
         public const string Incomplete = "incomplete";
+        public const string Pending = "pending";
     }
 
     /// <summary>Workflow sonlandırma işaretçileri ve nedenleri.</summary>

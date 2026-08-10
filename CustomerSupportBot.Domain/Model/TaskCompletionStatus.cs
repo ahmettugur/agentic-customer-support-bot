@@ -24,6 +24,13 @@ public enum TaskCompletionStatus
     Failed,
 
     /// <summary>Kısmen tamamlandı, eksik var.</summary>
-    Partial
+    Partial,
+
+    /// <summary>
+    /// Yan etkili tool onay kuyruğuna eklendi ama admin kararı verilmedi — iş HENÜZ
+    /// yapılmadı. Bloklamayan HITL modelinde <see cref="ToolResult.Success"/>=true olsa
+    /// bile bu durumda <see cref="Done"/> ile karıştırılmamalı (bkz. ToolResult.PendingApproval).
+    /// </summary>
+    PendingApproval
 }
 

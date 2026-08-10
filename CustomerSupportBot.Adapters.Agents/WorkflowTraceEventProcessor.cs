@@ -346,20 +346,31 @@ internal sealed class WorkflowTraceEventProcessor
     /// (replan) tetiklenebilirdi.
     ///
     /// <para>
-    /// Bilinçli asimetri: yalnızca BAŞARI yönünde düzeltilir. Tool başarısız olduysa veya sonucu
-    /// belirlenemiyorsa (ör. <see cref="FunctionResultContent.Result"/> ne <see cref="ToolResult"/>
-    /// ne tanınan bir <see cref="JsonElement"/> şemasında) hiç dokunulmaz — ters yönde zorlamak
-    /// (başarısızlığı "done" yapmak) müşteriye gerçekleşmemiş bir işlemi "oldu" demek gibi çok
-    /// daha riskli, tersine dönmesi zor bir hata olurdu. human_handoff'taki "kaçırılan eskalasyon
-    /// > fazladan eskalasyon" takasının buradaki karşılığı: "kaçırılan başarı bildirimi (fazladan
-    /// tur) &lt; yanlış başarı bildirimi (gerçekleşmemiş bir işlemi müşteriye onaylamak)".
+    /// Bloklamayan HITL modelinde <see cref="ToolResult.Success"/>=true İKİ farklı gerçek anlamına
+    /// gelebilir: iş gerçekten tamamlandı, VEYA sadece onay kuyruğuna eklendi
+    /// (<see cref="ToolResult.PendingApproval"/>=true, bkz. ApprovalGateService.ExecuteWithApprovalGateAsync).
+    /// Bu ikisi karıştırılırsa (eskiden olduğu gibi ikisi de "done" sayılırsa) müşteri henüz
+    /// gerçekleşmemiş bir işlemi "oldu" sanır — bu yüzden garanti artık iki yöne ayrılır: gerçek
+    /// başarı → <see cref="TaskCompletionStatus.Done"/>, onay bekliyor → <see cref="TaskCompletionStatus.PendingApproval"/>.
+    /// </para>
+    ///
+    /// <para>
+    /// Bilinçli asimetri: yalnızca BAŞARI (done veya pending) yönünde düzeltilir. Tool başarısız
+    /// olduysa veya sonucu belirlenemiyorsa (ör. <see cref="FunctionResultContent.Result"/> ne
+    /// <see cref="ToolResult"/> ne tanınan bir <see cref="JsonElement"/> şemasında) hiç dokunulmaz
+    /// — ters yönde zorlamak (başarısızlığı "done" yapmak) müşteriye gerçekleşmemiş bir işlemi
+    /// "oldu" demek gibi çok daha riskli, tersine dönmesi zor bir hata olurdu. human_handoff'taki
+    /// "kaçırılan eskalasyon > fazladan eskalasyon" takasının buradaki karşılığı: "kaçırılan başarı
+    /// bildirimi (fazladan tur) &lt; yanlış başarı bildirimi (gerçekleşmemiş bir işlemi müşteriye
+    /// onaylamak)".
     /// </para>
     ///
     /// <para>
     /// <paramref name="toolNames"/> içindeki BİRDEN FAZLA tool'dan biri başarılı olsa bile tek bir
     /// reflection kaydı üzerinde çalışılır (agentName başına bir <see cref="SpecialistReasoning"/>)
     /// — bir turda aynı ajanın birden fazla side-effect tool'u art arda çağırması beklenmez,
-    /// ama çağırsa bile "en az biri başarılı → done" yeterli bir garanti.
+    /// ama çağırsa bile "en az biri pending ise genel sonuç pending" (daha zayıf garanti, yanlışlıkla
+    /// "done" demektense daha güvenli).
     /// </para>
     /// </summary>
     internal static void EnsureSideEffectToolCompletion(
@@ -376,10 +387,16 @@ internal sealed class WorkflowTraceEventProcessor
             .ToHashSet(StringComparer.Ordinal);
         if (relevantCallIds.Count == 0) return;
 
-        var succeeded = contents.OfType<FunctionResultContent>()
+        var outcomes = contents.OfType<FunctionResultContent>()
             .Where(fr => relevantCallIds.Contains(fr.CallId))
-            .Any(fr => TryGetToolResultSuccess(fr.Result) == true);
-        if (!succeeded) return;
+            .Select(fr => TryGetToolOutcome(fr.Result))
+            .Where(o => o.Success == true)
+            .ToList();
+        if (outcomes.Count == 0) return;
+
+        var pending = outcomes.Any(o => o.PendingApproval);
+        var expectedStatus = pending ? TaskCompletionStatus.PendingApproval : TaskCompletionStatus.Done;
+        var expectedTaskComplete = !pending;
 
         var existing = reasonings.FirstOrDefault(r =>
             string.Equals(r.AgentName, agentName, StringComparison.OrdinalIgnoreCase));
@@ -392,17 +409,15 @@ internal sealed class WorkflowTraceEventProcessor
 
         var reflection = existing.PostToolReflection ??= new PostToolReflection();
 
-        // LLM zaten doğru işaretlemiş — hiçbir alanına dokunma. NOT: Status'un varsayılan
-        // değeri de "done" olduğu için (bkz. PostToolReflection.Status) yalnızca Status'e
-        // bakmak yeterli değil — TaskComplete kontrol edilmezse taze/boş bir reflection
-        // (varsayılan Status=done, TaskComplete=false) burada erkenden atlanır ve
-        // TaskComplete hiç true'ya çekilmez.
-        if (reflection.StatusEnum == TaskCompletionStatus.Done && reflection.TaskComplete) return;
+        // LLM zaten doğru işaretlemiş — hiçbir alanına dokunma.
+        if (reflection.StatusEnum == expectedStatus && reflection.TaskComplete == expectedTaskComplete) return;
 
-        reflection.Status = WellKnown.TaskStatuses.Done;
-        reflection.TaskComplete = true;
+        reflection.Status = pending ? WellKnown.TaskStatuses.PendingApproval : WellKnown.TaskStatuses.Done;
+        reflection.TaskComplete = expectedTaskComplete;
         if (string.IsNullOrWhiteSpace(reflection.Summary))
-            reflection.Summary = "İşlem başarıyla tamamlandı (sistem garantisiyle status=done'a düzeltildi).";
+            reflection.Summary = pending
+                ? "Talep onaya gönderildi; sonucu bildirim olarak iletilecek (sistem garantisiyle düzeltildi)."
+                : "İşlem başarıyla tamamlandı (sistem garantisiyle status=done'a düzeltildi).";
     }
 
     /// <summary>
@@ -411,14 +426,19 @@ internal sealed class WorkflowTraceEventProcessor
     /// normalize eder (bkz. mevcut test yardımcısı ApprovalGateServiceToolBuilderTests.ParseResult
     /// ile aynı desen).
     /// </summary>
-    private static bool? TryGetToolResultSuccess(object? raw)
+    private static (bool? Success, bool PendingApproval) TryGetToolOutcome(object? raw)
     {
-        if (raw is ToolResult tr) return tr.Success;
-        if (raw is JsonElement je && je.ValueKind == JsonValueKind.Object &&
-            je.TryGetProperty("success", out var s) &&
-            (s.ValueKind == JsonValueKind.True || s.ValueKind == JsonValueKind.False))
-            return s.GetBoolean();
-        return null;
+        if (raw is ToolResult tr) return (tr.Success, tr.PendingApproval);
+        if (raw is JsonElement je && je.ValueKind == JsonValueKind.Object)
+        {
+            bool? success = je.TryGetProperty("success", out var s) &&
+                (s.ValueKind == JsonValueKind.True || s.ValueKind == JsonValueKind.False)
+                ? s.GetBoolean()
+                : null;
+            var pending = je.TryGetProperty("pendingApproval", out var p) && p.ValueKind == JsonValueKind.True;
+            return (success, pending);
+        }
+        return (null, false);
     }
 
     /// <summary>

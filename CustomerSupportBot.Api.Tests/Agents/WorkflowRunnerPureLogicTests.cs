@@ -203,7 +203,7 @@ public class WorkflowRunnerPureLogicTests
         IEnumerable<ChatMessage> messages, List<SpecialistReasoning> reasonings, string agentName, IReadOnlySet<string> toolNames)
         => WorkflowTraceEventProcessor.EnsureSideEffectToolCompletion(messages, reasonings, agentName, toolNames);
 
-    private static List<ChatMessage> ToolCallAndResultMessages(string toolName, bool success) =>
+    private static List<ChatMessage> ToolCallAndResultMessages(string toolName, bool success, bool pendingApproval = false) =>
     [
         new(ChatRole.Assistant, new List<AIContent>
         {
@@ -212,7 +212,7 @@ public class WorkflowRunnerPureLogicTests
         }),
         new(ChatRole.Tool, new List<AIContent>
         {
-            new FunctionResultContent("call1", new ToolResult { Success = success, Message = "sonuç" })
+            new FunctionResultContent("call1", new ToolResult { Success = success, PendingApproval = pendingApproval, Message = "sonuç" })
         })
     ];
 
@@ -370,5 +370,70 @@ public class WorkflowRunnerPureLogicTests
 
         reasonings.Should().ContainSingle();
         reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.Done);
+    }
+
+    // Bloklamayan HITL modelinde ToolResult.Success=true, PendingApproval=true anlamına da
+    // gelebilir ("onaya gönderildi", iş HENÜZ yapılmadı) — bu durum "done" ile KARIŞTIRILMAMALI.
+
+    [Fact]
+    public void EnsureSideEffectToolCompletion_ToolPendingApproval_SynthesizesPendingNotDone()
+    {
+        var reasonings = new List<SpecialistReasoning>();
+
+        InvokeEnsureSideEffectToolCompletion(
+            ToolCallAndResultMessages(WellKnown.ToolNames.OrderCancel, success: true, pendingApproval: true),
+            reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.PendingApproval);
+        reasonings[0].PostToolReflection!.TaskComplete.Should().BeFalse();
+    }
+
+    [Fact]
+    public void EnsureSideEffectToolCompletion_ToolPendingApproval_OverridesIncorrectDone()
+    {
+        // LLM yanlışlıkla "done" işaretlese bile (eski, bloklayan model varsayımıyla),
+        // tool sonucu pending ise sistem garantisi bunu düzeltmeli — tersi (Done→Pending
+        // ASLA otomatik düzeltilmeyen "başarısızlık" yönü) test edilmiyor çünkü burada
+        // ikisi de "başarı" ekseninde (Success=true), sadece hangi başarı türü olduğu farklı.
+        var reasonings = new List<SpecialistReasoning>
+        {
+            new()
+            {
+                AgentName = WellKnown.AgentNames.Order,
+                PostToolReflection = new PostToolReflection { Status = WellKnown.TaskStatuses.Done, TaskComplete = true }
+            }
+        };
+
+        InvokeEnsureSideEffectToolCompletion(
+            ToolCallAndResultMessages(WellKnown.ToolNames.OrderCancel, success: true, pendingApproval: true),
+            reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.PendingApproval);
+        reasonings[0].PostToolReflection!.TaskComplete.Should().BeFalse();
+    }
+
+    [Fact]
+    public void EnsureSideEffectToolCompletion_ToolPendingApproval_JsonElement_StillDetectsPending()
+    {
+        var json = System.Text.Json.JsonDocument.Parse(
+            """{"success":true,"pendingApproval":true,"message":"onaya gönderildi"}""").RootElement;
+        var messages = new List<ChatMessage>
+        {
+            new(ChatRole.Assistant, new List<AIContent>
+            {
+                new FunctionCallContent("call1", WellKnown.ToolNames.OrderCancel,
+                    new Dictionary<string, object?> { ["orderId"] = "1030" })
+            }),
+            new(ChatRole.Tool, new List<AIContent> { new FunctionResultContent("call1", json) })
+        };
+        var reasonings = new List<SpecialistReasoning>();
+
+        InvokeEnsureSideEffectToolCompletion(messages, reasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
+
+        reasonings.Should().ContainSingle();
+        reasonings[0].PostToolReflection!.StatusEnum.Should().Be(TaskCompletionStatus.PendingApproval);
+        reasonings[0].PostToolReflection!.TaskComplete.Should().BeFalse();
     }
 }

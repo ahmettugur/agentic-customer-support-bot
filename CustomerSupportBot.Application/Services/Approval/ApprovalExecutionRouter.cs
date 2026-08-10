@@ -35,13 +35,19 @@ public sealed class ApprovalExecutionRouter : IApprovalExecutionRouter
                 GetString(p, "complaintText") ?? "",
                 GetString(p, "customerId")),
 
+            // customerId, Parameters sözlüğü yerine ApprovalRequest.CustomerId'den okunur —
+            // bu, HITL kaydını oluşturan JWT-doğrulanmış kimliğin AYNI kanonik alanı (bkz.
+            // ApprovalGateService.ExecuteWithApprovalGateAsync); Parameters'a ayrıca yazılmasına
+            // gerek yok.
             WellKnown.ToolNames.OrderCancel => _tools.OrderCancelTool(
                 GetString(p, "orderId") ?? "",
-                GetString(p, "reason") ?? ""),
+                GetString(p, "reason") ?? "",
+                request.CustomerId ?? ""),
 
             WellKnown.ToolNames.ReturnRequest => _tools.ReturnRequestTool(
                 GetString(p, "orderId") ?? "",
-                GetString(p, "reason") ?? ""),
+                GetString(p, "reason") ?? "",
+                request.CustomerId ?? ""),
 
             _ => ToolResult.SystemError(
                 "UNKNOWN_APPROVAL_TOOL",

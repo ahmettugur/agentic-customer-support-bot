@@ -286,7 +286,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                 {
                     if (pendingCalls.Count > 0)
                     {
-                        await DispatchToolCallsAsync(channel, pendingCalls, ct);
+                        await DispatchToolCallsAsync(channel, pendingCalls, session, ct);
                         pendingCalls.Clear();
                         break;
                     }
@@ -327,6 +327,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
     private async Task DispatchToolCallsAsync(
         IBrowserChannel channel,
         List<(string CallId, string Name, string ArgsJson)> calls,
+        AgentSession session,
         CancellationToken ct)
     {
         var tasks = calls.Select(async c =>
@@ -334,7 +335,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
             string outputJson;
             try
             {
-                outputJson = DispatchTool(c.Name, c.ArgsJson);
+                outputJson = DispatchTool(c.Name, c.ArgsJson, session.State.AuthenticatedCustomerId ?? "");
             }
             catch (Exception ex)
             {
@@ -356,20 +357,23 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         await _client.SendToolResultsAsync(results, triggerNextResponse: !_endRequested, ct);
     }
 
-    private string DispatchTool(string name, string argumentsJson)
+    private string DispatchTool(string name, string argumentsJson, string authenticatedCustomerId)
     {
         ToolResult result;
         try
         {
             var args = JsonNode.Parse(argumentsJson) as JsonObject ?? new JsonObject();
 
+            // customer_id LLM argümanından ASLA okunmaz — sadece login'li kullanıcının
+            // JWT-doğrulanmış kimliği (bkz. DispatchToolCallsAsync → session.State.AuthenticatedCustomerId)
+            // kullanılır; aksi halde model başka bir müşterinin sipariş geçmişini isteyebilirdi.
             result = name switch
             {
                 "product_inquiry_tool" => _tools.ProductInquiryTool(GetString(args, "product_name") ?? ""),
                 "product_list_tool"    => _tools.ProductListTool(GetString(args, "category")),
-                "order_status_tool"    => _tools.OrderStatusTool(GetString(args, "order_id") ?? ""),
-                "get_last_order_tool"  => _tools.GetLastOrderTool(GetString(args, "customer_id") ?? ""),
-                "get_all_orders_tool"  => _tools.GetAllOrdersTool(GetString(args, "customer_id") ?? ""),
+                "order_status_tool"    => _tools.OrderStatusTool(GetString(args, "order_id") ?? "", authenticatedCustomerId),
+                "get_last_order_tool"  => _tools.GetLastOrderTool(authenticatedCustomerId),
+                "get_all_orders_tool"  => _tools.GetAllOrdersTool(authenticatedCustomerId),
                 EndConversationToolName =>
                     ToolResult.Ok("Görüşme sonlandırılıyor.", new
                     {

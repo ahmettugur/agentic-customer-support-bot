@@ -95,11 +95,12 @@ public class ApprovalGateService
                 [System.ComponentModel.Description("İptal sebebi (zorunlu, en az 5 karakter)")] string reason) =>
                 await ExecuteWithApprovalGateAsync(
                     WellKnown.ToolNames.OrderCancel,
-                    new Dictionary<string, object?> { ["orderId"] = orderId, ["reason"] = reason },
-                    () => _tools.OrderCancelTool(orderId, reason)),
+                    new Dictionary<string, object?> { ["orderId"] = orderId, ["reason"] = reason, ["customerId"] = CurrentCustomerId },
+                    () => _tools.OrderCancelTool(orderId, reason, CurrentCustomerId)),
             name: WellKnown.ToolNames.OrderCancel,
             description:
-                "Mevcut bir siparişi iptal eder. Sadece 'İşleniyor' veya 'Kargolandı' durumundaki siparişler iptal edilebilir. " +
+                "Mevcut bir siparişi iptal eder. Sadece 'İşleniyor' veya 'Kargolandı' durumundaki siparişler iptal edilebilir; " +
+                "sadece login'li müşterinin kendi siparişleri iptal edilebilir, müşteri kimliği login'den otomatik alınır. " +
                 "Bu tool HITL approval gate'inden geçer — admin onaya gönderilir, sonucu bildirim olarak dönülür.");
 
     public AIFunction BuildReturnRequestTool() =>
@@ -109,13 +110,44 @@ public class ApprovalGateService
                 [System.ComponentModel.Description("İade sebebi (zorunlu, en az 5 karakter)")] string reason) =>
                 await ExecuteWithApprovalGateAsync(
                     WellKnown.ToolNames.ReturnRequest,
-                    new Dictionary<string, object?> { ["orderId"] = orderId, ["reason"] = reason },
-                    () => _tools.ReturnRequestTool(orderId, reason)),
+                    new Dictionary<string, object?> { ["orderId"] = orderId, ["reason"] = reason, ["customerId"] = CurrentCustomerId },
+                    () => _tools.ReturnRequestTool(orderId, reason, CurrentCustomerId)),
             name: WellKnown.ToolNames.ReturnRequest,
             description:
                 "Teslim edilmiş bir sipariş için iade talebi oluşturur. Sadece 'Teslim Edildi' durumundaki " +
-                "ve 14 gün içindeki siparişler iade edilebilir. " +
+                "ve 14 gün içindeki siparişler iade edilebilir; sadece login'li müşterinin kendi siparişleri iade " +
+                "edilebilir, müşteri kimliği login'den otomatik alınır. " +
                 "Bu tool HITL approval gate'inden geçer — admin onaya gönderilir, sonucu bildirim olarak dönülür.");
+
+    /// <summary>
+    /// customerId artık LLM'e sorulan bir parametre değil (bkz. <see cref="CurrentCustomerId"/>) —
+    /// yalnızca login'li müşterinin siparişleri sorgulanabilir/listelenebilir. HITL gerekmez
+    /// (salt-okunur), bu yüzden <see cref="ExecuteWithApprovalGateAsync"/> KULLANILMAZ.
+    /// </summary>
+    public AIFunction BuildOrderStatusTool() =>
+        AIFunctionFactory.Create(
+            ([System.ComponentModel.Description("Sorgulanacak sipariş numarası (zorunlu, ör. '1030')")] string orderId) =>
+                _tools.OrderStatusTool(orderId, CurrentCustomerId),
+            name: WellKnown.ToolNames.OrderStatus,
+            description:
+                "Sipariş durumunu sipariş numarasıyla sorgular. Sadece login'li müşterinin kendi siparişleri " +
+                "sorgulanabilir; müşteri kimliği login'den otomatik alınır.");
+
+    public AIFunction BuildGetLastOrderTool() =>
+        AIFunctionFactory.Create(
+            () => _tools.GetLastOrderTool(CurrentCustomerId),
+            name: WellKnown.ToolNames.GetLastOrder,
+            description:
+                "Login'li müşterinin en son siparişini getirir. Parametre gerekmez — müşteri kimliği " +
+                "login'den otomatik alınır.");
+
+    public AIFunction BuildGetAllOrdersTool() =>
+        AIFunctionFactory.Create(
+            () => _tools.GetAllOrdersTool(CurrentCustomerId),
+            name: WellKnown.ToolNames.GetAllOrders,
+            description:
+                "Login'li müşterinin tüm siparişlerini listeler. Parametre gerekmez — müşteri kimliği " +
+                "login'den otomatik alınır.");
 
     /// <summary>
     /// Onay gerekmiyorsa tool'u doğrudan çalıştırır. Onay gerekiyorsa <see cref="IApprovalQueue.CreateAsync"/>
@@ -161,7 +193,7 @@ public class ApprovalGateService
         if (existing is null)
             await _approvalQueue.CreateAsync(req);
 
-        return ToolResult.Ok(string.Format(WellKnown.FallbackMessages.ApprovalPending, req.Id));
+        return ToolResult.Pending(string.Format(WellKnown.FallbackMessages.ApprovalPending, req.Id));
     }
 
     private bool RequiresApproval(string toolName) =>

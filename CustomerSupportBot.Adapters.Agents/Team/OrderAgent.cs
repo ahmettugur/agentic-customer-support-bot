@@ -1,7 +1,9 @@
 // Adapters.Agents/Team/OrderAgent.cs
 // Sipariş oluşturma, sorgulama, iptal ve iade işlemleri.
-// Salt-okunur tool'lar (order_status / get_last_order / get_all_orders) doğrudan;
-// yan etkili olanlar (placement / cancel / return) HITL approval gate'inden geçer.
+// Tüm tool'lar (salt-okunur olanlar dahil) ApprovalGateService üzerinden kurulur —
+// customerId login'den (JWT/ApprovalContext) otomatik alınır, LLM'e hiç parametre olarak
+// gösterilmez. Yan etkili olanlar (placement / cancel / return) ayrıca HITL approval
+// gate'inden geçer.
 
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Agents.AI;
@@ -14,17 +16,15 @@ internal sealed class OrderAgent : SupportAgentBase
     public OrderAgent(
         IChatClient chatClient,
         IPromptRepository prompts,
-        ApprovalGateService approvalGate,
-        ICustomerSupportToolsService tools)
-        : base(BuildInner(chatClient, prompts, approvalGate, tools))
+        ApprovalGateService approvalGate)
+        : base(BuildInner(chatClient, prompts, approvalGate))
     {
     }
 
     private static ChatClientAgent BuildInner(
         IChatClient chatClient,
         IPromptRepository prompts,
-        ApprovalGateService approvalGate,
-        ICustomerSupportToolsService tools)
+        ApprovalGateService approvalGate)
         => new(
             chatClient,
             new ChatClientAgentOptions
@@ -36,9 +36,9 @@ internal sealed class OrderAgent : SupportAgentBase
                     Instructions = prompts.Get("agents/order-agent"),
                     Tools = [
                         approvalGate.BuildOrderPlacementTool(),
-                        AIFunctionFactory.Create(tools.OrderStatusTool,  new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.OrderStatus }),
-                        AIFunctionFactory.Create(tools.GetLastOrderTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.GetLastOrder }),
-                        AIFunctionFactory.Create(tools.GetAllOrdersTool, new AIFunctionFactoryOptions { Name = WellKnown.ToolNames.GetAllOrders }),
+                        approvalGate.BuildOrderStatusTool(),
+                        approvalGate.BuildGetLastOrderTool(),
+                        approvalGate.BuildGetAllOrdersTool(),
                         approvalGate.BuildOrderCancelTool(),
                         approvalGate.BuildReturnRequestTool()
                     ],

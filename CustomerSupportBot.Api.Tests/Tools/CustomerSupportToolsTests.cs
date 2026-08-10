@@ -133,14 +133,14 @@ public class CustomerSupportToolsTests
     [Fact]
     public void OrderStatus_BlankId_ValidationError()
     {
-        var r = _svc.OrderStatusTool("");
+        var r = _svc.OrderStatusTool("", "1027");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
     [Fact]
     public void OrderStatus_KnownOrder_Ok()
     {
-        var r = _svc.OrderStatusTool("1030");
+        var r = _svc.OrderStatusTool("1030", "1027");
         r.Success.Should().BeTrue();
         r.Message.Should().Contain("1030");
     }
@@ -148,7 +148,16 @@ public class CustomerSupportToolsTests
     [Fact]
     public void OrderStatus_UnknownOrder_NotFound()
     {
-        var r = _svc.OrderStatusTool("9999");
+        var r = _svc.OrderStatusTool("9999", "1027");
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
+    }
+
+    [Fact]
+    public void OrderStatus_BelongsToDifferentCustomer_NotFound()
+    {
+        // customerId artık LLM parametresi değil — sipariş başka müşteriye aitse
+        // (enumeration'ı önlemek için) NotFound dönülür, mismatch açıkça belirtilmez.
+        var r = _svc.OrderStatusTool("1030", "9999");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
     }
 
@@ -201,7 +210,7 @@ public class CustomerSupportToolsTests
     [Fact]
     public void OrderCancel_BlankOrderId_ValidationError()
     {
-        var r = _svc.OrderCancelTool("", "geçerli bir iptal sebebi");
+        var r = _svc.OrderCancelTool("", "geçerli bir iptal sebebi", "1027");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
@@ -209,7 +218,7 @@ public class CustomerSupportToolsTests
     public void OrderCancel_ShortReason_ValidationError()
     {
         // Sınır: 4 karakter → reddedilmeli (min 5).
-        var r = _svc.OrderCancelTool("1030", "1234");
+        var r = _svc.OrderCancelTool("1030", "1234", "1027");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
         r.Error.MissingFields.Should().Contain(WellKnown.ToolParameterNames.Reason);
     }
@@ -218,7 +227,7 @@ public class CustomerSupportToolsTests
     public void OrderCancel_WhitespacePaddedReason_ValidationError()
     {
         // Ham uzunluk 5 ama trim sonrası 1 — boşluk dolgusu kuralı aşmamalı.
-        var r = _svc.OrderCancelTool("1030", "a    ");
+        var r = _svc.OrderCancelTool("1030", "a    ", "1027");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
@@ -231,16 +240,28 @@ public class CustomerSupportToolsTests
         var placed = _svc.OrderPlacementTool(product, 1, customerId);
         var orderId = placed.Data!.GetType().GetProperty("orderId")!.GetValue(placed.Data) as string;
 
-        var r = _svc.OrderCancelTool(orderId!, "12345");
+        var r = _svc.OrderCancelTool(orderId!, "12345", customerId);
         r.Success.Should().BeTrue();
         _fixture.OrderRepo.Get(orderId!)!.Status.Should().Be(WellKnown.OrderStatuses.Cancelled);
+    }
+
+    [Fact]
+    public void OrderCancel_BelongsToDifferentCustomer_Conflict()
+    {
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var placed = _svc.OrderPlacementTool(product, 1, "9503");
+        var orderId = placed.Data!.GetType().GetProperty("orderId")!.GetValue(placed.Data) as string;
+
+        var r = _svc.OrderCancelTool(orderId!, "12345", "9999");
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.CustomerIdMismatch);
+        _fixture.OrderRepo.Get(orderId!)!.Status.Should().NotBe(WellKnown.OrderStatuses.Cancelled);
     }
 
     // ═══ ReturnRequestTool ═══
     [Fact]
     public void ReturnRequest_BlankOrderId_ValidationError()
     {
-        var r = _svc.ReturnRequestTool("", "geçerli bir iade sebebi");
+        var r = _svc.ReturnRequestTool("", "geçerli bir iade sebebi", "1027");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
@@ -248,7 +269,7 @@ public class CustomerSupportToolsTests
     public void ReturnRequest_ShortReason_ValidationError()
     {
         // Sınır: 4 karakter → reddedilmeli (min 5).
-        var r = _svc.ReturnRequestTool("1030", "1234");
+        var r = _svc.ReturnRequestTool("1030", "1234", "1027");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
         r.Error.MissingFields.Should().Contain(WellKnown.ToolParameterNames.Reason);
     }
@@ -257,8 +278,25 @@ public class CustomerSupportToolsTests
     public void ReturnRequest_ExactlyFiveCharReason_PassesValidation()
     {
         // Bilinmeyen sipariş + geçerli sebep: doğrulama geçip akış NotFound'a ilerlemeli.
-        var r = _svc.ReturnRequestTool("9999", "12345");
+        var r = _svc.ReturnRequestTool("9999", "12345", "1027");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
+    }
+
+    [Fact]
+    public void ReturnRequest_BelongsToDifferentCustomer_Conflict()
+    {
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var orderId = _fixture.OrderRepo.Create(new OrderInfo
+        {
+            Product = product,
+            Quantity = 1,
+            CustomerId = "9504",
+            Status = WellKnown.OrderStatuses.Delivered,
+            OrderDate = DateTime.UtcNow
+        });
+
+        var r = _svc.ReturnRequestTool(orderId, "ürün hasarlı geldi", "9999");
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.CustomerIdMismatch);
     }
 
     [Fact]
@@ -276,7 +314,7 @@ public class CustomerSupportToolsTests
             OrderDate = DateTime.UtcNow
         });
 
-        var r = _svc.ReturnRequestTool(orderId, "ürün hasarlı geldi");
+        var r = _svc.ReturnRequestTool(orderId, "ürün hasarlı geldi", "9502");
         r.Success.Should().BeTrue();
         _fixture.OrderRepo.Get(orderId)!.Status.Should().Be(WellKnown.OrderStatuses.ReturnRequested);
     }

@@ -22,6 +22,14 @@ public class ToolResult
     /// <summary>Tool hedefine ulaştı mı? false → error zorunlu dolu olmalı.</summary>
     public bool Success { get; set; }
 
+    /// <summary>
+    /// true ise <see cref="Success"/>=true olsa bile gerçek iş HENÜZ yapılmadı — sadece HITL
+    /// onay kuyruğuna eklendi (bkz. ApprovalGateService.ExecuteWithApprovalGateAsync). Bloklamayan
+    /// onay modelinde bu ayrım şart: aksi halde <c>EnsureSideEffectToolCompletion</c> gibi kod
+    /// garantileri "onaya gönderildi"yi "işlem tamamlandı" sanıp kullanıcıya yanlış bilgi verdirtir.
+    /// </summary>
+    public bool PendingApproval { get; set; }
+
     /// <summary>Sonucun güven skoru (0.0-1.0). Başarısız ise 0.</summary>
     public double Confidence { get; set; } = 1.0;
 
@@ -47,6 +55,18 @@ public class ToolResult
         {
             Success = true,
             Confidence = confidence,
+            Message = message,
+            Data = data,
+            SuggestedAction = ToolSuggestedActions.Proceed
+        };
+
+    /// <summary>Yan etkili tool HITL onay kuyruğuna eklendi, karar bekleniyor — iş HENÜZ yapılmadı.</summary>
+    public static ToolResult Pending(string message, object? data = null) =>
+        new()
+        {
+            Success = true,
+            PendingApproval = true,
+            Confidence = 1.0,
             Message = message,
             Data = data,
             SuggestedAction = ToolSuggestedActions.Proceed

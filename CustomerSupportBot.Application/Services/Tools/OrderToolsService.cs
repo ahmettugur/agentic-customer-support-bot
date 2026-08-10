@@ -99,13 +99,17 @@ public sealed class OrderToolsService : IOrderToolsService
 
     [Description("Sipariş durumunu sipariş numarasıyla sorgular. Sonuç ToolResult olarak döner.")]
     public ToolResult OrderStatusTool(
-        [Description("Sorgulanacak sipariş numarası (örn: 1030)")] string orderId)
+        [Description("Sorgulanacak sipariş numarası (örn: 1030)")] string orderId,
+        string customerId)
     {
         if (string.IsNullOrWhiteSpace(orderId))
             return ToolResult.ValidationError("Sipariş numarası boş olamaz.", WellKnown.ToolParameterNames.OrderId);
 
         var order = _orders.Get(orderId);
         if (order is null)
+            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, $"'{orderId}' numaralı sipariş bulunamadı.");
+
+        if (!string.Equals(order.CustomerId, customerId, StringComparison.Ordinal))
             return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, $"'{orderId}' numaralı sipariş bulunamadı.");
 
         return ToolResult.Ok(
@@ -162,7 +166,8 @@ public sealed class OrderToolsService : IOrderToolsService
                  "siparişler iptal edilebilir. Sonuç ToolResult olarak döner.")]
     public ToolResult OrderCancelTool(
         [Description("İptal edilecek sipariş numarası (zorunlu, ör. '1030')")] string orderId,
-        [Description("İptal sebebi (zorunlu, en az 5 karakter)")] string reason)
+        [Description("İptal sebebi (zorunlu, en az 5 karakter)")] string reason,
+        string customerId)
     {
         if (string.IsNullOrWhiteSpace(orderId))
             return ToolResult.ValidationError("Sipariş numarası boş olamaz.", WellKnown.ToolParameterNames.OrderId);
@@ -173,6 +178,11 @@ public sealed class OrderToolsService : IOrderToolsService
         var order = _orders.Get(orderId);
         if (order is null)
             return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, $"'{orderId}' numaralı sipariş bulunamadı.");
+
+        if (!string.Equals(order.CustomerId, customerId, StringComparison.Ordinal))
+            return ToolResult.Conflict(
+                WellKnown.ToolErrorCodes.CustomerIdMismatch,
+                $"'{orderId}' numaralı sipariş sizin hesabınıza ait değil.");
 
         if (order.Status == WellKnown.OrderStatuses.Cancelled)
             return ToolResult.Conflict(
@@ -194,7 +204,8 @@ public sealed class OrderToolsService : IOrderToolsService
                  "ve 14 gün içindeki siparişler iade edilebilir. Sonuç ToolResult olarak döner.")]
     public ToolResult ReturnRequestTool(
         [Description("İade talep edilecek sipariş numarası (zorunlu, ör. '1042')")] string orderId,
-        [Description("İade sebebi (zorunlu, en az 5 karakter)")] string reason)
+        [Description("İade sebebi (zorunlu, en az 5 karakter)")] string reason,
+        string customerId)
     {
         if (string.IsNullOrWhiteSpace(orderId))
             return ToolResult.ValidationError("Sipariş numarası boş olamaz.", WellKnown.ToolParameterNames.OrderId);
@@ -205,6 +216,11 @@ public sealed class OrderToolsService : IOrderToolsService
         var order = _orders.Get(orderId);
         if (order is null)
             return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, $"'{orderId}' numaralı sipariş bulunamadı.");
+
+        if (!string.Equals(order.CustomerId, customerId, StringComparison.Ordinal))
+            return ToolResult.Conflict(
+                WellKnown.ToolErrorCodes.CustomerIdMismatch,
+                $"'{orderId}' numaralı sipariş sizin hesabınıza ait değil.");
 
         if (order.Status == WellKnown.OrderStatuses.ReturnRequested ||
             order.Status == WellKnown.OrderStatuses.ReturnApproved)

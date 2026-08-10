@@ -49,7 +49,7 @@ internal sealed class AgentTeamFactory
 
         PlanningAgent     = WrapWithTelemetry(new PlanningAgent(chatClient, prompts), sourceName);
         ProductAgent      = WrapWithTelemetry(new ProductAgent(chatClient, prompts, tools), sourceName);
-        OrderAgent        = WrapWithTelemetry(new OrderAgent(chatClient, prompts, approvalGate, tools), sourceName);
+        OrderAgent        = WrapWithTelemetry(new OrderAgent(chatClient, prompts, approvalGate), sourceName);
         ComplaintAgent    = WrapWithTelemetry(new ComplaintAgent(chatClient, prompts, approvalGate), sourceName);
         HumanHandoffAgent = WrapWithTelemetry(new HumanHandoffAgent(chatClient, prompts), sourceName);
         ResponseAgent     = WrapWithTelemetry(new ResponseAgent(chatClient, prompts), sourceName);
