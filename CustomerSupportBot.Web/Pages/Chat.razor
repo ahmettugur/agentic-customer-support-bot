@@ -134,7 +134,7 @@
                             <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z" />
                         </svg>
                     </div>
-                    <h2>Merhaba, hoş geldiniz!</h2>
+                    <h2>@WelcomeTitle</h2>
                     <p>Size nasıl yardımcı olabilirim? Aşağıdaki konulardan birini seçebilir veya doğrudan sorunuzu yazabilirsiniz.</p>
                     <div class="examples">
                         <button class="example-chip" @onclick='() => SendChipMessage("Satışta olan ürünleri görmek istiyorum")'>
@@ -657,7 +657,25 @@
         return new MarkupString(sb.ToString());
     }
 
+    // ── Kullanıcıya hitap ─────────────────────────────────────────────────────
+    // Ad, login yanıtındaki FullName'den gelir (Username e-posta olduğu için gösterime uygun
+    // değil). Yoksa — staff hesabı, eski token veya katalogda kayıt yoksa — nötr karşılamaya
+    // düşülür; ad göstermek bir kolaylık, akışın çalışması buna bağlı değil.
+    private string? _customerName;
+
+    private string WelcomeTitle => string.IsNullOrWhiteSpace(_customerName)
+        ? "Merhaba, hoş geldiniz!"
+        : $"Merhaba {FirstNameOf(_customerName)}, hoş geldiniz!";
+
+    private static string FirstNameOf(string fullName)
+        => fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries) is { Length: > 0 } parts
+            ? parts[0]
+            : fullName;
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+        => _customerName = (await TokenStore.ReadAsync(AuthScope.Customer))?.FullName;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;

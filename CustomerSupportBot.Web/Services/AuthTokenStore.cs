@@ -53,5 +53,8 @@ public sealed record AuthTokenData(
     string AccessToken,
     string RefreshToken,
     string Username,
-    string Role
+    string Role,
+    // FullName: müşterinin adı soyadı — yalnızca Customer rolünde dolu (staff'ta null).
+    // Username e-posta olduğu için kullanıcıya gösterime uygun tek alan budur.
+    string? FullName = null
 );

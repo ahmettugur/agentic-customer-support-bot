@@ -37,11 +37,16 @@ public sealed class AppAuthStateProvider : AuthenticationStateProvider, IDisposa
         if (token is null || string.IsNullOrWhiteSpace(token.AccessToken))
             return Anonymous;
 
-        var identity = new ClaimsIdentity(
-        [
-            new Claim(ClaimTypes.Name, token.Username),
-            new Claim(ClaimTypes.Role, token.Role)
-        ], "jwt");
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.Name, token.Username),
+            new(ClaimTypes.Role, token.Role)
+        };
+        // Username e-posta; kullanıcıya hitap için gösterilebilir ad ayrı claim olarak taşınır.
+        if (!string.IsNullOrWhiteSpace(token.FullName))
+            claims.Add(new Claim(ClaimTypes.GivenName, token.FullName));
+
+        var identity = new ClaimsIdentity(claims, "jwt");
 
         return new AuthenticationState(new ClaimsPrincipal(identity));
     }

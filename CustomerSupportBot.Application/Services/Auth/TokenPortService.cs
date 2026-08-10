@@ -5,6 +5,7 @@
 using System.Security.Cryptography;
 using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using CustomerSupportBot.Application.Ports.Inbound.Auth;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model.Auth;
 using Microsoft.Extensions.Options;
 
@@ -15,17 +16,20 @@ public sealed class TokenPortService : ITokenService
     private readonly IUserAuthRepository _users;
     private readonly IRefreshTokenRepository _tokens;
     private readonly IJwtAccessTokenProvider _jwt;
+    private readonly ICustomerRepository? _customers;
     private readonly JwtOptions _options;
 
     public TokenPortService(
         IUserAuthRepository users,
         IRefreshTokenRepository tokens,
         IJwtAccessTokenProvider jwt,
-        IOptions<JwtOptions> options)
+        IOptions<JwtOptions> options,
+        ICustomerRepository? customers = null)
     {
         _users = users;
         _tokens = tokens;
         _jwt = jwt;
+        _customers = customers;
         _options = options.Value;
     }
 
@@ -41,7 +45,8 @@ public sealed class TokenPortService : ITokenService
         var (access, accessExpiry) = _jwt.GenerateAccessToken(user, now);
 
         return new AuthResponse(access, refreshPlain, accessExpiry, refreshExpiry,
-            user.Username, user.Role, user.LinkedAgentId);
+            user.Username, user.Role, user.LinkedAgentId,
+            await ResolveFullNameAsync(user, ct));
     }
 
     public async Task<AuthResponse?> RefreshAsync(string refreshToken, CancellationToken ct = default)
@@ -66,7 +71,27 @@ public sealed class TokenPortService : ITokenService
 
         var (access, accessExpiry) = _jwt.GenerateAccessToken(user, now);
         return new AuthResponse(access, newPlain, accessExpiry, newExpiry,
-            user.Username, user.Role, user.LinkedAgentId);
+            user.Username, user.Role, user.LinkedAgentId,
+            await ResolveFullNameAsync(user, ct));
+    }
+
+    /// <summary>
+    /// Müşteri hesapları için katalogdaki adı soyadı; staff (Admin/Agent) hesaplarında null.
+    ///
+    /// <para>
+    /// Kimlik <see cref="UserInfo.LinkedCustomerId"/>'den — yani JWT'nin bağlı olduğu hesaptan —
+    /// çözülür, istekten gelen hiçbir değerden değil; bu yüzden başka bir müşterinin adı bu
+    /// yolla dönemez. Repo çözülemezse veya kayıt yoksa null döner: ad yalnızca gösterim
+    /// amaçlı olduğu için eksikliği login akışını bozmamalı.
+    /// </para>
+    /// </summary>
+    private async Task<string?> ResolveFullNameAsync(UserInfo user, CancellationToken ct)
+    {
+        if (_customers is null) return null;
+        if (string.IsNullOrWhiteSpace(user.LinkedCustomerId)) return null;
+        if (!long.TryParse(user.LinkedCustomerId, out var customerId)) return null;
+
+        return await _customers.GetFullNameAsync(customerId, ct);
     }
 
     public async Task<bool> RevokeAsync(string refreshToken, CancellationToken ct = default)
