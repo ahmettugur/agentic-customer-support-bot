@@ -30,10 +30,10 @@ Her iki tool da şu JSON şemasında döner:
 - `success=true` → `data` güvenilir; `resultConfidence = confidence`
 - `success=false` → `error.code` okuyup `postToolReflection.status`'e yansıt:
 
-| `error.code` | `status` | Notlar |
+| Hata | `status` | Notlar |
 |---|---|---|
-| `PRODUCT_NOT_FOUND` | `partial` | `resultConfidence=0.4` |
-| `validation` | `needs_followup` | `missingFields`'ı kullanıcıya ilet |
+| `error.code=PRODUCT_NOT_FOUND` | `partial` | `resultConfidence=0.4` |
+| `error.category=validation` | `needs_followup` | `missingFields`'ı kullanıcıya ilet (`validation` bir **kategori**dir, kod değil — `error.code` alanında aranmaz) |
 
 ## Adımlar
 
