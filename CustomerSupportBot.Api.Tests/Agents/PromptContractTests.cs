@@ -235,6 +235,43 @@ public class PromptContractTests
                 "LessonMiner aday seçiminde bu sinyali kullanmalı; yalnızca yorumda anılması yeterli değil");
     }
 
+    // ─── Halka 4d: PlanningAgent çıktı formatı ↔ strict JSON schema ──────────────
+    // PlanningAgent ChatResponseFormat.ForJsonSchema<PlanningResult> ile yapılandırılmış:
+    // çıktı ÇIPLAK bir JSON nesnesi olmak zorunda. Prompt uzun süre "iki bölüm" istiyordu
+    // (fence'li JSON + ardından `1. OrderAgent : ...` düz metin routing satırları) — strict
+    // schema altında üretilemez, fallback modda da hiçbir parser okumuyordu; model talimata
+    // uymaya çalışırken routing metnini taskDescription gibi PARSE EDİLEN bir alana
+    // sıkıştırabilirdi (o alan doğrudan specialist'e görev olarak geçiyor).
+
+    [Fact]
+    public void PlanningPrompt_DoesNotAskForTextOutsideTheJsonObject()
+    {
+        var prompt = Prompt("agents/planning-agent");
+
+        prompt.Should().NotContain("Bölüm 2",
+            "strict JSON schema altında JSON dışına metin yazılamaz");
+        prompt.Should().NotContain("iki bölümden",
+            "çıktı tek bir JSON nesnesidir");
+        Regex.IsMatch(prompt, @"^\s*\d+\.\s*<?selectedAgent>?\s*:", RegexOptions.Multiline)
+            .Should().BeFalse("routing satırı formatı hiçbir yerde parse edilmiyor");
+    }
+
+    [Fact]
+    public void PlanningPrompt_DocumentsExactlyTheSchemaFields()
+    {
+        // Prompt'taki JSON örneği ile PlanningResult'ın alanları ayrışırsa, model şemanın
+        // kabul etmediği bir alan üretmeye çalışır ya da gerçek bir alanı hiç doldurmaz.
+        var prompt = Prompt("agents/planning-agent");
+
+        var schemaFields = typeof(PlanningResult).GetProperties()
+            .Select(p => char.ToLowerInvariant(p.Name[0]) + p.Name[1..])
+            .ToList();
+
+        foreach (var field in schemaFields)
+            prompt.Should().Contain($"\"{field}\"",
+                $"planning-agent.md '{field}' alanını örnek çıktıda göstermeli (PlanningResult'ta var)");
+    }
+
     // ─── Halka 5: Görsel mimari dokümanının tool matrisi ──────────────────────────
     // docs/agent-architecture.html tool↔ajan matrisini elle listeliyor. Bir tool eklenip
     // doküman güncellenmezse matris sessizce yanlışa döner — bu, admin panelindeki

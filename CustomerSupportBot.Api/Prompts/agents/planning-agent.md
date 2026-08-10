@@ -28,11 +28,10 @@ Müşteri taleplerini analiz eder, yapılandırılmış bir plan üretir ve uygu
 
 ## Çıktı formatı
 
-Çıktın **iki bölümden** oluşmalı, SIRAYLA:
-
-### Bölüm 1 — JSON
-
-```` ```json ... ``` ```` fence'leri içinde:
+Çıktın **yalnızca** aşağıdaki JSON nesnesidir — öncesinde/sonrasında hiçbir metin, açıklama
+veya yönlendirme satırı yazma. Ajan adlarını (`OrderAgent` vb.) yalnızca `selectedAgent` ve
+`alternativesRejected` alanlarının içinde kullan; `taskDescription`/`rationale` gibi serbest
+metin alanlarına yönlendirme listesi sıkıştırma.
 
 ```json
 {
@@ -46,14 +45,6 @@ Müşteri taleplerini analiz eder, yapılandırılmış bir plan üretir ve uygu
   "clarificationQuestion": "clarification gerekiyorsa kullanıcıya sorulacak soru, yoksa null",
   "taskDescription": "Seçilen ajana iletilecek görev açıklaması"
 }
-```
-
-### Bölüm 2 — Routing
-
-JSON'dan sonra yeni satırda:
-
-```
-1. <selectedAgent> : <taskDescription>
 ```
 
 ## ID format tanımları
@@ -95,14 +86,12 @@ Tüm ID'ler **prefix içermeyen, minimum 4 haneli rakamsal** değerlerdir.
 
 > Reasoning hint'inde `COMPOUND QUERY` notu görürsen, kullanıcı **birden fazla bağımsız işlem** istiyor demektir.
 
-- `taskDescription` içinde tüm alt görevleri **tek paragrafta özetle**.
-- Bölüm 2 routing bölümüne her alt görev için **ayrı bir satır** yaz:
-
-```
-1. <Agent1> : <alt görev 1 açıklaması>
-2. <Agent2> : <alt görev 2 açıklaması>
-```
-
-- `selectedAgent` alanında **ilk** alt görevin agent'ını seç (GroupChat sıralama için) ama routing bölümünde **hepsini** listele.
+- `taskDescription` içinde tüm alt görevleri **tek paragrafta özetle** (numaralı liste veya
+  ajan adı yazma — düz bir özet cümlesi yeterli).
+- `selectedAgent` alanında **ilk** alt görevin agent'ını seç (GroupChat sıralama için).
 - `needsClarification=false` tut — compound query'de de net plan var, kullanıcıya tekrar sormana gerek yok (entity'ler zaten verilmiş olmalı).
 - `rationale` içinde *"compound query ayrıştırıldı"* notunu ekle.
+
+> ℹ️ Alt görevlerin **yürütme sırası ve dağıtımı senin çıktına bağlı değildir** — bunu
+> ReasoningService'in ürettiği `subTasks` listesi belirler. Senin görevin yalnızca ilk ajanı
+> seçmek ve durumu `taskDescription`'da özetlemek.

@@ -285,27 +285,13 @@ else
         </div>
     }
 
-    @* ── Revision ── *@
-    @if (Trace.WasRevised)
-    {
-        <div class="trace-section @(IsCollapsed("revision") ? "collapsed" : "")">
-            <div class="trace-section-header" @onclick='() => Toggle("revision")'>
-                @Chev <span>♻️ Revizyon</span>
-                <span class="trace-section-tag" style="margin-left:auto">REVISE</span>
-            </div>
-            <div class="trace-section-body">
-                <div class="kv-row">
-                    <div class="kv-key">İlk taslak</div>
-                    <div class="kv-val"><div class="response-box draft">@(Trace.FirstDraftResponse ?? "")</div></div>
-                </div>
-                <div class="kv-row">
-                    <div class="kv-key">Revize edilmiş</div>
-                    <div class="kv-val"><div class="response-box revised">@(Trace.FinalResponse ?? "")</div></div>
-                </div>
-            </div>
-        </div>
-    }
-    else if (Trace.FinalResponse is not null)
+    @* NOT: Burada bir "♻️ Revizyon / ilk taslak" bölümü vardı — planlanmış ama hiç
+       uygulanmamış bir öz-revizyon akışının (taslak yaz → eleştir → revize et) UI kalıntısıydı.
+       Beslediği WasRevised/FirstDraftResponse alanlarının backend'de karşılığı hiç olmadığı için
+       koşul daima false'tu ve bölüm hiç render edilmiyordu. Öz-eleştiri sinyali artık
+       ReasoningTrace.SelfCritique olarak ölçülüyor (bkz. yukarıdaki Final Critique bölümü);
+       revizyon ayağına karar verilirse bu blok geri getirilebilir. *@
+    @if (Trace.FinalResponse is not null)
     {
         <div class="trace-section @(IsCollapsed("response") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("response")'>
@@ -538,7 +524,24 @@ else
             chips.Append($"<span class=\"step-chip action\">{HtmlEnc(act.GetString() ?? "")}</span>");
 
         var chipsHtml = chips.Length > 0 ? $"<span class=\"step-chips\">{chips}</span>" : "";
-        return $"<span class=\"pill step-pill\"><span class=\"step-text\">{text}</span>{chipsHtml}</span>";
+
+        // premise / alternativeRejected: reasoning-system.md bunları her adımda istiyor ve
+        // ReasoningResultParser modele koyuyordu, ama hiçbir yerde gösterilmiyorlardı.
+        // Chip'e sığmayacak kadar uzun oldukları için ayrı bir detay satırında verilir.
+        var details = new StringBuilder();
+        AppendStepDetail(details, step, "premise", "Önkoşul");
+        AppendStepDetail(details, step, "alternativeRejected", "Reddedilen alternatif");
+
+        return $"<span class=\"pill step-pill\"><span class=\"step-text\">{text}</span>{chipsHtml}{details}</span>";
+    }
+
+    private static void AppendStepDetail(StringBuilder sb, JsonElement step, string prop, string label)
+    {
+        if (!step.TryGetProperty(prop, out var el) || el.ValueKind != JsonValueKind.String) return;
+        var val = el.GetString();
+        if (string.IsNullOrWhiteSpace(val)) return;
+
+        sb.Append($"<span class=\"step-detail\"><span class=\"step-detail-label\">{HtmlEnc(label)}:</span> {HtmlEnc(val)}</span>");
     }
 
     // ── Pure helpers ─────────────────────────────────────────────────────────

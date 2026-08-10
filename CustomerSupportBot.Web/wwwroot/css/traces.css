@@ -490,8 +490,24 @@
     align-items: center;
     gap: 6px;
     max-width: 100%;
+    /* premise/alternativeRejected tam genişlikte ikinci satıra düşer */
+    flex-wrap: wrap;
 }
 .step-pill .step-text { white-space: normal; word-break: break-word; }
+
+/* Adımın gerekçe detayları — chip'e sığmayacak kadar uzun serbest metin alanları */
+.step-detail {
+    flex-basis: 100%;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--color-text-secondary);
+    white-space: normal;
+    word-break: break-word;
+}
+.step-detail .step-detail-label {
+    font-weight: 600;
+    opacity: 0.75;
+}
 
 .step-chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .step-chip {
@@ -544,8 +560,6 @@
     white-space: pre-wrap;
     line-height: 1.6;
 }
-.response-box.revised { border-left-color: var(--color-accent); }
-.response-box.draft   { border-left-color: #d97706; background: #fffbeb; border-color: #fde68a; }
 
 /* ─── Sohbet Geçmişi ─── */
 .trace-chat-history {
@@ -752,7 +766,6 @@
 [data-theme="dark"] .step-chip.action             { background: #2e1065; color: #c4b5fd; border-color: #4c1d95; }
 
 /* Response box */
-[data-theme="dark"] .response-box.draft           { background: #2d1a00; border-color: #713f12; border-left-color: #d97706; }
 
 /* Chat history */
 [data-theme="dark"] .trace-chat-user .trace-chat-role   { color: #818cf8; }
