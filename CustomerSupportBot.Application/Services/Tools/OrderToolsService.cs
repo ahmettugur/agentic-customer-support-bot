@@ -97,6 +97,20 @@ public sealed class OrderToolsService : IOrderToolsService
         return result;
     }
 
+    /// <summary>
+    /// Sipariş "yok" ile "var ama başkasının" ayrımını KULLANICIYA sızdırmayan ortak mesaj.
+    ///
+    /// <para>
+    /// İki durum farklı metinlerle bildirilirse ortaya bir enumeration oracle'ı çıkar: sipariş
+    /// numaraları 4 haneli ve ardışık olduğu için (seed: 1030–1081) saldırgan tarama yapıp
+    /// "bulunamadı" = yok, "size ait değil" = VAR ama başkasının çıkarımını yapabilir. Hata
+    /// KODU (<see cref="WellKnown.ToolErrorCodes.CustomerIdMismatch"/>) operasyonel görünürlük
+    /// için korunur — trace/admin panelinde gerçek sebep görünür; kullanıcıya giden metin aynıdır.
+    /// </para>
+    /// </summary>
+    private static string OrderNotAccessibleMessage(string orderId) =>
+        $"'{orderId}' numaralı sipariş bulunamadı.";
+
     [Description("Sipariş durumunu sipariş numarasıyla sorgular. Sonuç ToolResult olarak döner.")]
     public ToolResult OrderStatusTool(
         [Description("Sorgulanacak sipariş numarası (örn: 1030)")] string orderId,
@@ -107,10 +121,10 @@ public sealed class OrderToolsService : IOrderToolsService
 
         var order = _orders.Get(orderId);
         if (order is null)
-            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, $"'{orderId}' numaralı sipariş bulunamadı.");
+            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, OrderNotAccessibleMessage(orderId));
 
         if (!string.Equals(order.CustomerId, customerId, StringComparison.Ordinal))
-            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, $"'{orderId}' numaralı sipariş bulunamadı.");
+            return ToolResult.NotFound(WellKnown.ToolErrorCodes.CustomerIdMismatch, OrderNotAccessibleMessage(orderId));
 
         return ToolResult.Ok(
             message: $"Sipariş No: {orderId}, Ürün: {order.Product}, Adet: {order.Quantity}, Durum: {order.Status}.",
@@ -177,12 +191,13 @@ public sealed class OrderToolsService : IOrderToolsService
 
         var order = _orders.Get(orderId);
         if (order is null)
-            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, $"'{orderId}' numaralı sipariş bulunamadı.");
+            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, OrderNotAccessibleMessage(orderId));
 
+        // Sahiplik ihlali "bulunamadı" ile AYNI metni döner — bkz. OrderNotAccessibleMessage.
         if (!string.Equals(order.CustomerId, customerId, StringComparison.Ordinal))
-            return ToolResult.Conflict(
+            return ToolResult.NotFound(
                 WellKnown.ToolErrorCodes.CustomerIdMismatch,
-                $"'{orderId}' numaralı sipariş sizin hesabınıza ait değil.");
+                OrderNotAccessibleMessage(orderId));
 
         if (order.Status == WellKnown.OrderStatuses.Cancelled)
             return ToolResult.Conflict(
@@ -215,12 +230,13 @@ public sealed class OrderToolsService : IOrderToolsService
 
         var order = _orders.Get(orderId);
         if (order is null)
-            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, $"'{orderId}' numaralı sipariş bulunamadı.");
+            return ToolResult.NotFound(WellKnown.ToolErrorCodes.OrderNotFound, OrderNotAccessibleMessage(orderId));
 
+        // Sahiplik ihlali "bulunamadı" ile AYNI metni döner — bkz. OrderNotAccessibleMessage.
         if (!string.Equals(order.CustomerId, customerId, StringComparison.Ordinal))
-            return ToolResult.Conflict(
+            return ToolResult.NotFound(
                 WellKnown.ToolErrorCodes.CustomerIdMismatch,
-                $"'{orderId}' numaralı sipariş sizin hesabınıza ait değil.");
+                OrderNotAccessibleMessage(orderId));
 
         if (order.Status == WellKnown.OrderStatuses.ReturnRequested ||
             order.Status == WellKnown.OrderStatuses.ReturnApproved)

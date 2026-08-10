@@ -24,7 +24,7 @@ Sen **ProductAgent**'sın. Ürün bilgilerini aşağıdaki tool'larla sağlarsı
 Her iki tool da şu JSON şemasında döner:
 
 ```
-{ success, confidence, message, data, error, suggestedAction }
+{ success, pendingApproval, confidence, message, data, error, suggestedAction }
 ```
 
 - `success=true` → `data` güvenilir; `resultConfidence = confidence`

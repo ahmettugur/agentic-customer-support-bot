@@ -153,12 +153,25 @@ public class CustomerSupportToolsTests
     }
 
     [Fact]
-    public void OrderStatus_BelongsToDifferentCustomer_NotFound()
+    public void OrderStatus_BelongsToDifferentCustomer_IsIndistinguishableFromNotFound()
     {
-        // customerId artık LLM parametresi değil — sipariş başka müşteriye aitse
-        // (enumeration'ı önlemek için) NotFound dönülür, mismatch açıkça belirtilmez.
-        var r = _svc.OrderStatusTool("1030", "9999");
-        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
+        // Enumeration oracle koruması: "sipariş yok" ile "var ama başkasının" KULLANICIYA
+        // aynı görünmeli. Hata KODU farklıdır (trace/admin görünürlüğü için) ama kullanıcıya
+        // giden message birebir aynı olmalı — aksi halde ardışık sipariş numaraları taranarak
+        // hangi ID'lerin var olduğu çıkarılabilir.
+        var mismatch = _svc.OrderStatusTool("1030", "9999");   // var, ama 1027'nin
+        var missing  = _svc.OrderStatusTool("9999", "9999");   // hiç yok
+
+        mismatch.Success.Should().BeFalse();
+        mismatch.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.CustomerIdMismatch,
+            "gerçek sebep operasyonel görünürlük için korunmalı");
+        missing.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.OrderNotFound);
+
+        // Mesajlar yalnızca sorulan sipariş numarasında farklılaşmalı; şablon birebir aynı.
+        Normalize(mismatch.Message, "1030").Should().Be(Normalize(missing.Message, "9999"),
+            "kullanıcıya giden metin iki durumda da aynı olmalı (enumeration oracle'ı olmasın)");
+
+        static string Normalize(string message, string orderId) => message.Replace(orderId, "<id>");
     }
 
     // ═══ ComplaintRegistrationTool ═══
@@ -255,6 +268,11 @@ public class CustomerSupportToolsTests
         var r = _svc.OrderCancelTool(orderId!, "12345", "9999");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.CustomerIdMismatch);
         _fixture.OrderRepo.Get(orderId!)!.Status.Should().NotBe(WellKnown.OrderStatuses.Cancelled);
+
+        // Kullanıcıya giden metin "hiç yok" durumuyla aynı olmalı (enumeration oracle'ı yok);
+        // sadece sorulan sipariş numarası kısmı farklılaşabilir.
+        var missing = _svc.OrderCancelTool("9999", "12345", "9999");
+        r.Message.Replace(orderId!, "<id>").Should().Be(missing.Message.Replace("9999", "<id>"));
     }
 
     // ═══ ReturnRequestTool ═══
@@ -297,6 +315,11 @@ public class CustomerSupportToolsTests
 
         var r = _svc.ReturnRequestTool(orderId, "ürün hasarlı geldi", "9999");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.CustomerIdMismatch);
+
+        // Kullanıcıya giden metin "hiç yok" durumuyla aynı olmalı (enumeration oracle'ı yok);
+        // sadece sorulan sipariş numarası kısmı farklılaşabilir.
+        var missing = _svc.ReturnRequestTool("9999", "ürün hasarlı geldi", "9999");
+        r.Message.Replace(orderId, "<id>").Should().Be(missing.Message.Replace("9999", "<id>"));
     }
 
     [Fact]

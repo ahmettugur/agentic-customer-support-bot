@@ -53,9 +53,14 @@ public sealed class ComplaintToolsService : IComplaintToolsService
         }
         else if (!string.Equals(effectiveCustomerId, order.CustomerId, StringComparison.Ordinal))
         {
-            return ToolResult.Conflict(
+            // Kullanıcıya giden metin "sipariş yok" ile AYNI — "var ama başkasının" ayrımı
+            // sızdırılmaz (enumeration oracle'ı; bkz. OrderToolsService.OrderNotAccessibleMessage).
+            // Ayrıca customerId artık kullanıcının "sağladığı" bir şey değil (JWT'den gelir),
+            // bu yüzden eski "Sağladığınız müşteri kimliği (X)..." metni hem yanıltıcıydı hem de
+            // kullanıcıya kendi iç kimlik numarasını gösteriyordu.
+            return ToolResult.NotFound(
                 WellKnown.ToolErrorCodes.CustomerIdMismatch,
-                $"Sağladığınız müşteri kimliği ({effectiveCustomerId}) '{orderId}' siparişinin sahibiyle eşleşmiyor.");
+                $"'{orderId}' numaralı sipariş bulunamadı, şikayet kaydı oluşturulamadı.");
         }
 
         // Mükerrer çağrı koruması — kayıt oluşturulmadan ÖNCE. İmza türetilmiş

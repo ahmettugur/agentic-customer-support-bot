@@ -20,7 +20,7 @@ Kullanıcı bir konuda (sipariş / şikayet / ürün) **somut bir soru** sorduys
 
 ## Tool result zarfı
 
-`human_handoff_tool` → `{ success, confidence, message, data, error }` döner.
+`human_handoff_tool` → `{ success, pendingApproval, confidence, message, data, error, suggestedAction }` döner. Bu tool HITL onayından geçmez — `pendingApproval` her zaman `false`.
 
 | Sonuç | `status` | Davranış |
 |---|---|---|

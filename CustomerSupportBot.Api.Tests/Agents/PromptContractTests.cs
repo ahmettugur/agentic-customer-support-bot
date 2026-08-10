@@ -146,6 +146,51 @@ public class PromptContractTests
         hint.Should().Contain("ADMIN", "not admin kaynaklı olduğunu açıkça belirtmeli");
     }
 
+    // ─── Halka 4b: pendingApproval alan adı ↔ ajan promptları ────────────────────
+    // Bloklamayan HITL modelinde "onaya gönderildi" ile "iş tamamlandı" ayrımı ToolResult'ın
+    // pendingApproval alanına dayanır. Kod tarafı (WorkflowTraceEventProcessor) bu alanı
+    // camelCase JSON adıyla okur; ajan promptları da LLM'e AYNI alan adını gösterir.
+    // Alan yeniden adlandırılıp promptlar güncellenmezse LLM olmayan bir alana bakar ve
+    // bekleyen bir işlemi "tamamlandı" diye raporlar — sessiz, canlıda görülen bir hata.
+
+    [Fact]
+    public void PendingApprovalField_IsReferencedByEveryApprovalAwareAgentPrompt()
+    {
+        // Kod ucu: alan gerçekten var mı? (JSON'a camelCase serileşir.)
+        typeof(ToolResult).GetProperty(nameof(ToolResult.PendingApproval))
+            .Should().NotBeNull("ToolResult.PendingApproval, pending/done ayrımının tek kaynağıdır");
+
+        const string jsonFieldName = "pendingApproval";
+
+        // Kod ucu: trace işleyicisi bu adı okumalı.
+        SourceOf("CustomerSupportBot.Adapters.Agents/WorkflowTraceEventProcessor.cs")
+            .Should().Contain($"\"{jsonFieldName}\"",
+                "EnsureSideEffectToolCompletion bu alanı JSON adıyla okur");
+
+        // Prompt ucu: HITL onaylı tool'u olan ajanlar alanı adıyla anmalı.
+        foreach (var key in new[] { "agents/order-agent", "agents/complaint-agent" })
+            Prompt(key).Should().Contain(jsonFieldName,
+                $"{key}.md, pending kararını bu alana göre vermeli (message metnine göre DEĞİL)");
+    }
+
+    [Fact]
+    public void PendingApprovalStatus_IsSharedBetweenCodeAndPrompts()
+    {
+        // status="pending_approval" sabiti parser (NormalizeStatus) ile promptlar arasında
+        // ortak sözleşmedir; biri değişip diğeri değişmezse status sessizce "done"a düşer
+        // (NormalizeStatus tanımadığı değeri Done'a normalize eder).
+        var status = WellKnown.TaskStatuses.PendingApproval;
+
+        var json = "```json {\"postToolReflection\":{\"status\":\"" + status + "\"}} ```";
+        SpecialistReasoningParser.TryParse(json, "OrderAgent")!
+            .PostToolReflection!.StatusEnum
+            .Should().Be(TaskCompletionStatus.PendingApproval,
+                "parser bu status'u tanımalı, aksi halde sessizce done'a düşer");
+
+        foreach (var key in new[] { "agents/order-agent", "agents/complaint-agent", "agents/response-agent" })
+            Prompt(key).Should().Contain(status, $"{key}.md bu status değerini adıyla kullanmalı");
+    }
+
     // ─── Halka 5: Görsel mimari dokümanının tool matrisi ──────────────────────────
     // docs/agent-architecture.html tool↔ajan matrisini elle listeliyor. Bir tool eklenip
     // doküman güncellenmezse matris sessizce yanlışa döner — bu, admin panelindeki

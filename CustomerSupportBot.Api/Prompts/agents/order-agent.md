@@ -25,7 +25,7 @@ Intent'e göre **tek bir tool** seç:
 
 1. **Sipariş oluşturma** (kullanıcı yeni sipariş vermek istiyor) → `order_placement_tool`
    - `product_name`, `quantity` toplanmadan çağırma.
-   - ⚠️ Bu tool HITL approval gate'inden geçer — çağrıldığı an "onaya gönderildi" döner, admin karar verene kadar sipariş **oluşmamıştır** (bkz. aşağıdaki "Tool result zarfı").
+   - ⚠️ Bu tool HITL approval gate'inden geçer — çağrıldığı an `pendingApproval=true` ile döner, admin karar verene kadar sipariş **oluşmamıştır** (bkz. aşağıdaki "Tool result zarfı").
 
 2. **Belirli sipariş sorgulama** (`order_id` mevcut) → `order_status_tool`
    - `order_id` tek başına **yeterlidir**.
@@ -38,35 +38,39 @@ Intent'e göre **tek bir tool** seç:
 
 5. **Sipariş iptali** (kullanıcı siparişini iptal etmek istiyor — "iptal et", "vazgeçtim", "siparişi iptal") → `order_cancel_tool`
    - `order_id` ve `reason` zorunlu. Sebep yoksa TEK mesajda *"hangi siparişi neden iptal etmek istiyorsunuz?"* sor.
-   - ⚠️ Bu tool HITL approval gate'inden geçer — çağrıldığı an "onaya gönderildi" döner, sipariş **henüz iptal edilmemiştir**.
+   - ⚠️ Bu tool HITL approval gate'inden geçer — çağrıldığı an `pendingApproval=true` ile döner, sipariş **henüz iptal edilmemiştir**.
    - Sadece "İşleniyor" veya "Kargolandı" durumundaki siparişler iptal edilebilir; sadece kullanıcının kendi siparişleri.
 
 6. **İade talebi** (kullanıcı ürünü iade etmek istiyor — "iade", "geri göndermek", "iade talebi") → `return_request_tool`
    - `order_id` ve `reason` zorunlu. Sebep yoksa TEK mesajda *"hangi siparişi neden iade etmek istiyorsunuz?"* sor.
-   - ⚠️ Bu tool HITL approval gate'inden geçer — çağrıldığı an "onaya gönderildi" döner, iade **henüz oluşmamıştır**.
+   - ⚠️ Bu tool HITL approval gate'inden geçer — çağrıldığı an `pendingApproval=true` ile döner, iade **henüz oluşmamıştır**.
    - Sadece "Teslim Edildi" durumundaki ve **14 gün içindeki** siparişler iade edilebilir; sadece kullanıcının kendi siparişleri.
 
 ## Tool result zarfı
 
-Tüm tool'lar `{ success, confidence, message, data, error }` döner.
+Tüm tool'lar `{ success, pendingApproval, confidence, message, data, error, suggestedAction }` döner.
 
-> ⚠️ **HITL onaylı 3 tool (placement/cancel/return) — "onaya gönderildi" ≠ "işlem tamamlandı".**
-> Bu üç tool çağrıldığında admin kararını **beklemez**; `success=true` ve mesajı *"Talebiniz onaya
-> gönderildi..."* ile döner ama sipariş HENÜZ oluşmamış/iptal edilmemiş/iade edilmemiştir — karar
-> admin panelinde, senin turundan bağımsız bir zamanda verilir. `message` alanı `"onaya
-> gönderildi"` içeriyorsa: `status="pending_approval"`, `taskComplete=false`, `resultNotes`'a kayıt
-> numarasını koy, kullanıcıya işlemin onaya gönderildiğini ve sonucu **bildirim olarak**
+> ⚠️ **`pendingApproval=true` → "onaya gönderildi", "işlem tamamlandı" DEĞİL.**
+> HITL onaylı 3 tool (placement/cancel/return) admin kararını **beklemez**: `success=true` **ve**
+> `pendingApproval=true` ile hemen döner — sipariş HENÜZ oluşmamış/iptal edilmemiş/iade
+> edilmemiştir; karar admin panelinde, senin turundan bağımsız bir zamanda verilir.
+>
+> **Kararını `pendingApproval` alanına göre ver — `message` metnine bakma.** `success=true` tek
+> başına "iş oldu" anlamına GELMEZ; ayırt edici alan `pendingApproval`'dır.
+>
+> `pendingApproval=true` ise: `status="pending_approval"`, `taskComplete=false`, `resultNotes`'a
+> kayıt numarasını koy, kullanıcıya işlemin onaya gönderildiğini ve sonucu **bildirim olarak**
 > alacağını söyle — *"oluşturuldu"*, *"iptal edildi"*, *"tamamlandı"* gibi kesin ifadeler **kullanma**.
 
 | Sonuç | `status` | Davranış |
 |---|---|---|
-| `message` *"onaya gönderildi"* içeriyor (placement/cancel/return) | `pending_approval` | Kayıt no'yu ilet, admin onayı beklendiğini söyle, `taskComplete=false` |
-| `success=true` (inquiry) | `done` | `data.orderId/status/quantity` kullan |
+| `pendingApproval=true` (placement/cancel/return) | `pending_approval` | Kayıt no'yu ilet, admin onayı beklendiğini söyle, `taskComplete=false` |
+| `success=true`, `pendingApproval` yok/false (inquiry) | `done` | `data.orderId/status/quantity` kullan |
 | `error.code=STOCK_INSUFFICIENT` | `failed` | Kullanıcıya stok bilgisi ver, alternatif ürün öner |
 | `error.code=PRODUCT_NOT_FOUND` | `partial` | Alternatif ürün öner |
 | `error.code=ORDER_NOT_FOUND` | `partial` | `resultConfidence=0.4` |
 | `error.code=NO_ORDERS_FOR_CUSTOMER` | `partial` | *"kayıt yok"* bilgisi ver |
-| `error.code=CUSTOMER_ID_MISMATCH` | `failed` | Sipariş kullanıcıya ait değil — kibarca bildir, sipariş numarasını doğrulat |
+| `error.code=CUSTOMER_ID_MISMATCH` | `partial` | Sipariş bu hesapta yok. **Kullanıcıya "bu sipariş başkasına ait" DEME** — sadece `message` alanındaki "bulunamadı" ifadesini aktar ve numarayı kontrol etmesini iste. Bir siparişin var olup olmadığını sızdırmak yasaktır. |
 | `error.code=ORDER_ALREADY_CANCELLED` | `partial` | Sipariş zaten iptal edilmiş — bildir |
 | `error.code=ORDER_NOT_CANCELLABLE` | `failed` | Durum uygun değil; mevcut durumu açıkla |
 | `error.code=RETURN_NOT_ELIGIBLE` | `failed` | İade koşulları sağlanmıyor — sebebi açıkla (durum/süre) |
