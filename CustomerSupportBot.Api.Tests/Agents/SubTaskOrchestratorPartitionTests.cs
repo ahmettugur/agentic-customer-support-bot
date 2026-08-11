@@ -13,8 +13,16 @@ public class SubTaskOrchestratorPartitionTests
         MaxDegreeOfParallelism = 4
     };
 
-    private static SubTask Sub(int order, string agent, string desc = "x", string intent = "") =>
-        new() { Order = order, TargetAgent = agent, Description = desc, Intent = intent };
+    private static SubTask Sub(int order, string agent, string desc = "x", string intent = "",
+                               int[]? dependsOn = null) =>
+        new()
+        {
+            Order = order,
+            TargetAgent = agent,
+            Description = desc,
+            Intent = intent,
+            Dependencies = (dependsOn ?? []).ToList()
+        };
 
     [Fact]
     public void Partition_Empty_ReturnsEmpty() =>
@@ -185,5 +193,84 @@ public class SubTaskOrchestratorPartitionTests
         groups.Should().HaveCount(2);
         groups[0].Parallel.Should().BeTrue();
         groups[1].Parallel.Should().BeFalse();
+    }
+
+    // ─── Dependencies ────────────────────────────────────────────────────────────
+    // DecomposedRunner paralel bir grubun elemanlarını AYNI history snapshot'ıyla
+    // eşzamanlı başlatır — aynı batch'teki kardeşin sonucu diğerine görünmez.
+    // Bu yüzden bildirilen bir öncül asla aynı batch'e alınmamalı. (Bu alan uzun süre
+    // parse ediliyor ama hiç okunmuyordu.)
+
+    [Fact]
+    public void Partition_DependentReadOnlySubTasks_AreSplitIntoSeparateGroups()
+    {
+        var subs = new[]
+        {
+            Sub(1, WellKnown.AgentNames.Product),
+            Sub(2, WellKnown.AgentNames.Product, dependsOn: [1])
+        };
+
+        var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
+
+        groups.Should().HaveCount(2, "2 numaralı görev 1'in sonucunu bekliyor, aynı batch'e alınamaz");
+        groups[0].Items.Single().Order.Should().Be(1);
+        groups[1].Items.Single().Order.Should().Be(2);
+        groups.Should().OnlyContain(g => g.Parallel, "ikisi de yan-etkisiz — sadece batch sınırı değişti");
+    }
+
+    [Fact]
+    public void Partition_DependencyOnEarlierGroup_DoesNotSplitAgain()
+    {
+        // 1 ve 2 paralel, 3 yalnızca 1'e bağımlı. 1 ilk batch'te bitmiş olacağı için
+        // (gruplar birbirini WhenAll ile bekler) 3'ün ayrı bir gruba düşmesi yeterli;
+        // 3 ile 4 aynı batch'te kalabilmeli.
+        var subs = new[]
+        {
+            Sub(1, WellKnown.AgentNames.Product),
+            Sub(2, WellKnown.AgentNames.Product, dependsOn: [1]),
+            Sub(3, WellKnown.AgentNames.Product, dependsOn: [1]),
+            Sub(4, WellKnown.AgentNames.Product)
+        };
+
+        var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
+
+        groups.Should().HaveCount(2);
+        groups[0].Items.Select(i => i.Order).Should().Equal(1);
+        groups[1].Items.Select(i => i.Order).Should().Equal(2, 3, 4);
+    }
+
+    [Fact]
+    public void Partition_IndependentSubTasks_WithEmptyDependencies_StayInOneGroup()
+    {
+        // Bağımlılık kontrolü, bağımsız görevleri gereksiz yere ayırmamalı.
+        var subs = new[]
+        {
+            Sub(1, WellKnown.AgentNames.Product),
+            Sub(2, WellKnown.AgentNames.Product),
+            Sub(3, WellKnown.AgentNames.Product)
+        };
+
+        var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
+
+        groups.Should().HaveCount(1);
+        groups[0].Items.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void Partition_DependenciesAmongSerialSubTasks_DoNotCreateExtraGroups()
+    {
+        // Seri grup zaten Order sırasıyla tek tek yürütülüyor — bağımlılık kendiliğinden
+        // karşılanır, fazladan bölme yapmaya gerek yok.
+        var subs = new[]
+        {
+            Sub(1, WellKnown.AgentNames.Order, intent: WellKnown.Intents.OrderCancellation),
+            Sub(2, WellKnown.AgentNames.Complaint, dependsOn: [1])
+        };
+
+        var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
+
+        groups.Should().HaveCount(1);
+        groups[0].Parallel.Should().BeFalse();
+        groups[0].Items.Should().HaveCount(2);
     }
 }

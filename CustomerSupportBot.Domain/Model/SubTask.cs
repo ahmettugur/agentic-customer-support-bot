@@ -45,6 +45,9 @@ public class SubTask
     /// <summary>
     /// Bu alt görevin öncesinde tamamlanması gereken diğer sub-task sıraları
     /// (ör. [1] = önce 1. subtask bitmeli). Boş = bağımsız.
+    /// <c>SubTaskOrchestrator.Partition</c> bunu okur: bildirilen öncül aynı paralel
+    /// batch'e düşemez, batch orada kapatılır (aynı batch'teki kardeşler eşzamanlı
+    /// başlar ve birbirinin sonucunu göremez).
     /// </summary>
     public List<int> Dependencies { get; set; } = new();
 }

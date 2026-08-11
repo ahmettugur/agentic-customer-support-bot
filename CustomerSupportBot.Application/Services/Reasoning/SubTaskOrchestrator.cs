@@ -132,6 +132,15 @@ public class SubTaskOrchestrator
     /// gruplara ayırır. Order alanına göre sırayla iterasyon yapılır; aynı türde
     /// ardı ardına gelen subtask'lar tek bir grupta toplanır. Bu sayede sıralama
     /// (örn. read → write → read) korunmuş olur.
+    ///
+    /// <para>
+    /// <b>Bağımlılık kuralı:</b> <see cref="SubTask.Dependencies"/> ile bildirilen öncüller
+    /// asla aynı paralel batch'e alınmaz. DecomposedRunner paralel bir grubun tüm elemanlarını
+    /// <b>aynı history snapshot'ıyla</b> eşzamanlı başlatır (bkz. <c>historySnapshot</c>) —
+    /// yani aynı batch'teki bir kardeşin sonucu diğerine görünmez. Gruplar birbirini
+    /// <c>Task.WhenAll</c> ile beklediğinden, öncülü <b>önceki</b> bir gruba düşürmek
+    /// bağımlılığı karşılamak için yeterlidir.
+    /// </para>
     /// </summary>
     public static List<SubTaskGroup> Partition(
         IEnumerable<SubTask> subTasks,
@@ -143,20 +152,29 @@ public class SubTaskOrchestrator
 
         bool currentParallel = options.Enabled && options.IsReadOnly(ordered[0]);
         var currentBatch = new List<SubTask> { ordered[0] };
+        var batchOrders = new HashSet<int> { ordered[0].Order };
 
         for (var i = 1; i < ordered.Count; i++)
         {
             var sub = ordered[i];
             var canParallel = options.Enabled && options.IsReadOnly(sub);
 
-            if (canParallel == currentParallel)
+            // Seri gruplar zaten Order sırasıyla tek tek yürütülür — orada bağımlılık
+            // kendiliğinden karşılanır. Kontrol yalnızca paralel batch için anlamlı.
+            var dependsOnBatchMember = currentParallel
+                && sub.Dependencies.Count > 0
+                && sub.Dependencies.Any(batchOrders.Contains);
+
+            if (canParallel == currentParallel && !dependsOnBatchMember)
             {
                 currentBatch.Add(sub);
+                batchOrders.Add(sub.Order);
             }
             else
             {
                 groups.Add(new SubTaskGroup(currentParallel, currentBatch));
                 currentBatch = new List<SubTask> { sub };
+                batchOrders = new HashSet<int> { sub.Order };
                 currentParallel = canParallel;
             }
         }

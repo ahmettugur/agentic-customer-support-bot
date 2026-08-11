@@ -7,10 +7,26 @@ namespace CustomerSupportBot.Domain.Model;
 /// <summary>Tüm magic string sabitlerinin tek adresi.</summary>
 public static class WellKnown
 {
-    /// <summary>Algılanan kullanıcı niyetleri (intent).</summary>
+    /// <summary>
+    /// Algılanan kullanıcı niyetleri (intent).
+    ///
+    /// <para>
+    /// <b>Bu sınıf intent sözlüğünün tek doğruluk kaynağıdır.</b> <c>Prompts/services/reasoning-system.md</c>
+    /// içindeki <c>"intent"</c> enum satırı LLM'e hangi değerlerin üretilebileceğini söyler ve
+    /// <see cref="ReasoningResult.Intent"/> o ham string'i normalizasyonsuz taşır — yani prompt'taki
+    /// bir değer buradaki sabitlerden saparsa hiçbir derleme hatası olmadan <c>IntentSkillMap</c>
+    /// (appsettings) ve <c>ParallelExecutionOptions.IsReadOnly</c> gibi tam-string eşleşme yapan
+    /// tüketiciler sessizce ıskalar. Bu sapma gerçekten yaşandı: prompt <c>"sipariş_iadesi"</c>
+    /// derken kod <see cref="ReturnRequest"/> = <c>"iade_talebi"</c> tanımlıyordu ve iade
+    /// eskalasyonları hiçbir zaman <c>refund</c> skill'ini gerektirmedi.
+    /// <c>PromptContractTests.ReasoningPrompt_IntentEnum_MatchesWellKnownIntents</c> iki ucu bağlar.
+    /// </para>
+    /// </summary>
     public static class Intents
     {
+        /// <summary>Parser fallback'i — LLM bunu ÜRETMEZ, prompt enum'unda yer almaz.</summary>
         public const string Unknown = "bilinmiyor";
+
         public const string OrderCreation = "sipariş_oluşturma";
         public const string OrderInquiry = "sipariş_sorgulama";
         public const string OrderListing = "sipariş_listeleme";
@@ -18,7 +34,21 @@ public static class WellKnown
         public const string ReturnRequest = "iade_talebi";
         public const string Complaint = "şikayet";
         public const string ProductInfo = "ürün_bilgisi";
+
+        /// <summary>Kullanıcı açıkça insan temsilci istiyor → HumanHandoffAgent.</summary>
+        public const string HumanHandoffRequest = "talep_temsilci";
+
         public const string General = "genel";
+
+        /// <summary>
+        /// LLM'in üretmesi beklenen tüm intent değerleri (<see cref="Unknown"/> hariç —
+        /// o yalnızca parser fallback'idir). reasoning-system.md'deki enum ile birebir aynı küme.
+        /// </summary>
+        public static readonly IReadOnlySet<string> LlmProduced = new HashSet<string>(StringComparer.Ordinal)
+        {
+            OrderCreation, OrderInquiry, OrderListing, OrderCancellation,
+            ReturnRequest, Complaint, ProductInfo, HumanHandoffRequest, General
+        };
     }
 
     /// <summary>Güven seviyesi etiketleri (legacy string).</summary>

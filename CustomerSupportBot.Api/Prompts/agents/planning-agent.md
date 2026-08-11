@@ -82,16 +82,10 @@ Tüm ID'ler **prefix içermeyen, minimum 4 haneli rakamsal** değerlerdir.
 - `ResponseAgent`'tan sonra **asla** başka ajan seçme.
 - **Türkçe** yaz.
 
-## Compound query (çoklu niyet)
+## Çoklu niyet (compound query)
 
-> Reasoning hint'inde `COMPOUND QUERY` notu görürsen, kullanıcı **birden fazla bağımsız işlem** istiyor demektir.
-
-- `taskDescription` içinde tüm alt görevleri **tek paragrafta özetle** (numaralı liste veya
-  ajan adı yazma — düz bir özet cümlesi yeterli).
-- `selectedAgent` alanında **ilk** alt görevin agent'ını seç (GroupChat sıralama için).
-- `needsClarification=false` tut — compound query'de de net plan var, kullanıcıya tekrar sormana gerek yok (entity'ler zaten verilmiş olmalı).
-- `rationale` içinde *"compound query ayrıştırıldı"* notunu ekle.
-
-> ℹ️ Alt görevlerin **yürütme sırası ve dağıtımı senin çıktına bağlı değildir** — bunu
-> ReasoningService'in ürettiği `subTasks` listesi belirler. Senin görevin yalnızca ilk ajanı
-> seçmek ve durumu `taskDescription`'da özetlemek.
+> ℹ️ Bileşik sorgular **sana ulaşmadan** ayrıştırılır: ReasoningService birden fazla bağımsız işlem
+> tespit ederse DecomposedRunner her alt görevi **ayrı bir çalıştırmada** yürütür ve sen her seferinde
+> yalnızca **tek** bir alt görev görürsün. Yani reasoning hint'i sana her zaman tek bir işi tarif eder —
+> "birden fazla ajanı sırayla yönlendirme" gibi bir çıktı üretmen ne gerekli ne de mümkündür
+> (çıktın strict JSON şemasıyla kısıtlı, tek bir `selectedAgent` alanı var).

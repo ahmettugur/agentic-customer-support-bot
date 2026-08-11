@@ -272,6 +272,81 @@ public class PromptContractTests
                 $"planning-agent.md '{field}' alanını örnek çıktıda göstermeli (PlanningResult'ta var)");
     }
 
+    // ─── Halka 4e: reasoning-system.md intent enum'u ↔ WellKnown.Intents ─────────
+    // ReasoningResultParser intent'i HAM string olarak taşır (normalizasyon/alias katmanı
+    // yok) ve ReasoningChatClient'ta JSON schema da yok — yani LLM'in üretebileceği intent
+    // kümesini TEK BAŞINA prompt metni belirler. Tüketiciler (appsettings IntentSkillMap,
+    // ParallelExecutionOptions.IsReadOnly) tam-string eşleşme yapar.
+    //
+    // Bu sapma gerçekten yaşandı: prompt "sipariş_iadesi" derken kod tarafı
+    // WellKnown.Intents.ReturnRequest = "iade_talebi" tanımlıyordu. Sonuç: iade
+    // eskalasyonları IntentSkillMap'teki "iade_talebi" satırını hiç eşleştiremedi ve
+    // "refund" skill'i — config'te onu üreten TEK yer — hiçbir zaman gerekli sayılmadı.
+    // Hiçbir test yakalamadı, çünkü mevcut router testi "şikayet" kullanıyor: iki
+    // sözlükte de aynı yazılan nadir değerlerden biri.
+
+    /// <summary>reasoning-system.md'deki `"intent": "a | b | c"` satırından değerleri çıkarır.</summary>
+    private static List<string> ReasoningPromptIntentEnum()
+    {
+        var m = Regex.Match(Prompt("services/reasoning-system"),
+            "\"intent\"\\s*:\\s*\"([^\"]+)\"");
+        m.Success.Should().BeTrue("reasoning-system.md çıktı örneğinde \"intent\" satırı bulunmalı");
+
+        return m.Groups[1].Value
+            .Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+    }
+
+    [Fact]
+    public void ReasoningPrompt_IntentEnum_MatchesWellKnownIntents()
+    {
+        ReasoningPromptIntentEnum().Should().BeEquivalentTo(WellKnown.Intents.LlmProduced,
+            "prompt'un LLM'e sunduğu intent kümesi ile kodun tanıdığı küme birebir aynı olmalı; " +
+            "sapan bir değer hiçbir hata vermeden tüm tam-string eşleşmelerini ıskalar");
+    }
+
+    [Fact]
+    public void ReasoningPrompt_DoesNotMentionUnknownIntent()
+    {
+        // "bilinmiyor" yalnızca ReasoningResultParser'ın parse hatası fallback'i — LLM'e
+        // geçerli bir seçenek olarak sunulursa model başarısızlığı kendi beyan edebilir.
+        ReasoningPromptIntentEnum().Should().NotContain(WellKnown.Intents.Unknown);
+    }
+
+    [Fact]
+    public void IntentSkillMap_Keys_AreAllKnownIntents()
+    {
+        // appsettings'teki IntentSkillMap anahtarları ReasoningResult.Intent ile tam-string
+        // karşılaştırılır (SkillsBasedRouter.ExtractRequiredSkills). Sözlükte olmayan bir
+        // anahtar ölü konfigürasyondur — o skill hiçbir zaman gerekli sayılmaz.
+        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("CustomerSupportBot.Api/appsettings.json")));
+
+        var keys = settings.RootElement
+            .GetProperty("Routing").GetProperty("IntentSkillMap")
+            .EnumerateObject().Select(p => p.Name).ToList();
+
+        keys.Should().NotBeEmpty();
+        keys.Should().OnlyContain(k => WellKnown.Intents.LlmProduced.Contains(k),
+            "her IntentSkillMap anahtarı LLM'in gerçekten üretebileceği bir intent olmalı");
+    }
+
+    // ─── Halka 4f: planning-agent.md'de ölü hint atfı kalmamalı ──────────────────
+
+    [Fact]
+    public void PlanningPrompt_DoesNotReferenceRemovedCompoundQueryHint()
+    {
+        // WorkflowMessageBuilder eskiden reasoning hint'ine "COMPOUND QUERY" bloğu
+        // ekliyordu; blok kaldırıldı (gerçek decompose yolunda hiç tetiklenmiyordu —
+        // CreateSubTaskReasoning SubTasks'ı boşaltır). Prompt hâlâ o nota koşullu
+        // talimat verirse LLM hiç gelmeyecek bir sinyali beklemeye devam eder.
+        const string marker = "COMPOUND QUERY";
+
+        SourceOf("CustomerSupportBot.Adapters.Agents/WorkflowMessageBuilder.cs")
+            .Should().NotContain($"\"{marker}", "kod bu hint metnini artık üretmiyor");
+        Prompt("agents/planning-agent").Should().NotContain(marker,
+            "planning-agent.md üretilmeyen bir hint'e koşullu talimat bağlamamalı");
+    }
+
     // ─── Halka 5: Görsel mimari dokümanının tool matrisi ──────────────────────────
     // docs/agent-architecture.html tool↔ajan matrisini elle listeliyor. Bir tool eklenip
     // doküman güncellenmezse matris sessizce yanlışa döner — bu, admin panelindeki
