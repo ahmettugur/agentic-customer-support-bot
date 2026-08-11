@@ -498,6 +498,7 @@
     private bool     _ratingSubmitted;
     private ChatMsg? _currentBot;
     private readonly List<AgentChip> _agentChips = new();
+    private bool _agentChipsSealed;
 
     // ── Onay bildirimleri (bloklamayan HITL modeli) ─────────────────────────────
     private readonly List<UnseenApproval> _approvalNotifications = new();
@@ -836,7 +837,7 @@
                     .Select(c => FriendlyAgentName(c.Name))
                     .Distinct()
                     .ToList();
-                ClearAgentChips();
+                SealAgentChips();
                 break;
             case "response_delta":
                 if (jd.TryGetProperty("text", out var delta)) _currentBot.Content += delta.GetString() ?? "";
@@ -844,7 +845,7 @@
             case "response_complete":
                 if (jd.TryGetProperty("text", out var full)) _currentBot.Content = full.GetString() ?? _currentBot.Content;
                 _currentBot.IsStreaming = false;
-                ClearAgentChips();
+                SealAgentChips();
                 break;
             case "human_joined":
                 // Bot yanıtı streaming sırasında admin devralırsa bot balonunu kaldır
@@ -1219,15 +1220,39 @@
     private void UpsertAgentChip(string? name, string? status)
     {
         if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(status)) return;
+        // Yanıt akmaya başladıktan sonra gelen geç ajan olayları paneli yeniden AÇMAMALI.
+        if (_agentChipsSealed) return;
+
         var existing = _agentChips.FirstOrDefault(c => c.Name == name);
         if (existing != null) existing.Status = status;
         else _agentChips.Add(new AgentChip { Name = name, Status = status, SortOrder = _agentChipSeq++ });
     }
 
+    /// <summary>Tur başlangıcı — listeyi boşaltır ve yeni ajan çiplerine yeniden izin verir.</summary>
     private void ClearAgentChips()
     {
         _agentChips.Clear();
         _agentChipSeq = 0;
+        _agentChipsSealed = false;
+    }
+
+    /// <summary>
+    /// Yanıt akışı başladıktan sonra listeyi boşaltır ve YENİ çip eklenmesini kapatır.
+    ///
+    /// <para>
+    /// Backend, ResponseAgent'ın <c>status=done</c> olayını ilk <c>response_delta</c>'dan SONRA
+    /// gönderiyor: <c>ExecutorCompletedEvent</c>, <c>AgentResponseUpdateEvent</c>'ten sonra
+    /// geliyor (bkz. WorkflowTraceEventProcessor). Bu olay engellenmezse <c>response_start</c>'ta
+    /// temizlenen panel tek bir çiple yeniden açılıyor, ardından <c>response_complete</c>'te
+    /// tekrar kapanıyordu — kullanıcı yanıt geldikten sonra bir "kapan-aç-kapan" titremesi
+    /// görüyordu. Mühürleme bir sonraki turda <see cref="ClearAgentChips"/> ile kalkar.
+    /// </para>
+    /// </summary>
+    private void SealAgentChips()
+    {
+        _agentChips.Clear();
+        _agentChipSeq = 0;
+        _agentChipsSealed = true;
     }
 
     // ── response_delta / reasoning_delta render coalescing ──────────────────────
