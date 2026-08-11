@@ -90,7 +90,7 @@ public class PostgresSessionManagerHydrationTests
         var ct = TestContext.Current.CancellationToken;
         var sessionId = $"exchange-{Guid.NewGuid():N}";
         var mgr1 = NewManager(_fixture.DbFactory);
-        await mgr1.AddExchangeAsync(sessionId, "merhaba", "size nasıl yardımcı olabilirim", ct);
+        await mgr1.AddExchangeAsync(sessionId, "merhaba", "size nasıl yardımcı olabilirim", ct: ct);
 
         // Yeni bir manager instance'ı — cache boş, geçmişi DB'den hydrate etmek zorunda.
         var mgr2 = NewManager(_fixture.DbFactory);
@@ -153,7 +153,7 @@ public class PostgresSessionManagerHydrationTests
         // çağrı bu session için DB'ye tekrar gitmez (bkz. EnsureSessionHydrated).
         (await reader.GetHistoryAsync(sessionId, ct)).Should().BeEmpty();
 
-        await writer.AddExchangeAsync(sessionId, "merhaba", "size nasıl yardımcı olabilirim", ct);
+        await writer.AddExchangeAsync(sessionId, "merhaba", "size nasıl yardımcı olabilirim", ct: ct);
 
         // Reader zaten hydrate edilmiş olduğu için bu çağrı DB'ye BİR DAHA gitmez —
         // aşağıdaki iki mesaj yalnızca Redis delta'sından (OnRemoteHistoryChanged) gelebilir.

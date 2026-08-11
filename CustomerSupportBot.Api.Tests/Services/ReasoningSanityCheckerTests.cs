@@ -249,8 +249,54 @@ public class ReasoningSanityCheckerTests
     }
 
     // ─── SubTasksIgnoredRule ───
+    // Kural, alt görevlerin GERÇEKTEN yürütülmeyeceği durumu yakalamalı. Yürütme kapısı
+    // SubTaskOrchestrator.IsCompoundQuery: 2+ alt görev VE 2+ farklı hedef ajan.
+
     [Fact]
-    public void SubTasksIgnored_NextActionMissesAgents_Warns()
+    public void SubTasksIgnored_TwoDistinctAgents_NoIssue()
+    {
+        // REGRESYON: kural eskiden TAM BURADA ateşleniyordu — yani decompose'un doğru
+        // çalıştığı tek durumda. nextAction'ın decompose yolunda hiçbir etkisi yok.
+        var rule = new SubTasksIgnoredRule();
+        var issues = new List<ReasoningIssue>();
+        var reasoning = new ReasoningResult
+        {
+            SubTasks = new()
+            {
+                new SubTask { Order = 1, TargetAgent = WellKnown.AgentNames.Order },
+                new SubTask { Order = 2, TargetAgent = WellKnown.AgentNames.Complaint }
+            },
+            NextAction = "orderagent'e yönlendir"
+        };
+
+        SubTaskOrchestrator.IsCompoundQuery(reasoning).Should().BeTrue("kapı açık olmalı");
+        rule.Apply(reasoning, new VerifiedEntities(), issues);
+
+        issues.Should().BeEmpty("alt görevler DecomposedRunner ile ayrı ayrı yürütülecek");
+    }
+
+    [Fact]
+    public void SubTasksIgnored_TwoSubTasksSameAgent_Warns()
+    {
+        // Kapı kapalı (tek ajan) → tek-runner yoluna düşülür ve subTasks tamamen düşer.
+        var rule = new SubTasksIgnoredRule();
+        var issues = new List<ReasoningIssue>();
+        rule.Apply(new ReasoningResult
+        {
+            SubTasks = new()
+            {
+                new SubTask { Order = 1, TargetAgent = WellKnown.AgentNames.Order },
+                new SubTask { Order = 2, TargetAgent = WellKnown.AgentNames.Order }
+            }
+        }, new VerifiedEntities(), issues);
+
+        var issue = issues.Should().ContainSingle().Which;
+        issue.Code.Should().Be("subtasks_ignored");
+        issue.Message.Should().Contain("yürütülmeden");
+    }
+
+    [Fact]
+    public void SubTasksIgnored_NoTargetAgents_Warns()
     {
         var rule = new SubTasksIgnoredRule();
         var issues = new List<ReasoningIssue>();
@@ -258,13 +304,12 @@ public class ReasoningSanityCheckerTests
         {
             SubTasks = new()
             {
-                new SubTask { Order = 1, TargetAgent = "OrderAgent" },
-                new SubTask { Order = 2, TargetAgent = "ComplaintAgent" }
-            },
-            NextAction = "orderagent'e yönlendir"
+                new SubTask { Order = 1, Description = "a" },
+                new SubTask { Order = 2, Description = "b" }
+            }
         }, new VerifiedEntities(), issues);
 
-        issues.Should().ContainSingle().Which.Code.Should().Be("subtasks_ignored");
+        issues.Should().ContainSingle().Which.Message.Should().Contain("targetAgent");
     }
 
     [Fact]
@@ -274,7 +319,7 @@ public class ReasoningSanityCheckerTests
         var issues = new List<ReasoningIssue>();
         rule.Apply(new ReasoningResult
         {
-            SubTasks = new() { new SubTask { Order = 1, TargetAgent = "OrderAgent" } }
+            SubTasks = new() { new SubTask { Order = 1, TargetAgent = WellKnown.AgentNames.Order } }
         }, new VerifiedEntities(), issues);
         issues.Should().BeEmpty();
     }

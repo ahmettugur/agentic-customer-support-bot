@@ -421,8 +421,31 @@ public static class WellKnown
     }
 
     /// <summary>
-    /// Kural tabanlı duygu analizi anahtar kelimeleri.
-    /// Sıra: angry → negative → positive. Eşleşme yoksa neutral.
+    /// Kural tabanlı duygu analizi anahtar kelimeleri —
+    /// <see cref="Services.SessionStateExtractor.DetectSentiment"/> için.
+    ///
+    /// <para>
+    /// <b>Sıra load-bearing:</b> angry → negative → positive, ilk eşleşen kazanır.
+    /// Negative'in Positive'den önce gelmesi zorunludur: <c>"memnun değil"</c> (negative)
+    /// aksi halde <c>"memnun"</c> (positive) tarafından yakalanırdı. Yeni kelime eklerken
+    /// bir listedeki kelimenin sonraki listedekinin ÖNEKİ olup olmadığına dikkat et.
+    /// </para>
+    /// <para>
+    /// <b>İŞLEM adı olan kelimeler buraya girmez.</b> <c>"iade"</c>, <c>"iptal"</c>,
+    /// <c>"şikayet"</c> bir duygu değil, kullanıcının yapmak istediği işi anlatır —
+    /// bunlar Negative listesindeyken <i>"teşekkürler, iade işlemim tamamlandı"</i> gibi
+    /// memnun mesajlar negatif sayılıyor ve ardışık-negatif sayacını artırıp otomatik
+    /// eskalasyon eşiğini yanlış yere çekiyordu. Gerçekten öfkeli varyantları
+    /// (<c>"şikayet edeceğim"</c>) zaten Angry listesinde. Aynı gerekçeyle <c>"çöz"</c>
+    /// kaldırıldı: Positive'deki <c>"çözüldü"</c>nün önekiydi.
+    /// </para>
+    /// <para>
+    /// <b>Bilinen sınır:</b> eşleşme saf substring olduğu için <c>"sorun"</c> gibi kelimeler
+    /// olumlu kapanışlarda da yakalanır (<i>"sorunum çözüldü"</i> → negative). Düzgün çözümü
+    /// kelime sınırı + olumsuzlama analizidir; bu tablo kapsamında değil. Etkisi sınırlı,
+    /// çünkü gerçek boru hattında <see cref="TurnSignals"/> ile gelen LLM sentiment'i
+    /// önceliklidir — bu tablo yalnızca LLM sinyal üretmediğinde devreye girer.
+    /// </para>
     /// </summary>
     public static readonly IReadOnlyList<(string Sentiment, double Score, string[] Keywords)> SentimentKeywords =
     [
@@ -436,8 +459,7 @@ public static class WellKnown
         (Sentiments.Negative, 0.25, [
             "memnun değil", "kötü", "sorun", "problem", "hata", "yanlış",
             "gecikmeli", "gecikme", "eksik", "kırık", "bozuk", "hasar",
-            "iade", "iptal", "şikayet", "düzelt", "çöz", "mutsuz",
-            "sinir", "kızgın", "üzgün", "hayal kırıklığı", "beklentim",
+            "mutsuz", "sinir", "kızgın", "üzgün", "hayal kırıklığı", "beklentim",
             "olmadı", "çalışmıyor", "gelmedi", "kayıp", "neden böyle"
         ]),
         // Positive (olumlu) — 0.85

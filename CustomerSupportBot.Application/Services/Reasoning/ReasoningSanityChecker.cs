@@ -351,7 +351,25 @@ public sealed class NotFoundIgnoredRule : IReasoningSanityRule
     }
 }
 
-/// <summary>Compound query var ama nextAction tek agent yönlendirmesi.</summary>
+/// <summary>
+/// Alt görevler bildirilmiş ama orkestratör onları yürütmeyecek.
+///
+/// <para>
+/// Yürütme kapısı <see cref="SubTaskOrchestrator.IsCompoundQuery"/>: <b>2+ alt görev VE 2+
+/// farklı hedef ajan</b>. Bu koşul sağlanırsa <c>CustomerSupportTeam</c> DecomposedRunner'a
+/// geçer ve her alt görevi ayrı ayrı çalıştırır. Sağlanmazsa alt görev listesi tek-runner
+/// yoluna düşer ve <b>tamamen yok sayılır</b> — reasoning hint'inde bile görünmez
+/// (bkz. <c>WorkflowMessageBuilder.BuildReasoningSummaryHint</c>). Kullanıcının ikinci
+/// isteği sessizce cevapsız kalır.
+/// </para>
+/// <para>
+/// <b>Kural eskiden tam TERSİNİ yapıyordu:</b> kapı koşulunun aynısını kullanıp
+/// (<c>Count &gt;= 2 &amp;&amp; agents &gt;= 2</c>) <c>nextAction</c> tüm ajan adlarını
+/// anmıyorsa uyarı üretiyordu — yani decompose'un DOĞRU çalıştığı tek durumda ateşleniyordu.
+/// Decompose yolunda <c>nextAction</c>'ın hiçbir yönlendirme etkisi yok; üstelik bu yanlış
+/// pozitif <c>LessonMiner</c>'ın ders çıkarma prompt'una da giriyordu.
+/// </para>
+/// </summary>
 public sealed class SubTasksIgnoredRule : IReasoningSanityRule
 {
     public string Code => "subtasks_ignored";
@@ -359,6 +377,7 @@ public sealed class SubTasksIgnoredRule : IReasoningSanityRule
     public void Apply(ReasoningResult r, VerifiedEntities _, List<ReasoningIssue> issues)
     {
         if (r.SubTasks.Count < 2) return;
+        if (SubTaskOrchestrator.IsCompoundQuery(r)) return; // decompose edilecek — sorun yok
 
         var agents = r.SubTasks
             .Select(s => s.TargetAgent)
@@ -366,26 +385,20 @@ public sealed class SubTasksIgnoredRule : IReasoningSanityRule
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        if (agents.Count < 2) return;
+        var reason = agents.Count == 0
+            ? "hiçbirinde targetAgent yok"
+            : $"hepsi aynı ajana ({agents[0]}) yönelik";
 
-        var action = r.NextAction?.ToLowerInvariant() ?? "";
-        var mentionedAll = agents.All(a => action.Contains(a.ToLowerInvariant()));
-
-        if (!mentionedAll)
+        issues.Add(new ReasoningIssue
         {
-            var missing = agents.Where(a => !action.Contains(a.ToLowerInvariant())).ToList();
-            issues.Add(new ReasoningIssue
-            {
-                Code = Code,
-                Severity = IssueSeverity.Warn,
-                Message = $"subTasks {r.SubTasks.Count} alt görev içeriyor ({string.Join(", ", agents)}) " +
-                          $"ama nextAction sadece '{r.NextAction}' — {string.Join(", ", missing)} " +
-                          "unutuluyor.",
-                Field = "nextAction",
-                SuggestedFix = "nextAction'a tüm alt görevleri sırayla ekle, ya da PlanningAgent'ın " +
-                               "çoklu routing yapmasını sağla (ör. 'OrderAgent: ... / " +
-                               "ComplaintAgent: ...')."
-            });
-        }
+            Code = Code,
+            Severity = IssueSeverity.Warn,
+            Message = $"{r.SubTasks.Count} alt görev bildirildi ama {reason} — decompose kapısı " +
+                      "(2+ farklı hedef ajan) açılmıyor, alt görevler yürütülmeden düşecek.",
+            Field = "subTasks",
+            SuggestedFix = "Alt görevler gerçekten bağımsızsa her birine doğru targetAgent'ı ver " +
+                           "(ProductAgent / OrderAgent / ComplaintAgent). Aynı ajanın tek çağrısıyla " +
+                           "karşılanabiliyorlarsa subTasks'ı boşalt ve tek görev olarak tarif et."
+        });
     }
 }

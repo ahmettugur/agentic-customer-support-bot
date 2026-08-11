@@ -86,9 +86,14 @@ public class InMemorySessionManager : ISessionManager
 
     private async Task ExtractAndUpdateStateCoreAsync(
         AgentSession session, string userMessage, string botResponse,
-        IReadOnlyList<ConversationMessage>? priorHistory, CancellationToken ct)
+        IReadOnlyList<ConversationMessage>? priorHistory, CancellationToken ct,
+        TurnSignals? signals = null)
     {
-        SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse, priorHistory);
+        // Kilit gerekçesi için bkz. PostgresSessionManager.ExtractAndUpdateStateCoreAsync.
+        lock (session)
+        {
+            SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse, priorHistory, signals);
+        }
         await UpdateAsync(session, ct).ConfigureAwait(false);
     }
 
@@ -107,7 +112,8 @@ public class InMemorySessionManager : ISessionManager
     }
 
     public async Task AddExchangeAsync(
-        string sessionId, string userQuery, string assistantResponse, CancellationToken ct = default)
+        string sessionId, string userQuery, string assistantResponse,
+        TurnSignals? signals = null, CancellationToken ct = default)
     {
         var history = _messageHistory.GetOrAdd(sessionId, _ => new List<ConversationMessage>());
         List<ConversationMessage> priorHistorySnapshot;
@@ -126,7 +132,7 @@ public class InMemorySessionManager : ISessionManager
         _sessions[sessionId] = session;
 
         // State çıkarma
-        await ExtractAndUpdateStateCoreAsync(session, userQuery, assistantResponse, priorHistorySnapshot, ct)
+        await ExtractAndUpdateStateCoreAsync(session, userQuery, assistantResponse, priorHistorySnapshot, ct, signals)
             .ConfigureAwait(false);
     }
 

@@ -14,6 +14,15 @@ public static class SessionStateExtractor
 {
     /// <summary>
     /// Bir konuşma turundaki user ve bot mesajlarından state bilgilerini günceller.
+    ///
+    /// <para>
+    /// <b>Bu metot turun türetilmiş alanlarının (intent, sentiment,
+    /// <see cref="SessionState.ConsecutiveNegativeTurns"/>, faz) TEK YAZARIDIR.</b>
+    /// Başka hiçbir yerden yazılmamalıdır — LLM'in ürettiği değerler
+    /// <paramref name="llm"/> ile girdi olarak buraya taşınır. Bu alanları turun ortasında
+    /// ayrıca yazan ikinci bir yol eklemek, sayacın tur başına iki kez ilerlemesine ve
+    /// otomatik eskalasyonun erken tetiklenmesine yol açar (bkz. <see cref="TurnSignals"/>).
+    /// </para>
     /// </summary>
     /// <param name="priorHistory">
     /// Bu turdan ÖNCEKİ konuşma turları (eski → yeni sıralı, opsiyonel). Verilirse,
@@ -22,9 +31,15 @@ public static class SessionStateExtractor
     /// gerçek bağlamına göre yeniden sınıflandırılır — aksi halde sipariş numarası
     /// state.CustomerId'ye kalıcı olarak yazılıp sonraki turları da zehirler.
     /// </param>
+    /// <param name="llm">
+    /// LLM reasoning'inin bu tur için ürettiği sinyaller (opsiyonel). Dolu olan her alan
+    /// kural tabanlı çıkarımın YERİNE geçer; <c>null</c> alanlarda
+    /// <see cref="DetectUserIntent"/> / <see cref="DetectSentiment"/> devreye girer.
+    /// </param>
     public static void ExtractAndApply(
         SessionState state, string userMessage, string botResponse,
-        IReadOnlyList<ConversationMessage>? priorHistory = null)
+        IReadOnlyList<ConversationMessage>? priorHistory = null,
+        TurnSignals? llm = null)
     {
         state.TurnCount++;
 
@@ -46,14 +61,18 @@ public static class SessionStateExtractor
         if (!string.IsNullOrEmpty(extracted.OrderId))
             state.CollectedInfo["LastMentionedOrderId"] = extracted.OrderId;
 
-        // Niyet tespiti
-        state.CurrentIntent = DetectUserIntent(userMessage);
+        // Niyet tespiti — LLM bir karar ürettiyse o kazanır, yoksa kural tabanlı tabloya düş.
+        state.CurrentIntent = llm?.Intent ?? DetectUserIntent(userMessage);
 
         // Faz belirleme
         state.Phase = DetermineConversationPhase(state.TurnCount, botResponse);
 
-        // Duygu analizi
-        var (sentimentLabel, sentimentScore) = DetectSentiment(userMessage);
+        // Duygu analizi — aynı öncelik. Karar TEK yerde verilir; aşağıdaki tüm türetmeler
+        // (state alanları, SentimentHistory, ConsecutiveNegativeTurns) bu tek sonuca dayanır.
+        var (sentimentLabel, sentimentScore) = llm is { SentimentLabel: not null, SentimentScore: not null }
+            ? (llm.SentimentLabel, llm.SentimentScore.Value)
+            : DetectSentiment(userMessage);
+
         state.Sentiment = sentimentLabel;
         state.SentimentScore = sentimentScore;
 

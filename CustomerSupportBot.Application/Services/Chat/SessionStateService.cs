@@ -26,66 +26,34 @@ public sealed class SessionStateService
     }
 
     /// <summary>
-    /// Reasoning sonucundaki intent'i session state'e yazar.
+    /// Konuşmayı (exchange) session history'ye kaydeder, turun state çıkarımını tetikler
+    /// ve ChatBridge'e bildirir.
+    ///
+    /// <para>
+    /// <b>Intent ve sentiment burada, turun kapanışında tek seferde işlenir.</b> Eskiden
+    /// bunlar için ayrı <c>UpdateSessionIntentAsync</c> / <c>UpdateSessionSentiment</c>
+    /// metotları vardı ve tur ortasında state'e yazıyorlardı; hemen ardından bu çağrı
+    /// (<c>AddExchangeAsync</c> → <c>SessionStateExtractor</c>) aynı alanları kural tabanlı
+    /// değerlerle bir kez daha yazıyordu. Sonuç: LLM'in kararı her turda eziliyor,
+    /// <c>ConsecutiveNegativeTurns</c> ise tur başına iki kez artıyordu. Artık LLM'in
+    /// ürettikleri <see cref="TurnSignals"/> olarak GİRDİ biçiminde taşınır; türetilmiş
+    /// alanların tek yazarı <c>SessionStateExtractor.ExtractAndApply</c>'dır.
+    /// </para>
     /// </summary>
-    public async Task UpdateSessionIntentAsync(AgentSession session, string? intent, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(intent) || intent == WellKnown.Intents.Unknown) return;
-
-        // Aynı session'a çakışan (çift-submit, çoklu sekme) eşzamanlı isteklerde
-        // state mutasyonu — bkz. UpdateSessionSentiment'teki ConsecutiveNegativeTurns
-        // yorumu için aynı gerekçe. ISessionManager.GetOrCreateAsync/GetAsync aynı sessionId
-        // için hep AYNI AgentSession referansını döndürür, bu yüzden session nesnesinin
-        // kendisi kilit anahtarı olarak güvenle kullanılabilir (bkz.
-        // WorkflowRunner.ConsumeForceReplanHint'teki aynı kalıp).
-        lock (session)
-        {
-            session.State.CurrentIntent = intent;
-        }
-        await _sessionManager.UpdateAsync(session, ct);
-    }
-
-    /// <summary>
-    /// LLM reasoning sonucundaki sentiment'i session state'e yazar.
-    /// Kural tabanlı sonucu override eder (LLM daha doğru).
-    /// </summary>
-    public void UpdateSessionSentiment(AgentSession session, ReasoningResult reasoning)
-    {
-        if (string.IsNullOrWhiteSpace(reasoning.Sentiment) ||
-            reasoning.Sentiment == WellKnown.Sentiments.Neutral && reasoning.SentimentScore == 0.5)
-        {
-            return; // LLM sentiment döndürmemiş, kural tabanlı sonucu koru
-        }
-
-        // ConsecutiveNegativeTurns++ oku-değiştir-yaz — kilitsiz olursa aynı session'a
-        // çakışan iki eşzamanlı istek (çift-submit, çoklu sekme) birbirinin artışını
-        // ezebilir ve otomatik eskalasyon eşiği bir tur geç tetiklenir/hiç tetiklenmez.
-        lock (session)
-        {
-            var state = session.State;
-            state.Sentiment = reasoning.Sentiment;
-            state.SentimentScore = reasoning.SentimentScore;
-
-            if (reasoning.SentimentScore < WellKnown.SentimentThresholds.NegativeThreshold)
-                state.ConsecutiveNegativeTurns++;
-            else
-                state.ConsecutiveNegativeTurns = 0;
-        }
-    }
-
-    /// <summary>
-    /// Konuşmayı (exchange) session history'ye kaydeder ve ChatBridge'e bildirir.
-    /// </summary>
+    /// <param name="signals">
+    /// Bu tur için LLM sinyalleri; <c>null</c> ise kural tabanlı çıkarım kullanılır.
+    /// </param>
     public async Task PersistExchangeAsync(
         string sessionId,
         string query,
         string response,
         IChatBridge chatBridge,
+        TurnSignals? signals = null,
         CancellationToken ct = default)
     {
         if (!string.IsNullOrWhiteSpace(response))
         {
-            await _sessionManager.AddExchangeAsync(sessionId, query, response, ct);
+            await _sessionManager.AddExchangeAsync(sessionId, query, response, signals, ct);
             chatBridge.RecordBotExchange(sessionId, query, response);
         }
     }

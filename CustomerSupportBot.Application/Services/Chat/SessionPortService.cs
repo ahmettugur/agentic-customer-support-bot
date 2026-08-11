@@ -55,7 +55,9 @@ public sealed class SessionPortService : ISessionPort
 
     public async Task AddExchangeAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default)
     {
-        await _sessions.AddExchangeAsync(sessionId, userMessage, botResponse, ct);
+        // Genel amaçlı inbound API — bir reasoning turuna bağlı değil, dolayısıyla LLM
+        // sinyali yok; state çıkarımı kural tabanlı yolla yapılır.
+        await _sessions.AddExchangeAsync(sessionId, userMessage, botResponse, signals: null, ct);
         _logger.LogDebug("Exchange added to session: {SessionId}", sessionId);
     }
 

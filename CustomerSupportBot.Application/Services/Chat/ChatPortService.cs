@@ -56,8 +56,10 @@ public sealed class ChatPortService : IChatPort
         using var approvalScope = _approvalContext.SetScope(sessionId, null, query, session.State.AuthenticatedCustomerId);
         var response = await _team.RunAsync(query, history, session, reasoningResult, ct);
 
-        await _sessionState.UpdateSessionIntentAsync(session, reasoningResult.Intent, ct);
-        await _sessions.AddExchangeAsync(sessionId, query, response, ct);
+        // Intent/sentiment turun kapanışında TEK yerde işlenir — bkz. TurnSignals.
+        // (Bu yol eskiden sentiment'i hiç iletmiyordu; streaming yolla arasındaki
+        // davranış farkı da böylece kapanıyor.)
+        await _sessions.AddExchangeAsync(sessionId, query, response, TurnSignals.From(reasoningResult), ct);
 
         return new ChatResponse(response, sessionId, reasoningResult);
     }
@@ -100,7 +102,7 @@ public sealed class ChatPortService : IChatPort
             });
             if (!string.IsNullOrWhiteSpace(query))
             {
-                await _sessions.AddExchangeAsync(sessionId, query, "", ct);
+                await _sessions.AddExchangeAsync(sessionId, query, "", ct: ct);
                 _chatBridge.PublishUserMessage(sessionId, query);
             }
             yield break;
@@ -116,8 +118,6 @@ public sealed class ChatPortService : IChatPort
             if (evt.Type == StreamEventTypes.ReasoningComplete && evt.Data is ReasoningResult rr)
             {
                 reasoningResult = rr;
-                await _sessionState.UpdateSessionIntentAsync(session, rr.Intent, ct);
-                _sessionState.UpdateSessionSentiment(session, rr);
             }
         }
 
@@ -135,7 +135,8 @@ public sealed class ChatPortService : IChatPort
         }
 
         var fullResponse = responseBuilder.ToString().TrimEnd();
-        await _sessionState.PersistExchangeAsync(sessionId, query, fullResponse, _chatBridge, ct);
+        await _sessionState.PersistExchangeAsync(
+            sessionId, query, fullResponse, _chatBridge, TurnSignals.From(reasoningResult), ct);
 
         // Sentiment events
         var alert = _sessionState.CheckSentimentAlert(session);

@@ -154,9 +154,18 @@ public sealed class PostgresSessionManager : ISessionManager
 
     private async Task ExtractAndUpdateStateCoreAsync(
         AgentSession session, string userMessage, string botResponse,
-        IReadOnlyList<ConversationMessage>? priorHistory, CancellationToken ct)
+        IReadOnlyList<ConversationMessage>? priorHistory, CancellationToken ct,
+        TurnSignals? signals = null)
     {
-        SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse, priorHistory);
+        // ConsecutiveNegativeTurns oku-değiştir-yaz içerdiği için kilitli: aynı session'a
+        // çakışan iki eşzamanlı istek (çift-submit, çoklu sekme) birbirinin artışını ezerse
+        // otomatik eskalasyon eşiği bir tur geç tetiklenir. GetOrCreateAsync/GetAsync aynı
+        // sessionId için hep AYNI AgentSession referansını döndürdüğünden session nesnesi
+        // kilit anahtarı olarak güvenlidir (bkz. WorkflowMessageBuilder.ConsumeForceReplanHint).
+        lock (session)
+        {
+            SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse, priorHistory, signals);
+        }
         await UpdateAsync(session, ct).ConfigureAwait(false);
     }
 
@@ -176,7 +185,8 @@ public sealed class PostgresSessionManager : ISessionManager
     }
 
     public async Task AddExchangeAsync(
-        string sessionId, string userQuery, string assistantResponse, CancellationToken ct = default)
+        string sessionId, string userQuery, string assistantResponse,
+        TurnSignals? signals = null, CancellationToken ct = default)
     {
         await EnsureSessionHydratedAsync(sessionId, ct).ConfigureAwait(false);
 
@@ -208,7 +218,7 @@ public sealed class PostgresSessionManager : ISessionManager
             new ConversationMessage(ConversationRoles.Assistant, assistantResponse)
         ]);
 
-        await ExtractAndUpdateStateCoreAsync(session, userQuery, assistantResponse, priorHistorySnapshot, ct)
+        await ExtractAndUpdateStateCoreAsync(session, userQuery, assistantResponse, priorHistorySnapshot, ct, signals)
             .ConfigureAwait(false);
     }
 

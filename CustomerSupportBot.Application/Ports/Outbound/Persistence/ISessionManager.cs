@@ -31,7 +31,18 @@ public interface ISessionManager
     // ─── Konuşma geçmişi ───
 
     Task<List<ConversationMessage>> GetHistoryAsync(string sessionId, CancellationToken ct = default);
-    Task AddExchangeAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default);
+    /// <summary>
+    /// Bir konuşma turunu (kullanıcı + bot mesajı) geçmişe ekler ve turun state çıkarımını
+    /// tetikler.
+    /// </summary>
+    /// <param name="signals">
+    /// Bu tur için LLM reasoning'inin ürettiği intent/sentiment sinyalleri (opsiyonel).
+    /// Verilirse kural tabanlı çıkarımın yerine geçer — bkz. <see cref="TurnSignals"/>.
+    /// <c>null</c> geçmek "LLM sinyali yok, kural tabanlı çıkarımı kullan" demektir;
+    /// bu alanları tur ortasında AYRICA yazmak çift sayıma yol açar.
+    /// </param>
+    Task AddExchangeAsync(string sessionId, string userMessage, string botResponse,
+        TurnSignals? signals = null, CancellationToken ct = default);
     Task AppendAssistantMessageAsync(string sessionId, string text, CancellationToken ct = default);
     Task AppendUserMessageAsync(string sessionId, string text, CancellationToken ct = default);
     Task ClearSessionAsync(string sessionId, CancellationToken ct = default);

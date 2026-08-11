@@ -272,12 +272,11 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
                 await ForwardStreamEventAsync(channel, evt, ct);
                 if (evt.Type == StreamEventTypes.ReasoningComplete && evt.Data is ReasoningResult rr)
                 {
+                    // Intent burada state'e YAZILMAZ: aşağıdaki AddExchangeAsync turun
+                    // state çıkarımını çalıştırıp aynı alanı zaten yazıyor. Buradaki yazma
+                    // birkaç satır sonra sessizce eziliyordu — artık TurnSignals ile
+                    // girdi olarak taşınıyor (bkz. TurnSignals).
                     finalReasoning = rr;
-                    if (!string.IsNullOrWhiteSpace(rr.Intent) && rr.Intent != WellKnown.Intents.Unknown)
-                    {
-                        session.State.CurrentIntent = rr.Intent;
-                        await _sessionManager.UpdateAsync(session, ct);
-                    }
                 }
             }
 
@@ -296,7 +295,8 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
 
             if (!string.IsNullOrWhiteSpace(responseText))
             {
-                await _sessionManager.AddExchangeAsync(sessionId, safeQuery, responseText, ct);
+                await _sessionManager.AddExchangeAsync(
+                    sessionId, safeQuery, responseText, TurnSignals.From(finalReasoning), ct);
                 _chatBridge.RecordBotExchange(sessionId, safeQuery, responseText);
             }
 
