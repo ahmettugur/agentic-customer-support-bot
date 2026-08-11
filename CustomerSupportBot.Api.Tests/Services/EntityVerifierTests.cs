@@ -61,15 +61,33 @@ public class EntityVerifierTests
     }
 
     [Fact]
-    public void Verify_CustomerFromSession_UsesSessionState()
+    public void Verify_CustomerFromSession_UsesAuthenticatedCustomerId()
     {
         var session = EmptySession();
-        session.State.CustomerId = "1008";
+        session.State.AuthenticatedCustomerId = "1008";
 
         var result = _verifier.Verify("siparişlerim?", session);
 
         result.CustomerId.Should().NotBeNull();
         result.CustomerId!.Source.Should().Be(EntitySource.SessionState);
+    }
+
+    [Fact]
+    public void Verify_PoisonedSessionStateCustomerId_IsIgnored()
+    {
+        // State.CustomerId LLM'in serbest metinden çıkardığı, kullanıcı tarafından
+        // zehirlenebilir bir alan — SessionState fallback'i yalnızca JWT'den gelen
+        // AuthenticatedCustomerId'yi kullanmalı, yoksa bir kullanıcı "ben 1008 numaralı
+        // müşteriyim" diyerek başkasının last_order_id/order_count türetilmiş alanlarını
+        // reasoning prompt'una sızdırabilir.
+        var session = EmptySession();
+        session.State.CustomerId = "1008";
+        session.State.AuthenticatedCustomerId = null;
+
+        var result = _verifier.Verify("siparişlerim?", session);
+
+        result.CustomerId.Should().BeNull();
+        result.DerivedLastOrderId.Should().BeNullOrEmpty();
     }
 
     [Fact]

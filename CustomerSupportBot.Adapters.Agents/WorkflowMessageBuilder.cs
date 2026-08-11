@@ -167,21 +167,16 @@ internal sealed class WorkflowMessageBuilder
         if (!string.IsNullOrWhiteSpace(r.NextAction))
             linesBuilder.AppendLine($"- Önerilen sonraki aksiyon: {r.NextAction}");
 
-        if (r.SubTasks.Count >= 2)
-        {
-            linesBuilder.AppendLine(
-                $"- ⚠️ COMPOUND QUERY: {r.SubTasks.Count} alt göreve ayrıştırıldı. " +
-                "PlanningAgent olarak her birini SIRAYLA aynı yanıtta yönlendir:");
-            foreach (var sub in r.SubTasks.OrderBy(s => s.Order))
-            {
-                var entStr = sub.Entities.Count > 0
-                    ? $" [{string.Join(", ", sub.Entities.Select(kv => $"{kv.Key}={kv.Value}"))}]"
-                    : "";
-                linesBuilder.AppendLine(
-                    $"    {sub.Order}. {sub.TargetAgent}: {sub.Description}{entStr}");
-            }
-        }
-
+        // NOT: Burada eskiden SubTasks.Count >= 2 ise PlanningAgent'a "her birini sırayla
+        // aynı yanıtta yönlendir" diyen bir COMPOUND QUERY bloğu vardı. Bu, DecomposedRunner'ın
+        // gerçek yürütme yolunu YANLIŞ tarif ediyordu: SubTaskOrchestrator.IsCompoundQuery
+        // (farklı hedef ajan sayısı >= 2 şartı) true olduğunda CreateSubTaskReasoning zaten
+        // SubTasks'ı boşaltıp her alt görevi AYRI bir _runner.RunAsync çağrısıyla çalıştırıyor
+        // — yani bu blok gerçek decompose senaryosunda hiç tetiklenmiyordu (subReasoning'de
+        // SubTasks her zaman boş). Tek tetiklendiği durum IsCompoundQuery'nin false döndüğü
+        // (aynı ajana hedeflenmiş >=2 alt görev) tek-runner yoluydu — orada da PlanningAgent'a
+        // artık desteklenmeyen "sırayla yönlendir" formatını talep ediyordu (bkz. planning-agent.md:
+        // PlanningAgent'ın tek görevi ilk ajanı seçmek, çıktı formatı JSON schema ile kısıtlı).
         var reasoningLines = linesBuilder.ToString().TrimEnd();
         return _prompts.Render("services/reasoning-hint", new Dictionary<string, string?>
         {

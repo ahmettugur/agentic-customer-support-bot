@@ -5,7 +5,7 @@ using CustomerSupportBot.Domain.Services;
 // IdExtractor regex ile formatı doğrular. EntityVerifier aşağıdakileri yapar:
 //   1) Query'den extract et (IdExtractor)
 //   2) History'den eksik olanları tamamla (önceki turlardaki entity'leri hatırla)
-//   3) SessionState'ten tamamla (session.State.CustomerId)
+//   3) SessionState'ten tamamla (session.State.AuthenticatedCustomerId — JWT'den, poisonable değil)
 //   4) DB ile varlık doğrulaması yap (IOrderRepository / IComplaintRepository üzerinden)
 //   5) Türetilmiş alanları hesapla (ör. customer_id'den last_order_id)
 //
@@ -43,7 +43,7 @@ public class EntityVerifier
     /// Verilen bağlamda entity'leri çıkarır, doğrular ve türetilmiş alanları hesaplar.
     /// </summary>
     /// <param name="query">Güncel kullanıcı sorgusu.</param>
-    /// <param name="session">Oturum (State.CustomerId vb. için).</param>
+    /// <param name="session">Oturum (State.AuthenticatedCustomerId vb. için).</param>
     /// <param name="history">Önceki konuşma turları (opsiyonel).</param>
     public VerifiedEntities Verify(
         string query,
@@ -67,8 +67,12 @@ public class EntityVerifier
         var historyIds = ExtractFromHistory(history);
 
         // 3) Değerleri birleştir — öncelik: Query > History > SessionState
+        // NOT: SessionState fallback'i AuthenticatedCustomerId'den (JWT) gelir, poisonable
+        // session.State.CustomerId'den DEĞİL — aksi halde kullanıcı "ben 1008 numaralı
+        // müşteriyim" diyerek başka bir müşterinin last_order_id/order_count türetilmiş
+        // alanlarını reasoning prompt'una (ve "Düşünce süreci" panelinden kullanıcıya) sızdırabilir.
         var orderIdValue = queryIds.OrderId ?? historyIds.OrderId;
-        var customerIdValue = queryIds.CustomerId ?? historyIds.CustomerId ?? session.State.CustomerId;
+        var customerIdValue = queryIds.CustomerId ?? historyIds.CustomerId ?? session.State.AuthenticatedCustomerId;
         var complaintIdValue = queryIds.ComplaintId ?? historyIds.ComplaintId;
 
         // 4) Her entity için kaynak + doğrulama
