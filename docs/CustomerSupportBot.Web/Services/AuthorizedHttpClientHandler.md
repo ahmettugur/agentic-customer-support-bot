@@ -21,6 +21,8 @@
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 `DelegatingHandler` pattern'i cross-cutting concern'leri (auth, retry) HTTP pipeline'ına şeffaf şekilde eklemenin standart .NET yoludur. `CloneRequestAsync` metodu gereklidir çünkü `HttpRequestMessage` bir kez gönderildikten sonra tekrar gönderilemez — içerik stream'i tüketilmiş olur.
 
+> ⚠️ Bu handler yalnızca Blazor'un `HttpClient`'ı üzerinden giden istekleri kapsar. [`Chat.razor`](../Pages/Chat.md)'daki chat-stream/EventSource çağrıları `chat-bridge.js` içinde ham `fetch`/`EventSource` kullanır — bu pipeline'ın **dışındadır** ve aynı 401→refresh→retry mantığının ayrı bir kopyası oradadır (bkz. [`Chat.md`](../Pages/Chat.md#token-süresi-dolması--chat-akışı-authorizedhttpclienthandlerin-dışında)).
+
 ## Metotlar / Üyeler
 
 | Metot | Açıklama |

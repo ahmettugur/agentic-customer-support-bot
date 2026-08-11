@@ -53,6 +53,7 @@ Blazor WebAssembly (WASM) tabanlı ön yüz katmanı. `CustomerSupportBot.Api` �
 - [AuthTokenStore.md](Services/AuthTokenStore.md) — `localStorage` tabanlı JWT depolama.
 - [AuthorizedHttpClientHandler.md](Services/AuthorizedHttpClientHandler.md) — Otomatik Bearer token ekleme ve 401 refresh.
 - [ChatApiService.md](Services/ChatApiService.md) — Chat oturumu, rating ve approval API istemcisi.
+- [JwtUtils.md](Services/JwtUtils.md) — JWT `exp` claim'ini imza doğrulamadan decode eden yardımcı (`AppAuthStateProvider`'ın süre kontrolü için).
 - [KnowledgeApiService.md](Services/KnowledgeApiService.md) — Bilgi tabanı CRUD API istemcisi.
 - [SlaApiService.md](Services/SlaApiService.md) — SLA durum ve olay API istemcisi.
 - [ThemeService.md](Services/ThemeService.md) — Dark/Light tema yönetimi.

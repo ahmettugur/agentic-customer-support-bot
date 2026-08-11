@@ -5,6 +5,9 @@
 @inject ChatApiService ChatApi
 @inject HttpClient Http
 @inject AuthTokenStore TokenStore
+@inject AuthService AuthSvc
+@inject AppAuthStateProvider AuthState
+@inject NavigationManager Nav
 @implements IAsyncDisposable
 @inject ThemeService ThemeSvc
 @using System.Text.Json
@@ -789,7 +792,54 @@
         StateHasChanged();
         await ScrollBottomAsync();
         // Streaming is handled by JS fetch → OnStreamEvent / OnStreamComplete / OnStreamError callbacks
-        await JS.InvokeVoidAsync("__streamChat", _dotNetRef, _apiBase, text, _sessionId);
+        await JS.InvokeVoidAsync("__streamChat", _dotNetRef, _apiBase, text, _sessionId, false);
+    }
+
+    /// <summary>
+    /// JS'in ham fetch ile aldığı 401'i bildirir (bkz. __streamChat). Bu, Blazor'un normal
+    /// HttpClient'ı için var olan <see cref="AuthorizedHttpClientHandler"/>'ın 401→refresh→retry
+    /// mantığının chat-stream fetch'i için karşılığıdır — o handler burada devrede değil çünkü
+    /// chat-bridge.js kendi ham fetch/EventSource'unu kullanıyor.
+    /// </summary>
+    [JSInvokable]
+    public async Task OnStreamUnauthorized(string query, string? sessionId)
+    {
+        var refreshed = await AuthSvc.TryRefreshAsync(AuthScope.Customer);
+        if (refreshed is null)
+        {
+            AuthState.NotifyStateChanged();
+            OnStreamError("oturum süresi doldu");
+            var returnTo = Uri.EscapeDataString(Nav.Uri);
+            Nav.NavigateTo($"/customer-login?return={returnTo}", forceLoad: false);
+            return;
+        }
+
+        await JS.InvokeVoidAsync("__setAuthToken", refreshed.AccessToken);
+        // isRetry=true — bu deneme de 401 alırsa JS doğrudan OnStreamError'a düşer,
+        // ikinci bir refresh denemesi yapılmaz.
+        await JS.InvokeVoidAsync("__streamChat", _dotNetRef, _apiBase, query, sessionId, true);
+    }
+
+    /// <summary>
+    /// Kalıcı bildirim kanalının (EventSource) bir hatası — muhtemelen süresi dolmuş token.
+    /// EventSource tarayıcı API'sinde HTTP status kodu görünmediği için ayrım yapılamaz;
+    /// bu yüzden her hatada refresh denenir. chat-bridge.js bunu her bağlantı başına en
+    /// fazla bir kez çağırır (bkz. _persistentEventsRetried), sonsuz döngü oluşmaz.
+    /// </summary>
+    [JSInvokable]
+    public async Task OnPersistentEventsError(string sid)
+    {
+        var refreshed = await AuthSvc.TryRefreshAsync(AuthScope.Customer);
+        if (refreshed is null)
+        {
+            AuthState.NotifyStateChanged();
+            var returnTo = Uri.EscapeDataString(Nav.Uri);
+            Nav.NavigateTo($"/customer-login?return={returnTo}", forceLoad: false);
+            return;
+        }
+
+        await JS.InvokeVoidAsync("__setAuthToken", refreshed.AccessToken);
+        await JS.InvokeVoidAsync("_startPersistentEvents", sid, true);
     }
 
     [JSInvokable]

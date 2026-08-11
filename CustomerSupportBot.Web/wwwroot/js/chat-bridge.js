@@ -201,7 +201,17 @@ window.__chatSetup = function (ref, apiBase, authToken) {
     // Regular (non-async) function so JS.InvokeVoidAsync returns immediately.
     // The actual fetch+stream runs inside an IIFE so C# is never blocked waiting
     // for the Promise — OnStreamEvent callbacks arrive in real time.
-    window.__streamChat = function (ref, apiBase, query, sessionId) {
+    // Token'ı güncellemek için tek giriş noktası — AppAuthStateProvider/AuthService'in
+    // arka planda yenilediği token'ı buradan JS tarafına taşımak için kullanılır.
+    window.__setAuthToken = function (token) {
+        window._authToken = token || null;
+    };
+
+    // isRetry=true ise 401 alındığında YENİDEN refresh denenmez — doğrudan OnStreamError'a
+    // düşer. Bu, refresh edilmiş ama yine de geçersiz olan bir token'ın (ör. sunucu tarafında
+    // ayrıca reddedilmesi) sonsuz refresh döngüsüne girmesini engeller; her mesaj için en
+    // fazla bir kez otomatik retry yapılır.
+    window.__streamChat = function (ref, apiBase, query, sessionId, isRetry) {
         var ctrl = new AbortController();
         window._chatStreamAbort = ctrl;
         (async function () {
@@ -216,6 +226,12 @@ window.__chatSetup = function (ref, apiBase, authToken) {
                     signal: ctrl.signal
                 });
                 if (!r.ok) {
+                    if (r.status === 401 && !isRetry) {
+                        // C# tarafı refresh dener; başarılıysa __streamChat'i isRetry=true ile
+                        // tekrar çağırır, başarısızsa login'e yönlendirir. Bu fetch burada biter.
+                        ref.invokeMethodAsync('OnStreamUnauthorized', query, sessionId || null).catch(function () { });
+                        return;
+                    }
                     ref.invokeMethodAsync('OnStreamError', 'HTTP ' + r.status).catch(function () { });
                     return;
                 }
@@ -256,8 +272,14 @@ window.__chatSetup = function (ref, apiBase, authToken) {
     };
 
     // ── Persistent EventSource (uses absolute API URL) ────────────────────────
-    window._startPersistentEvents = function (sid) {
+    // isAuthRetry=true, C#'ın OnPersistentEventsError sonrası yeniden bağlanmak için yaptığı
+    // çağrıdır — bu durumda _persistentEventsRetried SIFIRLANMAZ. Sıfırlanırsa ve yeni token
+    // da (ör. refresh token da geçersizse ya da farklı bir sebeple) reddedilirse, ikinci hata
+    // tekrar C#'a bildirilip tekrar refresh denenir — sonsuz bir JS↔C# döngüsü doğar. Normal
+    // (yeni oturum bağlama) çağrılarda ikinci parametre verilmez, flag her zaman sıfırlanır.
+    window._startPersistentEvents = function (sid, isAuthRetry) {
         if (window._chatEs) window._chatEs.close();
+        if (!isAuthRetry) window._persistentEventsRetried = false;
         // EventSource header desteklemez — token'ı query string ile taşıyoruz
         // (bkz. AuthServicesExtensions.cs OnMessageReceived, access_token'ı bearer olarak okuyor).
         var tokenQs = window._authToken ? '?access_token=' + encodeURIComponent(window._authToken) : '';
@@ -268,7 +290,18 @@ window.__chatSetup = function (ref, apiBase, authToken) {
                 ref.invokeMethodAsync('OnPersistentEvent', t, e.data || '{}');
             });
         });
-        es.onerror = function () { };
+        // EventSource, hata sebebini (401 dahil) tarayıcı API'sinde expose etmez — ama
+        // token'ın süresi dolmuşsa bağlantı asla kurulamaz ve tarayıcı AYNI (artık geçersiz)
+        // URL'yle sonsuza dek kendi kendine yeniden bağlanmayı dener; kullanıcı hiçbir uyarı
+        // görmeden bildirim kanalı kalıcı olarak ölü kalır. Bu yüzden ilk hatada BİR kez
+        // C#'a haber verip token'ı yeniletiyoruz; o da başarısız olursa (_persistentEventsRetried
+        // zaten true olduğu için) burada tekrar denenmez — sonraki native reconnect
+        // denemeleri sessizce devam eder, kullanıcıyı spam'lemeyiz.
+        es.onerror = function () {
+            if (window._persistentEventsRetried) return;
+            window._persistentEventsRetried = true;
+            ref.invokeMethodAsync('OnPersistentEventsError', sid).catch(function () { });
+        };
     };
 
     window._stopPersistentEvents = function () {
