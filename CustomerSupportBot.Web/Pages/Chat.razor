@@ -197,11 +197,18 @@
                                         }
                                     </div>
                                 }
-                                else if (!msg.IsStreaming && msg.ProcessedAgents is { Count: > 0 })
+                                else if (msg.ProcessedAgents is { Count: > 0 })
                                 {
-                                    <!-- Akış bittiğinde canlı çipler yerini bu dondurulmuş (hepsi "tamamlandı")
-                                         kopyaya bırakır — kullanıcı hangi ajanların çalıştığını yanıt
-                                         bittikten sonra da görsün diye kaybolmuyor. -->
+                                    <!-- Canlı çipler yerini bu dondurulmuş (hepsi "tamamlandı") kopyaya
+                                         bırakır — kullanıcı hangi ajanların çalıştığını yanıt bittikten
+                                         sonra da görsün diye kaybolmuyor.
+
+                                         Koşulda `!msg.IsStreaming` ARANMAZ: snapshot response_start'ta
+                                         alınıp canlı liste aynı anda temizleniyor, ama IsStreaming yanıt
+                                         akışı boyunca true kalıyor. Bu bayrak burada da aransaydı iki dal
+                                         da false olur, panel yanıt akarken kaybolup response_complete'te
+                                         yeniden belirirdi (kullanıcının bildirdiği titreme). -->
+
                                     <div class="agent-chip-list">
                                         @foreach (var agentName in msg.ProcessedAgents)
                                         {
