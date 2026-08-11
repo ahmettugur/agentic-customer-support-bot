@@ -28,6 +28,11 @@ WorkflowRunner'ın SRP ihlali #47'de çözülerek mesaj inşası bu sınıfa ta�
 | Metot | Açıklama |
 |-------|----------|
 | `BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning)` | Tam mesaj listesini oluşturur: system prompt, context, reasoning özeti, entity hints, replan notu, kullanıcı mesajı. |
+| `BuildReasoningSummaryHint(ReasoningResult r)` | Reasoning sonucundan PlanningAgent'a giden özet system mesajını (`services/reasoning-hint`) üretir — Analiz, Niyet (`Niyet (nihai — ReasoningService kararı): ...`), Önerilen adımlar, gerekli bilgiler, önerilen aksiyon satırları. |
+
+### `BuildReasoningSummaryHint` — kaldırılan `COMPOUND QUERY` bloğu
+
+Bu metotta eskiden, `SubTasks.Count >= 2` olduğunda PlanningAgent'a *"her alt görevi sırayla aynı yanıtta yönlendir"* diyen bir `COMPOUND QUERY` bloğu vardı. Kaldırıldı çünkü **gerçek yürütme yolunu yanlış tarif ediyordu**: `SubTaskOrchestrator.IsCompoundQuery` (2+ alt görev VE 2+ farklı hedef ajan) `true` döndüğünde `SubTaskOrchestrator.CreateSubTaskReasoning`, türetilen mini `ReasoningResult`'ın `SubTasks` listesini bilerek **boşaltır** (sonsuz recursive decomposition'ı önlemek için) — yani bu blok gerçek decompose senaryosunda PlanningAgent'a hiç ulaşmıyordu. Tek tetiklendiği durum `IsCompoundQuery`'nin `false` döndüğü (aynı ajana hedeflenmiş 2+ alt görev) tek-runner yoluydu; orada da PlanningAgent'ın artık desteklemediği (strict JSON şema, tek `selectedAgent` alanı) bir "sırayla yönlendir" çıktı formatını talep ediyordu. Karşılık gelen `planning-agent.md` bölümü de sadeleştirildi — bkz. [`Prompts.md`](../CustomerSupportBot.Api/Prompts.md).
 
 ## Bağımlılıklar
 - `IContextPipeline` — Bağlam toplama.

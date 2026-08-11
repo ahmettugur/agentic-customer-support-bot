@@ -38,8 +38,10 @@ Kullanıcı sorgusundan ve konuşma geçmişinden `1030`, `1001`, `1027` format�
 ### Öncelik sırası
 
 ```
-Query > History (yeni mesajdan eskiye) > SessionState.CustomerId
+Query > History (yeni mesajdan eskiye) > SessionState.AuthenticatedCustomerId
 ```
+
+> ⚠️ Fallback kaynağı `SessionState.AuthenticatedCustomerId`'dir (JWT'den gelir), **`SessionState.CustomerId` DEĞİL**. İkincisi `SessionStateExtractor`'ın kullanıcının serbest metninden çıkardığı, dolayısıyla **poisonable** bir alandır — kullanıcı *"ben 1008 numaralı müşteriyim"* diyerek başka bir müşterinin `DerivedLastOrderId`/`DerivedOrderCount` gibi türetilmiş alanlarını reasoning prompt'una (ve "Düşünce süreci" panelinden kendisine) sızdırabilirdi. Bu ayrım daha önce eksikti ve düzeltildi; regresyon koruması `EntityVerifierTests.Verify_PoisonedSessionStateCustomerId_IsIgnored`.
 
 ### Doğrulama türleri
 
@@ -167,7 +169,7 @@ Reasoning LLM'e gönderilecek mesaj listesini (`List<ConversationMessage>`) olu�
 | `AssumptionHeavyStepsRule` | `assumption_based_step` | Info | Step grounding=assumption olan adımlar var |
 | `OverconfidentAssumptionsRule` | `overconfident_assumptions` | Warn | Güven ≥ 0.8 ama 3+ varsayım var |
 | `NotFoundIgnoredRule` | `not_found_ignored` | **Error** | DB'de bulunamayan entity var, model bunu görmezden geliyor |
-| `SubTasksIgnoredRule` | `subtasks_ignored` | Warn | 2+ alt görev var ama nextAction hepsini içermiyor |
+| `SubTasksIgnoredRule` | `subtasks_ignored` | Warn | 2+ alt görev bildirilmiş ama yürütme kapısı (2+ farklı hedef ajan, bkz. `SubTaskOrchestrator.IsCompoundQuery`) açılmıyor — alt görevler yürütülmeden düşecek |
 
 ### Severity ne anlama gelir?
 
@@ -178,6 +180,8 @@ Reasoning LLM'e gönderilecek mesaj listesini (`List<ConversationMessage>`) olu�
 | `Info` | Bilgi amaçlı, normal akışta da oluşabilir |
 
 > Şu an sanity issues yalnızca log'a ve trace'e yazılır; workflow bloklanmaz. İleride `Error` severity'de otomatik re-reasoning tetiklemek mümkündür.
+
+> 📌 **`SubTasksIgnoredRule` hakkında not:** Bu kural bir ara **tam tersini** yapıyordu — yürütme kapısıyla (`IsCompoundQuery`) aynı koşulu kullanıp kapı açıkken (yani `DecomposedRunner`'ın her alt görevi doğru şekilde ayrı ayrı çalıştıracağı durumda) uyarı üretiyordu, çünkü `nextAction` metninin tüm ajan adlarını içermesini bekliyordu — oysa decompose yolunda `nextAction`'ın hiçbir yönlendirme etkisi yok. Bu yanlış pozitif `LessonMiner`'ın ders çıkarma prompt'una da giriyordu. Kural artık kapı **kapalı kaldığında** (alt görevler hepsi aynı ajana yönelik ya da `targetAgent` boş) ateşleniyor — yani alt görevlerin gerçekten sessizce düştüğü durumda.
 
 ### Yeni kural eklemek
 

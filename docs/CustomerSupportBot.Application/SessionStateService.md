@@ -1,54 +1,31 @@
 # SessionStateService
 
-**Dosya:** `Services/Chat/SessionStateService.cs`  
+**Dosya:** `Services/Chat/SessionStateService.cs`
 **Yaşam döngüsü:** Singleton
 
 ## Ne yapar?
 
-`AgentSession` üzerindeki durum güncellemelerini (intent, sentiment, geçmiş kaydetme) tek bir yerde toplar. Transport katmanından (SSE, HTTP) bağımsızdır; `ChatPortService` tarafından her akış sonunda çağrılır.
+`AgentSession` üzerindeki durum güncellemelerini (geçmiş kaydetme, sentiment alarm kontrolü) toplar. Transport katmanından (SSE, HTTP) bağımsızdır; `ChatPortService` tarafından her akış sonunda çağrılır.
+
+> ⚠️ Bu sınıf eskiden `UpdateSessionIntentAsync`/`UpdateSessionSentiment` metotlarıyla intent ve sentiment'i **doğrudan** `session.State`'e yazıyordu. O metotlar **kaldırıldı** — bkz. aşağıdaki "Neden değişti?" bölümü. Intent/sentiment artık bu sınıfta değil, `SessionStateExtractor.ExtractAndApply`'da (Domain katmanı) işlenir; bu sınıf yalnızca reasoning sonucunu oraya taşımak için bir taşıyıcı görevi görür.
 
 ## Metodlar
 
-### `UpdateSessionIntent`
+### `PersistExchangeAsync`
 
 ```csharp
-public void UpdateSessionIntent(AgentSession session, string? intent)
+public async Task PersistExchangeAsync(
+    string sessionId, string query, string response,
+    IChatBridge chatBridge, TurnSignals? signals = null, CancellationToken ct = default)
 ```
 
-Reasoning sonucundan gelen `intent` değerini `session.State.CurrentIntent`'e yazar ve session'ı persist eder. `Unknown` veya boş intent gelirse güncelleme yapılmaz — önceki intent korunur.
+Tamamlanan bir turu (kullanıcı sorusu + bot yanıtı) kaydeder:
+1. `ISessionManager.AddExchangeAsync(sessionId, query, response, signals, ct)` → session geçmişine ekler **ve** `SessionStateExtractor.ExtractAndApply`'ı tetikler (intent/sentiment/phase/`ConsecutiveNegativeTurns` burada, TEK yerde hesaplanır — bkz. `Model-Reasoning.md#turnsignals`).
+2. `IChatBridge.RecordBotExchange` → admin live-chat paneline bildirir.
 
-### `UpdateSessionSentiment`
+Yanıt boşsa (streaming kesildi, hata oluştu) hiçbir şey yapılmaz — `signals` de dahil olmak üzere o turun state çıkarımı hiç çalışmaz.
 
-```csharp
-public void UpdateSessionSentiment(AgentSession session, ReasoningResult reasoning)
-```
-
-LLM reasoning sonucundaki sentiment'i session state'e yazar.
-
-**Önemli kural:** Reasoning `Neutral` sentiment ve `SentimentScore=0.5` döndürürse güncelleme yapılmaz. Bu, LLM'nin "sentiment tespit etmedi" durumunu ifade eder; önceki state korunur.
-
-**Ardışık negatif sayacı:**
-
-```csharp
-if (reasoning.SentimentScore < WellKnown.SentimentThresholds.NegativeThreshold)
-    state.ConsecutiveNegativeTurns++;
-else
-    state.ConsecutiveNegativeTurns = 0;
-```
-
-Negatif eşiğin altına düşünce sayaç artır; normal veya pozitif gelince sıfırla. Bu sayaç `CheckSentimentAlert` tarafından kullanılır.
-
-### `PersistExchange`
-
-```csharp
-public void PersistExchange(string sessionId, string query, string response, IChatBridge chatBridge)
-```
-
-Tamamlanan bir tur (kullanıcı sorusu + bot yanıtı) ikili olarak kaydeder:
-1. `ISessionManager.AddExchange` → session geçmişine ekler (sonraki turda `history` olarak gelir)
-2. `IChatBridge.RecordBotExchange` → admin live-chat paneline bildirir
-
-Yanıt boşsa (streaming kesildi, hata oluştu) hiçbir şey yapılmaz.
+`signals`, reasoning sonucundan `TurnSignals.From(reasoningResult)` ile üretilip buraya geçirilir; `null` ise `SessionStateExtractor` kural tabanlı (anahtar kelime) çıkarıma düşer.
 
 ### `CheckSentimentAlert`
 
@@ -56,7 +33,7 @@ Yanıt boşsa (streaming kesildi, hata oluştu) hiçbir şey yapılmaz.
 public SentimentAlertResult CheckSentimentAlert(AgentSession session)
 ```
 
-`ConsecutiveNegativeTurns >= AutoEscalationConsecutiveNegative` eşiğini kontrol eder.
+`ConsecutiveNegativeTurns >= AutoEscalationConsecutiveNegative` eşiğini kontrol eder. Bu sayaç artık **yalnızca** `SessionStateExtractor.ExtractAndApply` tarafından, tur başına tek seferde güncellenir (aşağıya bakınız) — bu metot yalnızca **okur**, hiçbir şey yazmaz.
 
 **`SentimentAlertResult` alanları:**
 
@@ -74,30 +51,42 @@ public sealed class SentimentAlertResult
 
 `ShouldAlert=true` ise `ChatPortService` `sentimentAlert` StreamEvent'i gönderir; admin paneli bunu görür.
 
-## Eşik değerleri (WellKnown.SentimentThresholds)
+## Eşik değerleri (`WellKnown.SentimentThresholds`)
 
 | Sabit | Varsayılan | Anlamı |
 |-------|-----------|--------|
 | `NegativeThreshold` | 0.35 | Bu skorun altı "negatif" kabul edilir |
 | `AutoEscalationConsecutiveNegative` | 3 | 3 ardışık negatif tur → alert tetikle |
 
-Bu değerler `WellKnown` sınıfında sabittir; konfigürasyona bağlı değildir. Değiştirmek için `WellKnown` sınıfını güncelleyin.
+Bu değerler `WellKnown` sınıfında sabittir; konfigürasyona bağlı değildir.
 
 ## `ChatPortService` ile entegrasyon
 
 ```csharp
-// Her streaming akışında:
+// Non-streaming (HandleAsync) ve streaming (HandleStreamAsync) yolları AYNI şekilde:
 
-// 1. Reasoning tamamlandıktan sonra:
-_sessionState.UpdateSessionIntent(session, rr.Intent);
-_sessionState.UpdateSessionSentiment(session, rr);
+var reasoningResult = await _reasoning.ReasonAsync(query, session, history, ct);
+// ... workflow çalışır, response üretilir ...
 
-// 2. Workflow tamamlandıktan sonra:
-_sessionState.PersistExchange(sessionId, query, fullResponse, _chatBridge);
+// Intent/sentiment turun ortasında YAZILMAZ. Reasoning sonucu bir TAŞIYICIYA (TurnSignals)
+// çevrilip turun kapanışına kadar bekletilir:
+await _sessionState.PersistExchangeAsync(
+    sessionId, query, response, _chatBridge, TurnSignals.From(reasoningResult), ct);
 
-// 3. Akışın sonunda:
+// Akışın sonunda (yalnızca streaming'de — sentiment_update/alert event'leri gerekir):
 var alert = _sessionState.CheckSentimentAlert(session);
 yield return new StreamEvent(StreamEventTypes.SentimentUpdate, { ... });
 if (alert.ShouldAlert)
     yield return new StreamEvent(StreamEventTypes.SentimentAlert, { ... });
 ```
+
+## Neden değişti? (Çift yazar → tek yazar)
+
+Eskiden akış şöyleydi: `ChatPortService` reasoning bitince `UpdateSessionIntentAsync(session, rr.Intent)` ve `UpdateSessionSentiment(session, rr)` ile intent/sentiment'i **doğrudan** `session.State`'e yazıyordu (turun ORTASI). Hemen ardından `AddExchangeAsync` çağrılıyor, o da `SessionStateExtractor.ExtractAndApply`'ı tetikleyip **aynı alanları kural tabanlı değerlerle bir kez daha** yazıyordu (turun SONU). İki sorun doğuruyordu:
+
+1. **LLM'in kararı her turda sessizce eziliyordu.** Belgelenen davranış "LLM daha doğru, kural tabanlıyı override eder"di; gerçek sıra bunun tam tersiydi.
+2. **`ConsecutiveNegativeTurns` tur başına iki kez artıyordu** — iki farklı yer aynı sayacı ayrı ayrı `++` ediyordu. `AutoEscalationConsecutiveNegative = 3` eşiği 3 tur yerine 2 turda aşılıyor, admin paneline *"müşteri 4 tur boyunca olumsuz"* gibi yanlış bir sayı gidiyordu.
+
+Ayrıca non-streaming yol (`HandleAsync`) `UpdateSessionSentiment`'i hiç çağırmıyordu — aynı mesaj hangi endpoint'ten geldiğine göre farklı sayaç davranışı üretiyordu.
+
+Çözüm: türetilmiş alanların **tek yazarı** `SessionStateExtractor.ExtractAndApply` (Domain katmanı) oldu. LLM'in ürettikleri artık state'e doğrudan yazılmıyor, `TurnSignals` kaydıyla girdi olarak taşınıyor. `UpdateSessionIntentAsync`/`UpdateSessionSentiment` kaldırıldı; iki endpoint de artık aynı `PersistExchangeAsync` çağrısından geçtiği için davranış farkı da ortadan kalktı. Detaylı gerekçe ve örnekler: `Services-SessionStateExtractor.md`.

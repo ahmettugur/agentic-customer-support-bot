@@ -7,6 +7,7 @@
 - `Model/ConfidenceLevel.cs`
 - `Model/PlanningResult.cs`
 - `Model/SubTask.cs`
+- `Model/TurnSignals.cs`
 
 `ReasoningAgent` ve `PlanningAgent`'ın LLM çıktılarını temsil eder. `ReasoningResultParser` ve `PlanningResultParser` bu modelleri üretir.
 
@@ -171,16 +172,11 @@ public sealed class ReasoningIssue
 public enum IssueSeverity { Info, Warn, Error }
 ```
 
-### Tipik issue code'ları
+### Kural kodları
 
-| Code | Anlam |
-|---|---|
-| `overconfident_clarification` | Yüksek confidence ama clarification gerekiyor — tutarsız |
-| `redundant_required_info` | Toplanmış bilgi zaten var, tekrar istiyor |
-| `grounding_missing` | Tüm step'ler assumption — delilsiz |
-| `intent_evidence_mismatch` | Intent declared, evidence farklı niyete işaret ediyor |
+8 kuralın tam listesi ve her birinin ne kontrol ettiği için bkz. [`ReasoningPipeline.md`](../CustomerSupportBot.Application/ReasoningPipeline.md#reasoningsanitychecker) — burada tekrar edilmiyor çünkü tek doğruluk kaynağı `ReasoningSanityChecker.cs`'teki kural sınıflarıdır.
 
-`Severity=Error` issue varsa Application katmanı **replan tetikler** — düşünceyi tekrar yaptır.
+> ⚠️ `SanityIssues` şu an **yalnızca log'a ve trace'e yazılır** — `Severity=Error` olsa bile otomatik replan tetiklemez, workflow bloklanmaz. (Bu dosyanın önceki bir sürümü "Error → replan tetikler" diyordu; bu doğru değildi, koddan doğrulanamadı.)
 
 ---
 
@@ -211,13 +207,15 @@ ReasoningAgent bunu parçalara böler:
 public sealed class SubTask
 {
     public int Order { get; set; }
-    public string Intent { get; set; }                     // "OrderInquiry"
+    public string Intent { get; set; }                     // "sipariş_sorgulama"
     public string Description { get; set; }
-    public string? TargetAgent { get; set; }               // "OrderAgent"
+    public string TargetAgent { get; set; } = "";           // "OrderAgent"
     public Dictionary<string, string> Entities { get; set; } = new();
-    public List<int> Dependencies { get; set; } = new();   // Sırasıyla çalıştırma
+    public List<int> Dependencies { get; set; } = new();
 }
 ```
+
+`Dependencies`, bu alt görevin önce tamamlanmış olmasını beklediği başka `Order` numaralarını taşır. `SubTaskOrchestrator.Partition` bunu okuyup öncülü aynı paralel batch'e almaz — çünkü paralel bir batch'in tüm elemanları aynı history snapshot'ıyla eşzamanlı başlar, yani kardeşler birbirinin sonucunu göremez. Sadece **gerçek** bir veri bağımlılığında doldurulmalı; bağımsız görevlere de eklemek paralelleşme fırsatını kaybettirip yürütmeyi yavaşlatır. Detay ve örnek: [`SubTaskOrchestrator.md`](../CustomerSupportBot.Application/SubTaskOrchestrator.md#dependencies--bağımlı-alt-görevler-aynı-batche-girmez).
 
 ### Örnek
 
@@ -243,6 +241,28 @@ public sealed class SubTask
 ```
 
 `AgentTeamCoordinator` bu listeyi sıralı çalıştırır.
+
+---
+
+## TurnSignals
+
+Reasoning'in bir turda ürettiği, session state'e taşınacak sinyaller:
+
+```csharp
+public sealed record TurnSignals(string? Intent, string? SentimentLabel, double? SentimentScore)
+{
+    public static TurnSignals? From(ReasoningResult? reasoning);
+}
+```
+
+**Ne işe yarar?** `ReasoningResult`'ın tamamı değil, sadece session state'e yazılacak iki alanı (intent, sentiment) taşıyan küçük bir DTO. `From(reasoning)` fabrika metodu bu süzmeyi yapar ve "gerçek bir karar mı, yoksa parser'ın fallback değeri mi" ayrımını burada yapar:
+
+- `Intent` boşsa veya `WellKnown.Intents.Unknown` ise → `null` (parser JSON'u okuyamadığında bu değeri koyar, gerçek bir karar değildir)
+- `Sentiment` boşsa veya tam olarak `neutral@0.5` ise → `null` (parser'ın alan hiç dönmediğinde ürettiği varsayılan çift)
+
+**Nereye gider?** `ChatPortService`, reasoning tamamlandığında `TurnSignals.From(reasoningResult)`'ı `SessionStateService.PersistExchangeAsync` → `ISessionManager.AddExchangeAsync` üzerinden `SessionStateExtractor.ExtractAndApply`'a (Domain katmanı) **girdi** olarak geçirir. Dolu alan kural tabanlı çıkarımın yerine geçer; `null` alanlarda kural tabanlı tablo (`WellKnown.IntentKeywords` / `SentimentKeywords`) devreye girer. Ayrıntılı akış: [`Services-SessionStateExtractor.md`](Services-SessionStateExtractor.md#turnsignals--llmin-girdisi-i̇kinci-bir-yazıcı-değil).
+
+**Neden Domain katmanında?** `TurnSignals`'ı hem Application (`ChatPortService`, üretici) hem Domain (`SessionStateExtractor`, tüketici) hem Adapters.Persistence (`InMemorySessionManager`/`PostgresSessionManager`, taşıyıcı — `ISessionManager.AddExchangeAsync` parametresi) kullanıyor. Domain hiçbir üst katmana bağımlı olmadığı için ortak bir tip için doğru yer burasıdır — Application'da tanımlansaydı Adapters.Persistence'ın Application'a bağımlı olması gerekirdi, bu da Hexagonal mimarinin bağımlılık yönünü tersine çevirirdi.
 
 ---
 

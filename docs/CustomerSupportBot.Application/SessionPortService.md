@@ -30,7 +30,7 @@ Yalnızca `MutateStateAsync` gerçekten async'tir; geri kalan tümü **senkrondu
 | `UpdateSession` | `ISessionManager.Update` | Session state'ini günceller |
 | `GetAllSessions` | `ISessionManager.GetAll` | Tüm session listesi |
 | `GetHistory` | `ISessionManager.GetHistory` | Session konuşma geçmişi |
-| `AddExchange` | `ISessionManager.AddExchange` | Kullanıcı-bot mesaj çifti ekler |
+| `AddExchange` | `ISessionManager.AddExchangeAsync` | Kullanıcı-bot mesaj çifti ekler; `signals: null` geçer (bu genel amaçlı API'ye bir reasoning turu bağlı değildir, LLM sinyali yok — bkz. `TurnSignals`) |
 | `ExtractAndUpdateState` | `ISessionManager.ExtractAndUpdateState` | Session'dan state çıkarır ve günceller |
 | `MutateStateAsync(sessionId, Action<SessionState> mutator, CancellationToken ct = default)` | — | Delegate ile state mutasyonu (tek gerçek async metod) |
 
@@ -59,7 +59,7 @@ public class SessionState
 
 `SessionPortService` kasıtlı olarak minimal tutulmuştur. Session üzerinde iş mantığı çalıştıran servisler şunlardır:
 
-- `SessionStateService` — intent/sentiment güncelleme ve alert tetikleme
+- `SessionStateService` — turu kaydetme (`PersistExchangeAsync`) ve sentiment alarm kontrolü (`CheckSentimentAlert`); intent/sentiment'in kendisi artık `SessionStateExtractor`'da (Domain) hesaplanır, bkz. `SessionStateService.md`
 - `ChatSessionPortService` — admin panel operasyonları
 - `ChatPortService` — chat akışında session kullanımı
 

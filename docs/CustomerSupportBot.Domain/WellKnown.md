@@ -27,17 +27,26 @@ Magic string'ler kodun her yerine dağılırsa:
 ```csharp
 public static class Intents
 {
-    public const string Unknown = "bilinmiyor";
+    public const string Unknown = "bilinmiyor";           // sadece parser fallback'i, LLM üretmez
     public const string OrderCreation = "sipariş_oluşturma";
     public const string OrderInquiry = "sipariş_sorgulama";
     public const string OrderListing = "sipariş_listeleme";
-    public const string OrderCancellation = "sipariş_iptali";  // YENİ
-    public const string ReturnRequest = "iade_talebi";           // YENİ
+    public const string OrderCancellation = "sipariş_iptali";
+    public const string ReturnRequest = "iade_talebi";
     public const string Complaint = "şikayet";
     public const string ProductInfo = "ürün_bilgisi";
+    public const string HumanHandoffRequest = "talep_temsilci";
     public const string General = "genel";
+
+    public static readonly IReadOnlySet<string> LlmProduced;   // yukarıdakilerin tümü, Unknown hariç
 }
 ```
+
+**Bu sınıf, intent kelime dağarcığının TEK doğruluk kaynağıdır.** Reasoning LLM'i `Prompts/services/reasoning-system.md` içindeki bir enum satırından hangi intent değerlerini üretebileceğini öğrenir; `ReasoningResultParser` bu string'i **hiçbir normalizasyon yapmadan** olduğu gibi taşır. Yani prompt'taki enum ile buradaki sabitler kelimesi kelimesine aynı olmak zorunda — aksi halde derleme hatası **vermeden** sessizce kırılır.
+
+Bu tam olarak başımıza geldi: prompt bir ara `"sipariş_iadesi"` yazıyordu, kod ise `ReturnRequest = "iade_talebi"` tanımlıyordu. `appsettings.json`'daki `IntentSkillMap["iade_talebi"]` LLM'in ürettiği `"sipariş_iadesi"` ile hiç eşleşmedi — sonuç: iade eskalasyonlarına hiçbir zaman `refund` yetkinliği (skill) gerekmedi, ve durum hiçbir yerde hata olarak görünmedi (derleyici sessiz, testler farkında değil). Bunu yakalayan tek şey `PromptContractTests.ReasoningPrompt_IntentEnum_MatchesWellKnownIntents` testiydi.
+
+`LlmProduced`, prompt ↔ kod senkronunu **test edilebilir** kılmak için eklendi: `IntentSkillMap` gibi tam-string eşleşme yapan tüketiciler artık bu kümeye göre doğrulanabiliyor. Yeni bir intent eklerken sırasıyla: (1) burada sabit ekle, (2) `reasoning-system.md`'deki enum satırına ekle, (3) `LlmProduced`'a ekle, (4) gerekiyorsa `appsettings.json`'daki `IntentSkillMap`'e satır ekle.
 
 ### Confidence (Türkçe + English varyantları)
 
@@ -409,7 +418,11 @@ public static readonly IReadOnlyList<(string Sentiment, double Score, string[] K
 ];
 ```
 
-Sıra: angry → negative → positive. Eşleşme yoksa `neutral`.
+Sıra: angry → negative → positive, **ilk eşleşen kazanır**. Eşleşme yoksa `neutral` (0.5). `SessionStateExtractor.DetectSentiment` bu tabloyu, yalnızca LLM sinyal üretmediğinde fallback olarak kullanır (bkz. `TurnSignals` ve `Services-SessionStateExtractor.md`).
+
+**Önemli:** Negative listesine "işlem adı" olan kelimeler (`iade`, `iptal`, `şikayet`) girmez. Bunlar kullanıcının yapmak istediği işi tarif eder, duygusunu değil — listedeyken *"teşekkürler, iade işlemim tamamlandı"* gibi memnun mesajlar negatif sayılıp `ConsecutiveNegativeTurns` sayacını (ve dolayısıyla otomatik eskalasyon eşiğini) yanlış yere çekiyordu. Gerçekten öfkeli varyantları (`"şikayet edeceğim"`) zaten Angry listesinde. Aynı gerekçeyle Positive listesindeki `"çözüldü"`nün öneki olan `"çöz"` de Negative'den çıkarıldı.
+
+Sıra da load-bearing: bir kelime bir sonraki listedeki kelimenin **öneki** olamaz — `"memnun değil"` (negative) `"memnun"`dan (positive) önce kontrol edilmezse yanlış sonuç çıkar. Bilinen bir sınır kaldı: eşleşme saf substring olduğu için `"sorun"` kelimesi *"sorunum çözüldü"* gibi olumlu bir cümlede de yakalanır (kelime sınırı/olumsuzlama analizi bu tablonun kapsamında değil). Etkisi sınırlı, çünkü gerçek boru hattında LLM'in sentiment'i önceliklidir — bu tablo yalnızca LLM sinyal üretmediğinde devreye girer.
 
 ### SentimentThresholds
 

@@ -66,11 +66,17 @@ Full bot pipeline — chat ile aynı mantık:
 ```
 1. InputGuard.Inspect(transcript)
 2. ReasoningPort.ReasonStreamingAsync → forward to browser
+                                       → ReasoningComplete event'i geldiğinde sonuç
+                                         `finalReasoning` DEĞİŞKENİNDE tutulur, state'e YAZILMAZ
 3. AgentTeamPort.RunStreamingAsync    → forward to browser
-4. SessionManager.AddExchange(...)
+4. SessionManager.AddExchangeAsync(sessionId, safeQuery, responseText,
+       TurnSignals.From(finalReasoning))
+   → geçmişe eklenir + intent/sentiment SessionStateExtractor'da (Domain) TEK burada işlenir
 5. IRealtimeVoiceTransport.SpeakTextAsync(responseText)
    prompt: "Yukarıdaki metni Türkçe olarak doğal, samimi bir tonla harfiyen oku."
 ```
+
+> ⚠️ 2. adımda eskiden `ReasoningComplete` geldiğinde `session.State.CurrentIntent = rr.Intent` ile intent doğrudan yazılıyordu; birkaç satır sonra 4. adımdaki `AddExchangeAsync` aynı alanı kural tabanlı değerle bir kez daha yazıyordu — chat (`ChatPortService`) tarafındakiyle aynı çift-yazar hatası burada da vardı. Artık `TurnSignals.From(finalReasoning)` ile tek çağrıya taşınıyor. Detay: [`Services-SessionStateExtractor.md`](../CustomerSupportBot.Domain/Services-SessionStateExtractor.md).
 
 ### Half-duplex gating
 

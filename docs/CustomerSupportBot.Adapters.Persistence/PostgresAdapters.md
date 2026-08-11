@@ -10,12 +10,13 @@ Temel desen için önce [HybridPattern.md](HybridPattern.md) oku.
 
 **Port:** `ISessionManager`
 
-**Yazma:** `AddExchange` → cache + DB INSERT (2 satır: user + assistant)  
+**Yazma:** `AddExchangeAsync(sessionId, query, response, signals?)` → cache + DB INSERT (2 satır: user + assistant), ardından `ExtractAndUpdateStateCoreAsync` çağrılır.
+
 **Hydration:** `GetAll()` çağrısında son 500 session metadata yüklenir. Tekil session `GetOrCreate`'te lazy yüklenir.
 
 **`AppendAssistantMessage` özelliği:** Son mesaj boş asistan mesajı ise onu replace eder — streaming sırasında placeholder yazılmış olabilir.
 
-**`ExtractAndUpdateState`:** In-memory `SessionStateExtractor` ile kurallar uygulanır, ardından `chat.sessions.state` JSONB güncellenir.
+**`ExtractAndUpdateStateCoreAsync`:** `SessionStateExtractor.ExtractAndApply`'ı (Domain) `session` nesnesi üzerinde `lock` altında çağırır, ardından `chat.sessions.state` JSONB günceller. Bu, turun türetilmiş state'inin (intent, sentiment, `ConsecutiveNegativeTurns`) **tek yazarıdır** — `signals` parametresi (`TurnSignals?`) reasoning'in bu tur için ürettiği intent/sentiment'i buraya girdi olarak taşır; `null` ise kural tabanlı çıkarıma düşülür. Kilit, `ConsecutiveNegativeTurns`'ün eşzamanlı isteklerde (çift-submit, çoklu sekme) bir artışı kaybetmesini önler. Detay: [`Services-SessionStateExtractor.md`](../CustomerSupportBot.Domain/Services-SessionStateExtractor.md).
 
 ---
 

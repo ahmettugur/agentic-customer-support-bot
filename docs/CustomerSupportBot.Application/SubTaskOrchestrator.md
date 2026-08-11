@@ -47,6 +47,25 @@ Partition çıktısı:
 
 **Sıra korunur:** Grup 1 bitmeden Grup 2 başlamaz; Grup 2 bitmeden Grup 3 başlamaz.
 
+### `Dependencies` — bağımlı alt görevler aynı batch'e girmez
+
+`SubTask.Dependencies`, o alt görevin önce tamamlanmış olmasını beklediği başka `Order` numaralarını taşır (reasoning LLM'i doldurur). `Partition` bunu okur: bir alt görevin bildirdiği öncül, o an inşa edilmekte olan paralel batch içindeyse, batch orada kapatılır ve öncül **önceki** bir grupta kalır.
+
+**Neden önemli?** `CustomerSupportTeam`/`DecomposedRunner`, paralel bir grubun tüm elemanlarını **aynı history snapshot'ıyla eşzamanlı** başlatır (`Task.WhenAll`). Yani aynı batch'teki bir kardeşin sonucu, diğerine görünmez. Bir alt görev gerçekten bir öncekinin sonucuna ihtiyaç duyuyorsa ve ikisi aynı batch'e düşerse, bağımlılık sessizce ihlal edilir — B görevi A'nın henüz üretmediği bir bilgiyle çalışmaya çalışır.
+
+```
+Örnek:
+  1. ProductAgent: ürünün stok durumunu sorgula          [read-only, dependency yok]
+  2. ProductAgent: stok varsa sipariş oluştur bilgisini hazırla  [read-only, dependsOn=[1]]
+  3. ProductAgent: kategori önerisi getir                 [read-only, dependency yok]
+
+Partition çıktısı:
+  Grup 1: [1]     → Parallel=true   (2, 1'e bağımlı olduğu için buraya alınamadı)
+  Grup 2: [2, 3]  → Parallel=true   (2'nin öncülü Grup 1'de zaten bitmiş olacak)
+```
+
+Bu alan uzun süre parse ediliyor ama hiçbir yerde okunmuyordu — reasoning LLM'i bağımlılık bildirse bile `Partition` bunu görmezden gelip aynı batch'e alabiliyordu. Şimdi gerçek bir yürütme etkisi var; gereksiz yere doldurmak (bağımsız görevlere de `dependencies` eklemek) yürütmeyi yavaşlatır çünkü paralelleşme fırsatını kaybettirir.
+
 ## `CreateSubTaskReasoning`
 
 ```csharp

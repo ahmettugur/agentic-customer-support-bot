@@ -1,6 +1,6 @@
 # SessionStateExtractor
 
-**Dosya:** `Services/SessionStateExtractor.cs`  
+**Dosya:** `Services/SessionStateExtractor.cs`
 **Tür:** `public static class`
 
 Bir kullanıcı + bot mesaj çiftinden **session state**'i türetir. Hem `InMemorySessionManager` hem `PostgresSessionManager` aynı mantığı kullanır — **tek doğruluk kaynağı**.
@@ -10,15 +10,15 @@ Bir kullanıcı + bot mesaj çiftinden **session state**'i türetir. Hem `InMemo
 ## Niye gerekli?
 
 Session state şu alanları içerir:
-- `CustomerId` — kullanıcı kimliği
-- `CurrentIntent` — şu anki niyet (OrderInquiry, Complaint, vb.)
+- `CustomerId` — kullanıcının kendi mesajından/bot yanıtından çıkarılan (LLM'in serbest metinden türettiği, **poisonable**) kimlik — gerçek yetkili kimlik için bkz. `AuthenticatedCustomerId` (JWT'den gelir, bu sınıfın işi değildir)
+- `CurrentIntent` — şu anki niyet (`sipariş_sorgulama`, `şikayet`, vb.)
 - `TurnCount` — turn sayısı
 - `Phase` — Greeting / Inquiry / Action / Resolution
 - `Sentiment` + `SentimentScore`
-- `ConsecutiveNegativeTurns` — peş peşe negatif sentiment sayısı
+- `ConsecutiveNegativeTurns` — peş peşe negatif sentiment sayısı (otomatik eskalasyon eşiğinin girdisi)
 - `CollectedInfo` — extracted entity'ler
 
-Bunlar her turn'de güncellenmeli, ama mesaj içeriğinden **deterministic** (LLM'siz) türetilmeli.
+Bunlar her turn'de güncellenmeli, ama mesaj içeriğinden **deterministic** (LLM'siz) türetilebilmeli — çünkü LLM her zaman bir karar üretmeyebilir (reasoning çağrısı başarısız olabilir, ya da bazı çağıranlar reasoning'i hiç atlar).
 
 ---
 
@@ -26,63 +26,50 @@ Bunlar her turn'de güncellenmeli, ama mesaj içeriğinden **deterministic** (LL
 
 ```csharp
 public static void ExtractAndApply(
-    ChatSessionState state,
+    SessionState state,
     string userMessage,
     string botResponse,
-    int turnNumber)
+    IReadOnlyList<ConversationMessage>? priorHistory = null,
+    TurnSignals? llm = null)
 ```
 
-State'i **in-place** günceller.
+State'i **in-place** günceller. `PostgresSessionManager`/`InMemorySessionManager`'ın `AddExchangeAsync`'i her turda bu metodu **bir kez** çağırır — bkz. aşağıdaki "Tek yazar" bölümü.
 
 ### Yapılan iş
 
 1. **ID çıkarımı** (`IdExtractor` çağrısı)
    - `customer_id` → `state.CustomerId` (kullanıcı mesajında yoksa bot yanıtından, yalnızca hâlâ `null` ise)
    - `order_id` → `CollectedInfo["LastMentionedOrderId"]`
+   - `priorHistory` bağlamsız (context'siz) bir sayı çıkarımını (ör. önceki turda *"sipariş numaram 1030"* dendikten sonra bu turda sadece *"1030"* yazılması) önceki turun gerçek bağlamına göre yeniden sınıflandırır.
 
-   > ⚠️ **Buradaki yanlış sınıflandırma kalıcıdır.** Diğer `IdExtractor` çağrıları (ör. `WorkflowRunner`'ın prompt hint'i) tek turluktur; burası ise **oturum durumuna yazar**. `state.CustomerId` sonraki her turda `EntityVerifier`'a bir kaynak ve `CustomerContextProvider`'a sipariş/şikayet geçmişi sorgusu olarak gider — yani tek bir hatalı tur bütün oturumu zehirler.
-   >
-   > Canlıda tam olarak bu yaşandı: *"Sipariş numaram 1041."* cümlesinde sipariş numarası `state.CustomerId`'ye yazılıyor, `LastMentionedOrderId` ise hiç set edilmiyordu. Kök neden ve düzeltme: [`IdExtractor` — `numaram` sahiplenmesi](Services-IdExtractor.md). Regresyon koruması `SessionStateExtractorTests`.
-2. **Intent tespiti**
-   - `WellKnown.IntentKeywords` tablosundan keyword match
-   - Özel kurallar: `"sipariş"` + (`"durum"` veya `"takip"` veya `"nerede"`) → `OrderInquiry`
-   - `"yeni sipariş"`, `"satın al"` → `OrderCreation`
+   > ⚠️ **Buradaki yanlış sınıflandırma kalıcıdır.** Diğer `IdExtractor` çağrıları (ör. workflow'un prompt hint'i) tek turluktur; burası ise **oturum durumuna yazar**. `state.CustomerId` sonraki her turda `EntityVerifier`'a bir kaynak olarak gider — yani tek bir hatalı tur bütün oturumu zehirler. Kök neden ve düzeltme: [`IdExtractor` — `numaram` sahiplenmesi](Services-IdExtractor.md). Regresyon koruması `SessionStateExtractorTests`.
+2. **Intent tespiti** — `state.CurrentIntent = llm?.Intent ?? DetectUserIntent(userMessage)`
+   - LLM (reasoning) bir intent ürettiyse **o kazanır**; üretmediyse `WellKnown.IntentKeywords` tablosuna düşülür.
+   - Kural tabanlı tabloda özel bir kural da var: `"sipariş"` + (`"durum"` veya `"takip"` veya `"nerede"`) → `sipariş_sorgulama`.
 3. **Phase belirleme**
    - Turn 1 → `Greeting`
    - Bot mesajında `WellKnown.ResponseKeywords.SuccessMarker` (`"başarıyla"`) varsa → `Resolution`
    - Bot mesajında `MissingInfoMarker` (`"EKSİK_BİLGİ"`) varsa → `Inquiry`
    - Aksi halde `Action`
-4. **Sentiment**
-   - `WellKnown.SentimentKeywords` tablosundan match
-   - Match yoksa → `"neutral"` / `0.5`
-5. **Consecutive negative tracking**
-   - Sentiment `< 0.35` (NegativeThreshold) ise counter artar
-   - Eşit/üstüyse counter sıfırlanır
-   - Counter ≥ 3 (`AutoEscalationConsecutiveNegative`) ise auto-escalation tetiklenir (yukarı katmanda)
+4. **Sentiment** — aynı öncelik: `llm` hem etiket hem skor içeriyorsa o kullanılır, yoksa `WellKnown.SentimentKeywords` tablosundan match aranır (yoksa `"neutral"` / `0.5`).
+5. **Consecutive negative tracking** — az önce (4)'te belirlenen **tek** sentiment sonucuna göre: skor `< 0.35` (NegativeThreshold) ise counter artar, değilse sıfırlanır. Counter `≥ 3` (`AutoEscalationConsecutiveNegative`) olduğunda yukarı katmanda (`SessionStateService.CheckSentimentAlert`) otomatik eskalasyon tetiklenir.
 
 ---
 
-## Keyword tablosu kaynağı
-
-Tüm keyword'ler `WellKnown.cs` içinde:
+## `TurnSignals` — LLM'in girdisi, ikinci bir yazıcı değil
 
 ```csharp
-public static readonly IReadOnlyList<(string Intent, string[] Keywords)> IntentKeywords =
-[
-    (Intents.OrderCreation, new[] { "sipariş ver", "satın al", "ürün al", ... }),
-    (Intents.Complaint,     new[] { "şikayet", "memnun değilim", "iade", ... }),
-    // ...
-];
-
-public static readonly IReadOnlyList<(string Label, double Score, string[] Keywords)> SentimentKeywords =
-[
-    ("angry",    0.10, new[] { "berbat", "rezalet", "çileden çıkardın", ... }),
-    ("negative", 0.25, new[] { "kötü", "memnun değil", "yetersiz", ... }),
-    ("positive", 0.85, new[] { "harika", "teşekkür", "süper", ... }),
-];
+public sealed record TurnSignals(string? Intent, string? SentimentLabel, double? SentimentScore);
 ```
 
-Bu tablo Türkçe ifadelere göre düzenlenmiş.
+`TurnSignals.From(reasoningResult)` reasoning sonucunu bu tipe süzer (bkz. `Model-Reasoning.md`). Dolu olan her alan kural tabanlı çıkarımın **yerine** geçer; `null` alanlarda (2) ve (4)'teki kural tabanlı yol devreye girer.
+
+**Neden bu şekilde tasarlandı:** Eskiden LLM'in ürettiği intent/sentiment, turun ORTASINDA (`ChatPortService`) doğrudan `session.State`'e yazılıyordu; birkaç satır sonra bu metod (`ExtractAndApply`) aynı alanları kural tabanlı değerlerle **bir kez daha** yazıyordu. İki sonucu vardı:
+
+- LLM'in kararı her turda sessizce eziliyordu — belgelenen "LLM daha doğru, kural tabanlıyı override eder" davranışının **tam tersi** oluyordu.
+- `ConsecutiveNegativeTurns` iki farklı yerden artırıldığı için **tur başına iki kez** ilerliyordu; `AutoEscalationConsecutiveNegative = 3` eşiği 3 tur yerine 2 turda aşılıyordu.
+
+Artık `ExtractAndApply`, turun türetilmiş alanlarının **tek yazarıdır**. LLM'in sonucu `TurnSignals` ile buraya **girdi** olarak taşınır; state'e ikinci bir elden asla doğrudan yazılmaz. Çift sayım bu sayede yapısal olarak imkânsız hale gelir.
 
 ---
 
@@ -92,20 +79,21 @@ Bu tablo Türkçe ifadelere göre düzenlenmiş.
 Turn 3 başlıyor:
   state.TurnCount = 2
   state.CustomerId = "12345"
-  state.CurrentIntent = "OrderInquiry"
+  state.CurrentIntent = "şikayet"
   state.Phase = "Inquiry"
   state.ConsecutiveNegativeTurns = 1
 
 userMessage = "Berbat bir hizmet, hiçbir şey çalışmıyor!"
 botResponse = "Sorununuzu anlıyorum, hemen bir temsilciye bağlıyorum"
+llm = null   // reasoning bu turda intent/sentiment üretmemiş (ör. hata/timeout)
 
-ExtractAndApply(state, userMessage, botResponse, 3) sonrası:
+ExtractAndApply(state, userMessage, botResponse, priorHistory, llm) sonrası:
   state.TurnCount = 3
-  state.CurrentIntent = "Complaint"           ← şikayet kelimeleri yok ama "berbat" → sentiment + müşteri öfke modu
+  state.CurrentIntent = "şikayet"              ← kural tabanlı tablo ("berbat" eşleşmedi ama önceki intent korunmuyor, tablo "genel"e düşerdi — burada gösterim amaçlı basitleştirildi)
   state.Sentiment = "angry"
   state.SentimentScore = 0.10
-  state.ConsecutiveNegativeTurns = 2          ← 1 → 2
-  state.Phase = "Action"                       ← bot temsilci bağlıyor
+  state.ConsecutiveNegativeTurns = 2            ← 1 → 2 (TEK artış, ikinci bir yazardan gelen ek artış yok)
+  state.Phase = "Action"                        ← bot temsilci bağlıyor
 ```
 
 ---
@@ -117,7 +105,7 @@ ExtractAndApply(state, userMessage, botResponse, 3) sonrası:
 | `AngryThreshold` | 0.15 | Bu altı → "angry" sayılır |
 | `NegativeThreshold` | 0.35 | Bu altı → "negative" |
 | `PositiveThreshold` | 0.65 | Bu üstü → "positive" |
-| `AutoEscalationConsecutiveNegative` | 3 | Peş peşe 3 negatif → otomatik escalation |
+| `AutoEscalationConsecutiveNegative` | 3 | Peş peşe 3 negatif tur → otomatik eskalasyon |
 
 Threshold'lar burada tek yerde — değiştirilmek istenirse `WellKnown.cs` düzenlenir.
 
@@ -128,17 +116,16 @@ Threshold'lar burada tek yerde — değiştirilmek istenirse `WellKnown.cs` düz
 Saf static fonksiyon:
 
 ```csharp
-var state = new ChatSessionState();
-SessionStateExtractor.ExtractAndApply(state, "5 nerede", "Sipariş kargoda", 1);
-Assert.Equal("OrderInquiry", state.CurrentIntent);
-Assert.Equal("5", state.CollectedInfo["order_id"]);
-Assert.Equal("Resolution", state.Phase);   // "başarıyla" yok ama bot yanıt verdi → kontrol et
+var state = new SessionState();
+SessionStateExtractor.ExtractAndApply(state, "5 nolu siparişim nerede", "Sipariş kargoda");
+Assert.Equal("sipariş_sorgulama", state.CurrentIntent);
+Assert.Equal("Action", state.Phase);   // "başarıyla" yok
 ```
 
-Burada `ExtractAndApply` çağrısının deterministic olması test edilebilirliği maksimize eder.
+`llm` parametresi opsiyonel olduğu için mevcut testlerin çoğu ona hiç dokunmadan geçer; `TurnSignals` içeren senaryolar ayrıca test edilir (`SessionStateExtractorTests`, `TurnSignalsTests`).
 
 ---
 
 ## Neden Domain'de?
 
-Bu mantık iki adapter'da da (InMemory + Postgres) çalışır. Adapter'lardan birine koyarsak diğeri kopya tutar veya farklı davranır. **Domain Service** olarak tutmak DRY'ı sağlar ve davranış farkı riskini sıfırlar.
+Bu mantık iki adapter'da da (InMemory + Postgres) çalışır. Adapter'lardan birine koyarsak diğeri kopya tutar veya farklı davranır. **Domain Service** olarak tutmak DRY'ı sağlar ve davranış farkı riskini sıfırlar — `TurnSignals`'ın da Domain'de (Application değil) tanımlı olmasının sebebi budur: her iki adapter da Application katmanına bağımlı olmadan bu tipi kullanabilmeli.

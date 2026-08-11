@@ -33,10 +33,11 @@ public ChatPortService(
 3. reasoningResult = ReasonAsync(query, session, history)
 4. approvalScope = SetScope(sessionId)    ← HITL tool call'ları bu scope'da kimliğini bilir
 5. response = team.RunAsync(query, history, session, reasoning)
-6. UpdateSessionIntent(session, intent)
-7. AddExchange(sessionId, query, response)
-8. return ChatResponse(response, sessionId, reasoning)
+6. AddExchangeAsync(sessionId, query, response, TurnSignals.From(reasoningResult))
+7. return ChatResponse(response, sessionId, reasoning)
 ```
+
+> ⚠️ 6. adım eskiden iki ayrı çağrıydı: önce `UpdateSessionIntentAsync(session, intent)` intent'i doğrudan state'e yazıyor, sonra `AddExchangeAsync` aynı alanı kural tabanlı değerle bir kez daha yazıyordu — LLM'in kararı sessizce eziliyordu. Artık intent (ve sentiment) `TurnSignals` ile **tek** çağrıya taşınıyor; state'in tek yazarı `SessionStateExtractor.ExtractAndApply`. Detay: [`Services-SessionStateExtractor.md`](../CustomerSupportBot.Domain/Services-SessionStateExtractor.md).
 
 ## `HandleStreamAsync` (Streaming)
 
@@ -55,7 +56,7 @@ yield: Session event → SessionEventPayload(sessionId)
 Reasoning stream:
   yield: ReasoningStart
   yield: ReasoningDelta* (her 20ms'de bir chunk)
-  yield: ReasoningComplete → ReasoningResult
+  yield: ReasoningComplete → ReasoningResult   ← reasoningResult DEĞİŞKENDE tutulur, state'e YAZILMAZ
 
 approvalScope = SetScope(sessionId)  ← HITL scope açılır
 
@@ -67,11 +68,15 @@ Workflow stream:
   yield: ResponseDelta*
   yield: ResponseComplete
 
-SessionStateService.PersistExchange(...)  ← Geçmiş kaydedilir
+SessionStateService.PersistExchangeAsync(
+    sessionId, query, fullResponse, chatBridge,
+    TurnSignals.From(reasoningResult))   ← Geçmiş kaydedilir + intent/sentiment TEK burada işlenir
 
 yield: SentimentUpdate
 yield: SentimentAlert?  (ConsecutiveNegativeTurns eşiği aşıldıysa)
 ```
+
+> ⚠️ `ReasoningComplete` event'i yield edildiğinde `reasoningResult` artık state'e **yazılmaz** — yalnızca yerel değişkende tutulup akışın sonunda `PersistExchangeAsync`'e `TurnSignals` olarak geçirilir. Eskiden burada `UpdateSessionIntentAsync`/`UpdateSessionSentiment` doğrudan çağrılıyordu; bu, `ConsecutiveNegativeTurns` sayacının tur başına iki kez artmasına yol açıyordu (bir kez burada, bir kez `PersistExchangeAsync`'in tetiklediği `SessionStateExtractor`'da). Detay: [`SessionStateService.md`](SessionStateService.md#neden-değişti-çift-yazar--tek-yazar).
 
 ## StreamEvent türleri (özet)
 
@@ -121,5 +126,5 @@ var text = TryExtractText(evt.Data);
 - `ReasoningService` çağrılmaz
 - `IAgentTeamPort` çağrılmaz
 - `SessionStateService` çağrılmaz
-- Kullanıcı mesajı `ISessionManager.AddExchange` ile geçmişe eklenir (boş yanıtla)
+- Kullanıcı mesajı `ISessionManager.AddExchangeAsync` ile geçmişe eklenir (boş yanıtla, `signals: null` — reasoning hiç çalışmadığı için taşınacak bir LLM sinyali yok, kural tabanlı çıkarım devreye girer)
 - Admin tarafı `IChatBridge` aboneliği ile mesajı alır ve ekranında görür
