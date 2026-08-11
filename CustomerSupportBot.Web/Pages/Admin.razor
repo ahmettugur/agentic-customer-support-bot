@@ -104,9 +104,16 @@
         <section id="panel-approvals" class="tab-content @ActiveCls("approvals")" role="tabpanel" aria-labelledby="tab-approvals">
             <div class="tab-header">
                 <h2>Onay Bekleyen Tool Çağrıları</h2>
-                @* Süre sunucudan gelir (ApprovalRequest.TimeoutSeconds) — config değişirse panel de değişir. *@
-                @{ var timeoutHint = _pendingApprovals.Count > 0 ? _pendingApprovals[0].TimeoutSeconds : 60; }
-                <p class="muted">LLM bir yan etkili tool çağırmak istiyor. Onay verilmezse <strong>@timeoutHint saniye</strong> sonra otomatik reddedilir.</p>
+                @* Bloklamayan HITL modelinde (bkz. ApprovalGateService.ExecuteWithApprovalGateAsync) tool
+                   çağrısı admin kararını BEKLEMEZ — kayıt burada, sen karar verene kadar durur. Eskiden
+                   burada ApprovalRequest.TimeoutSeconds'a bağlı "N saniye sonra otomatik reddedilir" yazan
+                   bir metin vardı; o, artık hiçbir tool tarafından tetiklenmeyen eski bloklayan modelin
+                   (AwaitDecisionAsync) kalıntısıydı ve SlaGuardianService'in (Sla.Approvals, eşiği aşan
+                   bekleyen onayları OnBreach=AutoReject ile fiilen reddeden, tasarım değişirken güncellenmemiş
+                   bir yapılandırma) davranışıyla yanlışlıkla örtüşüyordu. O yapılandırma düzeltildi
+                   (bkz. SlaOptions.cs) — artık yalnızca çok uzun süredir bekleyen kayıtlar için arka planda
+                   sessiz bir "pes et" eşiği var, admin'e görünen bir sayaç değil. *@
+                <p class="muted">LLM bir yan etkili tool çağırmak istiyor. Sen karar verene kadar kuyrukta bekler — çok uzun süre (günler) yanıtsız kalırsa sistem otomatik reddeder.</p>
             </div>
             <div class="cards-list">
                 @if (_pendingApprovals.Count == 0) { <div class="empty-state">Onay bekleyen istek yok.</div> }

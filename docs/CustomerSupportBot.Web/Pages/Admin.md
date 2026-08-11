@@ -8,7 +8,10 @@ Admin ve Agent panelinin ana sayfasıdır. Approvals, escalations, aktif chat ot
 
 ## Sorumlulukları
 - Sekme navigasyonu: Approvals, Escalations, Chat Sessions, Analytics, Improvements, Agents, Sessions.
-- Approval onay/red işlemleri (gerekçe zorunluluğu dahil).
+- Approval onay/red işlemleri (gerekçe zorunluluğu dahil). Onay Kuyruğu sekmesindeki kayıt, admin
+  karar verene ya da çok uzun süre (varsayılan 72 saat, `ApprovalOptions.StalePendingHours`)
+  yanıtsız kalırsa arka planda otomatik reddedilene kadar kuyrukta bekler — sabit bir saniye
+  sayacı yoktur (bkz. [`SlaPortService.md`](../../CustomerSupportBot.Application/Sla/SlaPortService.md#slaapprovalsonbreach-varsayılanı--autoreject--none), eskiden burada yanlışlıkla 60 saniyede otomatik reddeden bir SLA config'i vardı).
 - Escalation yönetimi (acknowledge, resolve, dismiss, replan).
 - Aktif chat oturumlarını izleme, mesaj geçmişi görme, takeover/release, mesaj gönderme.
 - Analytics dashboard ve oturum bazlı analitik (sentiment timeline, grafikler).

@@ -73,6 +73,39 @@ public class SlaGuardianServiceTests
     }
 
     [Fact]
+    public async Task ScanOnce_Approval_DefaultOptions_BreachDoesNotAutoReject()
+    {
+        // REGRESYON: ApprovalSlaOptions.OnBreach'in varsayılanı AutoReject idi. Bu, HITL
+        // bloklamayan modele taşınmadan (tool çağrısı artık admin kararını beklemiyor,
+        // bkz. ApprovalGateService.ExecuteWithApprovalGateAsync) önceki tasarımdan kalma bir
+        // artıktı — tasarım değişirken güncellenmemişti. Sonuç: appsettings.json'daki
+        // Sla.Approvals (BreachAfterSeconds=60, o zaman OnBreach=AutoReject) her bekleyen
+        // onayı admin hiç bakmasa bile 60. saniyede sessizce reddediyordu; bloklamayan
+        // modelin "admin ne zaman bakarsa baksın" amacını fiilen geçersiz kılıyordu.
+        // Explicit OnBreach set etmeden — yani gerçek varsayılanı kullanarak — test ediliyor.
+        var opts = new SlaOptions
+        {
+            Approvals = new ApprovalSlaOptions { WarnAfterSeconds = 1, BreachAfterSeconds = 2 }
+        };
+        var (slaPort, approvals, _, sink) = BuildHarness(opts);
+
+        var req = await approvals.CreateAsync(new ApprovalRequest
+        {
+            ToolName = "order_placement_tool",
+            RequestedAt = DateTime.UtcNow.AddSeconds(-10),
+            SessionId = "s1"
+        }, TestContext.Current.CancellationToken);
+
+        await slaPort.ScanOnceAsync(opts, TestContext.Current.CancellationToken);
+
+        sink.GetRecent().Should().Contain(e =>
+            e.Severity == SlaPolicyEvaluator.SeverityBreach && e.TargetId == req.Id,
+            "admin panelinde 'uzun süredir bekliyor' uyarısı hâlâ görünmeli");
+        approvals.Get(req.Id)!.Status.Should().Be(ApprovalStatus.Pending,
+            "SLA breach yalnızca bir uyarı — kararı admin verir, sistem değil");
+    }
+
+    [Fact]
     public async Task ScanOnce_Approval_AboveWarn_BelowBreach_OnlyWarn()
     {
         var opts = new SlaOptions

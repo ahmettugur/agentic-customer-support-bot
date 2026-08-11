@@ -24,24 +24,35 @@ public class SlaOptions
 
 public class ApprovalSlaOptions
 {
-    /// <summary>Bu süreyi aşan onaylar için "warn" eventi yayınlanır.</summary>
+    /// <summary>Bu süreyi aşan onaylar için "warn" eventi yayınlanır — admin panelinde bir uyarı rozeti.</summary>
     public int WarnAfterSeconds { get; set; } = 20;
 
     /// <summary>
-    /// Bu süreyi aşan onaylar SLA ihlali sayılır ve <see cref="OnBreach"/>'e göre
-    /// otomatik karar verilir. HumanInTheLoop.TimeoutSeconds (onay kuyruğunun kendi
-    /// timeout'u) ile AYNI veya ondan BÜYÜK tutulmalı — küçük tutulursa SLA, admin'e
-    /// tanınan onay penceresini (queue timeout ne olursa olsun) fiilen kısaltır.
+    /// Bu süreyi aşan onaylar SLA ihlali sayılır ve (varsayılan olarak) yalnızca bir
+    /// <c>breach</c> event'i yayınlanır — <see cref="OnBreach"/>'e bakınız.
     /// </summary>
     public int BreachAfterSeconds { get; set; } = 60;
 
     /// <summary>
-    /// Breach sonrası otomatik aksiyon:
-    /// <c>None</c> = sadece event yayınla (mevcut Approval timeout'u devreye girer),
-    /// <c>AutoReject</c> = onayı reddet,
-    /// <c>AutoApprove</c> = onayı onayla (sadece güvenli senaryolarda kullan).
+    /// Breach sonrası aksiyon. Varsayılan <c>None</c> — sadece event yayınlanır, admin panelinde
+    /// "uzun süredir bekliyor" rozeti olarak görünür, karar verilmez.
+    ///
+    /// <para>
+    /// <b>Neden <c>AutoReject</c> DEĞİL:</b> HITL bloklamayan modele taşınmadan önce (o zamanki
+    /// tasarımda) bu değer <c>AutoReject</c> idi ve o dönem <c>ApprovalOptions.TimeoutSeconds</c>
+    /// (o zamanki tool çağrısını AwaitDecisionAsync ile bekleten, 60sn) ile aynı tutulması gereken,
+    /// ikinci/yedek bir uygulama katmanıydı. Tool çağrıları artık admin kararını beklemiyor
+    /// (bkz. <c>ApprovalGateService.ExecuteWithApprovalGateAsync</c>) — kayıt, admin karar verene
+    /// ya da <c>ApprovalOptions.StalePendingHours</c> (varsayılan 72 saat) aşılana kadar kuyrukta
+    /// kalmalı. Tasarım değişirken bu alan güncellenmeyi unutulmuştu: <c>BreachAfterSeconds=60</c> +
+    /// <c>OnBreach=AutoReject</c> kombinasyonu, her bekleyen onayı admin bakmasa bile 60. saniyede
+    /// sessizce reddediyordu — bloklamayan modelin "admin ne zaman bakarsa baksın" amacını fiilen
+    /// geçersiz kılıyordu. <c>AutoReject</c>/<c>AutoApprove</c> hâlâ bir seçenek olarak duruyor
+    /// (ör. çok agresif bir operasyon politikası isteniyorsa) ama artık varsayılan değil ve
+    /// kasıtlı bir operatör kararı gerektirir.
+    /// </para>
     /// </summary>
-    public SlaBreachAction OnBreach { get; set; } = SlaBreachAction.AutoReject;
+    public SlaBreachAction OnBreach { get; set; } = SlaBreachAction.None;
 }
 
 public class EscalationSlaOptions
