@@ -20,6 +20,8 @@ Background hosted service olarak çalışır. `SlaOptions` konfigürasyonundaki 
 
 Varsayılan artık `None` — `BreachAfterSeconds` aşılınca yalnızca bir `SlaEvent` (breach) kaydı üretilir, admin panelinde bir uyarı rozeti olarak görünür, karar verilmez. `AutoReject`/`AutoApprove` hâlâ opsiyonel bir operatör kararı olarak duruyor (`appsettings.json` → `Sla.Approvals.OnBreach`), varsayılan değil. Regresyon koruması: `SlaGuardianServiceTests.ScanOnce_Approval_DefaultOptions_BreachDoesNotAutoReject`.
 
+> ⚠️ **Bu düzeltme ilk seferinde eksik kaldı.** `appsettings.json`'daki `OnBreach` `None`'a çekildi ama `CustomerSupportBot.Api/appsettings.Development.json`'daki AYRI kopyası unutuldu — ASP.NET Core config layering'i Development ortamında (dotnet run'ın varsayılanı, bkz. `launchSettings.json`) bu dosyayı base'in **üzerine** yazdığı için gerçek çalışan davranış hâlâ `AutoReject`'ti; kullanıcı düzeltmeden sonra bile 60 saniyede otomatik red gözlemledi. İki dosya da düzeltildi ve `AppSettingsConfigTests` (`CustomerSupportBot.Api.Tests/Infrastructure`) ikisinin senkron kalmasını zorunlu kılıyor — bu, "yalnızca base appsettings.json'ı test eden" `PromptContractTests`'in kaçırdığı bir sınıf hatadır (Development kopyası hiç okunmuyordu).
+
 ## Bağlantılar
 
 - [SlaPolicyEvaluator.md](SlaPolicyEvaluator.md) — SLA kural değerlendirmesi
