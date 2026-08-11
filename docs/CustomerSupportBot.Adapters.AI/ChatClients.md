@@ -1,6 +1,9 @@
 # Chat Client'lar
 
+> 💡 **Analiz notu:** Application katmanı `IGeneralChatClient.CompleteAsync()` çağırır ama ne OpenAI SDK'sını ne de Azure SDK'sını bilir. Bu dosyadaki adapter'lar o köprüyü kurar — domain mesajlarını SDK mesajlarına çevirir, API çağrısı yapar ve sonucu geri çevirir.
+
 **Dosyalar:**
+
 - `Chat/AiClientFactory.cs` — Provider factory
 - `Chat/GeneralChatClientAdapter.cs` — `IGeneralChatClient` impl
 - `Chat/ReasoningChatClient.cs` — `IReasoningChatClient` impl
@@ -21,7 +24,7 @@ public static IChatClient CreateStandardChatClient(AiOptions options)
 İki dal:
 
 | Provider | İç implementasyon |
-|---|---|
+| --- | --- |
 | `OpenAI` | `new OpenAIClient(apiKey).GetChatClient(model).AsIChatClient()` |
 | `AzureOpenAI` | `new AzureOpenAIClient(endpoint, apiKey).GetChatClient(deployment).AsIChatClient()` |
 
@@ -36,6 +39,7 @@ public static ReasoningChatClient CreateReasoningChatClient(
 ```
 
 Standart client'a ek:
+
 - `ReasoningModel` / `ReasoningDeployment` yoksa standart model/deployment'a düşer
 - `decorate` parametresi ile telemetri decorator inject edilebilir; `null` ise iç client doğrudan kullanılır
 - Oluşturulan `ReasoningChatClient` içinde `ModelName` ve `ReasoningEffort` saklanır
@@ -102,7 +106,7 @@ public async Task<string> CompleteAsync(
 `ConversationMessage.Role` (string) → `Microsoft.Extensions.AI.ChatRole`:
 
 | Domain (`ConversationRoles`) | ChatRole |
-|---|---|
+| --- | --- |
 | `User` | `ChatRole.User` |
 | `System` | `ChatRole.System` |
 | Diğer (`Assistant` vb.) | `ChatRole.Assistant` |
@@ -112,6 +116,7 @@ Bu mapping iki dünya arasında köprü — Application sadece string role kulla
 ### Cancellation davranışı
 
 `OperationCanceledException` özel olarak ele alınır:
+
 - Kullanıcı isteği iptal etti → exception olduğu gibi yükselt (translate etme)
 - Aksi halde `ExceptionTranslator.Translate` ile domain exception'a çevir
 
@@ -199,7 +204,7 @@ private ChatOptions BuildOptions() => new()
 ## Reasoning Effort etkisi
 
 | Effort | OpenAI o1 davranışı |
-|---|---|
+| --- | --- |
 | `low` | Hızlı yanıt, kısa düşünme |
 | `medium` | Orta seviye reasoning |
 | `high` | Derin reasoning, daha yavaş ama daha doğru |

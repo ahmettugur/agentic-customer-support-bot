@@ -1,5 +1,7 @@
 # CriteriaEvaluator
 
+> 💡 **Analiz notu:** Test hakemi — bot'un yanıtını kriterlerle karşılaştırır (doğruluk, eksiksizlik, ton). MAF'ın `FunctionEvaluator` altyapısını kullanır.
+
 **Dosya:** `CustomerSupportBot.Adapters.Agents/Evaluation/CriteriaEvaluator.cs`
 **Erişim:** `public static` (+ `public class ScenarioRunContext`, aynı dosyada)
 
@@ -39,7 +41,7 @@
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `Evaluate(spec, item, ctx)` (static) | Ana giriş noktası — `spec.Type`'a göre dispatch, sonucu `CriterionResult`'a adapte eder. |
 | `Checks` (private static readonly `Dictionary`) | Dispatch table — desteklenen 12 `type` (bkz. [docs/evaluation.md §3](../../evaluation.md)). |
 | `DescribeCriterion(spec)` (private static) | Rapor/API çıktısı için insan-okunur bir `Criterion` string'i üretir. |

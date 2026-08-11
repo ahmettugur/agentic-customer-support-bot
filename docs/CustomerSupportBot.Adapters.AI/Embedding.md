@@ -4,7 +4,15 @@
 **Port:** `IEmbeddingPort`  
 **Yaşam döngüsü:** Singleton
 
+## 1. Ne İşe Yarar
+
 Metni vektöre çevirir. OpenAI veya Azure OpenAI embedding API'sini kullanır.
+
+## 2. Hangi Amaçla Kullanılır
+
+Semantic memory (Qdrant) arama yapabilmek için metinlerin sayısal vektörlere dönüştürülmesi gerekir. Bu adapter o dönüşümü yapar.
+
+> 💡 **Analiz notu:** Kütüphanedeki bir kitap dizin kartı gibi düşün — "sipariş nerede?" sorusunu 1536 boyutlu bir sayı dizisine çevirir. Benzer anlamdaki cümleler birbirine yakın vektörler üretir. Bu sayede "kargom ne durumda?" da aynı kitap dizin kartına yakın çıkar.
 
 ---
 
@@ -60,6 +68,7 @@ Adapter chat'i Azure'dan, embedding'i OpenAI'dan alır — eksik config semantic
 ### IsConfigured == false
 
 Hiçbir provider yapılandırılmamışsa:
+
 - `_client = null`
 - Warning loglanır
 - `EmbedAsync` çağrıları boş array döner
@@ -105,6 +114,7 @@ const int batchSize = 64;
 ```
 
 OpenAI API tek istekte ~2048 input kabul eder ama:
+
 - 64 ile daha kısa latency (büyük batch yavaş döner)
 - Hata olursa kayıp az (1 batch fail → max 64 item)
 
@@ -138,7 +148,7 @@ await qdrant.UpsertAsync(docs.Zip(vectors));
 ## Embedding modelleri
 
 | Model | Dimension | Maliyet/1M token |
-|---|---|---|
+| --- | --- | --- |
 | `text-embedding-3-small` | 1536 | $0.02 |
 | `text-embedding-3-large` | 3072 | $0.13 |
 | `text-embedding-ada-002` (legacy) | 1536 | $0.10 |
@@ -146,6 +156,7 @@ await qdrant.UpsertAsync(docs.Zip(vectors));
 Default seçim: `text-embedding-3-small` (1536). Yeterli kaliteye sahip ve 6x ucuz.
 
 **Dimension değişimi:**
+
 - Qdrant collection o dimension'a göre yaratılır
 - Model değiştirilirse collection yeniden inşa edilmeli (eski vektörler uyumsuz)
 - `QdrantVectorMemoryAdapter.EnsureCollectionAsync` dimension uyumsuzluğunu tespit eder
@@ -182,7 +193,7 @@ Default seçim: `text-embedding-3-small` (1536). Yeterli kaliteye sahip ve 6x uc
 ## Performans
 
 | İşlem | Tipik süre |
-|---|---|
+| --- | --- |
 | Tek embedding | 50-200 ms (OpenAI) |
 | Batch 64 | 150-400 ms |
 | Boş text early return | <1 µs |

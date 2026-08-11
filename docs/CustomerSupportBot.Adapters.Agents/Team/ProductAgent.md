@@ -10,6 +10,8 @@
 
 Ürün sorgularını yanıtlar — tek ürün sorgulama ve katalog/kategori bazlı listeleme. Tüm tool'ları salt-okunur olduğu için compound query'lerde diğer read-only specialist'lerle paralel çalıştırılabilir (bkz. `WellKnown.AgentNames.ReadOnly`, `ParallelExecutionOptions.IsReadOnly`, [../DecomposedRunner.md](../DecomposedRunner.md)).
 
+> 💡 **Analiz notu:** Mağazadaki ürün danışmanı gibi — "bu ürün ne kadar?", "elektronik kategorisinde ne var?" sorularını yanıtlar. Stok/fiyat bilgisi verir ama sipariş almaz.
+
 ## Hangi amaçla kullanılır?
 
 `PlanningAgent` ürün sorgusu/listesi niyeti tespit ettiğinde devreye girer.
@@ -35,7 +37,7 @@
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `BuildInner(chatClient, prompts, tools)` (private static) | `ChatClientAgent` kurar: 2 tool + `ResponseFormat` = `SpecialistReasoningSchema`. |
 | `OnBeforeRun(messages)` | Breakpoint — LLM'e gönderilen tam mesaj listesi. |
 | `OnAfterRun(response)` | Breakpoint — `toolCalls`/`toolResults` (UI hint'leri ör. `category_picker` bu sonuçtan üretilir), `response.Text`. |

@@ -2,6 +2,8 @@
 
 `InMemory/` altındaki tüm adaptörler tek process içinde çalışır. Kalıcılık yoktur — restart sonrası veri sıfırlanır. Geliştirme, test ve demo senaryoları için kullanılır.
 
+> 💡 **Analiz notu:** Test yazarken Postgres kurmak zahmetli. InMemory adapter'lar aynı port'u (interface'i) implement eder ama `ConcurrentDictionary` ile bellekte tutar. Bu sayede unit testler milisaniyeler içinde çalışır.
+
 ---
 
 ## InMemorySessionManager
@@ -11,7 +13,7 @@
 `AgentSession` ve `ConversationMessage` listelerini `ConcurrentDictionary` ile tutar.
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `GetOrCreate(sessionId)` | Session varsa döner, yoksa oluşturur |
 | `Get(sessionId)` | Nullable döner |
 | `Update(session)` | State günceller |
@@ -34,7 +36,7 @@
 `TaskCompletionSource<bool>` başına bir pending task ile asenkron onay bekleme mekanizması sağlar.
 
 | Özellik | Değer |
-|---------|-------|
+| --------- | ------- |
 | Ring buffer | Max 200 history |
 | Timeout | Configurable; timeout'ta `AutoApprove`/`AutoReject`/`None` |
 | Thread safety | `SemaphoreSlim(1,1)` |
@@ -51,7 +53,7 @@
 Per-session `System.Threading.Channels.Channel<BridgeMessage>` kullanır. Admin ve kullanıcı kanalları ayrıdır.
 
 | Metod | Kanal | DB'ye yazılır? |
-|-------|-------|---------------|
+| ------- | ------- | --------------- |
 | `PublishUserMessage` | her ikisi | Evet |
 | `PublishBotMessage` | her ikisi | Evet |
 | `PublishAdminMessage` | her ikisi | Evet |
@@ -71,7 +73,7 @@ Ring buffer: 200 mesaj geçmişi; `SubscribeToUserAsync` / `SubscribeToAdminAsyn
 `ConcurrentDictionary<sessionId, ChatSessionMode>` ile mod durumu tutar.
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `SetMode(sessionId, Bot/Human, agentId)` | Mod ata + event fire |
 | `GetMode(sessionId)` | Mevcut mod |
 | `GetActive()` | Human modundaki session'lar |
@@ -94,7 +96,7 @@ Open → Dismissed    (DismissOrphaned)
 ```
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `Create(...)` | Yeni eskalasyon, event fire |
 | `GetOpen(sessionId?)` | Açık kayıtlar |
 | `GetRecent(count)` | Son N kayıt |
@@ -111,7 +113,7 @@ Open → Dismissed    (DismissOrphaned)
 `RoutingOptions.DefaultAgents`'tan seed edilir.
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `GetActive()` | `IsActive == true` agent'lar |
 | `GetAll()` | Tüm agent'lar |
 | `Create` / `Update` / `Delete` | CRUD |
@@ -128,7 +130,7 @@ Open → Dismissed    (DismissOrphaned)
 `ConcurrentDictionary<sessionId, ConversationRating>`.
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `Submit(sessionId, stars, feedback)` | Upsert |
 | `GetBySession(sessionId)` | Nullable |
 | `GetAll()` | Timestamp DESC sıralı |
@@ -143,7 +145,7 @@ Open → Dismissed    (DismissOrphaned)
 Ring buffer: 500. Üç aşamalı kayıt:
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `StartTrace(traceId, sessionId, query)` | Skeleton oluştur |
 | `Update(trace)` | Cache'i güncelle (DB yok) |
 | `Complete(trace)` | Tam state kaydet |
@@ -160,7 +162,7 @@ Ring buffer: 500. Üç aşamalı kayıt:
 Ring buffer: 500.
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `Record(event)` | Event ekle |
 | `GetRecent(count)` | Son N |
 | `LastEmittedAt(kind, targetId, severity)` | Aynı olayın son emit zamanı (duplicate önleme) |
@@ -172,7 +174,7 @@ Ring buffer: 500.
 **Port:** `ICustomerProfileStore`
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `GetOrCreate(customerId)` | Yeni profile oluşturur |
 | `Get(customerId)` | Nullable |
 | `Upsert(profile)` | Ekle/güncelle |
@@ -187,7 +189,7 @@ Ring buffer: 500.
 **Port:** `ILessonStore`
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `Add(lesson)` | Ekle |
 | `Get(id)` | Tekil |
 | `Update(lesson)` | Güncelle |
@@ -201,4 +203,3 @@ Ring buffer: 500.
 **Port:** `IMessageBusPort`
 
 İşlem-içi pub/sub. `Action<T>` handler'larla abone olma, `Publish(channel, message)` ile yayın.
-

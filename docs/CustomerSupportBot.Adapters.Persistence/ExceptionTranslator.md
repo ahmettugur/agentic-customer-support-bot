@@ -1,5 +1,7 @@
 # ExceptionTranslator
 
+> 💡 **Analiz notu:** EF Core / Npgsql unique constraint ihlali, connection timeout gibi DB hatalarını domain exception'larına çevirir. Application katmanı `NpgsqlException` görmez, `ConcurrencyConflictException` görür.
+
 **Dosya:** `ExceptionTranslator.cs`  
 **Tür:** `internal static class`
 
@@ -22,7 +24,7 @@ Gelen exception'ı inceler ve uygun `DomainException` alt sınıfını döner (�
 ## Eşleme tablosu
 
 | Gelen Exception | Koşul | Domain Exception |
-|----------------|-------|-----------------|
+| ---------------- | ------- | ----------------- |
 | `DbUpdateConcurrencyException` | — | `ConcurrencyConflictException` |
 | `DbUpdateException` içinde `PostgresException` | — | `TranslatePostgres` ile aşağıdaki tabloya göre |
 | `PostgresException` | `SqlState = "23505"` (unique violation) | `ConcurrencyConflictException` (**`DuplicateEntityException` diye bir sınıf yoktur**) |
@@ -56,7 +58,7 @@ catch (Exception ex) when (ex is not OperationCanceledException)
 ## Domain exception'lar
 
 | Sınıf | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `ConcurrencyConflictException` | Eş zamanlı güncelleme çakışması **veya** unique/deadlock/serialization ihlali |
 | `EntityNotFoundException` | FK referans ettiği kayıt yok |
 | `PersistenceException` | Genel altyapı hatası (timeout, bağlantı, tanınmayan hata) |

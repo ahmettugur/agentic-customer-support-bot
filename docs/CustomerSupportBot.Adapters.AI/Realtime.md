@@ -1,10 +1,19 @@
 # Realtime — OpenAI Voice Bridge
 
 **Dosyalar:**
+
 - `Realtime/OpenAiRealtimeClientAdapter.cs` — WebSocket köprüsü
 - `Realtime/RealtimeFunctionTools.cs` — Read-only tool schema kataloğu
 
+## 1. Ne İşe Yarar
+
 OpenAI Realtime API kullanarak **iki yönlü ses iletişimi** sağlar: kullanıcı konuşur → bot anlar → sesli yanıt verir.
+
+## 2. Hangi Amaçla Kullanılır
+
+Chat ekranında "sesli sohbet" modu — kullanıcı mikrofon açıp konuşabilir, bot sesli yanıt verir.
+
+> 💡 **Analiz notu:** Alexa veya Siri gibi — konuşarak müşteri desteği. Arka planda iki WebSocket var: biri browser↔sunucu, diğeri sunucu↔OpenAI. Ses verisi (PCM 24kHz) iki taraflı köprüden geçer.
 
 ---
 
@@ -32,6 +41,7 @@ Browser                              Api Layer                 OpenAI Realtime
 ```
 
 Application katmanı (`RealtimeBridgeService` veya `RealtimeNativeService`) bu transport'u kullanarak iki mod sunar:
+
 - **Bridge mode:** Reasoning + AgentTeam → text üret → Realtime'a "şunu oku" der
 - **Native mode:** OpenAI doğrudan tool çağırır, kendi yanıt verir
 
@@ -42,7 +52,7 @@ Application katmanı (`RealtimeBridgeService` veya `RealtimeNativeService`) bu t
 Adapter aşağıdaki metodları implement eder:
 
 | Metod | Açıklama |
-|---|---|
+| --- | --- |
 | `TryConnectAsync` | WebSocket bağlantısını aç |
 | `ConfigureBridgeSessionAsync` | Bridge modu config (auto-response = false) |
 | `ConfigureNativeSessionAsync` | Native modu config (tools + auto-response = true) |
@@ -111,6 +121,7 @@ public async Task<bool> TryConnectAsync(CancellationToken ct)
 ```
 
 **Akış:**
+
 1. Kullanıcı konuşur → transkripsiyon → Application'a teslim edilir
 2. Application **kendi pipeline'ında** yanıt üretir (Reasoning + Specialist + Response agents)
 3. `SpeakTextAsync(yanıt)` çağrılır → Realtime sadece TTS yapar
@@ -145,6 +156,7 @@ OpenAI bu modda kendiliğinden cevap vermez (`create_response=false`).
 ```
 
 **Akış:**
+
 1. Kullanıcı konuşur → OpenAI direkt anlar
 2. Gerekirse tool çağırır (ör. `order_status_tool`)
 3. `response.function_call_arguments.done` event'i gelir → Application dispatch eder → sonuç `SendToolResultsAsync` ile döner
@@ -160,7 +172,7 @@ Dezavantaj: HITL (approval, escalation) çağıramaz — read-only tool kısıt�
 WebSocket'ten gelen ham frame → JSON parse → `RealtimeServerEvent` enum'una map et:
 
 | OpenAI event tipi | Domain event |
-|---|---|
+| --- | --- |
 | `input_audio_buffer.speech_started` | `SpeechStarted` |
 | `input_audio_buffer.speech_stopped` | `SpeechStopped` |
 | `conversation.item.input_audio_transcription.completed` | `InputTranscriptCompleted` + transcript |
@@ -205,7 +217,7 @@ public async Task SendAudioChunkAsync(byte[] pcm16, CancellationToken ct)
 `RealtimeFunctionTools` sadece **read-only** tool şemaları sunar:
 
 | Tool | Parametre | Amaç |
-|---|---|---|
+| --- | --- | --- |
 | `product_inquiry_tool` | `product_name` | Ürün fiyat/stok sorgu |
 | `product_list_tool` | `category?` | Katalog / kategori listeleme |
 | `order_status_tool` | `order_id` | Sipariş durumu |
@@ -216,6 +228,7 @@ public async Task SendAudioChunkAsync(byte[] pcm16, CancellationToken ct)
 ### Yasak tool'lar
 
 Native mode'da **kayıt edilmemiştir**:
+
 - `order_placement_tool` — yeni sipariş (HITL gerektirir)
 - `order_cancel_tool` — sipariş iptali (HITL gerektirir)
 - `return_request_tool` — iade talebi (HITL gerektirir)
@@ -296,7 +309,7 @@ OpenAI'a verilen sistem prompt'unun anahtarları:
 ## Performans karakteristikleri
 
 | Metric | Tipik değer |
-|---|---|
+| --- | --- |
 | WebSocket bağlantı | ~200-500 ms |
 | Audio chunk RTT | 30-80 ms |
 | Tool dispatch RTT | 100-300 ms (DB lookup dahil) |

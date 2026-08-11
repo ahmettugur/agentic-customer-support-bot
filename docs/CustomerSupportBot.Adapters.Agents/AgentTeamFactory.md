@@ -8,6 +8,8 @@
 
 6 ajanı (`PlanningAgent`, `ProductAgent`, `OrderAgent`, `ComplaintAgent`, `HumanHandoffAgent`, `ResponseAgent`) bir kez örnekler ve her workflow koşusu için **taze** bir `Microsoft.Agents.AI.Workflows.Workflow` üretir.
 
+> 💡 **Analiz notu:** Bir futbol takımının kadrosu gibi — oyuncular (agent'lar) sabit ama her maç (workflow) için yeni bir strateji (ChatManager) ve yeni bir skor tablosu (handoff counts) kurulur.
+
 ## Hangi amaçla kullanılır?
 
 `WorkflowRunner`, her `RunAsync`/`RunStreamingAsync` çağrısında `CreateWorkflow()`'u çağırır. Ajan örnekleri (dolayısıyla tool bağlamları ve `IChatClient` bağlantıları) süreç ömrü boyunca sabittir — yalnızca `CustomerSupportChatManager` (yönlendirme durumu, `_handoffCounts` dahil) ve graph bağlantıları her koşuda yeniden kurulur, böylece tur-başına izole olması gereken state garanti edilir.
@@ -34,7 +36,7 @@ Ajan örneklerinin (dolayısıyla tool/prompt kurulumunun) her turda yeniden yar
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `PlanningAgent` / `ProductAgent` / `OrderAgent` / `ComplaintAgent` / `HumanHandoffAgent` / `ResponseAgent` (`AIAgent`, get-only) | Süreç ömrü boyunca sabit ajan örnekleri, OpenTelemetry ile sarmalanmış. |
 | `CreateWorkflow()` | Yeni bir `CustomerSupportChatManager` + 6 katılımcıyla taze bir `Workflow` üretir. |
 | `WrapWithTelemetry(agent, sourceName)` (private static) | `agent.AsBuilder().UseOpenTelemetry(sourceName).Build()`. |

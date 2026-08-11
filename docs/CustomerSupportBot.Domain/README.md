@@ -1,6 +1,6 @@
 # CustomerSupportBot.Domain
 
-Bu klasör **Domain katmanı**nın dokümantasyonunu içerir. Domain, projedeki **iş kavramları**nı temsil eder — saf, framework'siz, altyapısız C# sınıflarıdır.
+Bu klasör **Domain katmanı**nın dokümantasyonunu içerir. Domain, projedeki **iş kavramları**nı temsil eder — saf, framework'süz, altyapısız C# sınıflarıdır.
 
 ---
 
@@ -21,43 +21,50 @@ Api (Controllers)                    ──┘
 ## Klasör yapısı
 
 ```
-CustomerSupportBot.Domain/
-├── Exceptions/
-│   └── DomainException.cs
+docs/CustomerSupportBot.Domain/
+├── README.md (bu dosya)
+├── WellKnown.md
 ├── Model/
-│   ├── Auth/          (UserInfo, RefreshTokenInfo)
-│   ├── Improvement/   (Lesson)
-│   ├── Memory/        (CustomerProfile, MemoryDocument)
-│   └── *.cs           (29 model dosyası)
-└── Services/
-    ├── EscalationStates.cs
-    ├── IdExtractor.cs
-    ├── PlanningResultParser.cs
-    ├── ReasoningResultParser.cs
-    ├── SessionStateExtractor.cs
-    └── SpecialistReasoningParser.cs
+│   ├── AgentSession.md
+│   ├── SessionState.md (+ SentimentEntry)
+│   ├── ChatSessionState.md
+│   ├── ChatMode.md
+│   ├── ChatBridgeMessage.md (+ ChatBridgeSender)
+│   ├── ConversationMessage.md (+ ConversationRoles)
+│   ├── ConversationPhase.md
+│   ├── ConversationRating.md (+ AnalyticsDashboard)
+│   ├── ReasoningResult.md
+│   ├── ReasoningStep.md
+│   ├── ReasoningIssue.md (+ IssueSeverity)
+│   ├── ConfidenceLevel.md
+│   ├── PlanningResult.md (+ RejectedAlternative)
+│   ├── SubTask.md
+│   ├── TurnSignals.md
+│   ├── SelfCritique.md
+│   ├── SpecialistReasoning.md (+ PreToolCheck, PostToolReflection, TaskCompletionStatus)
+│   ├── ApprovalRequest.md (+ ApprovalStatus)
+│   ├── EscalationRequest.md (+ EscalationStatus, EscalationDecisionInput)
+│   ├── EscalationAction.md
+│   ├── HumanAgent.md (+ HumanAgentInput, EscalationPriority, RoutingDecision)
+│   ├── ToolResult.md (+ ToolError, ToolErrorCategories, ToolSuggestedActions)
+│   ├── OrderInfo.md
+│   ├── ComplaintInfo.md
+│   ├── ProductInfo.md
+│   ├── ExtractedIds.md
+│   ├── VerifiedEntities.md (+ VerifiedEntity, EntitySource, EntityVerification)
+│   ├── SessionAnalytics.md (+ ilgili DTO'lar)
+│   └── SlaEvent.md
+├── Services/
+│   ├── EscalationStates.md
+│   ├── IdExtractor.md
+│   ├── SessionStateExtractor.md
+│   ├── PlanningResultParser.md
+│   ├── ReasoningResultParser.md
+│   ├── SpecialistReasoningParser.md
+│   └── SelfCritiqueParser.md
+└── Exceptions/
+    └── DomainException.md
 ```
-
----
-
-## Dokümantasyon haritası
-
-| Doküman | Kapsam |
-|---|---|
-| [Exceptions.md](Exceptions.md) | DomainException ve alt sınıfları |
-| [Services-EscalationStates.md](Services-EscalationStates.md) | Escalation yaşam döngüsü State Pattern |
-| [Services-IdExtractor.md](Services-IdExtractor.md) | Regex tabanlı ID çıkarımı (LLM'siz) |
-| [Services-Parsers.md](Services-Parsers.md) | PlanningResultParser, ReasoningResultParser, SpecialistReasoningParser |
-| [Services-SessionStateExtractor.md](Services-SessionStateExtractor.md) | Session state türetimi |
-| [Model-Session.md](Model-Session.md) | AgentSession, ChatSessionState, ChatMode, ChatBridgeMessage, ConversationMessage |
-| [Model-Auth.md](Model-Auth.md) | UserInfo, RefreshTokenInfo |
-| [Model-Reasoning.md](Model-Reasoning.md) | ReasoningResult, ReasoningStep, ReasoningIssue, ConfidenceLevel, PlanningResult, SubTask |
-| [Model-Specialist.md](Model-Specialist.md) | SpecialistReasoning, PreToolCheck, PostToolReflection, TaskCompletionStatus |
-| [Model-Hitl.md](Model-Hitl.md) | ApprovalRequest, EscalationRequest, HumanAgent, RoutingDecision |
-| [Model-Tools.md](Model-Tools.md) | ToolResult, OrderInfo, ProductInfo, ComplaintInfo, ExtractedIds, VerifiedEntities |
-| [Model-Memory.md](Model-Memory.md) | CustomerProfile, MemoryDocument, Lesson |
-| [Model-Trace.md](Model-Trace.md) | ReasoningTrace, AgentVisit, ToolInvocation, SessionAnalytics, ConversationRating, SlaEvent |
-| [WellKnown.md](WellKnown.md) | Magic string constant registry |
 
 ---
 
@@ -73,18 +80,85 @@ CustomerSupportBot.Domain/
 
 ## Üç ana kategori
 
-### 1. Models (34 dosya)
-Saf veri tipleri. Sınıflar (mutable state için: `AgentSession`), record'lar (immutable DTO için: `OrderInfo`), enum'lar (`ChatMode`, `ConversationPhase`).
+### 1. Models (30 dosya)
 
-### 2. Services (6 dosya)
+Saf veri tipleri. Sınıflar (mutable state için: `AgentSession`), record'lar (immutable DTO için: `ProductInfo`), enum'lar (`ChatMode`, `ConversationPhase`).
+
+#### Oturum & Konuşma
+| Doküman | Kapsam |
+|---|---|
+| [Model/AgentSession.md](Model/AgentSession.md) | Oturum nesnesi — SessionId + zaman + state |
+| [Model/SessionState.md](Model/SessionState.md) | Oturum durumu — intent, phase, sentiment, collectedInfo |
+| [Model/ChatSessionState.md](Model/ChatSessionState.md) | HITL mod snapshot'ı (Bot/Human) |
+| [Model/ChatMode.md](Model/ChatMode.md) | Bot / Human enum |
+| [Model/ChatBridgeMessage.md](Model/ChatBridgeMessage.md) | Canlı sohbet mesaj formatı |
+| [Model/ConversationMessage.md](Model/ConversationMessage.md) | LLM konuşma geçmişi formatı |
+| [Model/ConversationPhase.md](Model/ConversationPhase.md) | Konuşma fazları enum |
+
+#### Reasoning & Planning
+| Doküman | Kapsam |
+|---|---|
+| [Model/ReasoningResult.md](Model/ReasoningResult.md) | LLM reasoning çıktısı (intent, güven, adımlar) |
+| [Model/ReasoningStep.md](Model/ReasoningStep.md) | Tek bir reasoning adımı |
+| [Model/ReasoningIssue.md](Model/ReasoningIssue.md) | Sanity check tutarsızlıkları |
+| [Model/ConfidenceLevel.md](Model/ConfidenceLevel.md) | Güven seviyesi enum |
+| [Model/PlanningResult.md](Model/PlanningResult.md) | PlanningAgent routing kararı |
+| [Model/SubTask.md](Model/SubTask.md) | Compound query alt görevleri |
+| [Model/TurnSignals.md](Model/TurnSignals.md) | LLM → SessionState sinyal taşıyıcı |
+| [Model/SelfCritique.md](Model/SelfCritique.md) | ResponseAgent kalite değerlendirmesi |
+
+#### Specialist Agents
+| Doküman | Kapsam |
+|---|---|
+| [Model/SpecialistReasoning.md](Model/SpecialistReasoning.md) | Pre/post tool reasoning |
+| [Model/ToolResult.md](Model/ToolResult.md) | Tool çağrısı standart dönüş zarfı |
+| [Model/OrderInfo.md](Model/OrderInfo.md) | Sipariş domain modeli |
+| [Model/ComplaintInfo.md](Model/ComplaintInfo.md) | Şikayet domain modeli |
+| [Model/ProductInfo.md](Model/ProductInfo.md) | Ürün domain modeli |
+| [Model/ExtractedIds.md](Model/ExtractedIds.md) | Regex ile çıkarılan ham ID'ler |
+| [Model/VerifiedEntities.md](Model/VerifiedEntities.md) | DB ile doğrulanmış entity'ler |
+
+#### HITL & Escalation
+| Doküman | Kapsam |
+|---|---|
+| [Model/ApprovalRequest.md](Model/ApprovalRequest.md) | HITL onay kaydı |
+| [Model/EscalationRequest.md](Model/EscalationRequest.md) | Eskalasyon talebi |
+| [Model/EscalationAction.md](Model/EscalationAction.md) | Eskalasyon karar aksiyonları enum |
+| [Model/HumanAgent.md](Model/HumanAgent.md) | İnsan temsilci profili |
+
+#### Analytics & Observability
+| Doküman | Kapsam |
+|---|---|
+| [Model/ReasoningTrace.md](Model/ReasoningTrace.md) | Workflow trace kaydı |
+| [Model/ConversationRating.md](Model/ConversationRating.md) | Müşteri değerlendirmesi |
+| [Model/SessionAnalytics.md](Model/SessionAnalytics.md) | Oturum bazlı analytics |
+| [Model/SlaEvent.md](Model/SlaEvent.md) | SLA uyarı/ihlal olayı |
+
+### 2. Services (7 dosya)
+
 Domain logic'i — altyapıya bağlı olmayan algoritmalar:
-- **EscalationStates**: State Pattern (Open → Acknowledged → Resolved/Dismissed)
-- **IdExtractor**: Regex ile Türkçe bağlam kelimesiyle 4+ haneli ID çıkar
-- **3 Parser**: LLM JSON çıktısını domain modeline çevir
-- **SessionStateExtractor**: User+Bot mesajından session state türet (intent, phase, sentiment)
+
+| Doküman | Kapsam |
+|---|---|
+| [Services/EscalationStates.md](Services/EscalationStates.md) | State Pattern (Open → Acknowledged → Resolved/Dismissed) |
+| [Services/IdExtractor.md](Services/IdExtractor.md) | Regex ile Türkçe bağlam kelimesiyle 4+ haneli ID çıkar |
+| [Services/SessionStateExtractor.md](Services/SessionStateExtractor.md) | User+Bot mesajından session state türet |
+| [Services/PlanningResultParser.md](Services/PlanningResultParser.md) | PlanningAgent JSON → PlanningResult |
+| [Services/ReasoningResultParser.md](Services/ReasoningResultParser.md) | Reasoning JSON → ReasoningResult |
+| [Services/SpecialistReasoningParser.md](Services/SpecialistReasoningParser.md) | Specialist JSON → SpecialistReasoning |
+| [Services/SelfCritiqueParser.md](Services/SelfCritiqueParser.md) | SelfCritique JSON → SelfCritique |
 
 ### 3. Exceptions (1 dosya)
-`DomainException` hiyerarşisi — altyapı hataları (`PersistenceException`, `ExternalServiceException`) ve iş kuralı hataları (`EntityNotFoundException`, `ConcurrencyConflictException`).
+
+| Doküman | Kapsam |
+|---|---|
+| [Exceptions/DomainException.md](Exceptions/DomainException.md) | Altyapı ve iş kuralı hataları |
+
+### 4. Constants
+
+| Doküman | Kapsam |
+|---|---|
+| [WellKnown.md](WellKnown.md) | Magic string constant registry |
 
 ---
 

@@ -7,6 +7,8 @@
 
 MAF workflow'u tamamlandığında `WorkflowOutputEvent` üretir. Bu event'in içindeki `Data` alanı birden fazla formatta gelebilir (`IEnumerable<ChatMessage>`, tek `ChatMessage` veya string). `WorkflowResponseExtractor`, bu ham veriden:
 
+> 💡 **Analiz notu:** Workflow sonucunu "ham madde"den "mamul"e çeviren fabrika gibi — TERMINATE marker'ları, JSON blokları, agent isimleri gibi teknik detayları temizler ve müşteriye gösterilecek temiz metin üretir.
+
 1. **Son kullanıcı yanıtını** çıkarır
 2. **Teknik iç verileri** (TERMINATE marker, JSON blokları, agent adları) temizler
 3. **Planning ve Specialist reasoning** verilerini trace için ayrıştırır
@@ -23,7 +25,7 @@ public static string ExtractResultFromOutput(WorkflowOutputEvent output)
 `WorkflowOutputEvent.Data`'yı üç farklı formatta işler:
 
 | Data türü | Davranış |
-|-----------|---------|
+| ----------- | --------- |
 | `IEnumerable<ChatMessage>` | TERMINATE içeren son assistant mesajını bul; yoksa routing içermeyen son assistant mesajını al |
 | `ChatMessage` | Doğrudan `.Text` |
 | `string` | Doğrudan döner |
@@ -40,6 +42,7 @@ public static PlanningResult? ExtractPlanningFromOutput(WorkflowOutputEvent outp
 Konuşma geçmişinden PlanningAgent'ın mesajını bulur ve `PlanningResultParser.TryParse` ile parse eder. Sonuç `ReasoningTrace.Planning` alanına yazılır.
 
 **PlanningAgent mesajını nasıl bulur?** İki koşuldan biri sağlanırsa mesaj "planning mesajı" kabul edilir:
+
 1. `AuthorName == "PlanningAgent"` veya
 2. Metin `"selected_agent"` JSON property'sini içeriyor
 
@@ -50,6 +53,7 @@ public static List<SpecialistReasoning> ExtractSpecialistReasoningsFromOutput(Wo
 ```
 
 Geçmişteki tüm specialist ajan mesajlarını tarar. Bir mesaj aşağıdaki JSON property'lerden birini içeriyorsa "specialist reasoning" olarak kabul edilir:
+
 - `"preToolCheck"`
 - `"resultConfidence"`
 - `"postToolReflection"`
@@ -65,6 +69,7 @@ public static string RemoveTerminationMarkers(string result)
 Kullanıcıya gönderilecek metinden `TERMINATE` ve sonrasını siler.
 
 **Regex:**
+
 ```
 TERMINATE(\s*[:\s]+reason\s*=\s*[a-zA-Z_]+|\s*\([^)]+\))?[\s\S]*$
 ```
@@ -74,7 +79,7 @@ Tüm regex çağrıları 500ms `matchTimeout` (`RegexTimeout` sabiti) ile çalı
 **Örnekler:**
 
 | Giriş | Çıkış |
-|-------|-------|
+| ------- | ------- |
 | `"Siparişiniz oluşturuldu. TERMINATE"` | `"Siparişiniz oluşturuldu."` |
 | `"Yanıt hazır. TERMINATE reason=completed"` | `"Yanıt hazır."` |
 | `"Tamam. TERMINATE(escalated)"` | `"Tamam."` |
@@ -90,6 +95,7 @@ Specialist ajanların ürettiği iç JSON bloklarını metinden siler. Bu blokla
 **Silinen JSON anahtarları:** `preToolCheck`, `resultConfidence`, `postToolReflection`, `selfCritique`
 
 **İki aşamalı temizlik:**
+
 1. Kod bloğu içindeki JSON'lar silinir (` ```json { ... } ``` ` formatı)
 2. Düz JSON nesneleri silinir (`{ ... }` formatı)
 3. Üç veya daha fazla ardışık boş satır `\n\n`'e indirgenir
@@ -115,7 +121,7 @@ public static string? ParseTerminationReasonFromResult(string text, ILogger? log
 TERMINATE marker'ının yanındaki nedeni çıkarır ve `WellKnown.Termination.KnownReasons` kümesiyle doğrular.
 
 | Metin | Sonuç |
-|-------|-------|
+| ------- | ------- |
 | `"... TERMINATE reason=escalation_needed"` | `"escalation_needed"` |
 | `"... TERMINATE(awaiting_user_input)"` | `"awaiting_user_input"` |
 | `"... TERMINATE reason=Completed"` | `"completed"` (case-insensitive normalize) |

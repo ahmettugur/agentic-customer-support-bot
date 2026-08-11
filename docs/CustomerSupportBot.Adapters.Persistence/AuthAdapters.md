@@ -1,6 +1,9 @@
 # Auth Adaptörleri
 
+> 💡 **Analiz notu:** Şifre hashleme (BCrypt) ve token üretme (JWT) güvenlik kritik operasyonlardır. BCrypt kasıtlı olarak yavaştır — brute-force saldırıları zorlaştırır. JWT ise sunucuda session tutmadan kimlik doğrulamayı mümkün kılar.
+
 **Dosyalar:**  
+
 - `Auth/BCryptPasswordHasher.cs`  
 - `Auth/JwtAccessTokenProvider.cs`  
 - `Auth/TokenService.cs` (dokümantasyon notu)  
@@ -44,7 +47,7 @@ JWT access token üretir. `JwtOptions` yapılandırmasından signing key ve ayar
 **Token claim'leri:**
 
 | Claim | Değer |
-|-------|-------|
+| ------- | ------- |
 | `sub` | `user.Id` |
 | `unique_name` | `user.Username` |
 | `name` | `user.Username` |
@@ -55,6 +58,7 @@ JWT access token üretir. `JwtOptions` yapılandırmasından signing key ve ayar
 | `exp` | `issuedAt + AccessTokenMinutes` |
 
 **Güvenlik gereksinimleri:**
+
 - Signing key minimum **32 karakter** olmalı (HMAC-SHA256)
 - Daha kısa key ile uygulama başlamaz (startup validation)
 
@@ -89,7 +93,7 @@ Bu dosya bir implementasyon değil, bir açıklama notudur. Token orchestration 
 **Bağımlılık:** `IDbContextFactory<CustomerSupportDbContext>` (Singleton'dan Scoped DbContext üretir)
 
 | Metod | SQL | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `FindActiveByUsernameAsync` | `WHERE username = @u AND is_active = true` | Login için kullanıcı bul |
 | `FindByIdAsync` | `WHERE id = @id` | Refresh token yenilemede kullanıcı doğrula |
 | `UpdateLastLoginAsync` | `UPDATE auth.users SET last_login_at = @now` | Her başarılı girişte güncelle |
@@ -116,7 +120,7 @@ new UserInfo(
 **Bağımlılık:** `IDbContextFactory<CustomerSupportDbContext>`
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `CreateAsync(id, userId, hash, expiry, now)` | Yeni refresh token kaydı |
 | `FindByHashAsync(hash)` | Hash ile bul — plain text **asla** DB'ye yazılmaz |
 | `RevokeAsync(id, revokedAt, replacedByHash)` | Revoke et, rotation zinciri için `ReplacedByTokenHash` yaz |

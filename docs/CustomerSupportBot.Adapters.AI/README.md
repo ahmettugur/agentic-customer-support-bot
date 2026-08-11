@@ -2,11 +2,15 @@
 
 LLM, embedding, vector store ve gerçek zamanlı ses altyapısı için adapter katmanı.
 
+> 💡 **Analiz notu:** Bu katman projenin "konuşma yeteneği"dir. Application katmanı "bir LLM'e sor" der ama hangi LLM, hangi API, hangi SDK — hepsini bu adapter bilir. Application hiçbir zaman `OpenAIClient` görmez, sadece `IReasoningChatClient.CompleteAsync()` çağırır. Bu sayede yarın OpenAI yerine Anthropic kullansak, sadece bu klasör değişir.
+
 İki sağlayıcı desteklenir:
+
 - **OpenAI** (GPT-4o, GPT-4-turbo, o1-mini reasoning, vb.)
 - **Azure OpenAI** (aynı modeller, Azure deployment'lar)
 
 Ek hizmetler:
+
 - **OpenAI Embedding API** — text-embedding-3-small/large
 - **Qdrant** vector store — semantic memory
 - **OpenAI Realtime API** — voice I/O (WebSocket)
@@ -40,7 +44,7 @@ CustomerSupportBot.Adapters.AI/
 ## Dokümantasyon haritası
 
 | Doküman | Kapsam |
-|---|---|
+| --- | --- |
 | [DependencyInjection.md](DependencyInjection.md) | `AddAiAdapters`, options binding, Composition Root pattern |
 | [Options.md](Options.md) | AiProviderOptions yapılandırma şeması |
 | [ChatClients.md](ChatClients.md) | AiClientFactory + GeneralChatClientAdapter + ReasoningChatClient |
@@ -54,7 +58,7 @@ CustomerSupportBot.Adapters.AI/
 ## Port → Adapter eşlemesi
 
 | Port (Application) | Adapter | Singleton/Scoped |
-|---|---|---|
+| --- | --- | --- |
 | `IGeneralChatClient` | `GeneralChatClientAdapter` | Singleton |
 | `IReasoningChatClient` | `ReasoningChatClient` | Singleton |
 | `IEmbeddingPort` | `OpenAiEmbeddingAdapter` | Singleton |
@@ -105,6 +109,7 @@ Tek `AI:Provider` config değeri uygulamanın hangi sağlayıcıya gideceğini b
 `AddAiAdapters` **`IChatClient`'ı kayıt etmez** — bu sorumluluk `Api` katmanına bırakılmıştır.
 
 Neden? `IChatClient` `Adapters.Telemetry/TelemetryChatClient` ile sarmalanmalı. Bu compose adımı:
+
 - `Adapters.AI` → asıl client'ı sağlar (OpenAI/Azure)
 - `Adapters.Telemetry` → decorator (TelemetryChatClient)
 - `Api` (Composition Root) → ikisini birleştirir
@@ -116,6 +121,7 @@ Neden? `IChatClient` `Adapters.Telemetry/TelemetryChatClient` ile sarmalanmalı.
 ## Yapay zekâ akışları
 
 ### Chat (text)
+
 ```
 PortService → IGeneralChatClient.CompleteAsync()
               IReasoningChatClient.CompleteAsync() / StreamAsync()
@@ -132,6 +138,7 @@ HTTPS API
 ```
 
 ### Semantic Memory
+
 ```
 LessonMiner / CustomerProfileService → IVectorMemoryPort.SearchAsync()
    ↓
@@ -141,6 +148,7 @@ QdrantVectorMemoryAdapter
 ```
 
 ### Realtime (voice)
+
 ```
 Browser WebSocket (PCM 24kHz)
    ↓
@@ -158,7 +166,7 @@ OpenAI Realtime WebSocket
 ## Bağımlılıklar
 
 | Paket | Amaç |
-|---|---|
+| --- | --- |
 | `Microsoft.Extensions.AI` | `IChatClient` interface |
 | `Microsoft.Agents.AI.OpenAI` | OpenAI istemcisi (OpenAI SDK'yı transitive getirir — doğrudan `OpenAI` paket referansı yoktur) |
 | `Azure.AI.OpenAI` | Azure OpenAI SDK |

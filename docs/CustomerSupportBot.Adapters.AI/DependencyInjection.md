@@ -1,5 +1,7 @@
 # Dependency Injection
 
+> 💡 **Analiz notu:** DI (Dependency Injection) kayıtları burada yapılır — hangi port (interface) hangi adapter (class) ile eşleşecek. `AddAiAdapters()` çağrılınca embedding, vector, realtime adapterleri sisteme kaydolur.
+
 **Dosya:** `DependencyInjection/AiAdapterServiceCollectionExtensions.cs`
 
 ---
@@ -36,7 +38,7 @@ AI altyapısının **bir kısmını** kaydeder. `IChatClient` kaydı bu extensio
 ### Neden Realtime Scoped, diğerleri Singleton?
 
 | Port | Yaşam döngüsü | Neden |
-|---|---|---|
+| --- | --- | --- |
 | `IEmbeddingPort` | Singleton | Tek HTTP client paylaşılır, stateless |
 | `IVectorMemoryPort` | Singleton | Tek Qdrant gRPC client, stateless |
 | `IRealtimeVoiceTransport` | **Scoped** | Her WebSocket bağlantısı kendi state'i (browser→OpenAI) |
@@ -59,6 +61,7 @@ if (memoryOptions?.Enabled == true)
 `SemanticMemory:Enabled = false` ise embedding ve vector store kaydedilmez. Application katmanı `IMemoryPort.Enabled` üzerinden bu durumu kontrol eder ve `DisabledMemoryPort` (no-op) kullanır.
 
 Bu sayede:
+
 - Qdrant kurulumu olmadan uygulama çalışır
 - OpenAI embedding maliyeti opsiyonel
 
@@ -118,7 +121,7 @@ Bu pattern Dependency Inversion'a uygun: Hiçbir adapter "ben telemetri ile sar�
 ## Options sectionları
 
 | Config key | Sınıf | İçeriği |
-|---|---|---|
+| --- | --- | --- |
 | `AI` | `AiOptions` | Provider seçimi + 3 sağlayıcı + Realtime |
 | `SemanticMemory` | `SemanticMemoryOptions` | Embedding model, dimension, Qdrant host |
 | `SelfImprovement` | `SelfImprovementOptions` | LessonMiner config (threshold, take, vb.) |

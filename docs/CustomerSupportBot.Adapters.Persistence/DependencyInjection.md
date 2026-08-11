@@ -1,5 +1,7 @@
 # DependencyInjection
 
+> 💡 **Analiz notu:** `AddPersistenceAdapters()` çağrılınca tüm Postgres repository'ler, auth servisleri, dosya sistemi adaptörleri ve arka plan servisleri DI container'a kaydolur.
+
 **Dosya:** `DependencyInjection/PersistenceAdapterServiceCollectionExtensions.cs`
 
 ## Giriş noktası
@@ -66,7 +68,7 @@ AddPersistenceAdapters(configuration)
 ## Postgres Adaptörler
 
 | Port | Implementasyon | Yaşam döngüsü |
-|------|---------------|--------------|
+| ------ | --------------- | -------------- |
 | `ISessionManager` | `PostgresSessionManager` | Singleton |
 | `IApprovalQueue` | `PostgresApprovalQueue` | Singleton |
 | `IChatBridge` | `PostgresChatBridge` | Singleton |
@@ -89,7 +91,7 @@ AddPersistenceAdapters(configuration)
 ## Auth Adaptörler
 
 | Port | Implementasyon | Yaşam döngüsü |
-|------|---------------|--------------|
+| ------ | --------------- | -------------- |
 | `IUserAuthRepository` | `EfUserAuthRepository` | Scoped |
 | `IRefreshTokenRepository` | `EfRefreshTokenRepository` | Scoped |
 
@@ -98,7 +100,7 @@ AddPersistenceAdapters(configuration)
 ## FileSystem Adaptörler
 
 | Port | Implementasyon |
-|------|---------------|
+| ------ | --------------- |
 | `IPromptRepository` | `FileSystemPromptRepository` |
 | `IKnowledgeBaseSource` | `FileSystemKnowledgeBaseSource` |
 

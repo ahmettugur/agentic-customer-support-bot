@@ -10,6 +10,8 @@
 
 Kullanıcı açıkça insan/canlı temsilci istediğinde devreye girer ("temsilci bağla", "bottan sıkıldım" vb.). Somut bir iş yapmaz; eskalasyon kaydı açılmasını tetikler.
 
+> 💡 **Analiz notu:** Çağrı merkezindeki "operatöre bağla" tuşu gibi — bot çözemediğinde veya müşteri istediğinde gerçek insan temsilciye aktarır.
+
 ## Hangi amaçla kullanılır?
 
 `PlanningAgent`, kullanıcının açıkça insan temsilci istediğini tespit ettiğinde (`selectedAgent="HumanHandoffAgent"`) bu ajana yönlendirir — bu kural diğer specialist seçimlerine göre **öncelikli**dir (sipariş/ürün/şikayet niyeti varsa bile kullanıcı doğrudan insan istiyorsa bu ajan seçilir). Intent tespiti `PlanningAgent`'ın kendi işi değildir (bkz. [PlanningAgent.md](PlanningAgent.md)) — bu karar, reasoning hint'indeki nihai intent + doğrudan kullanıcı ifadesi (`"temsilci bağla"` vb.) üzerinden verilir.
@@ -38,7 +40,7 @@ Kullanıcı açıkça insan/canlı temsilci istediğinde devreye girer ("temsilc
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `BuildInner(chatClient, prompts)` (private static) | `ChatClientAgent` kurar: tek tool + `ResponseFormat` = `SpecialistReasoningSchema`. |
 | `OnBeforeRun(messages)` | Breakpoint — LLM'e gönderilen tam mesaj listesi. |
 | `OnAfterRun(response)` | Breakpoint — `toolCalls` (`human_handoff_tool` hangi gerekçeyle çağrıldı), `response.Text`. |

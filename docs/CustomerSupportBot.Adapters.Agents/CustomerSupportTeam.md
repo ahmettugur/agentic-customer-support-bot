@@ -8,6 +8,8 @@
 
 `IAgentTeamPort`'un implementasyonu ve katmanın **kompozisyon kökü**dür. Kendisi hiçbir workflow/agent mantığı içermez — yalnızca `AgentTeamFactory`, `TurnFinalizer`, `WorkflowRunner`, `DecomposedRunner` nesnelerini kurar ve gelen isteği compound/single query ayrımına göre doğru koşucuya yönlendirir.
 
+> 💡 **Analiz notu:** Bir resepsiyonist gibi — müşteriyi dinler ve doğru departmana yönlendirir ama kendisi işlem yapmaz. Tek sorgu ise WorkflowRunner'a, çoklu sorgu ise DecomposedRunner'a delege eder.
+
 > **Mimari not:** Bu sınıf eskiden (ajan tanımları, workflow kurulumu, event işleme, HITL köprüsü dahil) tüm orkestrasyon mantığını tek başına barındırıyordu. Refactor sonrası bu sorumluluklar `AgentTeamFactory` (ajan/workflow kurulumu), `WorkflowRunner` (tek-sorgu koşusu + trace + streaming), `DecomposedRunner` (compound query orkestrasyonu) ve `TurnFinalizer`'a (tur-sonu yan etkileri) bölündü — bu sınıf yalnızca ince bir yönlendirici olarak kaldı.
 
 ## Hangi amaçla kullanılır?
@@ -27,6 +29,7 @@ Application katmanındaki `ChatPortService` (ve `EvaluationRunner`, `ReplanServi
 **Implements:** `CustomerSupportBot.Application.Ports.Outbound.IAgentTeamPort`.
 
 **Kurduğu bileşenler:**
+
 ```
 CustomerSupportTeam
     ├── AgentTeamFactory (new)   ← chatClient, prompts, approvalGate, tools, guards, loggerFactory
@@ -45,7 +48,7 @@ Hexagonal mimaride bu sınıf, Application katmanının `IAgentTeamPort` portunu
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `RunAsync(query, conversationHistory, session, reasoning, ct)` | Compound query ise `DecomposedRunner.RunDecomposedAsync`'e, değilse `WorkflowRunner.RunAsync`'e devreder. |
 | `RunStreamingAsync(query, conversationHistory, session, reasoning, ct)` | Compound query ise `DecomposedRunner.RunDecomposedStreamingAsync`'e, değilse `WorkflowRunner.RunStreamingAsync`'e devreder. |
 | `GetWorkflowDiagram()` | `WorkflowRunner.GetWorkflowDiagram()`'a devreder. |

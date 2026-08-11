@@ -8,6 +8,8 @@
 
 Takımdaki 6 ajanın (`PlanningAgent`, `ProductAgent`, `OrderAgent`, `ComplaintAgent`, `HumanHandoffAgent`, `ResponseAgent`) ortak iskeletidir: her ajan kendi prompt'unu/adını/tool listesini kendi sınıfında tanımlar, bu taban sınıf yalnızca **debug hook'larını** (`OnBeforeRun`/`OnAfterRun`) standartlaştırır.
 
+> 💡 **Analiz notu:** Bir şablona bağlı iş akışı — tüm agent'lar aynı "önce logla → çalış → sonra logla" adımlarını paylaşır. Alt sınıflar sadece "ne iş yapacağımı" tanımlar (prompt + tool'lar).
+
 ## Hangi amaçla kullanılır?
 
 Her `Team/*Agent.cs` sınıfı bu sınıftan türer ve `OnBeforeRun`/`OnAfterRun`'ı kendi ihtiyacına göre implemente eder (genelde breakpoint için — üretim kodunda bir iş yapmazlar, `_ = messages;` gibi no-op'turlar).
@@ -37,7 +39,7 @@ Her `Team/*Agent.cs` sınıfı bu sınıftan türer ve `OnBeforeRun`/`OnAfterRun
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `RunCoreAsync(messages, session, options, ct)` (protected override) | Non-streaming yol: `OnBeforeRun` → `base.RunCoreAsync` → `OnAfterRun`. |
 | `RunCoreStreamingAsync(messages, session, options, ct)` (protected override) | Streaming yol (gerçek çalışan sistemde kullanılan yol): `OnBeforeRun` → update'leri yield ederken biriktir → akış bitince `OnAfterRun(updates.ToAgentResponse())`. |
 | `OnBeforeRun(messages)` (protected abstract) | Breakpoint noktası — LLM'e gönderilmek üzere olan tam mesaj listesi. |

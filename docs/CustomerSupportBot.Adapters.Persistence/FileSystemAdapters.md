@@ -1,6 +1,9 @@
 # Dosya Sistemi Adaptörleri
 
+> 💡 **Analiz notu:** Prompt şablonları ve bilgi bankası makaleleri disk'te Markdown dosyaları olarak saklanır — DB'de değil. Bu sayede prompt'u değiştirmek için migration yapmana gerek yok, sadece .md dosyasını düzenle ve restart et.
+
 **Dosyalar:**  
+
 - `FileSystem/FileSystemPromptRepository.cs`  
 - `FileSystem/FileSystemKnowledgeBaseSource.cs`  
 - `FileSystem/PromptOptions.cs`  
@@ -54,7 +57,7 @@ Cache anahtarı, dosya yolundan uzantısız ve `/` ile normalize edilerek üreti
 ```
 
 | Ayar | Açıklama |
-|------|---------|
+| ------ | --------- |
 | `RootPath` | Prompt dosyalarının kök dizini (relative veya absolute; boşsa `AppContext.BaseDirectory/Prompts` veya CWD/Prompts denenir) |
 | `AllowEmpty` | ⚠️ **Ölü config** — `LoadAll()` içinde hiç referans verilmez; boş dizin durumunda her koşulda `InvalidOperationException` fırlatılır |
 

@@ -2,6 +2,8 @@
 
 Tüm entity sınıfları `EfCore/Entities/` altında şemaya göre gruplandırılmıştır. Her entity bir PostgreSQL tablosuna karşılık gelir.
 
+> 💡 **Analiz notu:** Entity ≠ Domain Model! Entity'ler DB'nin tablosuna karşılık gelir, Domain modeller iş mantığını temsil eder. Aralarında dönüşüm Adapter katmanında yapılır. Bu ayrım hexagonal mimarinin temelidir — DB şeması değişince Domain etkilenmez.
+
 ---
 
 ## `chat` şeması
@@ -9,7 +11,7 @@ Tüm entity sınıfları `EfCore/Entities/` altında şemaya göre gruplandırı
 ### `SessionEntity` → `chat.sessions`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `SessionId` | `varchar` PK | Oturum kimliği |
 | `CreatedAt` | `timestamptz` | Oluşturma zamanı |
 | `LastActivityAt` | `timestamptz` | Son aktivite |
@@ -20,7 +22,7 @@ Tüm entity sınıfları `EfCore/Entities/` altında şemaya göre gruplandırı
 ### `MessageEntity` → `chat.messages`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `bigint` identity PK | Otomatik artan |
 | `SessionId` | `varchar` FK→sessions | |
 | `Role` | `varchar` | `user` / `assistant` / `system` |
@@ -34,7 +36,7 @@ Tüm entity sınıfları `EfCore/Entities/` altında şemaya göre gruplandırı
 HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez**.
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `bigint` identity PK | |
 | `MessageId` | `varchar(12)` | Domain kimliği (12 karakter rastgele) |
 | `SessionId` | `varchar` | |
@@ -48,7 +50,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `ChatSessionModeEntity` → `chat.session_modes`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `SessionId` | `varchar` PK | |
 | `Mode` | `varchar` | `Bot` / `Human` |
 | `HumanAgent` | `varchar?` | Devralım yapan agent |
@@ -63,7 +65,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `ApprovalRequestEntity` → `hitl.approval_requests`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `varchar` PK | |
 | `SessionId` | `varchar` | |
 | `TraceId` | `varchar?` | |
@@ -84,7 +86,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `EscalationEntity` → `hitl.escalations`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `varchar` PK | |
 | `SessionId` | `varchar` | |
 | `TraceId` | `varchar?` | |
@@ -106,7 +108,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `HumanAgentEntity` → `hitl.human_agents`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `varchar` PK | |
 | `DisplayName` | `varchar` | |
 | `Email` | `varchar?` | |
@@ -126,7 +128,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `ReasoningTraceEntity` → `observability.reasoning_traces`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `TraceId` | `varchar` PK | |
 | `SessionId` | `varchar` | |
 | `UserQuery` | `text` | |
@@ -151,7 +153,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `LlmCallUsageEntity` → `observability.llm_call_usage`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `bigint` identity PK | |
 | `Model` | `varchar` | `gpt-4o`, `o3-mini`, vb. |
 | `Provider` | `varchar` | `openai`, `azure` |
@@ -168,7 +170,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `RatingEntity` → `analytics.ratings`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `SessionId` | `varchar` PK | Bir session için tek rating |
 | `Id` | `varchar` | Domain ID |
 | `Stars` | `int` | 1–5 |
@@ -180,7 +182,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `SlaEventEntity` → `analytics.sla_events`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `varchar` PK | |
 | `Timestamp` | `timestamptz` | |
 | `Kind` | `varchar` | `approval` / `escalation` |
@@ -197,7 +199,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `UserEntity` → `auth.users`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `varchar` PK | |
 | `Username` | `varchar` UNIQUE | |
 | `PasswordHash` | `varchar` | BCrypt hash |
@@ -212,7 +214,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `RefreshTokenEntity` → `auth.refresh_tokens`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `varchar` PK | |
 | `UserId` | `varchar` FK→users | |
 | `TokenHash` | `varchar` | SHA-256 hash (plain text hiç saklanmaz) |
@@ -228,7 +230,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `CustomerProfileEntity` → `personalization.customer_profiles`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `CustomerId` | `varchar` PK | |
 | `PreferredLanguage` | `varchar?` | `tr` / `en` |
 | `PreferredTone` | `varchar?` | `formal` / `casual` / vb. |
@@ -250,7 +252,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `LessonEntity` → `improvement.lessons`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `varchar` PK | |
 | `Title` | `varchar` | |
 | `LessonText` | `text` | "X durumunda Y yap" |
@@ -271,7 +273,7 @@ HITL canlı sohbet mesajları. `BotTyping` geçici olduğundan **persist edilmez
 ### `CategoryEntity` → `catalog.categories`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `int` PK | |
 | `Name` | `varchar` | Kategori adı |
 
@@ -282,7 +284,7 @@ Navigation: `Products` → `List<ProductEntity>`
 ### `CustomerEntity` → `catalog.customers`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `bigint` identity PK | Otomatik artan |
 | `FullName` | `varchar` | Müşteri adı soyadı |
 | `Email` | `varchar?` | |
@@ -293,7 +295,7 @@ Navigation: `Products` → `List<ProductEntity>`
 ### `ProductEntity` → `catalog.products`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Id` | `int` identity PK | |
 | `Name` | `varchar` | Ürün adı |
 | `Price` | `decimal` | Fiyat |
@@ -307,7 +309,7 @@ Navigation: `Category` → `CategoryEntity`, `OrderDetails` → `List<OrderDetai
 ### `OrderEntity` → `catalog.orders`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Code` | `bigint` identity PK | Sipariş kodu |
 | `CustomerId` | `bigint` FK→customers | |
 | `Status` | `varchar` | Sipariş durumu |
@@ -324,7 +326,7 @@ Navigation: `Details` → `List<OrderDetailEntity>`
 ### `OrderDetailEntity` → `catalog.order_details`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `OrderCode` | `bigint` FK→orders (composite PK) | |
 | `ProductId` | `int` FK→products (composite PK) | |
 | `Quantity` | `int` | Adet |
@@ -336,7 +338,7 @@ Navigation: `Order` → `OrderEntity`, `Product` → `ProductEntity`
 ### `ComplaintEntity` → `catalog.complaints`
 
 | Sütun | Tür | Açıklama |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | `Code` | `bigint` PK | ValueGeneratedNever — açıkça atanır |
 | `OrderId` | `bigint` FK→orders | İlgili sipariş |
 | `CustomerId` | `bigint` FK→customers | İlgili müşteri |

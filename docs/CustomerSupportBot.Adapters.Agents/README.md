@@ -2,6 +2,8 @@
 
 `CustomerSupportBot.Adapters.Agents` projesi, uygulamanın **ajan katmanının** tüm orkestrasyon mantığını barındırır. Hexagonal mimaride bu proje bir **Driven Adapter**'dır: Application katmanının `IAgentTeamPort` ve `IEvaluationPort` portlarını, Microsoft Agent Framework (MAF) kullanarak implemente eder. Application katmanı kasıtlı olarak yalnızca Domain'e bağımlı kaldığı için (MAF referansı almaz), MAF tiplerine (`EvalItem`, `ApprovalRequiredAIFunction`, `ChatResponseFormat` vb.) dokunan HER ŞEY burada yaşar.
 
+> 💡 **Analiz notu:** Bu katman projenin "beyni"dir. Application "bu soruyu çöz" der, bu adapter ise PlanningAgent → SpecialistAgent → ResponseAgent zincirini kurar, mesajları yönlendirir, tool çağrılarını yönetir ve sonucu döner. Bir orkestra şefinin notaları enstrümanlara dağıtması gibi — her agent bir enstrüman, bu katman onları koordine eden şeftir.
+
 ## Bu projeyi ne zaman açarsınız?
 
 - Yeni bir ajan (agent) eklemek veya mevcut ajanın prompt/tool/structured-output davranışını değiştirmek istediğinizde → [Team/](Team/README.md)
@@ -82,7 +84,7 @@ Evaluation/EvaluationRunner  ── IAgentTeamPort üzerinden CustomerSupportTea
 ## Detaylı dokümantasyon
 
 | Dosya | Açıklama |
-|---|---|
+| --- | --- |
 | [CustomerSupportTeam](CustomerSupportTeam.md) | Kompozisyon kökü — `IAgentTeamPort` implementasyonu, ince yönlendirici |
 | [AgentTeamFactory](AgentTeamFactory.md) | 6 ajanı örnekler, taze `Workflow` üretir |
 | [WorkflowRunner](WorkflowRunner.md) | Gerçek orkestratör — tek sorgu koşusu, trace, HITL köprüsü, streaming |

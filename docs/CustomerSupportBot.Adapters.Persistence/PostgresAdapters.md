@@ -2,6 +2,8 @@
 
 `Postgres/` altındaki tüm adaptörler **Hybrid Cache + DB** deseni uygular. Her biri InMemory karşılığı ile aynı port'u implement eder; ek olarak PostgreSQL kalıcılığı ve opsiyonel Redis pub/sub ekler.
 
+> 💡 **Analiz notu:** Bu dosya projedeki 17 Postgres adaptörünün hepsinin nasıl çalıştığını açıklar. Her adapter aynı deseni tekrar eder: "cache'ten oku, DB'ye yaz, Redis ile diğer pod'lara haber ver". Yeni bir adapter eklerken bu deseni takip edin.
+
 Temel desen için önce [HybridPattern.md](HybridPattern.md) oku.
 
 ---
@@ -91,7 +93,7 @@ Temel desen için önce [HybridPattern.md](HybridPattern.md) oku.
 **Üç aşamalı strateji:**
 
 | Metod | Cache | DB |
-|-------|-------|-----|
+| ------- | ------- | ----- |
 | `StartTrace` | Ekle | INSERT skeleton (minimal alanlar) |
 | `Update` | Güncelle | **Hayır** — hot path'de DB yazılmaz |
 | `Complete` | Güncelle | UPDATE tam içerik |
@@ -163,7 +165,7 @@ Exception swallow: logging yapar, exception'ı yutar — telemetry kaybı kabul 
 EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yaratır.
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `Create(order)` | Yeni sipariş + detay INSERT; `Code` DB tarafından üretilir |
 | `Get(orderId)` | Tekil sipariş (Include: Details + Product) |
 | `GetByCustomer(customerId)` | Müşteriye ait tüm siparişler (OrderDate DESC) |
@@ -178,7 +180,7 @@ EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yarat
 **Port:** `IComplaintRepository`
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `Create(complaint)` | Yeni şikayet; `catalog.complaint_seq` sequence'tan ID alır |
 | `Get(complaintId)` | Tekil şikayet |
 | `GetByOrder(orderId)` | Siparişe ait şikayetler |
@@ -193,7 +195,7 @@ EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yarat
 **Port:** `IProductCatalogRepository`
 
 | Metod | Açıklama |
-|-------|---------|
+| ------- | --------- |
 | `FindProduct(name)` | İsme göre ürün arama (exact match) |
 | `TryDeductStock(name, qty)` | Atomic stok düşürme (`ExecuteUpdate` ile) |
 | `GetAll()` | Tüm ürünler (kategori dahil, Name sıralı) |
@@ -213,4 +215,3 @@ EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yarat
 | `Exists(customerId)` | Müşteri var mı kontrolü |
 
 Minimal adapter — müşteri doğrulama için kullanılır.
-

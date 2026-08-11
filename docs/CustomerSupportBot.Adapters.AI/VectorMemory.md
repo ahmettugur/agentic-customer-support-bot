@@ -5,13 +5,22 @@
 **Yaşam döngüsü:** Singleton  
 **Protokol:** gRPC (port 6334)
 
+## 1. Ne İşe Yarar
+
 Qdrant vector store ile etkileşim — semantic memory için cosine similarity search.
+
+## 2. Hangi Amaçla Kullanılır
+
+Embedding adapter'ın ürettiği vektörleri Qdrant'a yazıp, benzer vektörleri arar. Müşterinin geçmiş konuşmaları, bilgi bankası makaleleri ve öğrenilmiş dersler bu veritabanında saklanır.
+
+> 💡 **Analiz notu:** Bir kütüphanenin dijital kataloğu gibi — kitap kartlarını (vektörleri) yerleştirirsin, sonra "bu konuya benzer ne var?" diye arama yaparsın. Qdrant milyonlarca kartı milisaniyeler içinde tarar.
 
 ---
 
 ## Neden Qdrant?
 
 Vektörel arama ihtiyaçları:
+
 - ✅ Cosine similarity / dot product
 - ✅ Metadata (payload) ile filter
 - ✅ Yüksek hacim (yüzbinler/milyonlar)
@@ -46,7 +55,7 @@ Bu adapter **koleksiyon adını constructor'da sabitlemez**; her metod çağrıs
 Her vektör Qdrant'a kaydedilirken yanına metadata (payload) eklenir:
 
 | Anahtar | Tip | İçerik |
-|---|---|---|
+| --- | --- | --- |
 | `_kind` | string | `Episodic`, `Lesson`, `Knowledge` |
 | `_text` | string | Memory metni (embed edilen) |
 | `_title` | string? | Opsiyonel başlık |
@@ -78,6 +87,7 @@ Koleksiyon adını ve hedef dimension'ı parametre olarak alır.
 ### Dev-friendly mismatch handling
 
 Eğer Qdrant collection 1536-dim ile yaratılmışsa ama config'de 3072 isteniyorsa:
+
 - **Eski collection silinir** (tüm vektörler kaybolur!)
 - Yeni collection 3072-dim ile yaratılır
 
@@ -215,6 +225,7 @@ private static MemoryDocument HydrateDocument(IDictionary<string, Value> payload
 ```
 
 `ScoredPoint.Payload` sözlüğünden `MemoryDocument` oluşturur:
+
 - `_` prefix'li alanlar rezerve — ID, text, title, source, sessionId, kind, createdAt
 - Diğer tüm payload key'leri `Tags` sözlüğüne kopyalanır (custom tag'ler korunur)
 - `_kind` enum parse edilir; başarısız olursa default `MemoryKind` değeri kalır
@@ -227,7 +238,7 @@ private static MemoryDocument HydrateDocument(IDictionary<string, Value> payload
 `ExceptionTranslator` Qdrant gRPC exception'larını çevirir:
 
 | gRPC Status | Domain Exception |
-|---|---|
+| --- | --- |
 | `Unavailable` | `ExternalServiceException("Qdrant", "database unavailable")` |
 | `DeadlineExceeded` | `ExternalServiceException("Qdrant", "operation timeout")` |
 | `NotFound` | `EntityNotFoundException("VectorCollection")` |

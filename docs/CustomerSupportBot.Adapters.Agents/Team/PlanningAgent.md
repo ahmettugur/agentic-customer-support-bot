@@ -10,6 +10,8 @@
 
 Müşteri talebini analiz eder, yapılandırılmış bir plan (JSON: `PlanningResult`) üretir ve uygun specialist ajana yönlendirir. Workflow'un **her turda ilk çalışan** ajanıdır (bkz. `Routing/Routing.cs` → `FirstTurnStrategy`).
 
+> 💡 **Analiz notu:** Bir hastanede triaj hemşiresi gibi — "bu hasta kardiyolojiye gitsin, şu hasta ortopediye" diye karar verir ama tedavi yapmaz.
+
 ## Hangi amaçla kullanılır?
 
 `CustomerSupportChatManager.SelectNextAgentAsync`, sohbette hiç `PlanningAgent` mesajı yoksa (`FirstTurnStrategy`) her zaman bu ajanı seçer. Ürettiği `PlanningResult.SelectedAgent`, bir sonraki ajanı belirler (`PlanRoutingStrategy`).
@@ -39,7 +41,7 @@ Müşteri talebini analiz eder, yapılandırılmış bir plan (JSON: `PlanningRe
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `BuildInner(chatClient, prompts)` (private static) | `ChatClientAgent` kurar: `Instructions` = `planning-agent.md`, `ResponseFormat` = `PlanningResult` şeması. |
 | `OnBeforeRun(messages)` | Breakpoint — kullanıcı sorgusu, reasoning hint'i, entity extraction hint'i. |
 | `OnAfterRun(response)` | Breakpoint — üretilen plan JSON'u (`response.Text`). |

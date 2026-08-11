@@ -1,6 +1,9 @@
 # EF Core DbContext
 
+> 💡 **Analiz notu:** `DbContext` Entity Framework Core'un "veritabanı oturumu" nesnesidir. Tüm tablo/entity eşlemeleri, ilişkiler ve migration'lar burada tanımlanır. Projede 9 ayrı şema (catalog, auth, chat, hitl, analytics, improvement, knowledge, observability, personalization) kullanılır — bu sayede tablolar mantıksal gruplara ayrılır.
+
 **Dosyalar:**  
+
 - `EfCore/CustomerSupportDbContext.cs` — ana DbContext  
 - `EfCore/Schemas.cs` — şema sabitleri  
 - `EfCore/PersistenceOptions.cs` — provider seçimi  
@@ -18,7 +21,7 @@
 ### DbSet'ler
 
 | DbSet | Şema | Tablo |
-|-------|------|-------|
+| ------- | ------ | ------- |
 | `Sessions` | `chat` | `sessions` |
 | `Messages` | `chat` | `messages` |
 | `ChatBridgeMessages` | `chat` | `bridge_messages` |
@@ -124,6 +127,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<CustomerSu
 ```
 
 **Migration oluşturmak için:**
+
 ```bash
 cd CustomerSupportBot.Adapters.Persistence
 dotnet ef migrations add <MigrationName> --project . --startup-project ../CustomerSupportBot.Api

@@ -1,5 +1,7 @@
 # ExceptionTranslator
 
+> 💡 **Analiz notu:** OpenAI/Qdrant SDK'ları HTTP 429 (rate limit), 503 (service unavailable) gibi hatalar fırlatır. Bu sınıf o teknik hataları domain'un anlayacağı `ExternalServiceException'a çevirir — Application katmanı SDK detaylarından habersiz kalır.
+
 **Dosya:** `ExceptionTranslator.cs`  
 **Tür:** `internal static class`
 
@@ -10,6 +12,7 @@ AI sağlayıcılarından gelen altyapı exception'larını **domain exception**'
 ## Neden translator?
 
 Provider SDK'ları kendi exception tipleri fırlatır:
+
 - OpenAI: `ClientResultException` (HTTP detayları)
 - Qdrant: `Grpc.Core.RpcException`
 - Genel: `HttpRequestException`, `TaskCanceledException`
@@ -62,7 +65,7 @@ HTTP status pattern matching `ClientResultException` üzerinde doğrudan yapıl�
 OpenAI/Azure SDK her HTTP hatasında `ClientResultException` fırlatır. Status kodu doğrudan pattern matching ile eşlenir:
 
 | HTTP status | Domain exception | Türkçe mesaj |
-|---|---|---|
+| --- | --- | --- |
 | `429` | `ExternalServiceException("AI", ...)` | "AI servisine çok fazla istek gönderildi (rate limit)." |
 | `401`, `403` | `ExternalServiceException("AI", ...)` | "AI servisine yetkilendirme başarısız." |
 | `408` | `ExternalServiceException("AI", ...)` | "AI servis isteği zaman aşımına uğradı." |
@@ -115,6 +118,7 @@ TaskCanceledException { InnerException: TimeoutException } => new ExternalServic
 ```
 
 **Önemli:** `OperationCanceledException` ile karıştırılmamalı:
+
 - `TaskCanceledException` + inner `TimeoutException` → **timeout** (server cevap vermedi)
 - `OperationCanceledException` cancellation token tetiklendi → **kullanıcı iptal etti**
 
@@ -126,10 +130,12 @@ OperationCanceledException => new ExternalServiceException("AI",
 ```
 
 > ⚠️ Adapter kodu genellikle bunu **translator'a göndermeden** yeniden fırlatır:
+>
 > ```csharp
 > catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
 > catch (Exception ex) { throw ExceptionTranslator.Translate(ex, "..."); }
 > ```
+>
 > Cancellation kullanıcı iptal eyleminin doğal sonucu — exception olarak loglanmamalı.
 
 ---
@@ -153,7 +159,7 @@ private static DomainException TranslateGrpc(Grpc.Core.RpcException rpc, string?
 ```
 
 | gRPC StatusCode | Domain Exception |
-|---|---|
+| --- | --- |
 | `Unavailable` | `ExternalServiceException("Qdrant", "database unavailable")` |
 | `DeadlineExceeded` | `ExternalServiceException("Qdrant", "operation timeout")` |
 | `NotFound` | `EntityNotFoundException("VectorCollection")` |
@@ -169,7 +175,7 @@ private static DomainException TranslateGrpc(Grpc.Core.RpcException rpc, string?
 `ExternalServiceException`'ın ilk parametresi servis adı:
 
 | Servis adı | Kullanım |
-|---|---|
+| --- | --- |
 | `"AI"` | Chat, embedding (OpenAI/Azure) |
 | `"Qdrant"` | Vector store |
 | `"Redis"` | Lock, message bus (Adapters.Redis) |
@@ -194,6 +200,7 @@ Sadece `Adapters.AI` projesi içinden erişilebilir. Diğer adapter'lar kendi `E
 **Neden ayrı ayrı?**
 
 Her adapter kendi provider'ının exception ekosistemini bilir. Tek paylaşılan translator olsa:
+
 - Tüm adapter projeleri birbirinin SDK paketine bağımlı olurdu
 - "Hangi SDK exception nereye gider" kararı tek dosyaya sıkışırdı
 

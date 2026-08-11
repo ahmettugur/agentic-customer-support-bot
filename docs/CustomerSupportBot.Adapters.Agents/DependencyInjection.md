@@ -1,5 +1,7 @@
 # DependencyInjection (AgentsAdapterServiceCollectionExtensions)
 
+> 💡 **Analiz notu:** `AddAgentsAdapter()` çağrılınca `IAgentTeamPort → CustomerSupportTeam` ve `IEvaluationPort → EvaluationRunner` eşleştirmeleri DI container'a kaydolur.
+
 **Dosya:** `CustomerSupportBot.Adapters.Agents/DependencyInjection/AgentsAdapterServiceCollectionExtensions.cs`
 
 ## Ne yapar?
@@ -31,7 +33,7 @@ services.AddSingleton<IEvaluationPort>(sp => sp.GetRequiredService<EvaluationRun
 ```
 
 | Servis | Kayıt tipi | Açıklama |
-|--------|-----------|---------|
+| -------- | ----------- | --------- |
 | `ApprovalGateService` | Singleton | HITL onay kapısı |
 | `CustomerSupportTeam` | Singleton | Ana orkestratör — concrete tip olarak da erişilebilir |
 | `IAgentTeamPort` | Singleton (factory) | Application katmanının kullandığı port arayüzü |
@@ -57,6 +59,7 @@ Bu kontrol "fail-fast" prensibiyle çalışır: uygulama başlarken yanlış yap
 `CustomerSupportTeam` constructor'ı `ISemanticMemoryWriter?` ve `ICustomerProfileService?` parametrelerini opsiyonel olarak alır. Bu servisler DI'a kayıtlıysa otomatik inject edilir; kayıtlı değilse null gelir ve özellik atlanır.
 
 Semantic memory'yi etkinleştirmek için:
+
 ```csharp
 services.AddSingleton<ISemanticMemoryWriter, YourSemanticMemoryImplementation>();
 ```

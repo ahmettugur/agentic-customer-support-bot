@@ -7,6 +7,8 @@
 
 **HITL (Human-in-the-Loop)** onay kapısını uygular. Yan etkili 4 tool (sipariş oluşturma, sipariş iptali, iade talebi, şikayet kaydı) config'de işaretliyse, `FunctionInvokingChatClient` bu tool'ları gerçekten çalıştırmadan önce durur ve admin onayı bekler.
 
+> 💡 **Analiz notu:** Bir bankadaki "çift imza" sistemi gibi düşün — büyük para transferi için kasiyerin tek başına işlem yapması yetmez, müdür de onaylamalı. Bot sipariş oluşturacaksa admin panelinden bir insan "evet, oluştur" demelidir.
+
 > **Mimari not (önemli):** Onay bekleme mantığı framework'ün **native** mekanizmasına dayanır — eski modelde (bu dosyanın önceki dokümantasyonunda anlatılan) `RequestApprovalAsync` tool lambda'sının **içinde** çağrılıp bloklayan bir `await` ile beklerdi; süreç restart'ında bu bekleme (ve dolayısıyla `TaskCompletionSource`) kaybolurdu. Artık `Build*Tool()` metotları tool'u `ApprovalRequiredAIFunction` ile sarmalar; `FunctionInvokingChatClient` bunu görünce tool'u çalıştırmadan **önce** bir `ToolApprovalRequestContent` üretir, bu da `AIAgentHostExecutor` üzerinden gerçek, checkpoint'lenebilir bir workflow superstep duraklaması olan `RequestInfoEvent`'e dönüşür. `WorkflowRunner.HandleRequestInfoEventAsync` bu event'i yakalayıp `RequestApprovalAsync`'i (artık `public`) çağırır — metodun gövdesi (kuyruk, bekleme, duplicate-istek koruması) değişmedi, yalnızca **çağrıldığı yer** değişti.
 
 ## Hangi amaçla kullanılır?
@@ -43,7 +45,7 @@ Framework'ün native HITL mekanizmasına geçiş, hexagonal mimariyi bilinçli o
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `BuildOrderPlacementTool()` | `order_placement_tool`'u kurar, `productName`/`quantity`/`customerId` alır, HITL gate'inden geçer. |
 | `BuildOrderCancelTool()` | `order_cancel_tool`'u kurar, `orderId`/`reason` alır, HITL gate'inden geçer. |
 | `BuildReturnRequestTool()` | `return_request_tool`'u kurar, `orderId`/`reason` alır, HITL gate'inden geçer. |
@@ -82,7 +84,7 @@ Constructor injection: `IApprovalQueue approvalQueue`, `IOptions<ApprovalOptions
 ```
 
 | Ayar | Açıklama |
-|------|---------|
+| ------ | --------- |
 | `Enabled` | `false` ise tüm tool'lar otomatik onaylanır (geliştirme ortamı için) |
 | `ToolsRequiringApproval` | Hangi tool'ların onay gerektirdiği listesi |
 | `TimeoutSeconds` | Onay kuyrukta bekleme süresi |

@@ -2,10 +2,12 @@
 
 `CustomerSupportBot.Adapters.Agents/Team/` klasörü, workflow'daki 6 ajanın (`PlanningAgent`, `ProductAgent`, `OrderAgent`, `ComplaintAgent`, `HumanHandoffAgent`, `ResponseAgent`) prompt/tool/schema tanımlarını ve ortak iskeletlerini barındırır. `AgentTeamFactory` (bkz. [../AgentTeamFactory.md](../AgentTeamFactory.md)) bu sınıfları örnekleyip workflow'a katılımcı olarak ekler.
 
+> 💡 **Analiz notu:** Her agent bir "departman müdürü" gibi düşün. PlanningAgent = müşteri ilişkileri (yönlendirme), ProductAgent = ürün kataloğu, OrderAgent = sipariş yönetimi, ComplaintAgent = şikayet birimi, HumanHandoffAgent = çağrı merkezi transfer, ResponseAgent = iletişim departmanı (müşteriye Türkçe yanıt yazar).
+
 ## Dosyalar
 
 | Dosya | Açıklama |
-|---|---|
+| --- | --- |
 | [SupportAgentBase](SupportAgentBase.md) | Tüm ajanların ortak taban sınıfı — debug hook'ları (`OnBeforeRun`/`OnAfterRun`) burada. |
 | [PlanningAgent](PlanningAgent.md) | Müşteri talebini analiz eder, yapılandırılmış plan (JSON) üretir, uygun ajana yönlendirir. Tool'u yok. |
 | [ProductAgent](ProductAgent.md) | Ürün sorgularını yanıtlar (tek ürün + katalog/kategori listeleme). Tüm tool'ları salt-okunur. |

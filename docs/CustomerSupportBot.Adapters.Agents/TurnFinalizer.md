@@ -8,6 +8,8 @@
 
 Bir workflow turu **başarıyla** tamamlandığında tetiklenmesi gereken tüm yan etkileri tek bir metotta (`FinalizeAsync`) toplar: bekleyen eskalasyonları işleme, agent visit çıktılarını doldurma, episodik bellek yazımı, müşteri profili güncellemesi ve trace'in kapatılması.
 
+> 💡 **Analiz notu:** Bir maçın bitiminde yapılan işlemler gibi — skortabelasını güncelle, istatistikleri kaydet, maç raporunu yaz. Workflow bitti ama arka planda yapılması gereken işler var.
+
 ## Hangi amaçla kullanılır?
 
 `WorkflowRunner.RunAsync`/`RunStreamingAsync`, workflow başarıyla tamamlandığında (timeout/iptal/hata değil) sonuç metni temizlendikten hemen sonra `_finalizer.FinalizeAsync(...)` çağırır.
@@ -35,7 +37,7 @@ Tur-sonu yan etkileri (`ApprovalGateService`, `ISemanticMemoryWriter`, `ICustome
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `FinalizeAsync(trace, session, query, result, terminationReason)` | Ana giriş noktası — eskalasyon, agent visit çıktıları, episodik bellek, müşteri profili, trace kapatma sırasıyla çağrılır. |
 | `PopulateAgentVisitOutputs(trace, finalResult)` (private static) | Boş `AgentVisit.Output` alanlarını ajan türüne göre doldurur (1500 karakterle kırpılır). |
 | `WriteEpisodicMemorySafe(trace, query, response)` (private) | Fire-and-forget episodik bellek yazımı. |

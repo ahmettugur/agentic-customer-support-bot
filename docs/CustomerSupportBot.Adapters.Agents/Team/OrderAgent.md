@@ -10,6 +10,8 @@
 
 Sipariş oluşturma, sorgulama, iptal ve iade işlemlerini yürütür. Salt-okunur tool'lar (`order_status`/`get_last_order`/`get_all_orders`) doğrudan çalışır; yan etkili olanlar (`placement`/`cancel`/`return`) `ApprovalGateService` HITL kapısından geçer.
 
+> 💡 **Analiz notu:** E-ticaret sitesinin sipariş departmanı — "siparişim nerede?" sorularını yanıtlar, yeni sipariş oluşturur. Ama sipariş oluşturma/iptal gibi kritik işlemler için admin onayı gerekir.
+
 ## Hangi amaçla kullanılır?
 
 `PlanningAgent` sipariş niyeti tespit ettiğinde (`selectedAgent="OrderAgent"`) veya bir başka specialist'in `postToolReflection.handoffSuggestion="OrderAgent"` demesiyle (`ReflectionRoutingStrategy`) devreye girer.
@@ -40,7 +42,7 @@ Sipariş oluşturma, sorgulama, iptal ve iade işlemlerini yürütür. Salt-okun
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `BuildInner(chatClient, prompts, approvalGate, tools)` (private static) | `ChatClientAgent` kurar: 6 tool + `ResponseFormat` = `SpecialistReasoningSchema`. |
 | `OnBeforeRun(messages)` | Breakpoint — kullanıcı sorgusu, ENTITY EXTRACTION hint'i (`order_id` vb.), o ana kadarki grup sohbeti. |
 | `OnAfterRun(response)` | Breakpoint — `toolCalls`, `toolResults` (not-found burada görülür), `response.Text`. |

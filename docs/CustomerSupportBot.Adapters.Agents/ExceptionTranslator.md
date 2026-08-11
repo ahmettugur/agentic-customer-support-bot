@@ -1,5 +1,7 @@
 # ExceptionTranslator
 
+> 💡 **Analiz notu:** MAF (Microsoft Agents Framework) kendi exception'larını fırlatır. Bu çevirici onları domain exception'larına dönüştürür — Application katmanı framework detaylarından habersiz kalır.
+
 **Dosya:** `CustomerSupportBot.Adapters.Agents/ExceptionTranslator.cs`  
 **Tür:** `internal static class`
 
@@ -16,7 +18,7 @@ internal static DomainException Translate(Exception ex, string? context = null)
 ```
 
 | Gelen exception | Dönen DomainException |
-|----------------|----------------------|
+| ---------------- | ---------------------- |
 | `InvalidOperationException` (mesajında "Workflow" geçiyor) | `ExternalServiceException("AgentWorkflow", ...)` |
 | `TaskCanceledException` (inner: `TimeoutException`) | `ExternalServiceException("AgentWorkflow", "...zaman aşımına uğradı")` |
 | `OperationCanceledException` | `ExternalServiceException("AgentWorkflow", "...isteği iptal edildi")` |

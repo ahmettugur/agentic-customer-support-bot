@@ -6,6 +6,8 @@
 
 `CustomerSupportChatManager.SelectNextAgentAsync` metodu, hangi ajanın çalışacağına karar vermek için üç stratejiyi sırayla dener. Bunlar **Strategy pattern** ile tasarlanmıştır: her strateji bağımsız bir sınıftır, değerlendirmesini yapar ve eşleşmezse null döndürür.
 
+> 💡 **Analiz notu:** Bir GPS navigasyon gibi — ilk rota (FirstTurnStrategy) kullanıcıyı PlanningAgent'a yönlendirir. Eğer PlanningAgent "OrderAgent'a git" derse ikinci rota (PlanRoutingStrategy) devreye girer. OrderAgent işini bitirince üçüncü rota (ReflectionRoutingStrategy) "ResponseAgent'a git" der.
+
 ```
 SelectNextAgentAsync(history)
     │
@@ -150,6 +152,7 @@ Bu sabitler log mesajlarında `"Agent selected via {Branch}: {Agent}"` formatın
 
 1. `Routing.cs` dosyasında `IRoutingStrategy`'yi implemente eden yeni bir `internal sealed class` oluşturun.
 2. `CustomerSupportChatManager` constructor'ında `_strategies` listesine ekleyin:
+
    ```csharp
    _strategies =
    [
@@ -159,6 +162,7 @@ Bu sabitler log mesajlarında `"Agent selected via {Branch}: {Agent}"` formatın
        new ReflectionRoutingStrategy(ctx),
    ];
    ```
+
 3. Sıra önemlidir: daha spesifik stratejiler üste, daha genel olanlar alta gelmelidir.
 
 ## Tam örnek akış

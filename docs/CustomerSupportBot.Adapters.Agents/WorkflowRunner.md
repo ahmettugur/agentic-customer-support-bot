@@ -8,6 +8,8 @@
 
 Tek bir (decompose edilmemiş) kullanıcı sorgusu için MAF `GroupChat` workflow'unu uçtan uca çalıştırır: mesaj hazırlığı → workflow execution → HITL onay köprüsü → trace toplama → sonuç temizleme → stream event üretimi. Katmanın **gerçek orkestratörü** budur — `CustomerSupportTeam` (bkz. [CustomerSupportTeam.md](CustomerSupportTeam.md)) yalnızca compound/single query ayrımını yapıp bu sınıfa veya `DecomposedRunner`'a yönlendiren ince bir kabuktur.
 
+> 💡 **Analiz notu:** Bir yarış pistinin kontrol merkezi gibi — start (mesaj hazırlığı), tur geçişleri (agent handoff), pit stop (HITL onay), finiş (yanıt temizleme) ve telemetri (trace) hepsini yönetir.
+
 ## Hangi amaçla kullanılır?
 
 `IAgentTeamPort.RunAsync`/`RunStreamingAsync` çağrıldığında (tek sorgu senaryosu) veya `DecomposedRunner` her bir alt-görevi çalıştırırken (compound query senaryosu — bkz. [DecomposedRunner.md](DecomposedRunner.md)) devreye girer. `CustomerSupportBot.Adapters.Agents/Evaluation/EvaluationRunner.cs` de `IAgentTeamPort` üzerinden dolaylı olarak bunu kullanır.
@@ -51,7 +53,7 @@ Aynı desen `EnsureSideEffectToolCompletion` ile `WellKnown.HighRiskTools`'taki 
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `GetWorkflowDiagram()` | `_factory.CreateWorkflow().ToMermaidString()` — admin panelindeki workflow diyagramı endpoint'i için. |
 | `RunAsync(query, conversationHistory, session, reasoning, ct)` | Non-streaming tek sorgu koşusu; nihai temizlenmiş metni döner. |
 | `RunStreamingAsync(query, conversationHistory, session, reasoning, ct)` | Streaming tek sorgu koşusu; `StreamEvent` akışı üretir (`Agent`, `UiHint`, `ResponseStart`, `ResponseDelta`, `ResponseComplete`, `Error`). |

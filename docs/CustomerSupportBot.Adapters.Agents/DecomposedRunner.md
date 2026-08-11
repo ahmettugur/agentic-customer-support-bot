@@ -8,6 +8,8 @@
 
 Compound query (bileşik sorgu — ör. "1001'i iptal et ve iade başlat") orkestrasyonunu yapar: reasoning aşamasının ürettiği `SubTasks` listesini `SubTaskOrchestrator.Partition` ile yan-etkisiz/yan-etkili gruplara ayırır, her grubu (paralel veya sıralı) `WorkflowRunner` üzerinden çalıştırır ve sonuçları tek bir yanıtta birleştirir.
 
+> 💡 **Analiz notu:** "Siparişimi iptal et VE yeni sipariş oluştur" gibi çoklu isteklerde her alt görev ayrı bir workflow koşusudur. İptal ve oluşturma bağımsızsa paralel, bağımlıysa sıralı çalışır — proje yönetimindeki "Critical Path" gibi.
+
 ## Hangi amaçla kullanılır?
 
 `CustomerSupportTeam.RunAsync`/`RunStreamingAsync`, `SubTaskOrchestrator.IsCompoundQuery(reasoning)` `true` döndürdüğünde (ör. reasoning aşaması sorguyu 2+ alt göreve ayırdıysa) bu sınıfa yönlenir; aksi halde doğrudan `WorkflowRunner` kullanılır.
@@ -39,7 +41,7 @@ Paralel dalda `_approvalContext.SetCurrentAgent(sub.TargetAgent)` her alt-görev
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `RunDecomposedAsync(query, conversationHistory, session, reasoning, ct)` | Non-streaming compound query koşusu; birleşik nihai metni döner. |
 | `RunDecomposedStreamingAsync(query, conversationHistory, session, reasoning, ct)` | Streaming compound query koşusu; `Orchestrator`/`SubTask#N` durum event'leri + birleşik yanıtın `ResponseStart`/`ResponseDelta`/`ResponseComplete` akışını üretir. |
 

@@ -10,6 +10,8 @@
 
 Müşteri şikayetlerini kaydeder. Tek tool'u yan etkilidir ve `ApprovalGateService` HITL kapısından geçer (admin onayı beklenir).
 
+> 💡 **Analiz notu:** Müşteri hizmetleri şikayet birimi — "ürünüm bozuk geldi" dediğinde şikayeti kayıt altına alır. Ama kayıt admin onayına tabidir çünkü şikayet açmak geri dönüşü olmayan bir işlemdir.
+
 ## Hangi amaçla kullanılır?
 
 `PlanningAgent` şikayet niyeti tespit ettiğinde (`selectedAgent="ComplaintAgent"`) veya bir başka specialist'in dinamik handoff önerisiyle devreye girer.
@@ -38,7 +40,7 @@ Müşteri şikayetlerini kaydeder. Tek tool'u yan etkilidir ve `ApprovalGateServ
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `BuildInner(chatClient, prompts, approvalGate)` (private static) | `ChatClientAgent` kurar: tek tool + `ResponseFormat` = `SpecialistReasoningSchema`. |
 | `OnBeforeRun(messages)` | Breakpoint — LLM'e gönderilen tam mesaj listesi. |
 | `OnAfterRun(response)` | Breakpoint — `toolCalls` (`orderId`, `complaintText`, `customerId`), `toolResults` (onay reddedildiyse `ValidationError` burada görülür). |

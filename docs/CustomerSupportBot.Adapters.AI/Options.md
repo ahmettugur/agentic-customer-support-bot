@@ -1,5 +1,7 @@
 # AiProviderOptions
 
+> 💡 **Analiz notu:** `appsettings.json`'daki `AI:` bloğunu C# property'lerine bağlayan config sınıfı. OpenAI API key, model adı, reasoning effort gibi ayarlar buradan okunur.
+
 **Dosya:** `Options/AiProviderOptions.cs`
 
 `appsettings.json > "AI"` bölümünden bind edilir.
@@ -39,7 +41,7 @@ public sealed class OpenAiOptions
 ```
 
 | Alan | Örnek |
-|---|---|
+| --- | --- |
 | `ApiKey` | `sk-...` |
 | `Model` | `gpt-4o-mini`, `gpt-4-turbo` |
 | `ReasoningModel` | `o1-mini`, `o1-preview` |
@@ -89,7 +91,7 @@ public sealed class RealtimeOptions
 ### Önemli alanlar
 
 | Alan | Açıklama |
-|---|---|
+| --- | --- |
 | `Enabled` | False ise Realtime endpoint 503 döner |
 | `Model` | OpenAI realtime modeli — Realtime API'ya özel |
 | `Voice` | `alloy`, `echo`, `shimmer`, ... (zorunlu) |

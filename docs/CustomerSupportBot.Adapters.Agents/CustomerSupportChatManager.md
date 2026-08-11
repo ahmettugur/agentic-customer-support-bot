@@ -8,6 +8,8 @@
 
 MAF (Microsoft Agents Framework), bir workflow içinde birden fazla ajanı "grup sohbet" modunda çalıştırır. Bu modda **kim konuşacak?** sorusunu cevaplamak `GroupChatManager`'ın görevidir. `CustomerSupportChatManager` bu soruyu iki farklı hook ile yanıtlar:
 
+> 💡 **Analiz notu:** Bir toplantı yöneticisi gibi — "şimdi sıra muhasebede (OrderAgent), sonra hukuk kontrolü (ResponseAgent)" diye söz hakkı verir. Toplantı sonlanma koşullarını da kontrol eder.
+
 1. **`SelectNextAgentAsync`** — Her turda hangi ajan çalışmalı?
 2. **`ShouldTerminateAsync`** — Konuşma bitmeli mi?
 
@@ -85,7 +87,7 @@ Constructor içinde `PlanningAgent` ve `ResponseAgent`'ın listede mevcut olduğ
 Bu sınıf tarafından kullanılan ayarlar (`appsettings.json` → `Workflow:` bölümü):
 
 | Ayar | Tür | Kullanım yeri |
-|------|-----|---------------|
+| ------ | ----- | --------------- |
 | `MaxIterations` | int | `GroupChatManager.MaximumIterationCount` |
 | `MaxHandoffsPerAgent` | int | `EnforceHandoffLimit` |
 | `MaxDuplicateToolCalls` | int | `DetectRepeatedToolCall` |
@@ -111,6 +113,7 @@ ShouldTerminate → true (TERMINATE bulundu) → Workflow biter
 ### "No routing strategy matched; falling back to PlanningAgent"
 
 Log'da bu uyarıyı görüyorsanız, 3 stratejinin hiçbiri eşleşmedi demektir. Olası nedenler:
+
 - `lastMessage` null
 - Mesajın `AuthorName`'i beklenen ajan adıyla eşleşmiyor
 - `RoutingContext.IsSpecialistMessage` false döndürüyor (yeni ajan eklendiyse `WellKnown.AgentNames.Specialists` dizisini kontrol edin)

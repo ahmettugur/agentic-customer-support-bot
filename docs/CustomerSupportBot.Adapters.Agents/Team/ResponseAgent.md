@@ -10,6 +10,8 @@
 
 Turun **son** ajanıdır: specialist'in (veya `PlanningAgent`'ın, netleştirme gerekiyorsa) yapılandırılmış çıktısını kullanıcıya sunulacak nihai, doğal dilde metne dönüştürür ve `"TERMINATE: reason=..."` işaretiyle workflow'u sonlandırır.
 
+> 💡 **Analiz notu:** Haber spikeri gibi — muhabir (specialist agent) haberi ham veri olarak getirir, spiker (ResponseAgent) bunu güzel bir Türkçe ile izleyiciye sunar ve "haberler bitti" (TERMINATE) der.
+
 ## Hangi amaçla kullanılır?
 
 `ReflectionRoutingStrategy`, her specialist mesajından sonra (eskalasyon/tamamlanma/bilinmeyen handoff durumlarında) bu ajana yönlenir. `PlanRoutingStrategy` da netleştirme gerektiğinde (`needsClarification=true` veya düşük confidence) doğrudan bu ajana yönlenir.
@@ -37,7 +39,7 @@ Bu ajan **bilinçli olarak** structured output kullanmaz — diğer 5 ajanın ak
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `BuildInner(chatClient, prompts)` (private static) | `ChatClientAgent` kurar: tool yok, `ResponseFormat` yok. |
 | `OnBeforeRun(messages)` | Breakpoint — specialist'in ürettiği ham çıktı (tool sonuçları + reasoning JSON) burada görülür. |
 | `OnAfterRun(response)` | Breakpoint — `response.Text` (kullanıcıya gidecek nihai metin + sonundaki `TERMINATE` işareti). |

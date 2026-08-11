@@ -8,6 +8,8 @@
 
 Uygulama başladığında çalışan startup kurtarma servisi. Önceki çalışmadan kalan tutarsız kayıtları temizler ve demo verilerini seed eder.
 
+> 💡 **Analiz notu:** Bir restoranın sabah açılış rutini gibi — "dünden kalan siparişleri iptal et, masaları temizle, bugünün menüsünü hazırla". Uygulama restart edildikten sonra bekleyen ama artık geçersiz olan kayıtları düzeltir.
+
 ---
 
 ## Çalışma zamanı
@@ -142,6 +144,7 @@ InMemory adaptörler her restart'ta sıfırlanır — "kalan kayıt" kavramı yo
 ## Güvenlik notu
 
 Üretimde ilk başlatmadan sonra:
+
 1. `Auth:DefaultAdminPassword` yapılandırma değerini değiştirin (varsayılan: `Admin123!`)
 2. `Auth:DefaultAgentPassword` yapılandırma değerini değiştirin (varsayılan: `Agent123!`)
 3. Agent kullanıcı adları: `john.doe`, `jane.smith`

@@ -1,5 +1,7 @@
 # EvaluationRunner
 
+> 💡 **Analiz notu:** Test koşucusu — her senaryo için bot'a soru sorar, yanıtı alır ve `CriteriaEvaluator`'a "bu yanıt kabul edilebilir mi?" diye sorar.
+
 **Dosya:** `CustomerSupportBot.Adapters.Agents/Evaluation/EvaluationRunner.cs`
 **Implements:** `IEvaluationPort` (Application katmanı portu)
 **Yaşam döngüsü:** Singleton
@@ -50,7 +52,7 @@ Bu sınıfın kendisi `IAgentTeamPort`/`IReasoningPort`/`ISessionManager`/`IReas
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `RunAsync(scenarios, ct)` | Tüm senaryoları sırayla çalıştırır, `EvaluationRunResult` döner. |
 | `RunScenarioAsync(scenario, ct)` | `Repetitions`'a göre `RunSingleAsync`'i 1 veya N kez çağırır, `ScenarioResult` döner. |
 | `RunSingleAsync(scenario, ct)` (private) | Eski (repetitions öncesi) `RunScenarioAsync`'in kendisi — tek koşu. |

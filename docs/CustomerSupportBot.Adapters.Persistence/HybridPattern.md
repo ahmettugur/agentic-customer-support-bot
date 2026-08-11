@@ -2,6 +2,8 @@
 
 Postgres adaptörlerinin tamamı aynı mimari deseni paylaşır: **in-memory cache önünde PostgreSQL, opsiyonel Redis pub/sub ile**. Bu desen her adapter'da yeniden uygulanır; merkezi bir base class yoktur.
 
+> 💡 **Analiz notu:** Bir dükkandaki vitrin + depo sistemi gibi düşün. Vitrin (cache) hızlı erişim için, depo (Postgres) kalıcı saklama için. Bir ürün (veri) satıldığında (yazıldığında) hem vitrine hem depoya konur. Vitrin boşalırsa (restart) depodan tekrar doldurulur. Birden fazla şube varsa (multi-pod) telsiz (Redis pub/sub) ile "vitrini güncelle" denir.
+
 ---
 
 ## Neden hybrid?
@@ -80,7 +82,7 @@ Redis bağlantısı yoksa adaptör yalnızca in-process çalışır (single-pod 
 **Redis kanal adları:**
 
 | Kanal | Olay |
-|-------|------|
+| ------- | ------ |
 | `csbot:approval:created` | Yeni onay isteği |
 | `csbot:approval:decided` | Onay/red kararı |
 | `csbot:escalation:created` | Yeni eskalasyon |
@@ -109,7 +111,7 @@ InMemory ortamda bu lock no-op çalışır.
 In-memory cache'in büyümesini önlemek için her adapter'da maksimum kayıt sınırı vardır:
 
 | Adapter | Limit |
-|---------|-------|
+| --------- | ------- |
 | ChatBridge history | 200 mesaj |
 | ApprovalQueue history | 200 kayıt |
 | EscalationSink | 500 kayıt |

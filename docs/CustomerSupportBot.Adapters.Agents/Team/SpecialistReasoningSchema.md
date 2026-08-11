@@ -1,5 +1,7 @@
 # SpecialistReasoningSchema
 
+> 💡 **Analiz notu:** Specialist agent'lar (Order, Product, Complaint) serbest metin değil, JSON formatında structured output üretir. Bu şema o JSON'un yapısını tanımlar — LLM'e "bana bu formatta yanıt ver" der.
+
 **Dosya:** `CustomerSupportBot.Adapters.Agents/Team/SpecialistReasoningSchema.cs`
 **Erişim:** `internal` (3 sınıf: `SpecialistReasoningSchema`, `PreToolCheckSchema`, `PostToolReflectionSchema` + `internal static class SpecialistReasoningSchemaOptions`)
 
@@ -35,7 +37,7 @@ Her specialist ajanın `BuildInner` static metodunda `ChatOptions.ResponseFormat
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
-|---|---|
+| --- | --- |
 | `SpecialistReasoningSchemaOptions.CamelCase` (static readonly) | `JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }`. |
 | `SpecialistReasoningSchema.PreToolCheck` (`PreToolCheckSchema?`) | Tool çağrısı öncesi parametre/karar muhakemesi. |
 | `SpecialistReasoningSchema.ResultConfidence` (`double`) | Tool sonrası güven skoru (0.0–1.0). |

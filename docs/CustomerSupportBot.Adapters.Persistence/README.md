@@ -2,6 +2,8 @@
 
 Application katmanının **driven port** sözleşmelerini (ISessionManager, IApprovalQueue, vb.) implement eden persistence adaptör katmanıdır. Auth altyapısı ve dosya sistemi adaptörlerini de içerir.
 
+> 💡 **Analiz notu:** Bu katman projenin "hafızası"dır. Application "bu siparişi kaydet" der ama nereye, hangi DB'ye, hangi tablo yapısıyla — hepsini bu adapter bilir. Domain ve Application hiçbir zaman `DbContext` veya SQL görmez. Yarın Postgres yerine MongoDB kullansak, sadece bu klasör değişir.
+
 > ⚠️ Üretimde çalışan tek backend **Postgres**'tir. `InMemory/` altında 13 adapter sınıfı mevcuttur ve testlerde kullanılır, ancak `PersistenceOptions.Provider` enum'u yalnızca `Postgres` değerine sahiptir — `PersistenceAdapterServiceCollectionExtensions.AddPersistenceAdapters` hiçbir koşula bağlı kalmadan sadece Postgres implementasyonlarını kaydeder. Runtime'da seçilebilen bir "InMemory modu" yoktur.
 
 ---
@@ -9,7 +11,7 @@ Application katmanının **driven port** sözleşmelerini (ISessionManager, IApp
 ## Belgeler
 
 | Konu | Dosya |
-|------|-------|
+| ------ | ------- |
 | DI kayıtları ve yapılandırma | [DependencyInjection.md](DependencyInjection.md) |
 | Hybrid cache+DB deseni (temel mimari) | [HybridPattern.md](HybridPattern.md) |
 | EF Core DbContext ve şemalar | [DbContext.md](DbContext.md) |
@@ -82,7 +84,7 @@ CustomerSupportBot.Adapters.Persistence/
 ## Postgres vs InMemory
 
 | Özellik | Postgres (üretimde kayıtlı olan) | InMemory (yalnızca testlerde kullanılır) |
-|---------|---------|----------|
+| --------- | --------- | ---------- |
 | Kalıcılık | EF Core + Npgsql | Yok (process sonlanınca sıfırlanır) |
 | Yatay ölçekleme | Desteklenir | — |
 | Dağıtık lock | Redis `IAppDistributedLock` | — |
@@ -96,7 +98,7 @@ CustomerSupportBot.Adapters.Persistence/
 Aşağıdaki tablo **üretimde gerçekten kayıtlı olan** (Postgres) implementasyonları gösterir. "InMemory" sütunu, testlerde kullanılabilen — ama runtime'da bir config anahtarıyla seçilemeyen — karşılıkları listeler.
 
 | Driven Port | Postgres (kayıtlı) | InMemory (yalnızca test) |
-|------------|---------|---------|
+| ------------ | --------- | --------- |
 | `ISessionManager` | `PostgresSessionManager` | `InMemorySessionManager` |
 | `IApprovalQueue` | `PostgresApprovalQueue` | `InMemoryApprovalQueue` |
 | `IChatBridge` | `PostgresChatBridge` | `InMemoryChatBridge` |
