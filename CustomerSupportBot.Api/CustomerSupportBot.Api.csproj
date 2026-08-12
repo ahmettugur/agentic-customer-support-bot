@@ -9,16 +9,39 @@
 
   <ItemGroup>
     <!-- Api katmanına özgü paketler -->
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
     <!-- contentfiles kasıtlı olarak DAHIL DEĞİL: bu paketin content item'ları (**/*.resx glob'u
          dahil) MSBuild tarafından consuming proje köküne göre çözülüyor. bin/obj derinleştikçe
          (nested publish/build çıktıları) bu glob kendi içine katlanıp MSB3552 ile patlıyordu. -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
       <IncludeAssets>runtime; build; native; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A2A (Agent2Agent) protokolü — ajanları dış sistemlere açmak için.
+         Endpoint mapping uzantıları (MapA2A / MapA2AJsonRpc / MapWellKnownAgentCard)
+         IEndpointRouteBuilder üzerinde çalıştığı için bu paketler Web SDK'lı Api
+         projesinde durur; Adapters.Agents bilinçli olarak framework'süz (düz
+         Microsoft.NET.Sdk) tutuluyor.
+
+         A2A / A2A.AspNetCore: protokolün kendi SDK'sı (AgentCard, IAgentHandler,
+         RequestContext, TaskUpdater, ITaskStore + ASP.NET Core routing).
+         Microsoft.Agents.AI.Hosting.A2A.AspNetCore: MAF köprüsü — bir AIAgent'ı
+         doğrudan A2A endpoint'i olarak yayınlar (MapA2AJsonRpc(AIAgent, path)) ve
+         uzun süreli (background/task) yürütmeyi AgentRunMode ile yönetir.
+
+         ⚠️ SÜRÜM RİSKİ: MAF çekirdeği (Adapters.Agents) 1.17.0, bu hosting paketi
+         1.12.0-preview. NuGet Microsoft.Agents.AI.Abstractions'ı 1.17.0'a birleştirir
+         ama hosting assembly'si 1.12'ye karşı derlendi — arada breaking change varsa
+         runtime'da TypeLoadException/MissingMethodException verir. Bu yüzden şu an
+         yalnızca uyumluluk spike'ı için duruyor; kalıcı kullanım öncesi doğrulanmalı. -->
+    <PackageReference Include="A2A" Version="1.0.0-preview2" />
+    <PackageReference Include="A2A.AspNetCore" Version="1.0.0-preview2" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.12.0-preview.260629.1" />
   </ItemGroup>
 
   <!-- Knowledge Base markdown dosyalarını build çıktısına kopyala — KnowledgeBaseIngestor okur. -->

@@ -68,6 +68,14 @@ internal sealed class RoutingContext
 
 **`IsSpecialistMessage`:** Mesajın `AuthorName`'i `WellKnown.AgentNames.Specialists` dizisindeki herhangi bir isimle başlıyorsa `true` döner. Yeni bir specialist ajan eklediğinizde bu diziye eklemeyi unutmayın.
 
+> ⚠️ **Ad çakışması — `using` alias'ı:** `Microsoft.Extensions.AI` 10.9.0 kendi `RoutingContext` tipini ekledi. `CustomerSupportChatManager.cs` hem `Microsoft.Extensions.AI` hem `...Agents.Routing` namespace'lerini import ettiği için bu, CS0104 (belirsiz referans) derleme hatası verdi. Çözüm o dosyanın başındaki alias:
+>
+> ```csharp
+> using RoutingContext = CustomerSupportBot.Adapters.Agents.Routing.RoutingContext;
+> ```
+>
+> Buradaki `RoutingContext` **bizim** tipimizdir ve MEAI'nin aynı adlı tipiyle hiçbir ilgisi yoktur. MEAI sürümü yükseltilirken benzer çakışmalar çıkabilir; çözüm tipi yeniden adlandırmak değil, alias ile hangisinin kastedildiğini sabitlemektir.
+
 ## Strateji 1: `FirstTurnStrategy`
 
 **Koşul:** Konuşma geçmişinde hiç PlanningAgent mesajı yok.

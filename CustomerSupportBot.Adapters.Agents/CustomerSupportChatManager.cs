@@ -9,6 +9,12 @@ using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
+// Microsoft.Extensions.AI 10.9.0 kendi RoutingContext tipini ekledi ve buradaki
+// `using Microsoft.Extensions.AI;` ile bizimki (Routing/Routing.cs) arasında CS0104
+// belirsizliği doğurdu. Alias, hangisinin kastedildiğini adıyla sabitler — MEAI ileride
+// başka bir ad daha çakıştırsa bile bu dosya etkilenmez.
+using RoutingContext = CustomerSupportBot.Adapters.Agents.Routing.RoutingContext;
+
 namespace CustomerSupportBot.Adapters.Agents;
 
 /// <summary>
