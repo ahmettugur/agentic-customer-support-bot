@@ -80,6 +80,9 @@ internal sealed class DomainExceptionHandler : IExceptionHandler
     private static (int Status, LogLevel Level, bool ExposeDetail) Map(DomainException ex) => ex switch
     {
         EntityNotFoundException      => (StatusCodes.Status404NotFound,           LogLevel.Information, true),
+        // 403: kimlik geçerli ama oturum başkasının. Mesaj güvenle gösterilebilir —
+        // oturumun VARLIĞINI zaten istemci iddia etti, sızan yeni bir bilgi yok.
+        UnauthorizedSessionAccessException => (StatusCodes.Status403Forbidden,    LogLevel.Warning,     true),
         ConcurrencyConflictException => (StatusCodes.Status409Conflict,           LogLevel.Warning,     true),
         ExternalServiceException     => (StatusCodes.Status503ServiceUnavailable, LogLevel.Error,       false),
         PersistenceException         => (StatusCodes.Status503ServiceUnavailable, LogLevel.Error,       false),

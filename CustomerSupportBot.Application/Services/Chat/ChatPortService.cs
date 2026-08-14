@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Domain.Exceptions;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
 
@@ -65,17 +66,26 @@ public sealed class ChatPortService : IChatPort
     }
 
     /// <summary>
-    /// Login'li müşterinin JWT'den doğrulanmış kimliğini session'a bir kez bağlar — bir sonraki
-    /// turlarda tekrar yazılmaz (session zaten bağlıysa no-op), böylece onay gerektiren tool'lar
-    /// için güvenilir tek kaynak kalıcı olur.
+    /// Login'li müşterinin JWT'den doğrulanmış kimliğini session'a bir kez bağlar ve oturum
+    /// sahipliğini doğrular.
+    ///
+    /// <para>
+    /// Eskiden burada yalnızca bağlama vardı: oturum zaten <b>başka</b> bir müşteriye bağlıysa
+    /// metot sessizce çıkıyor, tur o oturumun kimliğiyle devam ediyordu. Yani müşteri B,
+    /// müşteri A'nın <c>sessionId</c>'sini göndererek A'nın konuşma geçmişini alabiliyor ve
+    /// tool'ları A adına çalıştırabiliyordu. Artık ihlalde
+    /// <see cref="UnauthorizedSessionAccessException"/> fırlatılır.
+    /// </para>
+    ///
+    /// <para>
+    /// Kural <see cref="SessionIdentityBinder"/>'da tek noktada durur — aynı kontrol sesli
+    /// kanallarda da gerekiyor ve kopyalandığında biri güncellenip diğerleri kalıyordu.
+    /// </para>
     /// </summary>
     private async Task BindAuthenticatedCustomerAsync(AgentSession session, string? customerId, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(customerId) || session.State.AuthenticatedCustomerId is not null)
-            return;
-
-        session.State.AuthenticatedCustomerId = customerId;
-        await _sessions.UpdateAsync(session, ct);
+        if (!await SessionIdentityBinder.TryBindAsync(session, customerId, _sessions, ct))
+            throw new UnauthorizedSessionAccessException(session.SessionId);
     }
 
     /// <inheritdoc/>

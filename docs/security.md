@@ -117,13 +117,48 @@ iptal, iade ve şikayet tool'ları `customerId`'yi yalnızca buradan alır — L
 metninden çıkardığı numara asla kullanılmaz.
 
 `SessionIdentityBinder` bu kuralı tek noktada tutar ve oturum **başka** bir müşteriye bağlıysa
-bağlantıyı reddeder. Bu kontrol olmadan, bilinen bir `sessionId` veren biri o oturumun
-kimliğiyle çalışan tool'lara erişebilirdi.
+erişimi reddeder.
 
-> ⚠️ Bu bağ şu an sesli kanallarda (`RealtimeBridgeService`, `RealtimeNativeService`) uygulanır.
-> Yazılı chat (`ChatPortService.BindAuthenticatedCustomerAsync`) bağı kurar ama **sahiplik
-> ihlalinde reddetmez** — oturum zaten başkasına bağlıysa sessizce devam eder. Bu bilinen açık
-> hâlâ kapatılmayı bekliyor.
+### Neden kimlik doğrulama tek başına yetmiyor
+
+`sessionId` **her zaman istemciden gelir** — URL yolunda ya da istek gövdesinde.
+`RequireAuthorization("Customer")` yalnızca *"bu kişi bir müşteri mi"* sorusunu yanıtlar;
+*"bu oturum onun mu"* sorusunu yanıtlamaz. İkincisi sorulmadığında, geçerli bir token'a sahip
+herhangi bir müşteri başkasının `sessionId`'sini vererek:
+
+- o oturumun **konuşma geçmişini** alabilir,
+- **canlı olay akışını** dinleyebilir (bot yanıtları, onay sonuçları, temsilci mesajları),
+- tool'ları o oturumun kimliğiyle çalıştırabilirdi (sipariş geçmişi, iptal, iade).
+
+### İki katmanlı uygulama
+
+| Katman | Nerede | Ne yapar |
+|---|---|---|
+| **Uç** (asıl koruma) | `ChatEndpoints.IsSessionAccessibleAsync` | `SessionIdentityBinder.IsAccessibleAsync` ile salt-okunur kontrol → **403** `session_forbidden` |
+| **Port** (derinlemesine savunma) | `ChatPortService` → `SessionIdentityBinder.TryBindAsync` | İhlalde `UnauthorizedSessionAccessException` → `DomainExceptionHandler` → **403** |
+
+İkinci katman gereksiz görünebilir ama değil: uç katmanındaki kontrolü kaldıran bir mutasyon
+denendiğinde `POST /chat/` yine 403 döndü — port kendi başına da reddediyor. İleride bu port'u
+çağıracak başka bir giriş (ör. A2A) uç kontrolünü atlarsa koruma yerinde kalır.
+
+Salt-okunur uçlar (`IsAccessibleAsync`) oturumu **oluşturmaz ve değiştirmez**; aksi hâlde
+rastgele `sessionId` veren biri sınırsız boş oturum üretebilirdi. Yazma yolları
+(`TryBindAsync`) ise oturum sahipsizse onu çağırana bağlar.
+
+### Korunan uçlar
+
+| Uç | Kontrol |
+|---|---|
+| `POST /chat/` | 403 JSON |
+| `POST /chat/stream` | SSE header'ları yazıldıktan sonra durum kodu değişemez → akış içinde `session_forbidden` olayı, tur hiç başlamaz |
+| `GET /chat/events/{sid}` | 403 (header yazılmadan önce) |
+| `GET /chat-sessions/{sid}/approvals/unseen` | 403 JSON |
+| `POST /chat-sessions/{sid}/approvals/{id}/seen` | 403 JSON |
+| `WS /chat/realtime*` | Bağlantı `SessionIdentityBinder` ile reddedilir |
+| `GET /customer/approvals/history` | `sessionId` almaz — kimlik doğrudan JWT claim'inden, sahiplik sorusu doğmaz |
+
+Davranış `ChatSessionOwnershipTests` (uçtan uca HTTP) ve `SessionIdentityBinderTests`
+(birim) ile korunur.
 
 ### WebSocket'lerde token taşıma
 

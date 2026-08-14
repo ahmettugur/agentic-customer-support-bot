@@ -58,6 +58,24 @@ public class ExternalServiceException : DomainException
 }
 
 /// <summary>
+/// Bir oturuma, o oturumun sahibi olmayan bir müşteri adına erişilmeye çalışıldı.
+///
+/// <para>
+/// <c>sessionId</c> her zaman istemciden gelir (URL ya da gövde). Kimlik doğrulama "bu kişi bir
+/// müşteri mi" sorusunu yanıtlar, "bu oturum onun mu" sorusunu değil — ikincisini
+/// <c>SessionIdentityBinder</c> yanıtlar ve ihlalde bu exception fırlatılır.
+/// </para>
+/// </summary>
+public class UnauthorizedSessionAccessException : DomainException
+{
+    public string SessionId { get; }
+
+    public UnauthorizedSessionAccessException(string sessionId)
+        : base("SESSION_FORBIDDEN", "Bu oturuma erişim yetkiniz yok.")
+        => SessionId = sessionId;
+}
+
+/// <summary>
 /// Eşzamanlılık çakışması (örn: aynı approval'ı iki admin aynı anda onaylıyor).
 /// </summary>
 public class ConcurrencyConflictException : DomainException

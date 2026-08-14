@@ -55,4 +55,34 @@ public static class SessionIdentityBinder
 
         return string.Equals(bound, authenticatedCustomerId, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Salt-okunur sahiplik kontrolü — oturumu <b>oluşturmaz ve değiştirmez</b>.
+    ///
+    /// <para>
+    /// <see cref="TryBindAsync"/> yazma yolları içindir (bir tur başlatmak, sesli bağlantı
+    /// açmak). Bu ise yalnızca okuyan uçlar içindir: olay akışına abone olmak, okunmamış onay
+    /// bildirimlerini çekmek. Oradan <c>GetOrCreateAsync</c> çağırmak, rastgele bir
+    /// <c>sessionId</c> verilerek boş oturum üretilmesine yol açardı.
+    /// </para>
+    /// </summary>
+    /// <returns>
+    /// Oturum yoksa, henüz kimseye bağlı değilse veya bu müşteriye aitse <c>true</c>.
+    /// </returns>
+    public static async Task<bool> IsAccessibleAsync(
+        string? sessionId,
+        string? authenticatedCustomerId,
+        ISessionManager sessions,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return true;
+        if (string.IsNullOrWhiteSpace(authenticatedCustomerId)) return true;
+
+        var session = await sessions.GetAsync(sessionId, ct);
+        if (session is null) return true;
+
+        var bound = session.State.AuthenticatedCustomerId;
+        return string.IsNullOrWhiteSpace(bound)
+            || string.Equals(bound, authenticatedCustomerId, StringComparison.Ordinal);
+    }
 }

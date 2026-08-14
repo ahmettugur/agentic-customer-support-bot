@@ -6,6 +6,7 @@ using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
+using CustomerSupportBot.Application.Services.Chat;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -30,9 +31,16 @@ public static class ChatEndpoints
         HttpContext httpContext,
         IChatPort chatPort,
         IInputGuard inputGuard,
+        ISessionManager sessions,
         ILoggerFactory loggerFactory)
     {
         var logger = loggerFactory.CreateLogger("ChatEndpoints");
+
+        if (!await IsSessionAccessibleAsync(request.SessionId, httpContext, sessions))
+        {
+            logger.LogWarning("Oturum sahiplik ihlali reddedildi | session={Session}", request.SessionId);
+            return SessionForbidden();
+        }
 
         var guardResult = inputGuard.Inspect(request.Query);
         if (guardResult.Verdict == InputGuardVerdict.Reject)
@@ -78,10 +86,26 @@ public static class ChatEndpoints
         IChatPort chatPort,
         IHitlEventPort hitlEvents,
         IInputGuard inputGuard,
+        ISessionManager sessions,
         ILoggerFactory loggerFactory)
     {
         SseWriter.WriteHeaders(response);
         var logger = loggerFactory.CreateLogger("ChatEndpoints");
+
+        // SSE'de header'lar yazıldıktan sonra HTTP durum kodu değiştirilemez; bu yüzden
+        // ihlal, akışın içinde bir hata olayı olarak bildirilir ve tur hiç başlamaz.
+        if (!await IsSessionAccessibleAsync(request.SessionId, httpContext, sessions))
+        {
+            logger.LogWarning("Oturum sahiplik ihlali reddedildi (stream) | session={Session}", request.SessionId);
+            using var forbiddenSse = new SseForwarder(response, httpContext.RequestAborted);
+            await forbiddenSse.WriteSessionAsync(request.SessionId ?? "unknown");
+            await SseWriter.WriteEventAsync(
+                response,
+                "response_complete",
+                new { content = "Bu oturuma erişim yetkiniz yok.", blocked = true, error = "session_forbidden" },
+                httpContext.RequestAborted);
+            return;
+        }
 
         var guardResult = inputGuard.Inspect(request.Query);
         if (guardResult.Verdict == InputGuardVerdict.Reject)
@@ -152,6 +176,29 @@ public static class ChatEndpoints
     private static string? ResolveAuthenticatedCustomerId(HttpContext httpContext) =>
         httpContext.User.FindFirst("linked_customer_id")?.Value;
 
+    /// <summary>
+    /// <c>sessionId</c> istemciden gelir — URL'de ya da gövdede. Kimlik doğrulaması "bu kişi
+    /// bir müşteri mi" sorusunu yanıtlar, "bu oturum onun mu" sorusunu değil. Bu kontrol
+    /// olmadan müşteri B, müşteri A'nın oturum kimliğini vererek A'nın konuşma geçmişini,
+    /// canlı olay akışını ve onay bildirimlerini okuyabilirdi.
+    ///
+    /// <para>
+    /// Oturum henüz yoksa veya kimseye bağlı değilse erişim serbesttir — ilk temas onu
+    /// çağırana bağlar (bkz. <c>SessionIdentityBinder</c>).
+    /// </para>
+    /// </summary>
+    private static Task<bool> IsSessionAccessibleAsync(
+        string? sessionId, HttpContext httpContext, ISessionManager sessions) =>
+        SessionIdentityBinder.IsAccessibleAsync(
+            sessionId, ResolveAuthenticatedCustomerId(httpContext), sessions, httpContext.RequestAborted);
+
+    private static IResult SessionForbidden() =>
+        Results.Json(new
+        {
+            error = "session_forbidden",
+            message = "Bu oturuma erişim yetkiniz yok."
+        }, statusCode: StatusCodes.Status403Forbidden);
+
     private static string ExtractSessionId(object? data)
     {
         if (data == null) return "";
@@ -173,8 +220,18 @@ public static class ChatEndpoints
         string sessionId,
         HttpResponse response,
         HttpContext httpContext,
-        ChatEventOrchestrator orchestrator)
+        ChatEventOrchestrator orchestrator,
+        ISessionManager sessions)
     {
+        // Bu uç, oturumun TÜM canlı olaylarını yayınlar (bot yanıtları, onay sonuçları,
+        // temsilci mesajları). Sahiplik kontrolü olmadan başka bir müşterinin konuşması
+        // canlı olarak dinlenebilirdi.
+        if (!await IsSessionAccessibleAsync(sessionId, httpContext, sessions))
+        {
+            httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+
         SseWriter.WriteHeaders(response);
 
         using var sse = new SseForwarder(response, httpContext.RequestAborted);
@@ -186,8 +243,11 @@ public static class ChatEndpoints
     /// kaçırdığı onay sonuçlarını (bloklamayan onay modeli — bkz. ApprovalGateService)
     /// çekmek için. Badge/bildirim UI'ı sayfa açılışında bunu çağırır.
     /// </summary>
-    private static IResult HandleGetUnseenApprovalsAsync(string sessionId, IApprovalQueue approvals)
+    private static async Task<IResult> HandleGetUnseenApprovalsAsync(
+        string sessionId, HttpContext httpContext, IApprovalQueue approvals, ISessionManager sessions)
     {
+        if (!await IsSessionAccessibleAsync(sessionId, httpContext, sessions)) return SessionForbidden();
+
         var unseen = approvals.GetUnseenForSession(sessionId)
             .Select(r => new
             {
@@ -202,8 +262,11 @@ public static class ChatEndpoints
     }
 
     private static async Task<IResult> HandleMarkApprovalSeenAsync(
-        string sessionId, string id, IApprovalQueue approvals, CancellationToken ct)
+        string sessionId, string id, HttpContext httpContext,
+        IApprovalQueue approvals, ISessionManager sessions, CancellationToken ct)
     {
+        if (!await IsSessionAccessibleAsync(sessionId, httpContext, sessions)) return SessionForbidden();
+
         var request = approvals.Get(id);
         if (request is null || request.SessionId != sessionId) return Results.NotFound();
 
