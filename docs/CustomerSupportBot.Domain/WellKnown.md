@@ -368,12 +368,15 @@ public static class ToolParameterNames
     public const string OrderId = "order_id";
     public const string ProductName = "product_name";
     public const string Quantity = "quantity";
+    public const string Lines = "lines";
     public const string Reason = "reason";
     public const string ComplaintDescription = "description";
 }
 ```
 
 Tool parametrelerinin standart isimleri — `CollectedInfo` Dict'iyle uyumlu.
+
+> `Lines`, `order_placement_tool`'un satır listesi parametresidir (çok ürünlü sipariş). Satırların tamamı eksikse eksik-alan bildiriminde `ProductName`/`Quantity` yerine bu ad kullanılır — LLM'in doldurması gereken alan tek başına ürün adı değil, satırların tamamıdır. Bkz. [OrderToolsService](../CustomerSupportBot.Application/Tools/OrderToolsService.md).
 
 ### Defaults
 

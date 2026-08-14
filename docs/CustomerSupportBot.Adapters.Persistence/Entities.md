@@ -333,6 +333,8 @@ Navigation: `Details` → `List<OrderDetailEntity>`
 
 Navigation: `Order` → `OrderEntity`, `Product` → `ProductEntity`
 
+Bir siparişin **her ürünü için bir satır** tutulur — çok ürünlü sipariş bu tabloda N kayıt demektir. Bileşik birincil anahtar `(OrderCode, ProductId)` olduğu için **aynı ürün bir siparişte iki kez yer alamaz**; `OrderPlacementTool` tekrar eden ürünleri yazmadan önce tek satırda toplar (bkz. [OrderToolsService](../CustomerSupportBot.Application/Tools/OrderToolsService.md)).
+
 ---
 
 ### `ComplaintEntity` → `catalog.complaints`

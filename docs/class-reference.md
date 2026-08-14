@@ -571,7 +571,7 @@ ChatManager `ShouldTerminateAsync` bu ayarları kullanır.
 |---|---|---|---|
 | `ProductInquiryTool` | `(productName)` | ProductAgent | ❌ read-only |
 | `ProductListTool` | `(category?)` | ProductAgent | ❌ read-only |
-| `OrderPlacementTool` | `(productName, quantity?, customerId)` | OrderAgent | ✅ `OrdersDb` + stok — HITL |
+| `OrderPlacementTool` | `(lines: OrderLineRequest[], customerId)` | OrderAgent | ✅ `OrdersDb` + stok — HITL |
 | `OrderStatusTool` | `(orderId)` | OrderAgent | ❌ |
 | `GetLastOrderTool` | `(customerId)` | OrderAgent | ❌ |
 | `GetAllOrdersTool` | `(customerId)` | OrderAgent | ❌ |
@@ -583,7 +583,7 @@ ChatManager `ShouldTerminateAsync` bu ayarları kullanır.
 **Özel davranışlar**:
 
 - `ProductListTool` — `category` opsiyonel; boş gelirse tüm katalog döner, doluysa kategori adı `LOWER()` karşılaştırmasıyla filtrelenir.
-- `OrderPlacementTool` — stok kontrolü **`lock (_stockLock)`** altında (race-safe). Eksik alan → `ValidationError`, ürün yok → `NotFound(WellKnown.ToolErrorCodes.ProductNotFound)`, stok yetersiz → `Conflict(WellKnown.ToolErrorCodes.StockInsufficient)`.
+- `OrderPlacementTool` — **çok ürünlü**: tek çağrıda N satır alır, tek sipariş oluşturur. Aynı ürünün satırları birleştirilir (`order_details` PK'sı `(order_code, product_id)`). Stok düşümü **tek transaction**'da ya hep ya hiç yapılır — bir satır yetmezse hiçbiri düşülmez. Eksik alan → `ValidationError`, ürün yok → `NotFound(WellKnown.ToolErrorCodes.ProductNotFound)` (bulunamayanların hepsi tek mesajda), stok yetersiz → `Conflict(WellKnown.ToolErrorCodes.StockInsufficient)`. Ayrıntı: [OrderToolsService](CustomerSupportBot.Application/Tools/OrderToolsService.md).
 - `OrderCancelTool` — yalnızca `"İşleniyor"` veya `"Kargolandı"` durumundaki siparişler iptal edilebilir. Diğer durumlarda → `Conflict(WellKnown.ToolErrorCodes.OrderNotCancellable)`.
 - `ReturnRequestTool` — yalnızca `"Teslim Edildi"` durumundaki ve 14 gün içindeki siparişler için iade talebi açılabilir. Zaten iade talebi varsa → `Conflict(WellKnown.ToolErrorCodes.ReturnAlreadyRequested)`.
 - `ComplaintRegistrationTool` — `customerId` opsiyonel; boşsa `OrdersDb[orderId].CustomerId`'den türetir. Verilen customerId order sahibiyle uyuşmuyorsa → `Conflict(WellKnown.ToolErrorCodes.CustomerIdMismatch)`.

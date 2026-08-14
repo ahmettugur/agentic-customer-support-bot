@@ -325,16 +325,15 @@ internal sealed class WorkflowRunner
     }
 
     /// <summary>
-    /// HITL onay köprüsü. ApprovalGateService, yan etkili tool'ları ApprovalRequiredAIFunction
-    /// ile sarmalıyor — FunctionInvokingChatClient bu tool'ları GERÇEKTEN ÇALIŞTIRMADAN önce
-    /// bir ToolApprovalRequestContent üretiyor, bu da AIAgentHostExecutor tarafından workflow
-    /// superstep'ini duraklatan gerçek bir RequestInfoEvent'e dönüşüyor (GroupChatWorkflowBuilder
-    /// ile kurulan her ajan bunu otomatik destekliyor — ek graph kablolaması gerekmez).
+    /// HITL onay köprüsü — <b>bugün ölü yol</b>, bilerek korunuyor.
     ///
-    /// Burada event'i yakalayıp ApprovalGateService.RequestApprovalAsync ile AYNI
-    /// IApprovalQueue/SSE/SLA altyapısını tetikliyoruz (admin paneli, eskalasyon, SLA guardian
-    /// hiç değişmedi — sadece "kim bekliyor" değişti: eskiden tool lambda'sının içindeki bir
-    /// Task, şimdi framework'ün kendi checkpoint'lenebilir superstep duraklaması).
+    /// Bir tool ApprovalRequiredAIFunction ile sarılırsa, FunctionInvokingChatClient onu
+    /// GERÇEKTEN ÇALIŞTIRMADAN önce bir ToolApprovalRequestContent üretir; bu da
+    /// AIAgentHostExecutor tarafından workflow superstep'ini duraklatan gerçek bir
+    /// RequestInfoEvent'e dönüşür (GroupChatWorkflowBuilder ile kurulan her ajan bunu
+    /// otomatik destekler — ek graph kablolaması gerekmez). Burada event yakalanıp
+    /// ApprovalGateService.RequestApprovalAsync ile aynı IApprovalQueue/SSE/SLA altyapısı
+    /// tetiklenir.
     ///
     /// Bilinmeyen/parse edilemeyen bir RequestInfoEvent gelirse (ör. framework ileride başka
     /// tür request'ler eklerse) sessizce atlanır — hiçbir yanıt gönderilmez, o superstep askıda

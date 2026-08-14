@@ -4,7 +4,7 @@
 **Erişim:** `internal sealed`
 **Taban sınıf:** [SupportAgentBase](SupportAgentBase.md)
 **Ajan adı:** `WellKnown.AgentNames.Order`
-**Tool'ları:** `order_placement_tool` (HITL), `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`, `order_cancel_tool` (HITL), `return_request_tool` (HITL)
+**Tool'ları:** `order_placement_tool` (HITL, **çok ürünlü**), `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`, `order_cancel_tool` (HITL), `return_request_tool` (HITL)
 
 ## Ne işe yarar?
 
@@ -19,6 +19,7 @@ Sipariş oluşturma, sorgulama, iptal ve iade işlemlerini yürütür. Salt-okun
 ## Sorumlulukları
 
 - 6 tool arasından doğruyu seçmek (`preToolCheck.selectedTool` — yalnızca bu ajanda var, birden fazla aday tool olduğu için model muhakemesini netleştiren bir alan; parser tarafından okunmaz).
+- **Çok ürünlü siparişi tek çağrıda toplamak.** `order_placement_tool`'un `lines` parametresi bir dizidir; kullanıcı *"2 kahve ve 1 çikolata"* dediğinde her iki satır da **aynı** çağrıya konur. Ürün başına ayrı çağrı yapmak ayrı onay kayıtları ve ayrı siparişler üretir — admin birini onaylayıp diğerini reddedebilir ve müşteri yarım sipariş alır (bkz. [ApprovalGateService](../ApprovalGateService.md)).
 - Zorunlu parametrelerin (ör. `customerId`, `orderId`, `reason`) toplanıp toplanmadığını denetlemek (`preToolCheck.canProceed`); eksikse **tek mesajda** hepsini istemek (ping-pong yok).
 - Tool sonrası `postToolReflection` üretmek — sonucun durumu (`status`), tamamlanma bilgisi, olası dinamik handoff önerisi.
 - HITL reddi durumunda (`"Tool call invocation rejected. {reason}"` düz metnini, JSON değil, tanıyıp `status="failed"` üretmek — bkz. aşağı).

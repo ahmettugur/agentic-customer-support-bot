@@ -166,12 +166,20 @@ EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yarat
 
 | Metod | Açıklama |
 | ------- | --------- |
-| `Create(order)` | Yeni sipariş + detay INSERT; `Code` DB tarafından üretilir |
+| `Create(order)` | Yeni sipariş + **tüm** satırların INSERT'i; `Code` DB tarafından üretilir |
 | `Get(orderId)` | Tekil sipariş (Include: Details + Product) |
 | `GetByCustomer(customerId)` | Müşteriye ait tüm siparişler (OrderDate DESC) |
 | `GetLast(customerId)` | Son sipariş |
 | `Cancel(orderId, reason)` | İptal — sadece `Processing`/`Shipped` durumunda |
 | `RequestReturn(orderId, reason)` | İade talebi — sadece `Delivered` + 14 gün süresi |
+
+### Çok satırlı sipariş
+
+`catalog.order_details` tablosu sipariş başına N kayıt tutar; birincil anahtarı `(order_code, product_id)`'dir. Şema **en baştan beri** çok satırlıydı ama `MapToModel` uzun süre `Details.FirstOrDefault()` çağırdığı için ikinci ve sonraki ürünler sessizce kayboluyordu. Artık:
+
+- `MapToModel` tüm satırları okur ve `OrderInfo.Lines`'a doldurur (ürün adına göre sıralı — okuma deterministik olsun diye).
+- `Create` satırların hepsini yazar. Başlık ve satırlar iki ayrı `SaveChanges` gerektirir (sipariş kodu DB tarafından üretilir ve satırların FK'sı odur), bu yüzden **ikisi tek transaction'a alınır** — aksi hâlde araya düşen bir hata satırsız bir "hayalet sipariş" bırakırdı.
+- `Create`, satırsız bir `OrderInfo` gelirse `ArgumentException` fırlatır.
 
 ---
 
@@ -197,12 +205,20 @@ EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yarat
 | Metod | Açıklama |
 | ------- | --------- |
 | `FindProduct(name)` | İsme göre ürün arama (exact match) |
-| `TryDeductStock(name, qty)` | Atomic stok düşürme (`ExecuteUpdate` ile) |
+| `TryDeductStock(lines)` | Bir siparişin **tüm** satırlarının stoğunu tek transaction'da düşer |
 | `GetAll()` | Tüm ürünler (kategori dahil, Name sıralı) |
 | `GetByCategory(category)` | Kategoriye göre ürünler |
 | `GetCategories()` | Tüm kategori isimleri |
 
-**Stok düşürme:** `ExecuteUpdate` ile tek SQL — lock gerekmez, `WHERE stock >= qty` koşulu race condition önler.
+**Stok düşürme — ya hep ya hiç:**
+
+Her satır `ExecuteUpdate` ile tek koşullu SQL olarak düşülür (`WHERE name = ? AND stock >= qty`); bu koşul lock gerektirmeden race condition'ı önler. Satırların tamamı **tek transaction** içindedir: biri bile 0 satır etkilerse (stok yetmiyor) transaction rollback edilir ve o ana kadar düşülenler geri alınır.
+
+Neden gerekli: satırlar bağımsız düşülseydi, üçüncü satır yetmediğinde ilk ikisinin stoğu düşmüş ama sipariş oluşmamış olurdu — stok sessizce kaybolurdu.
+
+Başarısızlıkta `StockDeductionResult.Shortages` yetersiz kalan satırları taşır (`ürün`, `istenen`, `mevcut`) — kullanıcıya "hangi üründen kaç adet var" diyebilmek için.
+
+> ⚠️ Satırlar **ürün adına göre sıralı** işlenir. Bu kozmetik değil: iki eşzamanlı sipariş aynı iki ürünü ters sırada kilitlerse Postgres deadlock verir. Sabit sıra kilitleme düzenini deterministik yapar.
 
 ---
 

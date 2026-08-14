@@ -56,6 +56,19 @@ Reasoning Pipeline'ın **L0 (ilk) katmanı**dır. Her kullanıcı mesajında ça
 6) Customer verified ise türetilmiş alanlar hesapla
 ```
 
+### Sipariş entity'sinin attribute'ları
+
+`VerifyOrder`, doğrulanan sipariş için `VerifiedEntity.Attributes` sözlüğünü doldurur:
+
+| Anahtar | Değer |
+|---|---|
+| `status` | Sipariş durumu |
+| `product` | `OrderInfo.LinesSummary()` — çok satırlı siparişte `"Kahve x2, Çikolata x1"` |
+| `quantity` | `OrderInfo.TotalQuantity()` — satırların adet toplamı |
+| `customerId` | Sipariş sahibi |
+
+`Attributes` düz `string → string` bir sözlüktür, yani satır **yapısı** buradan taşınamaz. Bu kabul edilebilir: bu alanların tek tüketicisi `BuildPromptBlock`, yani downstream prompt'a "hangi sipariş neyi içeriyor" bilgisini vermek. Makine tarafından okunması gereken taraf (`ResponseAgent`) bu özeti değil, `ToolResult.Data`'daki yapılandırılmış `lines` dizisini kullanır — bkz. [OrderToolsService](../Tools/OrderToolsService.md).
+
 ## 7. Constructor Bağımlılıkları
 
 ```csharp

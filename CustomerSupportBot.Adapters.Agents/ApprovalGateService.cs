@@ -1,15 +1,22 @@
 // Adapters.Agents/ApprovalGateService.cs
 // HITL — Human-in-the-Loop approval gate + escalation sink servisleri.
 //
-// Onay bekletme mantığı artık framework'ün kendi mekanizmasına dayanıyor:
-// yan etkili tool'lar ApprovalRequiredAIFunction ile sarmalanıyor,
-// FunctionInvokingChatClient bu tool'lardan gelen çağrıyı gerçekten ÇALIŞTIRMADAN
-// önce bir RequestInfoEvent olarak workflow superstep'ini duraklatıyor
-// (bkz. WorkflowRunner.HandleApprovalRequestAsync — event'i yakalayıp bu servisteki
-// RequestApprovalAsync ile aynı IApprovalQueue/SSE/SLA altyapısını tetikleyen taraf).
-// Eskiden bu bekleme tool lambda'sının İÇİNDE (bloklayan bir await) yapılıyordu;
-// artık workflow'un kendisi duraklatılıyor — checkpoint'lenebilir bir superstep durması,
-// süreç-içi bir Task değil.
+// ONAY ARTIK BLOKLAMIYOR. Yan etkili 4 tool (sipariş/iptal/iade/şikayet) admin kararını
+// HİÇBİR YERDE beklemez: ExecuteWithApprovalGateAsync onay kaydını oluşturup hemen
+// ToolResult.Pending döner ve tur biter. Gerçek iş, admin karar verdiğinde
+// IApprovalExecutionRouter üzerinden ayrıca tetiklenir; sonuç kullanıcıya bildirim
+// olarak ulaşır.
+//
+// Bundan önce iki bekleyen model denendi ve ikisi de aynı sebepten terk edildi —
+// kullanıcının turu bir insanın ne zaman karar vereceğine bağlıydı, onaylar birikince
+// TimeoutSeconds içinde yetişilemiyor ve istekler sessizce otomatik red'e düşüyordu:
+//   1) bloklayan await, tool lambda'sının içinde;
+//   2) ApprovalRequiredAIFunction + RequestInfoEvent ile workflow superstep duraklaması.
+//
+// (2)'nin köprüsü (WorkflowRunner.HandleRequestInfoEventAsync + aşağıdaki
+// RequestApprovalAsync) kodda DURUYOR ama bu 4 tool için hiç tetiklenmiyor — hiçbiri
+// artık ApprovalRequiredAIFunction ile sarılmıyor, dolayısıyla o event'i üretmiyorlar.
+// Köprü, ileride biri bilerek bir tool'u o modelde sararsa çalışsın diye korunuyor.
 
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Application.Services;

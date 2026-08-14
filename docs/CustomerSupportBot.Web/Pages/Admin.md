@@ -12,6 +12,10 @@ Admin ve Agent panelinin ana sayfasıdır. Approvals, escalations, aktif chat ot
   karar verene ya da çok uzun süre (varsayılan 72 saat, `ApprovalOptions.StalePendingHours`)
   yanıtsız kalırsa arka planda otomatik reddedilene kadar kuyrukta bekler — sabit bir saniye
   sayacı yoktur (bkz. [`SlaPortService.md`](../../CustomerSupportBot.Application/Sla/SlaPortService.md#slaapprovalsonbreach-varsayılanı--autoreject--none), eskiden burada yanlışlıkla 60 saniyede otomatik reddeden bir SLA config'i vardı).
+- Onay kartında tool argümanlarını alan-alan göstermek (`ParseJsonFields`). **Dizi değerler ham JSON
+  olarak değil, okunur biçimde yazılır** (`FormatArray`): çok ürünlü siparişin `lines` parametresi
+  `productName=Kahve · quantity=2  |  productName=Çikolata · quantity=1` şeklinde görünür. Ham JSON
+  gösterilirse admin neyi onayladığını göremez ve HITL kapısı anlamını yitirir.
 - Escalation yönetimi (acknowledge, resolve, dismiss, replan).
 - Aktif chat oturumlarını izleme, mesaj geçmişi görme, takeover/release, mesaj gönderme.
 - Analytics dashboard ve oturum bazlı analitik (sentiment timeline, grafikler).

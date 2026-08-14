@@ -15,7 +15,7 @@ Reasoning/agent prompt'una enjekte edilecek bağlam parçalarını üreten provi
 | Provider | Açıklama |
 | ---------- | ---------- |
 | `ConversationSummaryProvider` | Son N turdan özet metin oluşturur |
-| `CustomerContextProvider` | Müşterinin sipariş/şikayet geçmişi |
+| `CustomerContextProvider` | Müşterinin sipariş/şikayet geçmişi. Sipariş satırları `OrderInfo.LinesSummary()` ile tek satıra indirilir — `1082: Kahve x2, Çikolata x1, Durum: İşleniyor, Tarih: …` |
 | `CustomerIdentityHintBuilder` | AuthenticatedCustomerId → prompt hint |
 | `CustomerProfileContextProvider` | Müşteri profili (tercihler, iletişim stili) |
 | `SemanticMemoryContextProvider` | Geçmiş konuşmalardan semantic search |

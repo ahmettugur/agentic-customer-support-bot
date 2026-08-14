@@ -38,6 +38,18 @@ Prompts/
 
 `planning-agent.md`'nin *"Compound query (çoklu niyet)"* bölümü eskiden, reasoning hint'inde `COMPOUND QUERY` notu görürse PlanningAgent'ın tüm alt görevleri tek yanıtta sırayla yönlendirmesini istiyordu. Bu talimat hiçbir zaman çalışamazdı — hem üreten kod tarafı kaldırıldı hem de PlanningAgent'ın strict JSON şeması (`ChatResponseFormat.ForJsonSchema<PlanningResult>`) zaten böyle bir çoklu-routing çıktısına izin vermiyordu. Bölüm, bileşik sorguların PlanningAgent'a ulaşmadan `DecomposedRunner` tarafından tek tek çalıştırıldığını doğru tarif eden kısa bir nota indirildi. Kod tarafındaki gerekçe: [`WorkflowMessageBuilder.md`](../CustomerSupportBot.Adapters.Agents/WorkflowMessageBuilder.md#buildreasoningsummaryhint--kaldırılan-compound-query-bloğu).
 
+### Çok ürünlü sipariş — üç prompt'un birlikte taşıdığı kural
+
+`order_placement_tool` tek çağrıda birden fazla ürün satırı alır. Bu, prompt tarafında **üç** dosyada eşzamanlı karşılık bulur; biri eksik kalırsa sipariş sessizce yarım kalır:
+
+| Dosya | Ne söyler | Eksik kalırsa |
+|---|---|---|
+| `agents/order-agent.md` | `lines` dizisini **tek çağrıda** doldur; ürün başına ayrı çağrı yapma | Her ürün ayrı onay kaydı olur; admin birini onaylayıp diğerini reddedebilir → yarım sipariş |
+| `agents/planning-agent.md` | Çok ürünlü talep **ayrı alt görevlere bölünmez**, OrderAgent hepsini tek çağrıda işler | Planlama gereksiz yere böler |
+| `services/reasoning-system.md` | Çok ürünlü sipariş **decomposition değildir** | Ürün başına subtask üretilir; hepsi `OrderAgent`'a gittiği için `IsCompoundQuery` (2 **farklı** targetAgent şartı) false döner ve alt görevler **yürütülmeden düşer** → sipariş tamamen kaybolur |
+
+Son satır bu tasarımdaki en sinsi hata yolu: reasoning "doğru" görünen bir plan üretir, hiçbir yerde hata oluşmaz, ama hiçbir şey çalışmaz. `ReasoningSanityChecker.SubTasksIgnoredRule` tam bu durumu yakalayıp uyarı üretir.
+
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 Prompt'lar code'dan ayrılarak `.md` dosyalarında tutulur — bu, prompt mühendisliğini derleyici değişiklikleri olmadan yapılabilir kılar. Markdown formatı okunabilirliği artırır.
 

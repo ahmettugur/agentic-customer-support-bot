@@ -47,7 +47,7 @@ docs/CustomerSupportBot.Domain/
 │   ├── EscalationAction.md
 │   ├── HumanAgent.md (+ HumanAgentInput, EscalationPriority, RoutingDecision)
 │   ├── ToolResult.md (+ ToolError, ToolErrorCategories, ToolSuggestedActions)
-│   ├── OrderInfo.md
+│   ├── OrderInfo.md (+ OrderLine, OrderLineRequest, StockDeductionResult)
 │   ├── ComplaintInfo.md
 │   ├── ProductInfo.md
 │   ├── ExtractedIds.md
@@ -112,7 +112,7 @@ Saf veri tipleri. Sınıflar (mutable state için: `AgentSession`), record'lar (
 |---|---|
 | [Model/SpecialistReasoning.md](Model/SpecialistReasoning.md) | Pre/post tool reasoning |
 | [Model/ToolResult.md](Model/ToolResult.md) | Tool çağrısı standart dönüş zarfı |
-| [Model/OrderInfo.md](Model/OrderInfo.md) | Sipariş domain modeli |
+| [Model/OrderInfo.md](Model/OrderInfo.md) | Sipariş domain modeli — **çok satırlı** (`OrderLine`), satır talebi (`OrderLineRequest`), stok düşüm sonucu (`StockDeductionResult`) |
 | [Model/ComplaintInfo.md](Model/ComplaintInfo.md) | Şikayet domain modeli |
 | [Model/ProductInfo.md](Model/ProductInfo.md) | Ürün domain modeli |
 | [Model/ExtractedIds.md](Model/ExtractedIds.md) | Regex ile çıkarılan ham ID'ler |
