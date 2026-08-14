@@ -35,11 +35,11 @@ public static class AdminEndpoints
     public static IEndpointRouteBuilder MapAdminEndpoints(this IEndpointRouteBuilder app)
     {
         // ─── APPROVALS ───
-        app.MapGet("/approvals/pending", (IApprovalPort approvals) =>
-            Results.Json(approvals.GetPending()));
+        app.MapGet("/approvals/pending", async (IApprovalPort approvals, CancellationToken ct) =>
+            Results.Json(await approvals.GetPendingAsync(ct)));
 
-        app.MapGet("/approvals/recent", (IApprovalPort approvals, int count = 50) =>
-            Results.Json(approvals.GetRecent(count)));
+        app.MapGet("/approvals/recent", async (IApprovalPort approvals, CancellationToken ct, int count = 50) =>
+            Results.Json(await approvals.GetRecentAsync(count, ct)));
 
         app.MapGet("/approvals/{id}", (string id, IApprovalPort approvals) =>
         {

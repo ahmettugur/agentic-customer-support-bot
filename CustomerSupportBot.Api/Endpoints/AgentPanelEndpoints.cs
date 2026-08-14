@@ -173,8 +173,8 @@ public static class AgentPanelEndpoints
         // APPROVALS
         // ════════════════════════════════════════════════════════════════
 
-        group.MapGet("/approvals/pending", (IApprovalPort approvals) =>
-            Results.Json(approvals.GetPending()));
+        group.MapGet("/approvals/pending", async (IApprovalPort approvals, CancellationToken ct) =>
+            Results.Json(await approvals.GetPendingAsync(ct)));
 
         group.MapPost("/approvals/{id}/approve",
             async (string id, ApprovalDecisionInput? body, HttpContext ctx, IApprovalPort approvals, CancellationToken ct) =>

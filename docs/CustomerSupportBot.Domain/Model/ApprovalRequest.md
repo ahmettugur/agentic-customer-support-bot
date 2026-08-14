@@ -44,6 +44,7 @@ Specialist agent bir side-effect tool çağırdığında `ApprovalGateService` b
 | `Id` | `string` | Benzersiz kimlik (12 char) |
 | `SessionId` | `string?` | Hangi oturuma ait |
 | `CustomerId` | `string?` | JWT-doğrulanmış müşteri ID |
+| `CustomerName` | `string?` | Müşterinin adı — **kalıcı değildir**. Admin paneline gönderilmeden hemen önce `ApprovalPortService` tarafından doldurulur; çözülemezse `null`. Bkz. [Admin.md](../../CustomerSupportBot.Web/Pages/Admin.md#müşteri-adı-nereden-gelir) |
 | `TraceId` | `string?` | Bağlı trace ID |
 | `ToolName` | `string` | Çağrılan tool (ör. "order_placement_tool") |
 | `AgentName` | `string?` | Tool'u çağıran agent |

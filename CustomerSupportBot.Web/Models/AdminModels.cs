@@ -24,7 +24,15 @@ public sealed record ApprovalRequest(
     // Reasoning trace'e derin link için (TraceDetailPanel / Replay).
     string? TraceId = null,
     // Otomatik red süresi; panelde sabit "60 saniye" yazmak yerine sunucudan okunur.
-    int TimeoutSeconds = 60
+    int TimeoutSeconds = 60,
+    // İşlemin kimin adına yapılacağı — kararın ikinci yarısı ("ne yapılacak"ın yanında "kime").
+    // Parameters içinden de okunabilirdi ama orası tool'a göre değişen serbest bir sözlük;
+    // kimlik kanonik alanından gelir (ApprovalRequest.CustomerId).
+    string? CustomerId = null,
+    // Sunucuda okuma anında çözülür (ApprovalPortService) — kalıcı değildir, bu yüzden
+    // müşteri adını değiştirdiğinde panel güncel adı gösterir. Çözülemezse null; kart
+    // o zaman yalnızca numarayı yazar.
+    string? CustomerName = null
 );
 
 // ─── Escalations ─────────────────────────────────────────────────────────────

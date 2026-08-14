@@ -15,24 +15,81 @@ namespace CustomerSupportBot.Application.Services.Approval;
 public sealed class ApprovalPortService : IApprovalPort
 {
     private readonly IApprovalQueue _approvalQueue;
+    private readonly ICustomerRepository _customers;
     private readonly ILogger<ApprovalPortService> _logger;
 
     public ApprovalPortService(
         IApprovalQueue approvalQueue,
+        ICustomerRepository customers,
         ILogger<ApprovalPortService> logger)
     {
         _approvalQueue = approvalQueue;
+        _customers = customers;
         _logger = logger;
     }
 
-    public IReadOnlyList<ApprovalRequest> GetPending()
+    public async Task<IReadOnlyList<ApprovalRequest>> GetPendingAsync(CancellationToken ct = default)
     {
-        return _approvalQueue.GetPending();
+        var pending = _approvalQueue.GetPending();
+        await EnrichCustomerNamesAsync(pending, ct);
+        return pending;
     }
 
-    public IReadOnlyList<ApprovalRequest> GetRecent(int count = 50)
+    public async Task<IReadOnlyList<ApprovalRequest>> GetRecentAsync(int count = 50, CancellationToken ct = default)
     {
-        return _approvalQueue.GetRecent(count);
+        var recent = _approvalQueue.GetRecent(count);
+        await EnrichCustomerNamesAsync(recent, ct);
+        return recent;
+    }
+
+    /// <summary>
+    /// Onay kayıtlarına müşteri adını yazar — admin "Müşteri #1027"yi değil, kimin adına karar
+    /// verdiğini görsün diye.
+    ///
+    /// <para>
+    /// Ad kalıcı DEĞİLDİR (bkz. <see cref="ApprovalRequest.CustomerName"/>); burada, panele
+    /// gönderilmeden hemen önce doldurulur. Tek bir toplu sorgu kullanılır — kart başına ayrı
+    /// sorgu, kuyruk büyüdükçe panelin açılışını doğrusal olarak yavaşlatırdı.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Not:</b> <c>IApprovalQueue</c> cache'teki canlı nesneleri döndürür, yani bu yazma
+    /// paylaşılan örnekleri değiştirir. Kasıtlı ve zararsız: değer aynı müşteri için hep aynıdır,
+    /// kalıcılık eşlemesinde yer almaz (yazılmaz), ve ikinci çağrıda tekrar sorgulanmasını
+    /// engelleyerek fiilen memoizasyon görevi görür. Adı değişen müşteri, kayıt cache'ten
+    /// düştüğünde ya da uygulama yeniden başladığında güncellenir.
+    /// </para>
+    ///
+    /// <para>
+    /// Ad çözülemezse (silinmiş müşteri, sayısal olmayan kimlik) alan <c>null</c> kalır ve panel
+    /// yalnızca numarayı gösterir — bu yüzden hata durumu istisna değil, sessiz bir düşüştür.
+    /// </para>
+    /// </summary>
+    private async Task EnrichCustomerNamesAsync(IReadOnlyList<ApprovalRequest> requests, CancellationToken ct)
+    {
+        var missing = requests
+            .Where(r => r.CustomerName is null && long.TryParse(r.CustomerId, out _))
+            .Select(r => long.Parse(r.CustomerId!))
+            .ToList();
+
+        if (missing.Count == 0) return;
+
+        try
+        {
+            var names = await _customers.GetFullNamesAsync(missing, ct);
+            foreach (var request in requests)
+            {
+                if (request.CustomerName is not null) continue;
+                if (long.TryParse(request.CustomerId, out var id) && names.TryGetValue(id, out var name))
+                    request.CustomerName = name;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Ad yalnızca bir görüntüleme kolaylığı — çözülemezse onay kuyruğu yine de
+            // açılmalı. Kart numaraya düşer.
+            _logger.LogWarning(ex, "Onay kuyruğu için müşteri adları çözülemedi.");
+        }
     }
 
     public ApprovalRequest? Get(string id)

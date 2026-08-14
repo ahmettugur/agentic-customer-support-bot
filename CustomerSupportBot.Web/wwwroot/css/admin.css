@@ -330,12 +330,220 @@
     line-height: 1.4;
 }
 
-/* Onay kartı — tool argümanları, gerekçe ve trace linki.
-   Admin kararı bu verilere dayanır (hangi sipariş, neden çağrıldı). */
+/* ═══════════════════════════════════════════════════════════════════════════
+   ONAY KARTI
+   ───────────────────────────────────────────────────────────────────────────
+   Bilgi hiyerarşisi kasıtlı: admin'in kararı tek bir soruya dayanır — "kimin
+   adına, ne yapılacak?". Bu yüzden eylem adı ve müşteri başlıkta, işlemin
+   içeriği (sipariş kalemleri / olgular) kartın görsel ağırlık merkezinde,
+   makine kimlikleri (tool adı, kayıt no, session, ham parametreler) ise
+   katlanmış "Teknik ayrıntı" bloğunda durur.
+
+   Eskiden kart, tool adını başlık yapıp tüm parametreleri ham anahtar/değer
+   olarak listeliyordu; çok ürünlü sipariş gelince bu "productName=X ·
+   quantity=3 | productName=Y · quantity=2" gibi okunmaz bir satıra dönüştü.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.approval-header { align-items: flex-start; }
+
+.approval-icon {
+    font-size: 15px;
+    line-height: 1.3;
+    flex-shrink: 0;
+}
+
+/* Kartın kimliği: makine adı (order_placement_tool) değil, eylemin kendisi. */
+.approval-action {
+    margin: 0;
+    font-size: var(--font-size-base);
+    font-weight: 650;
+    color: var(--color-text);
+    letter-spacing: -0.01em;
+}
+
+/* Ad + numara birlikte: ad tanınırlık, numara kesinlik sağlar. Ad öne çıkar,
+   numara ikincil kalır — ama gösterilir, çünkü aynı adı taşıyan iki müşteri olabilir. */
+.approval-customer {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 2px 9px;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    font-size: 11px;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+}
+.ac-name {
+    font-weight: 600;
+    color: var(--color-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ac-id {
+    color: var(--color-text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Gerekçe zorunluluğu sunucudan gelir (ApprovalRequest.ReasonRequired).
+   Admin, onay modalinde zorunlu alanla karşılaşmadan ÖNCE bunu görmeli. */
+.risk-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+    border-radius: var(--radius-full);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+/* ─── Sipariş kalemleri ─── */
+
+.approval-lines {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: var(--space-3);
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    font-size: var(--font-size-base);
+}
+
+.approval-lines td {
+    padding: 8px 12px;
+    vertical-align: baseline;
+}
+
+.approval-lines tbody tr + tr td { border-top: 1px solid var(--color-border); }
+
+.al-product {
+    color: var(--color-text);
+    font-weight: 500;
+    word-break: break-word;
+}
+
+/* Adet sağa yaslı: göz tek bir kolonda aşağı inip miktarları karşılaştırabilir. */
+.al-qty {
+    text-align: right;
+    white-space: nowrap;
+    color: var(--color-text-secondary);
+    font-variant-numeric: tabular-nums;
+    width: 1%;
+}
+.al-qty strong { color: var(--color-text); font-weight: 650; }
+
+.approval-lines tfoot td {
+    border-top: 1px solid var(--color-border-strong);
+    background: var(--color-surface);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
+/* ─── Olgu listesi (iptal / iade / şikayet) ─── */
+
+.approval-facts {
+    margin: 0 0 var(--space-3);
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.af-row {
+    display: flex;
+    gap: var(--space-3);
+    align-items: baseline;
+    padding: 8px 12px;
+}
+.af-row + .af-row { border-top: 1px solid var(--color-border); }
+
+/* Uzun serbest metinler (iptal sebebi, şikayet) tek satıra sıkışmasın. */
+.af-row-block { flex-direction: column; gap: 2px; }
+
+.af-row dt {
+    flex-shrink: 0;
+    min-width: 96px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
+.af-row dd {
+    margin: 0;
+    color: var(--color-text);
+    font-weight: 500;
+    word-break: break-word;
+    line-height: 1.45;
+}
+
+/* ─── Kullanıcının kendi cümlesi ─── */
+
+.approval-quote {
+    margin: 0 0 var(--space-3);
+    padding: 2px 0 2px 12px;
+    border-left: 2px solid var(--color-border-strong);
+    color: var(--color-text-secondary);
+    font-style: italic;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.approval-rationale {
+    margin: 0 0 var(--space-3);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+}
+
+/* ─── Teknik ayrıntı (katlanmış) ─── */
+
+.approval-tech > summary {
+    cursor: pointer;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    -webkit-user-select: none;
+    user-select: none;
+    padding: 2px 0;
+}
+.approval-tech > summary:hover { color: var(--color-text-secondary); }
+.approval-tech[open] > summary { margin-bottom: var(--space-2); }
+
+.at-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px var(--space-3);
+    align-items: baseline;
+    font-size: var(--font-size-xs);
+}
+.at-key { color: var(--color-text-secondary); }
+.at-val { color: var(--color-text); word-break: break-all; }
+code.at-val {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+}
+
+.at-params { margin: var(--space-2) 0 0; }
+
+/* Ekran okuyucu için görünür, gözle görünmez (tablo caption'ları). */
+.sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .card-row-top { margin-bottom: 2px; }
 
 .param-list {
-    margin: 0 0 6px 80px;          /* .label min-width ile hizalı */
+    margin: 0 0 6px;
     background: var(--color-surface-alt);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
@@ -1403,6 +1611,12 @@
     .admin-header { align-items: flex-start; flex-direction: column; }
     .card-actions { flex-direction: column; }
     .card-actions button { width: 100%; }
+    /* Dar ekranda başlık tek satıra sığmaz; zaman damgası alta iner. */
+    .approval-header { flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+    /* Etiket + değer yan yana sıkışmasın. */
+    .af-row { flex-direction: column; gap: 2px; }
+    .at-grid { grid-template-columns: 1fr; gap: 2px; }
+    .at-grid .at-key { margin-top: var(--space-2); }
     .analytics-summary { grid-template-columns: 1fr 1fr; }
 }
 
@@ -1479,6 +1693,8 @@
 /* Status tags */
 [data-theme="dark"] .status-tag.open,
 [data-theme="dark"] .status-tag.pending         { background: #422006; color: #fcd34d; border-color: #713f12; }
+/* Onay kartındaki tek sabit renk — diğer her şey token'lardan gelip temayı kendiliğinden izler. */
+[data-theme="dark"] .risk-tag                   { background: #422006; color: #fcd34d; border-color: #713f12; }
 [data-theme="dark"] .status-tag.resolved,
 [data-theme="dark"] .status-tag.approved,
 [data-theme="dark"] .status-tag.human           { background: #052e16; color: #86efac; border-color: #166534; }

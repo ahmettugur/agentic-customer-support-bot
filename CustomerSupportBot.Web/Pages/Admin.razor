@@ -121,40 +121,130 @@
                 {
                     @foreach (var a in _pendingApprovals)
                     {
+                        @* Bilgi hiyerarşisi: "kimin adına, ne yapılacak?" en üstte ve insan diliyle;
+                           makine kimlikleri (tool adı, kayıt no, session, ham parametreler) en altta,
+                           katlanmış "Teknik ayrıntı" bloğunda. Admin 50 kartı tararken her birini
+                           saniyeler içinde okuyabilmeli. *@
                         <article class="card card-approval">
-                            <header class="card-header">
-                                <div class="card-title"><span class="tool-tag">@a.ToolName</span><code class="card-id">@ShortId(a.Id)</code></div>
-                                <time class="muted">@FmtRelative(a.RequestedAt)</time>
-                            </header>
-                            <div class="card-body">
-                                <div class="card-row"><span class="label">Agent:</span> <span>@a.AgentName</span></div>
-                                <div class="card-row"><span class="label">Kullanıcı:</span> <span class="user-query">@a.UserQuery</span></div>
-
-                                @* Tool argümanları — kararın dayanağı. Hangi sipariş, hangi gerekçe. *@
-                                @{ var paramFields = ParseJsonFields(a.Parameters); }
-                                @if (paramFields is not null)
-                                {
-                                    <div class="card-row card-row-top"><span class="label">Parametreler:</span></div>
-                                    <div class="param-list">
-                                        @foreach (var (k, v) in paramFields)
-                                        {
-                                            <div class="param-row"><span class="param-key">@k</span><span class="param-val">@v</span></div>
-                                        }
-                                    </div>
-                                }
-
-                                @if (!string.IsNullOrWhiteSpace(a.Justification))
-                                {
-                                    <div class="card-row"><span class="label">Gerekçe:</span> <span class="justification">@a.Justification</span></div>
-                                }
-
-                                <div class="card-row">
-                                    <span class="label">Session:</span> <code class="session-id">@ShortId(a.SessionId)</code>
-                                    @if (!string.IsNullOrWhiteSpace(a.TraceId))
+                            <header class="card-header approval-header">
+                                <div class="card-title">
+                                    <span class="approval-icon" aria-hidden="true">@ToolIcon(a.ToolName)</span>
+                                    <h3 class="approval-action">@ToolDisplayName(a.ToolName)</h3>
+                                    @* Kimlik kanonik alandan gelir; eski kayıtlarda boşsa
+                                       tool parametrelerine düşülür. *@
+                                    @{ var customerId = a.CustomerId ?? ParamString(a.Parameters, "customerId"); }
+                                    @if (!string.IsNullOrWhiteSpace(customerId))
                                     {
-                                        <a class="trace-link" href="@($"/replay?traceId={Uri.EscapeDataString(a.TraceId)}")" target="_blank" rel="noopener">trace ↗</a>
+                                        <span class="approval-customer">
+                                            @if (!string.IsNullOrWhiteSpace(a.CustomerName))
+                                            {
+                                                <span class="ac-name">@a.CustomerName</span>
+                                            }
+                                            <span class="ac-id">#@customerId</span>
+                                        </span>
+                                    }
+                                    @if (a.ReasonRequired)
+                                    {
+                                        <span class="risk-tag" title="Yüksek riskli işlem — onaylarken gerekçe zorunlu">Yüksek risk</span>
                                     }
                                 </div>
+                                <time class="muted" title="@a.RequestedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm:ss")">@FmtRelative(a.RequestedAt)</time>
+                            </header>
+                            <div class="card-body">
+
+                                @* ── Kararın dayanağı: ne yapılacak? Kartın en baskın öğesi. ── *@
+                                @{
+                                    var orderLines = ApprovalLines(a.Parameters);
+                                    var facts      = ApprovalFacts(a);
+                                }
+                                @if (orderLines is not null)
+                                {
+                                    <table class="approval-lines">
+                                        <caption class="sr-only">Sipariş kalemleri</caption>
+                                        <tbody>
+                                            @foreach (var line in orderLines)
+                                            {
+                                                <tr>
+                                                    <td class="al-product">@line.Product</td>
+                                                    <td class="al-qty"><strong>@line.Quantity</strong> adet</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                        @if (orderLines.Count > 1)
+                                        {
+                                            <tfoot>
+                                                <tr>
+                                                    <td>@orderLines.Count kalem</td>
+                                                    <td class="al-qty">Toplam <strong>@orderLines.Sum(l => l.Quantity)</strong> adet</td>
+                                                </tr>
+                                            </tfoot>
+                                        }
+                                    </table>
+                                }
+                                else if (facts is not null)
+                                {
+                                    <dl class="approval-facts">
+                                        @foreach (var fact in facts)
+                                        {
+                                            <div class="af-row @(fact.Multiline ? "af-row-block" : null)">
+                                                <dt>@fact.Label</dt>
+                                                <dd>@fact.Value</dd>
+                                            </div>
+                                        }
+                                    </dl>
+                                }
+                                else
+                                {
+                                    // Tanınmayan tool — ham anahtar/değer listesine düş.
+                                    var paramFields = ParseJsonFields(a.Parameters);
+                                    if (paramFields is not null)
+                                    {
+                                        <div class="param-list">
+                                            @foreach (var (k, v) in paramFields)
+                                            {
+                                                <div class="param-row"><span class="param-key">@k</span><span class="param-val">@v</span></div>
+                                            }
+                                        </div>
+                                    }
+                                }
+
+                                @if (!string.IsNullOrWhiteSpace(a.UserQuery))
+                                {
+                                    <blockquote class="approval-quote">@a.UserQuery</blockquote>
+                                }
+
+                                @if (HasMeaningfulJustification(a.Justification))
+                                {
+                                    <p class="approval-rationale"><span class="label">Gerekçe:</span> @a.Justification</p>
+                                }
+
+                                @* Makine kimlikleri — karar için gerekmez, hata ayıklama için gerekir. *@
+                                <details class="approval-tech">
+                                    <summary>Teknik ayrıntı</summary>
+                                    <div class="at-grid">
+                                        <span class="at-key">Tool</span><code class="at-val">@a.ToolName</code>
+                                        <span class="at-key">Ajan</span><span class="at-val">@a.AgentName</span>
+                                        <span class="at-key">Kayıt</span><code class="at-val">@a.Id</code>
+                                        <span class="at-key">Session</span><code class="at-val">@ShortId(a.SessionId)</code>
+                                        @if (!string.IsNullOrWhiteSpace(a.TraceId))
+                                        {
+                                            <span class="at-key">Trace</span>
+                                            <span class="at-val">
+                                                <a class="trace-link" href="@($"/replay?traceId={Uri.EscapeDataString(a.TraceId)}")" target="_blank" rel="noopener">akışı görüntüle ↗</a>
+                                            </span>
+                                        }
+                                    </div>
+                                    @{ var rawFields = ParseJsonFields(a.Parameters); }
+                                    @if (rawFields is not null)
+                                    {
+                                        <div class="param-list at-params">
+                                            @foreach (var (k, v) in rawFields)
+                                            {
+                                                <div class="param-row"><span class="param-key">@k</span><span class="param-val">@v</span></div>
+                                            }
+                                        </div>
+                                    }
+                                </details>
                             </div>
                             <footer class="card-actions">
                                 <button class="btn-primary" @onclick='() => ShowApprovePrompt(a)'>✓ Onayla</button>

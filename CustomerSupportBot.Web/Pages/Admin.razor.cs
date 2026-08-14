@@ -552,6 +552,150 @@ public partial class Admin
     private static string ShortId(string? id) =>
         id is null ? "—" : id[..Math.Min(8, id.Length)] + "…";
 
+    // ── Onay kartı sunumu ─────────────────────────────────────────────────────
+    //
+    // Admin'in vereceği karar tek bir soruya dayanır: "kimin adına, ne yapılacak?"
+    // Kart bu soruyu en üstte ve kod diliyle değil insan diliyle yanıtlar; makine
+    // kimlikleri (tool adı, kayıt no, session, ham parametreler) "Teknik ayrıntı"
+    // altına iner. 50 bekleyen isteği tarayan bir admin her kartı saniyeler içinde
+    // okuyabilmelidir.
+    //
+    // NOT: Tool adları burada string sabit olarak duruyor çünkü Web projesi Domain'e
+    // referans vermez (bilinçli — WASM bundle'ı sunucu tiplerini taşımasın diye).
+    // Tanınmayan bir tool adı geldiğinde kart jenerik anahtar/değer listesine düşer,
+    // yani senkron kayması veri kaybına değil yalnızca daha ham bir görünüme yol açar.
+
+    private const string ToolOrderPlacement = "order_placement_tool";
+    private const string ToolOrderCancel    = "order_cancel_tool";
+    private const string ToolReturnRequest  = "return_request_tool";
+    private const string ToolComplaint      = "complaint_registration_tool";
+
+    /// <summary>Sipariş satırı — çok ürünlü siparişin tek kalemi.</summary>
+    private sealed record ApprovalLine(string Product, int Quantity);
+
+    /// <summary>Karta yazılacak tek bir olgu. <paramref name="Multiline"/> uzun serbest metinler için.</summary>
+    private sealed record ApprovalFact(string Label, string Value, bool Multiline = false);
+
+    /// <summary>Tool adının admin'e gösterilen insan-okunur karşılığı.</summary>
+    private static string ToolDisplayName(string toolName) => toolName switch
+    {
+        ToolOrderPlacement => "Yeni Sipariş",
+        ToolOrderCancel    => "Sipariş İptali",
+        ToolReturnRequest  => "İade Talebi",
+        ToolComplaint      => "Şikayet Kaydı",
+        _                  => toolName
+    };
+
+    /// <summary>Kart başlığındaki ikon — kart tipini bir bakışta ayırt ettirir.</summary>
+    private static string ToolIcon(string toolName) => toolName switch
+    {
+        ToolOrderPlacement => "🛒",
+        ToolOrderCancel    => "⛔",
+        ToolReturnRequest  => "↩",
+        ToolComplaint      => "⚑",
+        _                  => "⚙"
+    };
+
+    /// <summary>
+    /// Sipariş satırlarını okur. Yalnızca <c>order_placement_tool</c> bu alanı taşır;
+    /// diğer tool'larda null döner ve kart olgu listesine düşer.
+    /// </summary>
+    private static List<ApprovalLine>? ApprovalLines(object? parameters)
+    {
+        if (ParamElement(parameters, "lines") is not { ValueKind: JsonValueKind.Array } array)
+            return null;
+
+        var lines = new List<ApprovalLine>();
+        foreach (var element in array.EnumerateArray())
+        {
+            if (element.ValueKind != JsonValueKind.Object) continue;
+
+            var product = ReadProp(element, "productName");
+            var qty = ReadProp(element, "quantity");
+            if (product is not { ValueKind: JsonValueKind.String }) continue;
+
+            lines.Add(new ApprovalLine(
+                product.Value.GetString() ?? "",
+                qty?.ValueKind switch
+                {
+                    JsonValueKind.Number when qty.Value.TryGetInt32(out var n) => n,
+                    JsonValueKind.String when int.TryParse(qty.Value.GetString(), out var n) => n,
+                    _ => 0
+                }));
+        }
+
+        return lines.Count > 0 ? lines : null;
+    }
+
+    /// <summary>
+    /// Tanınan tool'lar için kararın dayanağı olan olguları insan diliyle döner.
+    /// Tanınmayan tool'da <c>null</c> — kart o zaman ham anahtar/değer listesini çizer.
+    /// </summary>
+    private static List<ApprovalFact>? ApprovalFacts(ApprovalRequest a)
+    {
+        string? P(string key) => ParamString(a.Parameters, key);
+
+        return a.ToolName switch
+        {
+            ToolOrderCancel =>
+            [
+                new ApprovalFact("Sipariş", FormatOrderId(P("orderId"))),
+                new ApprovalFact("İptal sebebi", P("reason") ?? "—", Multiline: true)
+            ],
+            ToolReturnRequest =>
+            [
+                new ApprovalFact("Sipariş", FormatOrderId(P("orderId"))),
+                new ApprovalFact("İade sebebi", P("reason") ?? "—", Multiline: true)
+            ],
+            ToolComplaint =>
+            [
+                new ApprovalFact("Sipariş", FormatOrderId(P("orderId"))),
+                new ApprovalFact("Şikayet", P("complaintText") ?? "—", Multiline: true)
+            ],
+            _ => null
+        };
+    }
+
+    private static string FormatOrderId(string? orderId) =>
+        string.IsNullOrWhiteSpace(orderId) ? "—" : $"#{orderId}";
+
+    /// <summary>
+    /// Gerekçe, PlanningAgent bir rationale üretemediğinde jenerik bir şablona düşer
+    /// (<c>"{agent} bu tool'u çağırmak istiyor."</c>). O metin kartta yer kaplar ama
+    /// hiçbir şey söylemez — karar için bilgi taşımayan satır gösterilmez.
+    /// </summary>
+    private static bool HasMeaningfulJustification(string? justification) =>
+        !string.IsNullOrWhiteSpace(justification)
+        && !justification.Contains("bu tool'u çağırmak istiyor", StringComparison.OrdinalIgnoreCase);
+
+    private static JsonElement? ParamElement(object? parameters, string key)
+    {
+        if (parameters is not JsonElement root || root.ValueKind != JsonValueKind.Object)
+            return null;
+
+        return ReadProp(root, key);
+    }
+
+    private static string? ParamString(object? parameters, string key) =>
+        ParamElement(parameters, key) switch
+        {
+            { ValueKind: JsonValueKind.String } e => e.GetString(),
+            { ValueKind: JsonValueKind.Null } => null,
+            { } e => e.GetRawText(),
+            _ => null
+        };
+
+    /// <summary>Büyük/küçük harfe duyarsız özellik okuma — sunucu camelCase yazar, JSON round-trip biçimi değişebilir.</summary>
+    private static JsonElement? ReadProp(JsonElement element, string name)
+    {
+        foreach (var prop in element.EnumerateObject())
+        {
+            if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+                return prop.Value;
+        }
+        return null;
+    }
+
     /// <summary>
     /// Onay kartındaki tool argümanlarını (ApprovalRequest.Parameters) alan-alan gösterilebilir
     /// hale getirir. Sunucu <c>Dictionary&lt;string, object?&gt;</c> gönderiyor; DTO'da

@@ -7,11 +7,17 @@ namespace CustomerSupportBot.Application.Ports.Inbound;
 ///</summary>
 public interface IApprovalPort
 {
-    /// <summary>Bekleyen onay istekleri.</summary>
-    IReadOnlyList<ApprovalRequest> GetPending();
+    /// <summary>
+    /// Bekleyen onay istekleri — <see cref="ApprovalRequest.CustomerName"/> doldurulmuş olarak.
+    /// </summary>
+    /// <remarks>
+    /// Async olmasının sebebi müşteri adlarının veritabanından çözülmesidir; kuyruğun kendisi
+    /// bellek içi cache'ten gelir. Ad çözümü tek bir toplu sorgudur (N+1 değil).
+    /// </remarks>
+    Task<IReadOnlyList<ApprovalRequest>> GetPendingAsync(CancellationToken ct = default);
 
-    /// <summary>Son N onay geçmişi.</summary>
-    IReadOnlyList<ApprovalRequest> GetRecent(int count = 50);
+    /// <summary>Son N onay geçmişi — <see cref="ApprovalRequest.CustomerName"/> doldurulmuş olarak.</summary>
+    Task<IReadOnlyList<ApprovalRequest>> GetRecentAsync(int count = 50, CancellationToken ct = default);
 
     /// <summary>Tek istek.</summary>
     ApprovalRequest? Get(string id);

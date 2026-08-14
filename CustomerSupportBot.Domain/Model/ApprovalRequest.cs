@@ -34,6 +34,24 @@ public class ApprovalRequest
     /// </summary>
     public string? CustomerId { get; set; }
 
+    /// <summary>
+    /// Müşterinin adı — <b>kalıcı değildir</b>, admin paneline gönderilmeden hemen önce
+    /// <c>ApprovalPortService</c> tarafından doldurulur (bkz. <c>ICustomerRepository.GetFullNamesAsync</c>).
+    ///
+    /// <para>
+    /// Neden okuma anında: ad, onayın bir parçası değil bir <i>görüntüleme</i> alanıdır. Kayıt
+    /// anında yazılıp saklansaydı müşteri adını değiştirdiğinde panelde eski ad görünürdü ve
+    /// bunu düzeltmek için bir migration gerekirdi. <see cref="ReasonRequired"/> ile aynı ruh:
+    /// panelin ihtiyacı olan türetilmiş bilgi sunucuda hesaplanır, panel kendi kopyasını tutmaz.
+    /// </para>
+    ///
+    /// <para>
+    /// Müşteri silinmiş veya kimlik çözülemiyorsa <c>null</c> kalır; panel o zaman yalnızca
+    /// numarayı gösterir.
+    /// </para>
+    /// </summary>
+    public string? CustomerName { get; set; }
+
     /// <summary>Trace ID — admin panelinden bağlam görmek için.</summary>
     public string? TraceId { get; set; }
 
