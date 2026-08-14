@@ -1,7 +1,7 @@
 // Services/Approval/ApprovalExecutionRouter.cs
 // ToolName -> ICustomerSupportToolsService yönlendirmesi. ApprovalRequest.Parameters,
 // ApprovalGateService tarafında Dictionary<string,object?> olarak yazılır ama Postgres'ten
-// hydrate edildiğinde (JSON round-trip) değerler JsonElement olarak gelir — GetString/GetInt
+// hydrate edildiğinde (JSON round-trip) değerler JsonElement olarak gelir — GetString/GetLines
 // her iki kaynağı da (canlı obje veya JsonElement) doğru okur.
 
 using System.Text.Json;
@@ -26,8 +26,7 @@ public sealed class ApprovalExecutionRouter : IApprovalExecutionRouter
         ToolResult result = request.ToolName switch
         {
             WellKnown.ToolNames.OrderPlacement => _tools.OrderPlacementTool(
-                GetString(p, "productName") ?? "",
-                GetInt(p, "quantity"),
+                GetLines(p, "lines"),
                 GetString(p, "customerId") ?? ""),
 
             WellKnown.ToolNames.ComplaintRegistration => _tools.ComplaintRegistrationTool(
@@ -71,21 +70,63 @@ public sealed class ApprovalExecutionRouter : IApprovalExecutionRouter
         };
     }
 
-    private static int? GetInt(IReadOnlyDictionary<string, object?> parameters, string key)
+    /// <summary>
+    /// Sipariş satırlarını okur. İki kaynak da desteklenir:
+    /// canlı çağrıda değer bir <see cref="OrderLineRequest"/> dizisidir, Postgres'ten
+    /// hydrate edilen onayda JSON round-trip sonrası bir <see cref="JsonElement"/> dizisidir.
+    ///
+    /// <para>
+    /// Sözlük anahtarları <c>ApprovalGateService</c>'in yazdığı camelCase adlardır; JSON
+    /// tarafında ise <see cref="OrderLineRequest"/>'in PascalCase özellik adları serileşir.
+    /// Bu yüzden alan okuması büyük/küçük harfe duyarsızdır — biçim değişirse satırlar
+    /// sessizce boş dönmemeli.
+    /// </para>
+    ///
+    /// <para>
+    /// Boş liste dönerse tool <c>ValidationError</c> ile reddeder; sessizce boş bir sipariş
+    /// oluşmaz.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<OrderLineRequest> GetLines(
+        IReadOnlyDictionary<string, object?> parameters, string key)
     {
-        if (!parameters.TryGetValue(key, out var value) || value is null) return null;
+        if (!parameters.TryGetValue(key, out var value) || value is null) return [];
 
-        if (value is JsonElement je)
+        // Canlı çağrı — henüz JSON'a dönmemiş.
+        if (value is IEnumerable<OrderLineRequest> live) return live.ToList();
+
+        if (value is not JsonElement { ValueKind: JsonValueKind.Array } array) return [];
+
+        var lines = new List<OrderLineRequest>();
+        foreach (var element in array.EnumerateArray())
         {
-            return je.ValueKind switch
+            if (element.ValueKind != JsonValueKind.Object) continue;
+
+            var name = ReadProperty(element, "productName");
+            var qty = ReadProperty(element, "quantity");
+
+            if (name is not { ValueKind: JsonValueKind.String }) continue;
+
+            var quantity = qty?.ValueKind switch
             {
-                JsonValueKind.Number when je.TryGetInt32(out var n) => n,
-                JsonValueKind.String when int.TryParse(je.GetString(), out var n) => n,
-                _ => null
+                JsonValueKind.Number when qty.Value.TryGetInt32(out var n) => n,
+                JsonValueKind.String when int.TryParse(qty.Value.GetString(), out var n) => n,
+                _ => 0
             };
+
+            lines.Add(new OrderLineRequest(name.Value.GetString() ?? "", quantity));
         }
 
-        if (value is int i) return i;
-        return int.TryParse(value.ToString(), out var parsed) ? parsed : null;
+        return lines;
+    }
+
+    private static JsonElement? ReadProperty(JsonElement element, string name)
+    {
+        foreach (var prop in element.EnumerateObject())
+        {
+            if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase))
+                return prop.Value;
+        }
+        return null;
     }
 }

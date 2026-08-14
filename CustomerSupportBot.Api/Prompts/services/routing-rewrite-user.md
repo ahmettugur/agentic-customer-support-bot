@@ -17,7 +17,7 @@ Aşağıdaki örnekler, farklı türde dahili mesajların kullanıcıya nasıl y
 
 **Müşteri sorusu:** Bir ürün sipariş etmek istiyorum.
 
-**Dahili mesaj:** `OrderAgent: product_name ve quantity eksik, ikisi birden iste`
+**Dahili mesaj:** `OrderAgent: ürün adı ve adet eksik, ikisi birden iste`
 
 **Beklenen yanıt:** Tabii, hangi üründen kaç adet istediğinizi yazar mısınız?
 

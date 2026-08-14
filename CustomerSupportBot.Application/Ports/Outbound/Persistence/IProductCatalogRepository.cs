@@ -10,8 +10,23 @@ public interface IProductCatalogRepository
     /// <summary>Tam eşleşme veya fuzzy match ile ürün bulur. Bulunamazsa null döner.</summary>
     ProductInfo? FindProduct(string productName);
 
-    /// <summary>Stok azaltır. Yetersiz stokta false döner.</summary>
-    bool TryDeductStock(string productName, int quantity);
+    /// <summary>
+    /// Bir siparişin <b>tüm</b> satırlarının stoğunu tek seferde düşer.
+    ///
+    /// <para>
+    /// Ya hep ya hiç: satırlardan biri bile yetmezse hiçbiri düşülmez ve
+    /// <see cref="StockDeductionResult.Shortages"/> yetersiz kalan satırları taşır.
+    /// Çağıran taraf tek tek düşüp elle telafi etmek zorunda kalmasın diye atomiklik
+    /// adapter'ın sorumluluğundadır (Postgres tarafında tek transaction).
+    /// </para>
+    ///
+    /// <para>
+    /// <paramref name="lines"/> içindeki ürün adları <b>kanonik</b> olmalıdır
+    /// (<see cref="FindProduct"/> ile çözülmüş) ve aynı ürün birden fazla satırda
+    /// tekrarlanmamalıdır — tekrar, aynı satırın iki kez düşülmesi demektir.
+    /// </para>
+    /// </summary>
+    StockDeductionResult TryDeductStock(IReadOnlyList<OrderLine> lines);
 
     /// <summary>Tüm ürün listesi.</summary>
     IReadOnlyList<ProductInfo> GetAll();

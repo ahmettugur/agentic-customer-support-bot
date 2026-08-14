@@ -83,8 +83,7 @@ public class ApprovalGateServiceToolBuilderTests
         var product = _fixture.ProductRepo.GetAll().First().Name;
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
-            ["productName"] = product,
-            ["quantity"] = 1
+            ["lines"] = new[] { new OrderLineRequest(product, 1) }
         }), TestContext.Current.CancellationToken);
 
         var (success, message) = ParseResult(result);
@@ -193,8 +192,7 @@ public class ApprovalGateServiceToolBuilderTests
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
-            ["productName"] = product,
-            ["quantity"] = 1
+            ["lines"] = new[] { new OrderLineRequest(product, 1) }
         }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
@@ -216,8 +214,7 @@ public class ApprovalGateServiceToolBuilderTests
 
         var result = await fn.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
         {
-            ["productName"] = product,
-            ["quantity"] = 1
+            ["lines"] = new[] { new OrderLineRequest(product, 1) }
         }), TestContext.Current.CancellationToken);
         var (success, _) = ParseResult(result);
         success.Should().BeTrue();
@@ -261,7 +258,7 @@ public class ApprovalGateServiceToolBuilderTests
         {
             var seeder = Build(new ApprovalOptions { Enabled = false }, contextAccessor: contextAccessor);
             await seeder.BuildOrderPlacementTool().InvokeAsync(new AIFunctionArguments(
-                new Dictionary<string, object?> { ["productName"] = product, ["quantity"] = 1 }),
+                new Dictionary<string, object?> { ["lines"] = new[] { new OrderLineRequest(product, 1) } }),
                 TestContext.Current.CancellationToken);
         }
         var foreignOrderId = _fixture.OrderRepo.GetByCustomer("9701").Last().OrderId;
@@ -298,7 +295,7 @@ public class ApprovalGateServiceToolBuilderTests
         using var placeScope = contextAccessor.SetScope("s1", null, "sipariş ver", "9601");
         var svc = Build(opts, contextAccessor: contextAccessor);
         var placed = await svc.BuildOrderPlacementTool().InvokeAsync(new AIFunctionArguments(
-            new Dictionary<string, object?> { ["productName"] = product, ["quantity"] = 1 }),
+            new Dictionary<string, object?> { ["lines"] = new[] { new OrderLineRequest(product, 1) } }),
             TestContext.Current.CancellationToken);
         var orderId = ((JsonElement)placed!).GetProperty("data").GetProperty("orderId").GetString();
 
@@ -327,7 +324,7 @@ public class ApprovalGateServiceToolBuilderTests
         using var scope = contextAccessor.SetScope("s1", null, "sipariş ver", "9602");
         var svc = Build(opts, contextAccessor: contextAccessor);
         await svc.BuildOrderPlacementTool().InvokeAsync(new AIFunctionArguments(
-            new Dictionary<string, object?> { ["productName"] = product, ["quantity"] = 1 }),
+            new Dictionary<string, object?> { ["lines"] = new[] { new OrderLineRequest(product, 1) } }),
             TestContext.Current.CancellationToken);
 
         var fn = svc.BuildGetLastOrderTool();
@@ -345,7 +342,7 @@ public class ApprovalGateServiceToolBuilderTests
         using var placeScope = contextAccessor.SetScope("s1", null, "sipariş ver", "9603");
         var svc = Build(opts, contextAccessor: contextAccessor);
         var placed = await svc.BuildOrderPlacementTool().InvokeAsync(new AIFunctionArguments(
-            new Dictionary<string, object?> { ["productName"] = product, ["quantity"] = 1 }),
+            new Dictionary<string, object?> { ["lines"] = new[] { new OrderLineRequest(product, 1) } }),
             TestContext.Current.CancellationToken);
         var orderId = ((JsonElement)placed!).GetProperty("data").GetProperty("orderId").GetString();
 

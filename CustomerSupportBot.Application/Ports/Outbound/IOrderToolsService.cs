@@ -7,7 +7,16 @@ namespace CustomerSupportBot.Application.Ports.Outbound;
 /// </summary>
 public interface IOrderToolsService
 {
-    ToolResult OrderPlacementTool(string productName, int? quantity, string customerId);
+    /// <summary>
+    /// Tek bir siparişte <b>bir veya daha fazla</b> ürün satırı oluşturur.
+    ///
+    /// <para>
+    /// <paramref name="lines"/> LLM'in ürettiği ham taleptir: ürün adları doğrulanmamıştır,
+    /// aynı ürün birden fazla kez geçebilir, adetler geçersiz olabilir. Doğrulama, katalog
+    /// çözümlemesi ve tekilleştirme bu metodun içinde yapılır.
+    /// </para>
+    /// </summary>
+    ToolResult OrderPlacementTool(IReadOnlyList<OrderLineRequest> lines, string customerId);
 
     /// <summary>
     /// Salt-okunur ön kontrol: sipariş var mı ve login'li müşteriye ait mi? Engel varsa

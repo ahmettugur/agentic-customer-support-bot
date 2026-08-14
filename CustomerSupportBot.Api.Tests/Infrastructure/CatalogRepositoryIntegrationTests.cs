@@ -14,7 +14,8 @@ public sealed class OrderRepositoryIntegrationTests
     {
         var order = _fx.OrderRepo.Get("1030");
         order.Should().NotBeNull();
-        order!.Product.Should().Be("Bira");   // seed Türkçeleştirildi (eski: "Beer")
+        order!.Lines.Should().ContainSingle()
+            .Which.Product.Should().Be("Bira");   // seed Türkçeleştirildi (eski: "Beer")
         order.CustomerId.Should().Be("1027");
     }
 
@@ -45,8 +46,7 @@ public sealed class OrderRepositoryIntegrationTests
     {
         var order = new OrderInfo
         {
-            Product    = "Kahve",
-            Quantity   = 5,
+            Lines      = [new OrderLine("Kahve", 5)],
             CustomerId = "9001",
             Status     = WellKnown.OrderStatuses.Processing,
             OrderDate  = DateTime.UtcNow
@@ -57,6 +57,43 @@ public sealed class OrderRepositoryIntegrationTests
         long.TryParse(code, out var id).Should().BeTrue();
         id.Should().BeGreaterThanOrEqualTo(1082);
         _fx.OrderRepo.Get(code).Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Create_MultiLineOrder_PersistsEveryLine()
+    {
+        // Şema (catalog.order_details) baştan beri çok satırlıydı; eskiden model tek
+        // satıra düşürdüğü için ikinci ve sonraki ürünler sessizce kayboluyordu.
+        var order = new OrderInfo
+        {
+            Lines      = [new OrderLine("Kahve", 2), new OrderLine("Çikolata", 1)],
+            CustomerId = "9001",
+            Status     = WellKnown.OrderStatuses.Processing,
+            OrderDate  = DateTime.UtcNow
+        };
+
+        var code = _fx.OrderRepo.Create(order);
+        var reloaded = _fx.OrderRepo.Get(code);
+
+        reloaded.Should().NotBeNull();
+        reloaded!.Lines.Should().HaveCount(2);
+        reloaded.TotalQuantity().Should().Be(3);
+        reloaded.Lines.Select(l => l.Product).Should().BeEquivalentTo(["Kahve", "Çikolata"]);
+    }
+
+    [Fact]
+    public void Create_OrderWithNoLines_Throws()
+    {
+        var order = new OrderInfo
+        {
+            CustomerId = "9001",
+            Status     = WellKnown.OrderStatuses.Processing,
+            OrderDate  = DateTime.UtcNow
+        };
+
+        // Satırsız "hayalet sipariş" yazılmamalı.
+        var act = () => _fx.OrderRepo.Create(order);
+        act.Should().Throw<ArgumentException>();
     }
 
     [Fact]
@@ -108,16 +145,43 @@ public sealed class ProductCatalogRepositoryIntegrationTests
     public void TryDeductStock_SufficientStock_DeductsAndReturnsTrue()
     {
         var before = _fx.ProductRepo.FindProduct("Scones")!.Stock;
-        var ok = _fx.ProductRepo.TryDeductStock("Scones", 1);
-        ok.Should().BeTrue();
+        var result = _fx.ProductRepo.TryDeductStock([new OrderLine("Scones", 1)]);
+        result.Success.Should().BeTrue();
         var after = _fx.ProductRepo.FindProduct("Scones")!.Stock;
         after.Should().Be(before - 1);
     }
 
     [Fact]
-    public void TryDeductStock_InsufficientStock_ReturnsFalse()
+    public void TryDeductStock_InsufficientStock_ReturnsFailureWithShortage()
     {
-        _fx.ProductRepo.TryDeductStock("Chai", 99_999).Should().BeFalse();
+        var available = _fx.ProductRepo.FindProduct("Çikolata")!.Stock;
+
+        var result = _fx.ProductRepo.TryDeductStock([new OrderLine("Çikolata", 99_999)]);
+
+        result.Success.Should().BeFalse();
+        result.Shortages.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new StockShortage("Çikolata", 99_999, available));
+    }
+
+    [Fact]
+    public void TryDeductStock_MultiLine_AllOrNothing()
+    {
+        // Bir satır yetmezse diğerlerinin stoğu da düşülmemeli — aksi hâlde sipariş
+        // oluşmadığı hâlde stok sessizce kaybolurdu.
+        var sconesBefore = _fx.ProductRepo.FindProduct("Scones")!.Stock;
+
+        var result = _fx.ProductRepo.TryDeductStock(
+            [new OrderLine("Scones", 1), new OrderLine("Çikolata", 99_999)]);
+
+        result.Success.Should().BeFalse();
+        result.Shortages.Should().ContainSingle().Which.Product.Should().Be("Çikolata");
+        _fx.ProductRepo.FindProduct("Scones")!.Stock.Should().Be(sconesBefore);
+    }
+
+    [Fact]
+    public void TryDeductStock_EmptyLines_Succeeds()
+    {
+        _fx.ProductRepo.TryDeductStock([]).Success.Should().BeTrue();
     }
 
     [Fact]

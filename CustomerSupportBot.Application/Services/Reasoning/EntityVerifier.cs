@@ -219,8 +219,12 @@ public class EntityVerifier
             entity.Attributes = new Dictionary<string, string>
             {
                 ["status"] = order.Status,
-                ["product"] = order.Product,
-                ["quantity"] = order.Quantity.ToString(),
+                // Çok satırlı sipariş tek bir özet dizeye indirilir ("Kahve x2, Çay x1").
+                // Attribute sözlüğü düz string→string olduğu için yapı taşınamaz; buradaki
+                // amaç zaten downstream prompt'a "hangi sipariş neyi içeriyor" bilgisini
+                // vermek — makine okuması gereken taraf tool sonucundaki `lines` alanını kullanır.
+                ["product"] = order.LinesSummary(),
+                ["quantity"] = order.TotalQuantity().ToString(),
                 ["customerId"] = order.CustomerId
             };
         }

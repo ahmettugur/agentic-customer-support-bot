@@ -60,19 +60,33 @@ public class ApprovalGateService
     /// </summary>
     private string CurrentCustomerId => _contextAccessor.Context?.CustomerId ?? "";
 
+    /// <summary>
+    /// Çok ürünlü sipariş: LLM tek çağrıda birden fazla satır gönderir.
+    ///
+    /// <para>
+    /// Alternatif — her ürün için ayrı bir tool çağrısı — kasıtlı olarak seçilmedi: her çağrı
+    /// AYRI bir onay kaydı üretirdi, admin bunları tek tek onaylardı ve biri onaylanıp diğeri
+    /// reddedilerek yarım bir sepet oluşabilirdi. Tek çağrı = tek onay = tek sipariş.
+    /// </para>
+    /// </summary>
     public AIFunction BuildOrderPlacementTool() =>
         AIFunctionFactory.Create(
             async (
-                [System.ComponentModel.Description("Sipariş verilecek ürünün adı")] string productName,
-                [System.ComponentModel.Description("Sipariş adedi")] int? quantity) =>
+                [System.ComponentModel.Description(
+                    "Sipariş satırları. Her satır bir ürün adı ve adet içerir; kullanıcı birden " +
+                    "fazla ürün istediyse HEPSİNİ tek listede gönder.")]
+                OrderLineRequest[] lines) =>
                 await ExecuteWithApprovalGateAsync(
                     WellKnown.ToolNames.OrderPlacement,
-                    new Dictionary<string, object?> { ["productName"] = productName, ["quantity"] = quantity, ["customerId"] = CurrentCustomerId },
-                    () => _tools.OrderPlacementTool(productName, quantity, CurrentCustomerId)),
+                    // customerId ayrıca yazılır: onay kaydı Postgres'ten hydrate edilirken
+                    // ApprovalExecutionRouter satırları buradan okur (bkz. ParametersJson).
+                    new Dictionary<string, object?> { ["lines"] = lines, ["customerId"] = CurrentCustomerId },
+                    () => _tools.OrderPlacementTool(lines, CurrentCustomerId)),
             name: WellKnown.ToolNames.OrderPlacement,
             description:
-                "Yeni sipariş oluşturur. Ürün adı ve adet zorunludur; müşteri kimliği login'den otomatik alınır. " +
-                "Bu tool HITL approval gate'inden geçer — admin onaya gönderilir, sonucu bildirim olarak dönülür.");
+                "Yeni sipariş oluşturur. Tek siparişte birden fazla ürün satırı olabilir; müşteri kimliği " +
+                "login'den otomatik alınır. Bu tool HITL approval gate'inden geçer — admin onaya gönderilir, " +
+                "sonucu bildirim olarak dönülür.");
 
     public AIFunction BuildComplaintRegistrationTool() =>
         AIFunctionFactory.Create(

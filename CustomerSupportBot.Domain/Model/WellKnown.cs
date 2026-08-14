@@ -373,6 +373,14 @@ public static class WellKnown
         public const string OrderId = "order_id";
         public const string ProductName = "product_name";
         public const string Quantity = "quantity";
+
+        /// <summary>
+        /// order_placement_tool'un satır listesi parametresi — çok ürünlü sipariş.
+        /// Eksik parametre bildirimlerinde <see cref="ProductName"/>/<see cref="Quantity"/>
+        /// yerine bu ad kullanılır, çünkü LLM'in doldurması gereken alan tek başına
+        /// ürün adı değil, satırların tamamıdır.
+        /// </summary>
+        public const string Lines = "lines";
         public const string Reason = "reason";
         public const string ComplaintDescription = "description";
     }

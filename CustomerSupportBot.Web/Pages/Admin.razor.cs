@@ -573,11 +573,39 @@ public partial class Admin
                 JsonValueKind.True   => "true",
                 JsonValueKind.False  => "false",
                 JsonValueKind.Null   => "—",
+                JsonValueKind.Array  => FormatArray(prop.Value),
                 _                    => prop.Value.GetRawText()
             };
             list.Add((prop.Name, val));
         }
         return list.Count > 0 ? list : null;
+    }
+
+    /// <summary>
+    /// Dizi parametreleri okunur tek satıra indirir — çok ürünlü siparişin
+    /// <c>lines</c> alanı ham JSON olarak gösterilirse admin neyi onayladığını
+    /// göremez ve HITL kapısı anlamını yitirir.
+    ///
+    /// <para>
+    /// Nesne elemanlar <c>"alan=değer · alan=değer"</c> biçiminde düzleştirilir; şema
+    /// bilinmediği için alan adları olduğu gibi yazılır (bu yardımcı yalnızca sipariş
+    /// satırlarına özel değil, herhangi bir dizi parametreye uygulanır).
+    /// </para>
+    /// </summary>
+    private static string FormatArray(JsonElement array)
+    {
+        var items = new List<string>();
+        foreach (var element in array.EnumerateArray())
+        {
+            items.Add(element.ValueKind switch
+            {
+                JsonValueKind.Object => string.Join(" · ", element.EnumerateObject().Select(p =>
+                    $"{p.Name}={(p.Value.ValueKind == JsonValueKind.String ? p.Value.GetString() : p.Value.GetRawText())}")),
+                JsonValueKind.String => element.GetString() ?? "",
+                _ => element.GetRawText()
+            });
+        }
+        return items.Count == 0 ? "—" : string.Join("  |  ", items);
     }
 
     private static string FmtRelative(DateTimeOffset dt)

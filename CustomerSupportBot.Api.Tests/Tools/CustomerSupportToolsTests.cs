@@ -45,19 +45,58 @@ public class CustomerSupportToolsTests
     }
 
     // ═══ OrderPlacementTool ═══
+
+    /// <summary>Tek satırlık sipariş isteği — testlerin çoğu bunu kullanır.</summary>
+    private static IReadOnlyList<OrderLineRequest> Line(string product, int quantity) =>
+        [new OrderLineRequest(product, quantity)];
+
     [Fact]
     public void OrderPlacement_AllMissing_ValidationError()
     {
-        var r = _svc.OrderPlacementTool("", null, "");
+        var r = _svc.OrderPlacementTool([], "");
         r.Success.Should().BeFalse();
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
     }
 
     [Fact]
+    public void OrderPlacement_NoLines_ValidationError()
+    {
+        var r = _svc.OrderPlacementTool([], "9001");
+        r.Success.Should().BeFalse();
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
+        r.Error.MissingFields.Should().Contain(WellKnown.ToolParameterNames.Lines);
+    }
+
+    [Fact]
+    public void OrderPlacement_NonPositiveQuantity_ValidationErrorNamesTheLine()
+    {
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var r = _svc.OrderPlacementTool(Line(product, 0), "9001");
+
+        r.Success.Should().BeFalse();
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.MissingRequiredField);
+        // Hangi satırın hatalı olduğu mesajda görünmeli — çok satırlı siparişte
+        // "adet geçersiz" tek başına kullanıcıyı hiçbir yere götürmez.
+        r.Message.Should().Contain(product);
+    }
+
+    [Fact]
     public void OrderPlacement_UnknownProduct_NotFound()
     {
-        var r = _svc.OrderPlacementTool("ZZZ-yokboyle", 1, "9001");
+        var r = _svc.OrderPlacementTool(Line("ZZZ-yokboyle", 1), "9001");
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.ProductNotFound);
+    }
+
+    [Fact]
+    public void OrderPlacement_MultipleUnknownProducts_ReportsAllAtOnce()
+    {
+        var r = _svc.OrderPlacementTool(
+            [new OrderLineRequest("ZZZ-yok-1", 1), new OrderLineRequest("ZZZ-yok-2", 2)],
+            "9001");
+
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.ProductNotFound);
+        // Tek tek bildirilirse kullanıcı eksikleri tur tur öğrenir (ping-pong).
+        r.Message.Should().Contain("ZZZ-yok-1").And.Contain("ZZZ-yok-2");
     }
 
     [Fact]
@@ -65,9 +104,56 @@ public class CustomerSupportToolsTests
     {
         var product = _fixture.ProductRepo.GetAll().First().Name;
         var customerId = "9002";
-        var r = _svc.OrderPlacementTool(product, 1, customerId);
+        var r = _svc.OrderPlacementTool(Line(product, 1), customerId);
         r.Success.Should().BeTrue();
         _fixture.OrderRepo.GetByCustomer(customerId).Count.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void OrderPlacement_MultipleProducts_CreatesSingleOrderWithAllLines()
+    {
+        var products = _fixture.ProductRepo.GetAll().Take(3).Select(p => p.Name).ToList();
+        products.Should().HaveCount(3, "test çok satırlı sipariş için en az 3 ürün ister");
+
+        var customerId = "9010";
+        var before = _fixture.OrderRepo.GetByCustomer(customerId).Count;
+
+        var r = _svc.OrderPlacementTool(
+            [new OrderLineRequest(products[0], 2),
+             new OrderLineRequest(products[1], 1),
+             new OrderLineRequest(products[2], 3)],
+            customerId);
+
+        r.Success.Should().BeTrue();
+
+        var orders = _fixture.OrderRepo.GetByCustomer(customerId);
+        orders.Count.Should().Be(before + 1, "çok ürünlü talep TEK sipariş olmalı");
+
+        var created = orders.OrderByDescending(o => o.Order.OrderDate).First().Order;
+        created.Lines.Should().HaveCount(3);
+        created.TotalQuantity().Should().Be(6);
+        created.Lines.Select(l => l.Product).Should().BeEquivalentTo(products);
+    }
+
+    [Fact]
+    public void OrderPlacement_SameProductTwice_MergesIntoOneLine()
+    {
+        // order_details birincil anahtarı (order_code, product_id) — tekrar eden ürün
+        // birleştirilmezse ikinci INSERT anahtar ihlali verirdi.
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var customerId = "9011";
+
+        var r = _svc.OrderPlacementTool(
+            [new OrderLineRequest(product, 2), new OrderLineRequest(product, 3)],
+            customerId);
+
+        r.Success.Should().BeTrue();
+
+        var created = _fixture.OrderRepo.GetByCustomer(customerId)
+            .OrderByDescending(o => o.Order.OrderDate).First().Order;
+
+        created.Lines.Should().ContainSingle();
+        created.Lines[0].Quantity.Should().Be(5);
     }
 
     [Fact]
@@ -77,8 +163,8 @@ public class CustomerSupportToolsTests
         var customerId = "9003";
         var ordersBefore = _fixture.OrderRepo.GetByCustomer(customerId).Count;
 
-        var r1 = _svc.OrderPlacementTool(product, 1, customerId);
-        var r2 = _svc.OrderPlacementTool(product, 1, customerId);
+        var r1 = _svc.OrderPlacementTool(Line(product, 1), customerId);
+        var r2 = _svc.OrderPlacementTool(Line(product, 1), customerId);
 
         r1.Success.Should().BeTrue();
         r2.Success.Should().BeTrue();
@@ -111,9 +197,9 @@ public class CustomerSupportToolsTests
         var product = _fixture.ProductRepo.GetAll().First().Name;
         var customerId = "9005";
 
-        var r1 = svc.OrderPlacementTool(product, 1, customerId);
+        var r1 = svc.OrderPlacementTool(Line(product, 1), customerId);
         clock.Advance(window + TimeSpan.FromSeconds(1));
-        var r2 = svc.OrderPlacementTool(product, 1, customerId);
+        var r2 = svc.OrderPlacementTool(Line(product, 1), customerId);
 
         r1.Success.Should().BeTrue();
         r2.Success.Should().BeTrue();
@@ -124,9 +210,36 @@ public class CustomerSupportToolsTests
     public void OrderPlacement_StockInsufficient_Conflict()
     {
         var product = _fixture.ProductRepo.GetAll().First().Name;
-        var r = _svc.OrderPlacementTool(product, 999_999, "9004");
+        var r = _svc.OrderPlacementTool(Line(product, 999_999), "9004");
         r.Success.Should().BeFalse();
         r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.StockInsufficient);
+    }
+
+    [Fact]
+    public void OrderPlacement_OneLineOutOfStock_RollsBackTheWholeOrder()
+    {
+        // Kritik davranış: çok satırlı siparişte bir satır yetmezse DİĞER satırların
+        // stoğu da düşülmemeli. Aksi hâlde sipariş oluşmadığı hâlde stok eksilirdi.
+        var products = _fixture.ProductRepo.GetAll().Take(2).ToList();
+        products.Should().HaveCount(2);
+
+        var okProduct = products[0];
+        var shortProduct = products[1];
+        var customerId = "9012";
+        var ordersBefore = _fixture.OrderRepo.GetByCustomer(customerId).Count;
+
+        var r = _svc.OrderPlacementTool(
+            [new OrderLineRequest(okProduct.Name, 1),
+             new OrderLineRequest(shortProduct.Name, 999_999)],
+            customerId);
+
+        r.Success.Should().BeFalse();
+        r.Error!.Code.Should().Be(WellKnown.ToolErrorCodes.StockInsufficient);
+        r.Message.Should().Contain(shortProduct.Name);
+
+        _fixture.ProductRepo.FindProduct(okProduct.Name)!.Stock
+            .Should().Be(okProduct.Stock, "başarısız siparişte hiçbir satırın stoğu düşülmemeli");
+        _fixture.OrderRepo.GetByCustomer(customerId).Count.Should().Be(ordersBefore);
     }
 
     // ═══ OrderStatusTool ═══
@@ -210,7 +323,7 @@ public class CustomerSupportToolsTests
     {
         var product = _fixture.ProductRepo.GetAll().First().Name;
         var customerId = "9006";
-        var orderResult = _svc.OrderPlacementTool(product, 1, customerId);
+        var orderResult = _svc.OrderPlacementTool(Line(product, 1), customerId);
         var orderId = orderResult.Data!.GetType().GetProperty("orderId")!.GetValue(orderResult.Data) as string;
         var r = _svc.ComplaintRegistrationTool(
             orderId!, $"şikayet metni unique {Guid.NewGuid()}", null);
@@ -250,7 +363,7 @@ public class CustomerSupportToolsTests
         // Sınır: tam 5 karakter geçerli → doğrulama geçip iptal akışı sürmeli.
         var product = _fixture.ProductRepo.GetAll().First().Name;
         var customerId = "9501";
-        var placed = _svc.OrderPlacementTool(product, 1, customerId);
+        var placed = _svc.OrderPlacementTool(Line(product, 1), customerId);
         var orderId = placed.Data!.GetType().GetProperty("orderId")!.GetValue(placed.Data) as string;
 
         var r = _svc.OrderCancelTool(orderId!, "12345", customerId);
@@ -262,7 +375,7 @@ public class CustomerSupportToolsTests
     public void OrderCancel_BelongsToDifferentCustomer_Conflict()
     {
         var product = _fixture.ProductRepo.GetAll().First().Name;
-        var placed = _svc.OrderPlacementTool(product, 1, "9503");
+        var placed = _svc.OrderPlacementTool(Line(product, 1), "9503");
         var orderId = placed.Data!.GetType().GetProperty("orderId")!.GetValue(placed.Data) as string;
 
         var r = _svc.OrderCancelTool(orderId!, "12345", "9999");
@@ -306,8 +419,7 @@ public class CustomerSupportToolsTests
         var product = _fixture.ProductRepo.GetAll().First().Name;
         var orderId = _fixture.OrderRepo.Create(new OrderInfo
         {
-            Product = product,
-            Quantity = 1,
+            Lines = [new OrderLine(product, 1)],
             CustomerId = "9504",
             Status = WellKnown.OrderStatuses.Delivered,
             OrderDate = DateTime.UtcNow
@@ -330,8 +442,7 @@ public class CustomerSupportToolsTests
         var product = _fixture.ProductRepo.GetAll().First().Name;
         var orderId = _fixture.OrderRepo.Create(new OrderInfo
         {
-            Product = product,
-            Quantity = 1,
+            Lines = [new OrderLine(product, 1)],
             CustomerId = "9502",
             Status = WellKnown.OrderStatuses.Delivered,
             OrderDate = DateTime.UtcNow

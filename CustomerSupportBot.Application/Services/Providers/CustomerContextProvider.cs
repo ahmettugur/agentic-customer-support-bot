@@ -50,7 +50,7 @@ public class CustomerContextProvider : IContextProvider
             sb.AppendLine($"Toplam sipariş: {orders.Count}");
             foreach (var (orderId, order) in orders.Take(5))
             {
-                sb.AppendLine($"  - {orderId}: {order.Product} x{order.Quantity}, " +
+                sb.AppendLine($"  - {orderId}: {order.LinesSummary()}, " +
                               $"Durum: {order.Status}, Tarih: {order.OrderDate:g}");
             }
         }

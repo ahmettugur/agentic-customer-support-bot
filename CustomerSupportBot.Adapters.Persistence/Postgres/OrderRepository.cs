@@ -19,11 +19,26 @@ public sealed class OrderRepository : IOrderRepository
         _logger = logger;
     }
 
+    /// <summary>
+    /// Siparişi ve <b>tüm</b> satırlarını yazar.
+    /// </summary>
+    /// <remarks>
+    /// Başlık ve satırlar iki ayrı <c>SaveChanges</c> gerektirir (sipariş kodu DB tarafından
+    /// üretilir ve satırların yabancı anahtarı odur), bu yüzden ikisi tek transaction'a
+    /// alınır — aksi hâlde araya düşen bir hata satırsız bir "hayalet sipariş" bırakırdı.
+    /// </remarks>
     public string Create(OrderInfo order)
     {
-        using var ctx = _dbFactory.CreateDbContext();
+        if (order.Lines.Count == 0)
+            throw new ArgumentException("Sipariş en az bir satır içermelidir.", nameof(order));
 
-        var product = ctx.Products.First(p => p.Name == order.Product);
+        using var ctx = _dbFactory.CreateDbContext();
+        using var tx = ctx.Database.BeginTransaction();
+
+        var names = order.Lines.Select(l => l.Product).ToList();
+        var products = ctx.Products
+            .Where(p => names.Contains(p.Name))
+            .ToDictionary(p => p.Name, p => p.Id);
 
         var orderEntity = new OrderEntity
         {
@@ -36,13 +51,18 @@ public sealed class OrderRepository : IOrderRepository
         ctx.Orders.Add(orderEntity);
         ctx.SaveChanges(); // Code DB tarafından üretilir, EF geri okur
 
-        ctx.OrderDetails.Add(new OrderDetailEntity
+        foreach (var line in order.Lines)
         {
-            OrderCode = orderEntity.Code,
-            ProductId = product.Id,
-            Quantity = order.Quantity
-        });
+            ctx.OrderDetails.Add(new OrderDetailEntity
+            {
+                OrderCode = orderEntity.Code,
+                ProductId = products[line.Product],
+                Quantity = line.Quantity
+            });
+        }
+
         ctx.SaveChanges();
+        tx.Commit();
         return orderEntity.Code.ToString();
     }
 
@@ -122,13 +142,19 @@ public sealed class OrderRepository : IOrderRepository
         return true;
     }
 
+    /// <remarks>
+    /// Satırların tamamı okunur. Eskiden burada <c>Details.FirstOrDefault()</c> vardı —
+    /// şema baştan beri çok satırlıydı ama model tek satıra düşürdüğü için ikinci ve
+    /// sonraki ürünler sessizce kayboluyordu.
+    /// </remarks>
     private static OrderInfo MapToModel(OrderEntity e)
     {
-        var detail = e.Details.FirstOrDefault();
         return new OrderInfo
         {
-            Product = detail?.Product.Name ?? "",
-            Quantity = detail?.Quantity ?? 0,
+            Lines = e.Details
+                .OrderBy(d => d.Product.Name, StringComparer.Ordinal)
+                .Select(d => new OrderLine(d.Product.Name, d.Quantity))
+                .ToList(),
             CustomerId = e.CustomerId.ToString(),
             Status = e.Status,
             OrderDate = e.OrderDate,
