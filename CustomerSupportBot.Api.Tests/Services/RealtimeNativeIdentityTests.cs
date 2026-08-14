@@ -49,11 +49,11 @@ public class RealtimeNativeIdentityTests
         if (fullName is not null)
             customers.GetFullNameAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns(fullName);
 
+        // Kimlik ARTIK önceden session'a yazılmıyor: gerçek akışta da olduğu gibi
+        // RunAsync'e parametre olarak geçilip orada bağlanmalı. Eskiden bu bağ hiç
+        // kurulmuyordu ve sesli kanalda her sipariş sorgusu customerId="" ile koşuyordu.
         var sessions = new InMemorySessionManager(
             new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 })));
-        var session = await sessions.GetOrCreateAsync("voice-1", CancellationToken.None);
-        session.State.AuthenticatedCustomerId = authenticatedCustomerId;
-        await sessions.UpdateAsync(session, CancellationToken.None);
 
         var client = ConnectedTransport();
         var guard = Substitute.For<IInputGuard>();
@@ -70,7 +70,7 @@ public class RealtimeNativeIdentityTests
             new CustomerIdentityHintBuilder(customers),
             NullLogger<RealtimeNativeService>.Instance);
 
-        await svc.RunAsync(ClosedChannel(), "voice-1", CancellationToken.None);
+        await svc.RunAsync(ClosedChannel(), "voice-1", authenticatedCustomerId, CancellationToken.None);
         return (client, sessions);
     }
 
@@ -93,5 +93,55 @@ public class RealtimeNativeIdentityTests
         await client.Received(1).ConfigureNativeSessionAsync(
             Arg.Is<string?>(ctx => !string.IsNullOrWhiteSpace(ctx) && ctx.Contains("Bugünün tarihi")),
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Asıl regresyon: kimlik oturuma YAZILMALI. Sipariş tool'ları
+    /// (order_status/get_last_order/get_all_orders) <c>session.State.AuthenticatedCustomerId</c>
+    /// okuyor; boş kalırsa sahiplik kontrolü her siparişi reddediyor ve kullanıcı sesli
+    /// asistandan "sipariş bulunamadı" duyuyor.
+    /// </summary>
+    [Fact]
+    public async Task LoggedInCustomer_IsBoundToSession()
+    {
+        var (_, sessions) = await RunAsync(authenticatedCustomerId: "1027", fullName: "Ahmet Tügür");
+
+        var session = await sessions.GetOrCreateAsync("voice-1", CancellationToken.None);
+        session.State.AuthenticatedCustomerId.Should().Be("1027");
+    }
+
+    [Fact]
+    public async Task SessionOwnedByAnotherCustomer_IsRejectedBeforeConfiguringVoiceSession()
+    {
+        // Sesli kanal artık kimlik doğruluyor; başkasının sessionId'siyle bağlanan biri
+        // o oturumun kimliğiyle sipariş geçmişini dinleyebilirdi.
+        var sessions = new InMemorySessionManager(
+            new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 })));
+        var session = await sessions.GetOrCreateAsync("voice-1", CancellationToken.None);
+        session.State.AuthenticatedCustomerId = "1027";
+        await sessions.UpdateAsync(session, CancellationToken.None);
+
+        var client = ConnectedTransport();
+        var svc = new RealtimeNativeService(
+            client,
+            sessions,
+            TestFactory.CreateToolsService(
+                Substitute.For<IProductCatalogRepository>(),
+                Substitute.For<IOrderRepository>(),
+                Substitute.For<IComplaintRepository>()),
+            Substitute.For<IInputGuard>(),
+            Substitute.For<IChatBridge>(),
+            new CustomerIdentityHintBuilder(Substitute.For<ICustomerRepository>()),
+            NullLogger<RealtimeNativeService>.Instance);
+
+        await svc.RunAsync(ClosedChannel(), "voice-1", "9999", CancellationToken.None);
+
+        // Sesli oturum hiç yapılandırılmamalı — bağlantı kimlik kontrolünde kesilir.
+        await client.DidNotReceive().ConfigureNativeSessionAsync(
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
+
+        // Ve oturumun sahibi değişmemeli.
+        var reloaded = await sessions.GetOrCreateAsync("voice-1", CancellationToken.None);
+        reloaded.State.AuthenticatedCustomerId.Should().Be("1027");
     }
 }

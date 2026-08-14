@@ -7,5 +7,10 @@ namespace CustomerSupportBot.Application.Ports.Inbound;
 /// </summary>
 public interface IRealtimeBridge
 {
-    Task RunAsync(IBrowserChannel channel, string sessionId, CancellationToken ct);
+    /// <param name="authenticatedCustomerId">
+    /// Login'li müşterinin JWT claim'inden gelen kimliği. Oturuma bir kez bağlanır ve
+    /// sipariş tool'ları bunu kullanır — bu değer olmadan her sipariş sorgusu sahiplik
+    /// kontrolüne takılıp "bulunamadı" döner.
+    /// </param>
+    Task RunAsync(IBrowserChannel channel, string sessionId, string? authenticatedCustomerId, CancellationToken ct);
 }

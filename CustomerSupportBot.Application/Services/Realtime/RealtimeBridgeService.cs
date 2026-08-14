@@ -5,6 +5,7 @@ using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Services.Chat;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
 
@@ -71,7 +72,8 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
         _logger = logger;
     }
 
-    public async Task RunAsync(IBrowserChannel channel, string sessionId, CancellationToken ct)
+    public async Task RunAsync(
+        IBrowserChannel channel, string sessionId, string? authenticatedCustomerId, CancellationToken ct)
     {
         if (!_client.IsEnabled)
         {
@@ -86,6 +88,19 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
         }
 
         var session = await _sessionManager.GetOrCreateAsync(sessionId, ct);
+
+        // Köprü modunda cevabı ajan pipeline'ı üretir ve HITL onay bağlamı buradaki
+        // AuthenticatedCustomerId'yi taşır (bkz. aşağıda _approvalContext.SetScope) —
+        // kimlik bağlanmazsa yan etkili tool'lar kimliksiz koşar.
+        if (!await SessionIdentityBinder.TryBindAsync(session, authenticatedCustomerId, _sessionManager, ct))
+        {
+            _logger.LogWarning(
+                "Realtime köprü: oturum başka bir müşteriye ait, bağlantı reddedildi session={Sid}", sessionId);
+            await channel.SendJsonAsync(
+                new { type = "error", message = "Bu oturuma erişim yetkiniz yok." }, ct);
+            return;
+        }
+
         await _client.ConfigureBridgeSessionAsync(ct);
 
         await channel.SendJsonAsync(new

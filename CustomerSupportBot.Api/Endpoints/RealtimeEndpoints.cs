@@ -9,15 +9,24 @@ public static class RealtimeEndpoints
     {
         // Köprü modu — gpt-realtime-1.5 sadece STT/TTS, agent pipeline cevabı üretir.
         // ws://host/chat/realtime/{sessionId?}
-        app.Map("/chat/realtime/{sessionId?}", HandleRealtimeAsync);
+        app.Map("/chat/realtime/{sessionId?}", HandleRealtimeAsync)
+            .RequireAuthorization("Customer");
 
         // Native mod — gpt-realtime-1.5 kendisi konuşur, okuma-only tool'ları çağırır.
         // Sipariş oluşturma / şikayet kaydı gibi yan-etkili işlemler bu kanalda YOKTUR.
         // ws://host/chat/realtime-native/{sessionId?}
-        app.Map("/chat/realtime-native/{sessionId?}", HandleRealtimeNativeAsync);
+        app.Map("/chat/realtime-native/{sessionId?}", HandleRealtimeNativeAsync)
+            .RequireAuthorization("Customer");
 
         return app;
     }
+
+    /// <summary>
+    /// Login'li müşterinin doğrulanmış kimliği — yazılı chat ile AYNI claim
+    /// (bkz. <c>ChatEndpoints</c>). Oturuma bağlanır ve sipariş tool'ları bunu kullanır.
+    /// </summary>
+    private static string? AuthenticatedCustomerId(HttpContext httpContext) =>
+        httpContext.User.FindFirst("linked_customer_id")?.Value;
 
     private static async Task HandleRealtimeAsync(
         HttpContext httpContext,
@@ -39,7 +48,7 @@ public static class RealtimeEndpoints
 
         try
         {
-            await bridge.RunAsync(channel, sid, httpContext.RequestAborted);
+            await bridge.RunAsync(channel, sid, AuthenticatedCustomerId(httpContext), httpContext.RequestAborted);
         }
         catch (OperationCanceledException) { /* client kapattı */ }
         catch (Exception ex)
@@ -72,7 +81,7 @@ public static class RealtimeEndpoints
 
         try
         {
-            await bridge.RunAsync(channel, sid, httpContext.RequestAborted);
+            await bridge.RunAsync(channel, sid, AuthenticatedCustomerId(httpContext), httpContext.RequestAborted);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)

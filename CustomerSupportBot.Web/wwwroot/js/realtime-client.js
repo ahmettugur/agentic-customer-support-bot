@@ -159,7 +159,15 @@
             const host = this.baseUrl
                 ? this.baseUrl.replace(/^https?:/i, proto)
                 : proto + '//' + location.host;
-            const url = host + this.endpoint + '/' + (this.sessionId || '');
+            // WebSocket handshake'ine Authorization header'ı EKLENEMEZ (tarayıcı API'si izin
+            // vermiyor), bu yüzden token query string'den geçer — sunucu tarafında zaten bu
+            // mekanizma var (bkz. AuthServicesExtensions.cs OnMessageReceived, SSE için de
+            // aynısı kullanılıyor). Token olmadan bağlantı 401 alır; onunla birlikte sesli
+            // kanal da müşteriyi tanır ve sipariş sorguları çalışır.
+            const tokenQs = window._authToken
+                ? '?access_token=' + encodeURIComponent(window._authToken)
+                : '';
+            const url = host + this.endpoint + '/' + (this.sessionId || '') + tokenQs;
 
             this.ws = new WebSocket(url);
             this.ws.binaryType = 'arraybuffer';

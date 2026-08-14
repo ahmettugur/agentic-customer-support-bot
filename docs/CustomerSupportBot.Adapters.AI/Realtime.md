@@ -221,9 +221,37 @@ public async Task SendAudioChunkAsync(byte[] pcm16, CancellationToken ct)
 | `product_inquiry_tool` | `product_name` | Ürün fiyat/stok sorgu |
 | `product_list_tool` | `category?` | Katalog / kategori listeleme |
 | `order_status_tool` | `order_id` | Sipariş durumu |
-| `get_last_order_tool` | `customer_id` | Son sipariş |
-| `get_all_orders_tool` | `customer_id` | Tüm siparişler |
+| `get_last_order_tool` | *(yok)* | Son sipariş |
+| `get_all_orders_tool` | *(yok)* | Tüm siparişler |
 | `end_conversation` | `reason?` | Sohbeti sonlandır |
+
+> 🔒 **`customer_id` bir tool parametresi DEĞİLDİR.** Model bu alanı hiç görmez; kimlik
+> oturumdan (`session.State.AuthenticatedCustomerId`) gelir. Aksi hâlde model, kullanıcının
+> söylediği herhangi bir numarayla başkasının sipariş geçmişini okuyabilirdi.
+
+### Kimlik doğrulama — sesli kanal da login ister
+
+Realtime WebSocket uçları `RequireAuthorization("Customer")` ile korunur ve müşteri kimliği
+`linked_customer_id` claim'inden okunup `SessionIdentityBinder` ile oturuma bağlanır.
+
+Tarayıcı WebSocket handshake'ine `Authorization` header'ı ekleyemediği için token **query
+string**'den geçer (`?access_token=…`) — sunucu tarafında bu mekanizma zaten vardı, SSE de
+aynısını kullanıyor (bkz. `AuthServicesExtensions.OnMessageReceived`).
+
+> 🐞 **Bu iki adım uzun süre eksikti ve iki sonucu vardı.**
+>
+> **1. Sipariş sorguları çalışmıyordu.** Uçlar anonimdi ve kimlik hiç bağlanmıyordu, yani
+> `session.State.AuthenticatedCustomerId` boş kalıyordu. Sipariş tool'ları `customerId=""` ile
+> koşup sahiplik kontrolüne takılıyor, `ValidateOrderActionable` da "yok" ile "başkasının"
+> ayrımını kasıtlı olarak gizlediği için (enumeration oracle koruması) kullanıcı sesli
+> asistandan **"sipariş bulunamadı"** duyuyordu. Ürün sorguları çalıştığı için arıza tool
+> dispatch'i gibi görünmüyordu. Yazılı sohbette aynı `sessionId` ile bir tur geçmişse kimlik
+> orada bağlandığı için sesli kanal *bazen* çalışıyordu — hatayı daha da kafa karıştırıcı
+> yapan buydu.
+>
+> **2. Uçlar kimliksizdi.** Bilinen bir `sessionId` ile bağlanan herkes, o oturumun kimliğiyle
+> çalışan tool'lar üzerinden başkasının sipariş geçmişini dinleyebilirdi. `SessionIdentityBinder`
+> artık oturum başka bir müşteriye bağlıysa bağlantıyı reddediyor.
 
 ### Yasak tool'lar
 

@@ -13,6 +13,7 @@ using CustomerSupportBot.Application.Services.Tools;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Services.Chat;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
 
@@ -59,7 +60,8 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         _logger = logger;
     }
 
-    public async Task RunAsync(IBrowserChannel channel, string sessionId, CancellationToken ct)
+    public async Task RunAsync(
+        IBrowserChannel channel, string sessionId, string? authenticatedCustomerId, CancellationToken ct)
     {
         if (!_client.IsEnabled)
         {
@@ -74,6 +76,18 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         }
 
         var session = await _sessionManager.GetOrCreateAsync(sessionId, ct);
+
+        // Kimliği oturuma bağla. Bu satır olmadan session.State.AuthenticatedCustomerId boş
+        // kalıyordu ve sipariş tool'ları customerId="" ile koşup sahiplik kontrolüne takılıyordu
+        // — kullanıcıya "sipariş bulunamadı" olarak yansıyordu (bkz. DispatchTool).
+        if (!await SessionIdentityBinder.TryBindAsync(session, authenticatedCustomerId, _sessionManager, ct))
+        {
+            _logger.LogWarning(
+                "RealtimeNative: oturum başka bir müşteriye ait, bağlantı reddedildi session={Sid}", sessionId);
+            await channel.SendJsonAsync(
+                new { type = "error", message = "Bu oturuma erişim yetkiniz yok." }, ct);
+            return;
+        }
 
         // Yazılı kanalda bu bilgi mesaj listesine system mesajı olarak giriyor; sesli modda
         // mesaj listesi olmadığı için oturum talimatlarına ekleniyor (aynı kaynaktan üretilir).

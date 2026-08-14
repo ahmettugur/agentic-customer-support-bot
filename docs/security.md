@@ -103,10 +103,37 @@ var agentScope = app.MapGroup("/agent").RequireAuthorization("AdminOrAgent");
 
 | Scope | Endpoint'ler |
 |-------|-------------|
-| **Public** (auth gerektirmez) | `POST /chat/`, `POST /chat/stream`, `GET /chat/events/{sid}`, `GET /sessions/`, `POST/GET .../rating` |
+| **Customer** | `POST /chat/`, `POST /chat/stream`, `GET /chat/events/{sid}`, `/chat-sessions/{sid}/approvals/*`, `GET /customer/approvals/history`, **`WS /chat/realtime/{sid?}`**, **`WS /chat/realtime-native/{sid?}`** |
+| **Public** (auth gerektirmez) | `GET /sessions/`, `POST/GET .../rating` |
 | **Auth gerektirir** | `POST /auth/logout` |
 | **Admin** | Trace, Evaluation, Memory, Improvements, Telemetry, Personalization, Agents, SLA, Admin (HITL) |
 | **AdminOrAgent** | `/agent/escalations/*`, `/agent/approvals/*`, `/agent/chat-sessions/*`, `/agent/profile` |
+
+### Oturum ↔ müşteri bağı
+
+Kimliği doğrulanan her kanal, oturumu login'li müşteriye bağlar: kimlik `linked_customer_id`
+claim'inden okunur ve `SessionState.AuthenticatedCustomerId`'ye **bir kez** yazılır. Sipariş,
+iptal, iade ve şikayet tool'ları `customerId`'yi yalnızca buradan alır — LLM'in kullanıcı
+metninden çıkardığı numara asla kullanılmaz.
+
+`SessionIdentityBinder` bu kuralı tek noktada tutar ve oturum **başka** bir müşteriye bağlıysa
+bağlantıyı reddeder. Bu kontrol olmadan, bilinen bir `sessionId` veren biri o oturumun
+kimliğiyle çalışan tool'lara erişebilirdi.
+
+> ⚠️ Bu bağ şu an sesli kanallarda (`RealtimeBridgeService`, `RealtimeNativeService`) uygulanır.
+> Yazılı chat (`ChatPortService.BindAuthenticatedCustomerAsync`) bağı kurar ama **sahiplik
+> ihlalinde reddetmez** — oturum zaten başkasına bağlıysa sessizce devam eder. Bu bilinen açık
+> hâlâ kapatılmayı bekliyor.
+
+### WebSocket'lerde token taşıma
+
+Tarayıcı WebSocket handshake'ine `Authorization` header'ı ekleyemez. Bu yüzden realtime uçları
+token'ı query string'den alır (`?access_token=…`); `AuthServicesExtensions.OnMessageReceived`
+bunu bearer token olarak okur. Aynı mekanizmayı SSE (`EventSource`) de kullanır.
+
+> Token'ın URL'de taşınması sunucu erişim loglarına düşebilir. Kabul edilmesinin sebebi
+> alternatifin (kısa ömürlü tek kullanımlık bilet ucu) ek bir uç ve durum yönetimi
+> gerektirmesi; token ömrü zaten kısadır ve refresh akışı mevcuttur.
 
 ### Rate Limiting
 
