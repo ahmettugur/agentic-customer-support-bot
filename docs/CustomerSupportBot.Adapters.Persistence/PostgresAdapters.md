@@ -178,7 +178,7 @@ EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yarat
 `catalog.order_details` tablosu sipariş başına N kayıt tutar; birincil anahtarı `(order_code, product_id)`'dir. Şema **en baştan beri** çok satırlıydı ama `MapToModel` uzun süre `Details.FirstOrDefault()` çağırdığı için ikinci ve sonraki ürünler sessizce kayboluyordu. Artık:
 
 - `MapToModel` tüm satırları okur ve `OrderInfo.Lines`'a doldurur (ürün adına göre sıralı — okuma deterministik olsun diye).
-- `Create` satırların hepsini yazar. Başlık ve satırlar iki ayrı `SaveChanges` gerektirir (sipariş kodu DB tarafından üretilir ve satırların FK'sı odur), bu yüzden **ikisi tek transaction'a alınır** — aksi hâlde araya düşen bir hata satırsız bir "hayalet sipariş" bırakırdı.
+- `Create` satırların hepsini yazar. Başlık ve satırlar iki ayrı `SaveChanges` gerektirir (sipariş kodu DB tarafından üretilir ve satırların FK'sı odur), bu yüzden **ikisi tek transaction'a alınır** — aksi hâlde araya düşen bir hata satırsız bir "hayalet sipariş" bırakırdı. Transaction, aşağıdaki retry kuralına uyar.
 - `Create`, satırsız bir `OrderInfo` gelirse `ArgumentException` fırlatır.
 
 ---
@@ -219,6 +219,36 @@ Neden gerekli: satırlar bağımsız düşülseydi, üçüncü satır yetmediği
 Başarısızlıkta `StockDeductionResult.Shortages` yetersiz kalan satırları taşır (`ürün`, `istenen`, `mevcut`) — kullanıcıya "hangi üründen kaç adet var" diyebilmek için.
 
 > ⚠️ Satırlar **ürün adına göre sıralı** işlenir. Bu kozmetik değil: iki eşzamanlı sipariş aynı iki ürünü ters sırada kilitlerse Postgres deadlock verir. Sabit sıra kilitleme düzenini deterministik yapar.
+
+---
+
+## ⚠️ Transaction açacaksanız: retry stratejisi kuralı
+
+`AddCustomerSupportPersistence` `EnableRetryOnFailure(maxRetryCount: 3)` ile kayıt yapar, yani üretimdeki strateji `NpgsqlRetryingExecutionStrategy`'dir. Bu strateji **elle açılan (user-initiated) transaction'ları reddeder**:
+
+```
+System.InvalidOperationException: The configured execution strategy
+'NpgsqlRetryingExecutionStrategy' does not support user-initiated transactions.
+```
+
+Sebep mantıklı: geçici bir hatada yalnızca tek bir komutu yeniden denemek, çok komutlu bir transaction'ı yarıda bırakabilir. Bu yüzden transaction'ın **tamamı** stratejiye tek bir yeniden-denenebilir birim olarak verilmelidir:
+
+```csharp
+using var probe = _dbFactory.CreateDbContext();
+var strategy = probe.Database.CreateExecutionStrategy();
+
+return strategy.Execute(() =>
+{
+    using var ctx = _dbFactory.CreateDbContext();   // ← delegate'in İÇİNDE
+    using var tx = ctx.Database.BeginTransaction();
+    // ...
+    tx.Commit();
+});
+```
+
+`DbContext`'in delegate'in **içinde** açılması şart: yeniden denemede taze bir change-tracker gerekir, yoksa ilk denemede eklenmiş entity'ler ikinci denemede tekrar yazılır.
+
+> 🐞 **Bu kural bir canlı hatasıyla öğrenildi.** Çok satırlı sipariş/stok transaction'ları testlerde geçip üretimde patladı; onay verilmiş bir sipariş `[HITL] Approval execution başarısız` ile düştü. Sebep test tarafındaydı: `PostgresCatalogFixture` `EnableRetryOnFailure` çağırmıyordu, dolayısıyla testlerde strateji elle transaction'a izin veren varsayılan `ExecutionStrategy` oluyordu. Fixture artık üretimle aynı yapılandırmayı kullanıyor — **testler ile üretim arasındaki DbContext yapılandırma farkı, bu sınıftaki hataların saklandığı yerdir.**
 
 ---
 

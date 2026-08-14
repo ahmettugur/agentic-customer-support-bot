@@ -26,44 +26,58 @@ public sealed class OrderRepository : IOrderRepository
     /// Başlık ve satırlar iki ayrı <c>SaveChanges</c> gerektirir (sipariş kodu DB tarafından
     /// üretilir ve satırların yabancı anahtarı odur), bu yüzden ikisi tek transaction'a
     /// alınır — aksi hâlde araya düşen bir hata satırsız bir "hayalet sipariş" bırakırdı.
+    ///
+    /// <para>
+    /// Transaction, üretimde açık olan retry stratejisiyle (<c>EnableRetryOnFailure</c>)
+    /// uyumlu olması için <c>CreateExecutionStrategy().Execute(...)</c> içinde çalıştırılır;
+    /// aksi hâlde <c>NpgsqlRetryingExecutionStrategy</c> elle açılan transaction'ı reddeder.
+    /// <see cref="DbContext"/> delegate'in İÇİNDE açılır: yeniden denemede taze bir
+    /// change-tracker gerekir, yoksa ilk denemede eklenen entity'ler ikinci kez yazılırdı.
+    /// </para>
     /// </remarks>
     public string Create(OrderInfo order)
     {
         if (order.Lines.Count == 0)
             throw new ArgumentException("Sipariş en az bir satır içermelidir.", nameof(order));
 
-        using var ctx = _dbFactory.CreateDbContext();
-        using var tx = ctx.Database.BeginTransaction();
+        using var probe = _dbFactory.CreateDbContext();
+        var strategy = probe.Database.CreateExecutionStrategy();
 
-        var names = order.Lines.Select(l => l.Product).ToList();
-        var products = ctx.Products
-            .Where(p => names.Contains(p.Name))
-            .ToDictionary(p => p.Name, p => p.Id);
-
-        var orderEntity = new OrderEntity
+        return strategy.Execute(() =>
         {
-            CustomerId = long.Parse(order.CustomerId),
-            Status = order.Status,
-            OrderDate = order.OrderDate.Kind == DateTimeKind.Utc
-                ? order.OrderDate
-                : DateTime.SpecifyKind(order.OrderDate, DateTimeKind.Utc)
-        };
-        ctx.Orders.Add(orderEntity);
-        ctx.SaveChanges(); // Code DB tarafından üretilir, EF geri okur
+            using var ctx = _dbFactory.CreateDbContext();
+            using var tx = ctx.Database.BeginTransaction();
 
-        foreach (var line in order.Lines)
-        {
-            ctx.OrderDetails.Add(new OrderDetailEntity
+            var names = order.Lines.Select(l => l.Product).ToList();
+            var products = ctx.Products
+                .Where(p => names.Contains(p.Name))
+                .ToDictionary(p => p.Name, p => p.Id);
+
+            var orderEntity = new OrderEntity
             {
-                OrderCode = orderEntity.Code,
-                ProductId = products[line.Product],
-                Quantity = line.Quantity
-            });
-        }
+                CustomerId = long.Parse(order.CustomerId),
+                Status = order.Status,
+                OrderDate = order.OrderDate.Kind == DateTimeKind.Utc
+                    ? order.OrderDate
+                    : DateTime.SpecifyKind(order.OrderDate, DateTimeKind.Utc)
+            };
+            ctx.Orders.Add(orderEntity);
+            ctx.SaveChanges(); // Code DB tarafından üretilir, EF geri okur
 
-        ctx.SaveChanges();
-        tx.Commit();
-        return orderEntity.Code.ToString();
+            foreach (var line in order.Lines)
+            {
+                ctx.OrderDetails.Add(new OrderDetailEntity
+                {
+                    OrderCode = orderEntity.Code,
+                    ProductId = products[line.Product],
+                    Quantity = line.Quantity
+                });
+            }
+
+            ctx.SaveChanges();
+            tx.Commit();
+            return orderEntity.Code.ToString();
+        });
     }
 
     public OrderInfo? Get(string orderId)

@@ -28,9 +28,17 @@ public sealed class PostgresCatalogFixture : IAsyncLifetime
     {
         await _container.StartAsync();
 
+        // EnableRetryOnFailure ÜRETİMLE AYNI olmalı (bkz. PersistenceServiceCollectionExtensions).
+        // Bu satır olmadan strateji, elle açılan transaction'lara izin veren varsayılan
+        // ExecutionStrategy olur; üretimde ise NpgsqlRetryingExecutionStrategy'dir ve
+        // BeginTransaction'ı InvalidOperationException ile reddeder. Fark, çok satırlı
+        // sipariş/stok transaction'larının testlerde geçip canlıda patlamasına yol açmıştı.
         var options = new DbContextOptionsBuilder<CustomerSupportDbContext>()
             .UseNpgsql(_container.GetConnectionString(), npg =>
-                npg.MigrationsHistoryTable("__ef_migrations_history", "public"))
+            {
+                npg.MigrationsHistoryTable("__ef_migrations_history", "public");
+                npg.EnableRetryOnFailure(maxRetryCount: 3);
+            })
             .Options;
 
         DbFactory = new SimpleDbContextFactory(options);
