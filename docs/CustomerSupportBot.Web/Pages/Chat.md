@@ -15,6 +15,40 @@ Müşteri destek chat arayüzüdür. Kullanıcının AI asistanla gerçek zamanl
 - Oturum rating'i (yıldız + feedback) göndermek/göstermek.
 - Approval bildirimleri (çan ikonu, panel, görüldü işaretleme, geçmiş).
 - Dark/light tema toggle.
+- `ui_hint` olaylarını karşılamak — bugün tek tür: kategori seçim kartları (aşağıya bakın).
+
+### Kategori seçim kartları — veri erken gelir, gösterim ertelenir
+
+`category_picker` ipucu **tur ortasında** yayınlanır: `ProductListTool` tool olarak çalışırken
+`IUiHintEmitter.Emit`'i çağırır, `WorkflowRunner` da kuyruğu olay döngüsünün içinde hemen
+boşaltır. Yani kategori listesi, `ResponseAgent` daha metnini üretmeden tarayıcıya ulaşır.
+
+`OnStreamEvent` bu veriyi geldiği anda `_currentBot.CategoryPicker`'a yazar, ama markup
+kartları **turun bitmesini bekler**:
+
+```razor
+@if (!msg.IsStreaming && msg.CategoryPicker is { Count: > 0 })
+```
+
+> 🐞 **Bulundu ve düzeltildi — çalışırken tıklanabilir arayüz.** Koşulda `!msg.IsStreaming`
+> yoktu; kartlar ipucu gelir gelmez çiziliyordu. Ajan çip paneli ise yalnızca akış sürerken
+> görünür (`msg.IsStreaming && _agentChips.Count > 0`), dolayısıyla kartların ilk göründüğü
+> an ile "ajan hâlâ çalışıyor" görüntüsü **yapısal olarak** çakışıyordu — rastlantı değil,
+> sıralamanın garantisi.
+>
+> Asıl zarar görüntü değildi: o pencerede bir karta tıklamak ikinci bir tur başlatıyordu.
+> `SendChipMessage` `SendAsync`'i koşulsuz çağırıyordu (`HandleSendAsync`'teki `_isStreaming`
+> kontrolü orada yoktu) ve `__streamChat` önceki akışı iptal etmeyip yalnızca abort
+> handle'ının üzerine yazıyor — sonuçta iki eşzamanlı `/chat/stream` isteği aynı
+> `_currentBot`'a yazıyor ve ilkini durdurma imkânı kayboluyordu.
+>
+> İki katmanlı düzeltme: kartlar tur bitmeden çizilmiyor, ayrıca `SendChipMessage` de
+> `_isStreaming` kontrolü yapıyor (ileride akış sırasında görünen bir düğme eklenirse diye).
+
+Akışı sonlandıran **her** yol `IsStreaming`'i `false` yapar — `response_complete`, `error`
+olayı, `OnStreamComplete` (JS abort dahil) ve `OnStreamError` — dolayısıyla picker gizli
+kalamaz. Kullanıcı turu "durdur" ile keserse de kartlar görünür; kategoriler zaten
+başarıyla alınmıştır.
 
 ## Diğer Katman ve Bileşenlerle İlişkileri
 - **DI ile inject edilen**: `IJSRuntime`, [ChatApiService](../Services/ChatApiService.md), `HttpClient`, [AuthTokenStore](../Services/AuthTokenStore.md), `AuthService`, [AppAuthStateProvider](../Services/AppAuthStateProvider.md), `NavigationManager`, [ThemeService](../Services/ThemeService.md).

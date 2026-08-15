@@ -355,6 +355,13 @@ public static class WellKnown
     {
         public const string MissingRequiredField = "MISSING_REQUIRED_FIELD";
         public const string ProductNotFound = "PRODUCT_NOT_FOUND";
+
+        /// <summary>
+        /// İstenen kategori katalogda hiç yok (ad yanlış). <see cref="ProductNotFound"/>'dan
+        /// ayrıdır: orada kategori vardır ama içi boştur — tekrar denemek anlamsızdır.
+        /// Burada ise geçerli bir adla tekrar denemek doğru davranıştır.
+        /// </summary>
+        public const string CategoryNotFound = "CATEGORY_NOT_FOUND";
         public const string CustomerNotFound = "CUSTOMER_NOT_FOUND";
         public const string OrderNotFound = "ORDER_NOT_FOUND";
         public const string StockInsufficient = "STOCK_INSUFFICIENT";

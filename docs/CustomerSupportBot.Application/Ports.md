@@ -51,8 +51,21 @@ Application katmanı bu arayüzleri kullanır. Implementasyonlar Adapter projele
 | `ICustomerProfileService` | `CustomerProfileService` | Müşteri profil güncelleme |
 | `ISemanticMemoryWriter` | `SemanticMemoryService` | Episodik bellek yazma |
 | `ISkillsBasedRouter` | `SkillsBasedRouter` | Eskalasyon routing kararı |
-| `IUiHintEmitter` | `UiHintEmitter` | Tool → streaming pipeline UI ipuçları |
+| `IUiHintEmitter` | `UiHintEmitter` | Tool → streaming pipeline UI ipuçları — `Emit` **`bool` döner**, aşağıya bakın |
 | `IBrowserChannel` | `WebSocketBrowserChannel` (Api) | WebSocket kanal abstraction |
+
+> ⚠️ **`IUiHintEmitter.Emit` teslimi garanti etmez.** İpucu ancak ambient bağlamda bir
+> session varsa kuyruğa girer; yoksa düşer ve metot `false` döner. Native sesli kanalda bu
+> bağlam hiç kurulmadığı için bu yol gerçekten yürünüyor.
+>
+> Dolayısıyla bu port'u çağıran her tool, LLM'e döndürdüğü mesajı **dönüş değerine
+> koşullamak zorundadır** — aksi halde "kullanıcıya gösterildi" gibi doğrulanmamış bir iddia
+> üretir ve model kullanıcıyı olmayan bir arayüze yönlendirir. `Emit` eskiden `void`'di ve
+> `ProductListTool` tam olarak bu hatayı yapıyordu; bkz.
+> [`Tools/ProductToolsService.md`](Tools/ProductToolsService.md#31-picker-gerçekten-gösterildi-mi-showcategorypicker).
+>
+> Genel kural: bu bir **yan kanaldır**, garanti değil. Bir ipucu hiç çizilmezse konuşmanın
+> yine de yürümesi gerekir — her ipucunun bir metin muadili olmalıdır.
 
 ### Persistence
 

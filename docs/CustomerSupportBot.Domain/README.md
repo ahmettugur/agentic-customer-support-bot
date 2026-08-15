@@ -50,6 +50,7 @@ docs/CustomerSupportBot.Domain/
 │   ├── OrderInfo.md (+ OrderLine, OrderLineRequest, StockDeductionResult)
 │   ├── ComplaintInfo.md
 │   ├── ProductInfo.md
+│   ├── CategoryProducts.md
 │   ├── ExtractedIds.md
 │   ├── VerifiedEntities.md (+ VerifiedEntity, EntitySource, EntityVerification)
 │   ├── SessionAnalytics.md (+ ilgili DTO'lar)
@@ -115,6 +116,7 @@ Saf veri tipleri. Sınıflar (mutable state için: `AgentSession`), record'lar (
 | [Model/OrderInfo.md](Model/OrderInfo.md) | Sipariş domain modeli — **çok satırlı** (`OrderLine`), satır talebi (`OrderLineRequest`), stok düşüm sonucu (`StockDeductionResult`) |
 | [Model/ComplaintInfo.md](Model/ComplaintInfo.md) | Şikayet domain modeli |
 | [Model/ProductInfo.md](Model/ProductInfo.md) | Ürün domain modeli |
+| [Model/CategoryProducts.md](Model/CategoryProducts.md) | Kategori sorgu sonucu — "kategori yok" ile "kategori boş"u ayırır |
 | [Model/ExtractedIds.md](Model/ExtractedIds.md) | Regex ile çıkarılan ham ID'ler |
 | [Model/VerifiedEntities.md](Model/VerifiedEntities.md) | DB ile doğrulanmış entity'ler |
 

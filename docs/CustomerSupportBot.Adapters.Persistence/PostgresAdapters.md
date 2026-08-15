@@ -18,7 +18,7 @@ Temel desen için önce [HybridPattern.md](HybridPattern.md) oku.
 
 **`AppendAssistantMessage` özelliği:** Son mesaj boş asistan mesajı ise onu replace eder — streaming sırasında placeholder yazılmış olabilir.
 
-**`ExtractAndUpdateStateCoreAsync`:** `SessionStateExtractor.ExtractAndApply`'ı (Domain) `session` nesnesi üzerinde `lock` altında çağırır, ardından `chat.sessions.state` JSONB günceller. Bu, turun türetilmiş state'inin (intent, sentiment, `ConsecutiveNegativeTurns`) **tek yazarıdır** — `signals` parametresi (`TurnSignals?`) reasoning'in bu tur için ürettiği intent/sentiment'i buraya girdi olarak taşır; `null` ise kural tabanlı çıkarıma düşülür. Kilit, `ConsecutiveNegativeTurns`'ün eşzamanlı isteklerde (çift-submit, çoklu sekme) bir artışı kaybetmesini önler. Detay: [`Services-SessionStateExtractor.md`](../CustomerSupportBot.Domain/Services-SessionStateExtractor.md).
+**`ExtractAndUpdateStateCoreAsync`:** `SessionStateExtractor.ExtractAndApply`'ı (Domain) `session` nesnesi üzerinde `lock` altında çağırır, ardından `chat.sessions.state` JSONB günceller. Bu, turun türetilmiş state'inin (intent, sentiment, `ConsecutiveNegativeTurns`) **tek yazarıdır** — `signals` parametresi (`TurnSignals?`) reasoning'in bu tur için ürettiği intent/sentiment'i buraya girdi olarak taşır; `null` ise kural tabanlı çıkarıma düşülür. Kilit, `ConsecutiveNegativeTurns`'ün eşzamanlı isteklerde (çift-submit, çoklu sekme) bir artışı kaybetmesini önler. Detay: [`SessionStateExtractor.md`](../CustomerSupportBot.Domain/Services/SessionStateExtractor.md).
 
 ---
 
@@ -207,8 +207,20 @@ EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yarat
 | `FindProduct(name)` | İsme göre ürün arama (exact match) |
 | `TryDeductStock(lines)` | Bir siparişin **tüm** satırlarının stoğunu tek transaction'da düşer |
 | `GetAll()` | Tüm ürünler (kategori dahil, Name sıralı) |
-| `GetByCategory(category)` | Kategoriye göre ürünler |
-| `GetCategories()` | Tüm kategori isimleri |
+| `GetByCategory(category)` | Kategoriye göre ürünler — **[`CategoryProducts`](../CustomerSupportBot.Domain/Model/CategoryProducts.md)** döner |
+| `GetSelectableCategories()` | **Yalnızca en az bir ürünü olan** kategori isimleri |
+
+**Kategori sorgularında iki incelik:**
+
+`GetByCategory` boş liste yerine `CategoryProducts` döner, çünkü "böyle bir kategori yok" ile
+"kategori var ama içi boş" çağıran için zıt anlamlar taşır (ayrıntı ve düzeltilen hata için
+bkz. [`CategoryProducts.md`](../CustomerSupportBot.Domain/Model/CategoryProducts.md)).
+Dönen `CanonicalName` katalogdaki yazımdır — kolon `und-u-ks-level1` collation'lı olduğu için
+eşleşme farklı yazımlarla da gerçekleşir.
+
+`GetSelectableCategories` (eski adı `GetCategories`) boş kategorileri **kasıtlı olarak**
+eler: bu liste kategori seçim ekranını besler ve içi boş bir kategoriyi seçenek olarak
+göstermek kullanıcıyı çıkmaz sokağa sokar. Seed'de 4 kategori gerçekten boştur.
 
 **Stok düşürme — ya hep ya hiç:**
 

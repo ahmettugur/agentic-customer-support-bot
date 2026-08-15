@@ -290,7 +290,14 @@
                                         }
                                     </div>
                                 }
-                                @if (msg.CategoryPicker is { Count: > 0 })
+                                @* Picker, ipucu geldiği anda DEĞİL tur bittiğinde çizilir.
+                                   category_picker tool çalışırken yayınlanıyor (bkz.
+                                   ProductToolsService.ShowCategoryPicker), yani veri turun
+                                   ortasında geliyor; ResponseAgent hâlâ metin üretiyor olabilir.
+                                   Erken çizilirse kullanıcı, sistem çalışırken tıklanabilir bir
+                                   arayüz görüyor ve tıklarsa ikinci bir tur başlıyordu. Veri
+                                   erken gelmeye devam ediyor, yalnızca gösterimi erteleniyor. *@
+                                @if (!msg.IsStreaming && msg.CategoryPicker is { Count: > 0 })
                                 {
                                     <div class="category-picker">
                                         <span class="category-picker-label">Kategori seçin</span>
@@ -732,7 +739,24 @@
             await HandleSendAsync();
     }
 
-    private async Task SendChipMessage(string text) => await SendAsync(text);
+    /// <summary>
+    /// Hazır metinli düğmelerden (karşılama çipleri, kategori kartları) mesaj gönderir.
+    ///
+    /// <para>
+    /// <c>_isStreaming</c> kontrolü <see cref="HandleSendAsync"/>'teki ile aynı sebeple burada
+    /// da gerekli: <see cref="SendAsync"/> koşulsuz olarak yeni bir tur başlatır ve
+    /// <c>__streamChat</c> önceki akışı iptal etmez — yalnızca abort handle'ının üzerine yazar.
+    /// Yani akış sürerken gelen ikinci bir gönderim iki eşzamanlı <c>/chat/stream</c> isteği
+    /// bırakır; ikisi de aynı <c>_currentBot</c>'a yazar ve ilkinin durdurma imkânı kaybolur.
+    /// Kategori kartları artık yalnızca tur bittikten sonra çizildiği için bu yola normalde
+    /// girilmez; kontrol, ileride akış sırasında görünen bir düğme eklenirse diye durur.
+    /// </para>
+    /// </summary>
+    private async Task SendChipMessage(string text)
+    {
+        if (_isStreaming) return;
+        await SendAsync(text);
+    }
 
     /// <summary>
     /// Kullanıcı devam eden yanıtı durdurur. __stopStream fetch'in AbortController'ını

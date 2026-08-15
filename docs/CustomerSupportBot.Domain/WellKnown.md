@@ -267,6 +267,7 @@ public static class ToolErrorCodes
 {
     public const string MissingRequiredField = "MISSING_REQUIRED_FIELD";
     public const string ProductNotFound = "PRODUCT_NOT_FOUND";
+    public const string CategoryNotFound = "CATEGORY_NOT_FOUND";
     public const string CustomerNotFound = "CUSTOMER_NOT_FOUND";
     public const string OrderNotFound = "ORDER_NOT_FOUND";
     public const string StockInsufficient = "STOCK_INSUFFICIENT";
@@ -278,6 +279,12 @@ public static class ToolErrorCodes
     public const string ReturnAlreadyRequested = "RETURN_ALREADY_REQUESTED";
 }
 ```
+
+> `CATEGORY_NOT_FOUND` ile `PRODUCT_NOT_FOUND` **kasıtlı olarak ayrıdır**: birincisinde
+> kategori adı yanlıştır ve geçerli bir adla tekrar denemek doğrudur, ikincisinde kategori
+> vardır ama içi boştur ve tekrar denemek anlamsızdır. İkisi eskiden tek koda düşüyor ve LLM
+> hangi durumda olduğunu bilemiyordu — bkz.
+> [`CategoryProducts.md`](Model/CategoryProducts.md).
 
 ### ReasoningEffort
 

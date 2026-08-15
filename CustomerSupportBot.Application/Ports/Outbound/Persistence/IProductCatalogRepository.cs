@@ -31,9 +31,21 @@ public interface IProductCatalogRepository
     /// <summary>Tüm ürün listesi.</summary>
     IReadOnlyList<ProductInfo> GetAll();
 
-    /// <summary>Belirli kategorideki ürünleri döner.</summary>
-    IReadOnlyList<ProductInfo> GetByCategory(string category);
+    /// <summary>
+    /// Belirli kategorideki ürünleri döner. Kategorinin hiç bulunamamasıyla bulunup boş
+    /// olmasını ayırt eder — bkz. <see cref="CategoryProducts"/>.
+    /// </summary>
+    CategoryProducts GetByCategory(string category);
 
-    /// <summary>Katalogdaki tüm benzersiz kategori adlarını sıralı döner.</summary>
-    IReadOnlyList<string> GetCategories();
+    /// <summary>
+    /// Kullanıcıya <b>seçenek olarak sunulabilecek</b> kategori adlarını sıralı döner:
+    /// yalnızca en az bir ürünü olanlar.
+    ///
+    /// <para>
+    /// Boş kategoriler kasıtlı olarak dışarıda bırakılır. Bu liste kategori seçim ekranını
+    /// besler; içi boş bir kategoriyi seçenek olarak göstermek kullanıcıyı tıkladığında
+    /// "ürün bulunmamaktadır" ile karşılaşacağı bir çıkmaz sokağa sokar.
+    /// </para>
+    /// </summary>
+    IReadOnlyList<string> GetSelectableCategories();
 }

@@ -17,12 +17,13 @@ public sealed class UiHintEmitter : IUiHintEmitter
 
     public UiHintEmitter(IApprovalContextAccessor ctx) => _ctx = ctx;
 
-    public void Emit(StreamEvent evt)
+    public bool Emit(StreamEvent evt)
     {
         var ctx = _ctx.Context;
         var sessionId = ctx?.SessionId;
-        if (string.IsNullOrEmpty(sessionId)) return;
+        if (string.IsNullOrEmpty(sessionId)) return false;
         _store.GetOrAdd(sessionId, _ => new ConcurrentQueue<StreamEvent>()).Enqueue(TagAgent(evt, ctx!.AgentName));
+        return true;
     }
 
     /// <summary>

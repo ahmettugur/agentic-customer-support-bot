@@ -138,7 +138,7 @@ public sealed class ProductCatalogRepository : IProductCatalogRepository
             .ToList();
     }
 
-    public IReadOnlyList<ProductInfo> GetByCategory(string category)
+    public CategoryProducts GetByCategory(string category)
     {
         using var ctx = _dbFactory.CreateDbContext();
 
@@ -146,22 +146,27 @@ public sealed class ProductCatalogRepository : IProductCatalogRepository
         var matched = ctx.Categories.AsNoTracking()
             .FirstOrDefault(c => c.Name == category);
 
-        if (matched is null) return [];
+        // "Kategori yok" ile "kategori boş" burada ayrılır; ikisini de boş listeye
+        // indirmek çağıranın hata mesajını doğru kurmasını imkânsız kılıyordu.
+        if (matched is null) return CategoryProducts.NotFound();
 
-        return ctx.Products
+        var products = ctx.Products
             .AsNoTracking()
             .Include(p => p.Category)
             .Where(p => p.CategoryId == matched.Id)
             .OrderBy(p => p.Name)
             .Select(p => new ProductInfo(p.Price, p.Stock, p.Name, p.Category.Name))
             .ToList();
+
+        return CategoryProducts.Found(matched.Name, products);
     }
 
-    public IReadOnlyList<string> GetCategories()
+    public IReadOnlyList<string> GetSelectableCategories()
     {
         using var ctx = _dbFactory.CreateDbContext();
         return ctx.Categories
             .AsNoTracking()
+            .Where(c => ctx.Products.Any(p => p.CategoryId == c.Id))
             .OrderBy(c => c.Name)
             .Select(c => c.Name)
             .ToList();
