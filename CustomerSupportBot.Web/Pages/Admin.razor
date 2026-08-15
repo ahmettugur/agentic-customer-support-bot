@@ -1,5 +1,5 @@
 @page "/admin"
-@attribute [Authorize]
+@attribute [Authorize(Roles = "Admin,Agent")]
 @layout AdminLayout
 @inject AdminApiService AdminApi
 @inject AnalyticsApiService AnalyticsApi
@@ -29,7 +29,7 @@
             </a>
             <div class="admin-header-info">
                 <h1>@(_isAgent ? "Temsilci Paneli" : "HITL Admin Panel")</h1>
-                <p class="muted">@(_isAgent ? "Atanmış eskalasyonlar &amp; canlı sohbetler" : "Human-in-the-Loop · Onay bekleyen tool çağrıları &amp; açık eskalasyonlar")</p>
+                <p class="muted">@(_isAgent ? "Atanmış eskalasyonlar & canlı sohbetler" : "Human-in-the-Loop · Onay bekleyen tool çağrıları & açık eskalasyonlar")</p>
             </div>
         </div>
         <div class="admin-header-right">
@@ -272,7 +272,7 @@
                                 <article class="card card-history compact-card">
                                     <header class="card-header">
                                         <div class="card-title">
-                                            <span class="status-tag">@e.Status</span>
+                                            <span class="status-tag @e.Status">@e.Status</span>
                                             @if (isReplan)
                                             {
                                                 <span class="status-tag status-tag--replan" title="Yeniden Planla ile kapatıldı">🔄</span>
@@ -318,7 +318,7 @@
                                 <article class="card card-escalation @(isAcknowledged ? "card-acknowledged" : "")">
                                     <header class="card-header">
                                         <div class="card-title">
-                                            <span class="status-tag @(isAcknowledged ? "status-tag--acknowledged" : "")">@e.Status</span>
+                                            <span class="status-tag @e.Status">@e.Status</span>
                                             <code class="card-id">@ShortId(e.Id)</code>
                                             @if (isAcknowledged && e.AssignedTo is not null)
                                             {
@@ -676,7 +676,7 @@
                                         {
                                             <div class="sa-detail-item">
                                                 <code>@a.ToolName</code>
-                                                <span class="status-tag">@a.Status</span>
+                                                <span class="status-tag @a.Status">@a.Status</span>
                                                 @if (a.DecidedBy is not null) { <span class="muted">by @a.DecidedBy</span> }
                                                 <time class="muted">@FmtRelative(a.RequestedAt)</time>
                                             </div>
@@ -691,7 +691,7 @@
                                         {
                                             <div class="sa-detail-item">
                                                 <span>@esc.Reason</span>
-                                                <span class="status-tag">@esc.Status</span>
+                                                <span class="status-tag @esc.Status">@esc.Status</span>
                                                 @if (esc.AgentName is not null) { <code>@esc.AgentName</code> }
                                                 @if (esc.Resolution is not null) { <span class="muted">→ @esc.Resolution</span> }
                                             </div>
@@ -731,7 +731,7 @@
                     {
                         <article class="card card-history">
                             <header class="card-header">
-                                <div class="card-title"><span class="tool-tag">@a.ToolName</span><span class="status-tag">@a.Status</span><code class="card-id">@ShortId(a.Id)</code></div>
+                                <div class="card-title"><span class="tool-tag">@a.ToolName</span><span class="status-tag @a.Status">@a.Status</span><code class="card-id">@ShortId(a.Id)</code></div>
                                 <time class="muted">@FmtRelative(a.RequestedAt)</time>
                             </header>
                             @if (a.DecidedBy is not null)
@@ -751,7 +751,7 @@
                     {
                         <article class="card card-history">
                             <header class="card-header">
-                                <div class="card-title"><span class="status-tag">@e.Status</span><code class="card-id">@ShortId(e.Id)</code></div>
+                                <div class="card-title"><span class="status-tag @e.Status">@e.Status</span><code class="card-id">@ShortId(e.Id)</code></div>
                                 <time class="muted">@FmtRelative(e.CreatedAt)</time>
                             </header>
                             <div class="card-body">

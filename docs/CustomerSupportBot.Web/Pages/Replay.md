@@ -13,6 +13,11 @@ Bir trace ID'si ile açılarak, o trace'in başlangıcından sonuna kadar reason
 - Her adım tipine uygun görsel render: Init, Agent Visit, Tool Call, Reasoning, Planning, Final.
 - İleri/geri navigasyon ve otomatik oynatma.
 
+## Erişim
+`[Authorize(Roles = "Admin")]` — `/traces/*` API'leri `Program.cs`'de `Admin` rolüyle
+korunuyor; sayfa yetkisi API ile örtüşüyor (bkz. [Traces.md](Traces.md#erişim) — aynı
+düzeltme beş admin sayfasında birlikte yapıldı).
+
 ## Diğer Katman ve Bileşenlerle İlişkileri
 - **DI ile inject edilen**: [TracesApiService](../Services/TracesApiService.md).
 - **Model bağımlılığı**: [TraceDetailModels](../Models/TraceDetailModels.md) — `ReplayStep`, `ReplayStepPayload` hiyerarşisi.

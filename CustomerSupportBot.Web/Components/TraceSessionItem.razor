@@ -3,7 +3,7 @@
      role="button"
      tabindex="0"
      @onkeydown="HandleKeyDown">
-    <div class="session-item-title">@(Session.Title ?? "(boş)")</div>
+    <div class="session-item-title" title="@(Session.Title ?? "(boş)")">@(Session.Title ?? "(boş)")</div>
     <div class="session-item-meta">
         <span class="session-trace-count">@Session.TraceCount trace</span>
         <span>•</span>

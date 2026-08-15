@@ -14,6 +14,10 @@ Bilgi tabanı (Knowledge Base) yönetim sayfasıdır. Makale oluşturma, düzenl
 - Yayın durumu toggle (published/draft).
 - İndeksleme durumu uyarıları gösterme.
 
+## Erişim
+`[Authorize(Roles = "Admin")]` — `/memory/*` API'leri `Admin` rolüyle korunuyor
+(bkz. [Traces.md](Traces.md#erişim)).
+
 ## Diğer Katman ve Bileşenlerle İlişkileri
 - **DI ile inject edilen**: [KnowledgeApiService](../Services/KnowledgeApiService.md), [ToastService](../Services/ToastService.md).
 - **Model bağımlılığı**: [KnowledgeModels](../Models/KnowledgeModels.md).

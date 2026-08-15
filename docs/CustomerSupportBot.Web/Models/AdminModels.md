@@ -17,6 +17,14 @@ Yalnızca veri taşıma — iş mantığı içermez.
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 Blazor WASM projesinde backend model DLL'lerine referans verilmez (izolasyon). Bu nedenle API şemaları client-side record'lar olarak yeniden tanımlanır. Record kullanımı immutability ve value-based equality sağlar.
 
+> ⚠️ **Bu mirror'ın kırılganlığı:** Alan adları API JSON'ıyla System.Text.Json'ın
+> case-insensitive eşleştirmesiyle uyuşmalı — yalnızca büyük/küçük harf farkı tolere
+> edilir, farklı bir ad **sessizce default değere** deserialize olur (hata fırlatmaz).
+> `SlaApprovalStats.WarnAfter`/`BreachAfter` tam olarak bu şekilde kırılmıştı (API
+> `warnAfterSeconds`/`breachAfterSeconds` dönüyordu); ayrıntı için
+> [Sla.md](../Pages/Sla.md#erişim). Yeni bir alan eklerken adın API'deki adla (case hariç)
+> birebir eşleştiğini doğrulayın.
+
 ## Üyeler
 
 ### Approvals
@@ -50,8 +58,8 @@ Blazor WASM projesinde backend model DLL'lerine referans verilmez (izolasyon). B
 |--------|---------|
 | `AgentInfo` | Id, DisplayName, IsActive |
 | `SlaStatus` | Enabled, PollIntervalSeconds, Approvals, Escalations |
-| `SlaApprovalStats` | PendingCount, OldestSeconds, WarnAfter, BreachAfter, OnBreach, BreachCountRecent |
-| `SlaEscalationStats` | OpenCount, OldestSeconds, WarnAfter, BreachAfter, BoostPriorityOnBreach, BreachCountRecent |
+| `SlaApprovalStats` | PendingCount, OldestSeconds, WarnAfterSeconds, BreachAfterSeconds, OnBreach, BreachCountRecent |
+| `SlaEscalationStats` | OpenCount, OldestSeconds, WarnAfterSeconds, BreachAfterSeconds, BoostPriorityOnBreach, BreachCountRecent |
 | `SlaEvent` | Timestamp, Kind, Severity, TargetId, Action, AgeSeconds, Note |
 | `SlaEventsResponse` | TotalCount, Items |
 

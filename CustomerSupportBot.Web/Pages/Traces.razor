@@ -1,7 +1,8 @@
 @page "/traces"
-@attribute [Authorize]
+@attribute [Authorize(Roles = "Admin")]
 @layout AdminLayout
 @inject TracesApiService TracesApi
+@inject IJSRuntime JS
 @implements IAsyncDisposable
 
 <link rel="stylesheet" href="css/traces.css" />
@@ -99,7 +100,9 @@
                     @foreach (var t in _traces)
                     {
                         <div class="trace-item @(_selectedTraceId == t.TraceId ? "active" : "")"
-                             @onclick="() => SelectTrace(t)">
+                             @onclick="() => SelectTrace(t)"
+                             role="button" tabindex="0"
+                             @onkeydown="@(e => { if (e.Key is "Enter" or " ") SelectTrace(t); })">
                             <p class="trace-item-query">@(t.UserQuery ?? "(boş sorgu)")</p>
                             <div class="trace-item-meta">
                                 @if (_viewMode == "all" && t.SessionId is not null)
@@ -136,13 +139,26 @@
     private bool               _autoRefresh   = true;
     private bool               _loading       = true;
     private bool               _loadingTraces;
+    private bool               _pageVisible   = true;
     private Timer?             _refreshTimer;
+    private DotNetObjectReference<Traces>? _dotNetRef;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadSessionsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _dotNetRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("loadScript", "/js/sla-bridge.js", "js-sla-bridge");
+        await JS.InvokeVoidAsync("__slaSetup", _dotNetRef);
         if (_autoRefresh) StartAutoRefresh();
     }
+
+    [JSInvokable]
+    public void OnVisibilityChange(bool visible) => _pageVisible = visible;
 
     private async Task LoadSessionsAsync()
     {
@@ -207,6 +223,7 @@
         _refreshTimer?.Dispose();
         _refreshTimer = new Timer(async _ =>
         {
+            if (!_pageVisible) return;
             try
             {
                 await InvokeAsync(async () =>
@@ -228,6 +245,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        _dotNetRef?.Dispose();
         if (_refreshTimer is not null) await _refreshTimer.DisposeAsync();
     }
 

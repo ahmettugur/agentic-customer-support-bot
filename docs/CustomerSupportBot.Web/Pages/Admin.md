@@ -4,7 +4,38 @@
 Admin ve Agent panelinin ana sayfasıdır. Approvals, escalations, aktif chat oturumları, analytics dashboard, improvement yönetimi ve agent listesini sekme tabanlı arayüzde sunar.
 
 ## Hangi Amaçla Kullanılır
-`/admin` route'unda, `Admin` veya `Agent` rolüyle erişilir. Tüm yönetim işlemlerinin tek noktadan yapıldığı kapsamlı dashboard'dur.
+`/admin` route'unda, `Admin` veya `Agent` rolüyle erişilir (`[Authorize(Roles = "Admin,Agent")]`).
+Tüm yönetim işlemlerinin tek noktadan yapıldığı kapsamlı dashboard'dur.
+
+> 🐞 **Bulundu ve düzeltildi:** Sayfa eskiden rolsüz `[Authorize]` kullanıyordu — teknik
+> olarak çalışıyordu (her iki rol de girebiliyordu) ama diğer dört admin sayfasıyla
+> (`Traces`, `Replay`, `Sla`, `Knowledge`) aynı desende olduğu için ilk bakışta onlarla
+> karıştırılıp yanlışlıkla `Roles = "Admin"`e daraltılabilirdi — ki bu sayfa
+> [AdminApiService](../Services/AdminApiService.md)'in rol-duyarlı `/agent/*` prefix'i
+> sayesinde `Agent` rolünü de gerçekten destekliyor. Karışıklığı önlemek için rol listesi
+> artık açıkça yazılıyor.
+
+> 🐞 **Bulundu ve düzeltildi — durum rozetleri renksizdi (tüm sekmelerde):** `admin.css`
+> içinde `.status-tag.approved`/`.rejected`/`.pending`/`.open`/`.acknowledged`/`.resolved`/
+> `.dismissed`/`.expired` için tam bir renk seti tanımlıydı (dark mode dahil), ama sayfadaki
+> **hiçbir** `<span class="status-tag">` bu durumu ikinci bir CSS class olarak eklemiyordu —
+> yalnızca metin içeriği olarak basılıyordu (`@a.Status`/`@e.Status`, backend'den zaten
+> `"approved"`/`"open"` gibi camelCase-enum string olarak geliyor). Sonuç: "APPROVED",
+> "OPEN" gibi rozetler her yerde düz, renksiz, kalın metin olarak görünüyordu — Onay
+> Kuyruğu, Eskalasyonlar, Geçmiş, Analytics detay satırları dahil 6 nokta. Kullanıcının
+> fark ettiği yer Geçmiş sekmesiydi ama kapsam tüm sayfaydı. Her noktada
+> `class="status-tag @a.Status"` deseni uygulandı. Açık Eskalasyonlar sekmesindeki
+> `isAcknowledged ? "status-tag--acknowledged" : ""` özel-durumu da bu vesileyle kaldırıldı
+> — `.status-tag.acknowledged` zaten aynı rengi tanımlıyordu, ayrı bir BEM class'ı
+> (`status-tag--acknowledged`) sadece bu tek eksik bağlamayı dolaylı yoldan telafi etmek
+> için yazılmış, artık gereksiz bir kopyaydı; CSS'ten de silindi.
+
+> 🐞 **Bulundu ve düzeltildi — çift HTML-encode:** Başlık altındaki açıklama metninde
+> `&amp;` yazılmıştı (`@("... &amp; ...")` bir C# string interpolasyonu içinde). Razor,
+> `@()` içindeki string'i zaten otomatik HTML-encode ettiğinden, kaynaktaki `&amp;`
+> ekrana literal **"&amp;"** olarak basılıyordu. Aynı satırlardaki düz HTML işaretlemesinde
+> (`@onclick` butonlarının metni gibi, `@()` dışında) `&amp;` doğrudur ve dokunulmadı —
+> yalnızca C# string içeriğine yazılan kopyalar `&` olarak düzeltildi.
 
 ## Sorumlulukları
 - Sekme navigasyonu: Approvals, Escalations, Chat Sessions, Analytics, Improvements, Agents, Sessions.

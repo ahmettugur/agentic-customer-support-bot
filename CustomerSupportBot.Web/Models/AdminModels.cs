@@ -144,8 +144,8 @@ public sealed record SlaStatus(
 public sealed record SlaApprovalStats(
     int PendingCount,
     double? OldestSeconds,
-    double WarnAfter,
-    double BreachAfter,
+    double WarnAfterSeconds,
+    double BreachAfterSeconds,
     string? OnBreach,
     int BreachCountRecent
 );
@@ -153,8 +153,8 @@ public sealed record SlaApprovalStats(
 public sealed record SlaEscalationStats(
     int OpenCount,
     double? OldestSeconds,
-    double WarnAfter,
-    double BreachAfter,
+    double WarnAfterSeconds,
+    double BreachAfterSeconds,
     bool BoostPriorityOnBreach,
     int BreachCountRecent
 );

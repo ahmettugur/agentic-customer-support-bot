@@ -1626,11 +1626,6 @@ code.at-val {
     border-left: 3px solid var(--color-warning, #f59e0b);
 }
 
-.status-tag--acknowledged {
-    background: #fef3c7;
-    color: #92400e;
-}
-
 .assigned-badge {
     display: inline-flex;
     align-items: center;

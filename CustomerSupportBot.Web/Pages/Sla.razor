@@ -1,5 +1,5 @@
 @page "/sla"
-@attribute [Authorize]
+@attribute [Authorize(Roles = "Admin")]
 @layout AdminLayout
 @inject SlaApiService SlaApi
 @inject IJSRuntime JS
@@ -10,7 +10,7 @@
 <div class="sla-container">
     <div class="sla-toolbar">
         <h1>⏱️ SLA Guardian</h1>
-        <div>
+        <div class="sla-toolbar-actions">
             @{
                 var pillClass = _status?.Enabled == true ? "ok" : "off";
                 var pillText  = _status is { Enabled: true }
@@ -18,8 +18,8 @@
                     : (_status is null ? "durum bilinmiyor" : "pasif");
             }
             <span class="pill @pillClass">@pillText</span>
-            <button @onclick="RefreshAsync" style="margin-left:8px;">Yenile</button>
-            <label style="margin-left:8px; font-size:12px; color:#4b5563;">
+            <button class="btn-secondary" @onclick="RefreshAsync">Yenile</button>
+            <label class="auto-refresh-toggle">
                 <input type="checkbox" @bind="_autoRefresh" @bind:after="OnAutoRefreshChanged" /> Auto (5sn)
             </label>
         </div>
@@ -33,9 +33,9 @@
             @if (_status?.Approvals is { } a)
             {
                 @StatRow("Bekleyen sayı",     a.PendingCount.ToString(),  "")
-                @StatRow("En eski (sn)",      FormatNum(a.OldestSeconds), StatClass(a.OldestSeconds ?? 0, a.WarnAfter, a.BreachAfter))
-                @StatRow("Warn eşiği (sn)",   a.WarnAfter.ToString(),     "")
-                @StatRow("Breach eşiği (sn)", a.BreachAfter.ToString(),   "")
+                @StatRow("En eski (sn)",      FormatNum(a.OldestSeconds), StatClass(a.OldestSeconds ?? 0, a.WarnAfterSeconds, a.BreachAfterSeconds))
+                @StatRow("Warn eşiği (sn)",   a.WarnAfterSeconds.ToString(),     "")
+                @StatRow("Breach eşiği (sn)", a.BreachAfterSeconds.ToString(),   "")
                 @StatRow("Breach aksiyonu",   a.OnBreach ?? "—",          "")
                 @StatRow("Son ihlaller",      a.BreachCountRecent.ToString(), a.BreachCountRecent > 0 ? "breach" : "")
             }
@@ -49,9 +49,9 @@
             @if (_status?.Escalations is { } ev)
             {
                 @StatRow("Açık sayı",         ev.OpenCount.ToString(),    "")
-                @StatRow("En eski (sn)",       FormatNum(ev.OldestSeconds), StatClass(ev.OldestSeconds ?? 0, ev.WarnAfter, ev.BreachAfter))
-                @StatRow("Warn eşiği (sn)",    ev.WarnAfter.ToString(),   "")
-                @StatRow("Breach eşiği (sn)",  ev.BreachAfter.ToString(), "")
+                @StatRow("En eski (sn)",       FormatNum(ev.OldestSeconds), StatClass(ev.OldestSeconds ?? 0, ev.WarnAfterSeconds, ev.BreachAfterSeconds))
+                @StatRow("Warn eşiği (sn)",    ev.WarnAfterSeconds.ToString(),   "")
+                @StatRow("Breach eşiği (sn)",  ev.BreachAfterSeconds.ToString(), "")
                 @StatRow("Priority boost",     ev.BoostPriorityOnBreach ? "aktif" : "pasif", "")
                 @StatRow("Son ihlaller",       ev.BreachCountRecent.ToString(), ev.BreachCountRecent > 0 ? "breach" : "")
             }

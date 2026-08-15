@@ -12,7 +12,8 @@ public sealed class AuthorizedHttpClientHandler(
     AuthTokenStore store,
     AuthService authService,
     NavigationManager nav,
-    AppAuthStateProvider authState) : DelegatingHandler
+    AppAuthStateProvider authState,
+    ToastService toast) : DelegatingHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
@@ -30,6 +31,12 @@ public sealed class AuthorizedHttpClientHandler(
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         var response = await base.SendAsync(request, cancellationToken);
+
+        // 403 — token geçerli ama rol yetmiyor. Servisler bu durumu genelde "boş liste"ye
+        // çeviriyor (bkz. TracesApiService, SlaApiService), yani kullanıcıya bir şey
+        // göstermezsek yetki hatası "veri yok" gibi görünür. Toast ile ayırt edilebilir kılınır.
+        if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            toast.ShowError("Bu işlem için yetkiniz yok.");
 
         if (response.StatusCode != System.Net.HttpStatusCode.Unauthorized)
             return response;

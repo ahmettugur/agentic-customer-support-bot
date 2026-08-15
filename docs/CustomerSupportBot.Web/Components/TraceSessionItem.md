@@ -7,7 +7,9 @@ Trace oturumları listesinde tek bir oturumu temsil eden satır bileşenidir.
 `Traces.razor` sayfasındaki sol panelde her trace oturumunu göstermek için kullanılır.
 
 ## Sorumlulukları
-- Oturum başlığı, trace sayısı, mesaj sayısı ve son aktivite zamanını göstermek.
+- Oturum başlığı, trace sayısı, mesaj sayısı ve son aktivite zamanını göstermek (başlık
+  `text-overflow: ellipsis` ile kısaltılır; tam metin `title` tooltip'inde durur — birçok
+  oturum "Sipariş ver…" gibi neredeyse aynı önekle kısalınca ayırt edilebilir kalması için).
 - Oturum ID'sinin ilk 8 karakterini göstermek.
 - Aktif seçili durumu görsel olarak belirtmek.
 - Click ve Enter/Space keyboard event'lerini handle etmek (erişilebilirlik).

@@ -211,6 +211,10 @@
     background: var(--color-primary-subtle);
     border-left-color: var(--color-primary);
 }
+.session-item:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+}
 
 .session-item-title {
     font-size: 12px;
@@ -291,6 +295,10 @@
 .trace-item.active {
     background: var(--color-primary-subtle);
     border-left-color: var(--color-primary);
+}
+.trace-item:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
 }
 
 .trace-item-query {

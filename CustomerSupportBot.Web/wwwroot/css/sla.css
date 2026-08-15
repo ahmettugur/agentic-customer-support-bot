@@ -14,6 +14,7 @@
     justify-content: space-between;
     align-items: center;
     gap: var(--space-3);
+    flex-wrap: wrap;
 }
 
 .sla-toolbar h1 {
@@ -22,6 +23,44 @@
     font-weight: 700;
     color: var(--color-text);
 }
+
+.sla-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition);
+}
+.btn-secondary:hover {
+    background: var(--color-surface-alt);
+    border-color: var(--color-border-strong);
+}
+
+.auto-refresh-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+}
+.auto-refresh-toggle input { accent-color: var(--color-primary); cursor: pointer; }
 
 .sla-grid {
     display: grid;
@@ -164,6 +203,16 @@
 
     .sla-event .age { grid-column: 3; text-align: right; }
     .sla-event .note { grid-column: 1 / -1; }
+}
+
+/* ── Klavye odağı ─────────────────────────────── */
+/* Sayfada özel bir odak halkası yoktu; klavye ile gezinen bir kullanıcı
+   Yenile/checkbox'a odaklandığında görünür bir gösterge alamıyordu. */
+.sla-container button:focus-visible,
+.sla-container input:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
 }
 
 /* ── Dark mode ────────────────────────────────── */

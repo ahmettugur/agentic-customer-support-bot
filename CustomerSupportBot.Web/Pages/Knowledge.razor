@@ -1,5 +1,5 @@
 @page "/knowledge"
-@attribute [Authorize]
+@attribute [Authorize(Roles = "Admin")]
 @layout AdminLayout
 @inject KnowledgeApiService KnowledgeApi
 @inject ToastService Toast
