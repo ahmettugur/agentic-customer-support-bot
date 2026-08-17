@@ -55,19 +55,7 @@ Bu dizin **Agentic Customer Support Bot** projesinin tüm teknik dokümantasyonu
 
 ---
 
-## Mimari Kararlar (ADR)
-
-Geri alınması pahalı, gerekçesi koddan okunamayan kararlar. "Neden böyle yapılmamış?"
-sorusunun cevabı burada.
-
-| ADR | Karar |
-|-----|-------|
-| [0001](adr/0001-workflow-durability.md) | MAF workflow'u durable execution için değil, tur-içi koordinasyon için kullanılıyor — checkpoint/resume kapalı, kalıcılık Postgres'te |
-| [0002](adr/0002-conversation-context-window.md) | Konuşma özeti, özetlediği turların **yerine** geçer (yanına değil); prompt büyüklüğü `EstimatedTokens` ile ölçülür |
-
----
-
-## Okuma Sırası (Stajyerler İçin)
+## Okuma Sırası
 
 1. **Bu README** — genel bakış
 2. **[architecture.md](architecture.md)** — hexagonal mimari ve katman kuralları

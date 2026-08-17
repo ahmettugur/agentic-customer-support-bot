@@ -35,8 +35,10 @@ O sayı kritik: `WorkflowMessageBuilder.SelectHistoryToSend` geçmişin ilk o ka
 > tur: **tam geçmiş + aynı turların özeti + özeti üretmek için fazladan bir LLM çağrısı.**
 > Aynı turlar iki kez ödeniyordu. Çıktı doğru olduğu için hiçbir test bunu yakalamamıştı.
 >
-> Ayrıntı ve kalan işler (özellikle **artımlı özetleme** — bugün 12+ mesajda özet her turda
-> sıfırdan üretiliyor): [ADR-0002](../../adr/0002-conversation-context-window.md).
+> Bu düzeltme maliyetin yalnızca yarısını çözer: özet hâlâ **sıfırdan** üretiliyor — 12+
+> mesajda (`history.Count - SummaryThreshold < RecentMessageCount` önbellek koşulu tutmadığı
+> için) her turda tüm eski geçmiş yeniden özetleniyor. Artımlı özetleme
+> (`yeni_özet = f(mevcut_özet, pencereden düşen mesajlar)`) hâlâ açık bir iş.
 
 ## Bağlantılar
 

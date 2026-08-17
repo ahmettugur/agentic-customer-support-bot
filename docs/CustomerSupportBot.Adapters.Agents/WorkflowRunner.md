@@ -38,21 +38,15 @@ Tek bir (decompose edilmemiş) kullanıcı sorgusu için MAF `GroupChat` workflo
 
 ## Kullanılma nedeni ve tasarım yaklaşımı
 
-> 📐 **Mimari karar:** Workflow her turda taze kurulup atılır; MAF'ın checkpoint/durable
-> execution katmanı **bilinçli olarak kapalıdır** ve kalıcılık Postgres'te tutulur. Gerekçesi,
-> bedeli ve bu kararın ne zaman gözden geçirilmesi gerektiği:
-> [ADR-0001](../adr/0001-workflow-durability.md).
->
-> 🧪 Bu sınıfın bağlı olduğu iki belgesiz MAF davranışı (`TurnToken` ile gerçek-tur/broadcast
-> ayrımı ve `AuthorName` öneki ile specialist tespiti)
-> `CustomerSupportBot.Api.Tests/Spikes/FrameworkAssumptionTests.cs` ile çivilenmiştir —
-> framework yükseltmesinde sessiz bozulma yerine kırmızı test verir.
+Workflow her turda taze kurulup atılır (`CreateWorkflow()` + `await using`); MAF'ın checkpoint/durable execution katmanı **bilinçli olarak kapalıdır** ve kalıcılık Postgres'te tutulur. Fiilen kullanılan yetenekler superstep zamanlayıcı, olay akışı ve GroupChat çok-ajan koordinasyonudur. Bunun bedeli iki maddedir: "konuşma restart'tan kaldığı yerden devam etsin" senaryosu bugün mümkün değildir, ve her turda tüm geçmiş yeniden beslenir.
+
+Bu sınıfın bağlı olduğu iki belgesiz MAF davranışı (`TurnToken` ile gerçek-tur/broadcast ayrımı ve `AuthorName` öneki ile specialist tespiti) `CustomerSupportBot.Api.Tests/Spikes/FrameworkAssumptionTests.cs` ile çivilenmiştir — framework yükseltmesinde sessiz bozulma yerine kırmızı test verir.
 
 Tek Sorumluluk ilkesi gereği eskiden `CustomerSupportTeam` içinde toplu duran orkestrasyon mantığı buraya, `AgentTeamFactory`'ye (ajan/workflow kurulumu) ve `TurnFinalizer`'a (tur-sonu yan etkileri) bölündü — `CustomerSupportTeam` artık yalnızca compound/single ayrımı yapan bir kompozisyon kökü. `RunAsync` (non-streaming) ve `RunStreamingAsync` neredeyse birebir aynı adımları izler; ortak trace toplama mantığı (`TraceState`, `StartTraceState`, `ApplyTraceEvent`, `FinalizeTraceAsync`'e devir) tek yerde tanımlanarak iki yol arasındaki tutarsızlık riski ortadan kaldırıldı — streaming yol yalnızca `yield` sorumluluğunu üstüne ekler.
 
 HITL onay köprüsü (`HandleRequestInfoEventAsync`) framework'ün native `RequestInfoEvent`/`ApprovalRequiredAIFunction` mekanizmasını kullanır: bir tool `ApprovalRequiredAIFunction` ile sarılırsa workflow superstep'i gerçekten duraklar ve event burada yakalanıp aynı `IApprovalQueue`/SSE/SLA altyapısına bağlanır.
 
-> ⚠️ **Bu yol bugün ölü — bilerek korunuyor.** Onay gerektiren dört tool (sipariş verme/iptal, iade, şikayet) `ApprovalGateService` üzerinden **bloklamayan** modele geçti: tool anında `ToolResult.Pending` döner, superstep durmaz, karar geldiğinde iş `IApprovalExecutionRouter` ile ayrıca yürütülür. Dolayısıyla bu köprü artık pratikte hiç tetiklenmiyor. Kuyruk tabanlı onayın tercih sebebi, web isteğinin ömründen bağımsız olması ve checkpoint'e ihtiyaç duymaması — bkz. [ADR-0001](../adr/0001-workflow-durability.md).
+> ⚠️ **Bu yol bugün ölü — bilerek korunuyor.** Onay gerektiren dört tool (sipariş verme/iptal, iade, şikayet) `ApprovalGateService` üzerinden **bloklamayan** modele geçti: tool anında `ToolResult.Pending` döner, superstep durmaz, karar geldiğinde iş `IApprovalExecutionRouter` ile ayrıca yürütülür. Dolayısıyla bu köprü artık pratikte hiç tetiklenmiyor. Kuyruk tabanlı onayın tercih sebebi, web isteğinin ömründen bağımsız olması ve checkpoint'e ihtiyaç duymaması.
 
 `EnsureHumanHandoffEscalation`'ın "tek yönlü garanti" tasarımı bilinçli bir takas: kaçırılan eskalasyonun maliyeti fazladan eskalasyondan yüksek görüldüğü için, `human_handoff_tool` çağrıldıysa LLM'in reflection'ı ne derse desin eskalasyon kaydı açılır (admin panelinde dismiss yolu var, tersi mümkün değil).
 
