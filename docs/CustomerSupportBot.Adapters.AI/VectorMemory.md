@@ -262,5 +262,4 @@ Production'da collection lifecycle:
 ## Bağlantılar
 
 - [Embedding.md](Embedding.md) — vektör nasıl üretilir
-- [Domain Model-Memory.md](../domain/Model-Memory.md) — `MemoryDocument`, `MemoryKind`
-- [Application MemoryPortService](../application/MemoryPortService.md)
+- [Application MemoryPortService](../CustomerSupportBot.Application/Memory/MemoryPortService.md)

@@ -198,7 +198,7 @@ private async Task RunScanWithLockAsync(SlaOptions opts, CancellationToken ct)
 - Action uygula (AutoReject, PriorityBoost)
 - `ISlaEventSink.Record()` ile event'i sakla
 
-Detay: [Application SlaGuardian](../application/SlaGuardian.md).
+Detay: [Application SlaGuardian](../CustomerSupportBot.Application/Sla/SlaPortService.md).
 
 ### Startup logu
 
@@ -247,8 +247,8 @@ services.AddHostedService<KnowledgeBaseStartupService>();
 
 ## Bağlantılar
 
-- [Application MemoryPortService](../application/MemoryPortService.md) — `IngestAsync` mantığı
-- [Application SlaGuardian](../application/SlaGuardian.md) — `ScanOnce` mantığı
-- [Adapters.Persistence FileSystemAdapters](../adapters-persistence/FileSystemAdapters.md) — KB hash tracking
-- [Adapters.Redis DistributedLock](../adapters-redis/DistributedLock.md)
+- [Application MemoryPortService](../CustomerSupportBot.Application/Memory/MemoryPortService.md) — `IngestAsync` mantığı
+- [Application SlaGuardian](../CustomerSupportBot.Application/Sla/SlaPortService.md) — `ScanOnce` mantığı
+- [Adapters.Persistence FileSystemAdapters](../CustomerSupportBot.Adapters.Persistence/FileSystemAdapters.md) — KB hash tracking
+- [Adapters.Redis DistributedLock](../CustomerSupportBot.Adapters.Redis/DistributedLock.md)
 - [Endpoints-Observability.md](Endpoints-Observability.md) — `/sla/status`, `/sla/events`

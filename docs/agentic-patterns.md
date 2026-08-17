@@ -183,7 +183,7 @@ CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs:121-140
 
 **Dosya**: `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`
 
-**Detay** → [adapters-agents/CustomerSupportChatManager.md](adapters-agents/CustomerSupportChatManager.md).
+**Detay** → [CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.md](CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.md).
 
 **Neden?** Tek bir ajan prompt'u tüm rolleri (router + 4 specialist + presenter) karıştırır → karmaşık + kırılgan. Group chat = rol ayrımı.
 
@@ -549,7 +549,7 @@ public async Task<string> RunDecomposedAsync(...)
 - **Recursion-safe** — derived reasoning'in `SubTasks=[]` olması sonsuz döngüyü engeller.
 - **Streaming uyumlu** — iç workflow event'leri forward edilir; sadece final response aggregated olarak yayın.
 
-**Neden?** MAF `GroupChatManager.SelectNextAgentAsync` bir turda tek next speaker seçer. Compound query için bu yetersiz. Kod katmanında orkestrasyon = *"N ayrı ama ilişkili konuşma = N workflow run"* modeli. Detay → [adapters-agents/CustomerSupportTeam.md](adapters-agents/CustomerSupportTeam.md).
+**Neden?** MAF `GroupChatManager.SelectNextAgentAsync` bir turda tek next speaker seçer. Compound query için bu yetersiz. Kod katmanında orkestrasyon = *"N ayrı ama ilişkili konuşma = N workflow run"* modeli. Detay → [CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.md](CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.md).
 
 ---
 
@@ -732,7 +732,7 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
 - **User feedback (thumbs up/down)** — post-hoc HITL, RLHF datası toplamak için. Trivial eklenebilir (`POST /feedback`).
 - **Admin authentication** — şu an `/approvals/*`, `/escalations/*` ve `/chat-sessions/*` endpoint'lerinde **hiçbir auth yok**. Production için JWT/role-based auth middleware eklenmeli.
 
-**Referans dokümantasyon**: [api/](api/Endpoints-Admin.md).
+**Referans dokümantasyon**: [CustomerSupportBot.Api/Endpoints-Admin.md](CustomerSupportBot.Api/Endpoints-Admin.md).
 
 ### 20.4 Admin Replan (one-shot planning override + auto bot turn)
 

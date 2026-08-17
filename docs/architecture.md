@@ -515,7 +515,7 @@ RunAsync(query, reasoning)
                   → "**1) ...**\n\n<r1>\n\n---\n\n**2) ...**\n\n<r2>"
 ```
 
-Detay → [domain/Model-Reasoning.md](domain/Model-Reasoning.md).
+Detay → [CustomerSupportBot.Domain/Model/ReasoningResult.md](CustomerSupportBot.Domain/Model/ReasoningResult.md).
 
 ### `POST /chat/stream` — SSE streaming
 
@@ -692,15 +692,15 @@ appsettings.json → Prompts:RootPath (opsiyonel)
 
 - **Ajan haritası (görsel): kim hangi tool'u çağırıyor, routing/HITL nasıl işliyor?** → [agent-architecture.html](agent-architecture.html) — tarayıcıda açın
 - **Her class/interface ne iş yapar?** → [class-reference.md](class-reference.md)
-- **HTTP endpoint şemaları + SSE event payload'ları** → [api/](api/README.md)
-- **Agent davranışı + iç sub-component anatomisi** → [adapters-agents/](adapters-agents/README.md)
-- **Reasoning pipeline katmanları** → [domain/Model-Reasoning.md](domain/Model-Reasoning.md)
+- **HTTP endpoint şemaları + SSE event payload'ları** → [CustomerSupportBot.Api/README.md](CustomerSupportBot.Api/README.md)
+- **Agent davranışı + iç sub-component anatomisi** → [CustomerSupportBot.Adapters.Agents/README.md](CustomerSupportBot.Adapters.Agents/README.md)
+- **Reasoning pipeline katmanları** → [CustomerSupportBot.Domain/Model/ReasoningResult.md](CustomerSupportBot.Domain/Model/ReasoningResult.md)
 - **Tasarım pattern'leri** → [agentic-patterns.md](agentic-patterns.md)
 - **Semantic memory, Self-Improving Loop, Replay, Personalization** → [intelligence.md](intelligence.md)
-- **Sesli konuşma (Realtime)** → [adapters-ai/Realtime.md](adapters-ai/Realtime.md)
+- **Sesli konuşma (Realtime)** → [CustomerSupportBot.Adapters.AI/Realtime.md](CustomerSupportBot.Adapters.AI/Realtime.md)
 - **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
-- **Telemetri ve maliyet takibi** → [adapters-telemetry/](adapters-telemetry/README.md)
-- **Veritabanı ve kalıcılık** → [adapters-persistence/](adapters-persistence/README.md)
+- **Telemetri ve maliyet takibi** → [CustomerSupportBot.Adapters.Telemetry/README.md](CustomerSupportBot.Adapters.Telemetry/README.md)
+- **Veritabanı ve kalıcılık** → [CustomerSupportBot.Adapters.Persistence/README.md](CustomerSupportBot.Adapters.Persistence/README.md)
 - **Kurulum ve dağıtım** → [deployment.md](deployment.md)
 - **Çalıştırma ve operasyon** → [operations.md](operations.md)
 - **Geliştirici rehberi** → [developer-guide.md](developer-guide.md)

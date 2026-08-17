@@ -45,4 +45,4 @@ Yok — enum tipi.
 
 - [ChatSessionState.md](ChatSessionState.md) — Bu enum'u kullanan snapshot model
 - [ChatBridgeMessage.md](ChatBridgeMessage.md) — Canlı sohbet mesajları
-- [../../CustomerSupportBot.Application/ChatPortService.md](../../CustomerSupportBot.Application/ChatPortService.md) — Mod kontrolünün yapıldığı yer
+- [../../CustomerSupportBot.Application/ChatPortService.md](../../CustomerSupportBot.Application/Chat/ChatPortService.md) — Mod kontrolünün yapıldığı yer

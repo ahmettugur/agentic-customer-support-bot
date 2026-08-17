@@ -120,7 +120,7 @@ service.name=AnotherService                ← başka uygulama
 
 **Önemli:** `TelemetryChatClient` bu extension'da kayıt edilmez. Onun kaydı **Composition Root**'ta — `CustomerSupportBot.Api/Extensions/AiServicesExtensions.cs` (`AddAiServices`, `Program.cs` tarafından çağrılır) — yapılır, çünkü hangi `IChatClient`'ı sarmaladığı ancak orada bilinir. `Adapters.AI` sadece asıl client'ı oluşturur; `Adapters.Telemetry` decorator sınıfını sağlar; ikisini birleştirme sorumluluğu Api katmanındadır. Ayrıca `TelemetryOptions.Enabled == false` ise sarmalama hiç yapılmaz, ham `IChatClient` döner.
 
-Tipik kayıt (bkz. [adapters-ai/DependencyInjection.md](../adapters-ai/DependencyInjection.md) — birebir güncel kod için):
+Tipik kayıt (bkz. [CustomerSupportBot.Adapters.AI/DependencyInjection.md](../CustomerSupportBot.Adapters.AI/DependencyInjection.md) — birebir güncel kod için):
 
 ```csharp
 // Api/Extensions/AiServicesExtensions.cs (Composition Root)

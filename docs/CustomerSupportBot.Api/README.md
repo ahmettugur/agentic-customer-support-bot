@@ -188,10 +188,10 @@ SSE tek yönlü (server→client), WebSocket çift yönlü.
 
 ## Bağlantılar
 
-- [Application](../application/README.md) — port servisleri
-- [Adapters.AI](../adapters-ai/README.md)
-- [Adapters.Persistence](../adapters-persistence/README.md)
-- [Adapters.Redis](../adapters-redis/README.md)
-- [Adapters.Telemetry](../adapters-telemetry/README.md)
-- [Adapters.Agents](../adapters-agents/README.md) — agent pipeline
-- [Domain](../domain/README.md)
+- [Application](../CustomerSupportBot.Application/README.md) — port servisleri
+- [Adapters.AI](../CustomerSupportBot.Adapters.AI/README.md)
+- [Adapters.Persistence](../CustomerSupportBot.Adapters.Persistence/README.md)
+- [Adapters.Redis](../CustomerSupportBot.Adapters.Redis/README.md)
+- [Adapters.Telemetry](../CustomerSupportBot.Adapters.Telemetry/README.md)
+- [Adapters.Agents](../CustomerSupportBot.Adapters.Agents/README.md) — agent pipeline
+- [Domain](../CustomerSupportBot.Domain/README.md)

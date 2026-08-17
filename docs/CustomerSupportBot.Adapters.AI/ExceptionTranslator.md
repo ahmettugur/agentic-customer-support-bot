@@ -244,6 +244,6 @@ Assert.Contains("rate limit", domainEx.Message);
 
 ## Bağlantılar
 
-- [Domain Exceptions.md](../domain/Exceptions.md) — ExternalServiceException, EntityNotFoundException, ConcurrencyConflictException
-- [Adapters.Persistence ExceptionTranslator](../adapters-persistence/ExceptionTranslator.md) — PostgreSQL paralel pattern
-- [Adapters.Redis HealthCheck.md](../adapters-redis/HealthCheck.md) — Redis ExceptionTranslator
+- [Domain Exceptions.md](../CustomerSupportBot.Domain/Exceptions/DomainException.md) — ExternalServiceException, EntityNotFoundException, ConcurrencyConflictException
+- [Adapters.Persistence ExceptionTranslator](../CustomerSupportBot.Adapters.Persistence/ExceptionTranslator.md) — PostgreSQL paralel pattern
+- [Adapters.Redis HealthCheck.md](../CustomerSupportBot.Adapters.Redis/HealthCheck.md) — Redis ExceptionTranslator

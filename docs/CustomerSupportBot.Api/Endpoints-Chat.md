@@ -267,9 +267,9 @@ Session bulunamazsa 404 döner.
 
 ## Bağlantılar
 
-- [Application ChatPort](../application/README.md)
-- [Application InputGuard](../application/InputGuard.md)
-- [Application RealtimeServices](../application/RealtimeServices.md)
-- [Adapters.AI Realtime](../adapters-ai/Realtime.md)
+- [Application ChatPort](../CustomerSupportBot.Application/README.md)
+- [Application InputGuard](../CustomerSupportBot.Application/Chat/InputGuard.md)
+- [Application RealtimeServices](../CustomerSupportBot.Application/Realtime/RealtimeBridgeService.md)
+- [Adapters.AI Realtime](../CustomerSupportBot.Adapters.AI/Realtime.md)
 - [Services.md](Services.md) — ChatEventOrchestrator
 - [Infrastructure.md](Infrastructure.md) — SseWriter, WebSocketBrowserChannel

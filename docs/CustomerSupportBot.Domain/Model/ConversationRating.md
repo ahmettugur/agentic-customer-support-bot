@@ -54,4 +54,4 @@ Admin panelindeki analytics ekranının özet veri modeli. Tüm oturumlar üzeri
 
 ## Bağlantılar
 
-- [../../CustomerSupportBot.Application/AnalyticsPortService.md](../../CustomerSupportBot.Application/AnalyticsPortService.md) — Bu modeli dolduran servis
+- [../../CustomerSupportBot.Application/AnalyticsPortService.md](../../CustomerSupportBot.Application/Telemetry/AnalyticsPortService.md) — Bu modeli dolduran servis

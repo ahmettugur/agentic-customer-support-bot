@@ -40,5 +40,5 @@ Bu yolun dört senaryosu `ApprovalExecutionRouterTests` ile korunmaktadır (canl
 
 ## Bağlantılar
 
-- [../ChatPortService.md](../ChatPortService.md) — Onay akışının başladığı yer
+- [../ChatPortService.md](../Chat/ChatPortService.md) — Onay akışının başladığı yer
 - [../../CustomerSupportBot.Domain/Model/ApprovalRequest.md](../../CustomerSupportBot.Domain/Model/ApprovalRequest.md) — Onay kaydı

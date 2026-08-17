@@ -328,5 +328,5 @@ Detay: [Endpoints-Observability.md](Endpoints-Observability.md).
 
 - [Services.md](Services.md) — ChatEventOrchestrator SSE'yi nasıl kullanır
 - [Endpoints-Chat.md](Endpoints-Chat.md) — `/chat/stream` SSE örneği
-- [Adapters.AI Realtime](../adapters-ai/Realtime.md) — WebSocket OpenAI tarafı
-- [Domain Exceptions](../domain/Exceptions.md) — DomainException hiyerarşisi
+- [Adapters.AI Realtime](../CustomerSupportBot.Adapters.AI/Realtime.md) — WebSocket OpenAI tarafı
+- [Domain Exceptions](../CustomerSupportBot.Domain/Exceptions/DomainException.md) — DomainException hiyerarşisi

@@ -349,5 +349,5 @@ Native mode bridge mode'dan ~2x hızlı (Application pipeline'ı atlamaz).
 
 ## Bağlantılar
 
-- [Application RealtimeServices.md](../application/RealtimeServices.md) — RealtimeBridgeService ve RealtimeNativeService kullanımı
+- [Application RealtimeServices.md](../CustomerSupportBot.Application/Realtime/RealtimeBridgeService.md) — RealtimeBridgeService ve RealtimeNativeService kullanımı
 - [Options.md](Options.md) — RealtimeOptions alanları

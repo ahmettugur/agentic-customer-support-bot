@@ -64,4 +64,4 @@ Yok — saf veri sınıfı.
 
 - [../../CustomerSupportBot.Adapters.Agents/Team/ResponseAgent.md](../../CustomerSupportBot.Adapters.Agents/Team/ResponseAgent.md) — Bu değerlendirmeyi üreten ajan
 - [../Services/SelfCritiqueParser.md](../Services/SelfCritiqueParser.md) — JSON → SelfCritique dönüşümü
-- [../../CustomerSupportBot.Application/LessonMiner.md](../../CustomerSupportBot.Application/LessonMiner.md) — İnceleme adayı seçimi
+- [../../CustomerSupportBot.Application/LessonMiner.md](../../CustomerSupportBot.Application/Improvement/LessonMiner.md) — İnceleme adayı seçimi

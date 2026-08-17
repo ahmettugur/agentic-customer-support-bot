@@ -324,9 +324,9 @@ Bazı agent'lar registry'de var ama user yok. Bazıları user var ama LinkedAgen
 
 ## Bağlantılar
 
-- [Application ApprovalPortService](../application/ApprovalPortService.md)
-- [Application EscalationPortService](../application/EscalationPortService.md)
-- [Application ChatSessionPortService](../application/ChatSessionPortService.md)
-- [Application HumanAgentPortService](../application/HumanAgentPortService.md)
-- [Domain Model-Hitl](../domain/Model-Hitl.md)
+- [Application ApprovalPortService](../CustomerSupportBot.Application/Approval/ApprovalPortService.md)
+- [Application EscalationPortService](../CustomerSupportBot.Application/Escalation/EscalationPortService.md)
+- [Application ChatSessionPortService](../CustomerSupportBot.Application/Chat/ChatSessionPortService.md)
+- [Application HumanAgentPortService](../CustomerSupportBot.Application/Escalation/HumanAgentPortService.md)
+- [Domain Model-Hitl](../CustomerSupportBot.Domain/Model/ApprovalRequest.md)
 - [Models.md](Models.md) — AdminModels DTO'lar

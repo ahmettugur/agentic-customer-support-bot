@@ -59,4 +59,4 @@ Yok — record tipi, `(string Role, string Text)` parametreleri constructor'dır
 ## Bağlantılar
 
 - [ChatBridgeMessage.md](ChatBridgeMessage.md) — Canlı sohbet UI mesajı (farklı amaç)
-- [../../CustomerSupportBot.Application/ReasoningPipeline.md](../../CustomerSupportBot.Application/ReasoningPipeline.md) — Bu mesajları kullanan pipeline
+- [../../CustomerSupportBot.Application/ReasoningPipeline.md](../../CustomerSupportBot.Application/Reasoning/ReasoningService.md) — Bu mesajları kullanan pipeline

@@ -151,4 +151,4 @@ Development'ta `/openapi/v1.json` — Swagger UI / Scalar bağlanabilir. Product
 
 - [Extensions.md](Extensions.md) — her `AddXxxServices` ne yapar
 - [Infrastructure.md](Infrastructure.md) — DomainExceptionHandler detayı
-- [Adapters.AI DependencyInjection](../adapters-ai/DependencyInjection.md) — IChatClient kayıt deseni
+- [Adapters.AI DependencyInjection](../CustomerSupportBot.Adapters.AI/DependencyInjection.md) — IChatClient kayıt deseni

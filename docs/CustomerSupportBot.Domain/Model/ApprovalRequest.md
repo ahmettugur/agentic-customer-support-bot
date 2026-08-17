@@ -77,6 +77,6 @@ Yok — saf veri sınıfı.
 
 ## Bağlantılar
 
-- [../../CustomerSupportBot.Application/ApprovalGateService.md](../../CustomerSupportBot.Application/ApprovalGateService.md) — Onay gate servisi
+- [../../CustomerSupportBot.Application/ApprovalGateService.md](../../CustomerSupportBot.Adapters.Agents/ApprovalGateService.md) — Onay gate servisi
 - [ToolResult.md](ToolResult.md) — `PendingApproval` flag'i
 - [EscalationRequest.md](EscalationRequest.md) — Eskalasyon (farklı mekanizma ama benzer HITL akışı)

@@ -1,6 +1,6 @@
 # Operations — Uygulama Nasıl Çalışır?
 
-Bu doküman uygulamanı **kuran**, **çalıştıran**, **gözlemleyen** ve **konfigüre eden** bakış açısıyla yazılmıştır. Kod-içi mimari için → [architecture.md](architecture.md), endpoint sözleşmeleri için → [api/](api/README.md), pattern detayları için → [agentic-patterns.md](agentic-patterns.md).
+Bu doküman uygulamanı **kuran**, **çalıştıran**, **gözlemleyen** ve **konfigüre eden** bakış açısıyla yazılmıştır. Kod-içi mimari için → [architecture.md](architecture.md), endpoint sözleşmeleri için → [CustomerSupportBot.Api/README.md](CustomerSupportBot.Api/README.md), pattern detayları için → [agentic-patterns.md](agentic-patterns.md).
 
 > ⚠️ **Bu dokümanın aşağıki bölümlerinde geçen `InMemory*` sınıf isimleri** (`InMemorySessionManager`, `InMemoryApprovalQueue` vb.) koda mevcuttur ve **yalnızca test projelerinden elle örneklenir**. `PersistenceOptions.Provider` enum'unun tek üyesi `Postgres`'tur; `AddPersistenceAdapters` hiçbir koşula bağlı kalmadan sadece Postgres implementasyonlarını kaydeder — runtime'da config ile seçilebilen bir "InMemory modu" yoktur. Aşağıdaki "InMemory modunda" ibareli tablolar, gerçekte **yalnızca test/InMemory sınıflarının davranışını** açıklar; production ortamı her zaman Postgres tablosundaki satırları kullanır.
 
@@ -118,7 +118,7 @@ Pattern → [agentic-patterns.md#9-guardrails--circuit-breaker](agentic-patterns
 }
 ```
 
-`Enabled = false` yaparsanız **tüm HITL mekanizması** bypass edilir (klasik bot davranışı). Detay → [api/](api/Endpoints-Admin.md).
+`Enabled = false` yaparsanız **tüm HITL mekanizması** bypass edilir (klasik bot davranışı). Detay → [CustomerSupportBot.Api/Endpoints-Admin.md](CustomerSupportBot.Api/Endpoints-Admin.md).
 
 ### `Routing`
 
@@ -152,7 +152,7 @@ Smart Routing & Skills-Based Escalation konfigürasyonu. Bir eskalasyon (`needs_
 }
 ```
 
-`Enabled = false` yaparsanız routing devre dışı kalır; eskalasyonlar admin manuel atayana kadar atanmamış kalır. `EscalationRequest`'in yeni alanları: `RequiredSkills`, `Priority`, `SuggestedAgentId`, `SuggestedAgentName`, `MatchScore`, `RoutingNote`. Detay → [api/](api/Endpoints-Admin.md).
+`Enabled = false` yaparsanız routing devre dışı kalır; eskalasyonlar admin manuel atayana kadar atanmamış kalır. `EscalationRequest`'in yeni alanları: `RequiredSkills`, `Priority`, `SuggestedAgentId`, `SuggestedAgentName`, `MatchScore`, `RoutingNote`. Detay → [CustomerSupportBot.Api/Endpoints-Admin.md](CustomerSupportBot.Api/Endpoints-Admin.md).
 
 ### `Telemetry`
 
@@ -462,7 +462,7 @@ Uygulama **iki ayrı SSE kanalı** kullanır — birbirini tamamlar:
 
 Frontend açılışta `EventSource` ile persistent kanalı açar (`app.js _ensurePersistentEvents`), her kullanıcı mesajı için ayrıca per-request stream başlatır. İki kanal aynı `sessionId` etrafında birleşir.
 
-Tam SSE event sözleşmeleri → [api/](api/Endpoints-Chat.md).
+Tam SSE event sözleşmeleri → [CustomerSupportBot.Api/Endpoints-Chat.md](CustomerSupportBot.Api/Endpoints-Chat.md).
 
 ---
 
@@ -528,7 +528,7 @@ Varsayılan persistence provider **Postgres**'dur (`appsettings.json > Persisten
 | Approval requests | `InMemoryApprovalQueue` | Ring buffer 200 | Kayıp |
 | Tüm diğerleri | In-memory | RAM | Kayıp |
 
-Detay → [adapters-persistence/](adapters-persistence/README.md).
+Detay → [CustomerSupportBot.Adapters.Persistence/README.md](CustomerSupportBot.Adapters.Persistence/README.md).
 
 ---
 
@@ -617,16 +617,16 @@ Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 ## Çapraz referanslar
 
 - **Mimari + DI haritası** → [architecture.md](architecture.md)
-- **Endpoint sözleşmeleri + SSE event şemaları** → [api/](api/README.md)
+- **Endpoint sözleşmeleri + SSE event şemaları** → [CustomerSupportBot.Api/README.md](CustomerSupportBot.Api/README.md)
 - **Tasarım pattern'leri (HITL, Replan, Compound query, …)** → [agentic-patterns.md](agentic-patterns.md)
-- **Agent davranış sözleşmeleri** → [adapters-agents/](adapters-agents/README.md)
-- **ChatManager routing mantığı** → [adapters-agents/CustomerSupportChatManager.md](adapters-agents/CustomerSupportChatManager.md)
-- **Reasoning pipeline ve sanity rule'lar** → [domain/Model-Reasoning.md](domain/Model-Reasoning.md)
+- **Agent davranış sözleşmeleri** → [CustomerSupportBot.Adapters.Agents/README.md](CustomerSupportBot.Adapters.Agents/README.md)
+- **ChatManager routing mantığı** → [CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.md](CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.md)
+- **Reasoning pipeline ve sanity rule'lar** → [CustomerSupportBot.Domain/Model/ReasoningResult.md](CustomerSupportBot.Domain/Model/ReasoningResult.md)
 - **Class/interface sözleşmeleri** → [class-reference.md](class-reference.md)
 - **Yeni feature/agent/tool ekleme** → [developer-guide.md](developer-guide.md)
 - **Semantic memory, Self-Improving Loop, Personalization** → [intelligence.md](intelligence.md)
-- **Sesli konuşma (Realtime)** → [adapters-ai/Realtime.md](adapters-ai/Realtime.md)
+- **Sesli konuşma (Realtime)** → [CustomerSupportBot.Adapters.AI/Realtime.md](CustomerSupportBot.Adapters.AI/Realtime.md)
 - **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
-- **Veritabanı ve kalıcılık** → [adapters-persistence/](adapters-persistence/README.md)
-- **Telemetri ve maliyet takibi** → [adapters-telemetry/](adapters-telemetry/README.md)
+- **Veritabanı ve kalıcılık** → [CustomerSupportBot.Adapters.Persistence/README.md](CustomerSupportBot.Adapters.Persistence/README.md)
+- **Telemetri ve maliyet takibi** → [CustomerSupportBot.Adapters.Telemetry/README.md](CustomerSupportBot.Adapters.Telemetry/README.md)
 - **Kurulum ve dağıtım** → [deployment.md](deployment.md)

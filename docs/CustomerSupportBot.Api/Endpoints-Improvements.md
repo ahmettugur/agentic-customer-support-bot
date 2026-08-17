@@ -180,9 +180,8 @@ Content-Type: application/json
 
 ## Bağlantılar
 
-- [Application ImprovementsPortService](../application/ImprovementsPortService.md)
-- [Application LessonMiner](../application/LessonMiner.md)
-- [Application MemoryPortService](../application/MemoryPortService.md)
-- [Application PersonalizationPortService](../application/PersonalizationPortService.md)
-- [Application CustomerProfileService](../application/CustomerProfileService.md)
-- [Domain Model-Memory](../domain/Model-Memory.md)
+- [Application ImprovementsPortService](../CustomerSupportBot.Application/Improvement/ImprovementsPortService.md)
+- [Application LessonMiner](../CustomerSupportBot.Application/Improvement/LessonMiner.md)
+- [Application MemoryPortService](../CustomerSupportBot.Application/Memory/MemoryPortService.md)
+- [Application PersonalizationPortService](../CustomerSupportBot.Application/Personalization/PersonalizationPortService.md)
+- [Application CustomerProfileService](../CustomerSupportBot.Application/Personalization/CustomerProfileService.md)

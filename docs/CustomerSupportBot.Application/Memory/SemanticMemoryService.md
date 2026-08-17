@@ -13,4 +13,4 @@ ContextProvider pipeline'ında `SemanticMemoryContextProvider` bu servisi çağ�
 ## Bağlantılar
 
 - [MemoryPortService.md](MemoryPortService.md) — Memory orkestratör
-- [../Providers/SemanticMemoryContextProvider.md](../Providers/SemanticMemoryContextProvider.md) — Bu servisi kullanan provider
+- [../Providers/SemanticMemoryContextProvider.md](../Providers/ContextProviders.md) — Bu servisi kullanan provider

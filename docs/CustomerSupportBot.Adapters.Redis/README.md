@@ -114,4 +114,4 @@ Adapter **hardcoded kanal tanımlamaz** — Application/Adapters katmanları run
 | `csbot:bridge:toadmin` | PostgresChatBridge | Kullanıcı → admin mesajları |
 | `csbot:chatmode` | PostgresChatModeRegistry | Bot/Human mod değişikliği |
 
-Detay için ilgili adapter dokümanlarına bak: [PostgresAdapters.md](../adapters-persistence/PostgresAdapters.md).
+Detay için ilgili adapter dokümanlarına bak: [PostgresAdapters.md](../CustomerSupportBot.Adapters.Persistence/PostgresAdapters.md).

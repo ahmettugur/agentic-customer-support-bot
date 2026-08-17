@@ -59,7 +59,7 @@ LLM kullanım ve maliyet snapshot'ı.
 
 ⚠️ Production'da kalıcı toplam için `analytics.llm_call_usages` tablosu kullanılmalı.
 
-Detay: [Adapters.Telemetry CostUsageStore](../adapters-telemetry/CostUsageStore.md).
+Detay: [Adapters.Telemetry CostUsageStore](../CustomerSupportBot.Adapters.Telemetry/CostUsageStore.md).
 
 ---
 
@@ -320,11 +320,11 @@ var candidates = new[]
 
 ## Bağlantılar
 
-- [Application TelemetryPortService](../application/TelemetryPortService.md)
-- [Application TracePortService](../application/TracePortService.md)
-- [Application AnalyticsPortService](../application/AnalyticsPortService.md)
-- [Application SlaGuardian](../application/SlaGuardian.md)
-- [Adapters.Telemetry CostUsageStore](../adapters-telemetry/CostUsageStore.md)
+- [Application TelemetryPortService](../CustomerSupportBot.Application/Telemetry/TelemetryPortService.md)
+- [Application TracePortService](../CustomerSupportBot.Application/Telemetry/TracePortService.md)
+- [Application AnalyticsPortService](../CustomerSupportBot.Application/Telemetry/AnalyticsPortService.md)
+- [Application SlaGuardian](../CustomerSupportBot.Application/Sla/SlaPortService.md)
+- [Adapters.Telemetry CostUsageStore](../CustomerSupportBot.Adapters.Telemetry/CostUsageStore.md)
 - [Infrastructure ScenarioLoader](Infrastructure.md#scenarioloader)
-- [Domain Model-Trace](../domain/Model-Trace.md)
+- [Domain Model-Trace](../CustomerSupportBot.Domain/Model/ReasoningTrace.md)
 - [Workers.md](Workers.md) — SlaGuardianService

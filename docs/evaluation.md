@@ -327,5 +327,5 @@ Sonuç, diğer kriterler gibi `ScenarioResult.CriteriaResults`'a `quality_releva
 - **CriteriaEvaluator kaynak** → `Adapters.Agents/Evaluation/CriteriaEvaluator.cs`
 - **Model tanımları** → `Application/Ports/Inbound/EvaluationModels.cs`
 - **Geliştirici rehberi** → [developer-guide.md](developer-guide.md)
-- **API endpoint'leri** → [api/](api/README.md)
-- **Agent davranışları** → [adapters-agents/](adapters-agents/README.md)
+- **API endpoint'leri** → [CustomerSupportBot.Api/README.md](CustomerSupportBot.Api/README.md)
+- **Agent davranışları** → [CustomerSupportBot.Adapters.Agents/README.md](CustomerSupportBot.Adapters.Agents/README.md)

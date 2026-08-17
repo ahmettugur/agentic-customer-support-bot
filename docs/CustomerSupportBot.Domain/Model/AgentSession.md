@@ -51,4 +51,4 @@ Yok — saf veri sınıfı, bağımlılık almaz. Tüm property'ler varsayılan 
 
 - [SessionState.md](SessionState.md) — Oturum içindeki türetilmiş durum
 - [../Services/SessionStateExtractor.md](../Services/SessionStateExtractor.md) — State'i kim günceller
-- [../../CustomerSupportBot.Application/ChatPortService.md](../../CustomerSupportBot.Application/ChatPortService.md) — Bu session'ı kim kullanır
+- [../../CustomerSupportBot.Application/ChatPortService.md](../../CustomerSupportBot.Application/Chat/ChatPortService.md) — Bu session'ı kim kullanır

@@ -205,4 +205,4 @@ Default seçim: `text-embedding-3-small` (1536). Yeterli kaliteye sahip ve 6x uc
 ## Bağlantılar
 
 - [VectorMemory.md](VectorMemory.md) — embedding sonucu Qdrant'a nasıl yazılır
-- [Adapters.Persistence FileSystemKnowledgeBaseSource](../adapters-persistence/FileSystemAdapters.md#filesystemknowledgebasesource)
+- [Adapters.Persistence FileSystemKnowledgeBaseSource](../CustomerSupportBot.Adapters.Persistence/FileSystemAdapters.md#filesystemknowledgebasesource)

@@ -58,4 +58,4 @@
 
 - [ExtractedIds.md](ExtractedIds.md) — Ham çıkarım (doğrulama öncesi)
 - [ReasoningResult.md](ReasoningResult.md) — Bu modeli taşıyan reasoning çıktısı
-- [../../CustomerSupportBot.Application/ReasoningPipeline.md](../../CustomerSupportBot.Application/ReasoningPipeline.md) — EntityVerifier pipeline katmanı
+- [../../CustomerSupportBot.Application/ReasoningPipeline.md](../../CustomerSupportBot.Application/Reasoning/ReasoningService.md) — EntityVerifier pipeline katmanı

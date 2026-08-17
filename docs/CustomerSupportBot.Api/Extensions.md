@@ -345,5 +345,5 @@ Sadece **development + Postgres** kombinasyonunda migration uygula. Production d
 ## Bağlantılar
 
 - [Program.md](Program.md) — `Add*Services` çağrı sırası
-- [Adapters.AI DependencyInjection](../adapters-ai/DependencyInjection.md) — Composition Root rationale
-- [Adapters.Persistence DependencyInjection](../adapters-persistence/DependencyInjection.md)
+- [Adapters.AI DependencyInjection](../CustomerSupportBot.Adapters.AI/DependencyInjection.md) — Composition Root rationale
+- [Adapters.Persistence DependencyInjection](../CustomerSupportBot.Adapters.Persistence/DependencyInjection.md)

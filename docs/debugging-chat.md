@@ -3,7 +3,7 @@
 Bu doküman bir kullanıcı mesajının baştan sona nasıl işlendiğini **kod seviyesinde** anlatır: hangi dosyada hangi metoda breakpoint koyacaksınız, neyi izleyeceksiniz, yaygın senaryolar.
 
 > Yüksek seviye akış için: [`reasoning.md`](reasoning.md).  
-> Endpoint detayları için: [`api/Endpoints-Chat.md`](api/Endpoints-Chat.md).
+> Endpoint detayları için: [`CustomerSupportBot.Api/Endpoints-Chat.md`](CustomerSupportBot.Api/Endpoints-Chat.md).
 
 ---
 
@@ -421,8 +421,8 @@ Page navigation'da bunu unutmak browser'da memory artırır.
 ## İlgili dokümanlar
 
 - [`reasoning.md`](reasoning.md) — Reasoning pattern'leri + örnek trace
-- [`api/Endpoints-Chat.md`](api/Endpoints-Chat.md) — Endpoint detayları + SSE event tipleri
-- [`application/ReasoningPipeline.md`](application/ReasoningPipeline.md), [`application/InputGuard.md`](application/InputGuard.md)
-- [`adapters-agents/`](adapters-agents/README.md) — MAF agent ekibi
+- [`CustomerSupportBot.Api/Endpoints-Chat.md`](CustomerSupportBot.Api/Endpoints-Chat.md) — Endpoint detayları + SSE event tipleri
+- [`CustomerSupportBot.Application/Reasoning/ReasoningService.md`](CustomerSupportBot.Application/Reasoning/ReasoningService.md), [`CustomerSupportBot.Application/Chat/InputGuard.md`](CustomerSupportBot.Application/Chat/InputGuard.md)
+- [`CustomerSupportBot.Adapters.Agents/README.md`](CustomerSupportBot.Adapters.Agents/README.md) — MAF agent ekibi
 - [`developer-guide.md`](developer-guide.md) — "X yapmak istiyorum" rehberi
 - [`operations.md`](operations.md) — Konfigürasyon + sorun giderme

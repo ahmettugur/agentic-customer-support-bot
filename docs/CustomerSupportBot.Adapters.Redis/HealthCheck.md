@@ -145,5 +145,5 @@ Bu adapter encapsulation'ın bir parçası: StackExchange.Redis tipleri (RedisEx
 
 ## Bağlantılar
 
-- [Domain Exceptions](../domain/Exceptions.md) — `ExternalServiceException` tanımı
-- [Adapters.Persistence ExceptionTranslator](../adapters-persistence/ExceptionTranslator.md) — paralel desen (PostgreSQL için)
+- [Domain Exceptions](../CustomerSupportBot.Domain/Exceptions/DomainException.md) — `ExternalServiceException` tanımı
+- [Adapters.Persistence ExceptionTranslator](../CustomerSupportBot.Adapters.Persistence/ExceptionTranslator.md) — paralel desen (PostgreSQL için)

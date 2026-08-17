@@ -54,4 +54,4 @@ public ReasoningService(
 - [EntityVerifier.md](EntityVerifier.md) — L0 entity doğrulama
 - [ReasoningMessageBuilder.md](ReasoningMessageBuilder.md) — L1 prompt hazırlığı
 - [ReasoningSanityChecker.md](ReasoningSanityChecker.md) — L3 tutarsızlık kontrolü
-- [../ChatPortService.md](../ChatPortService.md) — Bu servisi çağıran orkestratör
+- [../ChatPortService.md](../Chat/ChatPortService.md) — Bu servisi çağıran orkestratör

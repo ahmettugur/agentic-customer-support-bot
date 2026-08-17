@@ -260,4 +260,4 @@ Bellek pratikte sorun değil — birkaç düzine model, sabit-büyüklük.
 ## Bağlantılar
 
 - [TelemetryChatClient.md](TelemetryChatClient.md) — `Record`'u çağıran decorator
-- [Application TelemetryPortService](../application/TelemetryPortService.md) — endpoint'i sunan port
+- [Application TelemetryPortService](../CustomerSupportBot.Application/Telemetry/TelemetryPortService.md) — endpoint'i sunan port

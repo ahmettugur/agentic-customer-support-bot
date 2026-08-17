@@ -222,4 +222,4 @@ Browser    ────GET /chat/events/sess-123────→  Api endpoint
 
 - [Infrastructure.md](Infrastructure.md) — SseForwarder thread safety
 - [Endpoints-Chat.md](Endpoints-Chat.md) — `/chat/events/{sessionId}` endpoint
-- [Application HitlEventPortService](../application/HitlEventPortService.md)
+- [Application HitlEventPortService](../CustomerSupportBot.Application/Escalation/HitlEventPortService.md)

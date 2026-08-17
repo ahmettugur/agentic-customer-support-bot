@@ -184,7 +184,7 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
 ### `ContextPipeline` + `IContextProvider` — `Services/ContextPipeline.cs`, `Services/IContextProvider.cs`
 
-**Interface `IContextProvider`** — her sağlayıcı bir `Name`, `Order` (öncelik), `GetContextAsync(session, currentQuery)` metodu uygular. `currentQuery` kullanıcının o turdaki mesajıdır — oturum geçmişinden okunamaz, çünkü geçmiş workflow bittikten sonra yazılır (bkz. [ContextPipeline.md](application/ContextPipeline.md)).
+**Interface `IContextProvider`** — her sağlayıcı bir `Name`, `Order` (öncelik), `GetContextAsync(session, currentQuery)` metodu uygular. `currentQuery` kullanıcının o turdaki mesajıdır — oturum geçmişinden okunamaz, çünkü geçmiş workflow bittikten sonra yazılır (bkz. [ContextPipeline.md](CustomerSupportBot.Application/Chat/ContextPipeline.md)).
 
 **`ContextPipeline.BuildContextAsync(session)` → string** — tüm kayıtlı provider'ları `Order`'a göre sıralı çalıştırır ve üretilen metinleri `\n\n` ile birleştirir. Bir provider exception fırlatırsa loglanır ve atlanır.
 
@@ -404,7 +404,7 @@ Thread-safety: `ConcurrentDictionary` ile sağlanır. Stok kontrolü `IOrderRepo
 | `ChatResponse` | `Response`, `SessionId`, `Reasoning?` | `/chat/` response body. `record` tipi. `Models/ChatResponse.cs` |
 | `StreamEvent` | `Type`, `Data` | SSE event yapısı. `StreamEventTypes` sabitleri: `session`, `reasoning_start/delta/complete`, `agent`, `response_start/delta/complete`, `error`, `done`, HITL: `approval_required/resolved`, `escalation_created`, `human_joined/message/left`, `handoff_pending/cleared`, `bridge_message`, `bot_typing`, ayrıca `sentiment_update/alert`. `Models/StreamEvent.cs` |
 
-Event payload şemaları → [api/](api/README.md).
+Event payload şemaları → [CustomerSupportBot.Api/README.md](CustomerSupportBot.Api/README.md).
 
 ---
 
@@ -589,7 +589,7 @@ ChatManager `ShouldTerminateAsync` bu ayarları kullanır.
 - `ComplaintRegistrationTool` — `customerId` opsiyonel; boşsa `OrdersDb[orderId].CustomerId`'den türetir. Verilen customerId order sahibiyle uyuşmuyorsa → `Conflict(WellKnown.ToolErrorCodes.CustomerIdMismatch)`.
 - Tool çıktıları her zaman `ToolResult` → LLM düz metin değil, yapılandırılmış sinyal görür.
 
-Tool → agent eşleşmesi ve handoff davranışları → [adapters-agents/](adapters-agents/README.md).
+Tool → agent eşleşmesi ve handoff davranışları → [CustomerSupportBot.Adapters.Agents/README.md](CustomerSupportBot.Adapters.Agents/README.md).
 
 ---
 
@@ -634,7 +634,7 @@ ASP.NET Core Minimal API. Her dosya **extension method** olarak kayıt: `app.Map
 | POST | `/chat/` | `HandleChatAsync` — non-streaming; reasoning → workflow sıralı; `ChatResponse` JSON döner |
 | POST | `/chat/stream` | `HandleChatStreamAsync` — SSE; reasoning stream + workflow stream + done event |
 
-Detay şemaları + akış → [api/](api/README.md).
+Detay şemaları + akış → [CustomerSupportBot.Api/README.md](CustomerSupportBot.Api/README.md).
 
 ---
 
@@ -800,13 +800,13 @@ Secondary port. Postgres adaptörlerinin Redis'e doğrudan bağımlılığını 
 
 ## Çapraz referanslar
 
-- **Agent davranışı detayı** → [adapters-agents/](adapters-agents/README.md)
-- **Reasoning pipeline katmanları** → [domain/Model-Reasoning.md](domain/Model-Reasoning.md)
+- **Agent davranışı detayı** → [CustomerSupportBot.Adapters.Agents/README.md](CustomerSupportBot.Adapters.Agents/README.md)
+- **Reasoning pipeline katmanları** → [CustomerSupportBot.Domain/Model/ReasoningResult.md](CustomerSupportBot.Domain/Model/ReasoningResult.md)
 - **Tasarım örüntüleri** → [agentic-patterns.md](agentic-patterns.md)
 - **Mimari + DI + sequence diagram** → [architecture.md](architecture.md)
-- **Endpoint + event şemaları** → [api/](api/README.md)
+- **Endpoint + event şemaları** → [CustomerSupportBot.Api/README.md](CustomerSupportBot.Api/README.md)
 - **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
-- **Veritabanı ve kalıcılık** → [adapters-persistence/](adapters-persistence/README.md)
-- **Telemetri ve maliyet takibi** → [adapters-telemetry/](adapters-telemetry/README.md)
-- **Routing ve eskalasyon** → [application/SkillsBasedRouter.md](application/SkillsBasedRouter.md)
+- **Veritabanı ve kalıcılık** → [CustomerSupportBot.Adapters.Persistence/README.md](CustomerSupportBot.Adapters.Persistence/README.md)
+- **Telemetri ve maliyet takibi** → [CustomerSupportBot.Adapters.Telemetry/README.md](CustomerSupportBot.Adapters.Telemetry/README.md)
+- **Routing ve eskalasyon** → [CustomerSupportBot.Application/Routing/SkillsBasedRouter.md](CustomerSupportBot.Application/Routing/SkillsBasedRouter.md)
 - **Yeni sınıf/tool/agent nasıl eklenir** → [developer-guide.md](developer-guide.md)

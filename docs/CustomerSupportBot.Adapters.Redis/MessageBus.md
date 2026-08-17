@@ -187,5 +187,5 @@ Yüksek frekanslı channel'lar (örn. `csbot:bridge:touser` her chat mesajı iç
 
 ## Bağlantılar
 
-- [Application IMessageBusPort](../application/README.md)
-- [PostgresChatBridge](../adapters-persistence/PostgresAdapters.md#postgreschatbridge) — pub/sub kullanan adapter örneği
+- [Application IMessageBusPort](../CustomerSupportBot.Application/README.md)
+- [PostgresChatBridge](../CustomerSupportBot.Adapters.Persistence/PostgresAdapters.md#postgreschatbridge) — pub/sub kullanan adapter örneği

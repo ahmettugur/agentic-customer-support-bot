@@ -119,7 +119,7 @@ t2 (revoke, replacedBy=t3)
 t3 (active)
 ```
 
-Bir client t1'i tekrar kullanırsa → muhtemelen çalıntı → tüm zincir revoke edilir. Detay: [Adapters.Persistence AuthAdapters](../adapters-persistence/AuthAdapters.md).
+Bir client t1'i tekrar kullanırsa → muhtemelen çalıntı → tüm zincir revoke edilir. Detay: [Adapters.Persistence AuthAdapters](../CustomerSupportBot.Adapters.Persistence/AuthAdapters.md).
 
 ---
 
@@ -247,7 +247,7 @@ ASP.NET Core query string'den token okur, header gibi davranır.
 
 ## Bağlantılar
 
-- [Application Auth (TokenPortService, UserService)](../application/Auth.md)
-- [Adapters.Persistence AuthAdapters](../adapters-persistence/AuthAdapters.md) — BCrypt, JWT, refresh table
+- [Application Auth (TokenPortService, UserService)](../CustomerSupportBot.Application/Auth/TokenPortService.md)
+- [Adapters.Persistence AuthAdapters](../CustomerSupportBot.Adapters.Persistence/AuthAdapters.md) — BCrypt, JWT, refresh table
 - [Models.md](Models.md) — `AuthDtos.cs`
 - [Extensions.md](Extensions.md) — `AddAuthenticationServices`

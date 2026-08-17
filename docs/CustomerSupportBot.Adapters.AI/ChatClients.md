@@ -264,4 +264,4 @@ Detay: [ExceptionTranslator.md](ExceptionTranslator.md).
 
 - [Options.md](Options.md) — Provider config alanları
 - [DependencyInjection.md](DependencyInjection.md) — Composition Root pattern, IChatClient kaydı
-- [Adapters.Telemetry/TelemetryChatClient.md](../adapters-telemetry/TelemetryChatClient.md) — decorator
+- [Adapters.Telemetry/TelemetryChatClient.md](../CustomerSupportBot.Adapters.Telemetry/TelemetryChatClient.md) — decorator

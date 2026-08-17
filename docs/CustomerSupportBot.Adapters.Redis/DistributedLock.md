@@ -149,5 +149,5 @@ Yüksek frekanslı işlemler için lock granularity'ye dikkat:
 
 ## Bağlantılar
 
-- [Application IAppDistributedLock arayüzü](../application/README.md) — port tanımı
-- [PostgresAdapters.md](../adapters-persistence/PostgresAdapters.md) — Lock kullanan adapter'lar (Approval, ChatMode)
+- [Application IAppDistributedLock arayüzü](../CustomerSupportBot.Application/README.md) — port tanımı
+- [PostgresAdapters.md](../CustomerSupportBot.Adapters.Persistence/PostgresAdapters.md) — Lock kullanan adapter'lar (Approval, ChatMode)

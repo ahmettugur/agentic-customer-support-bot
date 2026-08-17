@@ -243,7 +243,7 @@ var complaintAgent = new ChatClientAgent(
 
 ## Yeni agent ekleme
 
-> **Detaylı referans:** Tüm `Adapters.Agents` sınıflarının kapsamlı dokümantasyonu için [`docs/adapters-agents/`](adapters-agents/README.md) klasörüne, `Application` katmanı için [`docs/application/`](application/README.md) klasörüne bakın.
+> **Detaylı referans:** Tüm `Adapters.Agents` sınıflarının kapsamlı dokümantasyonu için [`docs/adapters-agents/`](CustomerSupportBot.Adapters.Agents/README.md) klasörüne, `Application` katmanı için [`docs/application/`](CustomerSupportBot.Application/README.md) klasörüne bakın.
 
 ### Senaryo
 
@@ -615,7 +615,7 @@ Reasoning'i bu duruma sokacak bir evaluation senaryosu ekle:
 
 Not: `trace_field` tipi mevcut `CriteriaEvaluator`'da desteklenmez. Sanity issue tespiti için `EvaluationRunner.RunScenarioAsync` metodunu genişletmek veya doğrudan trace API'sini (`GET /traces/recent`) kontrol etmek gerekir.
 
-Detay → [domain/Model-Reasoning.md](domain/Model-Reasoning.md).
+Detay → [CustomerSupportBot.Domain/Model/ReasoningResult.md](CustomerSupportBot.Domain/Model/ReasoningResult.md).
 
 ---
 
@@ -713,7 +713,7 @@ if (verified.CampaignId?.Verification == EntityVerification.Verified)
 - [ ] `reasoning-system.md` yeni entity tipi hakkında not ekleniyor (opsiyonel ama önerilir)
 - [ ] Evaluation senaryosu yazıldı
 
-Detay → [domain/Model-Reasoning.md](domain/Model-Tools.md).
+Detay → [CustomerSupportBot.Domain/Model/ToolResult.md](CustomerSupportBot.Domain/Model/ToolResult.md).
 
 ---
 
@@ -798,7 +798,7 @@ curl -s http://localhost:5021/traces/recent?count=1 \
 | Response final'da `TERMINATE` | yok (`JoinAggregatedParts` zaten temiz) |
 | Frontend'de `response_complete` event'inde `decomposed=true` | evet |
 
-Detay → [domain/Model-Reasoning.md](domain/Model-Reasoning.md).
+Detay → [CustomerSupportBot.Domain/Model/ReasoningResult.md](CustomerSupportBot.Domain/Model/ReasoningResult.md).
 
 ---
 
@@ -978,4 +978,4 @@ curl -sX POST "http://localhost:5021/eval/run" \
 
 ---
 
-Sorularınız olursa: [architecture.md](architecture.md), [domain/Model-Reasoning.md](domain/Model-Reasoning.md), [agentic-patterns.md](agentic-patterns.md) dokümanlarını ilk uğrak olarak öneririz.
+Sorularınız olursa: [architecture.md](architecture.md), [CustomerSupportBot.Domain/Model/ReasoningResult.md](CustomerSupportBot.Domain/Model/ReasoningResult.md), [agentic-patterns.md](agentic-patterns.md) dokümanlarını ilk uğrak olarak öneririz.

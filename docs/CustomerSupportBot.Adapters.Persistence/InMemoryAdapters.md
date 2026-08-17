@@ -25,7 +25,7 @@
 | `GetAll` | Tüm session listesi (metadata) |
 | `ClearSession` | Geçmişi siler, state sıfırlar |
 
-> **`AddExchangeAsync`, turun türetilmiş state'inin (intent, sentiment, `ConsecutiveNegativeTurns`, phase) TEK yazarına** — `SessionStateExtractor.ExtractAndApply` (Domain katmanı) — giden tek kapıdır. İçeride `ExtractAndApply`'ı `session` nesnesi üzerinde `lock` altında çağırır: `ConsecutiveNegativeTurns` bir oku-değiştir-yaz işlemi olduğundan, aynı session'a çakışan eşzamanlı isteklerde (çift-submit, çoklu sekme) kilitsiz çağrı bir artışı kaybettirebilirdi. `GetOrCreateAsync`/`GetAsync` aynı `sessionId` için hep AYNI `AgentSession` referansını döndürdüğünden `session` nesnesi kilit anahtarı olarak güvenle kullanılır. Detay ve "neden `signals`" sorusunun cevabı: [`Services-SessionStateExtractor.md`](../CustomerSupportBot.Domain/Services-SessionStateExtractor.md).
+> **`AddExchangeAsync`, turun türetilmiş state'inin (intent, sentiment, `ConsecutiveNegativeTurns`, phase) TEK yazarına** — `SessionStateExtractor.ExtractAndApply` (Domain katmanı) — giden tek kapıdır. İçeride `ExtractAndApply`'ı `session` nesnesi üzerinde `lock` altında çağırır: `ConsecutiveNegativeTurns` bir oku-değiştir-yaz işlemi olduğundan, aynı session'a çakışan eşzamanlı isteklerde (çift-submit, çoklu sekme) kilitsiz çağrı bir artışı kaybettirebilirdi. `GetOrCreateAsync`/`GetAsync` aynı `sessionId` için hep AYNI `AgentSession` referansını döndürdüğünden `session` nesnesi kilit anahtarı olarak güvenle kullanılır. Detay ve "neden `signals`" sorusunun cevabı: [`Services-SessionStateExtractor.md`](../CustomerSupportBot.Domain/Services/SessionStateExtractor.md).
 
 ---
 

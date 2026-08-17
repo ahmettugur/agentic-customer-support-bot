@@ -2,7 +2,7 @@
 
 Bu doküman botun **"akıl yürütme"** stratejisini anlatır: hangi reasoning pattern'leri kullanıldı, niçin seçildi, kod içinde nerede yaşıyor.
 
-> Implementasyon detayları için: [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md), [`application/ReasoningPipeline.md`](application/ReasoningPipeline.md), [`adapters-agents/`](adapters-agents/README.md).
+> Implementasyon detayları için: [`CustomerSupportBot.Domain/Model/ReasoningResult.md`](CustomerSupportBot.Domain/Model/ReasoningResult.md), [`CustomerSupportBot.Application/Reasoning/ReasoningService.md`](CustomerSupportBot.Application/Reasoning/ReasoningService.md), [`CustomerSupportBot.Adapters.Agents/README.md`](CustomerSupportBot.Adapters.Agents/README.md).
 
 ---
 
@@ -70,7 +70,7 @@ ReasoningAgent prompt'una eklenir                   ← LLM bu hint'i görür
 
 Aynı pattern `SessionStateExtractor`'da: turn count, intent keyword match, sentiment keyword match — hepsi LLM'siz.
 
-📁 Kod: [`domain/Services-IdExtractor.md`](domain/Services-IdExtractor.md), [`domain/Services-SessionStateExtractor.md`](domain/Services-SessionStateExtractor.md)
+📁 Kod: [`CustomerSupportBot.Domain/Services/IdExtractor.md`](CustomerSupportBot.Domain/Services/IdExtractor.md), [`CustomerSupportBot.Domain/Services/SessionStateExtractor.md`](CustomerSupportBot.Domain/Services/SessionStateExtractor.md)
 
 ---
 
@@ -130,7 +130,7 @@ Tüm step'ler grounding=assumption → LLM havadan üretti → güvenilmez
 
 `SanityChecker` (aşağıda) `assumption` oranı yüksekse Warn fırlatır.
 
-📁 Kod: [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md), `Prompts/services/reasoning-system.md`
+📁 Kod: [`CustomerSupportBot.Domain/Model/ReasoningResult.md`](CustomerSupportBot.Domain/Model/ReasoningResult.md), `Prompts/services/reasoning-system.md`
 
 ---
 
@@ -168,7 +168,7 @@ ReasoningAgent **kendini denetler** — JSON çıkışına `sanityIssues[]` ekle
 
 Bu sayede LLM kendi hatasını fark edip düzeltir. Tek-shot bekleyip kötü output kabul etmek yerine.
 
-📁 Kod: [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md) (`ReasoningIssue`)
+📁 Kod: [`CustomerSupportBot.Domain/Model/ReasoningIssue.md`](CustomerSupportBot.Domain/Model/ReasoningIssue.md) (`ReasoningIssue`)
 
 ---
 
@@ -207,7 +207,7 @@ Bu pattern özellikle ID'siz mesajlarda kritik:
 - "siparişim nerede" → hangi sipariş? sor
 - "iade istiyorum" → hangi ürün/sipariş için? sor
 
-📁 Kod: [`application/PlanningAgent`](application/README.md), `Prompts/agents/planning-agent.md`
+📁 Kod: [`CustomerSupportBot.Application/README.md`](CustomerSupportBot.Application/README.md), `Prompts/agents/planning-agent.md`
 
 ---
 
@@ -266,7 +266,7 @@ Eğer task tamamlanamadıysa `handoffSuggestion = "ComplaintAgent"` ile başka a
 - **PostToolReflection:** Tool sonucunu kullanıcıya ham vermek yerine yorumla
 - **Status normalizasyonu:** `done` / `needs_followup` / `needs_escalation` / `failed` / `partial` — workflow için tek tip karar
 
-📁 Kod: [`domain/Model-Specialist.md`](domain/Model-Specialist.md), `Prompts/agents/order-agent.md` (vb.)
+📁 Kod: [`CustomerSupportBot.Domain/Model/SpecialistReasoning.md`](CustomerSupportBot.Domain/Model/SpecialistReasoning.md), `Prompts/agents/order-agent.md` (vb.)
 
 ---
 
@@ -319,7 +319,7 @@ Yan-etkisiz query: "1 ve 2 durumu"
   → 2 paralel subtask → p50 latency ÷ 2
 ```
 
-📁 Kod: [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md) (`SubTask`), [`application/`](application/README.md)
+📁 Kod: [`CustomerSupportBot.Domain/Model/SubTask.md`](CustomerSupportBot.Domain/Model/SubTask.md) (`SubTask`), [`CustomerSupportBot.Application/README.md`](CustomerSupportBot.Application/README.md)
 
 ---
 
@@ -349,7 +349,7 @@ SanityIssues += {
 }
 ```
 
-📁 Kod: [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md) (`ReasoningStep.Grounding`)
+📁 Kod: [`CustomerSupportBot.Domain/Model/ReasoningStep.md`](CustomerSupportBot.Domain/Model/ReasoningStep.md) (`ReasoningStep.Grounding`)
 
 ---
 
@@ -376,7 +376,7 @@ Specialist `PostToolReflection`'da handoff önerebilir:
 
 `AgentTeamCoordinator` bunu okur, runtime'da `ComplaintAgent`'a yönlendirir. **Planning hata yapsa bile** sistem düzeltir.
 
-📁 Kod: [`domain/Model-Specialist.md`](domain/Model-Specialist.md) (`PostToolReflection`)
+📁 Kod: [`CustomerSupportBot.Domain/Model/SpecialistReasoning.md`](CustomerSupportBot.Domain/Model/SpecialistReasoning.md) (`PostToolReflection`)
 
 ---
 
@@ -401,7 +401,7 @@ Sonra `ReplanService.ExecuteAsync` tetiklenir:
 4. ReplanNote LLM prompt'una **bağlam** olarak girer
 5. Yeni yanıt üretilir, `ForceReplanNextTurn = false` yapılır
 
-📁 Kod: [`application/ReplanService.md`](application/ReplanService.md), [`domain/Model-Session.md`](domain/Model-Session.md) (`ReplanControl`)
+📁 Kod: [`CustomerSupportBot.Application/Reasoning/ReplanService.md`](CustomerSupportBot.Application/Reasoning/ReplanService.md), [`CustomerSupportBot.Domain/Model/SessionState.md`](CustomerSupportBot.Domain/Model/SessionState.md) (`ReplanControl`)
 
 ---
 
@@ -430,7 +430,7 @@ Sonra `ReplanService.ExecuteAsync` tetiklenir:
 
 `ReasoningChatClient.ReasoningEffort` startup'ta belirlenir; ileride **dynamic** olarak senaryo karmaşıklığına göre değişebilir (örn. SubTasks ≥ 2 ise `high`).
 
-📁 Kod: [`adapters-ai/ChatClients.md`](adapters-ai/ChatClients.md) (`ReasoningChatClient`)
+📁 Kod: [`CustomerSupportBot.Adapters.AI/ChatClients.md`](CustomerSupportBot.Adapters.AI/ChatClients.md) (`ReasoningChatClient`)
 
 ---
 
@@ -466,7 +466,7 @@ Markdown dosyaları `FileSystemPromptRepository` startup'ta cache'ler. Prompt de
 2. Uygulamayı restart et (60s)
 3. Yeni davranış canlı — kod değişikliği yok
 
-📁 Kod: [`adapters-persistence/FileSystemAdapters.md`](adapters-persistence/FileSystemAdapters.md), `Prompts/README.md`
+📁 Kod: [`CustomerSupportBot.Adapters.Persistence/FileSystemAdapters.md`](CustomerSupportBot.Adapters.Persistence/FileSystemAdapters.md), `Prompts/README.md`
 
 ---
 
@@ -735,13 +735,13 @@ Tek konuşma turn'ü < yarım sentin altında. Bu deterministic preprocessing + 
 ## İlgili dokümantasyon
 
 - **Implementation:**
-  - [`domain/Model-Reasoning.md`](domain/Model-Reasoning.md) — ReasoningResult, ReasoningStep, SubTask, ReasoningIssue
-  - [`domain/Model-Specialist.md`](domain/Model-Specialist.md) — PreToolCheck, PostToolReflection
-  - [`domain/Services-Parsers.md`](domain/Services-Parsers.md) — LLM JSON parse mantığı
-  - [`domain/Services-IdExtractor.md`](domain/Services-IdExtractor.md) — Regex ID çıkarımı
-  - [`domain/Services-SessionStateExtractor.md`](domain/Services-SessionStateExtractor.md) — Deterministic state
-  - [`application/ReasoningAgent`](application/README.md), [`application/ReplanService.md`](application/ReplanService.md)
-  - [`adapters-ai/ChatClients.md`](adapters-ai/ChatClients.md) — ReasoningChatClient
+  - [`CustomerSupportBot.Domain/Model/ReasoningResult.md`](CustomerSupportBot.Domain/Model/ReasoningResult.md) — ReasoningResult, ReasoningStep, SubTask, ReasoningIssue
+  - [`CustomerSupportBot.Domain/Model/SpecialistReasoning.md`](CustomerSupportBot.Domain/Model/SpecialistReasoning.md) — PreToolCheck, PostToolReflection
+  - [`CustomerSupportBot.Domain/Services/ReasoningResultParser.md`](CustomerSupportBot.Domain/Services/ReasoningResultParser.md) — LLM JSON parse mantığı
+  - [`CustomerSupportBot.Domain/Services/IdExtractor.md`](CustomerSupportBot.Domain/Services/IdExtractor.md) — Regex ID çıkarımı
+  - [`CustomerSupportBot.Domain/Services/SessionStateExtractor.md`](CustomerSupportBot.Domain/Services/SessionStateExtractor.md) — Deterministic state
+  - [`CustomerSupportBot.Application/README.md`](CustomerSupportBot.Application/README.md), [`CustomerSupportBot.Application/Reasoning/ReplanService.md`](CustomerSupportBot.Application/Reasoning/ReplanService.md)
+  - [`CustomerSupportBot.Adapters.AI/ChatClients.md`](CustomerSupportBot.Adapters.AI/ChatClients.md) — ReasoningChatClient
 - **Patterns daha geniş:**
   - [`agentic-patterns.md`](agentic-patterns.md) — Genel agentic design pattern reference
   - [`intelligence.md`](intelligence.md) — Semantic memory + self-improvement döngüsü

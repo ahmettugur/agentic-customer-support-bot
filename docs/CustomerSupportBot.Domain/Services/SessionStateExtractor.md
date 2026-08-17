@@ -42,7 +42,7 @@ State'i **in-place** günceller. `PostgresSessionManager`/`InMemorySessionManage
    - `order_id` → `CollectedInfo["LastMentionedOrderId"]`
    - `priorHistory` bağlamsız (context'siz) bir sayı çıkarımını (ör. önceki turda *"sipariş numaram 1030"* dendikten sonra bu turda sadece *"1030"* yazılması) önceki turun gerçek bağlamına göre yeniden sınıflandırır.
 
-   > ⚠️ **Buradaki yanlış sınıflandırma kalıcıdır.** Diğer `IdExtractor` çağrıları (ör. workflow'un prompt hint'i) tek turluktur; burası ise **oturum durumuna yazar**. `state.CustomerId` sonraki her turda `EntityVerifier`'a bir kaynak olarak gider — yani tek bir hatalı tur bütün oturumu zehirler. Kök neden ve düzeltme: [`IdExtractor` — `numaram` sahiplenmesi](Services-IdExtractor.md). Regresyon koruması `SessionStateExtractorTests`.
+   > ⚠️ **Buradaki yanlış sınıflandırma kalıcıdır.** Diğer `IdExtractor` çağrıları (ör. workflow'un prompt hint'i) tek turluktur; burası ise **oturum durumuna yazar**. `state.CustomerId` sonraki her turda `EntityVerifier`'a bir kaynak olarak gider — yani tek bir hatalı tur bütün oturumu zehirler. Kök neden ve düzeltme: [`IdExtractor` — `numaram` sahiplenmesi](IdExtractor.md). Regresyon koruması `SessionStateExtractorTests`.
 2. **Intent tespiti** — `state.CurrentIntent = llm?.Intent ?? DetectUserIntent(userMessage)`
    - LLM (reasoning) bir intent ürettiyse **o kazanır**; üretmediyse `WellKnown.IntentKeywords` tablosuna düşülür.
    - Kural tabanlı tabloda özel bir kural da var: `"sipariş"` + (`"durum"` veya `"takip"` veya `"nerede"`) → `sipariş_sorgulama`.
