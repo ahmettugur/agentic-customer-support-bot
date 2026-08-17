@@ -174,23 +174,49 @@ public class WorkflowResponseExtractorOutputTests
     }
 
     // ─── IsInternalWorkflowExecutor ───
+    //
+    // Bu testlerin girdileri UYDURMA DEĞİL: MAF 1.17.0 ile gerçek production workflow'u
+    // (AgentTeamFactory.CreateWorkflow) kurulup ReflectEdges() ile ölçülen id'ler bunlar.
+    // Ölçüm: tek sistem düğümü "GroupChatHost", ajanlar ise "{AjanAdı}_{guid}".
+    // Eskiden burada "GroupChatManager"/"StartExecutor"/"EndExecutor" gibi girdiler vardı;
+    // MAF hiçbir topolojide o id'leri üretmiyor — filtreyi genişletmiş gibi görünüp aslında
+    // hiçbir şeyi korumuyorlardı (bkz. WellKnown.SystemExecutorPrefixes).
 
     [Theory]
+    [InlineData("GroupChatHost")]
     [InlineData("GroupChatHost-1")]
-    [InlineData("GroupChatManager")]
-    [InlineData("RoundRobinGroupChatManager-x")]
-    [InlineData("StartExecutor")]
-    [InlineData("EndExecutor-end")]
-    public void IsInternalWorkflowExecutor_KnownPrefixes_True(string id)
+    public void IsInternalWorkflowExecutor_SystemExecutor_True(string id)
     {
         WorkflowResponseExtractor.IsInternalWorkflowExecutor(id).Should().BeTrue();
     }
 
+    /// <summary>
+    /// Gerçek ajan id'leri (guid sonekiyle birlikte) ASLA sistem sayılmamalı — sayılsalardı
+    /// kullanıcı hiçbir ajan rozeti görmezdi.
+    /// </summary>
     [Theory]
     [InlineData("PlanningAgent")]
     [InlineData("OrderAgent")]
     [InlineData("CustomAgent")]
+    [InlineData("PlanningAgent_4a58d12814a44688afbe770cc1830ea6")]
+    [InlineData("ResponseAgent_2a22ab9b3b9a420bb2c5b8c0a88d0483")]
     public void IsInternalWorkflowExecutor_UserAgent_False(string id)
+    {
+        WorkflowResponseExtractor.IsInternalWorkflowExecutor(id).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Regresyon koruması: ölü girdiler geri eklenirse burası kırmızıya döner. Bunlar MAF'ın
+    /// ürettiği id'ler DEĞİL — filtreye eklenmeleri korumayı artırmaz, yanlış güven verir.
+    /// Topoloji GroupChat dışına çıkarsa (Concurrent/Handoff) doğru adlar "Start"/"Batcher/…"/
+    /// "HandoffStart" olur; o zaman bu test de bilinçli olarak güncellenmeli.
+    /// </summary>
+    [Theory]
+    [InlineData("GroupChatManager")]
+    [InlineData("RoundRobinGroupChatManager-x")]
+    [InlineData("StartExecutor")]
+    [InlineData("EndExecutor-end")]
+    public void IsInternalWorkflowExecutor_NonExistentMafIds_NotFiltered(string id)
     {
         WorkflowResponseExtractor.IsInternalWorkflowExecutor(id).Should().BeFalse();
     }

@@ -303,16 +303,32 @@ public static class WellKnown
         public const string Impolite = "impolite";
     }
 
-    /// <summary>MAF sistem executor önekleri — kullanıcıya gösterilmez.</summary>
+    /// <summary>
+    /// MAF sistem executor önekleri — kullanıcıya ajan gibi gösterilmemesi gerekenler.
+    ///
+    /// <para>
+    /// <b>Bu liste MAF'ın gerçekten ürettiği id'lere göre ölçülerek daraltıldı (1.17.0).</b>
+    /// GroupChat topolojisinde workflow YALNIZCA şu id'leri üretir:
+    /// <c>GroupChatHost</c> (tek sistem düğümü) + her ajan için <c>{AjanAdı}_{guid}</c>.
+    /// Eskiden listede <c>GroupChatManager</c>, <c>RoundRobinGroupChatManager</c>,
+    /// <c>StartExecutor</c>, <c>EndExecutor</c> de vardı; bunlar MAF'ın <b>hiçbir</b>
+    /// topolojisinde executor id olarak görünmüyor — ölü girdilerdi ve filtrenin gerçekte
+    /// tek bir dizeye dayandığını gizliyorlardı.
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ <b>Topoloji değiştirilirse burası güncellenmeli.</b> Ölçülen diğer topolojilerin
+    /// sistem düğümleri farklı adlar taşıyor ve bu liste onları YAKALAMAZ:
+    /// Concurrent → <c>Start</c>, <c>Batcher/{AjanAdı}_{guid}</c>; Handoff → <c>HandoffStart</c>;
+    /// Sequential → (sistem düğümü yok). Bugün yalnızca GroupChat kullanılıyor
+    /// (<c>AgentTeamFactory.CreateWorkflow</c>).
+    /// </para>
+    /// </summary>
     public static class SystemExecutorPrefixes
     {
         public static readonly string[] Values =
         [
-            "GroupChatHost",
-            "GroupChatManager",
-            "RoundRobinGroupChatManager",
-            "StartExecutor",
-            "EndExecutor"
+            "GroupChatHost"
         ];
     }
 

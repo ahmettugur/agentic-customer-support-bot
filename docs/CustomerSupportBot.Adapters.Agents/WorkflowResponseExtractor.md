@@ -151,6 +151,8 @@ public static bool IsInternalWorkflowExecutor(string executorId)
 
 MAF'ın iç orkestrasyon executorlarını (gerçek ajan olmayan) filtreler. `WellKnown.SystemExecutorPrefixes` listesindeki bir prefix ile başlayan executor ID'leri "iç executor" kabul edilir ve `StreamEvent` olarak yayımlanmaz.
 
+GroupChat topolojisinde ölçülen (MAF 1.17.0) gerçek durum: filtrelenen **tek** id `GroupChatHost`, geçen 6 id ise `{AjanAdı}_{guid}` biçimindeki ajanlar. Eşleşme `StartsWith` olduğu için guid soneki sorun çıkarmaz. Listenin neden bu kadar kısa olduğu ve topoloji değişirse ne olacağı için bkz. [WellKnown.md → SystemExecutorPrefixes](../CustomerSupportBot.Domain/WellKnown.md#systemexecutorprefixes).
+
 ### `StreamTextInChunksAsync`
 
 ```csharp

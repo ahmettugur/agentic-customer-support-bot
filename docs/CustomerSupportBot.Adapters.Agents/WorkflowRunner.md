@@ -46,7 +46,13 @@ Tek Sorumluluk ilkesi gereği eskiden `CustomerSupportTeam` içinde toplu duran 
 
 HITL onay köprüsü (`HandleRequestInfoEventAsync`) framework'ün native `RequestInfoEvent`/`ApprovalRequiredAIFunction` mekanizmasını kullanır: bir tool `ApprovalRequiredAIFunction` ile sarılırsa workflow superstep'i gerçekten duraklar ve event burada yakalanıp aynı `IApprovalQueue`/SSE/SLA altyapısına bağlanır.
 
-> ⚠️ **Bu yol bugün ölü — bilerek korunuyor.** Onay gerektiren dört tool (sipariş verme/iptal, iade, şikayet) `ApprovalGateService` üzerinden **bloklamayan** modele geçti: tool anında `ToolResult.Pending` döner, superstep durmaz, karar geldiğinde iş `IApprovalExecutionRouter` ile ayrıca yürütülür. Dolayısıyla bu köprü artık pratikte hiç tetiklenmiyor. Kuyruk tabanlı onayın tercih sebebi, web isteğinin ömründen bağımsız olması ve checkpoint'e ihtiyaç duymaması.
+> ⚠️ **Bu yol bugün ULAŞILAMAZ — bilerek korunuyor.** Onay gerektiren dört tool (sipariş verme/iptal, iade, şikayet) `ApprovalGateService` üzerinden **bloklamayan** modele geçti: tool anında `ToolResult.Pending` döner, superstep durmaz, karar geldiğinde iş `IApprovalExecutionRouter` ile ayrıca yürütülür. Kuyruk tabanlı onayın tercih sebebi, web isteğinin ömründen bağımsız olması ve checkpoint'e ihtiyaç duymaması.
+>
+> **Ulaşılamazlık doğrulandı:** repo genelinde production kodunda `ApprovalRequiredAIFunction` ile sarma **yok** — tüm tool'lar düz `AIFunctionFactory.Create` ile kuruluyor. Tek gerçek örnekleme bir testte: `HitlRejectionFormatTests`.
+>
+> **Neden silinmiyor:** (1) canlı tutmanın topolojik maliyeti **sıfır** — MAF 1.17.0 ile ölçüldü: bir ajana `ApprovalRequiredAIFunction` eklemek workflow graf'ına düğüm veya port EKLEMİYOR (`ReflectEdges`/`ReflectPorts` çıktısı değişmiyor). (2) Silinirse ve ileride biri bir tool'u o modelde sararsa, üretilen `RequestInfoEvent` işlenmeden kalır; superstep yanıt bekler ve o tur timeout'a kadar **asılı kalır**. Yani bu ölü kod değil, açık bırakılmış bir emniyet valfi.
+>
+> **Yeniden devreye almak için** tek gereken ilgili tool'u `ApprovalGateService`'te `ApprovalRequiredAIFunction` ile sarmak; buradaki kod değişmeden çalışır. Ama önce terk edilme sebebine bakın: admin kararını turun içinde beklemek, onaylar birikince `TimeoutSeconds` içinde yetişilememesine ve isteklerin sessizce otomatik red'e düşmesine yol açıyordu.
 
 `EnsureHumanHandoffEscalation`'ın "tek yönlü garanti" tasarımı bilinçli bir takas: kaçırılan eskalasyonun maliyeti fazladan eskalasyondan yüksek görüldüğü için, `human_handoff_tool` çağrıldıysa LLM'in reflection'ı ne derse desin eskalasyon kaydı açılır (admin panelinde dismiss yolu var, tersi mümkün değil).
 
@@ -82,7 +88,21 @@ Bu birleştirme bir yan etki doğurdu ve bilinçli olarak ele alındı: token'la
 | `BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning)` (private) | Workflow'a gidecek `ChatMessage` listesini kurar (bağlam → reasoning hint → entity hint → geçmiş → replan notu → sorgu). |
 | `ResolveExtractedIds(query, reasoning)` (internal static) | Entity hint'i için ID kaynağını çözer — `reasoning.VerifiedEntities` mevcutsa (ReasoningService'in query+geçmiş+session+DB'yi birleştirdiği sonuç) onu kullanır, yoksa `IdExtractor.Extract(query)` (yalnızca güncel mesaj, bağlamsız) fallback'ine düşer. Bkz. tasarım notu — bu ayrım gerçek bir üretim bug'ını (bağlam kelimesiz takip mesajlarında yanlış tool seçimi) düzeltmek için eklendi. |
 | `RewriteRoutingMessageAsync(routingMessage, originalQuery, ct)` (private) | Yanıt metninde ajan adı sızıntısı varsa LLM ile (`routing-rewrite-*` promptları) yeniden yazar; hata olursa sabit fallback mesajı döner. |
-| `StopRunGracefullyAsync(run)` (private) | Timeout/iptal anında `run.CancelRunAsync()` ile kooperatif durdurma dener (best-effort). |
+| `StopRunGracefullyAsync(run)` (private) | Timeout/iptal anında `run.CancelRunAsync()` ile koşuyu durdurur (best-effort). Sonraki ajan turunu engellemenin yanında **devam eden LLM çağrısına da iptali yayar** — bkz. aşağıdaki ölçüm notu. |
+
+> 🐞 **Düzeltildi — "framework devam eden LLM çağrısını kesemez" iddiası artık yanlış.**
+> Kodda bu metodun yorumu MAF 1.15.0'a atıfla "`CancelRunAsync` hâlihazırda devam eden bir LLM
+> HTTP çağrısını anında kesmez (framework sınırlaması)" diyordu. MAF 1.17.0 ile ölçüldüğünde
+> bunun geçerli olmadığı görüldü:
+>
+> | Senaryo | LLM çağrısının token'ı iptal edildi mi? |
+> |---|:---:|
+> | `CancelRunAsync()` çağrıldı | **evet** (~3 ms) |
+> | Kontrol: çağrılmadı | hayır |
+>
+> Kontrol deneyi nedenselliği doğrular. Ölçülen şey framework'ün iptali **yaydığı**dır;
+> soketin gerçekten kapanması alttaki HTTP istemcisine bağlıdır. Sürüm yükseltmelerinde
+> yeniden ölçün — yanlış bilgiye dayanıp olmayan bir kısıt için çözüm yazılmasın.
 
 ## Bağımlılıklar
 

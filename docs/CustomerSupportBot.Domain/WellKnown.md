@@ -334,16 +334,36 @@ public static class SystemExecutorPrefixes
 {
     public static readonly string[] Values =
     [
-        "GroupChatHost",
-        "GroupChatManager",
-        "RoundRobinGroupChatManager",
-        "StartExecutor",
-        "EndExecutor"
+        "GroupChatHost"
     ];
 }
 ```
 
-MAF sistem executor önekleri — kullanıcıya gösterilmez; `WorkflowResponseExtractor` bunları filtreler.
+MAF sistem executor önekleri — kullanıcıya ajan gibi gösterilmez; `WorkflowResponseExtractor.IsInternalWorkflowExecutor` bunları filtreler.
+
+> 🐞 **Ölçülerek daraltıldı — 4 girdi hiçbir şeyle eşleşmiyordu.** Liste eskiden
+> `GroupChatManager`, `RoundRobinGroupChatManager`, `StartExecutor`, `EndExecutor` de
+> içeriyordu. MAF 1.17.0 ile gerçek production workflow'u (`AgentTeamFactory.CreateWorkflow`)
+> kurulup `ReflectEdges()` ile ölçüldüğünde üretilen id'ler yalnızca şunlar:
+>
+> ```
+> GroupChatHost                                    ← tek sistem düğümü
+> PlanningAgent_4a58d12814a44688afbe770cc1830ea6   ← {AjanAdı}_{guid}
+> ProductAgent_28567321710f4b80a7a154caadd4566b
+> OrderAgent_1d8abdff1bc343999fee3e9e26baac31
+> ComplaintAgent_2f32cfc1e1a3424daebcc1f7e7bea010
+> HumanHandoffAgent_f4cba86a08cc42fb93c7d008016dba0e
+> ResponseAgent_2a22ab9b3b9a420bb2c5b8c0a88d0483
+> ```
+>
+> Silinen 4 girdi MAF'ın **hiçbir** topolojisinde executor id olarak görünmüyor; filtreyi
+> genişletmiş gibi görünüp aslında hiçbir şey korumuyor, korumanın gerçekte **tek bir dizeye**
+> (`GroupChatHost`) dayandığını gizliyorlardı. `IsInternalWorkflowExecutor_NonExistentMafIds_NotFiltered`
+> testi geri eklenmelerini engeller.
+
+> ⚠️ **Topoloji değişirse burası güncellenmeli.** Ölçülen diğer topolojilerin sistem düğümleri
+> farklı adlar taşır ve bu liste onları **yakalamaz**: Concurrent → `Start`, `Batcher/{AjanAdı}_{guid}`;
+> Handoff → `HandoffStart`; Sequential → (sistem düğümü yok). Bugün yalnızca GroupChat kullanılıyor.
 
 ### ApprovalReasons
 

@@ -348,11 +348,25 @@ internal sealed class WorkflowRunner
     }
 
     /// <summary>
-    /// Timeout/iptal anında koşuyu kooperatif olarak durdurmayı dener — mevcut superstep'ten
-    /// sonra step-runner'ın durmasını ister. Şu anki MAF sürümünde (1.15.0) bu, hâlihazırda
-    /// devam eden bir LLM HTTP çağrısını anında kesmez (framework sınırlaması), ama bir
-    /// sonraki ajan turunun başlamasını engeller — CancellationToken.None ile bırakmaktan
-    /// daha iyi. Hata olursa yutulur; bu zaten en iyi çaba (best-effort) bir temizliktir.
+    /// Timeout/iptal anında koşuyu durdurur: sonraki ajan turunun başlamasını engeller VE
+    /// hâlihazırda devam eden ajan/LLM çağrısına iptali yayar.
+    ///
+    /// <para>
+    /// Bu ikinci kısım MAF 1.17.0'da ölçüldü: LLM çağrısının içindeyken <c>CancelRunAsync()</c>
+    /// çağrıldığında çağrıya verilen <c>CancellationToken</c> milisaniyeler içinde iptal
+    /// ediliyor; çağrılmadığında iptal edilmiyor (kontrol deneyiyle nedensellik doğrulandı).
+    /// Soketin gerçekten kapanıp kapanmadığı alttaki HTTP istemcisine bağlıdır — ölçülen şey
+    /// framework'ün iptali <b>yaydığı</b>dır.
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ Bu yorum eskiden "MAF (1.15.0) devam eden LLM çağrısını kesmez (framework
+    /// sınırlaması)" diyordu; 1.17.0'da bu <b>artık doğru değil</b>. Yanlış bilgiye dayanıp
+    /// olmayan bir kısıt için çözüm yazılmasın diye kayda geçiriliyor. Sürüm yükseltmelerinde
+    /// yeniden ölçün.
+    /// </para>
+    ///
+    /// Hata olursa yutulur; bu zaten en iyi çaba (best-effort) bir temizliktir.
     /// </summary>
     private async Task StopRunGracefullyAsync(StreamingRun run)
     {
@@ -368,7 +382,32 @@ internal sealed class WorkflowRunner
     }
 
     /// <summary>
-    /// HITL onay köprüsü — <b>bugün ölü yol</b>, bilerek korunuyor.
+    /// HITL onay köprüsü — <b>bugün ULAŞILAMAZ kod</b>, bilerek korunuyor.
+    ///
+    /// <para>
+    /// <b>Neden ulaşılamaz:</b> bu metot yalnızca bir tool <c>ApprovalRequiredAIFunction</c>
+    /// ile sarılırsa tetiklenir. Repo genelinde production kodunda böyle bir sarma YOK —
+    /// tüm tool'lar düz <c>AIFunctionFactory.Create</c> ile kuruluyor
+    /// (<c>ApprovalGateService.Build*Tool</c>), çünkü onay bloklamayan modele geçti.
+    /// Tek gerçek örnekleme bir testte: <c>HitlRejectionFormatTests</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Neden silinmiyor:</b> (1) canlı tutmanın topolojik maliyeti sıfır — ölçüldü
+    /// (MAF 1.17.0): bir ajana <c>ApprovalRequiredAIFunction</c> eklemek workflow graf'ına
+    /// düğüm veya port EKLEMİYOR, id listesi değişmiyor. (2) Silinirse ve ileride biri bir
+    /// tool'u o modelde sararsa, üretilen <c>RequestInfoEvent</c> işlenmeden kalır; superstep
+    /// yanıt bekler ve o tur timeout'a kadar <b>asılı kalır</b>. Yani köprü, silinmesi
+    /// gereken ölü kod değil, açık bırakılmış bir emniyet valfidir.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Yeniden devreye girmesi için</b> tek gereken, ilgili tool'u
+    /// <c>ApprovalGateService</c>'te <c>ApprovalRequiredAIFunction</c> ile sarmak; buradaki
+    /// kod değişmeden çalışır. Ama önce bunun neden terk edildiğine bakın: admin kararını
+    /// turun içinde beklemek, onaylar birikince <c>TimeoutSeconds</c> içinde yetişilememesine
+    /// ve isteklerin sessizce otomatik red'e düşmesine yol açıyordu.
+    /// </para>
     ///
     /// Bir tool ApprovalRequiredAIFunction ile sarılırsa, FunctionInvokingChatClient onu
     /// GERÇEKTEN ÇALIŞTIRMADAN önce bir ToolApprovalRequestContent üretir; bu da
