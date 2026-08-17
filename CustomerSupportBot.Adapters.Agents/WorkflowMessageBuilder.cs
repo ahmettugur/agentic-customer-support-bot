@@ -87,8 +87,8 @@ internal sealed class WorkflowMessageBuilder
             messages.Add(new ChatMessage(ChatRole.System, entityHint));
         }
 
-        if (conversationHistory is { Count: > 0 })
-            messages.AddRange(conversationHistory.Select(m => new ChatMessage(ToChatRole(m.Role), m.Text)));
+        foreach (var m in SelectHistoryToSend(conversationHistory, session))
+            messages.Add(new ChatMessage(ToChatRole(m.Role), m.Text));
 
         var replanHint = ConsumeForceReplanHint(session);
         if (replanHint != null)
@@ -99,6 +99,42 @@ internal sealed class WorkflowMessageBuilder
         messages.Add(new ChatMessage(ChatRole.User, query));
 
         return messages;
+    }
+
+    /// <summary>
+    /// Geçmişin prompt'a gidecek kısmını seçer: özetlenmiş mesajlar atlanır, kalanlar birebir.
+    ///
+    /// <para>
+    /// <b>Düzeltilen hata:</b> Eskiden geçmiş koşulsuz olarak baştan sona ekleniyordu. Oysa
+    /// <c>ConversationSummaryProvider</c> 8. mesajdan itibaren eski turları özetleyip bağlama
+    /// koyuyor — yani aynı turlar hem özet hem ham hâliyle gönderiliyordu. Özetleme, maliyeti
+    /// azaltmak yerine <b>artırıyordu</b>: tam geçmiş + özet + özeti üretmek için fazladan bir
+    /// LLM çağrısı. Artık özet, özetlediği aralığın yerine geçiyor.
+    /// </para>
+    ///
+    /// <para>
+    /// Sınır <c>SessionState.SummarizedMessageCount</c>'tan okunur. Savunmacı biçimde kırpılır:
+    /// sayı geçmişten büyükse (ör. geçmiş temizlenmiş ama state kalmışsa) hiçbir şey atlanmaz —
+    /// özetlenmemiş bir mesajı düşürmektense fazladan mesaj göndermek yeğdir.
+    /// </para>
+    /// </summary>
+    internal static IEnumerable<ConversationMessage> SelectHistoryToSend(
+        List<ConversationMessage>? conversationHistory,
+        AgentSession? session)
+    {
+        if (conversationHistory is not { Count: > 0 })
+            return [];
+
+        var summarized = session?.State.SummarizedMessageCount ?? 0;
+
+        // Özet yoksa atlama da yok — sayı state'te kalmış olabilir, ona güvenme.
+        if (summarized <= 0 || string.IsNullOrWhiteSpace(session?.State.ConversationSummary))
+            return conversationHistory;
+
+        if (summarized >= conversationHistory.Count)
+            return conversationHistory;
+
+        return conversationHistory.Skip(summarized);
     }
 
     /// <summary>

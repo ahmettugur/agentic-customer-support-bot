@@ -56,6 +56,9 @@ public class ConversationSummaryProvider : IContextProvider
         {
             var summary = await SummarizeAsync(oldMessages);
             session.State.ConversationSummary = summary;
+            // Prompt kurulurken geçmişin ilk bu kadar mesajı atlanacak — özet onların yerine
+            // geçer. Bu sayı yazılmazsa özet tasarruf değil ek yük olur (bkz. SessionState).
+            session.State.SummarizedMessageCount = oldMessages.Count;
             await _sessionRepository.UpdateAsync(session);
 
             _logger.LogInformation(

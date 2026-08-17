@@ -50,6 +50,25 @@ public class SessionState
     /// <summary>Uzun konuşmaların LLM tarafından üretilmiş özeti.</summary>
     public string? ConversationSummary { get; set; }
 
+    /// <summary>
+    /// <see cref="ConversationSummary"/>'nin geçmişin <b>ilk kaç mesajını</b> kapsadığı.
+    ///
+    /// <para>
+    /// Bu sayı olmadan özet bir tasarruf değil, ek yüktü: özet bağlama ekleniyor ama geçmiş
+    /// yine baştan sona gönderiliyordu — yani aynı turlar hem özet hem ham hâliyle iki kez
+    /// ödeniyordu. Prompt kurulurken (<c>WorkflowMessageBuilder</c>) geçmişin ilk bu kadar
+    /// mesajı ATLANIR; özet onların yerine geçer, kalanlar birebir gönderilir.
+    /// </para>
+    ///
+    /// <para>
+    /// Özet önbellekten dönerken bu sayı güncellenmez; bu kasıtlıdır — o durumda özet daha
+    /// eski bir sınıra aittir ve yalnızca gerçekten özetlenmiş mesajların atlanması gerekir.
+    /// Sayının olduğundan küçük kalması güvenlidir (fazladan mesaj birebir gider), büyük
+    /// kalması olmazdı (özetlenmemiş mesaj sessizce düşerdi).
+    /// </para>
+    /// </summary>
+    public int SummarizedMessageCount { get; set; }
+
     /// <summary>Konuşma fazı: greeting, inquiry, action, resolution.</summary>
     public string Phase { get; set; } = WellKnown.Phases.Greeting;
 

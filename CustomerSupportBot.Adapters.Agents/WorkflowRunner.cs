@@ -70,6 +70,7 @@ internal sealed class WorkflowRunner
         var effectiveCt = linkedCts.Token;
 
         var st = _traceProcessor.StartTraceState(session, query, reasoning);
+        st.Trace.EstimatedTokens = TokenEstimator.Estimate(messages.Select(m => m.Text));
 
         var workflow = _factory.CreateWorkflow();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
@@ -117,24 +118,7 @@ internal sealed class WorkflowRunner
                     "RunAsync workflow hatası.");
         }
 
-        var terminationReason =
-            WorkflowResponseExtractor.ParseTerminationReasonFromResult(
-                st.Result, _loggerFactory.CreateLogger<WorkflowRunner>())
-            ?? WellKnown.Termination.ReasonCompleted;
-
-        // selfCritique HAM çıktıdan okunur — RemoveTechnicalJsonBlocks bloğu birazdan silecek.
-        st.Trace.SelfCritique = SelfCritiqueParser.TryParse(st.Result);
-
-        var result = WorkflowResponseExtractor.RemoveTerminationMarkers(st.Result);
-        result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(result);
-
-        if (WorkflowResponseExtractor.ContainsAgentRoutingMessage(result))
-        {
-            result = await _messageBuilder.RewriteRoutingMessageAsync(result, query, ct);
-        }
-
-        await _finalizer.FinalizeAsync(st.Trace, session, query, result, terminationReason);
-
+        var (result, _) = await BuildFinalResultAsync(st, session, query, effectiveCt);
         return result;
     }
 
@@ -155,6 +139,7 @@ internal sealed class WorkflowRunner
         var effectiveCt = linkedCts.Token;
 
         var st = _traceProcessor.StartTraceState(session, query, reasoning);
+        st.Trace.EstimatedTokens = TokenEstimator.Estimate(messages.Select(m => m.Text));
 
         var workflow = _factory.CreateWorkflow();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
@@ -211,21 +196,7 @@ internal sealed class WorkflowRunner
                 yield break;
         }
 
-        var terminationReason =
-            WorkflowResponseExtractor.ParseTerminationReasonFromResult(
-                st.Result, _loggerFactory.CreateLogger<WorkflowRunner>())
-            ?? WellKnown.Termination.ReasonCompleted;
-
-        // selfCritique HAM çıktıdan okunur — RemoveTechnicalJsonBlocks bloğu birazdan silecek.
-        st.Trace.SelfCritique = SelfCritiqueParser.TryParse(st.Result);
-
-        var result = WorkflowResponseExtractor.RemoveTerminationMarkers(st.Result);
-        result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(result);
-
-        if (WorkflowResponseExtractor.ContainsAgentRoutingMessage(result))
-            result = await _messageBuilder.RewriteRoutingMessageAsync(result, query, effectiveCt);
-
-        await _finalizer.FinalizeAsync(st.Trace, session, query, result, terminationReason);
+        var (result, terminationReason) = await BuildFinalResultAsync(st, session, query, effectiveCt);
 
         // ResponseAgent'ın gerçek token akışı zaten ApplyTraceEvent içinde (AgentResponseUpdateEvent
         // dalı) yayınlandıysa response_start + delta'lar döngü sırasında gönderilmiş demektir —
@@ -247,6 +218,61 @@ internal sealed class WorkflowRunner
 
         yield return new StreamEvent(StreamEventTypes.ResponseComplete,
             new { text = result, terminationReason });
+    }
+
+    /// <summary>
+    /// Koşu <b>normal</b> bittikten sonra ham workflow çıktısını kullanıcıya gösterilecek nihai
+    /// metne çevirir ve turu kalıcılaştırır. Anormal sonlanmanın karşılığı için bkz.
+    /// <see cref="FinalizeAbnormalTerminationAsync"/>.
+    ///
+    /// <para>
+    /// Bu blok da <see cref="RunAsync"/>/<see cref="RunStreamingAsync"/> arasında birebir
+    /// kopyaydı ve — <c>FinalizeAbnormalTerminationAsync</c>'te olduğu gibi — <b>sessizce
+    /// sapmıştı</b>: routing yeniden yazımına non-streaming dalı çağıranın token'ını (<c>ct</c>),
+    /// streaming dalı ise timeout'a bağlı token'ı (<c>effectiveCt</c>) veriyordu. Yani 60sn'lik
+    /// bütçenin 55'i workflow'da geçtiyse rewrite streaming'de 5 saniyeye sıkışıyor,
+    /// non-streaming'de sınırsız sürebiliyordu. Tek çağrı noktasına indirilerek bu fark yapısal
+    /// olarak imkânsız hale getirildi; her iki çağıran da turun bütçesine bağlı token'ı geçer.
+    /// </para>
+    /// </summary>
+    private async Task<(string Result, string TerminationReason)> BuildFinalResultAsync(
+        WorkflowTraceEventProcessor.TraceState st,
+        AgentSession? session,
+        string query,
+        CancellationToken turnCt)
+    {
+        var terminationReason =
+            WorkflowResponseExtractor.ParseTerminationReasonFromResult(
+                st.Result, _loggerFactory.CreateLogger<WorkflowRunner>())
+            ?? WellKnown.Termination.ReasonCompleted;
+
+        // selfCritique HAM çıktıdan okunur — RemoveTechnicalJsonBlocks bloğu birazdan silecek.
+        st.Trace.SelfCritique = SelfCritiqueParser.TryParse(st.Result);
+
+        var result = WorkflowResponseExtractor.RemoveTerminationMarkers(st.Result);
+        result = WorkflowResponseExtractor.RemoveTechnicalJsonBlocks(result);
+
+        if (WorkflowResponseExtractor.ContainsAgentRoutingMessage(result))
+        {
+            try
+            {
+                result = await _messageBuilder.RewriteRoutingMessageAsync(result, query, turnCt);
+            }
+            catch (OperationCanceledException)
+            {
+                // Yeniden yazım KOZMETİK: elimizde zaten geçerli bir yanıt var, bu adım yalnızca
+                // "X ajanına yönlendiriyorum" tarzı iç mesajı kullanıcı diline çeviriyor. Turun
+                // bütçesi tam burada dolarsa yanıtın tamamını kaybetmek yerine ham metinle devam
+                // ederiz. Bu try/catch olmadan, token'ları ortaklaştırmak streaming dalında
+                // iterator'dan dışarı sızan bir iptal istisnası üretirdi.
+                _loggerFactory.CreateLogger<WorkflowRunner>().LogWarning(
+                    "Routing mesajı yeniden yazımı iptal edildi — ham metinle devam ediliyor.");
+            }
+        }
+
+        await _finalizer.FinalizeAsync(st.Trace, session, query, result, terminationReason);
+
+        return (result, terminationReason);
     }
 
     private enum RunOutcomeKind { Completed, TimedOut, Cancelled, Error }
