@@ -30,7 +30,7 @@ Compound query (bileşik sorgu — ör. "1001'i iptal et ve iade başlat") orkes
 
 **Kimler çağırır:** `CustomerSupportTeam.RunAsync`/`RunStreamingAsync` (compound query dalı).
 
-**Ne kullanır:** `CustomerSupportBot.Application.Services.Reasoning.SubTaskOrchestrator` (`Partition`, `FormatSubTaskQuery`, `CreateSubTaskReasoning`, `FormatSubTaskResult`, `AggregateSubTaskResults`), `WorkflowResponseExtractor.ExtractDeltaText`/`StreamTextInChunksAsync`.
+**Ne kullanır:** `CustomerSupportBot.Application.Services.Reasoning.SubTaskOrchestrator` (`Partition`, `FormatSubTaskQuery`, `CreateSubTaskReasoning`, `FormatSubTaskResult`, `AggregateSubTaskResults`), `WorkflowResponseExtractor.ExtractDeltaText`/`SplitIntoDeltaChunks`.
 
 ## Kullanılma nedeni ve tasarım yaklaşımı
 

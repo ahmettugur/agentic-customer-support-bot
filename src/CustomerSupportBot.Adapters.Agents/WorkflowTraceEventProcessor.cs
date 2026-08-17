@@ -41,7 +41,7 @@ internal sealed class WorkflowTraceEventProcessor
         /// <summary>
         /// ResponseAgent'ın gerçek token akışından en az bir karakter yayınlandıysa true —
         /// bu turda <see cref="StreamEventTypes.ResponseStart"/> zaten gönderilmiş demektir,
-        /// döngü sonrası kod tekrar göndermemeli ve StreamTextInChunksAsync yapay
+        /// döngü sonrası kod tekrar göndermemeli ve SplitIntoDeltaChunks ile tamamlanmış-metin
         /// parçalamasına başvurmamalıdır.
         /// </summary>
         public bool ResponseStreamStarted { get; set; }

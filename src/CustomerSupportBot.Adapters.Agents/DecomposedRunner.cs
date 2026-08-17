@@ -255,7 +255,7 @@ internal sealed class DecomposedRunner
                 subTaskCount = total
             });
 
-        await foreach (var chunk in WorkflowResponseExtractor.StreamTextInChunksAsync(aggregated, ct))
+        foreach (var chunk in WorkflowResponseExtractor.SplitIntoDeltaChunks(aggregated))
         {
             yield return new StreamEvent(StreamEventTypes.ResponseDelta, new TextDeltaPayload(chunk));
         }

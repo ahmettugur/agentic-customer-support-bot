@@ -214,7 +214,11 @@ internal sealed class WorkflowRunner
             yield return new StreamEvent(StreamEventTypes.ResponseStart,
                 new { terminationReason });
 
-            await foreach (var chunk in WorkflowResponseExtractor.StreamTextInChunksAsync(result, effectiveCt))
+            // İptal edilebilir DEĞİL ve bu kasıtlı: metin bu noktada zaten hesaplandı ve
+            // BuildFinalResultAsync içinde kalıcılaştırıldı. Burada turun token'ına uymak,
+            // yalnızca response_complete'in gönderilmemesine ve kullanıcının ekranında yarım
+            // metin kalmasına yol açardı (bkz. SplitIntoDeltaChunks XML dokümanı).
+            foreach (var chunk in WorkflowResponseExtractor.SplitIntoDeltaChunks(result))
             {
                 yield return new StreamEvent(StreamEventTypes.ResponseDelta, new TextDeltaPayload(chunk));
             }

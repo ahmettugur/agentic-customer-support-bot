@@ -153,25 +153,44 @@ MAF'ın iç orkestrasyon executorlarını (gerçek ajan olmayan) filtreler. `Wel
 
 GroupChat topolojisinde ölçülen (MAF 1.17.0) gerçek durum: filtrelenen **tek** id `GroupChatHost`, geçen 6 id ise `{AjanAdı}_{guid}` biçimindeki ajanlar. Eşleşme `StartsWith` olduğu için guid soneki sorun çıkarmaz. Listenin neden bu kadar kısa olduğu ve topoloji değişirse ne olacağı için bkz. [WellKnown.md → SystemExecutorPrefixes](../CustomerSupportBot.Domain/WellKnown.md#systemexecutorprefixes).
 
-### `StreamTextInChunksAsync`
+### `SplitIntoDeltaChunks`
 
 ```csharp
-public static async IAsyncEnumerable<string> StreamTextInChunksAsync(
-    string text, CancellationToken ct)
+public static IEnumerable<string> SplitIntoDeltaChunks(string text)
 ```
 
-Tam metni boşluk ve satır sonu karakterlerinde bölerek kelime kelime (veya satır satır) akışa gönderir. Her parça arasında 20ms beklenir — bu gecikme frontend'de "yazıyor" efekti sağlar.
+Tamamlanmış bir metni `response_delta` olaylarına bölmek için boşluk/satır sonu sınırlarında parçalar. **Kayıpsızdır** — parçaların birleşimi girdiye birebir eşittir.
 
 **Örnek:**
 
 ```
 "Merhaba Ahmet Bey!" → ["Merhaba ", "Ahmet ", "Bey!"]
-                         ↑20ms↑    ↑20ms↑
 ```
+
+#### Parçalama neden gerekli — delta'lar kozmetik değil
+
+`response_complete`'in **sunucu tarafında hiçbir tüketicisi yoktur**; yalnızca tarayıcıya gider. Buna karşılık:
+
+| Tüketici | Ne yapar |
+|---|---|
+| `ChatPortService` | Delta'ları birleştirip `PersistExchangeAsync` ile **konuşma geçmişine yazar** |
+| `RealtimeBridgeService` | Delta'ları birleştirip `SpeakTextAsync` ile **TTS'e okutur** |
+| `DecomposedRunner` | Alt görev delta'larını birleştirip alt görev yanıtını kurar |
+
+Yani delta akışı kalıcılığın ve sesin kaynağıdır. Bu yüzden kayıpsızlık bir "temizlik" isteği değil, doğruluk şartıdır: bir karakter kaybolsa kullanıcıya doğru metin görünür (`response_complete` baloncuğun üzerine yazar) ama **DB'ye ve sese bozuk metin gider** — hata sessiz kalırdı. `SplitIntoDeltaChunks_IsLossless` bunu kilitler.
+
+> 🐞 **Kaldırıldı: kelime başına 20 ms yapay gecikme.** Metot eskiden `StreamTextInChunksAsync` adıyla her parçadan sonra `await Task.Delay(20, ct)` yapıyordu — yalnızca "yazıyor" hissi vermek için, hiçbir teknik gerekçesi olmadan. Ölçüm: **~20.8 ms/kelime** → 200 kelimede **4.2 sn**, 400 kelimede **8.3 sn**, üstelik yanıt zaten hesaplanıp DB'ye yazıldıktan *sonra*. İki somut zararı vardı:
+>
+> 1. **Yarım kalan yanıt.** `WorkflowRunner` bu metoda turun timeout'una bağlı token'ı veriyordu. Workflow bütçenin sonuna yakın normal bitip yapay akış timeout'u aşarsa `Task.Delay` `OperationCanceledException` fırlatıyor, bu iterator'dan dışarı sızıyor ve `response_complete` **hiç gönderilmiyordu** — cevap DB'de tam, kullanıcının ekranında yarım.
+> 2. **Gereksiz kaynak tutma.** MAF `StreamingRun` nesnesi ve SSE bağlantısı, yanıt hazır olduktan sonra saniyelerce açık kalıyordu.
+>
+> Gecikme gidince iptal edilecek bekleme noktası da kalmadı: metot artık **senkron**, `CancellationToken` almıyor ve hiçbir koşulda fırlatmıyor — `response_complete` teslimi yapısal olarak garanti. Kelime kelime bölme sürüyor (maliyeti yok; yavaş bağlantıda tarayıcı ilk kelimeleri erken çizebiliyor). `SplitIntoDeltaChunks_LongText_CompletesImmediately` gecikmenin geri gelmesini engeller.
+
+> ℹ️ Bu, **gerçek** token akışının yerine geçmez. Mümkün olan yerde gerçek akış (`AgentResponseUpdateEvent`) tercih edilir; burası yalnızca elde tamamlanmış bir metin olduğunda kullanılır — bkz. [ContextProviders / WorkflowRunner](WorkflowRunner.md).
 
 ## Ne zaman bu dosyaya dokunursunuz?
 
 - MAF yeni bir output event formatı üretiyorsa → `ExtractResultFromOutput` güncelleyin
 - Yeni bir "teknik JSON key" eklendiyse → `RemoveTechnicalJsonBlocks` içindeki `technicalKeys` sabitini güncelleyin
 - Yeni bir ajan adı eklendiyse → `ContainsAgentRoutingMessage` `WellKnown.AgentNames.All`'ı kullandığından otomatik çalışır; `WellKnown`'ı güncellemek yeterli
-- Streaming hızını değiştirmek istiyorsanız → `StreamTextInChunksAsync` içindeki `Task.Delay(20, ct)` değerini ayarlayın
+- Yapay "yazıyor" gecikmesi **bilerek kaldırıldı** (yukarıdaki 🐞 notu) — geri eklemeyin; kullanıcıya daha hızlı akış isteniyorsa çözüm gerçek token akışını (`AgentResponseUpdateEvent`) daha çok yolda kullanmaktır, sahte gecikmeyi ayarlamak değil

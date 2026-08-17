@@ -258,49 +258,86 @@ public class WorkflowResponseExtractorOutputTests
         WorkflowResponseExtractor.ExtractDeltaText(data).Should().Be("");
     }
 
-    // StreamTextInChunksAsync 
+    // SplitIntoDeltaChunks 
 
     [Fact]
-    public async Task StreamTextInChunksAsync_EmptyText_NoChunks()
+    public void SplitIntoDeltaChunks_EmptyText_NoChunks()
     {
-        var chunks = new List<string>();
-        await foreach (var c in WorkflowResponseExtractor.StreamTextInChunksAsync("", CancellationToken.None))
-            chunks.Add(c);
-        chunks.Should().BeEmpty();
+        WorkflowResponseExtractor.SplitIntoDeltaChunks("").Should().BeEmpty();
     }
 
     [Fact]
-    public async Task StreamTextInChunksAsync_TextWithSpaces_ChunksByWord()
+    public void SplitIntoDeltaChunks_TextWithSpaces_ChunksByWord()
     {
-        var chunks = new List<string>();
-        await foreach (var c in WorkflowResponseExtractor.StreamTextInChunksAsync("ab cd ef", CancellationToken.None))
-            chunks.Add(c);
+        var chunks = WorkflowResponseExtractor.SplitIntoDeltaChunks("ab cd ef").ToList();
 
         string.Concat(chunks).Should().Be("ab cd ef");
         chunks.Count.Should().BeGreaterThan(1);
     }
 
     [Fact]
-    public async Task StreamTextInChunksAsync_NoSpaces_SingleChunk()
+    public void SplitIntoDeltaChunks_NoSpaces_SingleChunk()
     {
-        var chunks = new List<string>();
-        await foreach (var c in WorkflowResponseExtractor.StreamTextInChunksAsync("abcdef", CancellationToken.None))
-            chunks.Add(c);
+        var chunks = WorkflowResponseExtractor.SplitIntoDeltaChunks("abcdef").ToList();
         chunks.Should().HaveCount(1);
         chunks[0].Should().Be("abcdef");
     }
 
+    /// <summary>
+    /// Parçaların birleşimi girdiyle BİREBİR aynı olmalı — bu, kozmetik bir istek değil:
+    /// konuşma geçmişine yazılan metin (ChatPortService) ve sesli yolda TTS'in okuduğu metin
+    /// (RealtimeBridgeService) delta'ların birleştirilmesiyle elde ediliyor. Burada bir
+    /// karakter kaybı olsa kullanıcıya doğru metin gösterilir (response_complete üzerine yazar)
+    /// ama DB'ye ve sese BOZUK metin gider — yani hata sessiz kalırdı.
+    /// </summary>
+    [Theory]
+    [InlineData("tek")]
+    [InlineData("iki kelime")]
+    [InlineData("satır\nsonu var")]
+    [InlineData("  baştan boşluk")]
+    [InlineData("sonda boşluk  ")]
+    [InlineData("çoklu   ardışık    boşluk")]
+    [InlineData("**1) Başlık**\n\nGövde metni\n\n---\n\n**2) İkinci**\n\nDiğer gövde")]
+    public void SplitIntoDeltaChunks_IsLossless(string input)
+    {
+        string.Concat(WorkflowResponseExtractor.SplitIntoDeltaChunks(input)).Should().Be(input);
+    }
+
+    /// <summary>
+    /// Regresyon koruması: bu metot eskiden kelime başına <c>await Task.Delay(20, ct)</c>
+    /// yapıyordu ve iptal edilmiş bir token'la <c>OperationCanceledException</c> FIRLATIYORDU.
+    /// Bu, turun timeout'u yapay akışın ortasında ateşlerse <c>response_complete</c>'in hiç
+    /// gönderilmemesine ve kullanıcının ekranında yarım metin kalmasına yol açıyordu — cevap
+    /// DB'de tam olduğu hâlde. Artık bekleme noktası yok; metot senkron ve hiçbir koşulda
+    /// fırlatmıyor, yani teslimat yapısal olarak garanti.
+    /// </summary>
     [Fact]
-    public async Task StreamTextInChunksAsync_Cancelled_StopsEarly()
+    public void SplitIntoDeltaChunks_NeverThrows_AndCompletesRegardlessOfAmbientCancellation()
     {
         using var cts = new CancellationTokenSource();
         cts.Cancel();
-        var chunks = new List<string>();
-        var act = async () =>
-        {
-            await foreach (var c in WorkflowResponseExtractor.StreamTextInChunksAsync("a b c d e", cts.Token))
-                chunks.Add(c);
-        };
-        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        var act = () => WorkflowResponseExtractor.SplitIntoDeltaChunks("a b c d e").ToList();
+
+        act.Should().NotThrow();
+        string.Concat(act()).Should().Be("a b c d e");
+    }
+
+    /// <summary>
+    /// Yapay gecikmenin gerçekten gittiğini kanıtlar. Eski hâl 400 kelimede ~8.3 saniye
+    /// sürüyordu (ölçüldü); bu test o davranış geri gelirse kırmızıya döner.
+    /// </summary>
+    [Fact]
+    public void SplitIntoDeltaChunks_LongText_CompletesImmediately()
+    {
+        var text = string.Join(" ", Enumerable.Repeat("kelime", 400));
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var chunks = WorkflowResponseExtractor.SplitIntoDeltaChunks(text).ToList();
+        sw.Stop();
+
+        chunks.Should().HaveCount(400);
+        sw.ElapsedMilliseconds.Should().BeLessThan(500,
+            "kelime başına yapay gecikme kaldırıldı — 400 kelime eskiden ~8300 ms sürüyordu");
     }
 }
