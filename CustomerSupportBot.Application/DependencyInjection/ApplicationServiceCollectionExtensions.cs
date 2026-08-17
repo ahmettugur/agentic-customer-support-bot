@@ -69,6 +69,14 @@ public static class ApplicationServiceCollectionExtensions
             .Validate(o => o.MaxHandoffsPerAgent > 0, "WorkflowGuards:MaxHandoffsPerAgent pozitif olmalı.")
             .ValidateOnStart();
 
+        services.AddOptions<ContextPipelineOptions>()
+            .Bind(configuration.GetSection("ContextPipeline"))
+            .Validate(o => o.ProviderTimeoutSeconds > 0, "ContextPipeline:ProviderTimeoutSeconds pozitif olmalı.")
+            .Validate(o => o.MaxProviderChars > 0, "ContextPipeline:MaxProviderChars pozitif olmalı.")
+            .Validate(o => o.MaxTotalChars >= o.MaxProviderChars,
+                "ContextPipeline:MaxTotalChars, MaxProviderChars'tan küçük olamaz.")
+            .ValidateOnStart();
+
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
 
         services.Configure<EvaluationQualityOptions>(configuration.GetSection(EvaluationQualityOptions.SectionName));

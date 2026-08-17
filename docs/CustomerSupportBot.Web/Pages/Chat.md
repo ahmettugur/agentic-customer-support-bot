@@ -16,6 +16,27 @@ Müşteri destek chat arayüzüdür. Kullanıcının AI asistanla gerçek zamanl
 - Approval bildirimleri (çan ikonu, panel, görüldü işaretleme, geçmiş).
 - Dark/light tema toggle.
 - `ui_hint` olaylarını karşılamak — bugün tek tür: kategori seçim kartları (aşağıya bakın).
+- Yapay zekâ bildirimini göstermek (aşağıya bakın).
+
+### Yapay zekâ bildirimi — iki katman
+
+| Yer | Class | Ne zaman görünür |
+|---|---|---|
+| Karşılama ekranı, örnek çiplerin altında | `.welcome-ai-notice` | Yalnızca sohbet boşken (ilk temas) |
+| Composer'ın hemen altında | `.input-hint` | Her zaman |
+
+İkisi tekrar değil, tamamlayıcı: karşılama bildirimi kullanıcı **ilk mesajını yazmadan önce**
+görülür ve yan etkili işlemleri (sipariş/iptal/iade) açıkça sayar; composer altındaki satır
+sohbet sürerken kalıcı hatırlatma olarak durur.
+
+Metinlerin ortak noktası, yalnızca "yapay zekâ kullanılıyor" demekle yetinmeyip
+**yanılabilirliği** ve **doğrulama çağrısını** söylemeleridir — eski metin
+(*"Yapay zeka destekli yanıtlar bilgilendirme amaçlıdır."*) bunların ikisini de içermiyordu,
+oysa asıl bildirilmesi gereken bunlar. Bu bot sipariş verebildiği, iptal ve iade
+başlatabildiği için doğrulama çağrısı kozmetik değil.
+
+Görsel ton kasıtlı olarak **bilgilendirici, uyarı değil**: nötr yüzey (`--color-surface-alt`)
+ve ikincil metin rengi kullanılır; kırmızı/sarı uyarı tonu kullanılmaz.
 
 ### Kategori seçim kartları — veri erken gelir, gösterim ertelenir
 

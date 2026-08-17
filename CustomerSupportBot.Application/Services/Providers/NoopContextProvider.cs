@@ -10,5 +10,5 @@ public sealed class NoopContextProvider : IContextProvider
 {
     public string Name => "Noop";
     public int Order => int.MaxValue;
-    public Task<string?> GetContextAsync(AgentSession session, string currentQuery) => Task.FromResult<string?>(null);
+    public Task<string?> GetContextAsync(AgentSession session, string currentQuery, CancellationToken ct = default) => Task.FromResult<string?>(null);
 }

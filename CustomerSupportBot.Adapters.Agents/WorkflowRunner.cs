@@ -62,7 +62,8 @@ internal sealed class WorkflowRunner
         ReasoningResult? reasoning,
         CancellationToken ct)
     {
-        var messages = await _messageBuilder.BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
+        var prompt = await _messageBuilder.BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
+        var messages = prompt.Messages;
 
         using var timeoutCts = new CancellationTokenSource(
             TimeSpan.FromSeconds(_guards.TimeoutSeconds));
@@ -71,6 +72,7 @@ internal sealed class WorkflowRunner
 
         var st = _traceProcessor.StartTraceState(session, query, reasoning);
         st.Trace.EstimatedTokens = TokenEstimator.Estimate(messages.Select(m => m.Text));
+        st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
         var workflow = _factory.CreateWorkflow();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
@@ -131,7 +133,8 @@ internal sealed class WorkflowRunner
     {
         var sessionId = session?.SessionId ?? string.Empty;
 
-        var messages = await _messageBuilder.BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
+        var prompt = await _messageBuilder.BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
+        var messages = prompt.Messages;
 
         using var timeoutCts = new CancellationTokenSource(
             TimeSpan.FromSeconds(_guards.TimeoutSeconds));
@@ -140,6 +143,7 @@ internal sealed class WorkflowRunner
 
         var st = _traceProcessor.StartTraceState(session, query, reasoning);
         st.Trace.EstimatedTokens = TokenEstimator.Estimate(messages.Select(m => m.Text));
+        st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
         var workflow = _factory.CreateWorkflow();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
@@ -274,6 +278,19 @@ internal sealed class WorkflowRunner
 
         return (result, terminationReason);
     }
+
+    /// <summary>
+    /// Bağlam parçalarını trace'e yazılabilir hâle çevirir — "model bu turda neyi biliyordu"
+    /// sorusunun kaydı. Hata/timeout/bütçe yüzünden düşen parçalar da kaydedilir; asıl değeri
+    /// orada, çünkü yanlış yanıtların sebebi çoğu zaman <b>eksik</b> bağlamdır.
+    /// </summary>
+    private static List<ContextPartUsage> ToContextUsage(ContextResult context) =>
+        context.Parts.Select(p => new ContextPartUsage
+        {
+            ProviderName = p.ProviderName,
+            Status = p.Status.ToString().ToLowerInvariant(),
+            Length = p.Length
+        }).ToList();
 
     private enum RunOutcomeKind { Completed, TimedOut, Cancelled, Error }
 

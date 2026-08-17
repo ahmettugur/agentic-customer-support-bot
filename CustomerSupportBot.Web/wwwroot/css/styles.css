@@ -1713,6 +1713,30 @@ body {
     max-width: 500px;
 }
 
+/* Yapay zekâ açılış bildirimi — bilgilendirici, uyarı değil: nötr yüzey ve ikincil metin
+   rengi kullanır, dikkat çekmek için renk/uyarı tonu kullanmaz. */
+.welcome-ai-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-top: var(--space-6);
+    padding: var(--space-3) var(--space-4);
+    max-width: 500px;
+    text-align: left;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+}
+
+.welcome-ai-notice svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--color-text-muted);
+}
+
 .example-chip {
     display: inline-flex;
     align-items: center;

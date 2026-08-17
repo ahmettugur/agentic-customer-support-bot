@@ -15,6 +15,17 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Agents;
 
+/// <summary>
+/// Workflow'a gidecek prompt: mesajlar + bağlamın <b>nasıl kurulduğu</b>.
+///
+/// <para>
+/// <see cref="Context"/> yalnızca gözlemlenebilirlik için değil: çağıran, özetin bu turda
+/// gerçekten prompt'a girip girmediğine göre geçmişi kırpma kararı veriyor
+/// (bkz. <see cref="WorkflowMessageBuilder.SelectHistoryToSend"/>).
+/// </para>
+/// </summary>
+internal sealed record WorkflowPrompt(List<ChatMessage> Messages, ContextResult Context);
+
 internal sealed class WorkflowMessageBuilder
 {
     private readonly IContextPipeline _contextPipeline;
@@ -46,7 +57,7 @@ internal sealed class WorkflowMessageBuilder
     /// veya mesaj sırasını değiştirirken ilgili prompt dosyalarının da gözden geçirilmesi gerekir;
     /// derleyici/test bu bağlantıyı doğrulamaz.
     /// </summary>
-    public async Task<List<ChatMessage>> BuildWorkflowMessagesAsync(
+    public async Task<WorkflowPrompt> BuildWorkflowMessagesAsync(
         string query,
         List<ConversationMessage>? conversationHistory,
         AgentSession? session,
@@ -60,14 +71,15 @@ internal sealed class WorkflowMessageBuilder
             messages.Add(new ChatMessage(ChatRole.System, identityHint));
         }
 
+        ContextResult contextResult = ContextResult.Empty;
         if (session != null)
         {
-            var context = await _contextPipeline.BuildContextAsync(session, query);
-            if (!string.IsNullOrWhiteSpace(context))
+            contextResult = await _contextPipeline.BuildContextAsync(session, query);
+            if (!string.IsNullOrWhiteSpace(contextResult.Text))
             {
                 messages.Add(new ChatMessage(ChatRole.System,
                     $"Aşağıdaki bağlam bilgileri mevcut oturum hakkındadır. " +
-                    $"Bu bilgileri yanıtlarınızda dikkate alın:\n\n{context}"));
+                    $"Bu bilgileri yanıtlarınızda dikkate alın:\n\n{contextResult.Text}"));
             }
         }
 
@@ -87,7 +99,7 @@ internal sealed class WorkflowMessageBuilder
             messages.Add(new ChatMessage(ChatRole.System, entityHint));
         }
 
-        foreach (var m in SelectHistoryToSend(conversationHistory, session))
+        foreach (var m in SelectHistoryToSend(conversationHistory, session, contextResult))
             messages.Add(new ChatMessage(ToChatRole(m.Role), m.Text));
 
         var replanHint = ConsumeForceReplanHint(session);
@@ -98,7 +110,7 @@ internal sealed class WorkflowMessageBuilder
 
         messages.Add(new ChatMessage(ChatRole.User, query));
 
-        return messages;
+        return new WorkflowPrompt(messages, contextResult);
     }
 
     /// <summary>
@@ -117,10 +129,20 @@ internal sealed class WorkflowMessageBuilder
     /// sayı geçmişten büyükse (ör. geçmiş temizlenmiş ama state kalmışsa) hiçbir şey atlanmaz —
     /// özetlenmemiş bir mesajı düşürmektense fazladan mesaj göndermek yeğdir.
     /// </para>
+    ///
+    /// <para>
+    /// <b>Kritik koşul:</b> atlama, özetin <b>bu turda gerçekten prompt'a girmiş olmasına</b>
+    /// bağlıdır (<c>contextResult</c>). Yalnızca oturum durumuna bakmak bir regresyon
+    /// üretiyordu: özetleyici LLM çağrısı hata verdiğinde/zaman aşımına uğradığında provider
+    /// <c>null</c> döner ama <c>SessionState.ConversationSummary</c> eski değerini korur —
+    /// böylece özet prompt'ta olmaz, geçmiş yine de atlanır ve o turlar modelin görüş
+    /// alanından tamamen kaybolurdu.
+    /// </para>
     /// </summary>
     internal static IEnumerable<ConversationMessage> SelectHistoryToSend(
         List<ConversationMessage>? conversationHistory,
-        AgentSession? session)
+        AgentSession? session,
+        ContextResult contextResult)
     {
         if (conversationHistory is not { Count: > 0 })
             return [];
@@ -129,6 +151,10 @@ internal sealed class WorkflowMessageBuilder
 
         // Özet yoksa atlama da yok — sayı state'te kalmış olabilir, ona güvenme.
         if (summarized <= 0 || string.IsNullOrWhiteSpace(session?.State.ConversationSummary))
+            return conversationHistory;
+
+        // Özet bu tur prompt'a girmediyse (hata/timeout/bütçe) geçmişi kırpma.
+        if (!contextResult.Included(ConversationSummaryProvider.ProviderName))
             return conversationHistory;
 
         if (summarized >= conversationHistory.Count)

@@ -17,6 +17,7 @@
 
 using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
+using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Persistence.FileSystem;
@@ -58,7 +59,7 @@ public class CustomerSupportTeamTests
 
         var prompts = new FileSystemPromptRepository(NullLogger<FileSystemPromptRepository>.Instance);
         var providers = Array.Empty<IContextProvider>();
-        var contextPipeline = new ContextPipeline(providers, NullLogger<ContextPipeline>.Instance);
+        var contextPipeline = new ContextPipeline(providers, Options.Create(new ContextPipelineOptions()), NullLogger<ContextPipeline>.Instance);
         var traceStore = new InMemoryReasoningTraceStore();
 
         var approvalOpts = new ApprovalOptions { Enabled = false };
@@ -166,7 +167,7 @@ public class CustomerSupportTeamTests
     {
         var builder = BuildMessageBuilder();
 
-        var messages = await builder.BuildWorkflowMessagesAsync("merhaba", null, null, null);
+        var messages = (await builder.BuildWorkflowMessagesAsync("merhaba", null, null, null)).Messages;
         messages.Should().NotBeNull();
         messages.Should().NotBeEmpty();
         messages.Last().Role.Should().Be(ChatRole.User);
@@ -183,7 +184,7 @@ public class CustomerSupportTeamTests
             new(ConversationRoles.User, "önceki mesaj"),
             new(ConversationRoles.Assistant, "önceki yanıt"),
         };
-        var messages = await builder.BuildWorkflowMessagesAsync("şimdiki", history, null, null);
+        var messages = (await builder.BuildWorkflowMessagesAsync("şimdiki", history, null, null)).Messages;
 
         messages.Should().Contain(m => m.Text == "önceki mesaj");
         messages.Should().Contain(m => m.Text == "şimdiki");
@@ -197,7 +198,7 @@ public class CustomerSupportTeamTests
         public string? SeenQuery { get; private set; }
         public string Name => "QueryCapture";
         public int Order => 1;
-        public Task<string?> GetContextAsync(AgentSession session, string currentQuery)
+        public Task<string?> GetContextAsync(AgentSession session, string currentQuery, CancellationToken ct = default)
         {
             SeenQuery = currentQuery;
             return Task.FromResult<string?>(null);
@@ -215,7 +216,7 @@ public class CustomerSupportTeamTests
         // Sorgu geçmişten okunamaz: geçmiş workflow bittikten SONRA yazılıyor. Bu yüzden
         // parametrenin gerçekten taşınması semantik hafıza retrieval'ının doğruluğu için şart.
         var capture = new QueryCapturingProvider();
-        var pipeline = new ContextPipeline([capture], NullLogger<ContextPipeline>.Instance);
+        var pipeline = new ContextPipeline([capture], Options.Create(new ContextPipelineOptions()), NullLogger<ContextPipeline>.Instance);
         var builder = BuildMessageBuilder(pipeline: pipeline);
 
         var session = new AgentSession { SessionId = "s1", State = new SessionState() };
@@ -230,7 +231,7 @@ public class CustomerSupportTeamTests
     {
         var builder = BuildMessageBuilder();
 
-        var messages = await builder.BuildWorkflowMessagesAsync("sipariş 1030 nerede?", null, null, null);
+        var messages = (await builder.BuildWorkflowMessagesAsync("sipariş 1030 nerede?", null, null, null)).Messages;
 
         // Entity hint genelde System rolünde eklenir
         messages.Should().Contain(m => m.Role == ChatRole.System);

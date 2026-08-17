@@ -70,6 +70,29 @@ public class ReasoningTrace
 
     /// <summary>Tahmini token kullanımı (cost guard için).</summary>
     public long EstimatedTokens { get; set; }
+
+    /// <summary>
+    /// Bu turda prompt'a hangi bağlam parçalarının girdiği — provider adı, durumu ve boyutu.
+    ///
+    /// <para>
+    /// "Model neyi biliyordu?" sorusunun cevabı. Bir yanıt yanlış olduğunda asıl sebep çoğu
+    /// zaman eksik bağlamdır (provider hata verdi, zaman aşımına uğradı veya bütçeye takıldı),
+    /// ama bu daha önce yalnızca <c>Debug</c> seviyesinde loglandığı için trace'ten görünmüyordu.
+    /// </para>
+    /// </summary>
+    public List<ContextPartUsage> ContextParts { get; set; } = new();
+}
+
+/// <summary>Tek bir bağlam sağlayıcısının bu turdaki katkısı.</summary>
+public class ContextPartUsage
+{
+    public string ProviderName { get; set; } = "";
+
+    /// <summary>included | empty | failed | timedOut | dropped</summary>
+    public string Status { get; set; } = "";
+
+    /// <summary>Prompt'a giren karakter sayısı (girmemişse 0).</summary>
+    public int Length { get; set; }
 }
 
 /// <summary>

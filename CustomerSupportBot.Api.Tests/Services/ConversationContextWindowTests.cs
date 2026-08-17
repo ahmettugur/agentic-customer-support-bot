@@ -9,6 +9,8 @@
 // yakalamıyordu çünkü çıktı "doğru"ydu, sadece pahalıydı.
 
 using CustomerSupportBot.Adapters.Agents;
+using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 
@@ -31,6 +33,16 @@ public class ConversationContextWindowTests
         return s;
     }
 
+    /// <summary>Özetin bu turda prompt'a GİRDİĞİ durum.</summary>
+    private static ContextResult SummaryIncluded() => new("[Konuşma Özeti]\n…", [
+        new ContextPart(ConversationSummaryProvider.ProviderName, 5, ContextPartStatus.Included, 20)
+    ]);
+
+    /// <summary>Özetleyicinin düştüğü durum — özet prompt'a girmedi.</summary>
+    private static ContextResult SummaryMissing(ContextPartStatus status) => new("", [
+        new ContextPart(ConversationSummaryProvider.ProviderName, 5, status, 0)
+    ]);
+
     // ═══ Özet varken: özetlenen aralık atlanır ═══
 
     [Fact]
@@ -39,7 +51,7 @@ public class ConversationContextWindowTests
         var history = History(12);
         var session = SessionWith("özet metni", summarizedCount: 8);
 
-        var sent = WorkflowMessageBuilder.SelectHistoryToSend(history, session).ToList();
+        var sent = WorkflowMessageBuilder.SelectHistoryToSend(history, session, SummaryIncluded()).ToList();
 
         sent.Should().HaveCount(4);
         sent[0].Text.Should().Be("mesaj-9");
@@ -57,9 +69,9 @@ public class ConversationContextWindowTests
         var session = SessionWith("özet metni", summarizedCount: 16);
 
         var withoutSummary = WorkflowMessageBuilder
-            .SelectHistoryToSend(history, SessionWith(summary: null, summarizedCount: 0)).ToList();
+            .SelectHistoryToSend(history, SessionWith(summary: null, summarizedCount: 0), SummaryIncluded()).ToList();
         var withSummary = WorkflowMessageBuilder
-            .SelectHistoryToSend(history, session).ToList();
+            .SelectHistoryToSend(history, session, SummaryIncluded()).ToList();
 
         withSummary.Count.Should().BeLessThan(withoutSummary.Count);
         TokenEstimator.Estimate(withSummary.Select(m => m.Text))
@@ -74,7 +86,7 @@ public class ConversationContextWindowTests
         var history = History(6);
 
         var sent = WorkflowMessageBuilder
-            .SelectHistoryToSend(history, SessionWith(summary: null, summarizedCount: 0)).ToList();
+            .SelectHistoryToSend(history, SessionWith(summary: null, summarizedCount: 0), SummaryIncluded()).ToList();
 
         sent.Should().HaveCount(6);
     }
@@ -89,9 +101,47 @@ public class ConversationContextWindowTests
         var history = History(10);
 
         var sent = WorkflowMessageBuilder
-            .SelectHistoryToSend(history, SessionWith(summary: null, summarizedCount: 6)).ToList();
+            .SelectHistoryToSend(history, SessionWith(summary: null, summarizedCount: 6), SummaryIncluded()).ToList();
 
         sent.Should().HaveCount(10);
+    }
+
+    // ═══ Özet bu tur prompt'a girmediyse: kırpma YAPILMAZ ═══
+
+    /// <summary>
+    /// Regresyon koruması. Özetleyici hata verir/zaman aşımına uğrarsa özet prompt'a girmez,
+    /// ama <c>SessionState.ConversationSummary</c> önceki turdan kalma değerini korur. Karar
+    /// yalnızca oturum durumuna bakılarak verilseydi geçmiş yine kırpılır ve o turlar
+    /// <b>ne özet ne ham</b> hâlde prompt'a girer — modelin görüş alanından tamamen kaybolurdu.
+    /// </summary>
+    [Theory]
+    [InlineData(ContextPartStatus.Failed)]
+    [InlineData(ContextPartStatus.TimedOut)]
+    [InlineData(ContextPartStatus.Dropped)]
+    [InlineData(ContextPartStatus.Empty)]
+    public void SummaryNotIncludedThisTurn_SendsFullHistory(ContextPartStatus status)
+    {
+        var history = History(12);
+        var session = SessionWith("önceki turdan kalma özet", summarizedCount: 8);
+
+        var sent = WorkflowMessageBuilder
+            .SelectHistoryToSend(history, session, SummaryMissing(status)).ToList();
+
+        sent.Should().HaveCount(12, "özet prompt'ta yoksa hiçbir tur atlanmamalı");
+        sent[0].Text.Should().Be("mesaj-1");
+    }
+
+    /// <summary>Bağlamda özet provider'ı hiç görünmüyorsa da kırpma yapılmamalı.</summary>
+    [Fact]
+    public void SummaryProviderAbsentFromContext_SendsFullHistory()
+    {
+        var history = History(12);
+        var session = SessionWith("özet", summarizedCount: 8);
+
+        var sent = WorkflowMessageBuilder
+            .SelectHistoryToSend(history, session, ContextResult.Empty).ToList();
+
+        sent.Should().HaveCount(12);
     }
 
     // ═══ Savunmacı sınırlar ═══
@@ -108,7 +158,7 @@ public class ConversationContextWindowTests
         var history = History(historyCount);
 
         var sent = WorkflowMessageBuilder
-            .SelectHistoryToSend(history, SessionWith("özet", summarized)).ToList();
+            .SelectHistoryToSend(history, SessionWith("özet", summarized), SummaryIncluded()).ToList();
 
         sent.Should().HaveCount(historyCount);
     }
@@ -116,8 +166,8 @@ public class ConversationContextWindowTests
     [Fact]
     public void EmptyOrNullHistory_ReturnsEmpty()
     {
-        WorkflowMessageBuilder.SelectHistoryToSend(null, SessionWith("özet", 3)).Should().BeEmpty();
-        WorkflowMessageBuilder.SelectHistoryToSend([], SessionWith("özet", 3)).Should().BeEmpty();
+        WorkflowMessageBuilder.SelectHistoryToSend(null, SessionWith("özet", 3), SummaryIncluded()).Should().BeEmpty();
+        WorkflowMessageBuilder.SelectHistoryToSend([], SessionWith("özet", 3), SummaryIncluded()).Should().BeEmpty();
     }
 
     [Fact]
@@ -125,7 +175,7 @@ public class ConversationContextWindowTests
     {
         var history = History(7);
 
-        WorkflowMessageBuilder.SelectHistoryToSend(history, session: null)
+        WorkflowMessageBuilder.SelectHistoryToSend(history, session: null, SummaryIncluded())
             .Should().HaveCount(7);
     }
 

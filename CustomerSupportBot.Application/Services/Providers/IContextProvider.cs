@@ -8,6 +8,25 @@ public interface IContextProvider
     int Order { get; }
 
     /// <summary>
+    /// Bu provider'ın katkısı <b>doğru cevap için gerekli mi</b>, yoksa yalnızca iyileştirici mi?
+    ///
+    /// <para>
+    /// Ayrım, hata anında ne yapılacağını belirler. İyileştirici bir provider düşerse (ör.
+    /// semantik bellek erişilemiyor) bot yine makul bir cevap verebilir; sessizce atlamak
+    /// doğrudur. Kritik bir provider düşerse — ör. müşterinin sipariş geçmişi okunamıyorsa —
+    /// model eksikliği FARK ETMEZ ve büyük olasılıkla "kayıtlı siparişiniz bulunamadı" der:
+    /// altyapı hatası kullanıcıya <b>yanlış olgu</b> olarak yansır.
+    /// </para>
+    ///
+    /// <para>
+    /// Bu yüzden kritik bir provider düştüğünde pipeline sessiz kalmaz; bağlama açık bir
+    /// "bu bilgi şu an okunamıyor, bilmiyorum de" uyarısı koyar. Tur yine tamamlanır ama
+    /// model uydurmak yerine bilmediğini söyler.
+    /// </para>
+    /// </summary>
+    bool IsCritical => false;
+
+    /// <summary>
     /// Bu tur için bağlam metni üretir.
     /// </summary>
     /// <param name="session">Oturum — kalıcı durum ve kimlik bilgisi için.</param>
@@ -27,5 +46,9 @@ public interface IContextProvider
     /// hem bilgi tabanı hem onaylanmış dersler yanlış sorguyla getiriliyordu.
     /// </para>
     /// </param>
-    Task<string?> GetContextAsync(AgentSession session, string currentQuery);
+    /// <param name="ct">
+    /// Provider başına zaman aşımı ve çağıran iptalinin birleşimi. Ağ/LLM çağrısı yapan her
+    /// provider bunu aşağıya geçirmelidir — aksi halde süre dolsa bile iş arka planda sürer.
+    /// </param>
+    Task<string?> GetContextAsync(AgentSession session, string currentQuery, CancellationToken ct = default);
 }

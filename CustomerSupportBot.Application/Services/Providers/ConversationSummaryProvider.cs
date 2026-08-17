@@ -23,7 +23,14 @@ public class ConversationSummaryProvider : IContextProvider
     private const int SummaryThreshold = 8;
     private const int RecentMessageCount = 4;
 
-    public string Name => "ConversationSummary";
+    /// <summary>
+    /// Provider adı — <c>WorkflowMessageBuilder</c> geçmişi kırpıp kırpmayacağına karar
+    /// verirken bu adla "özet bu tur gerçekten prompt'a girdi mi?" diye sorar, o yüzden
+    /// serbest metin değil sabit.
+    /// </summary>
+    public const string ProviderName = "ConversationSummary";
+
+    public string Name => ProviderName;
     public int Order => 5;
 
     public ConversationSummaryProvider(
@@ -36,9 +43,9 @@ public class ConversationSummaryProvider : IContextProvider
         _logger = logger;
     }
 
-    public async Task<string?> GetContextAsync(AgentSession session, string currentQuery)
+    public async Task<string?> GetContextAsync(AgentSession session, string currentQuery, CancellationToken ct = default)
     {
-        var history = await _sessionRepository.GetHistoryAsync(session.SessionId);
+        var history = await _sessionRepository.GetHistoryAsync(session.SessionId, ct);
         if (history.Count < SummaryThreshold)
             return null;
 
@@ -54,12 +61,12 @@ public class ConversationSummaryProvider : IContextProvider
 
         try
         {
-            var summary = await SummarizeAsync(oldMessages);
+            var summary = await SummarizeAsync(oldMessages, ct);
             session.State.ConversationSummary = summary;
             // Prompt kurulurken geçmişin ilk bu kadar mesajı atlanacak — özet onların yerine
             // geçer. Bu sayı yazılmazsa özet tasarruf değil ek yük olur (bkz. SessionState).
             session.State.SummarizedMessageCount = oldMessages.Count;
-            await _sessionRepository.UpdateAsync(session);
+            await _sessionRepository.UpdateAsync(session, ct);
 
             _logger.LogInformation(
                 "Konuşma özetlendi: {OldCount} mesaj → {SummaryLength} karakter",
@@ -74,7 +81,7 @@ public class ConversationSummaryProvider : IContextProvider
         }
     }
 
-    private async Task<string> SummarizeAsync(List<ConversationMessage> messages)
+    private async Task<string> SummarizeAsync(List<ConversationMessage> messages, CancellationToken ct)
     {
         var conversationText = new StringBuilder();
         foreach (var msg in messages)
@@ -92,7 +99,7 @@ public class ConversationSummaryProvider : IContextProvider
             new(ConversationRoles.User, conversationText.ToString())
         };
 
-        return await _chatClient.CompleteAsync(prompt);
+        return await _chatClient.CompleteAsync(prompt, ct);
     }
 
     private static string FormatSummaryContext(string summary)

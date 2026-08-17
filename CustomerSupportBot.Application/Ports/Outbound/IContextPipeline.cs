@@ -8,5 +8,10 @@ namespace CustomerSupportBot.Application.Ports.Outbound;
 /// </summary>
 public interface IContextPipeline
 {
-    Task<string> BuildContextAsync(AgentSession session, string currentQuery);
+    /// <summary>
+    /// Bağlamı kurar. Yalnızca birleşik metni değil, <b>hangi provider'ın katkı yaptığını</b>
+    /// da döner — çağıranın buna göre karar vermesi gerekebiliyor (bkz. <see cref="ContextResult"/>).
+    /// </summary>
+    Task<ContextResult> BuildContextAsync(
+        AgentSession session, string currentQuery, CancellationToken ct = default);
 }

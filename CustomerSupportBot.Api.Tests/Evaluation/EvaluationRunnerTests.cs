@@ -1,4 +1,5 @@
 // Tests/Evaluation/EvaluationRunnerTests.cs
+using CustomerSupportBot.Application.Ports.Outbound;
 
 using CustomerSupportBot.Adapters.AI.Chat;
 using CustomerSupportBot.Adapters.Agents;
@@ -33,7 +34,7 @@ public class EvaluationRunnerTests
         var prompts = new FileSystemPromptRepository(NullLogger<FileSystemPromptRepository>.Instance);
         var configuration = new ConfigurationBuilder().Build();
         var contextPipeline = new ContextPipeline(
-            Array.Empty<IContextProvider>(), NullLogger<ContextPipeline>.Instance);
+            Array.Empty<IContextProvider>(), Options.Create(new ContextPipelineOptions()), NullLogger<ContextPipeline>.Instance);
         var traceStore = new InMemoryReasoningTraceStore();
         var approvalOpts = new ApprovalOptions { Enabled = false };
         var queue = new InMemoryApprovalQueue(

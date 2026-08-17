@@ -32,7 +32,7 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
         _logger = logger;
     }
 
-    public async Task<string?> GetContextAsync(AgentSession session, string currentQuery)
+    public async Task<string?> GetContextAsync(AgentSession session, string currentQuery, CancellationToken ct = default)
     {
         if (!_memory.Enabled) return null;
 
@@ -51,11 +51,11 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
             // Eskiden iki ayrı SearchAsync çağrısı vardı ve her biri kendi içinde aynı metni
             // yeniden embed ediyordu — embedder'da cache olmadığı için tur başına iki
             // embedding çağrısı (ve iki kat maliyet) oluşuyordu.
-            var queryVector = await _memory.EmbedQueryAsync(query);
+            var queryVector = await _memory.EmbedQueryAsync(query, ct);
             if (queryVector.Length == 0) return null;
 
-            var kbTask = _memory.SearchByVectorAsync(MemoryKind.Knowledge, queryVector);
-            var lessonsTask = _memory.SearchByVectorAsync(MemoryKind.Lesson, queryVector);
+            var kbTask = _memory.SearchByVectorAsync(MemoryKind.Knowledge, queryVector, ct: ct);
+            var lessonsTask = _memory.SearchByVectorAsync(MemoryKind.Lesson, queryVector, ct: ct);
             await Task.WhenAll(kbTask, lessonsTask);
 
             var kb = kbTask.Result;

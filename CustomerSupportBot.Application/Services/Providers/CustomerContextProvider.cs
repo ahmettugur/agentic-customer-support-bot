@@ -35,7 +35,14 @@ public class CustomerContextProvider : IContextProvider
     public string Name => "CustomerContext";
     public int Order => 10;
 
-    public Task<string?> GetContextAsync(AgentSession session, string currentQuery)
+    /// <summary>
+    /// Kritik: bu bağlam düşerse model müşterinin siparişlerini göremez ve büyük olasılıkla
+    /// "kayıtlı siparişiniz bulunamadı" der — yani altyapı hatası kullanıcıya yanlış olgu
+    /// olarak yansır. Sessizce atlamak yerine modele eksikliği bildirilir.
+    /// </summary>
+    public bool IsCritical => true;
+
+    public Task<string?> GetContextAsync(AgentSession session, string currentQuery, CancellationToken ct = default)
     {
         var customerId = session.State.AuthenticatedCustomerId;
         if (string.IsNullOrWhiteSpace(customerId))

@@ -40,6 +40,37 @@ O sayı kritik: `WorkflowMessageBuilder.SelectHistoryToSend` geçmişin ilk o ka
 > için) her turda tüm eski geçmiş yeniden özetleniyor. Artımlı özetleme
 > (`yeni_özet = f(mevcut_özet, pencereden düşen mesajlar)`) hâlâ açık bir iş.
 
+## Kritik mi, iyileştirici mi?
+
+`IContextProvider.IsCritical` (varsayılan `false`) bir provider düştüğünde ne olacağını
+belirler — ayrıntı: [ContextPipeline.md](../Chat/ContextPipeline.md#32-kritik--iyileştirici-ayrımı-icontextprovideriscritical).
+
+| Provider | Kritik? | Gerekçe |
+|---|:---:|---|
+| `CustomerContextProvider` | ✅ | Düşerse model "siparişiniz bulunamadı" der — altyapı hatası **yanlış olguya** dönüşür |
+| `ConversationSummaryProvider` | ✗ | Düşerse geçmiş kırpılmaz, tam hâliyle gider (pahalı ama doğru) |
+| `SemanticMemoryContextProvider` | ✗ | Bilgi tabanı erişilemese de bot makul cevap verebilir |
+| `CustomerProfileContextProvider` | ✗ | Kişiselleştirme kaybı; olgu kaybı değil |
+
+Yeni provider eklerken sorulacak soru: *bu bağlam olmadan model **yanlış bir şey söyler mi**,
+yoksa sadece **daha az iyi** mi söyler?* Birincisi kritik, ikincisi iyileştirici.
+
+## Sezgisel koşullu çalıştırma — bilinçli olarak yapılmadı
+
+Her provider'ın **olgu tabanlı** erken çıkışı zaten var (bellek kapalı, kimlik yok, profil
+boş, geçmiş kısa). Bunların ötesinde "kısa/önemsiz turlarda pahalı provider'ları atla" gibi
+**sezgisel** bir optimizasyon uygulanmadı. Sebep:
+
+- Diğer korumaların aksine bu bir **güvenlik değil, kalite/maliyet takası**. Yanlış sezgi,
+  gereken bağlamı sessizce düşürür ve hatanın izi görünmez.
+- Karar için gereken veri (`ReasoningTrace.EstimatedTokens` + `ContextParts`) **yeni eklendi**
+  ve henüz canlıda birikmedi. Hangi provider'ın gerçekten pahalı olduğunu ölçmeden sezgiyle
+  budamak, ölçmeden optimize etmektir.
+
+Karar için bakılacak veri: tur başına `EstimatedTokens` eğrisi ve `ContextParts` içindeki
+provider boyutları. Semantik arama gerçekten baskınsa ve düşük değerli turlarda boş dönüyorsa,
+o zaman `TurnSignals`/intent ile koşullandırmak veriye dayalı bir karar olur.
+
 ## Bağlantılar
 
 - [../Reasoning/ReasoningMessageBuilder.md](../Reasoning/ReasoningMessageBuilder.md) — Provider çıktılarını kullanan builder
