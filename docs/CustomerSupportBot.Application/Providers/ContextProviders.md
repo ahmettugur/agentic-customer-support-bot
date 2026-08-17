@@ -17,9 +17,53 @@ Reasoning/agent prompt'una enjekte edilecek bağlam parçalarını üreten provi
 | `ConversationSummaryProvider` | Eski turları özetler — özet, o turların **yerine** geçer (aşağıya bakın) |
 | `CustomerContextProvider` | Müşterinin sipariş/şikayet geçmişi. Sipariş satırları `OrderInfo.LinesSummary()` ile tek satıra indirilir — `1082: Kahve x2, Çikolata x1, Durum: İşleniyor, Tarih: …` |
 | `CustomerIdentityHintBuilder` | AuthenticatedCustomerId → prompt hint |
-| `CustomerProfileContextProvider` | Müşteri profili (tercihler, iletişim stili) |
-| `SemanticMemoryContextProvider` | Geçmiş konuşmalardan semantic search |
+| `CustomerProfileContextProvider` | Müşteri profili (tercihler, ton, çıkarımlar) — `CustomerUnderstandingService`'in sentezini render eder |
+| `SemanticMemoryContextProvider` | Knowledge + Lesson + (kimlik doğrulandıysa) müşterinin geçmiş episode'ları |
+| `ProductRecommendationContextProvider` | Kural tabanlı ürün önerisi (isteğe bağlı, susma kuralları için bkz. [RecommendationService.md](../Personalization/RecommendationService.md)) |
 | `NoopContextProvider` | Hiçbir şey yapmaz (test/disable için) |
+
+## `ProductRecommendationContextProvider` — talimat değil, öneri
+
+Bu, Customer Memory işlem hattının **Recommendation** aşamasının bağlama giriş noktası.
+`IRecommendationService.Recommend(session)`'ı çağırır ve boş dönmezse metni açıkça *"isteğe
+bağlı, YALNIZCA uygun bağlamda bahset — zorlama"* diliyle ekler.
+
+Susma kararının (ne zaman öneri **üretilmeyeceği** — duygu, veri yeterliliği) tamamı
+`RecommendationService`'te verilir, burada tekrar edilmez; bu provider yalnızca üretileni
+render eder. Ayrıntı: [RecommendationService.md](../Personalization/RecommendationService.md).
+
+## `CustomerProfileContextProvider` — artık `CustomerUnderstanding` üzerinden çalışıyor
+
+Bu provider `ICustomerProfileStore`'u artık **doğrudan okumuyor**. Aradaki sentez katmanı
+[`CustomerUnderstandingService`](../Personalization/CustomerUnderstandingService.md)
+`CustomerProfile`'ı tek bir `CustomerUnderstanding` nesnesine çeviriyor (null-kontrolleri,
+top-N sıralama/kırpma dahil); provider yalnızca bu nesneyi metne döküyor.
+
+Sebep: bu sentez mantığı (customerId yoksa/profil yoksa/tur sıfırsa null dönme, en sık 3
+niyet, en yeni 5 ürün ilgisi) ileride başka bir tüketicinin (ör. bir öneri motoru) de
+ihtiyaç duyacağı bir şey — tek yerde yaşaması, iki tüketicinin aynı kuralları iki kez
+yazmasını (ve sessizce birbirinden sapmasını) önler.
+
+## `SemanticMemoryContextProvider` — Episode retrieval canlandırıldı
+
+Bu provider üç koleksiyonu birleştirir: Knowledge (statik SSS/politika), Lesson
+(self-improvement) ve — kimlik doğrulandıysa — Episodic (geçmiş konuşma turları).
+
+> 🐞 **Bulundu ve düzeltildi — episodic bellek write-only ölü veriydi.** `TurnFinalizer` her
+> turun sonunda soru+yanıtı Episodic koleksiyonuna yazıyordu, ama bu provider yalnızca
+> Knowledge+Lesson arıyordu — yazılan hiçbir episode asla geri okunmuyordu. "Müşteriyle
+> geçmişte ne konuşuldu?" sorusunun cevabı yalnızca yapısal veriden (`CustomerContextProvider`
+> → sipariş/şikayet tabloları) geliyordu; konuşmasal geçmiş (ürün tercihleri, daha önce
+> sorulan sorular, verilen yanıtlar) hiç kullanılmıyordu.
+>
+> Artık `session.State.AuthenticatedCustomerId` doluysa Episodic koleksiyonu `customerId`
+> tag'iyle filtrelenip aranıyor ve "🗂️ Bu Müşteriyle Geçmiş Görüşmeler" başlığı altında
+> bağlama ekleniyor. `SessionId` değil `customerId` ile filtrelenmesi kasıtlı — amaç aynı
+> müşterinin **farklı oturumlardaki** geçmişini bulmak; ayrıntı için
+> [SemanticMemoryService.md](../Memory/SemanticMemoryService.md#3-writeepisodeasync--customerid-tagi).
+>
+> Kimlik doğrulanmamışsa (anonim tur) Episodic koleksiyonu hiç aranmaz — filtresiz arama
+> başka bir müşterinin geçmişini sızdırma riski taşırdı.
 
 ## `ConversationSummaryProvider` — özet neyin yerine geçer
 
@@ -35,10 +79,24 @@ O sayı kritik: `WorkflowMessageBuilder.SelectHistoryToSend` geçmişin ilk o ka
 > tur: **tam geçmiş + aynı turların özeti + özeti üretmek için fazladan bir LLM çağrısı.**
 > Aynı turlar iki kez ödeniyordu. Çıktı doğru olduğu için hiçbir test bunu yakalamamıştı.
 >
-> Bu düzeltme maliyetin yalnızca yarısını çözer: özet hâlâ **sıfırdan** üretiliyor — 12+
-> mesajda (`history.Count - SummaryThreshold < RecentMessageCount` önbellek koşulu tutmadığı
-> için) her turda tüm eski geçmiş yeniden özetleniyor. Artımlı özetleme
-> (`yeni_özet = f(mevcut_özet, pencereden düşen mesajlar)`) hâlâ açık bir iş.
+> **İkinci tur düzeltme — artımlı özetleme (fold).** İlk düzeltme maliyetin yalnızca
+> yarısını çözüyordu: özet hâlâ **sıfırdan** üretiliyordu — 12+ mesajda (önbellek koşulu
+> tutmadığı için) her turda tüm eski geçmiş yeniden özetleniyordu. Artık `yeni_özet =
+> f(mevcut_özet, pencereden yeni düşen mesajlar)` — `SummarizedMessageCount` hem "geçmişin
+> ne kadarı atlanacak" hem "hangi mesajlardan sonrası hâlâ özetlenmemiş" sınırı olarak
+> kullanılıyor, LLM'e her turda yalnızca DELTA gönderiliyor (bkz. `FoldAsync`).
+>
+> Eşzamanlı çift-submit/çoklu-sekme yarışına karşı `IAppDistributedLock` ile
+> `session:{sessionId}` anahtarı kilitleniyor — aynı desen `PostgresSessionManager.
+> MutateStateAsync`'te de kullanılıyor. Kilit yalnızca gerçekten katlama gerektiğinde
+> alınıyor; önbellek isabetinde (özet zaten güncel sınırı kapsıyorsa) kilitsiz, hızlı yoldan
+> dönülüyor.
+>
+> Bilerek yapılmayan: Facts/Narrative ayrımı (yapısal veriyi — müşteri kimliği, sipariş
+> no — kayıpsız bir alanda, geri kalanı serbestçe özetlenen bir alanda tutmak). Mevcut tek
+> özet metni LLM'e "önemli bilgileri koru" talimatıyla güveniyor; bu ayrım deterministik bir
+> garanti verirdi ama ek şema/karmaşıklık gerektirir ve şu an gözlenen bir veri kaybı
+> vakası yok — ölçülmeden eklenmedi.
 
 ## Kritik mi, iyileştirici mi?
 
@@ -51,6 +109,7 @@ belirler — ayrıntı: [ContextPipeline.md](../Chat/ContextPipeline.md#32-kriti
 | `ConversationSummaryProvider` | ✗ | Düşerse geçmiş kırpılmaz, tam hâliyle gider (pahalı ama doğru) |
 | `SemanticMemoryContextProvider` | ✗ | Bilgi tabanı erişilemese de bot makul cevap verebilir |
 | `CustomerProfileContextProvider` | ✗ | Kişiselleştirme kaybı; olgu kaybı değil |
+| `ProductRecommendationContextProvider` | ✗ | Zaten *isteğe bağlı* bir blok — susma kuralları servis seviyesinde, kritiklik burada tekrar edilmiyor |
 
 Yeni provider eklerken sorulacak soru: *bu bağlam olmadan model **yanlış bir şey söyler mi**,
 yoksa sadece **daha az iyi** mi söyler?* Birincisi kritik, ikincisi iyileştirici.

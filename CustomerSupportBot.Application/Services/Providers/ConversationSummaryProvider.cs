@@ -1,9 +1,13 @@
 // Application/Services/Providers/ConversationSummaryProvider.cs
 // Uzun konuşma geçmişini LLM ile özetleyerek token tasarrufu sağlar.
+// Özet ARTIMLI üretilir: her turda tüm eski geçmiş yeniden özetlenmez, yalnızca son
+// özetten bu yana DÜŞEN (yeni sınırın dışında kalan) mesajlar mevcut özetle katlanır
+// (fold). Bkz. FoldAsync.
 
 using System.Text;
 
 using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
@@ -18,6 +22,7 @@ public class ConversationSummaryProvider : IContextProvider
 {
     private readonly IGeneralChatClient _chatClient;
     private readonly ISessionManager _sessionRepository;
+    private readonly IAppDistributedLock _distributedLock;
     private readonly ILogger<ConversationSummaryProvider> _logger;
 
     private const int SummaryThreshold = 8;
@@ -36,10 +41,12 @@ public class ConversationSummaryProvider : IContextProvider
     public ConversationSummaryProvider(
         IGeneralChatClient chatClient,
         ISessionManager sessionRepository,
+        IAppDistributedLock distributedLock,
         ILogger<ConversationSummaryProvider> logger)
     {
         _chatClient = chatClient;
         _sessionRepository = sessionRepository;
+        _distributedLock = distributedLock;
         _logger = logger;
     }
 
@@ -49,28 +56,51 @@ public class ConversationSummaryProvider : IContextProvider
         if (history.Count < SummaryThreshold)
             return null;
 
-        if (session.State.ConversationSummary != null &&
-            history.Count - SummaryThreshold < RecentMessageCount)
-        {
-            return FormatSummaryContext(session.State.ConversationSummary);
-        }
-
-        var oldMessages = history.Take(history.Count - RecentMessageCount).ToList();
-        if (oldMessages.Count == 0)
+        // Özetlenecek yeni sınır: son RecentMessageCount mesaj hep ham gönderilir, öncesi
+        // özete taşınabilir aday havuzudur.
+        var boundary = history.Count - RecentMessageCount;
+        if (boundary <= 0)
             return null;
+
+        // Hızlı yol (kilitsiz): mevcut özet zaten bu sınırı kapsıyorsa iş yok.
+        if (session.State.ConversationSummary != null && boundary <= session.State.SummarizedMessageCount)
+            return FormatSummaryContext(session.State.ConversationSummary);
 
         try
         {
-            var summary = await SummarizeAsync(oldMessages, ct);
+            // Aynı session için eşzamanlı iki istek (çift-submit, çoklu sekme) burada
+            // yarışabilir — ikisi de aynı "eski özet"i okuyup farklı deltaları katlarsa
+            // biri sessizce kaybolur (bkz. PostgresSessionManager.MutateStateAsync'teki
+            // aynı desen). Kilit bu yarışı serileştirir.
+            await using var handle = await _distributedLock
+                .AcquireAsync($"session:{session.SessionId}", ct: ct)
+                .ConfigureAwait(false);
+
+            // Kilit beklerken aynı süreçte başka bir çağrı zaten katlamış olabilir
+            // (PostgresSessionManager aynı sessionId için hep aynı AgentSession referansını
+            // döndürür) — tekrar kontrol ederek gereksiz LLM çağrısından kaçınılır.
+            if (session.State.ConversationSummary != null && boundary <= session.State.SummarizedMessageCount)
+                return FormatSummaryContext(session.State.ConversationSummary);
+
+            var priorCount = Math.Min(session.State.SummarizedMessageCount, boundary);
+            var newMessages = history.Skip(priorCount).Take(boundary - priorCount).ToList();
+            if (newMessages.Count == 0)
+            {
+                return session.State.ConversationSummary is null
+                    ? null
+                    : FormatSummaryContext(session.State.ConversationSummary);
+            }
+
+            var summary = await FoldAsync(session.State.ConversationSummary, newMessages, ct);
             session.State.ConversationSummary = summary;
             // Prompt kurulurken geçmişin ilk bu kadar mesajı atlanacak — özet onların yerine
             // geçer. Bu sayı yazılmazsa özet tasarruf değil ek yük olur (bkz. SessionState).
-            session.State.SummarizedMessageCount = oldMessages.Count;
+            session.State.SummarizedMessageCount = boundary;
             await _sessionRepository.UpdateAsync(session, ct);
 
             _logger.LogInformation(
-                "Konuşma özetlendi: {OldCount} mesaj → {SummaryLength} karakter",
-                oldMessages.Count, summary.Length);
+                "Konuşma özeti güncellendi: {NewCount} yeni mesaj katlandı → {SummaryLength} karakter",
+                newMessages.Count, summary.Length);
 
             return FormatSummaryContext(summary);
         }
@@ -81,22 +111,40 @@ public class ConversationSummaryProvider : IContextProvider
         }
     }
 
-    private async Task<string> SummarizeAsync(List<ConversationMessage> messages, CancellationToken ct)
+    /// <summary>
+    /// Yeni mesajları özete katlar. <paramref name="existingSummary"/> <c>null</c>ise ilk
+    /// özetleme (sıfırdan), doluysa artımlı katlama (<c>yeni_özet = f(mevcut_özet, yeni
+    /// mesajlar)</c>) yapılır — ikisi de tek bir LLM çağrısı, önceki mesajlar tekrar
+    /// gönderilmez.
+    /// </summary>
+    private async Task<string> FoldAsync(string? existingSummary, List<ConversationMessage> newMessages, CancellationToken ct)
     {
         var conversationText = new StringBuilder();
-        foreach (var msg in messages)
+        foreach (var msg in newMessages)
         {
             var role = msg.Role == ConversationRoles.User ? "Müşteri" : "Asistan";
             conversationText.AppendLine($"{role}: {msg.Text}");
         }
 
+        var systemPrompt = existingSummary is null
+            ? "Aşağıdaki müşteri destek konuşmasını kısa ve öz bir şekilde özetle. " +
+              "Önemli bilgileri koru: müşteri kimliği, sipariş numaraları, yapılan işlemler, " +
+              "çözülmemiş sorunlar. Türkçe yaz. Maksimum 150 kelime."
+            : "Sana mevcut bir konuşma özeti ve konuşmanın DEVAMINDAN yeni mesajlar veriliyor. " +
+              "Mevcut özeti, yeni mesajlardaki bilgileri de katarak GÜNCELLE — yeniden baştan " +
+              "yazma, üzerine inşa et. Önemli bilgileri koru: müşteri kimliği, sipariş " +
+              "numaraları, yapılan işlemler, çözülmemiş sorunlar. Eski bilgi yeni mesajlarla " +
+              "çelişiyorsa (ör. bir sorun çözüldü) yeni durumu yansıt. Türkçe yaz. Maksimum " +
+              "150 kelime.";
+
+        var userContent = existingSummary is null
+            ? conversationText.ToString()
+            : $"Mevcut özet:\n{existingSummary}\n\nYeni mesajlar:\n{conversationText}";
+
         var prompt = new List<ConversationMessage>
         {
-            new(ConversationRoles.System,
-                "Aşağıdaki müşteri destek konuşmasını kısa ve öz bir şekilde özetle. " +
-                "Önemli bilgileri koru: müşteri kimliği, sipariş numaraları, yapılan işlemler, " +
-                "çözülmemiş sorunlar. Türkçe yaz. Maksimum 150 kelime."),
-            new(ConversationRoles.User, conversationText.ToString())
+            new(ConversationRoles.System, systemPrompt),
+            new(ConversationRoles.User, userContent)
         };
 
         return await _chatClient.CompleteAsync(prompt, ct);
