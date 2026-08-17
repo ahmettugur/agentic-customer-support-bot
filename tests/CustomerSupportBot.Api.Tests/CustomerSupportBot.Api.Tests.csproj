@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- xunit.v3/Microsoft.Testing.Platform: eski VSTest köprüsü .NET 10'da desteklenmiyor,
+         `dotnet test`'in yeni MTP deneyimine opt-in olması gerekiyor. -->
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <RunSettingsFilePath>$(MSBuildThisFileDirectory)coverlet.runsettings</RunSettingsFilePath>
 
     <!-- Coverlet: exclude generated/compiler code from coverage -->
@@ -21,10 +24,6 @@
         <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
     <PackageReference Include="NSubstitute" Version="6.2.0" />
     <PackageReference Include="FluentAssertions" Version="8.10.0" />
     <PackageReference Include="coverlet.collector" Version="10.0.1">
