@@ -17,6 +17,13 @@
       <Project Path="src/CustomerSupportBot.Adapters.Telemetry/CustomerSupportBot.Adapters.Telemetry.csproj" />
     </Folder>
   <Folder Name="/Tests/">
-    <Project Path="tests/CustomerSupportBot.Api.Tests/CustomerSupportBot.Api.Tests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Domain.Tests/CustomerSupportBot.Domain.Tests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Application.Tests/CustomerSupportBot.Application.Tests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Adapters.Agents.Tests/CustomerSupportBot.Adapters.Agents.Tests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Adapters.AI.Tests/CustomerSupportBot.Adapters.AI.Tests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Adapters.Persistence.Tests/CustomerSupportBot.Adapters.Persistence.Tests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Adapters.Telemetry.Tests/CustomerSupportBot.Adapters.Telemetry.Tests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Api.IntegrationTests/CustomerSupportBot.Api.IntegrationTests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Tests.Shared/CustomerSupportBot.Tests.Shared.csproj" />
   </Folder>
 </Solution>

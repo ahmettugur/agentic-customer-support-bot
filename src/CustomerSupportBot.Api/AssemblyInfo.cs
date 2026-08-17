@@ -1,3 +1,3 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("CustomerSupportBot.Api.Tests")]
+[assembly: InternalsVisibleTo("CustomerSupportBot.Api.IntegrationTests")]

@@ -8,7 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="CustomerSupportBot.Api.Tests" />
+    <InternalsVisibleTo Include="CustomerSupportBot.Application.Tests" />
+    <InternalsVisibleTo Include="CustomerSupportBot.Adapters.Agents.Tests" />
+    <InternalsVisibleTo Include="CustomerSupportBot.Adapters.Persistence.Tests" />
+    <InternalsVisibleTo Include="CustomerSupportBot.Api.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>

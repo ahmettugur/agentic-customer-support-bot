@@ -52,7 +52,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="CustomerSupportBot.Tests" />
+    <InternalsVisibleTo Include="CustomerSupportBot.Api.IntegrationTests" />
   </ItemGroup>
 
   <ItemGroup>

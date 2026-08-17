@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Bu proje test projesi DEĞİL (IsTestProject yok) — IAsyncLifetime/ICollectionFixture
+         gibi tipler için sadece extensibility paketine ihtiyaç var, çalıştırılabilir xunit.v3
+         ana paketine değil. -->
+    <PackageReference Include="xunit.v3.extensibility.core" Version="4.0.0" />
+    <PackageReference Include="NSubstitute" Version="6.2.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Domain\CustomerSupportBot.Domain.csproj" />
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Application\CustomerSupportBot.Application.csproj" />
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Adapters.Persistence\CustomerSupportBot.Adapters.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Adapters.Redis\CustomerSupportBot.Adapters.Redis.csproj" />
+  </ItemGroup>
+
+</Project>
