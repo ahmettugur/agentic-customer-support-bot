@@ -49,6 +49,8 @@ Application katmanı bu arayüzleri kullanır. Implementasyonlar Adapter projele
 | `IProductToolsService` | `ProductToolsService` | Ürün tool implementasyonları |
 | `IApprovalContextAccessor` | `ApprovalContextAccessor` | AsyncLocal HITL context |
 | `ICustomerProfileService` | `CustomerProfileService` | Müşteri profil güncelleme |
+| `ICustomerUnderstandingService` | `CustomerUnderstandingService` | `CustomerProfile`'ı tek, sentezlenmiş `CustomerUnderstanding` görünümüne çevirir (LLM çağırmaz) |
+| `IRecommendationService` | `RecommendationService` | Kural tabanlı ürün önerisi (LLM çağırmaz) — susma kuralları için bkz. [RecommendationService.md](Personalization/RecommendationService.md) |
 | `ISemanticMemoryWriter` | `SemanticMemoryService` | Episodik bellek yazma |
 | `ISkillsBasedRouter` | `SkillsBasedRouter` | Eskalasyon routing kararı |
 | `IUiHintEmitter` | `UiHintEmitter` | Tool → streaming pipeline UI ipuçları — `Emit` **`bool` döner**, aşağıya bakın |

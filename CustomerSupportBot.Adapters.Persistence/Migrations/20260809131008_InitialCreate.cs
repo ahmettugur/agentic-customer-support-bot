@@ -159,6 +159,7 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     intent_frequency = table.Column<string>(type: "jsonb", nullable: false),
                     product_interests = table.Column<string>(type: "jsonb", nullable: false),
                     recent_ratings = table.Column<string>(type: "jsonb", nullable: false),
+                    traits = table.Column<string>(type: "jsonb", nullable: false),
                     summary = table.Column<string>(type: "text", nullable: true),
                     admin_note = table.Column<string>(type: "text", nullable: true),
                     total_sessions = table.Column<int>(type: "integer", nullable: false),

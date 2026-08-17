@@ -45,6 +45,11 @@ internal sealed class CustomerProfileConfiguration : IEntityTypeConfiguration<Cu
             .HasColumnType("jsonb")
             .IsRequired();
 
+        builder.Property(p => p.TraitsJson)
+            .HasColumnName("traits")
+            .HasColumnType("jsonb")
+            .IsRequired();
+
         builder.Property(p => p.Summary)
             .HasColumnName("summary");
 

@@ -97,4 +97,71 @@ public class SemanticMemoryContextProviderTests
         var ctx = await provider.GetContextAsync(session, "soru");
         ctx.Should().BeNull();
     }
+
+    // ═══ Episode retrieval — canlandırılan davranış ═══
+
+    private static (string Collection, IReadOnlyDictionary<string, string>? TagFilter) LastEpisodicCall(
+        IVectorMemoryPort store) =>
+        store.ReceivedCalls()
+            .Where(c => c.GetMethodInfo().Name == nameof(IVectorMemoryPort.SearchAsync))
+            .Select(c => ((string)c.GetArguments()[0]!, (IReadOnlyDictionary<string, string>?)c.GetArguments()[4]))
+            .First(c => c.Item1 == "cs_episodic");
+
+    /// <summary>
+    /// Doğrulanmış müşteri kimliği varsa Episodic koleksiyonu customerId tag'iyle aranmalı —
+    /// sessionId'yle değil, çünkü amaç aynı müşterinin FARKLI oturumlardaki geçmişini bulmak.
+    /// </summary>
+    [Fact]
+    public async Task GetContext_WithAuthenticatedCustomer_SearchesEpisodesFilteredByCustomerId()
+    {
+        var store = Substitute.For<IVectorMemoryPort>();
+        store.SearchAsync(Arg.Any<string>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(),
+                Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<string>() switch
+            {
+                "cs_episodic" => (IReadOnlyList<MemorySearchHit>)
+                    [Hit(MemoryKind.Episodic, "Geçen hafta 1082 numaralı siparişi sordu.", "Geçmiş görüşme", "trace-1")],
+                _ => Array.Empty<MemorySearchHit>()
+            });
+
+        var provider = Build(store, SessionWithUserQuery("siparişim nerede"));
+        var session = new AgentSession
+        {
+            SessionId = "s",
+            State = new SessionState { AuthenticatedCustomerId = "1027" }
+        };
+
+        var ctx = await provider.GetContextAsync(session, "siparişim nerede");
+
+        ctx.Should().NotBeNull();
+        ctx.Should().Contain("Bu Müşteriyle Geçmiş Görüşmeler");
+        ctx.Should().Contain("Geçen hafta 1082 numaralı siparişi sordu");
+
+        var (_, tagFilter) = LastEpisodicCall(store);
+        tagFilter.Should().NotBeNull();
+        tagFilter!["customerId"].Should().Be("1027");
+    }
+
+    /// <summary>
+    /// Kimlik doğrulanmamışsa (anonim tur) Episodic koleksiyonu HİÇ aranmamalı — filtresiz
+    /// arama, başka bir müşterinin episode'unu sızdırma riski taşırdı.
+    /// </summary>
+    [Fact]
+    public async Task GetContext_WithoutAuthenticatedCustomer_DoesNotSearchEpisodes()
+    {
+        var store = Substitute.For<IVectorMemoryPort>();
+        store.SearchAsync(Arg.Any<string>(), Arg.Any<float[]>(), Arg.Any<int>(), Arg.Any<float>(),
+                Arg.Any<IReadOnlyDictionary<string, string>?>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+
+        var provider = Build(store, SessionWithUserQuery("soru"));
+        var session = new AgentSession { SessionId = "s", State = new SessionState() };
+
+        await provider.GetContextAsync(session, "soru");
+
+        store.ReceivedCalls()
+            .Count(c => c.GetMethodInfo().Name == nameof(IVectorMemoryPort.SearchAsync)
+                     && (string)c.GetArguments()[0]! == "cs_episodic")
+            .Should().Be(0);
+    }
 }

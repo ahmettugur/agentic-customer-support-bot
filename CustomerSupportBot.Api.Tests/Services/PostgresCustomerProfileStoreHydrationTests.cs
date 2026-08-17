@@ -66,6 +66,40 @@ public class PostgresCustomerProfileStoreHydrationTests
         seenByReader.Summary.Should().Be("VIP müşteri");
     }
 
+    /// <summary>
+    /// Traits sütunu ("traits" jsonb) InitialCreate migration'ına elle eklendi (tek dosya
+    /// konvansiyonu) — bu test o kolonun gerçekten var olduğunu ve InferredTrait'in
+    /// serialize/deserialize round-trip'inin bozulmadığını Postgres'e karşı doğrular.
+    /// </summary>
+    [Fact]
+    public void Upsert_RoundTripsTraits_ThroughRealDatabase()
+    {
+        var store = NewStore(_fixture.DbFactory);
+        var customerId = $"cust-{Guid.NewGuid():N}"[..16];
+        var inferredAt = new DateTime(2026, 1, 15, 10, 30, 0, DateTimeKind.Utc);
+
+        store.Upsert(new CustomerProfile
+        {
+            CustomerId = customerId,
+            TotalTurns = 7,
+            Traits =
+            [
+                new InferredTrait("Fiyat hassasiyeti yüksek", 0.75, $"consolidate:{customerId}@turn7", inferredAt)
+            ]
+        });
+
+        // Cache'i değil DB'yi okumaya zorlamak için taze bir store örneği.
+        var fresh = NewStore(_fixture.DbFactory);
+        var reloaded = fresh.Get(customerId);
+
+        reloaded.Should().NotBeNull();
+        reloaded!.Traits.Should().HaveCount(1);
+        reloaded.Traits[0].Claim.Should().Be("Fiyat hassasiyeti yüksek");
+        reloaded.Traits[0].Confidence.Should().Be(0.75);
+        reloaded.Traits[0].Source.Should().Be($"consolidate:{customerId}@turn7");
+        reloaded.Traits[0].InferredAt.Should().Be(inferredAt);
+    }
+
     [Fact]
     public void Delete_PublishesRemoval_VisibleOnOtherPodWithoutFurtherDbAccess()
     {

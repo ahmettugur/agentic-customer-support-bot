@@ -1,3 +1,4 @@
+using CustomerSupportBot.Application.Services.Personalization;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,8 +8,10 @@ namespace CustomerSupportBot.Api.Tests.Services.Providers;
 
 public class CustomerProfileContextProviderTests
 {
+    // Understanding sentezi burada MOCK'lanmıyor — gerçek CustomerUnderstandingService
+    // üzerinden çalıştırılıyor ki bu testler sentez + render zincirinin TAMAMINI kapsasın.
     private static CustomerProfileContextProvider Build(InMemoryCustomerProfileStore store)
-        => new(store, NullLogger<CustomerProfileContextProvider>.Instance);
+        => new(new CustomerUnderstandingService(store), NullLogger<CustomerProfileContextProvider>.Instance);
 
     [Fact]
     public async Task NoCustomerId_ReturnsNull()
@@ -99,6 +102,47 @@ public class CustomerProfileContextProviderTests
         var ctx = await provider.GetContextAsync(session, "profilimi göster");
 
         ctx.Should().BeNull("LLM'in metinden çıkardığı kimlik profil erişimi için kullanılmamalı");
+    }
+
+    /// <summary>
+    /// Trait'ler confidence'la BİRLİKTE görünmeli — çıplak iddia, model tarafından olgu
+    /// sanılabilir. "%80" formatı hem okunur hem de bunun bir tahmin olduğunu işaret eder.
+    /// </summary>
+    [Fact]
+    public async Task PopulatedProfile_WithTraits_IncludesConfidence()
+    {
+        var store = new InMemoryCustomerProfileStore();
+        store.Upsert(new CustomerProfile
+        {
+            CustomerId = "1027",
+            TotalTurns = 5,
+            Traits =
+            [
+                new InferredTrait("Fiyat hassasiyeti yüksek", 0.8, "consolidate:1027@turn5", DateTime.UtcNow),
+                new InferredTrait("Teknik detaylara önem veriyor", 0.4, "consolidate:1027@turn5", DateTime.UtcNow)
+            ]
+        });
+
+        var provider = Build(store);
+        var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1027" } };
+        var ctx = await provider.GetContextAsync(session, "test sorgusu");
+
+        ctx.Should().NotBeNull();
+        ctx.Should().Contain("Fiyat hassasiyeti yüksek").And.Contain("%80");
+        ctx.Should().Contain("Teknik detaylara önem veriyor").And.Contain("%40");
+    }
+
+    [Fact]
+    public async Task PopulatedProfile_NoTraits_OmitsTraitsSection()
+    {
+        var store = new InMemoryCustomerProfileStore();
+        store.Upsert(new CustomerProfile { CustomerId = "1027", TotalTurns = 5 });
+
+        var provider = Build(store);
+        var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1027" } };
+        var ctx = await provider.GetContextAsync(session, "test sorgusu");
+
+        ctx.Should().NotContain("Davranışsal gözlemler");
     }
 
     [Fact]

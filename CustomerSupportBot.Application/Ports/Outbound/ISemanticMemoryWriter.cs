@@ -6,6 +6,15 @@ namespace CustomerSupportBot.Application.Ports.Outbound;
 public interface ISemanticMemoryWriter
 {
     bool Enabled { get; }
+
+    /// <param name="customerId">
+    /// Doğrulanmış müşteri kimliği (varsa). Tag olarak yazılır ve retrieval'ın <b>müşteri
+    /// bazında</b> filtrelenebilmesini sağlar — sessionId'ye göre filtrelemek yetmez, aynı
+    /// müşterinin farklı oturumlardaki (dolayısıyla farklı sessionId'lerdeki) geçmişini
+    /// birbirine bağlayamaz. Anonim turlarda <c>null</c>; o episode yalnızca sessionId ile
+    /// bulunabilir kalır.
+    /// </param>
     Task WriteEpisodeAsync(string sessionId, string traceId, string userQuery,
-        string finalResponse, string? intent, int? rating, CancellationToken ct = default);
+        string finalResponse, string? intent, int? rating, string? customerId = null,
+        CancellationToken ct = default);
 }

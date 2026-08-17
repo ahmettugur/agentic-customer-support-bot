@@ -56,11 +56,28 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
 
             var kbTask = _memory.SearchByVectorAsync(MemoryKind.Knowledge, queryVector, ct: ct);
             var lessonsTask = _memory.SearchByVectorAsync(MemoryKind.Lesson, queryVector, ct: ct);
-            await Task.WhenAll(kbTask, lessonsTask);
+
+            // Doğrulanmış müşteri kimliği varsa, o müşterinin GEÇMİŞ OTURUMLARDAKİ episode'ları
+            // da aranır — customerId tag'iyle filtrelenir, sessionId'yle değil. Sınır sessionId
+            // olsaydı aynı müşterinin dünkü ve bugünkü oturumu birbirine hiç bağlanamazdı.
+            //
+            // Bu, yazılan ama hiç okunmayan episodic belleği canlandırır: WriteEpisodeAsync her
+            // turda bir kayıt üretiyordu, ama SearchAsync(MemoryKind.Episodic, …) kod tabanında
+            // hiçbir yerde çağrılmıyordu — episode'lar write-only ölü veriydi.
+            var customerId = session.State.AuthenticatedCustomerId;
+            var episodesTask = string.IsNullOrWhiteSpace(customerId)
+                ? Task.FromResult<IReadOnlyList<MemorySearchHit>>(Array.Empty<MemorySearchHit>())
+                : _memory.SearchByVectorAsync(MemoryKind.Episodic, queryVector,
+                    tagFilter: new Dictionary<string, string> { ["customerId"] = customerId }, ct: ct);
+
+            await Task.WhenAll(kbTask, lessonsTask, episodesTask);
 
             var kb = kbTask.Result;
             var lessons = lessonsTask.Result;
-            if (kb.Count == 0 && lessons.Count == 0) return null;
+            // Bu turun kendi episode'u henüz yazılmadı (TurnFinalizer workflow'dan SONRA yazar),
+            // ama aynı turun trace'i zaten üretilmiş olabilir — kendi kendine atıf riski yok.
+            var episodes = episodesTask.Result;
+            if (kb.Count == 0 && lessons.Count == 0 && episodes.Count == 0) return null;
 
             var sb = new StringBuilder();
             int budget = _memory.Options.Retrieval.MaxContextChars;
@@ -70,6 +87,12 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
                 sb.AppendLine("## 📚 İlgili Bilgi Tabanı (citation'lı kullanılmalı)");
                 AppendHits(sb, kb, ref budget);
             }
+            if (episodes.Count > 0 && budget > 200)
+            {
+                sb.AppendLine();
+                sb.AppendLine("## 🗂️ Bu Müşteriyle Geçmiş Görüşmeler");
+                AppendHits(sb, episodes, ref budget);
+            }
             if (lessons.Count > 0 && budget > 200)
             {
                 sb.AppendLine();
@@ -77,7 +100,8 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
                 AppendHits(sb, lessons, ref budget);
             }
 
-            _logger.LogDebug("SemanticMemory context: kb={KbCount} lessons={LessonsCount}", kb.Count, lessons.Count);
+            _logger.LogDebug("SemanticMemory context: kb={KbCount} episodes={EpisodeCount} lessons={LessonsCount}",
+                kb.Count, episodes.Count, lessons.Count);
             return sb.ToString();
         }
         catch (Exception ex)

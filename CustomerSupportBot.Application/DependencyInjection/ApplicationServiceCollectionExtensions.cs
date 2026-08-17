@@ -139,6 +139,7 @@ public static class ApplicationServiceCollectionExtensions
 
         services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
         services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();
+        services.AddSingleton<IContextProvider, ProductRecommendationContextProvider>();
         services.AddSingleton<IContextProvider, CustomerContextProvider>();
         services.AddSingleton<ContextPipeline>();
         services.AddSingleton<IContextPipeline>(sp => sp.GetRequiredService<ContextPipeline>());
@@ -153,6 +154,8 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<CustomerSupportBot.Application.Services.Improvement.LessonMiner>();
         services.AddSingleton<CustomerSupportBot.Application.Services.Personalization.CustomerProfileService>();
         services.AddSingleton<ICustomerProfileService>(sp => sp.GetRequiredService<CustomerSupportBot.Application.Services.Personalization.CustomerProfileService>());
+        services.AddSingleton<ICustomerUnderstandingService, CustomerSupportBot.Application.Services.Personalization.CustomerUnderstandingService>();
+        services.AddSingleton<IRecommendationService, CustomerSupportBot.Application.Services.Personalization.RecommendationService>();
         services.AddSingleton<ISkillsBasedRouter, CustomerSupportBot.Application.Services.Routing.SkillsBasedRouter>();
         services.AddSingleton<EscalationPolicyService>();
     }

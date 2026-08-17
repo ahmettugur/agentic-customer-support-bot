@@ -148,6 +148,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
             entity.IntentFrequencyJson = mapped.IntentFrequencyJson;
             entity.ProductInterestsJson = mapped.ProductInterestsJson;
             entity.RecentRatingsJson = mapped.RecentRatingsJson;
+            entity.TraitsJson = mapped.TraitsJson;
             entity.Summary = mapped.Summary;
             entity.AdminNote = mapped.AdminNote;
             entity.TotalSessions = mapped.TotalSessions;
@@ -207,6 +208,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
         IntentFrequencyJson = JsonSerializer.Serialize(p.IntentFrequency, _json),
         ProductInterestsJson = JsonSerializer.Serialize(p.ProductInterests, _json),
         RecentRatingsJson = JsonSerializer.Serialize(p.RecentRatings, _json),
+        TraitsJson = JsonSerializer.Serialize(p.Traits, _json),
         Summary = p.Summary,
         AdminNote = p.AdminNote,
         TotalSessions = p.TotalSessions,
@@ -224,6 +226,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
         IntentFrequency = JsonSerializer.Deserialize<Dictionary<string, int>>(e.IntentFrequencyJson, _json) ?? new(),
         ProductInterests = JsonSerializer.Deserialize<List<string>>(e.ProductInterestsJson, _json) ?? new(),
         RecentRatings = JsonSerializer.Deserialize<List<int>>(e.RecentRatingsJson, _json) ?? new(),
+        Traits = JsonSerializer.Deserialize<List<InferredTrait>>(e.TraitsJson, _json) ?? new(),
         Summary = e.Summary,
         AdminNote = e.AdminNote,
         TotalSessions = e.TotalSessions,

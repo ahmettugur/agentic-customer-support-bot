@@ -158,6 +158,101 @@ public class CustomerProfileServiceTests
         await act.Should().NotThrowAsync();
     }
 
+    // ═══ Traits — confidence + source ═══
+
+    [Fact]
+    public async Task ConsolidateAsync_LlmReturnsTraits_PopulatesConfidenceAndSource()
+    {
+        var (svc, _, chat) = Build();
+        var existing = (await svc.RecordInteractionAsync("CUST-1", "en pahalı olan hangisi", "X ürünü.", "product_inquiry",
+            ct: TestContext.Current.CancellationToken))!;
+        chat.Reply = "{\"summary\":\"x\",\"preferredTone\":\"neutral\"," +
+                     "\"traits\":[{\"claim\":\"Fiyat hassasiyeti düşük\",\"confidence\":0.8}]}";
+
+        var p = await svc.ConsolidateAsync("CUST-1", TestContext.Current.CancellationToken);
+
+        p!.Traits.Should().HaveCount(1);
+        p.Traits[0].Claim.Should().Be("Fiyat hassasiyeti düşük");
+        p.Traits[0].Confidence.Should().Be(0.8);
+        p.Traits[0].Source.Should().Contain("CUST-1").And.Contain($"turn{existing.TotalTurns}");
+    }
+
+    /// <summary>
+    /// Traits BİRİKMEZ — her consolidate çağrısı baştan üretir. Aksi halde geçersiz hâle
+    /// gelmiş eski bir iddia sonsuza kadar profilde kalır ve yenisiyle çelişirdi.
+    /// </summary>
+    [Fact]
+    public async Task ConsolidateAsync_SecondCall_ReplacesTraits_DoesNotAccumulate()
+    {
+        var (svc, _, chat) = Build();
+        await svc.RecordInteractionAsync("CUST-1", "test", "ok", "x", ct: TestContext.Current.CancellationToken);
+
+        chat.Reply = "{\"summary\":\"x\",\"preferredTone\":\"neutral\",\"traits\":[{\"claim\":\"A\",\"confidence\":0.5}]}";
+        await svc.ConsolidateAsync("CUST-1", TestContext.Current.CancellationToken);
+
+        chat.Reply = "{\"summary\":\"x\",\"preferredTone\":\"neutral\",\"traits\":[{\"claim\":\"B\",\"confidence\":0.5}]}";
+        var p = await svc.ConsolidateAsync("CUST-1", TestContext.Current.CancellationToken);
+
+        p!.Traits.Should().ContainSingle(t => t.Claim == "B");
+        p.Traits.Should().NotContain(t => t.Claim == "A");
+    }
+
+    [Theory]
+    [InlineData(1.5, 1.0)]   // aralık üstü → kırpılır
+    [InlineData(-0.3, 0.0)]  // aralık altı → kırpılır
+    public async Task ConsolidateAsync_ConfidenceOutOfRange_IsClamped(double raw, double expected)
+    {
+        var (svc, _, chat) = Build();
+        await svc.RecordInteractionAsync("CUST-1", "test", "ok", "x", ct: TestContext.Current.CancellationToken);
+        chat.Reply = $"{{\"summary\":\"x\",\"preferredTone\":\"neutral\"," +
+                     $"\"traits\":[{{\"claim\":\"X\",\"confidence\":{raw.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}]}}";
+
+        var p = await svc.ConsolidateAsync("CUST-1", TestContext.Current.CancellationToken);
+
+        p!.Traits[0].Confidence.Should().Be(expected);
+    }
+
+    /// <summary>Boş claim'li girişler sessizce atlanır — LLM'in ürettiği çöpü profile taşımaz.</summary>
+    [Fact]
+    public async Task ConsolidateAsync_TraitWithBlankClaim_IsSkipped()
+    {
+        var (svc, _, chat) = Build();
+        await svc.RecordInteractionAsync("CUST-1", "test", "ok", "x", ct: TestContext.Current.CancellationToken);
+        chat.Reply = "{\"summary\":\"x\",\"preferredTone\":\"neutral\"," +
+                     "\"traits\":[{\"claim\":\"\",\"confidence\":0.5},{\"claim\":\"Geçerli\",\"confidence\":0.5}]}";
+
+        var p = await svc.ConsolidateAsync("CUST-1", TestContext.Current.CancellationToken);
+
+        p!.Traits.Should().HaveCount(1, "boş claim atlanmalı, yalnızca geçerli olan kalmalı");
+        p.Traits[0].Claim.Should().Be("Geçerli");
+    }
+
+    [Fact]
+    public async Task ConsolidateAsync_MoreThanMaxTraits_IsCapped()
+    {
+        var (svc, _, chat) = Build();
+        await svc.RecordInteractionAsync("CUST-1", "test", "ok", "x", ct: TestContext.Current.CancellationToken);
+        var traits = string.Join(",", Enumerable.Range(1, 8).Select(i => $"{{\"claim\":\"T{i}\",\"confidence\":0.5}}"));
+        chat.Reply = $"{{\"summary\":\"x\",\"preferredTone\":\"neutral\",\"traits\":[{traits}]}}";
+
+        var p = await svc.ConsolidateAsync("CUST-1", TestContext.Current.CancellationToken);
+
+        p!.Traits.Should().HaveCount(5);
+    }
+
+    /// <summary>traits alanı hiç yoksa (eski/uyumsuz LLM çıktısı) boş liste döner, çökmez.</summary>
+    [Fact]
+    public async Task ConsolidateAsync_NoTraitsField_ReturnsEmptyList()
+    {
+        var (svc, _, chat) = Build();
+        await svc.RecordInteractionAsync("CUST-1", "test", "ok", "x", ct: TestContext.Current.CancellationToken);
+        chat.Reply = "{\"summary\":\"x\",\"preferredTone\":\"neutral\"}";
+
+        var p = await svc.ConsolidateAsync("CUST-1", TestContext.Current.CancellationToken);
+
+        p!.Traits.Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData("merhaba ne yapıyorsun", true)]
     [InlineData("Hello there", false)]

@@ -33,6 +33,14 @@ public sealed class CustomerProfile
     /// <summary>LLM tarafından üretilmiş 1-2 cümlelik kısa profil özeti.</summary>
     public string? Summary { get; set; }
 
+    /// <summary>
+    /// Müşteri davranışından çıkarılan, confidence+source taşıyan iddialar (ör. "fiyat
+    /// hassasiyeti yüksek"). <see cref="Summary"/>'den farkı: bu bir olgu değil bir YORUMDUR —
+    /// bkz. <see cref="InferredTrait"/>. Her <c>ConsolidateAsync</c> çağrısında baştan üretilir
+    /// (birikmez); bkz. o metodun XML dokümanı.
+    /// </summary>
+    public List<InferredTrait> Traits { get; set; } = new();
+
     /// <summary>Admin'in elle eklediği serbest not (override).</summary>
     public string? AdminNote { get; set; }
 

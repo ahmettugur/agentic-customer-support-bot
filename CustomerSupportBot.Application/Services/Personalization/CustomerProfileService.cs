@@ -34,6 +34,7 @@ public sealed partial class CustomerProfileService : ICustomerProfileService
     private const int MaxProductInterests = 10;
     private const int MaxRecentRatings = 10;
     private const int MaxIntents = 20;
+    private const int MaxTraits = 5;
 
     private readonly ICustomerProfileStore _store;
     private readonly IGeneralChatClient _chatClient;
@@ -133,6 +134,20 @@ public sealed partial class CustomerProfileService : ICustomerProfileService
     /// <summary>
     /// LLM ile profilin "Summary" + "PreferredTone" alanlarını günceller.
     /// </summary>
+    /// <summary>
+    /// Admin tetikler; profili LLM ile özetler ve <see cref="CustomerProfile.Traits"/>'i
+    /// yeniden üretir.
+    ///
+    /// <para>
+    /// <b>Traits BİRİKMEZ — her çağrıda baştan üretilir.</b> Bilinçli tasarım kararı: profil
+    /// artımlı delta değil, birikmiş SAYAÇLARDAN (<c>IntentFrequency</c>, <c>ProductInterests</c>,
+    /// <c>RecentRatings</c>) oluşuyor — <c>BuildConsolidatePrompt</c> her seferinde TÜM birikmiş
+    /// veriyi LLM'e veriyor. Trait'leri biriktirseydik, 6 ay önce doğru olup artık geçersiz olan
+    /// bir iddia (ör. "yeni müşteri, az veri var") sonsuza kadar profilde kalırdı ve yenileriyle
+    /// çelişirdi. Bunun bedeli: iki consolidate arasında trait sayısı artmaz, önceki traits'in
+    /// <c>Confidence</c>'ı ne olursa olsun sıfırlanır.
+    /// </para>
+    /// </summary>
     public async Task<CustomerProfile?> ConsolidateAsync(string customerId, CancellationToken ct = default)
     {
         var profile = _store.Get(customerId);
@@ -146,8 +161,14 @@ public sealed partial class CustomerProfileService : ICustomerProfileService
             {
                 new(ConversationRoles.System,
                     "Sen müşteri profili özetleyicisisin. SADECE geçerli JSON dön: " +
-                    "{\"summary\":\"...\",\"preferredTone\":\"formal|casual|concise|verbose|neutral\"}. " +
-                    "Summary 1-2 cümle, Türkçe."),
+                    "{\"summary\":\"...\",\"preferredTone\":\"formal|casual|concise|verbose|neutral\"," +
+                    "\"traits\":[{\"claim\":\"...\",\"confidence\":0.0}]}. " +
+                    "Summary 1-2 cümle, Türkçe. " +
+                    "traits: müşteri davranışından ÇIKARDIĞIN gözlemler (ör. \"Fiyat hassasiyeti yüksek\", " +
+                    "\"Teknik detaylara önem veriyor\") — en fazla 5 tane, yalnızca veriden gerçekten " +
+                    "desteklenenleri ekle, veri yetersizse boş dizi dön. confidence 0.0-1.0 arası, " +
+                    "verinin ne kadar güçlü desteklediğine göre DÜRÜST bir tahmin — az veri varsa düşük " +
+                    "confidence ver, uydurma."),
                 new(ConversationRoles.User, prompt)
             };
             var responseText = await _chatClient.CompleteAsync(messages, ct);
@@ -164,6 +185,7 @@ public sealed partial class CustomerProfileService : ICustomerProfileService
                 profile.Summary = s.GetString();
             if (doc.RootElement.TryGetProperty("preferredTone", out var t))
                 profile.PreferredTone = t.GetString() ?? profile.PreferredTone;
+            profile.Traits = ParseTraits(doc.RootElement, customerId, profile.TotalTurns);
 
             profile.LastConsolidatedAt = DateTime.UtcNow;
             _store.Upsert(profile);
@@ -202,6 +224,47 @@ public sealed partial class CustomerProfileService : ICustomerProfileService
         sb.AppendLine();
         sb.AppendLine("Bu bilgilere bakarak müşteri için 1-2 cümlelik kısa bir profil özeti ve uygun ton önerisi üret. JSON dön.");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// LLM'in <c>traits</c> dizisini <see cref="InferredTrait"/> listesine çevirir.
+    /// Savunmacı: boş/eksik <c>claim</c> atlanır, <c>confidence</c> [0,1] aralığına
+    /// kırpılır (LLM 0-1 dışı veya string döndürebilir), <see cref="MaxTraits"/> ile sınırlanır.
+    /// LLM çıktısı güvenilmez veri olarak ele alınır — burada çökmek, profilin geri kalanının
+    /// (Summary/PreferredTone zaten yazılmış) kaybolmasına yol açmamalı.
+    /// </summary>
+    internal static List<InferredTrait> ParseTraits(JsonElement root, string customerId, int totalTurns)
+    {
+        var result = new List<InferredTrait>();
+        if (!root.TryGetProperty("traits", out var traitsEl) || traitsEl.ValueKind != JsonValueKind.Array)
+            return result;
+
+        var source = $"consolidate:{customerId}@turn{totalTurns}";
+        var now = DateTime.UtcNow;
+
+        foreach (var t in traitsEl.EnumerateArray())
+        {
+            if (result.Count >= MaxTraits) break;
+            if (t.ValueKind != JsonValueKind.Object) continue;
+            if (!t.TryGetProperty("claim", out var claimEl) || claimEl.ValueKind != JsonValueKind.String)
+                continue;
+            var claim = claimEl.GetString();
+            if (string.IsNullOrWhiteSpace(claim)) continue;
+
+            double confidence = 0.5; // LLM confidence vermezse "belirsiz" — ne yüksek ne düşük.
+            if (t.TryGetProperty("confidence", out var confEl))
+            {
+                if (confEl.ValueKind == JsonValueKind.Number && confEl.TryGetDouble(out var c))
+                    confidence = c;
+                else if (confEl.ValueKind == JsonValueKind.String && double.TryParse(confEl.GetString(), out var cs))
+                    confidence = cs;
+            }
+            confidence = Math.Clamp(confidence, 0.0, 1.0);
+
+            result.Add(new InferredTrait(claim.Trim(), confidence, source, now));
+        }
+
+        return result;
     }
 
     internal static string? ExtractJson(string text)

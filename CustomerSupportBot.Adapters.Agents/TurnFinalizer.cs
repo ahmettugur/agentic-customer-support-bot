@@ -54,7 +54,7 @@ internal sealed class TurnFinalizer
     {
         await _approvalGate.ProcessPendingEscalationsAsync(trace, query, result);
         PopulateAgentVisitOutputs(trace, result);
-        WriteEpisodicMemorySafe(trace, query, result);
+        WriteEpisodicMemorySafe(trace, query, result, session?.State.AuthenticatedCustomerId);
         await UpdateCustomerProfileSafeAsync(session, trace, query, result);
 
         _traceStore.Complete(trace.TraceId,
@@ -101,7 +101,7 @@ internal sealed class TurnFinalizer
         }
     }
 
-    private void WriteEpisodicMemorySafe(ReasoningTrace trace, string query, string response)
+    private void WriteEpisodicMemorySafe(ReasoningTrace trace, string query, string response, string? customerId)
     {
         if (_semanticMemory is null || !_semanticMemory.Enabled) return;
         if (string.IsNullOrWhiteSpace(query) || string.IsNullOrWhiteSpace(response)) return;
@@ -116,7 +116,7 @@ internal sealed class TurnFinalizer
         {
             try
             {
-                await memory.WriteEpisodeAsync(sessionId, traceId, query, response, intent, rating: null);
+                await memory.WriteEpisodeAsync(sessionId, traceId, query, response, intent, rating: null, customerId);
             }
             catch (Exception ex)
             {

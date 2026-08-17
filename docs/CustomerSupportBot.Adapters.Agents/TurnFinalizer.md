@@ -40,7 +40,7 @@ Tur-sonu yan etkileri (`ApprovalGateService`, `ISemanticMemoryWriter`, `ICustome
 | --- | --- |
 | `FinalizeAsync(trace, session, query, result, terminationReason)` | Ana giriş noktası — eskalasyon, agent visit çıktıları, episodik bellek, müşteri profili, trace kapatma sırasıyla çağrılır. |
 | `PopulateAgentVisitOutputs(trace, finalResult)` (private static) | Boş `AgentVisit.Output` alanlarını ajan türüne göre doldurur (1500 karakterle kırpılır). |
-| `WriteEpisodicMemorySafe(trace, query, response)` (private) | Fire-and-forget episodik bellek yazımı. |
+| `WriteEpisodicMemorySafe(trace, query, response, customerId)` (private) | Fire-and-forget episodik bellek yazımı. `customerId` (`session?.State.AuthenticatedCustomerId`) doldurulur — episode retrieval'ın (bkz. [ContextProviders.md](../CustomerSupportBot.Application/Providers/ContextProviders.md#semanticmemorycontextprovider--episode-retrieval-canlandırıldı)) bu müşteriye ait geçmiş turları bulabilmesi buna dayanır. |
 | `UpdateCustomerProfileSafeAsync(session, trace, query, response)` (private) | Best-effort müşteri profili güncellemesi. |
 
 ## Bağımlılıklar

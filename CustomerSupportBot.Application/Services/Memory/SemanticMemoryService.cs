@@ -91,7 +91,7 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
         if (!Enabled || string.IsNullOrWhiteSpace(query)) return Array.Empty<MemorySearchHit>();
 
         var vec = await _embedder.EmbedAsync(query, ct);
-        return await SearchByVectorAsync(kind, vec, topK, minScore, ct);
+        return await SearchByVectorAsync(kind, vec, topK, minScore, ct: ct);
     }
 
     /// <summary>
@@ -107,6 +107,7 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
     /// </summary>
     public async Task<IReadOnlyList<MemorySearchHit>> SearchByVectorAsync(
         MemoryKind kind, float[] queryVector, int? topK = null, float? minScore = null,
+        IReadOnlyDictionary<string, string>? tagFilter = null,
         CancellationToken ct = default)
     {
         if (!Enabled || queryVector.Length == 0) return Array.Empty<MemorySearchHit>();
@@ -115,7 +116,7 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
             CollectionFor(kind), queryVector,
             topK ?? _options.Retrieval.TopK,
             minScore ?? _options.Retrieval.MinScore,
-            tagFilter: null,
+            tagFilter: tagFilter,
             ct: ct);
     }
 
@@ -125,7 +126,8 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
 
     /// <summary>Bir trace tamamlandığında çağrılır — episodik bellek yazımı.</summary>
     public Task WriteEpisodeAsync(string sessionId, string traceId, string userQuery,
-        string finalResponse, string? intent, int? rating, CancellationToken ct = default)
+        string finalResponse, string? intent, int? rating, string? customerId = null,
+        CancellationToken ct = default)
     {
         if (!Enabled || string.IsNullOrWhiteSpace(userQuery)) return Task.CompletedTask;
 
@@ -144,6 +146,10 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
         };
         if (!string.IsNullOrEmpty(intent)) doc.Tags["intent"] = intent;
         if (rating.HasValue) doc.Tags["rating"] = rating.Value.ToString();
+        // customerId tag olarak yazılır — retrieval'ın sessionId sınırını aşıp aynı müşterinin
+        // FARKLI oturumlardaki geçmişini de bulabilmesi için. Anonim turlarda boş kalır; o
+        // episode yalnızca sessionId ile bulunabilir olarak kalmaya devam eder.
+        if (!string.IsNullOrWhiteSpace(customerId)) doc.Tags["customerId"] = customerId;
         return UpsertAsync(doc, ct);
     }
 

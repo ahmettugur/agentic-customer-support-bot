@@ -14,6 +14,8 @@ public sealed class CustomerProfileEntity
     public string ProductInterestsJson { get; set; } = "[]";
     public string RecentRatingsJson { get; set; } = "[]";
 
+    public string TraitsJson { get; set; } = "[]";
+
     public string? Summary { get; set; }
     public string? AdminNote { get; set; }
     public int TotalSessions { get; set; }

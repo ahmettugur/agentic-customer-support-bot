@@ -1154,6 +1154,11 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("recent_ratings");
 
+                    b.Property<string>("TraitsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("traits");
+
                     b.Property<string>("Summary")
                         .HasColumnType("text")
                         .HasColumnName("summary");
