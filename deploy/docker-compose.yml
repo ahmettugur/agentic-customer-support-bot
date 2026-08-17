@@ -41,9 +41,9 @@ services:
       - "7334:6334"
     volumes:
       # Verileri kalıcı tutmak için
-      - qdrant_storage:/qdrant/storage:z
+      - qdrant_storage:/qdrant/storage
       # Snapshot'lar için
-      - qdrant_snapshots:/qdrant/snapshots:z
+      - qdrant_snapshots:/qdrant/snapshots
     environment:
       # Servis ayarları
       QDRANT__SERVICE__HTTP_PORT: 6333
