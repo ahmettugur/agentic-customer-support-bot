@@ -19,9 +19,9 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.11" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-    <PackageReference Include="Testcontainers.PostgreSql" Version="4.13.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -35,20 +35,20 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.v3" Version="4.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\CustomerSupportBot.Domain\CustomerSupportBot.Domain.csproj" />
-    <ProjectReference Include="..\CustomerSupportBot.Application\CustomerSupportBot.Application.csproj" />
-    <ProjectReference Include="..\CustomerSupportBot.Api\CustomerSupportBot.Api.csproj" />
-    <ProjectReference Include="..\CustomerSupportBot.Adapters.Agents\CustomerSupportBot.Adapters.Agents.csproj" />
-    <ProjectReference Include="..\CustomerSupportBot.Adapters.Persistence\CustomerSupportBot.Adapters.Persistence.csproj" />
-    <ProjectReference Include="..\CustomerSupportBot.Adapters.Telemetry\CustomerSupportBot.Adapters.Telemetry.csproj" />
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Domain\CustomerSupportBot.Domain.csproj" />
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Application\CustomerSupportBot.Application.csproj" />
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Api\CustomerSupportBot.Api.csproj" />
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Adapters.Agents\CustomerSupportBot.Adapters.Agents.csproj" />
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Adapters.Persistence\CustomerSupportBot.Adapters.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Adapters.Telemetry\CustomerSupportBot.Adapters.Telemetry.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\CustomerSupportBot.Api\Prompts\**\*.md" Link="Prompts\%(RecursiveDir)%(FileName)%(Extension)">
+    <None Include="..\..\src\CustomerSupportBot.Api\Prompts\**\*.md" Link="Prompts\%(RecursiveDir)%(FileName)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

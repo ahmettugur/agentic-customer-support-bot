@@ -164,12 +164,12 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 ### Gereksinimler
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- **Docker** — PostgreSQL + Qdrant container'ları için (`docker compose up -d`)
+- **Docker** — PostgreSQL + Qdrant container'ları için (`docker compose -f deploy/docker-compose.yml up -d`)
 - **OpenAI API key** (chat + embedding) veya Azure OpenAI
 
 ### Yapılandırma
 
-`CustomerSupportBot.Api/appsettings.json` dosyasını düzenlleyin:
+`src/CustomerSupportBot.Api/appsettings.json` dosyasını düzenlleyin:
 
 ```json
 {
@@ -185,10 +185,10 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 ### Çalıştırma
 
 ```bash
-dotnet run --project CustomerSupportBot.Api
+dotnet run --project src/CustomerSupportBot.Api
 ```
 
-API `http://localhost:5021` adresinde başlar ve chat arayüzü `CustomerSupportBot.Api/wwwroot/index.html` üzerinden sunulur.
+API `http://localhost:5021` adresinde başlar ve chat arayüzü `src/CustomerSupportBot.Api/wwwroot/index.html` üzerinden sunulur.
 
 ### Hızlı API Testi
 
@@ -317,54 +317,65 @@ Proje **hexagonal (ports & adapters) mimarisi** ile 7 katmana ayrılmıştır:
 
 ```
 agentic-customer-support-bot/
-├── CustomerSupportBot.Domain/                # Domain modelleri + saf iş kuralları
-│   ├── Model/                               # Entity POCO'lar, VO'lar, senaryo modelleri
-│   └── Services/                            # Domain servisleri (IdExtractor, vb.)
+├── src/
+│   ├── CustomerSupportBot.Domain/            # Domain modelleri + saf iş kuralları
+│   │   ├── Model/                           # Entity POCO'lar, VO'lar, senaryo modelleri
+│   │   └── Services/                        # Domain servisleri (IdExtractor, vb.)
+│   │
+│   ├── CustomerSupportBot.Application/       # Port tanımları + uygulama servisleri
+│   │   ├── Ports/
+│   │   │   ├── Driving/                     # CustomerSupportToolsService, vb.
+│   │   │   └── Driven/                      # ISessionManager, IPromptRepository, IMessageBusPort, ...
+│   │   ├── Services/                        # ReasoningService, EntityVerifier, ContextPipeline, ...
+│   │   └── DependencyInjection/
+│   │
+│   ├── CustomerSupportBot.Adapters.Agents/   # MAF ajan orkestrasyon adaptörü
+│   │   ├── CustomerSupportTeam.cs           # 7 MAF ajanı + workflow builder
+│   │   ├── CustomerSupportChatManager.cs    # GroupChatManager (seçim + sonlandırma)
+│   │   ├── ApprovalGateService.cs
+│   │   └── Routing/
+│   │
+│   ├── CustomerSupportBot.Adapters.Persistence/ # Kalıcı veri adaptörleri
+│   │   ├── EfCore/                          # CustomerSupportDbContext + migrations
+│   │   ├── Postgres/                        # PostgresSessionManager, Approvals, vb.
+│   │   ├── InMemory/                        # InMemorySessionManager, demo katalog adaptörleri
+│   │   ├── FileSystem/                      # FileSystemPromptRepository + PromptOptions
+│   │   └── DependencyInjection/
+│   │
+│   ├── CustomerSupportBot.Adapters.Redis/    # Redis adaptörleri (locking, pub/sub)
+│   │   ├── Locking/                         # RedisLockAdapter
+│   │   ├── Messaging/                       # RedisMessageBusAdapter (IMessageBusPort)
+│   │   └── DependencyInjection/
+│   │
+│   ├── CustomerSupportBot.Adapters.Telemetry/ # OpenTelemetry + maliyet telemetrisi
+│   │   ├── Chat/
+│   │   ├── OpenTelemetry/
+│   │   └── DependencyInjection/
+│   │
+│   ├── CustomerSupportBot.Api/                # Composition root (ASP.NET Core Minimal API)
+│   │   ├── Program.cs                       # DI + endpoint mapping
+│   │   ├── appsettings.json                 # AI, WorkflowGuards, HITL, Persistence config
+│   │   ├── Endpoints/                       # ChatEndpoints, AdminEndpoints, TraceEndpoints, ...
+│   │   ├── Prompts/                         # Ajan + servis prompt MD dosyaları
+│   │   │   ├── agents/                      # planning-agent.md, product-inquiry-agent.md, ...
+│   │   │   └── services/                    # reasoning-system.md, entity-hints.md, ...
+│   │   └── KnowledgeBase/                   # RAG dökümanı: iade politikası, kargo, SSS
+│   │
+│   └── CustomerSupportBot.Web/                # Blazor WASM admin paneli + chat arayüzü
 │
-├── CustomerSupportBot.Application/           # Port tanımları + uygulama servisleri
-│   ├── Ports/
-│   │   ├── Driving/                         # CustomerSupportToolsService, vb.
-│   │   └── Driven/                          # ISessionManager, IPromptRepository, IMessageBusPort, ...
-│   ├── Services/                            # ReasoningService, EntityVerifier, ContextPipeline, ...
-│   └── DependencyInjection/
+├── tests/
+│   └── CustomerSupportBot.Api.Tests/          # Entegrasyon + değerlendirme testleri
+│       ├── Evaluation/
+│       ├── Endpoints/
+│       └── ...
 │
-├── CustomerSupportBot.Adapters.Agents/       # MAF ajan orkestrasyon adaptörü
-│   ├── CustomerSupportTeam.cs               # 7 MAF ajanı + workflow builder
-│   ├── CustomerSupportChatManager.cs        # GroupChatManager (seçim + sonlandırma)
-│   ├── ApprovalGateService.cs
-│   └── Routing/
+├── deploy/
+│   ├── docker-compose.yml                     # Postgres, Redis, Qdrant, Jaeger, OTel, sandbox
+│   ├── jaeger-v2-config.yaml
+│   └── otel-collector-config.yaml
 │
-├── CustomerSupportBot.Adapters.Persistence/ # Kalıcı veri adaptörleri
-│   ├── EfCore/                              # CustomerSupportDbContext + migrations
-│   ├── Postgres/                            # PostgresSessionManager, Approvals, vb.
-│   ├── InMemory/                            # InMemorySessionManager, demo katalog adaptörleri
-│   ├── FileSystem/                          # FileSystemPromptRepository + PromptOptions
-│   └── DependencyInjection/
-│
-├── CustomerSupportBot.Adapters.Redis/        # Redis adaptörleri (locking, pub/sub)
-│   ├── Locking/                             # RedisLockAdapter
-│   ├── Messaging/                           # RedisMessageBusAdapter (IMessageBusPort)
-│   └── DependencyInjection/
-│
-├── CustomerSupportBot.Adapters.Telemetry/    # OpenTelemetry + maliyet telemetrisi
-│   ├── Chat/
-│   ├── OpenTelemetry/
-│   └── DependencyInjection/
-│
-├── CustomerSupportBot.Api/                   # Composition root (ASP.NET Core Minimal API)
-│   ├── Program.cs                           # DI + endpoint mapping
-│   ├── appsettings.json                     # AI, WorkflowGuards, HITL, Persistence config
-│   ├── Endpoints/                           # ChatEndpoints, AdminEndpoints, TraceEndpoints, ...
-│   ├── Prompts/                             # Ajan + servis prompt MD dosyaları
-│   │   ├── agents/                          # planning-agent.md, product-inquiry-agent.md, ...
-│   │   └── services/                        # reasoning-system.md, entity-hints.md, ...
-│   ├── KnowledgeBase/                       # RAG dökümanı: iade politikası, kargo, SSS
-│   └── (arayüz ayrı projede: CustomerSupportBot.Web — Blazor WASM)
-│
-└── CustomerSupportBot.Api.Tests/             # Entegrasyon + değerlendirme testleri
-    ├── Evaluation/
-    ├── Endpoints/
-    └── ...
+├── docs/                                       # Katman/servis bazlı teknik dokümantasyon
+└── CustomerSupport.slnx
 ```
 ---
 

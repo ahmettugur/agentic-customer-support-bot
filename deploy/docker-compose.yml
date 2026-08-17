@@ -173,8 +173,8 @@ services:
     ports:
       - "8100:8100"
     volumes:
-      # Sandbox API kodu ve geçici dosya yükleme dizini
-      - ./sandbox:/sandbox
+      # Sandbox API kodu ve geçici dosya yükleme dizini (repo kökü — compose.yml deploy/ altında)
+      - ../sandbox:/sandbox
     environment:
       # CPU/bellek limitlerini uygulama seviyesinde bildir
       - MAX_EXECUTION_SECONDS=30

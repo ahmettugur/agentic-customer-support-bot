@@ -127,7 +127,7 @@ public class PromptContractTests
         // Kod tarafı: WorkflowMessageBuilder.BuildReasoningSummaryHint aynı etiketi üretir.
         // Metot instance olduğu ve tüm bağımlılıkları gerektirdiği için (Docker'lı fixture)
         // burada kaynak dosya üzerinden doğrulanır — amaç iki ucun senkronunu korumak.
-        SourceOf("CustomerSupportBot.Adapters.Agents/WorkflowMessageBuilder.cs")
+        SourceOf("src/CustomerSupportBot.Adapters.Agents/WorkflowMessageBuilder.cs")
             .Should().Contain(label,
                 "BuildReasoningSummaryHint bu etiketi üretmeli");
     }
@@ -163,7 +163,7 @@ public class PromptContractTests
         const string jsonFieldName = "pendingApproval";
 
         // Kod ucu: trace işleyicisi bu adı okumalı.
-        SourceOf("CustomerSupportBot.Adapters.Agents/WorkflowTraceEventProcessor.cs")
+        SourceOf("src/CustomerSupportBot.Adapters.Agents/WorkflowTraceEventProcessor.cs")
             .Should().Contain($"\"{jsonFieldName}\"",
                 "EnsureSideEffectToolCompletion bu alanı JSON adıyla okur");
 
@@ -209,7 +209,7 @@ public class PromptContractTests
                  })
         {
             prompt.Should().Contain(field, $"response-agent.md '{field}' alanını istemeli");
-            SourceOf("CustomerSupportBot.Domain/Services/SelfCritiqueParser.cs")
+            SourceOf("src/CustomerSupportBot.Domain/Services/SelfCritiqueParser.cs")
                 .Should().Contain($"\"{field}\"", $"SelfCritiqueParser '{field}' alanını okumalı");
         }
 
@@ -224,13 +224,13 @@ public class PromptContractTests
         // Bu blok uzun süre üretilip hiç okunmadı (yalnızca çıktıdan siliniyordu) ve prompt
         // "sistem tarafından okunur" diye yanlış beyanda bulunuyordu. Tüketim zincirinin
         // (parse → trace → LessonMiner) kopması hâlinde prompt yeniden yalan söylemeye başlar.
-        SourceOf("CustomerSupportBot.Adapters.Agents/WorkflowRunner.cs")
+        SourceOf("src/CustomerSupportBot.Adapters.Agents/WorkflowRunner.cs")
             .Should().Contain("SelfCritiqueParser.TryParse", "ham çıktıdan parse edilmeli");
-        SourceOf("CustomerSupportBot.Domain/Model/ReasoningTrace.cs")
+        SourceOf("src/CustomerSupportBot.Domain/Model/ReasoningTrace.cs")
             .Should().Contain("SelfCritique? SelfCritique", "trace'e yazılmalı");
 
         // Yorum satırında geçmesi YETMEZ — aday seçimini gerçekten sürüklemeli.
-        SourceOf("CustomerSupportBot.Application/Services/Improvement/LessonMiner.cs")
+        SourceOf("src/CustomerSupportBot.Application/Services/Improvement/LessonMiner.cs")
             .Should().Contain("SelfCritique?.IsConcerning",
                 "LessonMiner aday seçiminde bu sinyali kullanmalı; yalnızca yorumda anılması yeterli değil");
     }
@@ -319,7 +319,7 @@ public class PromptContractTests
         // appsettings'teki IntentSkillMap anahtarları ReasoningResult.Intent ile tam-string
         // karşılaştırılır (SkillsBasedRouter.ExtractRequiredSkills). Sözlükte olmayan bir
         // anahtar ölü konfigürasyondur — o skill hiçbir zaman gerekli sayılmaz.
-        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("CustomerSupportBot.Api/appsettings.json")));
+        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/appsettings.json")));
 
         var keys = settings.RootElement
             .GetProperty("Routing").GetProperty("IntentSkillMap")
@@ -341,7 +341,7 @@ public class PromptContractTests
         // talimat verirse LLM hiç gelmeyecek bir sinyali beklemeye devam eder.
         const string marker = "COMPOUND QUERY";
 
-        SourceOf("CustomerSupportBot.Adapters.Agents/WorkflowMessageBuilder.cs")
+        SourceOf("src/CustomerSupportBot.Adapters.Agents/WorkflowMessageBuilder.cs")
             .Should().NotContain($"\"{marker}", "kod bu hint metnini artık üretmiyor");
         Prompt("agents/planning-agent").Should().NotContain(marker,
             "planning-agent.md üretilmeyen bir hint'e koşullu talimat bağlamamalı");
@@ -391,7 +391,7 @@ public class PromptContractTests
         // İlk yazımda TimeoutSeconds için sınıf varsayılanı (60) yazılmıştı; appsettings'teki
         // gerçek değer 180. Bu test o karışıklığı tekrarlanamaz kılar.
         var doc = SourceOf("docs/agent-architecture.html");
-        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("CustomerSupportBot.Api/appsettings.json")));
+        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/appsettings.json")));
 
         var guards = settings.RootElement.GetProperty("WorkflowGuards");
         foreach (var key in new[] { "TimeoutSeconds", "MaxIterations", "MaxHandoffsPerAgent", "MaxDuplicateToolCalls" })
@@ -412,7 +412,7 @@ public class PromptContractTests
         // SLA eşikleri doküman tablosunda sayı olarak yazılı; config değişirse sunumdaki
         // rakam yanlışa döner. Guard değerleriyle aynı sapma sınıfı.
         var doc = SourceOf("docs/agent-architecture.html");
-        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("CustomerSupportBot.Api/appsettings.json")));
+        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/appsettings.json")));
         var sla = settings.RootElement.GetProperty("Sla");
 
         foreach (var (group, key) in new[]

@@ -31,7 +31,7 @@ public class AppSettingsConfigTests
         // onay admin karar verene ya da ApprovalOptions.StalePendingHours (72 saat) aşılana
         // kadar kuyrukta kalmalı. Sla.Approvals.OnBreach=AutoReject, bunu 60 saniyeye
         // indirip tasarımı geçersiz kılar.
-        var json = File.ReadAllText(RepoPath("CustomerSupportBot.Api/appsettings.json"));
+        var json = File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/appsettings.json"));
         using var doc = JsonDocument.Parse(json);
         var onBreach = doc.RootElement
             .GetProperty("Sla").GetProperty("Approvals").GetProperty("OnBreach").GetString();
@@ -44,7 +44,7 @@ public class AppSettingsConfigTests
     [Fact]
     public void SlaApprovalsOnBreach_DevelopmentOverride_DoesNotReintroduceAutoReject()
     {
-        var devPath = RepoPathIfExists("CustomerSupportBot.Api/appsettings.Development.json");
+        var devPath = RepoPathIfExists("src/CustomerSupportBot.Api/appsettings.Development.json");
         if (devPath is null) return; // Bu makinede dosya yok (gitignored) — kontrol edilecek bir şey yok.
 
         using var doc = JsonDocument.Parse(File.ReadAllText(devPath));

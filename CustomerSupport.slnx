@@ -1,22 +1,22 @@
 <Solution>
   <Folder Name="/Core/">
-    <Project Path="CustomerSupportBot.Domain/CustomerSupportBot.Domain.csproj" />
+    <Project Path="src/CustomerSupportBot.Domain/CustomerSupportBot.Domain.csproj" />
   </Folder>
   <Folder Name="/Application/">
-    <Project Path="CustomerSupportBot.Application/CustomerSupportBot.Application.csproj" />
+    <Project Path="src/CustomerSupportBot.Application/CustomerSupportBot.Application.csproj" />
   </Folder>
     <Folder Name="/Adapters/In/">
-      <Project Path="CustomerSupportBot.Api/CustomerSupportBot.Api.csproj" />
-      <Project Path="CustomerSupportBot.Web/CustomerSupportBot.Web.csproj" />
+      <Project Path="src/CustomerSupportBot.Api/CustomerSupportBot.Api.csproj" />
+      <Project Path="src/CustomerSupportBot.Web/CustomerSupportBot.Web.csproj" />
     </Folder>
     <Folder Name="/Adapters/Out/">
-      <Project Path="CustomerSupportBot.Adapters.AI/CustomerSupportBot.Adapters.AI.csproj" />
-      <Project Path="CustomerSupportBot.Adapters.Agents/CustomerSupportBot.Adapters.Agents.csproj" />
-      <Project Path="CustomerSupportBot.Adapters.Persistence/CustomerSupportBot.Adapters.Persistence.csproj" />
-      <Project Path="CustomerSupportBot.Adapters.Redis/CustomerSupportBot.Adapters.Redis.csproj" />
-      <Project Path="CustomerSupportBot.Adapters.Telemetry/CustomerSupportBot.Adapters.Telemetry.csproj" />
+      <Project Path="src/CustomerSupportBot.Adapters.AI/CustomerSupportBot.Adapters.AI.csproj" />
+      <Project Path="src/CustomerSupportBot.Adapters.Agents/CustomerSupportBot.Adapters.Agents.csproj" />
+      <Project Path="src/CustomerSupportBot.Adapters.Persistence/CustomerSupportBot.Adapters.Persistence.csproj" />
+      <Project Path="src/CustomerSupportBot.Adapters.Redis/CustomerSupportBot.Adapters.Redis.csproj" />
+      <Project Path="src/CustomerSupportBot.Adapters.Telemetry/CustomerSupportBot.Adapters.Telemetry.csproj" />
     </Folder>
   <Folder Name="/Tests/">
-    <Project Path="CustomerSupportBot.Api.Tests/CustomerSupportBot.Api.Tests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Api.Tests/CustomerSupportBot.Api.Tests.csproj" />
   </Folder>
 </Solution>
