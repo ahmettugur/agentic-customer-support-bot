@@ -15,8 +15,10 @@ CustomerSupportBot.Api/
 ├── Program.cs                          ← Bootstrap, middleware, DI orchestration
 ├── AssemblyInfo.cs                     ← [InternalsVisibleTo("CustomerSupportBot.Api.Tests")]
 ├── PortAliases.cs                      ← Global usings
-├── Endpoints/                          ← 16 endpoint dosyası (Minimal API)
+├── Endpoints/                          ← 17 endpoint dosyası (Minimal API)
 │   ├── AuthEndpoints.cs
+│   ├── A2AEndpoints.cs                 ← /a2a/{product,order,complaint} — dış sistemlere açık
+│   ├── A2AAuthEndpoints.cs             ← /auth/a2a/token-exchange
 │   ├── ChatEndpoints.cs                ← /chat, /chat/stream (SSE)
 │   ├── RealtimeEndpoints.cs            ← /chat/realtime (WS)
 │   ├── SessionEndpoints.cs
@@ -66,7 +68,7 @@ CustomerSupportBot.Api/
 | Doküman | Kapsam |
 |---|---|
 | [Program.md](Program.md) | Program.cs — DI sıralaması, middleware order, HITL guard |
-| [Extensions.md](Extensions.md) | 7 DI extension dosyası |
+| [Extensions.md](Extensions.md) | 9 DI extension dosyası (A2AServicesExtensions dahil) |
 | [Infrastructure.md](Infrastructure.md) | DomainExceptionHandler, SseWriter, SseForwarder, WebSocketBrowserChannel, ScenarioLoader |
 | [Services.md](Services.md) | ChatEventOrchestrator (per-session SSE) |
 | [Workers.md](Workers.md) | KnowledgeBaseIngestor, SlaGuardianService |
@@ -74,6 +76,7 @@ CustomerSupportBot.Api/
 | [Endpoints-Auth.md](Endpoints-Auth.md) | /auth/login, /auth/refresh, /auth/logout |
 | [Endpoints-Chat.md](Endpoints-Chat.md) | /chat, /chat/stream, /chat/realtime, /sessions |
 | [Endpoints-Admin.md](Endpoints-Admin.md) | /approvals, /escalations, /chat-sessions, /agents, /agent/* |
+| [A2A.md](A2A.md) | **A2A (Agent2Agent)** — ürün/sipariş/şikayet ajanlarının dış sistemlere açılması, iki adımlı token, AgentCard keşfi, çok dilli entegrasyon |
 | [Endpoints-Observability.md](Endpoints-Observability.md) | /traces, /telemetry, /analytics, /sla, /eval |
 | [Endpoints-Improvements.md](Endpoints-Improvements.md) | /improvements, /memory, /customers |
 | [Prompts.md](Prompts.md) | LLM prompt template dizini |

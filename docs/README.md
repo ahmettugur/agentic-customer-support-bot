@@ -46,6 +46,7 @@ Bu dizin **Agentic Customer Support Bot** projesinin tüm teknik dokümantasyonu
 | [reasoning.md](reasoning.md) | Reasoning pipeline detayları |
 | [intelligence.md](intelligence.md) | AI/LLM entegrasyon detayları |
 | [security.md](security.md) | JWT, HITL güvenlik, poisoning koruması |
+| [Api/A2A.md](CustomerSupportBot.Api/A2A.md) | A2A (Agent2Agent) — ajanların dış sistemlere açılması, iki adımlı token, AgentCard keşfi, başka dillerden entegrasyon |
 | [deployment.md](deployment.md) | Deploy kılavuzu |
 | [developer-guide.md](developer-guide.md) | Geliştirici rehberi |
 | [debugging-chat.md](debugging-chat.md) | Chat debug rehberi |

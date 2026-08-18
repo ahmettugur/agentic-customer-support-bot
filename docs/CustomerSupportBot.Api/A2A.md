@@ -84,15 +84,43 @@ ile müşteri kimliğini kurar. Sohbet ve sesli kanallar aynı işi `ChatPortSer
 alır, kurulmazsa boş string olur, sorgular hiçbir şey bulamaz ve ajan "siparişiniz yok" der —
 yani altyapı eksiği **yanlış olguya** dönüşür. Claim yoksa istek reddedilir.
 
+### Kapsam İKİ yerde kurulur — akış ve akışsız farklı anlarda çalışır
+
+Kapsam yalnızca `using var scope = …; return await next(context);` deseniyle kurulsaydı **akış
+yolunda hiç kurulmamış olurdu**. Sebep, iki metodun ajanı farklı anlarda çalıştırması:
+
+| Metot | Ajan ne zaman çalışır |
+|---|---|
+| `SendMessage` | Filtre zinciri **dönmeden önce** — `SingleResponseAsync` sonucu `await` eder |
+| `SendStreamingMessage` | Filtre zinciri **tamamen döndükten sonra** — SSE gövdesi yazılırken, `JsonRpcStreamedResult.ExecuteAsync` içinde |
+
+İkincisinde `using` çoktan kapanmış, `AsyncLocal` sıfırlanmış olur. Bu yüzden filtre kapsamı
+**hem** `next(context)` çevresinde **hem de** dönen `IResult`'ı saran `ScopedResult` içinde kurar.
+
+> Bu teoriden değil, ölçümden çıktı: aynı token'la arka arkaya `SendMessage` doğru siparişi
+> döndürürken `SendStreamingMessage` *"kimlik doğrulama bilgisi iletilmedi"* diyordu. Sebep
+> `A2A.AspNetCore.dll`'in IL'i incelenerek doğrulandı — `StreamResponse` `IAsyncEnumerable`'ı
+> filtre içinde hiç enumerate etmiyor. Kapalı düşen bir hataydı (başka müşterinin verisi
+> sızmadı), ama ilan edilmemiş bir yüzeyde **yanlış olgu** üretiyordu.
+>
+> `A2AScopeTimingTests` iki yolu da kilitler ve iki ayrı mutasyonla doğrulandı: `ScopedResult`
+> kaldırılınca yalnızca akış testi, dış `using` kaldırılınca yalnızca akışsız test düşüyor.
+
 ## 5. Endpoint'ler
 
 | Endpoint | Token | Rate limit |
 |---|---|---|
 | `POST /auth/a2a/token-exchange` | `Partner` | `a2a` |
-| `POST /a2a/product` · `/a2a/product/message:send` | `Partner` | `a2a` |
-| `POST /a2a/order` · `/a2a/order/message:send` | `A2ASubject` | `a2a` |
-| `POST /a2a/complaint` · `/a2a/complaint/message:send` | `A2ASubject` | `a2a` |
+| `POST /a2a/product` · `/a2a/product/message:send` · `:stream` | `Partner` | `a2a` |
+| `POST /a2a/order` · `/a2a/order/message:send` · `:stream` | `A2ASubject` | `a2a` |
+| `POST /a2a/complaint` · `/a2a/complaint/message:send` · `:stream` | `A2ASubject` | `a2a` |
 | `GET /a2a/{agent}/.well-known/agent-card.json` | — (public) | — |
+
+JSON-RPC tarafında akış ayrı bir yol değil, aynı yola giden **ayrı bir metottur**
+(`SendStreamingMessage`); HTTP+JSON tarafında `message:stream` sonekiyle ayrılır. Yetki,
+rate-limit ve scope filtresi akış yollarında da **aynen** uygulanır — köprü bunları tek bir
+endpoint grubu olarak map ettiği için ayrıca yapılandırma gerekmez, ama bu, korumanın
+kendiliğinden geldiği anlamına gelmez: kapsamın akışta ayrıca kurulması gerekti (bölüm 4).
 
 ### İki transport
 
@@ -698,6 +726,7 @@ görülseydi müşteri numarası taranabilirdi (bkz. bölüm 3).
   - `A2AAgentCatalogTests` — salt-okunur bariyeri
   - `A2ATokenExchangeTests` — token değişimi iş kuralı
   - `ComplaintReadOnlyToolsTests` — sahiplik + enumeration koruması
-  - `A2AEndpointsTests` — yetki/transport zinciri
+  - `A2AEndpointsTests` — yetki/transport zinciri, kart yetenek ilanının davranışa bağlanması
+  - `A2AScopeTimingTests` — ambient kimliğin akış VE akışsız yolda kurulması (bölüm 4)
   - `A2ADisabledByDefaultTests` — kanal kapalıyken hiç yayınlanmaması
   - `A2AProtocolConformanceTests` — protokolün kendi istemcisiyle uçtan uca uyum

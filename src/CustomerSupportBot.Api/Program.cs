@@ -65,6 +65,14 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
 app.UseHttpsRedirection();
+// A2A red logu, yetkilendirmeyi SARMALAMAK zorunda: UseAuthorization başarısız politikada
+// kısa devre yapar ve kendisinden SONRA kayıtlı hiçbir middleware/endpoint filtresi çalışmaz.
+// Ölçüldü — sonrasına konduğunda 401/403 istekleri loglarda hiç görünmüyordu.
+if (a2aEnabled)
+{
+    app.UseA2ARejectionLogging();
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 

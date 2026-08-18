@@ -90,9 +90,7 @@ public sealed class A2ATokenProvider(
 
             var resp = await http.PostAsJsonAsync("/auth/a2a/token-exchange", new { customerId = CustomerId }, ct);
             if (!resp.IsSuccessStatusCode)
-                throw new InvalidOperationException(
-                    $"Token degisimi reddedildi ({(int)resp.StatusCode}). "
-                  + $"A2A:Partners altinda bu partner icin '{CustomerId}' izinli mi?");
+                throw new InvalidOperationException(await DescribeExchangeFailureAsync(resp, ct));
 
             var body = await resp.Content.ReadFromJsonAsync<JsonElement>(Json, ct);
             _subjectToken = body.GetProperty("accessToken").GetString()
@@ -108,6 +106,38 @@ public sealed class A2ATokenProvider(
             return _subjectToken;
         }
         finally { _lock.Release(); }
+    }
+
+    /// <summary>
+    /// Hata mesajini DURUM KODUNA gore ayirir.
+    ///
+    /// <para>
+    /// Eskiden her kod icin tek bir metin basiliyordu: "A2A:Partners altinda bu partner icin
+    /// '{musteri}' izinli mi?". Bu yalnizca 403 icin dogru bir tavsiyedir. Gercek bir kosuda
+    /// <b>401</b> alindi ve mesaj kullaniciyi yapilandirma izin listesine yonlendirdi — oysa
+    /// 401 "kimligin dogrulanamadi" demektir, izin listesiyle hic ilgisi yoktur. Yanlis yone
+    /// yonlendiren bir hata mesaji, hic mesaj olmamasindan daha maliyetlidir.
+    /// </para>
+    /// </summary>
+    private async Task<string> DescribeExchangeFailureAsync(HttpResponseMessage resp, CancellationToken ct)
+    {
+        var code = (int)resp.StatusCode;
+        var body = (await resp.Content.ReadAsStringAsync(ct)).Trim();
+        if (body.Length > 200) body = body[..200] + "...";
+
+        var hint = code switch
+        {
+            401 => "Partner token'i KABUL EDILMEDI. Token gecerli mi (suresi 60dk), API ayakta ve ayni "
+                 + "surec mi? Bu bir yetki sorunu DEGIL — izin listesiyle ilgisi yok.",
+            403 => $"Partner dogrulandi ama '{CustomerId}' icin YETKISI YOK. API tarafinda "
+                 + "A2A:Partners altinda bu partner icin bu musteri izinli mi?",
+            404 => "Uc bulunamadi. API'de /auth/a2a/token-exchange yayinlanmis mi?",
+            429 => "Hiz siniri asildi (A2A:RequestsPerMinute).",
+            _   => "Beklenmedik durum kodu."
+        };
+
+        return $"Token degisimi reddedildi ({code}). {hint}"
+             + (string.IsNullOrEmpty(body) ? "" : $" Sunucu yaniti: {body}");
     }
 
     private async Task<string> GetPartnerTokenAsyncNoLock(CancellationToken ct)

@@ -1,6 +1,8 @@
 // Api/Endpoints/A2AEndpoints.cs
 // A2A (Agent2Agent) ajanlarının dış sistemlere yayınlanması.
 
+using System.Diagnostics;
+using System.Security.Claims;
 using CustomerSupportBot.Adapters.Agents.A2A;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.A2A;
@@ -45,29 +47,31 @@ public static class A2AEndpoints
         // korumanın atlanması, diğerindeki tüm kontrolleri anlamsız kılardı.
         app.MapA2AJsonRpc(A2AAgentNames.Product, "/a2a/product")
             .RequireAuthorization("Partner")
-            .RequireRateLimiting("a2a");
+            .RequireRateLimiting("a2a")
+            .AddEndpointFilter(new A2ALogFilter("product"));
         app.MapA2AHttpJson(A2AAgentNames.Product, "/a2a/product")
             .RequireAuthorization("Partner")
-            .RequireRateLimiting("a2a");
+            .RequireRateLimiting("a2a")
+            .AddEndpointFilter(new A2ALogFilter("product"));
 
         app.MapA2AJsonRpc(A2AAgentNames.Order, "/a2a/order")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
-            .AddEndpointFilter(new A2ASubjectScopeFilter());
+            .AddEndpointFilter(new A2ASubjectScopeFilter("order"));
         app.MapA2AHttpJson(A2AAgentNames.Order, "/a2a/order")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
-            .AddEndpointFilter(new A2ASubjectScopeFilter());
+            .AddEndpointFilter(new A2ASubjectScopeFilter("order"));
 
         // Şikayet ajanı da müşteri verisi döndürür — sipariş ajanıyla AYNI kimlik şartına tabi.
         app.MapA2AJsonRpc(A2AAgentNames.Complaint, "/a2a/complaint")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
-            .AddEndpointFilter(new A2ASubjectScopeFilter());
+            .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"));
         app.MapA2AHttpJson(A2AAgentNames.Complaint, "/a2a/complaint")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
-            .AddEndpointFilter(new A2ASubjectScopeFilter());
+            .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"));
 
         // AgentCard — A2A'nın keşif yarısı. Kart olmadan çağıran, ajanın hangi yetenekleri
         // olduğunu ve hangi kimlik doğrulamasını beklediğini deneyerek öğrenmek zorunda kalır.
@@ -299,16 +303,34 @@ public static class A2AEndpoints
     /// etmek, yanlış "veri yok" cevabı üretmekten daha kötüdür.
     /// </para>
     /// </summary>
-    private sealed class A2ASubjectScopeFilter : IEndpointFilter
+    private sealed class A2ASubjectScopeFilter(string agent) : IEndpointFilter
     {
         public async ValueTask<object?> InvokeAsync(
             EndpointFilterInvocationContext context, EndpointFilterDelegate next)
         {
             var http = context.HttpContext;
+            var log = A2ALog.For(http);
+            var partnerId = A2ALog.PartnerOf(http);
+            var startedAt = Stopwatch.GetTimestamp();
+
+            // Bu isteği artık BİZ logluyoruz — middleware tekrar yazmasın.
+            http.Items[HandledKey] = true;
+
             var customerId = http.User.FindFirst("linked_customer_id")?.Value;
 
             if (string.IsNullOrWhiteSpace(customerId))
+            {
+                // Sebebi AÇIKÇA logla: dışarıya dönen 403 bilerek sessizdir (enumeration
+                // koruması, bkz. bölüm 3), ama operatörün gerçek sebebi görmesi gerekir —
+                // aksi halde "partner 403 alıyor" şikâyeti kör bir aramaya dönüşür.
+                log.LogWarning(
+                    "[A2A] {Agent} REDDEDILDI · partner={Partner} · sebep=linked_customer_id claim'i yok",
+                    agent, partnerId);
                 return Results.Forbid();
+            }
+
+            log.LogInformation("[A2A] {Agent} ← partner={Partner} customer={Customer}",
+                agent, partnerId, customerId);
 
             var accessor = http.RequestServices.GetRequiredService<IApprovalContextAccessor>();
 
@@ -334,17 +356,175 @@ public static class A2AEndpoints
                 sessionId: null, traceId: null, userQuery: null, customerId: customerId);
 
             var result = await next(context);
-            return result is IResult inner ? new ScopedResult(inner, accessor, customerId) : result;
+
+            if (result is IResult inner)
+                return new ScopedResult(inner, accessor, customerId, agent, partnerId, startedAt);
+
+            // IResult DEĞİLSE ExecuteAsync hiç çalışmaz — bitiş logu burada yazılmalı, yoksa
+            // çağrı "başladı" satırıyla yarım kalır ve loga bakan kişi asılı kaldı sanır.
+            A2ALog.Completed(http, agent, partnerId, customerId, startedAt);
+            return result;
         }
 
-        private sealed class ScopedResult(IResult inner, IApprovalContextAccessor accessor, string customerId) : IResult
+        /// <summary>
+        /// Scope'u yanıt YAZILIRKEN de ayakta tutar ve çağrıyı orada tamamlanmış sayar.
+        ///
+        /// <para>
+        /// Bitiş logunun burada olması şart: akış yanıtında gerçek iş <c>ExecuteAsync</c> içinde
+        /// yapılır. Süre <c>next()</c> döndüğünde ölçülseydi akış çağrıları sürekli ~0 ms görünür,
+        /// yani en yavaş çağrılar en hızlıymış gibi kaydedilirdi.
+        /// </para>
+        /// </summary>
+        private sealed class ScopedResult(
+            IResult inner,
+            IApprovalContextAccessor accessor,
+            string customerId,
+            string agent,
+            string partnerId,
+            long startedAt) : IResult
         {
             public async Task ExecuteAsync(HttpContext httpContext)
             {
                 using var scope = accessor.SetScope(
                     sessionId: null, traceId: null, userQuery: null, customerId: customerId);
-                await inner.ExecuteAsync(httpContext);
+                try
+                {
+                    await inner.ExecuteAsync(httpContext);
+                }
+                finally
+                {
+                    // finally: istisna hâlinde de bitiş satırı düşsün. Aksi halde hatalı çağrılar
+                    // loglarda hiç tamamlanmamış görünür — tam da en çok incelenecek olanlar.
+                    A2ALog.Completed(httpContext, agent, partnerId, customerId, startedAt);
+                }
             }
+        }
+    }
+
+    /// <summary>
+    /// A2A kanalının istek logları. Sabit bir kategori adı (<see cref="Category"/>) kullanılır ki
+    /// <c>appsettings.json</c> üzerinden tek başına kısılabilsin/açılabilsin — filtre iç içe
+    /// private bir sınıf olduğu için <c>ILogger&lt;T&gt;</c> okunaksız bir kategori üretirdi.
+    /// </summary>
+    /// <summary>
+    /// Yetkilendirme katmanında reddedilen A2A isteklerini loglar.
+    ///
+    /// <para>
+    /// <b>Neden endpoint filtresi yetmiyor:</b> <c>RequireAuthorization("A2ASubject")</c>
+    /// başarısız olduğunda <c>UseAuthorization</c> ardışık düzeni <b>kısa devre</b> yapar ve
+    /// endpoint filtreleri hiç çalışmaz. Ölçüldü: partner token'ıyla sipariş ajanına gidilince
+    /// 403 dönüyor ama filtre tabanlı loglardan hiçbiri düşmüyordu — yani en çok görülmesi
+    /// gereken olay (bir partner'ın müşteri verisine uzanma denemesi) loglarda YOKTU.
+    /// </para>
+    ///
+    /// <para>
+    /// Çift loglamayı önlemek için endpoint filtresi <see cref="HandledKey"/> işaretini koyar;
+    /// bu middleware yalnızca işaret YOKSA yazar. Böylece başarılı çağrılar tek satır "←" ve
+    /// tek satır "→" üretir, reddedilenler ise yalnızca burada görünür.
+    /// </para>
+    /// </summary>
+    public static IApplicationBuilder UseA2ARejectionLogging(this IApplicationBuilder app) =>
+        app.Use(async (http, next) =>
+        {
+            if (!http.Request.Path.StartsWithSegments("/a2a"))
+            {
+                await next(http);
+                return;
+            }
+
+            var startedAt = Stopwatch.GetTimestamp();
+            await next(http);
+
+            var handled = http.Items.ContainsKey(HandledKey);
+            if (handled || http.Response.StatusCode is not (401 or 403 or 429))
+                return;
+
+            A2ALog.For(http).LogWarning(
+                "[A2A] {Path} REDDEDILDI · {Status} · partner={Partner} · {Elapsed:F0}ms · "
+              + "yetkilendirme katmanında durduruldu (endpoint hiç çalışmadı)",
+                http.Request.Path.Value, http.Response.StatusCode, A2ALog.PartnerOf(http),
+                Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+        });
+
+    /// <summary>Endpoint filtresinin "bu isteği ben logladım" işareti — bkz. <see cref="UseA2ARejectionLogging"/>.</summary>
+    private const string HandledKey = "__a2a_logged";
+
+    /// <summary>
+    /// Yalnızca loglar — ambient kimlik KURMAZ.
+    ///
+    /// <para>
+    /// Ürün ajanı için ayrı bir filtre gerekiyor çünkü o müşteri kimliği istemez (partner token'ı
+    /// yeterlidir) ve <see cref="A2ASubjectScopeFilter"/> kullanmaz. Bu filtre olmasaydı ürün
+    /// çağrıları loglarda HİÇ görünmezdi — üstelik en çok çağrılan ajan odur.
+    /// </para>
+    /// </summary>
+    private sealed class A2ALogFilter(string agent) : IEndpointFilter
+    {
+        public async ValueTask<object?> InvokeAsync(
+            EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+        {
+            var http = context.HttpContext;
+            var partnerId = A2ALog.PartnerOf(http);
+            var startedAt = Stopwatch.GetTimestamp();
+            http.Items[HandledKey] = true;
+
+            A2ALog.For(http).LogInformation("[A2A] {Agent} ← partner={Partner}", agent, partnerId);
+
+            var result = await next(context);
+
+            // Akış yanıtında iş ExecuteAsync içinde yapılır; süreyi orada ölçmek gerekir
+            // (bkz. ScopedResult üzerindeki not).
+            if (result is IResult inner)
+                return new LoggedResult(inner, agent, partnerId, startedAt);
+
+            A2ALog.Completed(http, agent, partnerId, customerId: null, startedAt);
+            return result;
+        }
+
+        private sealed class LoggedResult(IResult inner, string agent, string partnerId, long startedAt) : IResult
+        {
+            public async Task ExecuteAsync(HttpContext httpContext)
+            {
+                try
+                {
+                    await inner.ExecuteAsync(httpContext);
+                }
+                finally
+                {
+                    A2ALog.Completed(httpContext, agent, partnerId, customerId: null, startedAt);
+                }
+            }
+        }
+    }
+
+    private static class A2ALog
+    {
+        public const string Category = "CustomerSupportBot.Api.A2A";
+
+        public static ILogger For(HttpContext http) =>
+            http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(Category);
+
+        /// <summary>
+        /// Çağıran partner. Özne token'ında kimlik <c>a2a:{partner}:{customer}</c> biçimindedir
+        /// (bkz. <see cref="A2ASubjectIdentity"/>) — rate limit de aynı kaynaktan bölümler.
+        /// Partner token'ında bu biçim yoktur; orada kullanıcı adı okunur, çünkü <c>NameIdentifier</c>
+        /// kullanıcı satırının GUID'idir ve logda hiçbir şey ifade etmez.
+        /// </summary>
+        public static string PartnerOf(HttpContext http)
+        {
+            var subjectId = http.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return A2ASubjectIdentity.TryGetPartnerId(subjectId)
+                ?? http.User.FindFirst(ClaimTypes.Name)?.Value
+                ?? "bilinmiyor";
+        }
+
+        public static void Completed(
+            HttpContext http, string agent, string partnerId, string? customerId, long startedAt)
+        {
+            var elapsed = Stopwatch.GetElapsedTime(startedAt);
+            For(http).LogInformation(
+                "[A2A] {Agent} → {Status} · partner={Partner} customer={Customer} · {Elapsed:F0}ms",
+                agent, http.Response.StatusCode, partnerId, customerId ?? "-", elapsed.TotalMilliseconds);
         }
     }
 }
