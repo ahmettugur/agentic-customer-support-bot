@@ -134,7 +134,14 @@ public sealed class ChatPortService : IChatPort
         using var approvalScope = _approvalContext.SetScope(sessionId, null, query, session.State.AuthenticatedCustomerId);
 
         // Workflow stream
+        //
+        // Geçmişe yazılacak metnin kaynağı: ÖNCE response_complete'in kanonik metni, o hiç
+        // gelmezse (hata/iptal) delta birleşimi. Bu ayrım şart, çünkü ikisi farklı olabilir —
+        // delta'lar ResponseAgent'ın ham akışı, kanonik metin ise teknik JSON'u temizlenmiş ve
+        // gerekiyorsa ajan-adı sızıntısına karşı yeniden yazılmış hâli. Eskiden yalnızca
+        // delta'lar birleştirildiği için geçmişe ham metin yazılıyordu (bkz. ResponseCompletePayload).
         var responseBuilder = new System.Text.StringBuilder();
+        string? canonicalResponse = null;
         await foreach (var evt in _team.RunStreamingAsync(query, history, session, reasoningResult, ct))
         {
             yield return evt;
@@ -142,9 +149,13 @@ public sealed class ChatPortService : IChatPort
             {
                 responseBuilder.Append(delta.Text);
             }
+            else if (evt.Type == StreamEventTypes.ResponseComplete && evt.Data is ResponseCompletePayload complete)
+            {
+                canonicalResponse = complete.Text;
+            }
         }
 
-        var fullResponse = responseBuilder.ToString().TrimEnd();
+        var fullResponse = (canonicalResponse ?? responseBuilder.ToString()).TrimEnd();
         await _sessionState.PersistExchangeAsync(
             sessionId, query, fullResponse, _chatBridge, TurnSignals.From(reasoningResult), ct);
 

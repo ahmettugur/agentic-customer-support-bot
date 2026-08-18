@@ -939,15 +939,17 @@
                 }
                 break;
             case "response_start":
-                // Yanıt akmaya başlamadan önce o ana kadarki çip listesini mesaja
-                // kalıcı olarak kopyala — canlı çipler temizlense de "hangi ajanlar
-                // çalıştı" bilgisi mesajın altında görünmeye devam etsin.
-                _currentBot.ProcessedAgents = _agentChips
-                    .OrderBy(c => c.SortOrder)
-                    .Select(c => FriendlyAgentName(c.Name))
-                    .Distinct()
-                    .ToList();
-                SealAgentChips();
+                // Compound (alt görevlere bölünmüş) sorguda alt görevler METİN AKARKEN de
+                // çalışmaya devam eder; burada mühürlenirse "SubTask#N" ilerleme çipleri hiç
+                // görünmez — yani compound'un tek ilerleme göstergesi kaybolur. Bu yüzden
+                // mühürleme yalnızca decomposed OLMAYAN turlarda burada yapılır; compound'da
+                // response_complete'e ertelenir (orada zaten mühürleniyor).
+                if (!(jd.TryGetProperty("decomposed", out var decomposedFlag)
+                      && decomposedFlag.ValueKind == JsonValueKind.True))
+                {
+                    SnapshotProcessedAgents();
+                    SealAgentChips();
+                }
                 break;
             case "response_delta":
                 if (jd.TryGetProperty("text", out var delta)) _currentBot.Content += delta.GetString() ?? "";
@@ -955,6 +957,10 @@
             case "response_complete":
                 if (jd.TryGetProperty("text", out var full)) _currentBot.Content = full.GetString() ?? _currentBot.Content;
                 _currentBot.IsStreaming = false;
+                // Compound turda response_start mühürlemeyi buraya ertelemişti — çip listesi
+                // ancak burada kesinleşir. Tek sorgu turunda zaten mühürlü, tekrar anlık
+                // görüntü alınmaz (mühürden sonra _agentChips boş olduğu için listeyi silerdi).
+                if (!_agentChipsSealed) SnapshotProcessedAgents();
                 SealAgentChips();
                 break;
             case "human_joined":
@@ -1358,6 +1364,22 @@
     /// görüyordu. Mühürleme bir sonraki turda <see cref="ClearAgentChips"/> ile kalkar.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// O ana kadarki canlı çip listesini mesaja kalıcı olarak kopyalar — canlı çipler
+    /// temizlense de "hangi ajanlar çalıştı" bilgisi mesajın altında görünmeye devam etsin.
+    /// İki çağıranı var (<c>response_start</c> tek-sorgu yolunda, <c>response_complete</c>
+    /// compound yolunda), bu yüzden tek metotta duruyor.
+    /// </summary>
+    private void SnapshotProcessedAgents()
+    {
+        if (_currentBot is null) return;
+        _currentBot.ProcessedAgents = _agentChips
+            .OrderBy(c => c.SortOrder)
+            .Select(c => FriendlyAgentName(c.Name))
+            .Distinct()
+            .ToList();
+    }
+
     private void SealAgentChips()
     {
         _agentChips.Clear();

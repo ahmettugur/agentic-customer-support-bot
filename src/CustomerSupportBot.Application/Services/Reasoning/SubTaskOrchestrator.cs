@@ -112,19 +112,38 @@ public class SubTaskOrchestrator
     /// <summary>
     /// Aggregated response içinde her subtask sonucunu başlık + içerik olarak sunar.
     /// </summary>
+    /// <summary>
+    /// Alt görev sonucunun başlığı (gövdeden önceki kısım, boş satır dahil).
+    ///
+    /// <para>
+    /// Ayrı bir metot olması şart: <c>DecomposedRunner</c> sıralı alt görevlerde gerçek token
+    /// akışını canlı iletirken başlığı gövdeden ÖNCE yayınlamak zorunda — gövde henüz üretilmemiş
+    /// olduğu için <see cref="FormatSubTaskResult"/> o anda çağrılamaz. Başlık iki yerde ayrı
+    /// yazılsaydı akan metin ile nihai metin sessizce ayrışırdı.
+    /// </para>
+    /// </summary>
+    public static string FormatSubTaskHeader(SubTask subTask)
+        => $"**{subTask.Order}) {subTask.Description}**\n\n";
+
     public static string FormatSubTaskResult(SubTask subTask, string subResponse)
-    {
-        var clean = (subResponse ?? string.Empty).Trim();
-        var header = $"**{subTask.Order}) {subTask.Description}**";
-        return $"{header}\n\n{clean}";
-    }
+        => FormatSubTaskHeader(subTask) + (subResponse ?? string.Empty).Trim();
 
     /// <summary>
     /// Alt görev sonuçlarını tek yanıtta birleştirir.
     /// </summary>
+    /// <summary>
+    /// Alt görev sonuçlarını ayıran metin. <b>Sabit olması şart:</b> <c>DecomposedRunner</c>
+    /// alt görev sonuçlarını tamamlandıkça tek tek <c>response_delta</c> olarak yayınlar ve
+    /// aralarına bu ayırıcıyı koyar; yayınlanan parçaların birleşimi
+    /// <see cref="AggregateSubTaskResults"/> çıktısına birebir eşit olmalıdır. Ayırıcı iki
+    /// yerde ayrı ayrı yazılsaydı biri değiştiğinde ekranda akan metin ile nihai metin
+    /// sessizce birbirinden ayrılırdı.
+    /// </summary>
+    public const string ResultSeparator = "\n\n---\n\n";
+
     public static string AggregateSubTaskResults(IReadOnlyList<string> parts)
     {
-        return string.Join("\n\n---\n\n", parts);
+        return string.Join(ResultSeparator, parts);
     }
 
     /// <summary>

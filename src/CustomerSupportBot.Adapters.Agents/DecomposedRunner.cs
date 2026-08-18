@@ -15,13 +15,13 @@ namespace CustomerSupportBot.Adapters.Agents;
 
 internal sealed class DecomposedRunner
 {
-    private readonly WorkflowRunner _runner;
+    private readonly IWorkflowRunner _runner;
     private readonly ParallelExecutionOptions _parallelOptions;
     private readonly IUiHintEmitter _uiHint;
     private readonly IApprovalContextAccessor _approvalContext;
 
     public DecomposedRunner(
-        WorkflowRunner runner,
+        IWorkflowRunner runner,
         ParallelExecutionOptions parallelOptions,
         IUiHintEmitter uiHint,
         IApprovalContextAccessor approvalContext)
@@ -116,6 +116,27 @@ internal sealed class DecomposedRunner
         var groups = SubTaskOrchestrator.Partition(reasoning.SubTasks, _parallelOptions);
         var parallelGroupCount = groups.Count(g => g.Parallel && g.Items.Count > 1);
 
+        // Alt görev sonuçları TAMAMLANDIKÇA yayınlanır; kullanıcı hepsinin bitmesini beklemez.
+        // Bu bayrak yalnızca ilk parçadan sonra ayırıcı koymak için.
+        var anyPartEmitted = false;
+
+        // response_start, ilk delta'dan ÖNCE gönderilir — "yanıt metni akmaya başlıyor"
+        // anlamı her iki yolda (tek sorgu / compound) aynı kalsın diye. Bu olayın sırasına
+        // güvenen bir tüketici compound'da sessizce yanılmamalı.
+        //
+        // decomposed=true bayrağı burada işlevsel: Blazor bu olayda normalde ajan çiplerini
+        // MÜHÜRLÜYOR (Chat.razor → SealAgentChips), ama compound'da alt görevler metin akarken
+        // de çalışmaya devam eder — erken mühür "SubTask#N" ilerleme çiplerini yok ederdi.
+        // Bayrağı gören Blazor mühürlemeyi response_complete'e erteler.
+        yield return new StreamEvent(StreamEventTypes.ResponseStart,
+            new
+            {
+                terminationReason = WellKnown.Termination.ReasonCompleted,
+                revised = false,
+                decomposed = true,
+                subTaskCount = total
+            });
+
         yield return new StreamEvent(StreamEventTypes.Agent,
             new
             {
@@ -173,7 +194,8 @@ internal sealed class DecomposedRunner
 
                 foreach (var (sub, resp, hints) in results.OrderBy(t => t.sub.Order))
                 {
-                    collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, resp);
+                    var part = SubTaskOrchestrator.FormatSubTaskResult(sub, resp);
+                    collected[sub.Order] = part;
                     runningHistory.Add(new ConversationMessage(ConversationRoles.User,
                         SubTaskOrchestrator.FormatSubTaskQuery(sub)));
                     runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, resp));
@@ -183,6 +205,13 @@ internal sealed class DecomposedRunner
 
                     yield return new StreamEvent(StreamEventTypes.Agent,
                         new { name = $"SubTask#{sub.Order}", status = "done", order = sub.Order });
+
+                    // Sonuç HAZIR olduğu anda yayınla — kalan alt görevler beklenmez.
+                    if (anyPartEmitted)
+                        yield return new StreamEvent(StreamEventTypes.ResponseDelta,
+                            new TextDeltaPayload(SubTaskOrchestrator.ResultSeparator));
+                    yield return new StreamEvent(StreamEventTypes.ResponseDelta, new TextDeltaPayload(part));
+                    anyPartEmitted = true;
                 }
             }
             else
@@ -205,6 +234,21 @@ internal sealed class DecomposedRunner
                     var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
                     var subResponseBuilder = new StringBuilder();
 
+                    // Sıralı dalda alt görevin GERÇEK token akışı kullanıcıya canlı iletilir —
+                    // paralel daldan farkı, burada sonuçların sırayla üretilmesi, yani araya
+                    // girmeden akıtılabilmesi. Başlık gövdeden önce yayınlanır çünkü gövde
+                    // henüz üretilmedi; TrimmingDeltaStreamer ise ham token'ları
+                    // FormatSubTaskResult'ın uyguladığı Trim() ile BİREBİR aynı hâle getirir,
+                    // böylece akan metnin birleşimi nihai metne eşit kalır.
+                    if (anyPartEmitted)
+                        yield return new StreamEvent(StreamEventTypes.ResponseDelta,
+                            new TextDeltaPayload(SubTaskOrchestrator.ResultSeparator));
+                    yield return new StreamEvent(StreamEventTypes.ResponseDelta,
+                        new TextDeltaPayload(SubTaskOrchestrator.FormatSubTaskHeader(sub)));
+                    anyPartEmitted = true;
+
+                    var bodyStreamer = new TrimmingDeltaStreamer();
+
                     _approvalContext.SetCurrentAgent(sub.TargetAgent);
                     await foreach (var evt in _runner.RunStreamingAsync(
                         subQuery, runningHistory, session, subReasoning, ct))
@@ -212,8 +256,15 @@ internal sealed class DecomposedRunner
                         switch (evt.Type)
                         {
                             case var t when t == StreamEventTypes.ResponseDelta:
-                                subResponseBuilder.Append(WorkflowResponseExtractor.ExtractDeltaText(evt.Data));
+                            {
+                                var raw = WorkflowResponseExtractor.ExtractDeltaText(evt.Data);
+                                subResponseBuilder.Append(raw);
+                                var safe = bodyStreamer.Feed(raw);
+                                if (safe.Length > 0)
+                                    yield return new StreamEvent(StreamEventTypes.ResponseDelta,
+                                        new TextDeltaPayload(safe));
                                 break;
+                            }
                             case var t when t == StreamEventTypes.ResponseStart
                                          || t == StreamEventTypes.ResponseComplete:
                                 break;
@@ -231,12 +282,14 @@ internal sealed class DecomposedRunner
                     }
 
                     var subResponse = subResponseBuilder.ToString().Trim();
-                    collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, subResponse);
+                    var part = SubTaskOrchestrator.FormatSubTaskResult(sub, subResponse);
+                    collected[sub.Order] = part;
                     runningHistory.Add(new ConversationMessage(ConversationRoles.User, subQuery));
                     runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, subResponse));
 
                     yield return new StreamEvent(StreamEventTypes.Agent,
                         new { name = $"SubTask#{sub.Order}", status = "done", order = sub.Order });
+                    // Metin burada yayınlanmaz — başlık + gövde zaten canlı akıtıldı.
                 }
             }
         }
@@ -246,28 +299,14 @@ internal sealed class DecomposedRunner
 
         var aggregated = SubTaskOrchestrator.AggregateSubTaskResults(collected.Values.ToList());
 
-        yield return new StreamEvent(StreamEventTypes.ResponseStart,
-            new
-            {
-                terminationReason = WellKnown.Termination.ReasonCompleted,
-                revised = false,
-                decomposed = true,
-                subTaskCount = total
-            });
-
-        foreach (var chunk in WorkflowResponseExtractor.SplitIntoDeltaChunks(aggregated))
-        {
-            yield return new StreamEvent(StreamEventTypes.ResponseDelta, new TextDeltaPayload(chunk));
-        }
-
+        // Metin burada TEKRAR yayınlanmaz — parçalar tamamlandıkça zaten gönderildi ve
+        // birleşimleri tam olarak `aggregated`a eşit (bkz. SubTaskOrchestrator.ResultSeparator).
         yield return new StreamEvent(StreamEventTypes.ResponseComplete,
-            new
-            {
-                text = aggregated,
-                terminationReason = WellKnown.Termination.ReasonCompleted,
-                revised = false,
-                decomposed = true,
-                subTaskCount = total
-            });
+            new ResponseCompletePayload(
+                aggregated,
+                TerminationReason: WellKnown.Termination.ReasonCompleted,
+                Revised: false,
+                Decomposed: true,
+                SubTaskCount: total));
     }
 }

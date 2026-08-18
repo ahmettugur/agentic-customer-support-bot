@@ -256,7 +256,13 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
         }
     }
 
-    private async Task HandleUserTranscriptAsync(
+    /// <summary>
+    /// Test edilebilmesi için <c>internal</c> (bkz. <c>InternalsVisibleTo</c>) — reflection
+    /// yerine doğrudan çağrılır, böylece yeniden adlandırma derleme zamanında yakalanır.
+    /// Kritik davranışı <c>VoiceCanonicalResponseTests</c> kilitler: TTS'e verilen metnin
+    /// kaynağı delta birleşimi değil, <c>response_complete</c>'in kanonik metnidir.
+    /// </summary>
+    internal async Task HandleUserTranscriptAsync(
         IBrowserChannel channel,
         AgentSession session,
         string transcript,
@@ -296,7 +302,14 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
             }
 
             using var approvalScope = _approvalContext.SetScope(sessionId, null, safeQuery, session.State.AuthenticatedCustomerId);
+            // Sesli kanalda bu metin hem geçmişe yazılır hem de TTS ile MÜŞTERİYE OKUNUR —
+            // dolayısıyla kaynağı kanonik olmak zorunda: önce response_complete, o gelmezse
+            // delta birleşimi. Eskiden yalnızca delta'lar birleştiriliyordu ve bu, ajan adı
+            // sızıntısı olan bir turda müşterinin "OrderAgent size yardımcı olacak" gibi bir
+            // cümleyi sesli duyması demekti: RewriteRoutingMessageAsync savunması yalnızca
+            // yazılı ekrana uygulanıyor, sesi baypas ediyordu (bkz. ResponseCompletePayload).
             var responseBuilder = new StringBuilder();
+            string? canonicalResponse = null;
             await foreach (var evt in _team.RunStreamingAsync(safeQuery, history, session, finalReasoning, ct))
             {
                 await ForwardStreamEventAsync(channel, evt, ct);
@@ -304,9 +317,13 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
                 {
                     responseBuilder.Append(delta.Text);
                 }
+                else if (evt.Type == StreamEventTypes.ResponseComplete && evt.Data is ResponseCompletePayload complete)
+                {
+                    canonicalResponse = complete.Text;
+                }
             }
 
-            var responseText = responseBuilder.ToString().TrimEnd();
+            var responseText = (canonicalResponse ?? responseBuilder.ToString()).TrimEnd();
 
             if (!string.IsNullOrWhiteSpace(responseText))
             {

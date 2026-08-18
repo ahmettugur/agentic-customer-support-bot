@@ -1,6 +1,8 @@
 // Ports/Driving/StreamEvent.cs
 // IChatPort streaming use case output DTO'su ve event tipleri.
 
+using System.Text.Json.Serialization;
+
 namespace CustomerSupportBot.Application.Ports.Inbound;
 
 /// <summary>
@@ -23,6 +25,45 @@ public sealed record SessionEventPayload(string SessionId);
 /// dönerlerdi. Bu record aynı JSON şekli (camelCase → "text") üretir, tipli okumaya izin verir.
 /// </summary>
 public sealed record TextDeltaPayload(string Text);
+
+/// <summary>
+/// <see cref="StreamEventTypes.ResponseComplete"/> payload'ı — turun <b>kanonik</b> yanıt metni.
+///
+/// <para>
+/// <b>Neden tipli olması şart:</b> bu event'in taşıdığı metin, delta akışının taşıdığından
+/// FARKLI olabilir. Delta'lar ResponseAgent'ın ham token akışıdır (yalnızca TERMINATE'ten
+/// kesilir); buradaki metin ise ek temizlikten geçmiştir — teknik JSON blokları silinir ve
+/// yanıtta ajan adı sızıntısı varsa (<c>ContainsAgentRoutingMessage</c>) metin LLM ile
+/// <b>tamamen yeniden yazılır</b>.
+/// </para>
+///
+/// <para>
+/// 🐞 <b>Bu tip bir hatayı kapatmak için eklendi.</b> Payload eskiden anonim bir
+/// <c>new { text = ... }</c> nesnesiydi ve sunucu tarafında <b>hiçbir tüketicisi yoktu</b> —
+/// tipli okunamadığı için kimse okumaya çalışmamıştı. Sonuç: <c>ChatPortService</c> konuşma
+/// geçmişini, <c>RealtimeBridgeService</c> ise TTS'e okutulacak metni delta'ları birleştirerek
+/// üretiyordu. Ajan adı sızıntısı olan bir turda ekranda temiz metin görünürken
+/// <b>veritabanına ham metin yazılıyor</b> ve <b>sesli kanalda müşteri "OrderAgent size
+/// yardımcı olacak" gibi bir cümleyi duyuyordu</b> — yani <c>RewriteRoutingMessageAsync</c>
+/// savunması yalnızca yazılı sohbet ekranı için çalışıyor, kalıcılığı ve sesi baypas ediyordu.
+/// </para>
+///
+/// <para>
+/// Tüketiciler artık bu metni kanonik kaynak olarak kullanır ve event hiç gelmezse
+/// (hata/iptal) delta birleşimine geri düşer.
+/// </para>
+/// </summary>
+/// <param name="Text">Kullanıcıya gösterilen/kaydedilen nihai metin.</param>
+/// <param name="TerminationReason">Turun sonlanma sebebi (<c>WellKnown.Termination</c>).</param>
+/// <param name="Revised">Yanıt self-critique sonrası revize edildiyse true.</param>
+/// <param name="Decomposed">Compound sorgu alt görevlere bölündüyse true.</param>
+/// <param name="SubTaskCount">Bölünme varsa alt görev sayısı.</param>
+public sealed record ResponseCompletePayload(
+    string Text,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TerminationReason = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Revised = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Decomposed = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? SubTaskCount = null);
 
 /// <summary>Tanımlı event tipleri — tip güvenliği için sabitler.</summary>
 public static class StreamEventTypes

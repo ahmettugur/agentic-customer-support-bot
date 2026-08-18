@@ -196,4 +196,50 @@ public class SubTaskOrchestratorTests
         SubTaskOrchestrator.AggregateSubTaskResults(parts)
             .Should().Be("a\n\n---\n\nb\n\n---\n\nc");
     }
+
+    // ─── Ayırıcı sözleşmesi: ilerlemeli yayın ile birleştirme aynı ayırıcıyı kullanmalı ───
+    //
+    // DecomposedRunner alt görev sonuçlarını TAMAMLANDIKÇA tek tek response_delta olarak
+    // yayınlar ve aralarına SubTaskOrchestrator.ResultSeparator koyar; turun sonunda ise
+    // response_complete AggregateSubTaskResults çıktısını taşır. İkisi aynı ayırıcıyı
+    // kullanmazsa ekranda akan metin ile nihai metin sessizce birbirinden ayrılır —
+    // kullanıcı yanıtın sonunda metnin "zıpladığını" görür. Bu testler o bağı kilitler.
+
+    /// <summary>
+    /// Asıl değişmez: parçaları ayırıcıyla elle birleştirmek, AggregateSubTaskResults ile
+    /// BİREBİR aynı sonucu vermeli. DecomposedRunner'ın ilerlemeli yayını tam olarak bunu yapar.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(5)]
+    public void ProgressiveEmission_ConcatenatesTo_SameTextAsAggregate(int partCount)
+    {
+        var parts = Enumerable.Range(1, partCount)
+            .Select(i => SubTaskOrchestrator.FormatSubTaskResult(
+                new SubTask { Order = i, Description = $"görev {i}" }, $"yanıt {i}"))
+            .ToList();
+
+        // DecomposedRunner'ın yaptığı: ilk parça ayırıcısız, sonrakiler ayırıcı önekiyle
+        var streamed = new System.Text.StringBuilder();
+        for (int i = 0; i < parts.Count; i++)
+        {
+            if (i > 0) streamed.Append(SubTaskOrchestrator.ResultSeparator);
+            streamed.Append(parts[i]);
+        }
+
+        streamed.ToString().Should().Be(SubTaskOrchestrator.AggregateSubTaskResults(parts),
+            "akan metin ile response_complete'teki nihai metin ayrışırsa kullanıcı sonda sıçrama görür");
+    }
+
+    /// <summary>
+    /// Ayırıcı sabiti gerçekten AggregateSubTaskResults tarafından kullanılıyor mu?
+    /// Sabit tanımlanıp birleştirmede elle farklı bir dize yazılırsa bu test kırmızıya döner.
+    /// </summary>
+    [Fact]
+    public void ResultSeparator_IsTheSeparatorActuallyUsedByAggregate()
+    {
+        SubTaskOrchestrator.AggregateSubTaskResults(["X", "Y"])
+            .Should().Be($"X{SubTaskOrchestrator.ResultSeparator}Y");
+    }
 }
