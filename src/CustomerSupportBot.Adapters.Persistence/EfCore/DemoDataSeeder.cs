@@ -42,6 +42,14 @@ public sealed class DemoDataSeeder : IHostedService
             _logger.LogError(ex, "[Seeder] Default admin seed başarısız.");
         }
 
+        // A2A partner hesabı — YALNIZCA kanal açıkken. Kapalı kurulumda kimlik oluşturmak,
+        // kullanılmayan bir erişim yüzeyi bırakmak olurdu.
+        try { await SeedA2APartnerAsync(cancellationToken); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Seeder] A2A partner seed başarısız.");
+        }
+
         // HumanAgents — tablo boşsa default temsilcileri seed et.
         try { await SeedDefaultAgentsAsync(cancellationToken); }
         catch (Exception ex)
@@ -126,6 +134,59 @@ public sealed class DemoDataSeeder : IHostedService
         _logger.LogWarning(
             "[Seeder] Default admin oluşturuldu (username='{Username}'). " +
             "ÜRETIMDE Auth:DefaultAdminPassword'u rotate edin.",
+            username);
+    }
+
+    /// <summary>
+    /// A2A partner login hesabı — <b>yalnızca geliştirme/demo</b> içindir.
+    ///
+    /// <para>
+    /// Token değişimi (<c>/auth/a2a/token-exchange</c>) <c>Partner</c> rolünde bir kimlik ister,
+    /// ama seed'de öyle bir hesap yoktu ve oluşturmanın da bir yolu yoktu — yani A2A zinciri
+    /// uçtan uca hiç denenemiyordu. Bu metot o boşluğu geliştirme ortamı için kapatır.
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ <b>Üretimde gerçek partner sağlama ayrı bir iştir</b> (admin onaylı kayıt akışı,
+    /// gizli rotasyonu, sözleşme kapsamı). Buradaki hesap sabit bir varsayılan paroladan türer
+    /// ve <b>üretimde kullanılmamalıdır</b>.
+    /// </para>
+    ///
+    /// <para>
+    /// Yalnızca <c>A2A:Enabled=true</c> iken çalışır: kapalı kurulumda partner kimliği
+    /// oluşturmak, hiç kullanılmayacak bir erişim yüzeyi bırakmak olurdu. Ayrıca hesabın var
+    /// olması TEK BAŞINA yetmez — partnerin hangi müşteriler adına hareket edebileceği
+    /// <c>A2A:Partners</c> altında ayrıca tanımlanmalıdır (varsayılan: hiçbiri).
+    /// </para>
+    /// </summary>
+    private async Task SeedA2APartnerAsync(CancellationToken ct)
+    {
+        if (!_configuration.GetValue<bool>("A2A:Enabled")) return;
+
+        var dbFactory = GetService<IDbContextFactory<CustomerSupportDbContext>>();
+        var hasher = GetService<IPasswordHasher>();
+        if (dbFactory is null || hasher is null) return;
+
+        var username = _configuration["A2A:DevPartnerUsername"] ?? "demo-partner";
+        var password = _configuration["A2A:DevPartnerPassword"] ?? "Partner123!";
+
+        await using var ctx = await dbFactory.CreateDbContextAsync(ct);
+        if (await ctx.Users.AnyAsync(u => u.Username == username, ct)) return;
+
+        ctx.Users.Add(new UserEntity
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Username = username,
+            PasswordHash = hasher.Hash(password),
+            Role = "Partner",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
+        await ctx.SaveChangesAsync(ct);
+
+        _logger.LogWarning(
+            "[Seeder] A2A DEV partner hesabı oluşturuldu (username='{Username}'). " +
+            "Bu hesap yalnızca geliştirme içindir; üretimde kullanmayın ve parolayı rotate edin.",
             username);
     }
 

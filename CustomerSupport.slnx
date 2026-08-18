@@ -16,6 +16,9 @@
       <Project Path="src/CustomerSupportBot.Adapters.Redis/CustomerSupportBot.Adapters.Redis.csproj" />
       <Project Path="src/CustomerSupportBot.Adapters.Telemetry/CustomerSupportBot.Adapters.Telemetry.csproj" />
     </Folder>
+  <Folder Name="/Samples/">
+    <Project Path="samples/CustomerSupportBot.A2AClient.Sample/CustomerSupportBot.A2AClient.Sample.csproj" />
+  </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/CustomerSupportBot.Domain.Tests/CustomerSupportBot.Domain.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Application.Tests/CustomerSupportBot.Application.Tests.csproj" />

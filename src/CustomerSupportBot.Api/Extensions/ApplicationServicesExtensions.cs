@@ -5,6 +5,12 @@ using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Api.Workers;
 using CustomerSupportBot.Application.DependencyInjection;
 
+using System.Security.Claims;
+
+using CustomerSupportBot.Application.Services.A2A;
+
+using Microsoft.Extensions.Options;
+
 namespace CustomerSupportBot.Api.Extensions;
 
 public static class ApplicationServicesExtensions
@@ -56,6 +62,36 @@ public static class ApplicationServicesExtensions
                         QueueLimit = 0,
                         AutoReplenishment = true
                     }));
+
+            // A2A: bölümleme IP'ye DEĞİL PARTNER'a göre yapılır. Dış sistemler proxy/bulut
+            // çıkışı arkasında IP paylaşabilir (bir partnerin trafiği diğerinin sınırını
+            // tüketirdi) ya da IP değiştirebilir (sınır fiilen ortadan kalkardı). Kimlik
+            // token'dan gelir ve çağıran onu değiştiremez.
+            //
+            // Özne token'ında partner, kimliğin içindedir; oradan çıkarılır ki bir partner
+            // çok sayıda müşteri adına çağrı yaparak servisi tek başına tüketemesin.
+            options.AddPolicy("a2a", httpContext =>
+            {
+                var limits = httpContext.RequestServices
+                    .GetRequiredService<IOptions<A2AOptions>>().Value;
+
+                var subjectId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var partitionKey =
+                    A2ASubjectIdentity.TryGetPartnerId(subjectId)   // özne token'ı → partner
+                    ?? subjectId                                    // partner token'ı → kendisi
+                    ?? httpContext.Connection.RemoteIpAddress?.ToString()  // kimliksiz → IP
+                    ?? "unknown";
+
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: $"a2a:{partitionKey}",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = Math.Max(1, limits.RequestsPerMinute),
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    });
+            });
         });
 
         // Agents adapter — CustomerSupportTeam + ApprovalGateService

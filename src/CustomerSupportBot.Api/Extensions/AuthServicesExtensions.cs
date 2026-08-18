@@ -5,6 +5,7 @@ using CustomerSupportBot.Application.Ports.Inbound.Auth;
 using CustomerSupportBot.Application.Services.Auth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using CustomerSupportBot.Application.Services.A2A;
 
 namespace CustomerSupportBot.Api.Extensions;
 
@@ -62,6 +63,14 @@ public static class AuthServicesExtensions
             options.AddPolicy("Agent", p => p.RequireRole("Agent"));
             options.AddPolicy("AdminOrAgent", p => p.RequireRole("Admin", "Agent"));
             options.AddPolicy("Customer", p => p.RequireRole("Customer"));
+
+            // ─── A2A (dış sistemlere açılan kanal) ───
+            // İki ayrı rol bilinçli: partner token'ı YALNIZCA token değişimi yapabilir,
+            // ajanları doğrudan çağıramaz. Ajanları çağıran özne token'ı ise tek bir müşteriye
+            // kilitlidir. Böylece "hangi sistem" ile "hangi müşteri" soruları ayrı token'larda
+            // taşınır ve müşteri kimliği hiçbir zaman istemcinin değiştirebildiği bir parametre olmaz.
+            options.AddPolicy("Partner", p => p.RequireRole(A2ARoles.Partner));
+            options.AddPolicy("A2ASubject", p => p.RequireRole(A2ARoles.Subject));
         });
 
         return services;

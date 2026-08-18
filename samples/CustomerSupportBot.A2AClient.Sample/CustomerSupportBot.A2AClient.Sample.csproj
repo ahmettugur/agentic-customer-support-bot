@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CustomerSupportBot.A2AClient.Sample</RootNamespace>
+    <UserSecretsId>customersupportbot-a2a-sample</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Bizim projelerimize referans YOKTUR ve olmamalidir. Buradaki paketlerin
+         hepsi herkese acik NuGet paketleridir; yani bu istemci, disaridan baglanan
+         bir partnerin elindekinden fazlasina sahip degildir. Referans verseydik
+         paylasilan tiplerle calisir ve entegrasyonu degil kendi ic tutarliligimizi
+         test etmis olurduk. -->
+    <PackageReference Include="A2A" Version="1.0.0-preview2" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.17.0" />
+    <PackageReference Include="Microsoft.Agents.AI.A2A" Version="1.17.0-preview.260804.1" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.17.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.9.0" />
+
+    <!-- OpenTelemetry — sunucuyla AYNI sürüm (1.17.0, bkz. Adapters.Telemetry.csproj). Opsiyoneldir
+         (Telemetry:Enabled=false varsayılan): bir partnerin kendi collector'ı olmadan bu örneği
+         çalıştırabilmesi gerekir. Açıldığında AddHttpClientInstrumentation, giden A2A çağrılarına
+         W3C traceparent ekler — sunucu da AddAspNetCoreInstrumentation ile bunu okuduğu için
+         (Adapters.Telemetry/DependencyInjection/TelemetryAdapterServiceCollectionExtensions.cs)
+         tek bir iz, iki sürecin sınırını GERÇEKTEN geçer; süslü bir correlationId değil. -->
+    <PackageReference Include="OpenTelemetry" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings*.json"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+  </ItemGroup>
+
+</Project>

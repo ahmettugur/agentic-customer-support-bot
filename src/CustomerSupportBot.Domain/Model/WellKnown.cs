@@ -110,6 +110,12 @@ public static class WellKnown
         public const string OrderPlacement = "order_placement_tool";
         public const string OrderStatus = "order_status_tool";
         public const string ComplaintRegistration = "complaint_registration_tool";
+
+        /// <summary>Şikayet durumu sorgulama (SALT-OKUNUR). Yazma karşılığı: <see cref="ComplaintRegistration"/>.</summary>
+        public const string ComplaintStatus = "complaint_status_tool";
+
+        /// <summary>Müşterinin tüm şikayetlerini listeler (SALT-OKUNUR).</summary>
+        public const string GetAllComplaints = "get_all_complaints_tool";
         public const string GetLastOrder = "get_last_order_tool";
         public const string GetAllOrders = "get_all_orders_tool";
         public const string OrderCancel = "order_cancel_tool";
@@ -383,6 +389,8 @@ public static class WellKnown
         public const string StockInsufficient = "STOCK_INSUFFICIENT";
         public const string CustomerIdMismatch = "CUSTOMER_ID_MISMATCH";
         public const string NoOrdersForCustomer = "NO_ORDERS_FOR_CUSTOMER";
+        public const string ComplaintNotFound = "COMPLAINT_NOT_FOUND";
+        public const string NoComplaintsForCustomer = "NO_COMPLAINTS_FOR_CUSTOMER";
         public const string OrderAlreadyCancelled = "ORDER_ALREADY_CANCELLED";
         public const string OrderNotCancellable = "ORDER_NOT_CANCELLABLE";
         public const string ReturnNotEligible = "RETURN_NOT_ELIGIBLE";
@@ -394,6 +402,7 @@ public static class WellKnown
     {
         public const string CustomerId = "customer_id";
         public const string OrderId = "order_id";
+        public const string ComplaintId = "complaint_id";
         public const string ProductName = "product_name";
         public const string Quantity = "quantity";
 

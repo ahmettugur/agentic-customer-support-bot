@@ -99,4 +99,80 @@ public sealed class ComplaintToolsService : IComplaintToolsService
         _idempotency.Record(WellKnown.ToolNames.ComplaintRegistration, signature, result, complaintId);
         return result;
     }
+    /// <summary>
+    /// Şikayet erişilemediğinde dönen TEK metin.
+    ///
+    /// <para>
+    /// Sahiplik ihlali ile "hiç yok" durumu <b>aynı metni</b> döndürür — sipariş tarafındaki
+    /// <c>OrderNotAccessibleMessage</c> ile aynı gerekçe: ayrı metinler dönseydi, dışarıdan
+    /// şikayet numarası taranarak hangi numaraların var olduğu (ve dolaylı olarak başka
+    /// müşterilerin şikayet hacmi) öğrenilebilirdi. Hata KODU farklıdır
+    /// (<c>CustomerIdMismatch</c> vs <c>ComplaintNotFound</c>), böylece trace/admin panelinde
+    /// gerçek sebep görünür; kullanıcıya giden metin aynıdır.
+    /// </para>
+    /// </summary>
+    private static string ComplaintNotAccessibleMessage(string complaintId) =>
+        $"'{complaintId}' numaralı şikayet bulunamadı.";
+
+    [Description("Şikayet durumunu şikayet numarasıyla sorgular (salt-okunur). Sonuç ToolResult olarak döner.")]
+    public ToolResult ComplaintStatusTool(
+        [Description("Sorgulanacak şikayet numarası (örn: 1001)")] string complaintId,
+        string customerId)
+    {
+        if (string.IsNullOrWhiteSpace(complaintId))
+            return ToolResult.ValidationError("Şikayet numarası boş olamaz.", WellKnown.ToolParameterNames.ComplaintId);
+
+        if (string.IsNullOrWhiteSpace(customerId))
+            return ToolResult.ValidationError("Müşteri kimlik numarası boş olamaz.", WellKnown.ToolParameterNames.CustomerId);
+
+        var complaint = _complaints.Get(complaintId);
+        if (complaint is null)
+            return ToolResult.NotFound(
+                WellKnown.ToolErrorCodes.ComplaintNotFound, ComplaintNotAccessibleMessage(complaintId));
+
+        // Sahiplik ihlali "bulunamadı" ile AYNI metni döner — bkz. ComplaintNotAccessibleMessage.
+        if (!string.Equals(complaint.CustomerId, customerId, StringComparison.Ordinal))
+            return ToolResult.NotFound(
+                WellKnown.ToolErrorCodes.CustomerIdMismatch, ComplaintNotAccessibleMessage(complaintId));
+
+        return ToolResult.Ok(
+            message: $"Şikayet No: {complaintId}, Sipariş: {complaint.OrderId}, Durum: {complaint.Status}.",
+            data: new
+            {
+                complaintId,
+                orderId = complaint.OrderId,
+                status = complaint.Status,
+                complaint = complaint.Complaint
+            });
+    }
+
+    [Description("Müşterinin tüm şikayetlerini listeler (salt-okunur). Sonuç ToolResult olarak döner.")]
+    public ToolResult GetAllComplaintsTool(
+        [Description("Müşteri kimlik numarası (zorunlu)")] string customerId)
+    {
+        if (string.IsNullOrWhiteSpace(customerId))
+            return ToolResult.ValidationError("Müşteri kimlik numarası boş olamaz.", WellKnown.ToolParameterNames.CustomerId);
+
+        var all = _complaints.GetByCustomer(customerId);
+        if (all.Count == 0)
+            return ToolResult.NotFound(
+                WellKnown.ToolErrorCodes.NoComplaintsForCustomer,
+                "Kayıtlı bir şikayetiniz bulunmamaktadır.");
+
+        var lines = all.Select(c => $"{c.ComplaintId}: Sipariş {c.Complaint.OrderId}, Durum: {c.Complaint.Status}");
+
+        return ToolResult.Ok(
+            message: $"Toplam {all.Count} şikayet: " + string.Join(" | ", lines),
+            data: new
+            {
+                count = all.Count,
+                complaints = all.Select(c => new
+                {
+                    complaintId = c.ComplaintId,
+                    orderId = c.Complaint.OrderId,
+                    status = c.Complaint.Status
+                }).ToList()
+            });
+    }
+
 }

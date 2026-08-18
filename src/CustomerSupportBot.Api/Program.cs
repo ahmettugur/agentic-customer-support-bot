@@ -25,6 +25,15 @@ builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddAuthenticationServices(builder.Configuration);
 builder.Services.AddAppHealthChecks(builder.Configuration);
 
+// A2A (Agent2Agent) — dış sistemlere açılan kanal. Kapalıysa ajanlar hiç kaydedilmez ve
+// endpoint hiç map edilmez: kapalı bir kanalın yayında olmaması, yetkiyle engellenmesinden
+// daha güvenlidir (yanlış yapılandırma yüzeyi hiç doğmaz).
+var a2aEnabled = builder.Configuration.GetValue<bool>("A2A:Enabled");
+if (a2aEnabled)
+{
+    builder.Services.AddA2AAgents();
+}
+
 var app = builder.Build();
 
 // HITL guard: production'da HITL devre dışıysa açık uyarı bas
@@ -60,6 +69,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapAuthEndpoints();
+app.MapA2AAuthEndpoints();
+if (a2aEnabled)
+{
+    app.MapA2AAgentEndpoints();
+}
 app.MapChatEndpoints();
 app.MapRealtimeEndpoints();
 app.MapSessionEndpoints();

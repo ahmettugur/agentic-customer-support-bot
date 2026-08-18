@@ -55,6 +55,7 @@ public static class ApplicationServiceCollectionExtensions
             .ValidateOnStart();
 
         services.Configure<RoutingOptions>(configuration.GetSection("Routing"));
+        services.Configure<Services.A2A.A2AOptions>(configuration.GetSection("A2A"));
 
         services.AddOptions<ParallelExecutionOptions>()
             .Bind(configuration.GetSection(ParallelExecutionOptions.SectionName))
@@ -154,6 +155,14 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<CustomerSupportBot.Application.Services.Improvement.LessonMiner>();
         services.AddSingleton<CustomerSupportBot.Application.Services.Personalization.CustomerProfileService>();
         services.AddSingleton<ICustomerProfileService>(sp => sp.GetRequiredService<CustomerSupportBot.Application.Services.Personalization.CustomerProfileService>());
+        // ─── A2A (dış sistemlere açılan kanal) ───
+        // Yetki kararı VARSAYILAN OLARAK REDDEDER; yapılandırma yoksa hiçbir partner
+        // hiçbir müşteri adına token alamaz (bkz. ConfiguredA2ASubjectAuthorizer).
+        services.AddSingleton<Ports.Outbound.A2A.IA2ASubjectAuthorizer, Services.A2A.ConfiguredA2ASubjectAuthorizer>();
+        // Scoped: IJwtAccessTokenProvider scoped'dır (bkz. auth kayıtları); singleton bir servis
+        // scoped bir bağımlılığı tüketemez — DI doğrulaması host başlangıcında bunu reddeder.
+        services.AddScoped<Services.A2A.A2ATokenExchangeService>();
+
         services.AddSingleton<ICustomerUnderstandingService, CustomerSupportBot.Application.Services.Personalization.CustomerUnderstandingService>();
         services.AddSingleton<IRecommendationService, CustomerSupportBot.Application.Services.Personalization.RecommendationService>();
         services.AddSingleton<ISkillsBasedRouter, CustomerSupportBot.Application.Services.Routing.SkillsBasedRouter>();

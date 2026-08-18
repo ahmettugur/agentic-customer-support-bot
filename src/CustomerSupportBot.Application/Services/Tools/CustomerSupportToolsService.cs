@@ -57,6 +57,12 @@ public sealed class CustomerSupportToolsService : ICustomerSupportToolsService
         => _order.ReturnRequestTool(orderId, reason, customerId);
 
     // ─── IComplaintToolsService ───
+    public ToolResult ComplaintStatusTool(string complaintId, string customerId)
+        => _complaint.ComplaintStatusTool(complaintId, customerId);
+
+    public ToolResult GetAllComplaintsTool(string customerId)
+        => _complaint.GetAllComplaintsTool(customerId);
+
     public ToolResult ComplaintRegistrationTool(string orderId, string complaintText, string? customerId = null)
         => _complaint.ComplaintRegistrationTool(orderId, complaintText, customerId);
 

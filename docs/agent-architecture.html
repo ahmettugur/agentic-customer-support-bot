@@ -684,7 +684,7 @@
       </p>
       <div class="meta">
         <span><b>6</b> ajan</span>
-        <span><b>10</b> tool</span>
+        <span><b>12</b> tool</span>
         <span><b>4</b> HITL onay kapısı</span>
         <span><b>3</b> routing stratejisi</span>
         <span><b>2</b> sesli kanal</span>
@@ -889,10 +889,13 @@
             <header>
               <h4>ComplaintAgent</h4><span class="chip chip-write">yan etkili</span>
             </header>
-            <p>Şikayet kaydı oluşturur. Tek tool'u da onay kapısından geçer.</p>
+            <p>Şikayet kaydı oluşturur; kayıt tool'u onay kapısından geçer. Salt-okunur
+              sorgulama tool'ları A2A kanalında da kullanılır (bkz. A2A.md).</p>
             <ul>
               <li><span class="dot dot-write"></span>complaint_registration_tool <span
                   class="chip chip-gate">onay</span></li>
+              <li><span class="dot"></span>complaint_status_tool</li>
+              <li><span class="dot"></span>get_all_complaints_tool</li>
             </ul>
           </article>
 
@@ -981,6 +984,18 @@
                 <td>ComplaintAgent</td>
                 <td><span class="chip chip-write">yazar</span></td>
                 <td><span class="chip chip-gate">zorunlu</span></td>
+              </tr>
+              <tr>
+                <td><code>complaint_status_tool</code></td>
+                <td>ComplaintAgent</td>
+                <td>okur</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><code>get_all_complaints_tool</code></td>
+                <td>ComplaintAgent</td>
+                <td>okur</td>
+                <td>—</td>
               </tr>
               <tr>
                 <td><code>human_handoff_tool</code></td>

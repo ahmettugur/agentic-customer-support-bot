@@ -33,6 +33,11 @@ public static class AgentsAdapterServiceCollectionExtensions
         services.AddSingleton<IAgentTeamPort>(sp =>
             sp.GetRequiredService<CustomerSupportTeam>());
 
+        // A2A ile dış sistemlere açılan ajanlar — sohbet/sesli kanaldaki workflow
+        // ajanlarından AYRI örneklerdir (salt-okunur tool kümesi, düz metin çıktı).
+        // Endpoint'e bağlanması Api katmanının işidir; burada yalnızca kurulur.
+        services.AddSingleton<A2A.A2AAgentCatalog>();
+
         // EvaluationRunner MAF'ın EvalItem/ChatMessage tiplerine bağımlı olduğu için
         // burada (Application değil) yaşıyor — bkz. CriteriaEvaluator.cs başındaki not.
         services.AddSingleton<EvaluationRunner>();

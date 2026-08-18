@@ -24,11 +24,11 @@ public sealed class JwtAccessTokenProvider : IJwtAccessTokenProvider
                 "Jwt:SigningKey en az 32 karakter olmalı (HMAC-SHA256). appsettings içine ekleyin.");
     }
 
-    public (string Token, DateTime ExpiresAt) GenerateAccessToken(UserInfo user, DateTime nowUtc)
+    public (string Token, DateTime ExpiresAt) GenerateAccessToken(UserInfo user, DateTime nowUtc, int? lifetimeMinutes = null)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var expires = nowUtc.AddMinutes(_options.AccessTokenMinutes);
+        var expires = nowUtc.AddMinutes(lifetimeMinutes ?? _options.AccessTokenMinutes);
 
         var claims = new List<Claim>
         {

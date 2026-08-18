@@ -174,6 +174,28 @@ public class ApprovalGateService
                 "login'den otomatik alınır.");
 
     /// <summary>
+    /// Şikayet durumu sorgulama (SALT-OKUNUR). Müşteri kimliği login'den/çağrı kimliğinden
+    /// gelir — LLM'e parametre olarak gösterilmez, dolayısıyla başkasının şikayeti istenemez.
+    /// </summary>
+    public AIFunction BuildComplaintStatusTool() =>
+        AIFunctionFactory.Create(
+            ([System.ComponentModel.Description("Sorgulanacak şikayet numarası (örn: 1001)")] string complaintId) =>
+                _tools.ComplaintStatusTool(complaintId, CurrentCustomerId),
+            name: WellKnown.ToolNames.ComplaintStatus,
+            description:
+                "Şikayet durumunu şikayet numarasıyla sorgular. Müşteri kimliği otomatik alınır; " +
+                "yalnızca kendi şikayetleriniz görünür.");
+
+    /// <summary>Müşterinin tüm şikayetlerini listeler (SALT-OKUNUR).</summary>
+    public AIFunction BuildGetAllComplaintsTool() =>
+        AIFunctionFactory.Create(
+            () => _tools.GetAllComplaintsTool(CurrentCustomerId),
+            name: WellKnown.ToolNames.GetAllComplaints,
+            description:
+                "Login'li müşterinin tüm şikayetlerini listeler. Parametre gerekmez — müşteri kimliği " +
+                "otomatik alınır.");
+
+    /// <summary>
     /// Onay gerekmiyorsa tool'u doğrudan çalıştırır. Onay gerekiyorsa <see cref="IApprovalQueue.CreateAsync"/>
     /// ile kaydı oluşturur ve KARARI BEKLEMEDEN hemen "onaya gönderildi" sonucunu döner — turn burada biter.
     /// Gerçek iş (execute), admin karar verdiğinde <see cref="IApprovalExecutionRouter"/> üzerinden ayrıca
