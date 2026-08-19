@@ -12,6 +12,7 @@ DI kayıtlarının modüler dağılımı. `Program.cs` her birini çağırır.
 | `AddPersistenceServices` | EF Core / InMemory provider |
 | `AddApplicationServices` | Port servisleri + CORS + rate limit + hosted services |
 | `AddAuthenticationServices` | JWT + policies |
+| `AddA2AAgents` | Keyed A2A ajan/sunucu kayıtları + principal bazlı store izolasyonu |
 | `AddAppHealthChecks` / `MapAppHealthChecks` | Health endpoints |
 | `MigrateIfDevelopmentAsync` | Dev'de EF Core migration |
 
@@ -269,6 +270,44 @@ services.AddScoped<IJwtAccessTokenProvider, JwtAccessTokenProvider>();
 services.AddScoped<ITokenService, TokenPortService>();
 services.AddScoped<IUserService, Application.Services.Auth.UserService>();
 ```
+
+---
+
+## A2AServicesExtensions
+
+`AddA2AAgents`, yalnızca `A2A:Enabled=true` iken `Program.cs` tarafından çağrılır. Ürün,
+sipariş ve şikayet ajanlarını isimlendirilmiş (`keyed`) `AIAgent` kayıtları olarak ekler ve her
+birini aynı adla A2A sunucusuna bağlar:
+
+```csharp
+services.AddHttpContextAccessor();
+services.UseClaimsBasedAgentIsolation();
+
+services
+    .AddAIAgent(A2AAgentNames.Product,
+        (sp, _) => sp.GetRequiredService<A2AAgentCatalog>().Product)
+    .AddA2AServer(o => o.AgentRunMode = AgentRunMode.DisallowBackground);
+```
+
+Diğer iki kayıt aynı deseni `A2AAgentNames.Order` ve `A2AAgentNames.Complaint` için uygular.
+Endpoint mapping de aynı sabitleri kullandığı için kayıt adı ile yayınlanan ajan birbirinden
+ayrılamaz. Ajan örnekleri burada yeniden kurulmaz; salt-okunur tool bariyerini taşıyan
+`A2AAgentCatalog` tek doğruluk kaynağıdır.
+
+`UseClaimsBasedAgentIsolation`, A2A hosting store anahtarlarını çağıranın `NameIdentifier`
+claim'iyle böler. Böylece istemciden gelen `contextId` veya `taskId` tek başına başka bir
+partnerin ya da müşterinin durumuna erişim sağlamaz. Özne token'larında izolasyon anahtarı
+`a2a:{partnerId}:{customerId}`, partner token'larında benzersiz kullanıcı kimliğidir.
+
+Bu kurulum kalıcı bir `AgentSessionStore` kaydetmez. Dolayısıyla uzak A2A ajanları HTTP
+istekleri arasında konuşma geçmişi tutmaz; yanıtta `contextId` dönmesi bu davranışı değiştirmez.
+İleride bir store eklendiğinde claims tabanlı izolasyon o store'u da otomatik olarak sarar.
+
+`AgentRunMode.DisallowBackground`, salt-okunur kanalda uzun ömürlü görev oluşturulmasını
+engeller. Bu API deneysel işaretli olduğu için `MEAI001` yalnızca üç kayıt satırının çevresinde
+bastırılır; proje genelinde kapatılmaz.
+
+Detaylı protokol, kimlik ve transport açıklaması için [A2A.md](A2A.md) belgesine bakın.
 
 ---
 

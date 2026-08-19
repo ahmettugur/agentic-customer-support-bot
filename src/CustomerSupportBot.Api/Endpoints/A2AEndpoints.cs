@@ -1,8 +1,8 @@
 // Api/Endpoints/A2AEndpoints.cs
 // A2A (Agent2Agent) ajanlarının dış sistemlere yayınlanması.
 
+using System.Buffers;
 using System.Diagnostics;
-using Microsoft.AspNetCore.Http.Features;
 using System.Security.Claims;
 using CustomerSupportBot.Adapters.Agents.A2A;
 using CustomerSupportBot.Application.Ports.Outbound;
@@ -53,35 +53,35 @@ public static class A2AEndpoints
             .RequireAuthorization("Partner")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ALogFilter("product"))
-            .WithBodyLimit(maxRequestBytes);
+            .WithProtocolGuards(maxRequestBytes, isHttpJson: false);
         app.MapA2AHttpJson(A2AAgentNames.Product, "/a2a/product")
             .RequireAuthorization("Partner")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ALogFilter("product"))
-            .WithBodyLimit(maxRequestBytes);
+            .WithProtocolGuards(maxRequestBytes, isHttpJson: true);
 
         app.MapA2AJsonRpc(A2AAgentNames.Order, "/a2a/order")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ASubjectScopeFilter("order"))
-            .WithBodyLimit(maxRequestBytes);
+            .WithProtocolGuards(maxRequestBytes, isHttpJson: false);
         app.MapA2AHttpJson(A2AAgentNames.Order, "/a2a/order")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ASubjectScopeFilter("order"))
-            .WithBodyLimit(maxRequestBytes);
+            .WithProtocolGuards(maxRequestBytes, isHttpJson: true);
 
         // Şikayet ajanı da müşteri verisi döndürür — sipariş ajanıyla AYNI kimlik şartına tabi.
         app.MapA2AJsonRpc(A2AAgentNames.Complaint, "/a2a/complaint")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"))
-            .WithBodyLimit(maxRequestBytes);
+            .WithProtocolGuards(maxRequestBytes, isHttpJson: false);
         app.MapA2AHttpJson(A2AAgentNames.Complaint, "/a2a/complaint")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"))
-            .WithBodyLimit(maxRequestBytes);
+            .WithProtocolGuards(maxRequestBytes, isHttpJson: true);
 
         // AgentCard — A2A'nın keşif yarısı. Kart olmadan çağıran, ajanın hangi yetenekleri
         // olduğunu ve hangi kimlik doğrulamasını beklediğini deneyerek öğrenmek zorunda kalır.
@@ -102,37 +102,147 @@ public static class A2AEndpoints
     }
 
     /// <summary>
-    /// A2A uçlarına istek gövdesi sınırı koyar.
+    /// A2A endpoint grubuna protokol guard metadata'sı ekler.
     ///
     /// <para>
-    /// Kestrel'in varsayılanı 30 MB'dır ve metin tabanlı bir sorgu kanalı için anlamsız
-    /// derecede geniştir. Bu, ajan seviyesindeki karakter/parça sınırının (bkz.
-    /// <c>InputLimitedAgent</c>) yerine geçmez — onu tamamlar: burada ham bayt daha
-    /// AYRIŞTIRILMADAN reddedilir, orada LLM'e gidecek metin ölçülür.
+    /// Endpoint filtresi kullanılmaz: HTTP+JSON handler'ında <c>SendMessageRequest</c>, filtre
+    /// çağrılmadan önce bind edilir. Metadata'yı <see cref="UseA2AProtocolGuards"/> middleware'i
+    /// okur ve ham gövdeyi model binding başlamadan sınırlar.
     /// </para>
     /// </summary>
-    private static TBuilder WithBodyLimit<TBuilder>(this TBuilder builder, long maxBytes)
+    private static TBuilder WithProtocolGuards<TBuilder>(
+        this TBuilder builder,
+        long maxBytes,
+        bool isHttpJson)
         where TBuilder : IEndpointConventionBuilder =>
-        builder.AddEndpointFilter(async (context, next) =>
+        builder.WithMetadata(new A2AProtocolGuardMetadata(maxBytes, isHttpJson));
+
+    /// <summary>
+    /// A2A protokol sınırlarını endpoint çalışmadan ve gövde deserialize edilmeden önce uygular.
+    /// Middleware <c>UseAuthorization</c>'dan sonra kaydedilir; yetkisiz isteklerin gövdesini
+    /// okumaz, yetkili isteklerde ise host özelliğine bağlı kalmadan chunked gövdeleri de sınırlar.
+    /// </summary>
+    public static IApplicationBuilder UseA2AProtocolGuards(this IApplicationBuilder app) =>
+        app.Use(async (http, next) =>
         {
-            var http = context.HttpContext;
+            var guard = http.GetEndpoint()?.Metadata.GetMetadata<A2AProtocolGuardMetadata>();
+            if (guard is null)
+            {
+                await next(http);
+                return;
+            }
 
-            // ÖNCE Content-Length. Sunucunun gövde sınırı özelliğine güvenmek yetmez: o özellik
-            // her barındırma ortamında YOKTUR (ölçüldü — TestServer'da null döner) ve
-            // olmadığında sınır sessizce etkisiz kalır. Yapılandırmada görünen ama hiçbir şey
-            // yapmayan bir güvenlik ayarı, hiç olmamasından kötüdür.
-            if (http.Request.ContentLength is { } declared && declared > maxBytes)
-                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            if (guard.IsHttpJson)
+            {
+                var requestedVersion = http.Request.Headers["A2A-Version"].FirstOrDefault();
+                if (string.IsNullOrWhiteSpace(requestedVersion))
+                    requestedVersion = http.Request.Query["A2A-Version"].FirstOrDefault();
 
-            // Content-Length bildirilmemiş (chunked) gövdeler için sunucu tarafı sınır — varsa.
-            // Bu dal test ortamında doğrulanamaz (özellik orada yok); Content-Length kontrolü
-            // asıl korumadır, bu yalnızca onun kapsamadığı durum için yedektir.
-            var feature = http.Features.Get<IHttpMaxRequestBodySizeFeature>();
-            if (feature is { IsReadOnly: false })
-                feature.MaxRequestBodySize = maxBytes;
+                // Spesifikasyona göre boş değer 0.3 anlamına gelir. Bu uygulama ve kullanılan
+                // SDK yalnızca 1.0 semantiğini uygular; 0.3'ü kabul etmek sessiz ve hatalı bir
+                // protokol düşürmesi olurdu.
+                requestedVersion = string.IsNullOrWhiteSpace(requestedVersion) ? "0.3" : requestedVersion;
+                if (requestedVersion != "1.0")
+                {
+                    await Results.Problem(
+                        type: "https://a2a-protocol.org/errors/version-not-supported",
+                        title: "Protocol Version Not Supported",
+                        detail: $"The requested A2A protocol version '{requestedVersion}' is not supported. "
+                              + "Supported versions: 1.0.",
+                        statusCode: StatusCodes.Status400BadRequest,
+                        extensions: new Dictionary<string, object?>
+                        {
+                            ["supportedVersions"] = new[] { "1.0" }
+                        })
+                        .ExecuteAsync(http);
+                    return;
+                }
 
-            return await next(context);
+                // Upstream preview REST result'i application/json üretir. A2A 1.0 HTTP+JSON
+                // binding'i application/a2a+json önerir; istemci uyumluluğu için yalnızca
+                // başarılı JSON yanıtlarını düzelt, ProblemDetails ve SSE türlerine dokunma.
+                http.Response.OnStarting(() =>
+                {
+                    if (http.Response.StatusCode < 400
+                        && http.Response.ContentType?.StartsWith(
+                            "application/json", StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        var suffix = http.Response.ContentType["application/json".Length..];
+                        http.Response.ContentType = $"application/a2a+json{suffix}";
+                    }
+
+                    return Task.CompletedTask;
+                });
+            }
+
+            if (HttpMethods.IsPost(http.Request.Method))
+            {
+                var originalBody = http.Request.Body;
+                var bufferedBody = await BufferBodyWithinLimitAsync(http, guard.MaxRequestBytes);
+                if (bufferedBody is null)
+                    return;
+
+                await using (bufferedBody)
+                {
+                    http.Request.Body = bufferedBody;
+                    try
+                    {
+                        await next(http);
+                    }
+                    finally
+                    {
+                        http.Request.Body = originalBody;
+                    }
+                }
+
+                return;
+            }
+
+            await next(http);
         });
+
+    private static async Task<MemoryStream?> BufferBodyWithinLimitAsync(HttpContext http, long maxBytes)
+    {
+        if (http.Request.ContentLength is { } declared && declared > maxBytes)
+        {
+            http.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+            return null;
+        }
+
+        var initialCapacity = (int)Math.Min(http.Request.ContentLength ?? 0, 64 * 1024);
+        var buffered = new MemoryStream(initialCapacity);
+        var rented = ArrayPool<byte>.Shared.Rent(8192);
+
+        try
+        {
+            long total = 0;
+            while (true)
+            {
+                var read = await http.Request.Body.ReadAsync(rented.AsMemory(), http.RequestAborted);
+                if (read == 0)
+                    break;
+
+                total += read;
+                if (total > maxBytes)
+                {
+                    http.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
+                    await buffered.DisposeAsync();
+                    return null;
+                }
+
+                await buffered.WriteAsync(rented.AsMemory(0, read), http.RequestAborted);
+            }
+
+            buffered.Position = 0;
+            return buffered;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rented);
+        }
+    }
+
+    private sealed record A2AProtocolGuardMetadata(long MaxRequestBytes, bool IsHttpJson);
 
     /// <summary>
     /// Ajanın desteklediği transport'ları ilan eder.
@@ -154,8 +264,18 @@ public static class A2AEndpoints
 
         return
         [
-            new AgentInterface { ProtocolBinding = ProtocolBindingNames.JsonRpc,  Url = url },
-            new AgentInterface { ProtocolBinding = ProtocolBindingNames.HttpJson, Url = url }
+            new AgentInterface
+            {
+                ProtocolBinding = ProtocolBindingNames.JsonRpc,
+                ProtocolVersion = "1.0",
+                Url = url
+            },
+            new AgentInterface
+            {
+                ProtocolBinding = ProtocolBindingNames.HttpJson,
+                ProtocolVersion = "1.0",
+                Url = url
+            }
         ];
     }
 

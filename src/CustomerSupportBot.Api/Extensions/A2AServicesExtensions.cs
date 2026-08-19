@@ -22,6 +22,14 @@ public static class A2AServicesExtensions
     /// </summary>
     public static IServiceCollection AddA2AAgents(this IServiceCollection services)
     {
+        // A2A contextId/taskId değerleri yalnızca konuşmayı sürdürme anahtarıdır; sahiplik
+        // kanıtı değildir. Hosting store'larını çağıranın NameIdentifier claim'iyle bölümle.
+        // Subject token'larda bu claim a2a:{partner}:{customer}, partner token'larında ise
+        // benzersiz kullanıcı ID'sidir. Böylece aynı wire contextId farklı principal'lar
+        // arasında oturum taşımak için kullanılamaz.
+        services.AddHttpContextAccessor();
+        services.UseClaimsBasedAgentIsolation();
+
         // AgentRunMode.DisallowBackground bilinçli: arka plan (uzun süreli) görevler dış
         // çağıranın sunucuda iş biriktirmesine izin verirdi. Bu kanal salt-okunur sorgular
         // içindir — her çağrı istek ömrü içinde başlar ve biter.

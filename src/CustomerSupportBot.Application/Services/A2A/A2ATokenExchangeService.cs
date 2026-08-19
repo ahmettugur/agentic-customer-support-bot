@@ -12,7 +12,10 @@ namespace CustomerSupportBot.Application.Services.A2A;
 /// <summary>A2A kanalında kullanılan roller.</summary>
 public static class A2ARoles
 {
-    /// <summary>Partner makine kimliği. Yalnızca token değişimi yapabilir; A2A ajanlarını DOĞRUDAN çağıramaz.</summary>
+    /// <summary>
+    /// Partner makine kimliği. Müşteri bağımsız ürün ajanını doğrudan çağırabilir; müşteri
+    /// verisi döndüren ajanlar için önce tek müşteriye kilitli bir özne token'ı almalıdır.
+    /// </summary>
     public const string Partner = "Partner";
 
     /// <summary>

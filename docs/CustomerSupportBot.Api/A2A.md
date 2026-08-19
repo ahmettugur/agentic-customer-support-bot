@@ -45,8 +45,8 @@ ancak **dış bir sistem onu çağırdığında** fark edilirdi.
 
 | Token | Cevapladığı soru | Ne yapabilir |
 |---|---|---|
-| **Partner** (`Partner` rolü) | *Hangi sistem arıyor?* | Yalnızca token değişimi. Ajanları **doğrudan çağıramaz**. |
-| **Özne** (`A2ASubject` rolü) | *Hangi müşteri adına?* | Ajanları çağırır. **Tek müşteriye kilitli**, kısa ömürlü. |
+| **Partner** (`Partner` rolü) | *Hangi sistem arıyor?* | Müşteri bağımsız ürün ajanını çağırır; ayrıca token değişimi yapar. |
+| **Özne** (`A2ASubject` rolü) | *Hangi müşteri adına?* | Sipariş/şikayet ajanlarını çağırır. **Tek müşteriye kilitli**, kısa ömürlü. |
 
 Akış (OAuth 2.0 Token Exchange, RFC 8693 deseni):
 
@@ -60,11 +60,21 @@ partner token ──> POST /auth/a2a/token-exchange { customerId }
                                   └─> POST /a2a/order   (A2ASubject policy + scope filtresi)
 ```
 
-**Partner token'ı neden doğrudan kullanılmıyor:** o "hangi sistem" sorusunu cevaplar, "hangi
-müşteri" sorusunu değil. Doğrudan kullanılsaydı müşteri kimliğinin **çağrı gövdesinde parametre**
+**Partner token'ı müşteri ajanlarında neden doğrudan kullanılmıyor:** o "hangi sistem" sorusunu
+cevaplar, "hangi müşteri" sorusunu değil. Doğrudan kullanılsaydı müşteri kimliğinin **çağrı gövdesinde parametre**
 olarak taşınması gerekirdi — yani tool'ların güvendiği kimlik, istemcinin serbestçe
 değiştirebildiği bir alan olurdu. Bu, sohbet kanalında bilerek kapatılan açığın
 (`SessionState.CustomerId` yerine `AuthenticatedCustomerId`) A2A'da yeniden açılması demekti.
+
+`contextId` ve `taskId` kimlik veya sahiplik kanıtı değildir. A2A hosting session/task store'ları
+`NameIdentifier` claim'iyle ayrıca bölümlenir. Partner token'ında bu değer benzersiz kullanıcı
+ID'si, özne token'ında `a2a:{partnerId}:{customerId}` biçimindedir. Bu nedenle aynı `contextId`
+başka bir partner veya müşteri kimliğiyle gönderildiğinde farklı bir store alanına çözülür.
+
+Bu kurulum ayrıca kalıcı bir A2A session store kaydetmez; ajan çağrıları istekler arasında sohbet
+geçmişi saklamaz. Yanıtta `contextId` bulunması tek başına sunucunun önceki mesajları hatırladığı
+anlamına gelmez. İleride session store eklendiğinde yukarıdaki principal izolasyonu aynı store'a
+otomatik uygulanır.
 
 **Yetkisiz ile "müşteri yok" ayrımı bilerek yapılmaz** (ikisi de 403): ayrım yapılsaydı
 dışarıdan müşteri numarası taranarak hangi numaraların var olduğu öğrenilebilirdi.
@@ -202,10 +212,9 @@ Kök kart, ürün kartından **türetilir** (yeniden kurulmaz) — ikisinin zama
 bir skill'in yalnızca birine eklenmesi, sessiz bir tutarsızlık olurdu. `A2AProtocolConformanceTests`
 bunu ayrıca doğrular.
 
-**`PublicBaseUrl` zorunludur.** Boş bırakılırsa kartlarda göreli adresler yayınlanır; kartı
-okuyan dış istemci adresi kendi başına çözmek zorunda kalır ve proxy/gateway arkasında yanlış
-sonuç verir. Uygulama açılışta bunu denetler: boşsa uyarı, göreli veya (Development dışında)
-HTTPS olmayan bir değer verilmişse **başlatma hatası**.
+**`PublicBaseUrl` dış ortamlarda zorunludur.** Development'ta boş bırakılırsa kartlarda göreli
+adresler yayınlanır ve uygulama uyarı verir. Development dışında boş, göreli veya HTTPS olmayan
+bir değer verilmişse uygulama **başlamaz**.
 
 Aynı ölçümden çıkan diğer sonuçlar:
 
@@ -379,7 +388,7 @@ private static string ComplaintNotAccessibleMessage(string complaintId) =>
 >
 > | Ayar | Nerede uygulanır | Ne ölçer |
 > |---|---|---|
-> | `MaxRequestBytes` (64 KB) | Endpoint filtresi | Ham gövde — daha ayrıştırılmadan reddedilir |
+> | `MaxRequestBytes` (64 KB) | Binding öncesi middleware | Ham gövde — daha ayrıştırılmadan reddedilir |
 > | `MaxMessageChars` (4000) | `InputLimitedAgent` | LLM'e gidecek toplam metin |
 > | `MaxParts` (20) | `InputLimitedAgent` | Parça sayısı — uzunluk sınırını bölerek dolaşmayı engeller |
 >
@@ -387,10 +396,15 @@ private static string ComplaintNotAccessibleMessage(string complaintId) =>
 > HTTP+JSON ve streaming olmak üzere üç yoldan çağrılır; kontrolü endpoint'e koymak üç yerde
 > tekrar (ve birinde unutma) demekti. Sınır aşıldığında LLM'e **hiç gidilmez** ve çağıran
 > protokol hatası değil, ne yapması gerektiğini söyleyen bir ajan yanıtı alır.
+>
+> Ham gövde sınırı endpoint filtresi değildir. Minimal API, HTTP+JSON `SendMessageRequest`
+> gövdesini endpoint filtresinden önce bind eder. Guard bu nedenle yetkilendirmeden sonra fakat
+> model binding'den önce çalışan middleware'dir; `Content-Length` olmayan chunked gövdeleri de
+> en fazla 64 KB okuyarak sınırlar.
 
-> **`PublicBaseUrl` dışa açılan kurulumda zorunludur.** Boşsa kartlarda göreli adresler
-> yayınlanır ve uygulama açılışta uyarı basar. Göreli bir değer verilirse veya Development
-> dışında HTTPS olmayan bir adres verilirse uygulama **başlamaz**.
+> **`PublicBaseUrl` dışa açılan kurulumda zorunludur.** Development'ta boşsa kartlarda göreli
+> adresler yayınlanır ve uygulama uyarı basar. Development dışında boş, göreli veya HTTPS
+> olmayan bir değer verilirse uygulama **başlamaz**.
 
 > **`PartnerId` = partner kullanıcısının KULLANICI ADI**, veritabanı satırının GUID'i değil.
 > Token değişimi, çağıranın token'ındaki kullanıcı adı claim'ini (`name` / `unique_name`)
@@ -848,10 +862,18 @@ bir uyumsuzluk değil, bilinçli bir sınırdır.
 > sayar. Uzun girdi gönderme ihtimaliniz varsa **istemci tarafında da** kırpın; sunucunun
 > sınırlarını kartla değil, entegrasyon dokümanıyla öğrenirsiniz (A2A'da bunu ilan edecek bir
 > alan yoktur).
->
-> Bu tasarım bilinçlidir: sınır aşıldığında istisna fırlatılsaydı köprü onu jenerik bir sunucu
-> hatasına çevirirdi ve çağıran nedenini hiç öğrenemezdi. Anlaşılır bir metin, sebebi
-> okunamayan bir `500`'den iyidir.
+
+Bu tasarım bilinçlidir: sınır aşıldığında istisna fırlatılsaydı köprü onu jenerik bir sunucu
+hatasına çevirirdi ve çağıran nedenini hiç öğrenemezdi. Anlaşılır bir metin, sebebi okunamayan
+bir `500`'den iyidir.
+
+### HTTP+JSON protokol guard'ları
+
+HTTP+JSON çağrılarında `A2A-Version` header'ı (ve uyumluluk için aynı adlı query parametresi)
+doğrulanır. Bu sunucu yalnızca `1.0` uygular. Spesifikasyon gereği boş değer `0.3` sayıldığından,
+boş/`0.3` veya başka bir sürüm ajan çalıştırılmadan `400 Protocol Version Not Supported` alır.
+Başarılı JSON yanıtları `application/a2a+json`, akış yanıtları `text/event-stream`, hata
+yanıtları ise `application/problem+json` medya türünü kullanır.
 
 ### Desteklenmeyen: arka plan görevleri
 
@@ -893,6 +915,11 @@ görülseydi müşteri numarası taranabilirdi (bkz. bölüm 3).
   - `A2ATokenExchangeTests` — token değişimi iş kuralı
   - `ComplaintReadOnlyToolsTests` — sahiplik + enumeration koruması
   - `A2AEndpointsTests` — yetki/transport zinciri, kart yetenek ilanının davranışa bağlanması
+  - `A2ASessionIsolationTests` — aynı `contextId`'nin farklı principal'lar arasında store paylaşmaması
   - `A2AScopeTimingTests` — ambient kimliğin akış VE akışsız yolda kurulması (bölüm 4)
   - `A2ADisabledByDefaultTests` — kanal kapalıyken hiç yayınlanmaması
-  - `A2AProtocolConformanceTests` — protokolün kendi istemcisiyle uçtan uca uyum
+  - `A2AProtocolConformanceTests` — resmi .NET SDK istemcisiyle uçtan uca SDK uyumu
+
+`A2AProtocolConformanceTests` istemci ve sunucuda aynı .NET SDK ailesini kullandığı için ortak
+bir SDK sapmasını tek başına yakalayamaz. Release doğrulamasında SDK'dan bağımsız resmi
+`a2a-tck` zorunlu gereksinim seti ayrıca çalıştırılmalıdır.

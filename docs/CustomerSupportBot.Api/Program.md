@@ -20,6 +20,7 @@ Uygulamanın **Composition Root**'u. Tüm DI kayıtları, middleware pipeline'ı
 9. AddApplicationServices(config)       ← Port servisleri, CORS, rate limiting, hosted services
 10. AddAuthenticationServices(config)   ← JWT + role policies
 11. AddAppHealthChecks(config)          ← Postgres + Redis health checks
+12. AddA2AAgents() (A2A açıksa)         ← Keyed ajanlar + A2A hosting + principal izolasyonu
 ```
 
 ### Neden bu sıra?
@@ -33,6 +34,7 @@ Uygulamanın **Composition Root**'u. Tüm DI kayıtları, middleware pipeline'ı
 | Application | Persistence + Redis (port'lar adapter'ları kullanır) |
 | Auth | — (sonda olur ki UserService gibi port'lar mevcut olsun) |
 | HealthChecks | Persistence + Redis (bağımlılıkları kontrol eder) |
+| A2A | AI + Application + Auth; yalnızca `A2A:Enabled=true` iken kaydedilir |
 
 ---
 
@@ -55,6 +57,17 @@ Production'da `Approval:Enabled = false` ise **kritik uyarı** — `order_placem
 
 ---
 
+## A2A startup guard'ları
+
+`A2A:Enabled=true` olduğunda servis kaydı, token değişimi ve ajan endpoint'leri birlikte açılır.
+Kanal kapalıysa bunların hiçbiri yayınlanmaz.
+
+`A2A:PublicBaseUrl`, Development dışında zorunlu ve mutlak bir HTTPS adresi olmalıdır; aksi
+halde uygulama başlangıçta durur. Development ortamında boş bırakılabilir, fakat AgentCard
+adresleri göreli olacağı için bir uyarı loglanır.
+
+---
+
 ## Middleware pipeline
 
 Sıra çok önemli — ASP.NET Core her middleware'i sırayla execute eder.
@@ -67,9 +80,11 @@ Sıra çok önemli — ASP.NET Core her middleware'i sırayla execute eder.
 5. UseWebSockets()               ← Auth'tan önce — WS upgrade
 6. MapOpenApi() (dev only)
 7. UseHttpsRedirection()
-8. UseAuthentication()
-9. UseAuthorization()
-10. MapXxxEndpoints()            ← Endpoint mapping (en sonda)
+8. UseA2ARejectionLogging()      ← A2A açıksa; auth 401/403 sonuçlarını da sarar
+9. UseAuthentication()
+10. UseAuthorization()
+11. UseA2AProtocolGuards()       ← A2A açıksa; model binding'den önce gövde/protokol kontrolü
+12. MapXxxEndpoints()            ← Endpoint mapping (en sonda)
 ```
 
 ### Neden ExceptionHandler en başta?
@@ -80,6 +95,12 @@ Sonraki herhangi bir middleware exception fırlatırsa burada yakalanır. `Domai
 
 WebSocket upgrade `HTTP 101 Switching Protocols` cevabını verir. Token `?access_token=...` query param'dan alınır (AuthServicesExtensions `OnMessageReceived` event'i).
 
+### A2A middleware sırası neden böyle?
+
+`UseA2ARejectionLogging`, yetkilendirme kısa devrelerini de görebilmek için authentication ve
+authorization'ı dışarıdan sarar. `UseA2AProtocolGuards` ise yetkisiz gövdeleri okumamak için
+authorization'dan sonra, A2A Minimal API model binding çalışmadan önce yer alır.
+
 ---
 
 ## Endpoint gruplandırma
@@ -87,13 +108,20 @@ WebSocket upgrade `HTTP 101 Switching Protocols` cevabını verir. Token `?acces
 ```csharp
 // Public — rate-limited, anonim veya JWT opsiyonel
 app.MapAuthEndpoints();
+if (a2aEnabled)
+{
+    app.MapA2AAuthEndpoints();
+    app.MapA2AAgentEndpoints();
+}
 app.MapChatEndpoints();
 app.MapRealtimeEndpoints();
 app.MapSessionEndpoints();
 app.MapAnalyticsEndpoints();    // /sessions/{sid}/rating public; /analytics/dashboard Admin
 
 // Admin scope (JWT + role=Admin)
-var adminScope = app.MapGroup("").RequireAuthorization("Admin");
+var adminScope = app.MapGroup("")
+    .RequireAuthorization("Admin")
+    .RequireRateLimiting("general");
 adminScope.MapAdminEndpoints();
 adminScope.MapTraceEndpoints();
 adminScope.MapEvaluationEndpoints();
@@ -102,11 +130,12 @@ adminScope.MapImprovementsEndpoints();
 adminScope.MapTelemetryEndpoints();
 adminScope.MapPersonalizationEndpoints();
 adminScope.MapAgentsEndpoints();
-adminScope.MapWorkflowEndpoints();
 adminScope.MapSlaEndpoints();
 
 // AdminOrAgent scope
-var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent");
+var agentScope = app.MapGroup("")
+    .RequireAuthorization("AdminOrAgent")
+    .RequireRateLimiting("general");
 agentScope.MapAgentPanelEndpoints();   // /agent/*
 ```
 

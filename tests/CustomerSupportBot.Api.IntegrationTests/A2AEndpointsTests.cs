@@ -89,10 +89,18 @@ public class A2AEndpointsTests : IClassFixture<A2AEnabledFactory>
         return provider.GenerateAccessToken(user, DateTime.UtcNow).Token;
     }
 
-    private HttpClient ClientWith(string token)
+    /// <summary>
+    /// Yetkili istemci. <paramref name="a2aVersion"/> varsayılan olarak gönderilir çünkü
+    /// spesifikasyon "Clients MUST send the <c>A2A-Version</c> header" der ve HTTP+JSON
+    /// uçlarımız bunu zorunlu tutar (bkz. <c>UseA2AProtocolGuards</c>). <c>null</c> geçmek,
+    /// başlığı hiç göndermeyen bir istemciyi taklit eder.
+    /// </summary>
+    private HttpClient ClientWith(string token, string? a2aVersion = "1.0")
     {
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (a2aVersion is not null)
+            client.DefaultRequestHeaders.TryAddWithoutValidation("A2A-Version", a2aVersion);
         return client;
     }
 

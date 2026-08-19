@@ -149,8 +149,9 @@ catch (Exception ex)
     return 1;
 }
 
-// Konusma surekliligi: ayni oturum boyunca ayni AgentSession kullanilir, boylece
-// "peki onun fiyati neydi" gibi bir devam sorusu baglami koruyabilir.
+// Konusma surekliligi YEREL yonlendiriciye aittir: ayni AgentSession, onceki kullanici
+// turlarini korur. Uzak A2A sunucusu kalici session store kaydetmedigi icin contextId
+// uzerinden uzak konusma gecmisi tutmaz.
 var session = await agent.CreateSessionAsync(cts.Token);
 
 Console.WriteLine();

@@ -437,7 +437,7 @@ public class A2AScopeTimingTests : IClassFixture<A2AScopeTimingFactory>
         await foreach (var evt in client.SendStreamingMessageAsync(Ask("test"), TestContext.Current.CancellationToken))
         {
             if (evt.Message is { } msg)
-                parts.AddRange(msg.Parts.Select(p => p.Text));
+                parts.AddRange(msg.Parts.Select(p => p.Text).OfType<string>());
         }
 
         string.Join("", parts).Should().Be("customerId=1027",

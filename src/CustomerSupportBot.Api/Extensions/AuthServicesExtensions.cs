@@ -75,10 +75,11 @@ public static class AuthServicesExtensions
             options.AddPolicy("SessionAccess", p => p.RequireRole("Customer", "Admin", "Agent"));
 
             // ─── A2A (dış sistemlere açılan kanal) ───
-            // İki ayrı rol bilinçli: partner token'ı YALNIZCA token değişimi yapabilir,
-            // ajanları doğrudan çağıramaz. Ajanları çağıran özne token'ı ise tek bir müşteriye
-            // kilitlidir. Böylece "hangi sistem" ile "hangi müşteri" soruları ayrı token'larda
-            // taşınır ve müşteri kimliği hiçbir zaman istemcinin değiştirebildiği bir parametre olmaz.
+            // İki ayrı rol bilinçli: partner token'ı müşteri bağımsız ürün ajanını çağırabilir
+            // ve token değişimi yapabilir. Müşteri verisi döndüren ajanları çağıran özne token'ı
+            // ise tek bir müşteriye kilitlidir. Böylece "hangi sistem" ile "hangi müşteri"
+            // soruları ayrı token'larda taşınır ve müşteri kimliği hiçbir zaman istemcinin
+            // değiştirebildiği bir parametre olmaz.
             options.AddPolicy("Partner", p => p.RequireRole(A2ARoles.Partner));
             options.AddPolicy("A2ASubject", p => p.RequireRole(A2ARoles.Subject));
         });
@@ -86,4 +87,3 @@ public static class AuthServicesExtensions
         return services;
     }
 }
-

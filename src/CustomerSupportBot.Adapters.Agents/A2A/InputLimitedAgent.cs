@@ -38,7 +38,7 @@ public sealed class InputLimitedAgent(AIAgent inner, A2AOptions options) : Deleg
 
     protected override Task<AgentResponse> RunCoreAsync(
         IEnumerable<ChatMessage> messages,
-        AgentSession session,
+        AgentSession? session,
         AgentRunOptions? options = null,
         CancellationToken cancellationToken = default)
     {
@@ -50,7 +50,7 @@ public sealed class InputLimitedAgent(AIAgent inner, A2AOptions options) : Deleg
 
     protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages,
-        AgentSession session,
+        AgentSession? session,
         AgentRunOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {

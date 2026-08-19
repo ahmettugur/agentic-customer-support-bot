@@ -52,15 +52,20 @@ if (!app.Environment.IsDevelopment())
 }
 
 // A2A guard: kanal açıkken kart adresleri dış istemcilerin okuyacağı adreslerdir.
-// PublicBaseUrl boşsa kartlarda GÖRELİ url'ler yayınlanır ve kartı okuyan dış istemci adresi
-// kendi başına çözmek zorunda kalır — proxy/gateway arkasında bu yanlış sonuç verir.
+// PublicBaseUrl yalnızca Development'ta boş kalabilir; bu durumda kartlarda GÖRELİ URL'ler
+// yayınlanır. Dış ortamda boşluk da göreli değer kadar hatalıdır ve startup'ı durdurur.
 // Spesifikasyon üretim HTTP arayüzleri için mutlak HTTPS adres bekler.
 if (a2aEnabled)
 {
     var a2aOpts = app.Services.GetRequiredService<IOptions<A2AOptions>>().Value;
     var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
 
-    if (string.IsNullOrWhiteSpace(a2aOpts.PublicBaseUrl))
+    if (string.IsNullOrWhiteSpace(a2aOpts.PublicBaseUrl) && !app.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "A2A:PublicBaseUrl Development dışında zorunludur ve mutlak bir HTTPS adresi olmalıdır.");
+    }
+    else if (string.IsNullOrWhiteSpace(a2aOpts.PublicBaseUrl))
     {
         startupLogger.LogWarning(
             "[A2A] PublicBaseUrl boş — agent card'larda göreli adresler yayınlanacak. "
@@ -106,6 +111,14 @@ if (a2aEnabled)
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Endpoint metadata'sı routing sırasında hazırdır; guard yetkilendirmeden sonra, Minimal API
+// model binding'inden önce çalışır. Böylece yetkisiz gövdeler boşuna okunmaz ve yetkili A2A
+// gövdeleri deserialize edilmeden önce kesin olarak sınırlandırılır.
+if (a2aEnabled)
+{
+    app.UseA2AProtocolGuards();
+}
 
 app.MapAuthEndpoints();
 // Token değişimi de bayrağa BAĞLI: kapalıyken yalnızca ajan uçlarını kaldırmak, kanalı

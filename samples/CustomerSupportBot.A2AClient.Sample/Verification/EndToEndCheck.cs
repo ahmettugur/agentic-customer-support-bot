@@ -37,7 +37,7 @@ public static class EndToEndCheck
         {
             Step("1. Partner girisi");
             await tokens.GetPartnerTokenAsync(ct);
-            Ok("Partner token alindi — bu token yalnizca token DEGISIMI yapabilir.");
+            Ok("Partner token alindi — urun ajanini cagirabilir ve token DEGISIMI yapabilir.");
 
             Step($"2. Token degisimi (musteri {tokens.CustomerId} adina)");
             await tokens.GetSubjectTokenAsync(ct);
