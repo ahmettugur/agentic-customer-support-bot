@@ -244,11 +244,15 @@ public static class ChatEndpoints
     /// çekmek için. Badge/bildirim UI'ı sayfa açılışında bunu çağırır.
     /// </summary>
     private static async Task<IResult> HandleGetUnseenApprovalsAsync(
-        string sessionId, HttpContext httpContext, IApprovalQueue approvals, ISessionManager sessions)
+        string sessionId, HttpContext httpContext, IApprovalQueue approvals, ISessionManager sessions,
+        CancellationToken ct)
     {
         if (!await IsSessionAccessibleAsync(sessionId, httpContext, sessions)) return SessionForbidden();
 
-        var unseen = approvals.GetUnseenForSession(sessionId)
+        var customerId = ResolveAuthenticatedCustomerId(httpContext);
+        if (string.IsNullOrWhiteSpace(customerId)) return Results.Ok(Array.Empty<object>());
+
+        var unseen = (await approvals.GetUnseenForSessionAsync(sessionId, customerId, ct))
             .Select(r => new
             {
                 id = r.Id,
@@ -256,6 +260,7 @@ public static class ChatEndpoints
                 status = r.Status.ToString().ToLowerInvariant(),
                 decisionReason = r.DecisionReason,
                 executionResult = r.ExecutionResult,
+                executionStatus = r.ExecutionStatus.ToString().ToLowerInvariant(),
                 decidedAt = r.DecidedAt
             });
         return Results.Ok(unseen);
@@ -267,10 +272,28 @@ public static class ChatEndpoints
     {
         if (!await IsSessionAccessibleAsync(sessionId, httpContext, sessions)) return SessionForbidden();
 
-        var request = approvals.Get(id);
+        // Get() DEĞİL: unseen listesi kalıcı depodan cevaplanıyor, bu yüzden orada görünen bir
+        // kayıt cache'de olmayabilir (cache açık kayıtlar + son N kararı tutar). Cache'e bakan
+        // bir kontrol, listelenen eski bir bildirim için 404 döndürür ve bildirim her girişte
+        // yeniden "görülmemiş" olarak çıkar.
+        var request = await approvals.GetAsync(id, ct);
         if (request is null || request.SessionId != sessionId) return Results.NotFound();
 
-        await approvals.MarkSeenAsync(id, ct);
+        // Kaydın müşterisi de doğrulanır. Oturum sahipliği tek başına yetmez: onay kayıtları
+        // oturumdan bağımsız yaşar ve oturum sahipliği kontrolü var olmayan oturumlara izin
+        // verir, dolayısıyla silinmiş bir oturumun id'sini bilen biri buradan geçebilirdi.
+        var callerCustomerId = ResolveAuthenticatedCustomerId(httpContext);
+        if (string.IsNullOrWhiteSpace(callerCustomerId) ||
+            !string.Equals(request.CustomerId, callerCustomerId, StringComparison.Ordinal))
+            return Results.NotFound();
+
+        // Yazma başarısızsa 204 dönmek istemciyi yanıltır: bildirimi okundu sayar ama kayıt
+        // işaretlenmemiştir, aynı bildirim her girişte tekrar çıkar.
+        if (!await approvals.MarkSeenAsync(id, ct))
+            return Results.Problem(
+                title: "Bildirim görüldü olarak işaretlenemedi",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+
         return Results.NoContent();
     }
 
@@ -281,12 +304,13 @@ public static class ChatEndpoints
     /// customerId route/body'den değil JWT claim'inden okunur — başka bir müşterinin
     /// geçmişini URL değiştirerek görme ihtimali yok.
     /// </summary>
-    private static IResult HandleGetApprovalHistoryAsync(HttpContext httpContext, IApprovalQueue approvals)
+    private static async Task<IResult> HandleGetApprovalHistoryAsync(
+        HttpContext httpContext, IApprovalQueue approvals, CancellationToken ct)
     {
         var customerId = ResolveAuthenticatedCustomerId(httpContext);
         if (string.IsNullOrWhiteSpace(customerId)) return Results.Ok(Array.Empty<object>());
 
-        var history = approvals.GetHistoryForCustomer(customerId)
+        var history = (await approvals.GetHistoryForCustomerAsync(customerId, ct: ct))
             .Select(r => new
             {
                 id = r.Id,
@@ -294,6 +318,7 @@ public static class ChatEndpoints
                 status = r.Status.ToString().ToLowerInvariant(),
                 decisionReason = r.DecisionReason,
                 executionResult = r.ExecutionResult,
+                executionStatus = r.ExecutionStatus.ToString().ToLowerInvariant(),
                 requestedAt = r.RequestedAt,
                 decidedAt = r.DecidedAt
             });

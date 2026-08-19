@@ -20,28 +20,19 @@ public class EndpointSmokeTests : IClassFixture<TestWebApplicationFactory>
 
     private HttpClient NewClient() => _factory.CreateClient();
 
-    // ─── Anonymous: Sessions ───
-    [Fact]
-    public async Task Get_Sessions_ReturnsOkAndArray()
+    // ─── Sessions: anonim erişim YOK ───
+    //
+    // Bu üç uç eskiden anonimdi ve testleri bunu "OK" olarak doğruluyordu. /sessions/ tüm
+    // oturum kimliklerini listeliyor, diğer ikisi de o kimliklerle konuşmaları ve state'i
+    // veriyordu — yani /chat/* üzerindeki müşteri yetkilendirmesi bu yoldan dolaşılabiliyordu.
+    [Theory]
+    [InlineData("/sessions/")]
+    [InlineData("/sessions/unknown-session/messages")]
+    [InlineData("/sessions/unknown-xyz/state")]
+    public async Task SessionEndpoints_WithoutToken_Unauthorized(string path)
     {
-        var resp = await NewClient().GetAsync("/sessions/", TestContext.Current.CancellationToken);
-        resp.StatusCode.Should().Be(HttpStatusCode.OK);
-        var arr = await resp.Content.ReadFromJsonAsync<object[]>(cancellationToken: TestContext.Current.CancellationToken);
-        arr.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task Get_SessionMessages_ReturnsOk()
-    {
-        var resp = await NewClient().GetAsync("/sessions/unknown-session/messages", TestContext.Current.CancellationToken);
-        resp.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [Fact]
-    public async Task Get_SessionState_Unknown_NotFound()
-    {
-        var resp = await NewClient().GetAsync("/sessions/unknown-xyz/state", TestContext.Current.CancellationToken);
-        resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var resp = await NewClient().GetAsync(path, TestContext.Current.CancellationToken);
+        resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     // ─── Admin-only (no token → 401) ───

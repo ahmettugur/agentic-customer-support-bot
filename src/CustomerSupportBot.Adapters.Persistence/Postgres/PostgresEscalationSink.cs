@@ -83,6 +83,30 @@ public sealed class PostgresEscalationSink : IEscalationSink
             .ToList();
     }
 
+    /// <summary>
+    /// Agent kapsamlı geçmiş — <b>doğrudan veritabanından</b>, cache'ten değil.
+    ///
+    /// <para>
+    /// Cache yalnızca açık kayıtlar + son <see cref="HydrateRecentCount"/> kapalı kaydı tutar.
+    /// Bir agent'ın kendi kapalı eskalasyonu o pencerenin gerisinde kalabilir; cache üzerinden
+    /// filtrelemek onu görünmez bırakırdı. Hem <c>assigned_to</c> daraltması hem de limit
+    /// burada, tek bir SQL sorgusunda uygulanır.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<EscalationRequest>> GetRecentForAgentAsync(
+        string agentId, int count = 50, CancellationToken ct = default)
+    {
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+
+        var rows = await ctx.Escalations.AsNoTracking()
+            .Where(e => e.AssignedTo == null || e.AssignedTo == agentId)
+            .OrderByDescending(e => e.CreatedAt)
+            .Take(count)
+            .ToListAsync(ct);
+
+        return rows.Select(ToDomain).ToList();
+    }
+
     public IReadOnlyList<EscalationRequest> GetRecent(int count = 50)
     {
         EnsureHydrated();

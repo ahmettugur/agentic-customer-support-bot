@@ -64,7 +64,7 @@ public sealed class AnalyticsPortService : IAnalyticsPort
     public async Task<object> GetSummaryAsync(CancellationToken ct = default)
     {
         var allRatings = _ratings.GetAll();
-        var sessionInfos = await _sessions.GetAllSessionsAsync(ct);
+        var sessionInfos = await _sessions.GetAllSessionsAsync(forCustomerId: null, ct);
         var allSessions = await _sessions.GetAllAsync(ct);
         var recentApprovals = _approvals.GetRecent(200);
         var recentEscalations = _escalations.GetRecent(200);
@@ -102,7 +102,7 @@ public sealed class AnalyticsPortService : IAnalyticsPort
     {
         var dashboard = new AnalyticsDashboard();
 
-        var allSessions = await _sessions.GetAllSessionsAsync(ct);
+        var allSessions = await _sessions.GetAllSessionsAsync(forCustomerId: null, ct);
         dashboard.TotalSessions = allSessions.Count;
         dashboard.TotalMessages = allSessions.Sum(s => s.MessageCount);
         dashboard.AverageSessionMessages = allSessions.Count > 0

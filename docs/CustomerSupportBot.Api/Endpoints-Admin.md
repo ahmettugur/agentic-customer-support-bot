@@ -17,6 +17,7 @@ Pending approval queue yönetimi.
 |---|---|---|
 | `/approvals/pending` | GET | Bekleyen approval'lar |
 | `/approvals/recent?count=50` | GET | Son N karar |
+| `/approvals/stuck` | GET | Onaylanmış ama yürütmesi askıda kalmış kayıtlar (tarih sınırı yok) |
 | `/approvals/{id}` | GET | Tek approval |
 | `/approvals/{id}/approve` | POST | Onayla (body: `{ decidedBy?, reason? }`) |
 | `/approvals/{id}/reject` | POST | Reddet (body: `{ decidedBy?, reason? }`) |
@@ -202,16 +203,33 @@ private static string? GetLinkedAgentId(HttpContext ctx) =>
 |---|---|---|
 | `/agent/escalations/my` | GET | `linked_agent_id`'ye atanmış eskalasyonlar |
 | `/agent/escalations/open` | GET | Boş veya bu agent'a atananlar |
+| `/agent/escalations/recent?count=50` | GET | Geçmiş — **aynı kapsam**: boş veya bu agent'a atananlar |
 | `/agent/escalations/{id}/acknowledge` | POST | Üstlen + müşteriye bildir |
 | `/agent/escalations/{id}/resolve` | POST | Çöz + `DecrementLoad` |
 | `/agent/escalations/{id}/dismiss` | POST | Reddet |
 | `/agent/escalations/{id}/replan` | POST | Replan tetikle |
+
+**Kapsam kuralı:** Sınırsız erişim **`Admin` rolünden** türetilir, `linked_agent_id` claim'inin
+yokluğundan DEĞİL. `LinkedAgentId` veritabanında nullable'dır; "claim yoksa hepsini göster"
+kuralı, bağlantısı kurulmamış bir `Agent` hesabını sessizce Admin kapsamına yükseltirdi —
+üstelik eylem uçları claim yoksa zaten 400 döndüğü için liste uçları onlardan daha geniş olurdu.
+Bağlantısız bir Agent liste uçlarında da **400** alır.
+
+Kapsam daraltması ve limit **birlikte, veritabanında** uygulanır (`IEscalationSink.GetRecentForAgentAsync`).
+İki tuzak birden vardır ve ikisi de agent'ın kendi kayıtlarını görememesine yol açar:
+
+1. `count` ile kesip sonra elemek — o N kaydın tamamı başkalarına aitse liste boş döner.
+2. Cache üzerinde filtrelemek — `PostgresEscalationSink` cache'i açık kayıtlar + son **500**
+   kapalı kayıttır, yani cache'in kendisi bir "son N" penceresidir. Orada elemek sınırı 50'den
+   500'e ötelemekten ibarettir, kaldırmaz.
 
 ### Approval endpoint'leri
 
 | Route | Method | Açıklama |
 |---|---|---|
 | `/agent/approvals/pending` | GET | Tüm pending |
+| `/agent/approvals/recent?count=50` | GET | Son N karar (geçmiş sekmesi) |
+| `/agent/approvals/stuck` | GET | Yürütmesi askıda kalmış onaylar (tarih sınırı yok) |
 | `/agent/approvals/{id}/approve` | POST | Onayla (high-risk için reason zorunlu) |
 | `/agent/approvals/{id}/reject` | POST | Reddet |
 

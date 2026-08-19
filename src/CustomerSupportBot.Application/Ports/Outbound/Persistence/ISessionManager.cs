@@ -46,7 +46,17 @@ public interface ISessionManager
     Task AppendAssistantMessageAsync(string sessionId, string text, CancellationToken ct = default);
     Task AppendUserMessageAsync(string sessionId, string text, CancellationToken ct = default);
     Task ClearSessionAsync(string sessionId, CancellationToken ct = default);
-    Task<List<SessionInfo>> GetAllSessionsAsync(CancellationToken ct = default);
+    /// <summary>
+    /// Oturum listesi. <paramref name="forCustomerId"/> verilirse YALNIZCA o müşteriye bağlı
+    /// oturumlar döner; null ise hepsi (admin/agent panelleri için).
+    ///
+    /// <para>
+    /// Filtre burada, veri kaynağında uygulanır — çağıranın listeyi aldıktan sonra ayıklamasına
+    /// bırakılmaz. Uç noktanın filtrelemeyi unutması, bir müşterinin diğer tüm müşterilerin
+    /// oturum kimliklerini görmesi demektir.
+    /// </para>
+    /// </summary>
+    Task<List<SessionInfo>> GetAllSessionsAsync(string? forCustomerId = null, CancellationToken ct = default);
 
     // ─── State extraction ───
 

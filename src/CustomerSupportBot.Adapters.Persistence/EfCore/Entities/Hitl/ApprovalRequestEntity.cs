@@ -30,6 +30,9 @@ public sealed class ApprovalRequestEntity
     public string? ExecutionResult { get; set; }
     public DateTime? ExecutedAt { get; set; }
 
+    /// <summary>ApprovalExecutionStatus'ün string karşılığı (None|Running|Succeeded|Failed).</summary>
+    public string ExecutionStatus { get; set; } = "None";
+
     /// <summary>Müşterinin bu kararı bir bildirim/badge olarak gördüğü zaman (null → unseen).</summary>
     public DateTime? CustomerSeenAt { get; set; }
 }

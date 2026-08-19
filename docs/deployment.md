@@ -16,7 +16,6 @@ services:
   kibana:          # Elasticsearch görselleştirme
   otel-collector:  # OpenTelemetry trace routing
   jaeger:          # Distributed tracing UI
-  sandbox:         # Python kod çalıştırma (izole)
 ```
 
 ### Port Haritası
@@ -34,7 +33,6 @@ services:
 | **Jaeger UI** | 16686 | 16686 | Tracing UI |
 | **OTel Collector gRPC** | 4327 | 4317 | OTLP receiver (opsiyonel, `otel` profili) |
 | **OTel Collector HTTP** | 4328 | 4318 | OTLP receiver (opsiyonel, `otel` profili) |
-| **Python Sandbox** | 8100 | 8100 | Kod çalıştırma API |
 
 ### OTel Collector (Opsiyonel)
 
@@ -100,22 +98,6 @@ qdrant:
 ```
 
 Üç collection kullanılır: `cs_knowledge`, `cs_episodic`, `cs_lessons`. `KnowledgeBaseIngestor` uygulama başlarken `KnowledgeBase/*.md` dosyalarını chunk'layıp Qdrant'a yazar.
-
-### Python Sandbox
-
-```yaml
-sandbox:
-  image: python:3.12-slim
-  ports: ["8100:8100"]
-  networks: [sandbox_net]  # İzole ağ
-  deploy:
-    resources:
-      limits:
-        cpus: "1.0"
-        memory: 512M
-```
-
-İzole ortamda Python kodu çalıştırır. **sandbox_net** sadece iç ağ — dış erişim yok. `./sandbox/sandbox_api.py` dosyası gereklidir (repo'da olmayabilir).
 
 ### Redis
 

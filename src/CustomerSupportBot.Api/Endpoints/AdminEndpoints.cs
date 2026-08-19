@@ -2,6 +2,7 @@
 // HITL admin endpoint'leri:
 //   - GET   /approvals/pending            : Onay bekleyen tool çağrıları
 //   - GET   /approvals/recent?count=50    : Son N karar (history)
+//   - GET   /approvals/stuck              : Onaylanmış ama yürütmesi askıda kalmış kayıtlar
 //   - GET   /approvals/{id}               : Tek request
 //   - POST  /approvals/{id}/approve       : Onayla
 //   - POST  /approvals/{id}/reject        : Reddet (body: { reason? })
@@ -40,6 +41,12 @@ public static class AdminEndpoints
 
         app.MapGet("/approvals/recent", async (IApprovalPort approvals, CancellationToken ct, int count = 50) =>
             Results.Json(await approvals.GetRecentAsync(count, ct)));
+
+        // Askıda kalmış yürütmeler — tarih sınırı YOK. /approvals/recent bunun yerine geçemez:
+        // "son N kayıt" listesinde askıdaki bir kayıt trafik arttıkça düşer ve tam da elle
+        // müdahale bekleyen kayıt görünmez olur.
+        app.MapGet("/approvals/stuck", async (IApprovalPort approvals, CancellationToken ct) =>
+            Results.Json(await approvals.GetStuckExecutionsAsync(ct)));
 
         app.MapGet("/approvals/{id}", (string id, IApprovalPort approvals) =>
         {

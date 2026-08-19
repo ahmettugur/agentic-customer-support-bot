@@ -1,24 +1,29 @@
 // Services/Persistence/PostgresApprovalQueue.cs
 // HITL — Hibrit cache + PostgreSQL approval queue.
 //
-// Önemli: TaskCompletionSource süreç-içi senkronizasyon primitifidir;
-// PERSIST EDİLMEZ. Restart edilirse bekleyen TCS'ler kaybolur — DB'deki
-// Pending kayıtlar PersistenceHydrator tarafından startup'ta Expired'a
-// çevrilir (audit trail).
+// Önemli: TaskCompletionSource süreç-içi senkronizasyon primitifidir; PERSIST EDİLMEZ.
+// Bloklamayan onay modelinde (bkz. ApprovalGateService) zaten kimse onu beklemez: kaydı
+// OLUŞTURAN pod dışındaki her pod'da (OnRemoteCreated / HydrateAsync) Tcs null'dır. Bu
+// yüzden kararın yayılması, bildirimi ve okunması Tcs'e BAĞLI OLMAMALIDIR — bkz.
+// OnRemoteDecided. Pending kayıtlar restart'ta artık expire EDİLMEZ (kimse beklemiyor);
+// süresi geçenleri StaleApprovalSweepService periyodik olarak reddeder.
 //
 // Davranış (in-memory ile aynı):
 //   - Create: DB'ye INSERT (Pending) + cache + TCS + RequestCreated event.
 //   - AwaitDecisionAsync: TCS task'ını bekler. Timeout'ta otomatik karar.
 //   - Decide: cache + TCS release + DB UPDATE + RequestDecided event.
 //   - Lazy hydrate: tüm açık (Pending) + son N karar yüklenir.
-//     (Hydrate edilen Pending'ler için yeni TCS oluşturulmaz çünkü orijinal
-//      tool lambda'sı zaten ölmüş; hydrator startup'ta bunları Expired'a çeker.
-//      Burada cache'e sadece "sahipsiz" kayıt olarak okuma için ekleriz.)
+//     (Hydrate edilen Pending'ler için yeni TCS oluşturulmaz — cache'e "sahipsiz"
+//      kayıt olarak, okuma ve karar yayılımı için eklenirler.)
 //
 // Yatay ölçeklendirme (Redis pub/sub):
 //   - Create: csbot:approval:created kanalına yayın → diğer pod'lar entry'yi cache'e ekler.
-//   - Decide: csbot:approval:decided kanalına yayın → TCS o pod'da hangi pod'da bulunursa
-//     orada tetiklenir.
+//   - Decide: DB'de koşullu sahiplenme (ClaimDecisionAsync, WHERE Status='Pending') →
+//     yürütme → csbot:approval:decided kanalına yayın → diğer pod'lar cache'i günceller ve
+//     RequestDecided'ı (SSE bildirimi) kendi bağlı istemcileri için tetikler.
+//     Sahiplenme yürütmeden ÖNCE ve tek bir UPDATE ile yapılır: distributed lock yalnızca
+//     eş zamanlı çağrıları serialize eder, bayat bir cache yüzünden SONRADAN gelen ikinci
+//     bir kararın aynı işi tekrar yürütmesini engellemez — bunu DB koşulu engeller.
 
 using System.Collections.Concurrent;
 using System.Text.Json;
@@ -157,7 +162,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         if (!autoApprove)
         {
             entry.Request.Status = ApprovalStatus.Expired;
-            try { await UpdateAsync(entry.Request).ConfigureAwait(false); }
+            try { await MarkExpiredIfPendingAsync(id).ConfigureAwait(false); }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[HITL] Approval Expired UPDATE başarısız. Id={Id}", id);
@@ -182,38 +187,84 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
 
         try
         {
-            // Lock altında güncel durumu kontrol et
+            // Ucuz ön eleme — bu pod zaten kararı biliyorsa DB'ye hiç gitme.
             if (entry.Request.Status != ApprovalStatus.Pending) return false;
 
-            entry.Request.Status = approved ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
-            entry.Request.DecidedAt = DateTime.UtcNow;
-            entry.Request.DecidedBy = string.IsNullOrWhiteSpace(decidedBy) ? WellKnown.Defaults.Admin : decidedBy;
+            var decidedAt = DateTime.UtcNow;
+            var newStatus = approved ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
+            var resolvedBy = string.IsNullOrWhiteSpace(decidedBy) ? WellKnown.Defaults.Admin : decidedBy;
+
+            // Onaylanan bir talebin yürütmesi kararla AYNI anda "Running" işaretlenir. Böylece
+            // yürütme ile sonucun yazılması arasında süreç kapanırsa kayıt Approved+Running olarak
+            // kalır ve askıda olduğu GÖRÜNÜR olur — bu pencere eskiden hiçbir yerde iz bırakmıyordu.
+            var newExecStatus = approved ? ApprovalExecutionStatus.Running : ApprovalExecutionStatus.None;
+
+            // ASIL KORUMA BURADA: kaydı DB'de koşullu olarak (WHERE Status='Pending') sahipleniriz.
+            // Bellekteki Status tek başına yeterli DEĞİLDİR — bu pod kaydı oluşturmamışsa
+            // durumu yalnızca Redis üzerinden öğrenir ve o mesaj kaybolabilir; o zaman bellek
+            // "Pending" der, oysa başka bir pod çoktan onaylayıp iadeyi yürütmüştür. Distributed
+            // lock yalnızca AYNI ANDA yürütmeyi engeller, sonradan tekrarı değil.
+            //
+            // Sahiplenme, yürütmeden ÖNCE yapılır: 0 satır etkilendiyse kararı başkası vermiştir,
+            // gerçek iş (iade/iptal) hiç çalıştırılmaz.
+            int claimed;
+            try
+            {
+                claimed = await ClaimDecisionAsync(id, newStatus, newExecStatus, decidedAt, resolvedBy, reason, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[HITL] Approval karar sahiplenme (UPDATE) başarısız. Id={Id}", id);
+                throw;
+            }
+
+            if (claimed == 0)
+            {
+                // Karar başka bir pod'da verilmiş ve bizim belleğimiz bayat kalmış (kayıp Redis
+                // mesajı veya biz oluşturmadığımız için Tcs'siz gelen kayıt). Belleği DB'den
+                // tazeleyip kendimizi onarıyoruz ki sonraki okumalar (unseen/badge, sweep)
+                // doğru durumu görsün.
+                _logger.LogWarning(
+                    "[HITL] Approval kararı başka bir pod'da verilmiş; yürütme atlandı. Id={Id}", id);
+                await RefreshFromDbAsync(id, ct).ConfigureAwait(false);
+                return false;
+            }
+
+            entry.Request.Status = newStatus;
+            entry.Request.ExecutionStatus = newExecStatus;
+            entry.Request.DecidedAt = decidedAt;
+            entry.Request.DecidedBy = resolvedBy;
             entry.Request.DecisionReason = reason;
 
             // Onaylandıysa gerçek iş burada, karar anında tetiklenir — tool çağrısı artık
             // bunu beklemiyor (bkz. ApprovalGateService.ExecuteWithApprovalGateAsync).
-            // Distributed lock scope'u içinde olduğu için aynı isteğin iki pod'da eş zamanlı
-            // yürütülmesi mümkün değil.
             if (approved)
             {
                 try
                 {
                     var outcome = await _executionRouter.ExecuteAsync(entry.Request, ct).ConfigureAwait(false);
                     entry.Request.ExecutionResult = outcome.Message;
+                    // outcome.Success eskiden atılıyordu: tool kendi işini reddetse bile kayıt
+                    // yalnızca "Onaylandı" görünüyordu. İnsan kararı ile işin sonucu ayrı alanlar.
+                    entry.Request.ExecutionStatus = outcome.Success
+                        ? ApprovalExecutionStatus.Succeeded
+                        : ApprovalExecutionStatus.Failed;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "[HITL] Approval execution başarısız. Id={Id}", id);
                     entry.Request.ExecutionResult = "İşlem yürütülürken bir hata oluştu.";
+                    entry.Request.ExecutionStatus = ApprovalExecutionStatus.Failed;
                 }
                 entry.Request.ExecutedAt = DateTime.UtcNow;
-            }
 
-            try { await UpdateAsync(entry.Request).ConfigureAwait(false); }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[HITL] Approval UPDATE başarısız. Id={Id}", id);
-                throw;
+                try { await WriteExecutionOutcomeAsync(entry.Request).ConfigureAwait(false); }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[HITL] Approval sonuç UPDATE başarısız. Id={Id}", id);
+                    throw;
+                }
             }
 
             _logger.LogInformation(
@@ -234,7 +285,8 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
                 reason = entry.Request.DecisionReason,
                 decidedAt = entry.Request.DecidedAt,
                 executionResult = entry.Request.ExecutionResult,
-                executedAt = entry.Request.ExecutedAt
+                executedAt = entry.Request.ExecutedAt,
+                executionStatus = entry.Request.ExecutionStatus.ToString()
             });
 
             return true;
@@ -271,70 +323,109 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         return _entries.TryGetValue(id, out var entry) ? entry.Request : null;
     }
 
-    public IReadOnlyList<ApprovalRequest> GetUnseenForSession(string sessionId)
+    /// <summary>
+    /// Doğrudan PostgreSQL'e sorar, cache'e DEĞİL.
+    ///
+    /// <para>
+    /// Cache üzerinden okumak bu sorguyu Redis'in teslimatına bağımlı kılıyordu: <c>decided</c>
+    /// (veya <c>created</c>) mesajını kaçırmış bir pod'da kayıt "Pending" görünür ya da hiç
+    /// bulunmaz; buradaki <c>Status != Pending</c> filtresi de onu sessizce eler ve müşteri
+    /// sonradan girdiğinde sonucu HİÇ göremezdi. Redis yayını en-fazla-bir-kez teslimattır ve
+    /// hataları bilinçli olarak yutulur (bkz. <c>RedisMessageBusAdapter</c>) — dolayısıyla
+    /// anlık bildirim için bir hızlandırma katmanıdır, kalıcı durumun kaynağı değildir.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<ApprovalRequest>> GetUnseenForSessionAsync(
+        string sessionId, string customerId, CancellationToken ct = default)
     {
-        EnsureHydrated();
-        return _entries.Values
-            .Select(e => e.Request)
-            .Where(r =>
-                string.Equals(r.SessionId, sessionId, StringComparison.Ordinal)
-                && r.Status != ApprovalStatus.Pending
-                && r.CustomerSeenAt is null)
-            .OrderBy(r => r.DecidedAt)
-            .ToList();
+        var pending = nameof(ApprovalStatus.Pending);
+
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        var rows = await ctx.Approvals.AsNoTracking()
+            .Where(a => a.SessionId == sessionId
+                     && a.CustomerId == customerId
+                     && a.Status != pending && a.CustomerSeenAt == null)
+            .OrderBy(a => a.DecidedAt)
+            .ToListAsync(ct);
+
+        return rows.Select(ToDomain).ToList();
     }
 
-    public async Task MarkSeenAsync(string id, CancellationToken ct = default)
+    /// <summary>Askıda kalmış yürütmeler — bkz. <see cref="IApprovalQueue.GetStuckExecutionsAsync"/>.</summary>
+    public async Task<IReadOnlyList<ApprovalRequest>> GetStuckExecutionsAsync(CancellationToken ct = default)
     {
-        EnsureHydrated();
-        if (!_entries.TryGetValue(id, out var entry) || entry.Request.CustomerSeenAt is not null) return;
+        var approved = nameof(ApprovalStatus.Approved);
+        var running = nameof(ApprovalExecutionStatus.Running);
+        // Taze kayıtlar hâlâ çalışıyor olabilir; onları "askıda" diye göstermek yanlış alarmdır.
+        var cutoff = DateTime.UtcNow - TimeSpan.FromMinutes(Math.Max(1, _options.StuckExecutionAfterMinutes));
 
-        entry.Request.CustomerSeenAt = DateTime.UtcNow;
-        try { await UpdateAsync(entry.Request).ConfigureAwait(false); }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[HITL] Approval CustomerSeenAt UPDATE başarısız. Id={Id}", id);
-        }
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        var rows = await ctx.Approvals.AsNoTracking()
+            .Where(a => a.Status == approved && a.ExecutionStatus == running
+                     && a.DecidedAt != null && a.DecidedAt < cutoff)
+            .OrderBy(a => a.DecidedAt)
+            .ToListAsync(ct);
+
+        return rows.Select(ToDomain).ToList();
     }
 
-    public IReadOnlyList<ApprovalRequest> GetHistoryForCustomer(string customerId, int count = 100)
+    /// <summary>Kalıcı depodan tek kayıt — gerekçe için bkz. <see cref="IApprovalQueue.GetAsync"/>.</summary>
+    public async Task<ApprovalRequest?> GetAsync(string id, CancellationToken ct = default)
     {
-        EnsureHydrated();
-        return _entries.Values
-            .Select(e => e.Request)
-            .Where(r => string.Equals(r.CustomerId, customerId, StringComparison.Ordinal))
-            .OrderByDescending(r => r.RequestedAt)
-            .Take(count)
-            .ToList();
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        var row = await ctx.Approvals.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, ct);
+        return row is null ? null : ToDomain(row);
     }
 
     /// <summary>
-    /// PersistenceHydrator startup'ta çağırır — Pending kayıtları toplu olarak Expired'a çeker.
+    /// Yalnızca <c>customer_seen_at</c> kolonunu yazar — kaydın geri kalanına DOKUNMAZ.
+    ///
+    /// <para>
+    /// Bu ayrım kritik: burası eskiden cache'teki nesnenin TÜM alanlarını (Status, DecidedAt,
+    /// ExecutionResult...) DB'ye geri yazan genel bir UPDATE çağırıyordu. Kararı kaçırmış bir
+    /// pod'un cache'i "Pending" der; unseen listesini pod A'dan alıp "gördüm" isteği pod B'ye
+    /// düşen bir istemci (iki ayrı HTTP isteği, load balancer) DB'deki Approved kaydı Pending'e
+    /// GERİ ÇEVİRİRDİ. Bu yalnızca yanlış bir durum etiketi değil, kaydı yeniden "sahiplenilebilir"
+    /// hâle getirdiği için mükerrer yürütme korumasını (ClaimDecisionAsync) da delerdi.
+    /// </para>
     /// </summary>
-    public async Task ExpirePendingOnStartupAsync(TimeSpan minAge, CancellationToken ct = default)
+    public async Task<bool> MarkSeenAsync(string id, CancellationToken ct = default)
     {
-        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
-        var cutoff = DateTime.UtcNow - minAge;
+        EnsureHydrated();
 
-        var stale = await ctx.Approvals
-            .Where(a => a.Status == "Pending" && a.RequestedAt < cutoff)
-            .ToListAsync(ct);
-
-        if (stale.Count == 0) return;
-
-        var now = DateTime.UtcNow;
-        foreach (var e in stale)
+        var seenAt = DateTime.UtcNow;
+        try
         {
-            e.Status = "Expired";
-            e.DecidedAt = now;
-            e.DecidedBy = WellKnown.Defaults.System;
-            e.DecisionReason = WellKnown.ApprovalReasons.TimeoutExpired;
+            await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+            await ctx.Approvals
+                .Where(a => a.Id == id && a.CustomerSeenAt == null)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(a => a.CustomerSeenAt, seenAt), ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Approval CustomerSeenAt UPDATE başarısız. Id={Id}", id);
+            return false;
         }
 
-        await ctx.SaveChangesAsync(ct);
-        _logger.LogWarning(
-            "[HITL] {Count} stale Pending approval Expired'a çevrildi (restart recovery).",
-            stale.Count);
+        if (_entries.TryGetValue(id, out var entry) && entry.Request.CustomerSeenAt is null)
+            entry.Request.CustomerSeenAt = seenAt;
+
+        return true;
+    }
+
+    /// <summary>Doğrudan PostgreSQL'e sorar — gerekçe için bkz. <see cref="GetUnseenForSessionAsync"/>.</summary>
+    public async Task<IReadOnlyList<ApprovalRequest>> GetHistoryForCustomerAsync(
+        string customerId, int count = 100, CancellationToken ct = default)
+    {
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        var rows = await ctx.Approvals.AsNoTracking()
+            .Where(a => a.CustomerId == customerId)
+            .OrderByDescending(a => a.RequestedAt)
+            .Take(count)
+            .ToListAsync(ct);
+
+        return rows.Select(ToDomain).ToList();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -346,25 +437,97 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         await ctx.SaveChangesAsync(ct);
     }
 
-    private async Task UpdateAsync(ApprovalRequest req)
+    /// <summary>
+    /// Kararı DB'de KOŞULLU olarak yazar: yalnızca satır hâlâ Pending ise. Etkilenen satır
+    /// sayısını döner (1 = bu pod kararı sahiplendi, 0 = başkası önce davrandı).
+    ///
+    /// <para>
+    /// Tek bir <c>UPDATE ... WHERE Status = 'Pending'</c> ifadesidir, yani kontrol ile yazma
+    /// arasında başka bir pod araya giremez. Bellekteki durumu okuyup sonra koşulsuz yazan
+    /// eski hâli, iki pod'un aynı iadeyi sırayla iki kez yürütmesine açıktı.
+    /// </para>
+    /// </summary>
+    private async Task<int> ClaimDecisionAsync(
+        string id, ApprovalStatus newStatus, ApprovalExecutionStatus newExecStatus,
+        DateTime decidedAt, string decidedBy, string? reason, CancellationToken ct)
     {
+        var pending = nameof(ApprovalStatus.Pending);
+        var target = newStatus.ToString();
+        var targetExec = newExecStatus.ToString();
+
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        return await ctx.Approvals
+            .Where(a => a.Id == id && a.Status == pending)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.Status, target)
+                .SetProperty(a => a.ExecutionStatus, targetExec)
+                .SetProperty(a => a.DecidedAt, decidedAt)
+                .SetProperty(a => a.DecidedBy, decidedBy)
+                .SetProperty(a => a.DecisionReason, reason), ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Bir kaydın bellekteki kopyasını DB'deki gerçekle değiştirir. Sahiplenme başarısız
+    /// olduğunda çağrılır: o an bayat olduğumuzu kesin olarak biliriz, dolayısıyla kendimizi
+    /// onarmak için doğru andır. Kaydın Tcs'i (varsa) korunur.
+    /// </summary>
+    private async Task RefreshFromDbAsync(string id, CancellationToken ct)
+    {
+        try
+        {
+            await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+            var row = await ctx.Approvals.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, ct);
+            if (row is null) return;
+
+            var tcs = _entries.TryGetValue(id, out var existing) ? existing.Tcs : null;
+            var refreshed = ToDomain(row);
+            _entries[id] = new QueueEntry(refreshed, tcs);
+            tcs?.TrySetResult(refreshed);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Approval cache tazeleme başarısız. Id={Id}", id);
+        }
+    }
+
+    /// <summary>
+    /// Yürütme sonucunu yazar — yalnızca <c>execution_result</c> ve <c>executed_at</c>.
+    /// Kararın kendisi zaten <see cref="ClaimDecisionAsync"/> ile yazılmıştır; burada tekrar
+    /// yazmak, aradan geçen sürede değişmiş olabilecek alanları cache'ten ezmek demektir.
+    /// </summary>
+    private async Task WriteExecutionOutcomeAsync(ApprovalRequest req)
+    {
+        var result = req.ExecutionResult;
+        var executedAt = req.ExecutedAt;
+        var execStatus = req.ExecutionStatus.ToString();
+
         await using var ctx = await _dbFactory.CreateDbContextAsync();
-        var existing = await ctx.Approvals.FirstOrDefaultAsync(a => a.Id == req.Id);
-        if (existing is null)
-        {
-            ctx.Approvals.Add(ToEntity(req));
-        }
-        else
-        {
-            existing.Status = req.Status.ToString();
-            existing.DecidedAt = req.DecidedAt;
-            existing.DecidedBy = req.DecidedBy;
-            existing.DecisionReason = req.DecisionReason;
-            existing.ExecutionResult = req.ExecutionResult;
-            existing.ExecutedAt = req.ExecutedAt;
-            existing.CustomerSeenAt = req.CustomerSeenAt;
-        }
-        await ctx.SaveChangesAsync();
+        await ctx.Approvals
+            .Where(a => a.Id == req.Id)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.ExecutionResult, result)
+                .SetProperty(a => a.ExecutedAt, executedAt)
+                .SetProperty(a => a.ExecutionStatus, execStatus))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Bloklayan eski yolun timeout dalı: kaydı yalnızca hâlâ Pending ise Expired'a çeker.
+    /// </summary>
+    private async Task MarkExpiredIfPendingAsync(string id)
+    {
+        var pending = nameof(ApprovalStatus.Pending);
+        var expired = nameof(ApprovalStatus.Expired);
+        var now = DateTime.UtcNow;
+
+        await using var ctx = await _dbFactory.CreateDbContextAsync();
+        await ctx.Approvals
+            .Where(a => a.Id == id && a.Status == pending)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.Status, expired)
+                .SetProperty(a => a.DecidedAt, now))
+            .ConfigureAwait(false);
     }
 
     private static ApprovalRequestEntity ToEntity(ApprovalRequest req) => new()
@@ -386,6 +549,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         TimeoutSeconds = req.TimeoutSeconds,
         ExecutionResult = req.ExecutionResult,
         ExecutedAt = req.ExecutedAt,
+        ExecutionStatus = req.ExecutionStatus.ToString(),
         CustomerSeenAt = req.CustomerSeenAt
     };
 
@@ -418,6 +582,8 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             TimeoutSeconds = e.TimeoutSeconds,
             ExecutionResult = e.ExecutionResult,
             ExecutedAt = e.ExecutedAt,
+            ExecutionStatus = Enum.TryParse<ApprovalExecutionStatus>(e.ExecutionStatus, ignoreCase: true, out var es)
+                ? es : ApprovalExecutionStatus.None,
             CustomerSeenAt = e.CustomerSeenAt
         };
     }
@@ -445,14 +611,36 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         }
     }
 
+    /// <summary>
+    /// Cache'i doldurur: <b>TÜM açık (Pending) kayıtlar</b> + son <see cref="HydrateRecentCount"/>
+    /// karara bağlanmış kayıt.
+    ///
+    /// <para>
+    /// Pending'lerin tamamı şart. Burası eskiden tarihe göre son 200 kaydı çekiyordu (yorum
+    /// "tüm açık kayıtlar" dese de kod bunu yapmıyordu): yoğun bir kurulumda 200 yeni kaydın
+    /// gerisinde kalan eski bir Pending onay cache'e hiç girmez, dolayısıyla admin panelinde
+    /// görünmez ve <c>StaleApprovalSweepService</c> onu bulamayacağı için 72 saat sonra da
+    /// reddedilmezdi — kayıt sonsuza kadar askıda kalırdı. Karara bağlanmışlarda sınır zararsız,
+    /// çünkü onlar üzerinde artık iş yapılmıyor.
+    /// </para>
+    /// </summary>
     private async Task HydrateAsync()
     {
         await using var ctx = await _dbFactory.CreateDbContextAsync();
 
-        var rows = await ctx.Approvals.AsNoTracking()
+        var pending = nameof(ApprovalStatus.Pending);
+
+        var open = await ctx.Approvals.AsNoTracking()
+            .Where(a => a.Status == pending)
+            .ToListAsync();
+
+        var decided = await ctx.Approvals.AsNoTracking()
+            .Where(a => a.Status != pending)
             .OrderByDescending(a => a.RequestedAt)
             .Take(HydrateRecentCount)
             .ToListAsync();
+
+        var rows = open.Concat(decided).ToList();
 
         foreach (var e in rows)
         {
@@ -517,7 +705,25 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
 
             var id = root.GetProperty("id").GetString()!;
             if (!_entries.TryGetValue(id, out var entry)) return;
-            if (entry.Tcs is null || entry.Tcs.Task.IsCompleted) return;
+
+            // Tcs'in VARLIĞINA BAKILMAZ. Burada eskiden "entry.Tcs is null → return" vardı;
+            // bloklayan modelde makuldü çünkü mesajın tek amacı bekleyen bir çağrıyı uyandırmaktı.
+            // Bloklamayan modelde hiç kimse beklemiyor, dolayısıyla kararı VERMEYEN pod'larda
+            // Tcs her zaman null olur (bkz. OnRemoteCreated ve HydrateAsync: tcs: null) — o hâliyle
+            // bu satır kararın diğer pod'lara YAYILMASINI tümden engelliyordu: bellekte kayıt
+            // Pending kalıyor, RequestDecided hiç tetiklenmiyor (SSE bildirimi gitmiyor) ve
+            // GetUnseenForSession'ın "Status != Pending" filtresi kaydı eleyerek müşteri sonradan
+            // girdiğinde de göstermiyordu.
+            //
+            // Mesaj tekrarına karşı koruma. "Status != Pending ise atla" demek YETMEZ: bir pod
+            // kaydı tam yürütme sırasında hydrate etmişse belleğinde zaten Approved+Running olur
+            // ve o zaman yürütmenin BİTTİĞİNİ bildiren bu mesajı tümden atlardı — müşteriye
+            // başarısız bir işlem anlık olarak düz "Onaylandı" görünürdü. Bu yüzden ölçüt
+            // "karar biliniyor mu" değil, "yürütme sonucu biliniyor mu"dur.
+            var alreadyFinal =
+                entry.Request.Status != ApprovalStatus.Pending &&
+                entry.Request.ExecutionStatus is not ApprovalExecutionStatus.Running;
+            if (alreadyFinal) return;
 
             var approved = root.GetProperty("approved").GetBoolean();
             entry.Request.Status = approved ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
@@ -530,8 +736,12 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
                 ? er.GetString() : null;
             entry.Request.ExecutedAt = root.TryGetProperty("executedAt", out var ea) && ea.ValueKind != JsonValueKind.Null
                 ? ea.GetDateTime() : null;
+            entry.Request.ExecutionStatus =
+                root.TryGetProperty("executionStatus", out var esr) && esr.ValueKind == JsonValueKind.String
+                && Enum.TryParse<ApprovalExecutionStatus>(esr.GetString(), ignoreCase: true, out var remoteExec)
+                    ? remoteExec : ApprovalExecutionStatus.None;
 
-            entry.Tcs.TrySetResult(entry.Request);
+            entry.Tcs?.TrySetResult(entry.Request);
 
             try { RequestDecided?.Invoke(this, entry.Request); }
             catch (Exception ex) { _logger.LogWarning(ex, "RequestDecided handler (remote) failed"); }

@@ -16,6 +16,32 @@ public enum ApprovalStatus
 }
 
 /// <summary>
+/// Onaylanan bir talebin GERÇEK İŞİNİN (sipariş iptali, iade...) durumu.
+///
+/// <para>
+/// <see cref="ApprovalStatus"/>'ten AYRI tutulur çünkü ikisi farklı sorular yanıtlar:
+/// biri "insan ne karar verdi", diğeri "o karar hayata geçti mi". Tek alanda birleştirilince
+/// yürütmesi başarısız olmuş bir talep panelde sadece "Onaylandı" görünüyordu; daha kötüsü,
+/// karar yazıldıktan sonra yürütme çalışmadan süreç kapanırsa (deploy, crash) kayıt hiçbir
+/// yerde "askıda" görünmüyor, sessizce kayboluyordu.
+/// </para>
+/// </summary>
+public enum ApprovalExecutionStatus
+{
+    /// <summary>Yürütülecek bir iş yok — talep reddedildi veya henüz karara bağlanmadı.</summary>
+    None,
+
+    /// <summary>Onaylandı, gerçek iş başlatıldı ama sonucu henüz yazılmadı.</summary>
+    Running,
+
+    /// <summary>Gerçek iş başarıyla tamamlandı.</summary>
+    Succeeded,
+
+    /// <summary>Gerçek iş çalıştı ve başarısız oldu (hata veya tool'un kendi reddi).</summary>
+    Failed
+}
+
+/// <summary>
 /// Bir tool çağrısı için oluşturulmuş approval kaydı. Tool lambda'sı bu
 /// Nesneyi queue'ya yazar ve decision'ını await eder.
 /// </summary>
@@ -108,6 +134,13 @@ public class ApprovalRequest
 
     /// <summary>Yürütmenin tamamlandığı zaman (null → henüz yürütülmedi veya onaylanmadı).</summary>
     public DateTime? ExecutedAt { get; set; }
+
+    /// <summary>
+    /// Gerçek işin durumu — insan kararından (<see cref="Status"/>) bağımsızdır.
+    /// <see cref="ApprovalExecutionStatus.Running"/> kalmış bir kayıt, yürütme sırasında
+    /// sürecin kapandığı anlamına gelir ve insan müdahalesi gerektirir.
+    /// </summary>
+    public ApprovalExecutionStatus ExecutionStatus { get; set; } = ApprovalExecutionStatus.None;
 
     /// <summary>
     /// Müşterinin bu kararı/sonucu (bildirim/badge olarak) gördüğü zaman. Null ise "unseen" —

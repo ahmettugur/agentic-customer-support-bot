@@ -85,6 +85,12 @@ internal sealed class ApprovalRequestConfiguration : IEntityTypeConfiguration<Ap
             .HasColumnName("executed_at")
             .HasColumnType("timestamptz");
 
+        builder.Property(a => a.ExecutionStatus)
+            .HasColumnName("execution_status")
+            .HasMaxLength(16)
+            .HasDefaultValue("None")
+            .IsRequired();
+
         builder.Property(a => a.CustomerSeenAt)
             .HasColumnName("customer_seen_at")
             .HasColumnType("timestamptz");
@@ -97,5 +103,10 @@ internal sealed class ApprovalRequestConfiguration : IEntityTypeConfiguration<Ap
 
         builder.HasIndex(a => a.CustomerId)
             .HasDatabaseName("ix_approvals_customer_id");
+
+        // "Askıda kalmış yürütme" sorgusu (Approved + Running) için — admin panelinin
+        // dikkat çekmesi gereken kayıtlar bunlar.
+        builder.HasIndex(a => new { a.Status, a.ExecutionStatus })
+            .HasDatabaseName("ix_approvals_status_execution_status");
     }
 }

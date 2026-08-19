@@ -32,7 +32,12 @@ public sealed record ApprovalRequest(
     // Sunucuda okuma anında çözülür (ApprovalPortService) — kalıcı değildir, bu yüzden
     // müşteri adını değiştirdiğinde panel güncel adı gösterir. Çözülemezse null; kart
     // o zaman yalnızca numarayı yazar.
-    string? CustomerName = null
+    string? CustomerName = null,
+    // Kararın SONUCU — kararın kendisinden ayrı. "approved" bir kaydın işi başarısız olmuş
+    // ya da yarıda kalmış olabilir; panel bunu ayrıca göstermeli, aksi hâlde düzeltilmesi
+    // gereken kayıt sorunsuzların arasında kaybolur. (none|running|succeeded|failed)
+    string? ExecutionStatus = null,
+    string? ExecutionResult = null
 );
 
 // ─── Escalations ─────────────────────────────────────────────────────────────

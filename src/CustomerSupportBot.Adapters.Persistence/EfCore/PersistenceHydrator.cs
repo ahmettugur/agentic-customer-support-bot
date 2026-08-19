@@ -1,10 +1,19 @@
 // Adapters.Persistence/EfCore/PersistenceHydrator.cs
 // Startup recovery IHostedService — PostgreSQL provider aktifken uygulama açılışında
 // bir restart'ın arkada bıraktığı "hiç bitmeyen" kayıtları temizler:
-//   1. ApprovalQueue: Pending kayıtlardan eski olanları (TCS kayboldu) Expired yap.
-//   2. ReasoningTraceStore: CompletedAt=null olan in-flight trace'leri
+//   1. ReasoningTraceStore: CompletedAt=null olan in-flight trace'leri
 //      Error="terminated_by_restart" olarak kapat.
 // İşlemler idempotent. Hata olursa uygulama durmaz, sadece loglanır.
+//
+// BURADA ARTIK APPROVAL TEMİZLİĞİ YOK. Eskiden 10 saniyeden eski Pending onaylar
+// startup'ta Expired'a çekiliyordu; bu, onayın tool çağrısını BLOKLADIĞI modelde
+// doğruydu — restart bekleyen TaskCompletionSource'u öldürdüğü için kaydın sahibi
+// kalmıyordu. Bloklamayan modelde (bkz. ApprovalGateService) bekleyen yok: kayıt
+// admin karar verene kadar günlerce Pending durabilir ve durmalıdır
+// (ApprovalOptions.StalePendingHours, varsayılan 72 saat). O kod kalsaydı her deploy
+// bekleyen tüm onayları sessizce reddederdi — 10 saniye ile 72 saat aynı kayıt için
+// iki çelişen ömür tanımlıyordu. Süresi geçen kayıtları artık
+// StaleApprovalSweepService periyodik olarak reddediyor.
 //
 // Demo/seed verisi (default admin, agent, Northwind ürün/müşteri verisi vb.) burada
 // DEĞİL — DemoDataSeeder'da. Bu ikisi farklı sorumluluklar: biri restart sonrası veri
@@ -19,8 +28,6 @@ namespace CustomerSupportBot.Adapters.Persistence.EfCore;
 
 public sealed class PersistenceHydrator : IHostedService
 {
-    private static readonly TimeSpan StalePendingThreshold = TimeSpan.FromSeconds(10);
-
     private readonly IServiceProvider _services;
     private readonly ILogger<PersistenceHydrator> _logger;
 
@@ -35,19 +42,6 @@ public sealed class PersistenceHydrator : IHostedService
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("[Hydrator] Startup recovery başlıyor.");
-
-        // Approval queue — yetim Pending'leri Expired'a çek.
-        try
-        {
-            if (GetService<IApprovalQueue>() is PostgresApprovalQueue pgApproval)
-            {
-                await pgApproval.ExpirePendingOnStartupAsync(StalePendingThreshold, cancellationToken);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[Hydrator] Approval expire başarısız.");
-        }
 
         // Reasoning trace — yarım kalmış trace'leri kapat.
         try

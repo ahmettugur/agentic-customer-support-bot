@@ -35,3 +35,19 @@ Development ve demo ortamlarında hızlı başlangıç sağlar. Her seed metodu 
 - `IPasswordHasher` — Admin/müşteri parola hash'leme.
 - `IConfiguration` — Default admin credential konfigürasyonu.
 - [NorthwindSeedData](NorthwindSeedData.md) — Statik seed verileri.
+
+---
+
+## Güvenlik notu
+
+Seeder demo hesapları **varsayılan şifrelerle** oluşturur. Üretimde ilk başlatmadan önce:
+
+1. `Auth:DefaultAdminPassword` değerini ayarlayın — verilmezse `Admin123!` kullanılır
+   (`DemoDataSeeder.cs`). Depodaki `appsettings.json` bunu boş bırakır; `Admin123!` yalnızca
+   `appsettings.Development.json` içindedir.
+2. `Auth:DefaultAgentPassword` değerini ayarlayın — verilmezse `Agent123!` kullanılır.
+3. Oluşturulan agent kullanıcı adları: `john.doe`, `jane.smith` (e-postanın `@` öncesi).
+
+Seeder her iki durumda da log'a rotasyon uyarısı yazar. En temizi, üretimde bu servisi hiç
+çalıştırmamaktır — demo verisi üretim ortamına ait değildir.
+

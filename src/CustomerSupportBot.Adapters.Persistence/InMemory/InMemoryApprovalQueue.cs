@@ -104,6 +104,9 @@ public class InMemoryApprovalQueue : IApprovalQueue
             if (entry.Request.Status != ApprovalStatus.Pending) return false;
 
             entry.Request.Status = approved ? ApprovalStatus.Approved : ApprovalStatus.Rejected;
+            entry.Request.ExecutionStatus = approved
+                ? ApprovalExecutionStatus.Running
+                : ApprovalExecutionStatus.None;
             entry.Request.DecidedAt = DateTime.UtcNow;
             entry.Request.DecidedBy = string.IsNullOrWhiteSpace(decidedBy) ? WellKnown.Defaults.Admin : decidedBy;
             entry.Request.DecisionReason = reason;
@@ -115,11 +118,15 @@ public class InMemoryApprovalQueue : IApprovalQueue
             {
                 var outcome = await _executionRouter.ExecuteAsync(entry.Request, ct).ConfigureAwait(false);
                 entry.Request.ExecutionResult = outcome.Message;
+                entry.Request.ExecutionStatus = outcome.Success
+                    ? ApprovalExecutionStatus.Succeeded
+                    : ApprovalExecutionStatus.Failed;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[HITL] Approval execution başarısız. Id={Id}", id);
                 entry.Request.ExecutionResult = "İşlem yürütülürken bir hata oluştu.";
+                entry.Request.ExecutionStatus = ApprovalExecutionStatus.Failed;
             }
             entry.Request.ExecutedAt = DateTime.UtcNow;
         }
@@ -152,30 +159,49 @@ public class InMemoryApprovalQueue : IApprovalQueue
     public ApprovalRequest? Get(string id) =>
         _entries.TryGetValue(id, out var entry) ? entry.Request : null;
 
-    public IReadOnlyList<ApprovalRequest> GetUnseenForSession(string sessionId) =>
-        _entries.Values
+    // Tek süreç: cache zaten kayıtların tek kaynağıdır, ayrı bir kalıcı depo yoktur.
+    public Task<IReadOnlyList<ApprovalRequest>> GetUnseenForSessionAsync(
+        string sessionId, string customerId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ApprovalRequest>>(_entries.Values
             .Select(e => e.Request)
             .Where(r =>
                 string.Equals(r.SessionId, sessionId, StringComparison.Ordinal)
+                && string.Equals(r.CustomerId, customerId, StringComparison.Ordinal)
                 && r.Status != ApprovalStatus.Pending
                 && r.CustomerSeenAt is null)
             .OrderBy(r => r.DecidedAt)
-            .ToList();
+            .ToList());
 
-    public Task MarkSeenAsync(string id, CancellationToken ct = default)
+    public Task<IReadOnlyList<ApprovalRequest>> GetStuckExecutionsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ApprovalRequest>>(_entries.Values
+            .Select(e => e.Request)
+            .Where(r => r.Status == ApprovalStatus.Approved
+                     && r.ExecutionStatus == ApprovalExecutionStatus.Running
+                     && r.DecidedAt is not null
+                     && r.DecidedAt < DateTime.UtcNow - TimeSpan.FromMinutes(
+                            Math.Max(1, _options.StuckExecutionAfterMinutes)))
+            .OrderBy(r => r.DecidedAt)
+            .ToList());
+
+    // Tek süreç: cache zaten kayıtların tek kaynağıdır.
+    public Task<ApprovalRequest?> GetAsync(string id, CancellationToken ct = default) =>
+        Task.FromResult(Get(id));
+
+    public Task<bool> MarkSeenAsync(string id, CancellationToken ct = default)
     {
         if (_entries.TryGetValue(id, out var entry))
             entry.Request.CustomerSeenAt = DateTime.UtcNow;
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 
-    public IReadOnlyList<ApprovalRequest> GetHistoryForCustomer(string customerId, int count = 100) =>
-        _entries.Values
+    public Task<IReadOnlyList<ApprovalRequest>> GetHistoryForCustomerAsync(
+        string customerId, int count = 100, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ApprovalRequest>>(_entries.Values
             .Select(e => e.Request)
             .Where(r => string.Equals(r.CustomerId, customerId, StringComparison.Ordinal))
             .OrderByDescending(r => r.RequestedAt)
             .Take(count)
-            .ToList();
+            .ToList());
 
     private void TrimHistory()
     {

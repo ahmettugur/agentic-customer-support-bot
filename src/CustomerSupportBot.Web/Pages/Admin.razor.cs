@@ -24,6 +24,7 @@ public partial class Admin
 
     private List<ApprovalRequest>    _pendingApprovals   = [];
     private List<ApprovalRequest>    _historyApprovals   = [];
+    private List<ApprovalRequest>    _stuckApprovals     = [];
     private List<EscalationRequest>  _openEscalations    = [];
     private List<EscalationRequest>  _closedEscalations  = [];
     private List<EscalationRequest>  _historyEscalations = [];
@@ -158,6 +159,8 @@ public partial class Admin
                 case "history":
                     _historyApprovals   = await AdminApi.GetRecentApprovalsAsync(50);
                     _historyEscalations = await AdminApi.GetRecentEscalationsAsync(50);
+                    // Ayrı çağrı: askıda kalmış yürütmelerin "son 50" penceresinden düşmemesi gerekir.
+                    _stuckApprovals     = await AdminApi.GetStuckApprovalsAsync();
                     break;
                 case "improvements":
                     _proposedLessons = await AdminApi.GetLessonsAsync("Proposed");
@@ -551,6 +554,32 @@ public partial class Admin
     // ── Helpers ───────────────────────────────────────────────────────────────
     private static string ShortId(string? id) =>
         id is null ? "—" : id[..Math.Min(8, id.Length)] + "…";
+
+    /// <summary>
+    /// Onayın kendisi değil, onayın SONUCU. Bu ayrım panelde görünür olmalı: yalnızca karara
+    /// bakan bir liste, yürütmesi başarısız olmuş ya da yarıda kalmış bir talebi de sorunsuz
+    /// "Approved" gösteriyordu — yani düzeltilmesi gereken kayıt hiçbir yerde göze çarpmıyordu.
+    /// </summary>
+    /// <summary>
+    /// Bir yürütmenin gerçekten askıda mı yoksa hâlâ çalışıyor mu olduğuna sunucu karar verir
+    /// (<c>ApprovalOptions.StuckExecutionAfterMinutes</c>); panel o kararı <c>/approvals/stuck</c>
+    /// listesinden okur, kendi eşiğini tutmaz.
+    ///
+    /// <para>
+    /// Bu ayrım olmadan geçmiş ekranındaki HER <c>running</c> kayıt "deploy/crash oldu, elle
+    /// doğrulayın" uyarısı alıyordu — uzun süren ama sorunsuz devam eden bir işlem de dahil.
+    /// Yanlış alarm, uyarının kendisini değersizleştirir.
+    /// </para>
+    /// </summary>
+    private bool IsStuck(ApprovalRequest a) => _stuckApprovals.Any(s => s.Id == a.Id);
+
+    private static string ExecutionStatusLabel(string? status, bool isStuck = false) => status switch
+    {
+        "running"   => isStuck ? "işlem askıda" : "işleniyor",
+        "failed"    => "işlem başarısız",
+        "succeeded" => "işlem tamam",
+        _           => ""
+    };
 
     // ── Onay kartı sunumu ─────────────────────────────────────────────────────
     //

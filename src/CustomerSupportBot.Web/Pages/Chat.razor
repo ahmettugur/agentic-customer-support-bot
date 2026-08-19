@@ -65,7 +65,7 @@
                                     @foreach (var a in _approvalHistory)
                                     {
                                         <div class="approval-panel-item approval-@a.Status">
-                                            <span class="approval-status">@ApprovalStatusLabel(a.Status)</span>
+                                            <span class="approval-status">@ApprovalStatusLabel(a.Status, a.ExecutionStatus)</span>
                                             <span class="approval-message">@(a.ExecutionResult ?? a.DecisionReason ?? "")</span>
                                             <span class="approval-date">@a.RequestedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm")</span>
                                         </div>
@@ -83,7 +83,7 @@
                                     @foreach (var a in CurrentApprovalList)
                                     {
                                         <div class="approval-panel-item approval-@a.Status">
-                                            <span class="approval-status">@ApprovalStatusLabel(a.Status)</span>
+                                            <span class="approval-status">@ApprovalStatusLabel(a.Status, a.ExecutionStatus)</span>
                                             <span class="approval-message">@(a.ExecutionResult ?? a.DecisionReason ?? "")</span>
                                         </div>
                                     }
@@ -1116,13 +1116,31 @@
         StateHasChanged();
     }
 
-    private static string ApprovalStatusLabel(string status) => status switch
+    /// <summary>
+    /// Admin'in kararı ile o kararın HAYATA GEÇİP GEÇMEDİĞİ ayrı şeylerdir; etiket ikisini
+    /// birlikte gösterir. Yalnızca karara bakan eski etiket, yürütmesi başarısız olmuş bir
+    /// talebi de "✅ Onaylandı" diye gösteriyordu — kullanıcı hata metnini okusa bile
+    /// başlık ona işin yapıldığını söylüyordu.
+    /// </summary>
+    private static string ApprovalStatusLabel(string status, string? executionStatus = null)
     {
-        "approved" => "✅ Onaylandı",
-        "rejected" => "❌ Reddedildi",
-        "pending"  => "⏳ Onay bekliyor",
-        _          => "⏱️ Süresi doldu"
-    };
+        if (status == "approved")
+        {
+            return executionStatus switch
+            {
+                "failed"    => "⚠️ Onaylandı, işlem başarısız",
+                "running"   => "⏳ Onaylandı, işleniyor",
+                _           => "✅ Onaylandı"
+            };
+        }
+
+        return status switch
+        {
+            "rejected" => "❌ Reddedildi",
+            "pending"  => "⏳ Onay bekliyor",
+            _          => "⏱️ Süresi doldu"
+        };
+    }
 
     // ── Persistent events (admin live takeover) ───────────────────────────────
     [JSInvokable]
@@ -1187,7 +1205,8 @@
                     Status: jd.TryGetProperty("status", out var ast) ? ast.GetString() ?? "" : "",
                     DecisionReason: jd.TryGetProperty("reason", out var ar) ? ar.GetString() : null,
                     ExecutionResult: jd.TryGetProperty("executionResult", out var aer) ? aer.GetString() : null,
-                    DecidedAt: DateTimeOffset.UtcNow);
+                    DecidedAt: DateTimeOffset.UtcNow,
+                    ExecutionStatus: jd.TryGetProperty("executionStatus", out var aes) ? aes.GetString() : null);
                 if (_approvalNotifications.All(x => x.Id != approval.Id))
                     _approvalNotifications.Add(approval);
                 break;

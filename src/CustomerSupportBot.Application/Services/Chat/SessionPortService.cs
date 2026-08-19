@@ -43,9 +43,10 @@ public sealed class SessionPortService : ISessionPort
         _logger.LogDebug("Session updated: {SessionId}", session.SessionId);
     }
 
-    public async Task<IReadOnlyList<SessionInfo>> GetAllSessionsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<SessionInfo>> GetAllSessionsAsync(
+        string? forCustomerId = null, CancellationToken ct = default)
     {
-        return await _sessions.GetAllSessionsAsync(ct);
+        return await _sessions.GetAllSessionsAsync(forCustomerId, ct);
     }
 
     public Task<List<ConversationMessage>> GetHistoryAsync(string sessionId, CancellationToken ct = default)

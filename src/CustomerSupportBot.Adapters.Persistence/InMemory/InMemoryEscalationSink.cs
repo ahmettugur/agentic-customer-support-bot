@@ -46,6 +46,16 @@ public class InMemoryEscalationSink : IEscalationSink
             .OrderBy(e => e.CreatedAt)
             .ToList();
 
+    // Tek süreç: kayıtların tek kaynağı zaten bellektir, ayrı bir kalıcı depo yoktur.
+    public Task<IReadOnlyList<EscalationRequest>> GetRecentForAgentAsync(
+        string agentId, int count = 50, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<EscalationRequest>>(_byId.Values
+            .Where(e => string.IsNullOrEmpty(e.AssignedTo)
+                     || string.Equals(e.AssignedTo, agentId, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(e => e.CreatedAt)
+            .Take(count)
+            .ToList());
+
     public IReadOnlyList<EscalationRequest> GetRecent(int count = 50) =>
         _byId.Values
             .OrderByDescending(e => e.CreatedAt)

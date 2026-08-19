@@ -146,7 +146,8 @@ SSE tek yönlü (server→client), WebSocket çift yönlü.
 1. ConfigureServices (DI sequence — Program.cs)
    - Telemetry → AI → Redis → Persistence → Application → Auth
 2. Hosted services:
-   - PersistenceHydrator (Postgres'te eski state expire)
+   - PersistenceHydrator (Postgres'te restart'ta yarım kalan trace'leri kapatır; onay kayıtlarına dokunmaz)
+   - DemoDataSeeder (boş DB'ye demo verisi — üretimde çalıştırılmamalı)
    - SlaGuardianService (her N saniye SLA tarama)
    - KnowledgeBaseIngestor (opsiyonel, startup'ta KB embed)
 3. Middleware pipeline (build-up):

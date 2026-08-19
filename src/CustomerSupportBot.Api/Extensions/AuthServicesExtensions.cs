@@ -64,6 +64,16 @@ public static class AuthServicesExtensions
             options.AddPolicy("AdminOrAgent", p => p.RequireRole("Admin", "Agent"));
             options.AddPolicy("Customer", p => p.RequireRole("Customer"));
 
+            // Oturum uçları (/sessions/*) için AÇIK rol listesi.
+            //
+            // Burada çıplak RequireAuthorization() KULLANILAMAZ: A2A token'ları da aynı JWT
+            // şemasıyla doğrulanır, dolayısıyla "kimliği doğrulanmış" olmak yeterli sayılırsa
+            // partner token'ı da bu uçlara girer. Partner token'ında linked_customer_id claim'i
+            // yoktur; kapsam "claim yoksa sınırsız" kuralıyla hesaplanırsa partner admin gibi
+            // değerlendirilip TÜM müşterilerin oturumlarını okuyabilir. A2A token'larının
+            // geçerlilik alanı yalnızca /a2a uçlarıdır (bkz. A2ATokenExchangeService).
+            options.AddPolicy("SessionAccess", p => p.RequireRole("Customer", "Admin", "Agent"));
+
             // ─── A2A (dış sistemlere açılan kanal) ───
             // İki ayrı rol bilinçli: partner token'ı YALNIZCA token değişimi yapabilir,
             // ajanları doğrudan çağıramaz. Ajanları çağıran özne token'ı ise tek bir müşteriye

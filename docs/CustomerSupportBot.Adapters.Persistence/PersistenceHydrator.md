@@ -6,9 +6,10 @@
 
 ## Ne yapar?
 
-Uygulama başladığında çalışan startup kurtarma servisi. Önceki çalışmadan kalan tutarsız kayıtları temizler ve demo verilerini seed eder.
+Uygulama başladığında çalışan startup kurtarma servisi. Önceki çalışmadan kalan tutarsız kayıtları
+temizler. **Demo verisi seed etmez** — o iş `DemoDataSeeder`'ındır.
 
-> 💡 **Analiz notu:** Bir restoranın sabah açılış rutini gibi — "dünden kalan siparişleri iptal et, masaları temizle, bugünün menüsünü hazırla". Uygulama restart edildikten sonra bekleyen ama artık geçersiz olan kayıtları düzeltir.
+> 💡 **Analiz notu:** Bir restoranın sabah açılış rutini gibi — "dün gece yarıda kalan işleri kapat". Kapsamı dar tutmak önemli: yalnızca restart yüzünden **sahibi kalmamış** kayıtlar düzeltilir. Müşterinin dün verdiği ve hâlâ geçerli olan bir talep (bekleyen onay) buna dahil DEĞİLDİR — bu ayrımı kaybetmek, her deploy'da bekleyen onayların sessizce reddedilmesine yol açmıştı.
 
 ---
 
@@ -20,21 +21,14 @@ Uygulama başladığında çalışan startup kurtarma servisi. Önceki çalışm
 
 ## Adımlar
 
-### 1. Stale pending approvals expire
+> **Onay kayıtlarına DOKUNULMAZ.** Burada eskiden 10 saniyeden eski `Pending` onayları
+> `Expired`'a çeken bir adım vardı. Onayın tool çağrısını **bloklamadığı** yeni modelde bu
+> yanlıştır: bekleyen bir onayın süreç-içi sahibi yoktur ve olmaması normaldir — admin günler
+> sonra karar verebilir (`ApprovalOptions.StalePendingHours`, varsayılan 72 saat). O adım
+> kalsaydı her deploy, bekleyen tüm onayları sessizce reddederdi. Süresi geçen kayıtları artık
+> `StaleApprovalSweepService` periyodik olarak temizler.
 
-```
-hitl.approval_requests
-WHERE status = 'Pending'
-  AND requested_at < NOW() - INTERVAL '10 seconds'
-
-→ status = 'Expired', decided_at = NOW(), decided_by = 'system'
-```
-
-Önceki çalışmada onay isteği gönderilmiş ama yanıt alınmadan uygulama kapanmışsa bu kayıtlar sonsuza kadar Pending kalır. 10 saniyelik eşik, yeni başlangıçta bunları temizler.
-
----
-
-### 2. In-flight traces terminate
+### 1. In-flight traces terminate
 
 ```
 observability.reasoning_traces
@@ -49,102 +43,24 @@ Restart sırasında aktif olan reasoning akışları tamamlanmadan kesilmiştir.
 
 ---
 
-### 3. Default admin seed
+## Seed BURADA DEĞİL
 
-```
-auth.users
-WHERE username = @username  (varsayılan: 'admin')
+Demo/başlangıç verisi (default admin, human agent'lar, Northwind ürün/müşteri/sipariş verisi,
+demo müşteri hesabı) bu servisin işi **değildir** — ayrı bir `IHostedService` olan
+**`DemoDataSeeder`** tarafından yapılır; bkz. [DemoDataSeeder.md](DemoDataSeeder.md).
 
-→ yoksa INSERT:
-   username='admin', passwordHash=BCrypt('Admin123!'), role='Admin', is_active=true
-```
+İkisi farklı sorumluluklardır ve karıştırılmamalıdır:
 
-Kullanıcı adı `Auth:DefaultAdminUsername`, şifre `Auth:DefaultAdminPassword` konfigürasyonundan okunur. Tanımlı değilse varsayılanlar: `admin` / `Admin123!`.
+| | PersistenceHydrator | DemoDataSeeder |
+|---|---|---|
+| Amaç | Restart'ın arkada bıraktığı **tutarsız kayıtları** düzeltmek | Boş bir ortamda hızlı başlamak |
+| Gerekli mi | Veri bütünlüğü için evet | Hayır, kolaylık |
+| Üretimde | Çalışır | Çalışmamalı |
 
----
-
-### 4. Default human agent seed
-
-```
-hitl.human_agents
-→ tablo boşsa 2 demo agent INSERT:
-   - agent-jdoe (John Doe, john.doe@example.com, skills: complaint/refund/vip)
-   - agent-jsmith (Jane Smith, jane.smith@example.com, skills: order/product/enterprise)
-
-auth.users
-→ her agent için linked user oluştur
-   username = email.Split('@')[0]  (john.doe, jane.smith)
-   password = Auth:DefaultAgentPassword ?? 'Agent123!'
-   role = 'Agent', linked_agent_id = agent.Id
-```
-
-Demo ve geliştirme ortamında oturum açıp agent panelini test etmek için hazır temsilci hesapları oluşturulur.
-
----
-
-### 5. Categories seed
-
-```
-catalog.categories
-→ tablo boşsa 21 demo kategori INSERT (NorthwindSeedData)
-```
-
----
-
-### 6. Customers seed
-
-```
-catalog.customers
-→ tablo boşsa 29 demo müşteri INSERT (NorthwindSeedData)
-→ sequence reset: setval(pg_get_serial_sequence('catalog.customers', 'id'), MAX(id))
-```
-
----
-
-### 7. Products seed
-
-```
-catalog.products
-→ tablo boşsa 36 demo ürün INSERT (NorthwindSeedData)
-→ sequence reset: setval(pg_get_serial_sequence('catalog.products', 'id'), MAX(id))
-```
-
----
-
-### 8. Orders + OrderDetails seed
-
-```
-catalog.orders
-→ tablo boşsa 48 demo sipariş INSERT (NorthwindSeedData)
-→ sequence reset: setval(pg_get_serial_sequence('catalog.orders', 'code'), MAX(code))
-
-catalog.order_details
-→ tablo boşsa sipariş detayları INSERT (NorthwindSeedData)
-```
-
----
-
-### 9. Complaints seed
-
-```
-catalog.complaints
-→ tablo boşsa 5 demo şikayet INSERT (NorthwindSeedData)
-```
-
-Complaints tablosu `ValueGeneratedNever()` kullanır — `Code` alanı seed verilerinde açıkça atanır, sequence yoktur.
+Varsayılan şifreler ve demo hesaplarla ilgili güvenlik notları da `DemoDataSeeder` belgesindedir.
 
 ---
 
 ## Neden sadece Postgres?
 
 InMemory adaptörler her restart'ta sıfırlanır — "kalan kayıt" kavramı yoktur. Hydrator yalnızca Postgres modunda anlamlıdır; `AddPersistenceAdapters()` çağrısında `PersistenceHydrator` otomatik kayıt edilir.
-
----
-
-## Güvenlik notu
-
-Üretimde ilk başlatmadan sonra:
-
-1. `Auth:DefaultAdminPassword` yapılandırma değerini değiştirin (varsayılan: `Admin123!`)
-2. `Auth:DefaultAgentPassword` yapılandırma değerini değiştirin (varsayılan: `Agent123!`)
-3. Agent kullanıcı adları: `john.doe`, `jane.smith`

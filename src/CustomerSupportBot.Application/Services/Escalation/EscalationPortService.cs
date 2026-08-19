@@ -51,6 +51,14 @@ public sealed class EscalationPortService : IEscalationPort
         return _escalations.GetRecent(count);
     }
 
+    public Task<IReadOnlyList<EscalationRequest>> GetRecentForAgentAsync(
+        string agentId, int count = 50, CancellationToken ct = default)
+    {
+        // Filtreleme burada YAPILMAZ; adaptöre devredilir. Cache üzerinde elemek, cache'in
+        // kendisi bir "son N" penceresi olduğu için sınırı ötelemekten ibarettir.
+        return _escalations.GetRecentForAgentAsync(agentId, count, ct);
+    }
+
     public EscalationRequest? Get(string id)
     {
         return _escalations.Get(id);

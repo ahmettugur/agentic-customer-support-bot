@@ -312,7 +312,8 @@ public sealed class PostgresSessionManager : ISessionManager
         PublishSessionCleared(sessionId);
     }
 
-    public async Task<List<SessionInfo>> GetAllSessionsAsync(CancellationToken ct = default)
+    public async Task<List<SessionInfo>> GetAllSessionsAsync(
+        string? forCustomerId = null, CancellationToken ct = default)
     {
         await EnsureAllListHydratedAsync(ct).ConfigureAwait(false);
 
@@ -320,6 +321,14 @@ public sealed class PostgresSessionManager : ISessionManager
         foreach (var kvp in _sessions)
         {
             var session = kvp.Value;
+
+            // Müşteri kapsamı: yalnızca bu müşteriye BAĞLI oturumlar. Bağlanmamış (anonim)
+            // oturumlar da elenir — başkasının başlattığı, henüz kimliğe bağlanmamış bir
+            // oturumun kimliği sızmamalı.
+            if (forCustomerId is not null &&
+                !string.Equals(session.State.AuthenticatedCustomerId, forCustomerId, StringComparison.Ordinal))
+                continue;
+
             var history = await GetHistoryAsync(kvp.Key, ct).ConfigureAwait(false);
             var firstUserMsg = history.FirstOrDefault(m => m.Role == ConversationRoles.User)?.Text;
 

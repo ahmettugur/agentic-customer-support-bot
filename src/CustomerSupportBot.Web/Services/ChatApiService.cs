@@ -97,7 +97,8 @@ public sealed record UnseenApproval(
     string Status,
     string? DecisionReason,
     string? ExecutionResult,
-    DateTimeOffset? DecidedAt);
+    DateTimeOffset? DecidedAt,
+    string? ExecutionStatus = null);
 
 public sealed record ApprovalHistoryItem(
     string Id,
@@ -106,4 +107,5 @@ public sealed record ApprovalHistoryItem(
     string? DecisionReason,
     string? ExecutionResult,
     DateTimeOffset RequestedAt,
-    DateTimeOffset? DecidedAt);
+    DateTimeOffset? DecidedAt,
+    string? ExecutionStatus = null);

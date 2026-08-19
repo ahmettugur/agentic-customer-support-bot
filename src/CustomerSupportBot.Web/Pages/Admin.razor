@@ -722,7 +722,36 @@
         <!-- TAB: HISTORY -->
         <section id="panel-history" class="tab-content @ActiveCls("history")" role="tabpanel" aria-labelledby="tab-history">
             <div class="tab-header"><h2>Geçmiş</h2><p class="muted">Son 50 onay kararı + son 50 eskalasyon.</p></div>
-            <h3>Onay Geçmişi</h3>
+            @if (_stuckApprovals.Count > 0)
+            {
+                <h3>⚠️ Yürütmesi askıda kalan onaylar (@_stuckApprovals.Count)</h3>
+                <div class="cards-list">
+                    <div class="empty-state">
+                        Bu talepler onaylandı ve işlem <strong>başlatıldı</strong>, ancak sonucu hiç yazılmadı —
+                        büyük olasılıkla yürütme sırasında süreç kapandı (deploy/crash). İşlemin gerçekten
+                        yapılıp yapılmadığı <strong>elle doğrulanmalıdır</strong>; sistem otomatik tekrar denemez.
+                    </div>
+                    @foreach (var a in _stuckApprovals)
+                    {
+                        <article class="card card-history">
+                            <header class="card-header">
+                                <div class="card-title">
+                                    <span class="tool-tag">@a.ToolName</span>
+                                    <span class="status-tag pending">işlem askıda</span>
+                                    <code class="card-id">@ShortId(a.Id)</code>
+                                </div>
+                                <time class="muted">@FmtRelative(a.RequestedAt)</time>
+                            </header>
+                            <div class="card-body">
+                                <div class="card-row"><span class="label">Müşteri:</span> <span>@(a.CustomerName ?? a.CustomerId ?? "—")</span></div>
+                                <div class="card-row"><span class="label">Karar:</span> <span>@a.DecidedBy · @a.DecisionReason</span></div>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+
+            <h3 class="section-spaced">Onay Geçmişi</h3>
             <div class="cards-list">
                 @if (_historyApprovals.Count == 0) { <div class="empty-state">Henüz karar kaydı yok.</div> }
                 else
@@ -731,12 +760,23 @@
                     {
                         <article class="card card-history">
                             <header class="card-header">
-                                <div class="card-title"><span class="tool-tag">@a.ToolName</span><span class="status-tag @a.Status">@a.Status</span><code class="card-id">@ShortId(a.Id)</code></div>
+                                <div class="card-title"><span class="tool-tag">@a.ToolName</span><span class="status-tag @a.Status">@a.Status</span>@if (a.ExecutionStatus is "running" or "failed")
+                                    {
+                                        <span class="status-tag @(a.ExecutionStatus == "failed" ? "rejected" : "pending")">@ExecutionStatusLabel(a.ExecutionStatus, IsStuck(a))</span>
+                                    }<code class="card-id">@ShortId(a.Id)</code></div>
                                 <time class="muted">@FmtRelative(a.RequestedAt)</time>
                             </header>
                             @if (a.DecidedBy is not null)
                             {
                                 <div class="card-body"><div class="card-row"><span class="label">Karar:</span> <span>@a.DecidedBy · @a.DecisionReason</span></div></div>
+                            }
+                            @if (a.ExecutionStatus == "running" && IsStuck(a))
+                            {
+                                <div class="card-body"><div class="card-row"><span class="label">⚠️ Dikkat:</span> <span>Onaylandı ve işlem başlatıldı, ancak sonucu hiç yazılmadı — büyük olasılıkla yürütme sırasında süreç kapandı (deploy/crash). İşlemin gerçekten yapılıp yapılmadığı <strong>elle doğrulanmalıdır</strong>; sistem bunu kendiliğinden tekrar denemez.</span></div></div>
+                            }
+                            else if (a.ExecutionStatus == "failed")
+                            {
+                                <div class="card-body"><div class="card-row"><span class="label">Yürütme hatası:</span> <span>@(a.ExecutionResult ?? "bilinmiyor")</span></div></div>
                             }
                         </article>
                     }

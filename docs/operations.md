@@ -111,12 +111,27 @@ Pattern → [agentic-patterns.md#9-guardrails--circuit-breaker](agentic-patterns
 ```json
 "HumanInTheLoop": {
   "Enabled": true,
-  "ToolsRequiringApproval": ["order_placement_tool", "complaint_registration_tool"],
-  "TimeoutSeconds": 60,             // approval bekleme süresi (timeout sonrası reject)
-  "AutoApproveOnTimeout": false,
+  "ToolsRequiringApproval": [
+    "order_placement_tool", "order_cancel_tool",
+    "return_request_tool", "complaint_registration_tool"
+  ],
+  "StalePendingHours": 72,          // bu kadar yanıtsız kalan Pending → otomatik REJECT
+  "StuckExecutionAfterMinutes": 15, // onaylanan iş bu kadardır Running ise "askıda" sayılır
+  "TimeoutSeconds": 60,             // ⚠️ bu dört tool için ETKİSİZ (aşağıya bakın)
+  "AutoApproveOnTimeout": false,    // ⚠️ aynı şekilde etkisiz
   "EscalationEnabled": true         // false → escalation tool çağrıları no-op
 }
 ```
+
+**Onay bloklamaz.** Tool çağrısı admin kararını beklemez; kaydı oluşturup hemen döner ve
+kullanıcının turu biter. Bu yüzden "approval bekleme süresi" diye bir kavram artık yoktur:
+
+| Ayar | Geçerli mi | Ne yapar |
+|---|---|---|
+| `StalePendingHours` | ✅ | `StaleApprovalSweepService` bu süreyi aşan `Pending` kayıtları otomatik **reddeder**. |
+| `StuckExecutionAfterMinutes` | ✅ | Onaylanıp yürütmesi bu kadardır `Running` olan kayıtlar `/approvals/stuck` altında ve panelde uyarıyla listelenir. Eşik düşük tutulursa hâlâ çalışan normal işlemler yanlışlıkla "crash" gibi görünür. |
+| `TimeoutSeconds` | ❌ | Yalnızca eski bloklayan yol (`AwaitDecisionAsync`) içindi. |
+| `AutoApproveOnTimeout` | ❌ | Aynı sebeple uygulanmaz; zaman aşımının sonucu **her zaman red**'dir. |
 
 `Enabled = false` yaparsanız **tüm HITL mekanizması** bypass edilir (klasik bot davranışı). Detay → [CustomerSupportBot.Api/Endpoints-Admin.md](CustomerSupportBot.Api/Endpoints-Admin.md).
 
@@ -261,7 +276,8 @@ Tüm `Telemetry` ayarı kapatılmak istenirse `Telemetry.Enabled = false` — tr
                                Admin: Trace, Eval, Memory, Improvements, Telemetry,
                                       Personalization, Agents, SLA
                                + Analytics (kısmi public)
-11. IHostedService'ler başlar→ KnowledgeBaseIngestor, SlaGuardianService, PersistenceHydrator
+11. IHostedService'ler başlar→ KnowledgeBaseIngestor, SlaGuardianService, PersistenceHydrator,
+    DemoDataSeeder (demo verisi), StaleApprovalSweepService (bekleyen onay temizliği)
 12. app.Run()                → Kestrel dinler (default :5021)
 ```
 
@@ -298,7 +314,7 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
 | `IEscalationSink` (`InMemoryEscalationSink`) | Bot'un çözemediği talepler için ticket kuyruğu |
 | `IChatModeRegistry` (`InMemoryChatModeRegistry`) | Session başına `(Bot \| Human)` mod takibi + `ModeChanged` event |
 | `IChatBridge` (`InMemoryChatBridge`) | User ↔ Admin mesaj köprüsü (`Channel<T>` pub/sub + ring buffer 200) + bot/typing yayını |
-| `ApprovalGateService` | Tool lambda'larını sarar; `Enabled=true` ise onay bekletir, false ise pass-through |
+| `ApprovalGateService` | Tool lambda'larını sarar; `Enabled=true` ise onay kaydı oluşturup **beklemeden** döner (gerçek iş admin kararında `IApprovalExecutionRouter` ile çalışır), false ise pass-through |
 
 ### Storage
 
@@ -595,7 +611,8 @@ Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 | Frontend SSE 5021'e bağlanmıyor | CORS / port farkı | `app.js` içinde `new ChatApp("http://localhost:5021")` |
 | Reasoning timeout | `WorkflowGuards:TimeoutSeconds` çok düşük veya model yavaş | TimeoutSeconds artır veya `ReasoningEffort: "low"` |
 | `MaxDuplicateToolCalls` tetiklendi | Bot aynı tool'u 3+ kez çağırıyor | Reasoning prompt iyileştirmesi; `adapters-agents/` belgesindeki `preToolCheck` kuralı |
-| Approval expired | Admin 60 saniye içinde karar vermedi | `HumanInTheLoop:TimeoutSeconds` artır veya `AutoApproveOnTimeout` aç |
+| Approval expired | Talep `StalePendingHours` (72 saat) boyunca yanıtsız kaldı, sweep reddetti | Admin panelinin izlendiğinden emin olun; eşiği `HumanInTheLoop:StalePendingHours` ile ayarlayın. `TimeoutSeconds`/`AutoApproveOnTimeout` bu tool'lar için **etkisizdir** |
+| Onaylandı ama işlem olmadı | `execution_status='Running'` kalmış (yürütme sırasında süreç kapandı) veya `IApprovalExecutionRouter`'da o tool için dal yok | Kaydı admin panelinden kontrol edin; sistem otomatik retry **yapmaz**, elle doğrulanır |
 | Replan'dan sonra bot yine yanlış agent'ı seçti | Reasoning history'de önceki tool sonuçları hâlâ etkili | Replan modal'ından **bot-içi not** ekle ("şikayet ajanına yönlendir" gibi) |
 | Admin sohbeti bittiğinde puanlama çıkmıyor | 4 mesajdan az olabilir veya zaten gösterilmiş | `_maybeShowRating` koşulları (`messageCount >= 4`, `!ratingShown`, `!humanModeActive`) |
 

@@ -572,7 +572,7 @@ Bu ayrım sayesinde:
 4. **`HumanAgentPortService` constructor'ı** — Eskalasyon çözümlendiğinde insan temsilci yükünü otomatik azaltan `IEscalationSink.RequestDecided` event aboneliğini kurar (ayrı bir `WireRoutingLoadTracking` çağrısı yoktur — bu davranış servisin kendi constructor'ına taşınmıştır).
 5. **Middleware pipeline**: CORS → Rate Limiter → WebSockets → Auth → Authorization.
 6. **Endpoint mapping**: Public (chat, realtime, session, auth) + Admin scope (trace, eval, memory, improvements, telemetry, personalization, agents, SLA) + Analytics.
-7. **IHostedService'ler** başlatılır: `KnowledgeBaseIngestor` (KB → Qdrant), `SlaGuardianService` (periyodik SLA taraması), `PersistenceHydrator` (seed data).
+7. **IHostedService'ler** başlatılır: `KnowledgeBaseIngestor` (KB → Qdrant), `SlaGuardianService` (periyodik SLA taraması), `PersistenceHydrator` (restart kurtarma), `DemoDataSeeder` (demo verisi — üretimde çalıştırılmamalı), `StaleApprovalSweepService` (süresi geçen onayları reddeder).
 8. **`CustomerSupportTeam` construct edildiğinde** 6 agent yaratılır ve OpenTelemetry middleware ile sarılır — **bu lazy'dir**, ilk `/chat/` isteğinde tetiklenir.
 9. `app.Run()` ile Kestrel dinlemeye başlar.
 

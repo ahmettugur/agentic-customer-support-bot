@@ -42,6 +42,13 @@ public sealed class ApprovalPortService : IApprovalPort
         return recent;
     }
 
+    public async Task<IReadOnlyList<ApprovalRequest>> GetStuckExecutionsAsync(CancellationToken ct = default)
+    {
+        var stuck = await _approvalQueue.GetStuckExecutionsAsync(ct);
+        await EnrichCustomerNamesAsync(stuck, ct);
+        return stuck;
+    }
+
     /// <summary>
     /// Onay kayıtlarına müşteri adını yazar — admin "Müşteri #1027"yi değil, kimin adına karar
     /// verdiğini görsün diye.

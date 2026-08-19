@@ -19,6 +19,12 @@ public interface IApprovalPort
     /// <summary>Son N onay geçmişi — <see cref="ApprovalRequest.CustomerName"/> doldurulmuş olarak.</summary>
     Task<IReadOnlyList<ApprovalRequest>> GetRecentAsync(int count = 50, CancellationToken ct = default);
 
+    /// <summary>
+    /// Onaylanmış ama yürütmesi askıda kalmış kayıtlar — admin panelinin elle müdahale için
+    /// göstermesi gerekenler. Tarih sınırı yoktur (bkz. IApprovalQueue.GetStuckExecutionsAsync).
+    /// </summary>
+    Task<IReadOnlyList<ApprovalRequest>> GetStuckExecutionsAsync(CancellationToken ct = default);
+
     /// <summary>Tek istek.</summary>
     ApprovalRequest? Get(string id);
 

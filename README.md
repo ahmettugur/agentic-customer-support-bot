@@ -370,7 +370,7 @@ agentic-customer-support-bot/
 │       └── ...
 │
 ├── deploy/
-│   ├── docker-compose.yml                     # Postgres, Redis, Qdrant, Jaeger, OTel, sandbox
+│   ├── docker-compose.yml                     # Postgres, Redis, Qdrant, Elasticsearch, Kibana, OTel, Jaeger
 │   ├── jaeger-v2-config.yaml
 │   └── otel-collector-config.yaml
 │

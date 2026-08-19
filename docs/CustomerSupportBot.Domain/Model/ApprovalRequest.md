@@ -59,6 +59,7 @@ Specialist agent bir side-effect tool çağırdığında `ApprovalGateService` b
 | `TimeoutSeconds` | `int` | Timeout süresi (config'ten) |
 | `ExecutionResult` | `string?` | Tool yürütme sonucu (onay sonrası) |
 | `ExecutedAt` | `DateTime?` | Yürütme zamanı |
+| `ExecutionStatus` | `ApprovalExecutionStatus` | Gerçek işin durumu — karardan ayrı |
 | `CustomerSeenAt` | `DateTime?` | Müşterinin sonucu gördüğü zaman |
 | `ReasonRequired` | `bool` | **Computed** — high-risk tool mu? |
 
@@ -70,6 +71,32 @@ Specialist agent bir side-effect tool çağırdığında `ApprovalGateService` b
 | `Approved` | Admin onayladı |
 | `Rejected` | Admin reddetti |
 | `Expired` | Timeout ile otomatik reddedildi |
+
+### ApprovalExecutionStatus Enum
+
+`ApprovalStatus`'ten **ayrıdır** ve ayrı bir soruyu yanıtlar: `Status` "insan ne karar verdi",
+`ExecutionStatus` "o karar hayata geçti mi". Tek alanda birleştirilseydi yürütmesi başarısız olmuş
+bir talep panelde yalnızca "Onaylandı" görünürdü; daha kötüsü, karar yazıldıktan sonra yürütme
+tamamlanmadan süreç kapanırsa (deploy/crash) kayıt hiçbir yerde askıda görünmez, sessizce kaybolurdu.
+
+| Değer | Açıklama |
+| ------- | ---------- |
+| `None` | Yürütülecek iş yok — reddedildi veya henüz karara bağlanmadı |
+| `Running` | Onaylandı, iş başlatıldı, sonucu henüz yazılmadı |
+| `Succeeded` | İş başarıyla tamamlandı |
+| `Failed` | İş çalıştı ve başarısız oldu (hata veya tool'un kendi reddi) |
+
+`Running` durumunda **kalmış** bir kayıt, yürütme sırasında sürecin kapandığı anlamına gelir.
+Sistem bunu kendiliğinden tekrar denemez — çünkü altta yatan tool'lar (sipariş iptali, iade)
+idempotent değildir ve otomatik retry mükerrer yürütme riski taşır. Bu kayıtlar admin panelinde
+uyarı ile işaretlenir ve **elle doğrulanır**.
+
+| `Status` | `ExecutionStatus` | Panelde |
+| --- | --- | --- |
+| Approved | Succeeded | ✅ Onaylandı |
+| Approved | Running | ⏳ Onaylandı, işleniyor / uzun sürerse **askıda** |
+| Approved | Failed | ⚠️ Onaylandı, işlem başarısız |
+| Rejected | None | ❌ Reddedildi |
 
 ## 7. Constructor Bağımlılıkları
 

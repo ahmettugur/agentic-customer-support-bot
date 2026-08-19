@@ -42,7 +42,13 @@
 | Thread safety | `SemaphoreSlim(1,1)` |
 | Events | `RequestCreated`, `RequestDecided` |
 
-**`AwaitDecisionAsync`:** `TaskCompletionSource<bool>` bekler. `Decide(id, approved)` çağrısında TCS tamamlanır. Timeout Task ile yarışır.
+**`AwaitDecisionAsync`:** `TaskCompletionSource<ApprovalRequest>` bekler. `DecideAsync(id, approved)`
+çağrısında TCS tamamlanır, timeout Task ile yarışır.
+
+> ⚠️ Bu **eski bloklayan yolun** metodudur ve onay gerektiren dört tool artık onu **çağırmaz**
+> (bkz. `ApprovalGateService.ExecuteWithApprovalGateAsync`). Yeni akışta tool kararı beklemez;
+> gerçek iş admin karar verdiğinde `IApprovalExecutionRouter` üzerinden çalışır. Metot geriye
+> dönük uyumluluk için duruyor.
 
 ---
 

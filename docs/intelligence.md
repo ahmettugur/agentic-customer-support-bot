@@ -154,7 +154,7 @@ POST /memory/ingest                              # KB'yi yeniden tara
 | Bileşen | Dosya |
 |---|---|
 | `Lesson` (model + `LessonStatus` enum) | `Domain/Model/Improvement/Lesson.cs` |
-| `ILessonStore` / `InMemoryLessonStore` | `Application/Ports/Driven/` + `Adapters.Persistence/InMemory/` |
+| `ILessonStore` / `PostgresLessonStore` | `Application/Ports/Driven/` + `Adapters.Persistence/Postgres/` |
 | `LessonMiner` (mine + approve + reject) | `Application/Services/Improvement/LessonMiner.cs` |
 | `ImprovementsEndpoints` | `Api/Endpoints/ImprovementsEndpoints.cs` |
 | Admin UI | `CustomerSupportBot.Web/Pages/Admin.razor` — Improvements sekmesi (Blazor WASM) |
@@ -207,7 +207,12 @@ POST /improvements/{id}/reject           # body: { decidedBy?, reason? }
 
 ### 2.6 Persistence
 
-`InMemoryLessonStore` default — uygulama yeniden başlatıldığında `Proposed` lesson'lar kaybolur, ama `Approved` olanlar Qdrant'ta kalır (Knowledge gibi ele alınır). İleride `PostgresLessonStore` eklenebilir.
+`PostgresLessonStore` kullanılır (`AddPersistenceAdapters` içinde kayıtlı tek uygulama). `Proposed`
+lesson'lar restart'ta **kaybolmaz**; `Approved` olanlar ayrıca Qdrant'a yazılır (Knowledge gibi ele
+alınır) — yani onaylı bir ders hem ilişkisel kayıt hem de aranabilir vektör olarak durur.
+
+`InMemoryLessonStore` sınıfı kod tabanında hâlâ vardır ama **hiçbir yerde kayıtlı değildir**;
+yalnızca birim testlerinin DB'siz çalışması için tutulur.
 
 ---
 
@@ -301,7 +306,7 @@ Bu ayrım önemli: heuristik tarafı **her turda** (ücretsiz) çalışır; LLM 
 
 ### 4.3 Operasyonel
 
-- **Persistance**: `InMemoryCustomerProfileStore` — restart'ta kaybolur. (Roadmap: `PostgresCustomerProfileStore`)
+- **Persistance**: `PostgresCustomerProfileStore` — profiller restart'ta korunur ve pod'lar arasında paylaşılır. (`InMemoryCustomerProfileStore` sınıfı durur ama kayıtlı değildir; testler içindir.)
 - **Privacy**: `DELETE /customers/{id}/profile` ile profil tamamen silinebilir (GDPR right-to-be-forgotten).
 - **Throttle**: `RecordInteraction` LLM kullanmaz — rate limit yok.
 

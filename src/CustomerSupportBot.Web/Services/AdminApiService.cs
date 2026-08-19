@@ -34,6 +34,18 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         return result ?? [];
     }
 
+    /// <summary>
+    /// Onaylanmış ama yürütmesi askıda kalmış kayıtlar. "Son N" listesinden ayrı bir çağrıdır
+    /// çünkü askıdaki bir kayıt trafik arttıkça o listeden düşer — tam da görünmesi gereken
+    /// kayıt görünmez olurdu.
+    /// </summary>
+    public async Task<List<ApprovalRequest>> GetStuckApprovalsAsync()
+    {
+        var prefix = await PrefixAsync();
+        var result = await http.GetFromJsonAsync<List<ApprovalRequest>>($"{prefix}/approvals/stuck");
+        return result ?? [];
+    }
+
     public async Task ApproveAsync(string id, string? reason, string decidedBy = "admin")
     {
         var prefix = await PrefixAsync();

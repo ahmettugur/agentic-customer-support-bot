@@ -39,6 +39,17 @@ public class ApprovalOptions
     public int StalePendingHours { get; set; } = 72;
 
     /// <summary>
+    /// Onaylanmış bir işin yürütmesi bu kadar dakikadır sürüyorsa "askıda" sayılır.
+    ///
+    /// <para>
+    /// Eşik olmadan, HÂLÂ ÇALIŞAN normal bir işlem de askıda görünürdü — panel 15 saniyede bir
+    /// yenilendiği için uzun süren her yürütme "deploy/crash oldu, elle doğrulayın" uyarısıyla
+    /// listelenirdi. Yanlış alarm, uyarının kendisini değersizleştirir.
+    /// </para>
+    /// </summary>
+    public int StuckExecutionAfterMinutes { get; set; } = 15;
+
+    /// <summary>
     /// Escalation sink feature flag. Kapatılırsa needs_escalation status'u
     /// Yalnızca metin olarak kalır (eski davranış).
     /// </summary>

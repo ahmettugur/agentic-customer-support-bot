@@ -312,7 +312,7 @@ ReasoningAgent compound query'i **alt görevlere** böler:
 | `dependencies: []` | Hemen başla |
 | `dependencies: [1]` | Subtask 1 tamamlanmasını bekle |
 | Yan-etkisiz (Inquiry, ProductInfo) | **Paralel** çalıştırılabilir (`Task.WhenAll`) |
-| Yan-etkili (OrderPlacement, Complaint) | **Sıralı** — HITL gate'i bloklar |
+| Yan-etkili (OrderPlacement, Complaint) | **Sıralı** — onay kaydı tek olsun diye (gate beklemez) |
 
 ```
 Yan-etkisiz query: "1 ve 2 durumu"
@@ -537,6 +537,11 @@ Kullanıcı: **"5 ve 7 durumu nedir?"**
 
 Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açmak istiyorum"`) için sistemin **fiili davranışı**dır. `ReasoningTrace` formatında, HITL approval ile şikayet kaydı akışını gösterir.
 
+> **Dikkat:** Onay **bloklamaz**. Bu turda şikayet henüz KAYDEDİLMEZ — yalnızca onay talebi
+> oluşturulur ve tur biter. Admin onayladığında gerçek kayıt `IApprovalExecutionRouter`
+> üzerinden ayrıca çalışır ve kullanıcıya bildirim olarak ulaşır. Bu yüzden aşağıdaki
+> `agentVisits` süreleri admin'in reaksiyon süresini **içermez**.
+
 ### Kullanıcı mesajı
 
 ```
@@ -551,8 +556,8 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
   "sessionId": "sess_8f3c1a2e",
   "userQuery": "001 1 için hasarlı ürün şikayeti açmak istiyorum",
   "startedAt": "2026-05-24T10:00:12.450Z",
-  "completedAt": "2026-05-24T10:00:18.927Z",
-  "durationMs": 6477,
+  "completedAt": "2026-05-24T10:00:15.727Z",
+  "durationMs": 3277,
   "iterationCount": 5,
   "estimatedTokens": 2840,
   "terminationReason": "completed",
@@ -595,7 +600,7 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
       },
       {
         "order": 4,
-        "description": "ComplaintAgent'a yönlendirilmeli; complaint_registration_tool yan-etkili → HITL approval gerekecek",
+        "description": "ComplaintAgent'a yönlendirilmeli; complaint_registration_tool yan-etkili → HITL onayına gidecek",
         "action": "route",
         "grounding": "derived",
         "confidence": 0.95
@@ -638,14 +643,14 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
         "confidence": 0.95
       },
       "resultConfidence": 0.9,
-      "resultNotes": "Approval onayı bekleniyor, sonra tool çağrılacak",
+      "resultNotes": "Onay talebi oluşturuldu (app_01HG8K2P5N); tur burada bitiyor, kayıt admin kararından sonra yapılacak",
       "postToolReflection": {
         "taskComplete": true,
         "status": "done",
         "statusEnum": "Done",
         "handoffSuggestion": null,
         "missingContext": [],
-        "summary": "Şikayet 7 olarak kaydedildi (001 / 1)"
+        "summary": "Şikayet talebi onaya gönderildi (001 / 1) — kayıt henüz oluşmadı"
       }
     }
   ],
@@ -654,10 +659,10 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
   "agentVisits": [
     { "agentName": "ReasoningAgent",  "startedAt": "2026-05-24T10:00:12.500Z", "completedAt": "2026-05-24T10:00:13.880Z", "durationMs": 1380 },
     { "agentName": "PlanningAgent",   "startedAt": "2026-05-24T10:00:13.910Z", "completedAt": "2026-05-24T10:00:14.620Z", "durationMs": 710 },
-    { "agentName": "ComplaintAgent",  "startedAt": "2026-05-24T10:00:14.650Z", "completedAt": "2026-05-24T10:00:18.450Z", "durationMs": 3800,
-      "output": "PreToolCheck → ApprovalGate (3.2s) → tool çağrısı → reflection"
+    { "agentName": "ComplaintAgent",  "startedAt": "2026-05-24T10:00:14.650Z", "completedAt": "2026-05-24T10:00:15.250Z", "durationMs": 600,
+      "output": "PreToolCheck → onay kaydı oluşturuldu → reflection (admin beklenmedi)"
     },
-    { "agentName": "ResponseAgent",   "startedAt": "2026-05-24T10:00:18.480Z", "completedAt": "2026-05-24T10:00:18.927Z", "durationMs": 447 }
+    { "agentName": "ResponseAgent",   "startedAt": "2026-05-24T10:00:15.280Z", "completedAt": "2026-05-24T10:00:15.727Z", "durationMs": 447 }
   ],
 
   // ─── 6. Tool çağrıları ───
@@ -674,12 +679,17 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
   ],
 
   // ─── 7. Approval (HITL) ───
-  // Tool çağrısı yapılmadan önce approval gate tetiklendi:
-  //   ApprovalRequest oluşturuldu (id: app_01HG8K2P5N)
-  //   3.2 saniye sonra admin "Onayla" tıkladı
-  //   Sonra tool çağrıldı ve sonuç döndü.
+  // Tool gerçek işi YAPMADI; onay kaydı oluşturup döndü:
+  //   ApprovalRequest oluşturuldu (id: app_01HG8K2P5N), status=Pending
+  //   Tur burada bitti — admin kararı beklenmedi.
+  //
+  // Admin daha sonra (saniyeler veya saatler sonra) "Onayla" dediğinde:
+  //   ClaimDecisionAsync → status=Approved, executionStatus=Running
+  //   IApprovalExecutionRouter → complaint_registration_tool gerçekten çalışır
+  //   executionStatus=Succeeded, executionResult="Şikayet 7 olarak kaydedildi"
+  //   Kullanıcıya SSE ile approval_resolved bildirimi gider (bağlı değilse badge'de birikir).
 
-  "finalResponse": "Şikayetiniz başarıyla kaydedildi. Şikayet numaranız: **7**. Müşteri hizmetleri ekibimiz en kısa sürede sizinle iletişime geçecektir."
+  "finalResponse": "Şikayet talebiniz onaya gönderildi. Sonucu size bildirim olarak ileteceğiz; bu arada başka bir konuda yardımcı olabilirim."
 }
 ```
 
@@ -695,7 +705,7 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
 | **Confidence-aware routing** | `reasoning.confidenceScore: 0.95` yüksek, `planning.needsClarification: false` → clarification yok, direkt specialist |
 | **Grounding** | `regex` (×2), `session_state`, `derived` — sadece 1 step `derived`, çoğunluk delilli |
 | **ReAct (3 faz)** | ComplaintAgent: `preToolCheck.canProceed=true` → tool call → `postToolReflection.status=done` |
-| **HITL approval gate** | `complaint_registration_tool` high-risk → 3.2 saniye admin onayı beklendi |
+| **HITL approval gate** | `complaint_registration_tool` high-risk → onay talebi açıldı, tur **beklemeden** bitti; kayıt admin kararından sonra yapılacak |
 | **Alternatives rejected** | Planning OrderAgent ve ProductAgent'ı **gerekçeli** elemiş (audit) |
 | **No handoff** | `handoffSuggestion: null` — doğru agent seçildi, dynamic re-route gerekmedi |
 | **Sentiment tracking** | `sentimentScore: 0.35` — negative (şikayet), `consecutiveNegativeTurns++` |
@@ -705,17 +715,22 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
 ```
 ReasoningAgent   1380 ms  ████████████████████
 PlanningAgent     710 ms  ██████████
-ComplaintAgent   3800 ms  ████████████████████████████████████████████████████████
+ComplaintAgent    600 ms  █████████
   ├─ PreToolCheck  ~500 ms
-  ├─ Approval gate ~3200 ms  (admin reaksiyonu!)
-  ├─ Tool call      ~80 ms
-  └─ Reflection    ~20 ms
+  ├─ Onay kaydı     ~80 ms  (DB INSERT + Redis publish)
+  └─ Reflection     ~20 ms
 ResponseAgent     447 ms  ██████
 ────────────────────────
-Toplam            6477 ms
+Toplam            3137 ms
 ```
 
-**Önemli:** Tool çağrısı + reflection sadece **100 ms** sürdü. Toplam latency'nin **%50'si admin'in onay vermesi**. Production'da SLA Guardian bu süreyi takip eder; threshold aşılırsa otomatik AutoReject veya öncelik boost tetiklenir.
+**Önemli:** Admin'in reaksiyon süresi bu tabloda **yoktur** ve olmamalıdır — kullanıcının turu
+onaydan bağımsız biter. Onay bloklasaydı aynı senaryo ~6.5 saniye sürerdi ve bunun yarısı
+admin'in tıklamasını beklemek olurdu; 50-100 eşzamanlı onay biriktiğinde de istekler
+zaman aşımına uğrayıp sessizce reddedilirdi.
+
+Admin'in ne kadar beklettiği ayrı bir metriktir: `SLA Guardian` bekleyen onayları takip eder,
+`StalePendingHours` (72 saat) aşılırsa kayıt otomatik reddedilir.
 
 ### Token kullanımı
 

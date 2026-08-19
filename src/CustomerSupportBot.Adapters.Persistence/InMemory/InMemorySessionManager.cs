@@ -184,13 +184,19 @@ public class InMemorySessionManager : ISessionManager
         _sessions[sessionId] = session;
     }
 
-    public async Task<List<SessionInfo>> GetAllSessionsAsync(CancellationToken ct = default)
+    public async Task<List<SessionInfo>> GetAllSessionsAsync(
+        string? forCustomerId = null, CancellationToken ct = default)
     {
         var result = new List<SessionInfo>();
 
         foreach (var kvp in _sessions)
         {
             var session = kvp.Value;
+
+            if (forCustomerId is not null &&
+                !string.Equals(session.State.AuthenticatedCustomerId, forCustomerId, StringComparison.Ordinal))
+                continue;
+
             var history = await GetHistoryAsync(kvp.Key, ct).ConfigureAwait(false);
             var firstUserMsg = history.FirstOrDefault(m => m.Role == ConversationRoles.User)?.Text;
 

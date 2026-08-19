@@ -28,9 +28,11 @@ Temel desen için önce [HybridPattern.md](HybridPattern.md) oku.
 
 **Hydration:** Son 200 kayıt lazy yüklenir.  
 **Yazma stratejisi:** Durable-first — DB INSERT/UPDATE önce, cache sonra.  
-**Dağıtık lock:** `Decide()` çağrısında `IAppDistributedLock.AcquireAsync("approval:decide:{id}")` — birden fazla pod aynı anda karar veremez.  
-**Redis:** `csbot:approval:created` / `csbot:approval:decided` kanalları.  
-**Startup:** `ExpirePendingOnStartupAsync()` — `PersistenceHydrator` çağırır.
+**Dağıtık lock:** `Decide()` çağrısında `IAppDistributedLock.TryAcquireAsync("approval:{id}")` — birden fazla pod aynı anda karar veremez.  
+**Mükerrer yürütme koruması:** Kilit yalnızca *eş zamanlı* çağrıları serialize eder, bayat bir cache yüzünden *sonradan* gelen ikinci kararı değil. Asıl koruma `ClaimDecisionAsync`'tir: karar, gerçek iş yürütülmeden **önce** tek bir `UPDATE ... WHERE status = 'Pending'` ile sahiplenilir. 0 satır etkilenirse kararı başkası vermiştir; yürütme atlanır ve pod kendi cache'ini DB'den tazeler.  
+**Redis:** `csbot:approval:created` / `csbot:approval:decided` kanalları. `decided` mesajı, dinleyen pod'da bekleyen bir `TaskCompletionSource` olup olmadığına **bakılmaksızın** işlenir — bloklamayan modelde kararı vermeyen pod'ların hiçbirinde TCS yoktur; TCS'e bağlanmak kararın yayılmasını, SSE bildirimini ve "sonradan gir de gör" akışını tümden engelliyordu.  
+**Yürütme durumu:** Karar (`status`) ile gerçek işin sonucu (`execution_status`) ayrı kolonlardır. Onay claim'i `execution_status='Running'` yazar, iş bitince `Succeeded`/`Failed` olur — böylece yürütme sırasında süreç kapanırsa kayıt DB'de askıda GÖRÜNÜR kalır. Otomatik retry yoktur (tool'lar idempotent değil); bu kayıtlar admin panelinde işaretlenir.  
+**Startup:** Onay kayıtlarına dokunulmaz (bkz. `PersistenceHydrator.md`). Süresi geçenler `StaleApprovalSweepService` tarafından periyodik olarak reddedilir.
 
 ---
 
@@ -60,10 +62,15 @@ Temel desen için önce [HybridPattern.md](HybridPattern.md) oku.
 
 **Port:** `IEscalationSink`
 
-**Hydration:** Açık eskalasyonlar + son 500 yüklenir.  
+**Hydration:** Açık eskalasyonlar + son 500 kapalı kayıt yüklenir.  
 **Yazma:** Write-through.  
 **Durum geçişleri:** Cache'e `EscalationStateFactory` uygulanır, ardından DB UPDATE.  
-**Redis:** `csbot:escalation:created` / `csbot:escalation:decided`.
+**Redis:** `csbot:escalation:created` / `csbot:escalation:decided`.  
+**Agent kapsamlı geçmiş:** `GetRecentForAgentAsync` cache'i DEĞİL, doğrudan veritabanını sorgular
+(`WHERE assigned_to IS NULL OR assigned_to = @agentId ... LIMIT`). Sebep: cache'in kendisi bir
+"son N" penceresidir; bir agent'ın kapalı kaydı o pencerenin gerisinde kalabilir ve cache üzerinde
+filtrelemek onu görünmez bırakır. Bu, sınırı ötelemekle çözülmez — daraltma ve limit birlikte,
+veri kaynağında uygulanmalıdır.
 
 ---
 

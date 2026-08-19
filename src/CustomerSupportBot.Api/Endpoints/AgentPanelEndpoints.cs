@@ -5,9 +5,15 @@
 // Eskalasyon:
 //   GET  /agent/escalations/my              → Bana atanmış eskalasyonlar
 //   GET  /agent/escalations/open            → Tüm açık eskalasyonlar
+//   GET  /agent/escalations/recent          → Son N karar (geçmiş sekmesi)
 //   POST /agent/escalations/{id}/acknowledge → Üstlen (herhangi bir agent)
 //   POST /agent/escalations/{id}/resolve     → Çöz
 //   POST /agent/escalations/{id}/dismiss     → Reddet
+//
+// Onay:
+//   GET  /agent/approvals/pending           → Bekleyen onaylar
+//   GET  /agent/approvals/recent            → Son N karar (geçmiş sekmesi)
+//   GET  /agent/approvals/stuck             → Yürütmesi askıda kalmış onaylar
 //
 // Onay (Approval):
 //   GET  /agent/approvals/pending            → Onay bekleyen tool çağrıları
@@ -57,16 +63,33 @@ public static class AgentPanelEndpoints
             return Results.Ok(new { agentId, count = mine.Count, items = mine });
         });
 
+        // ─── Geçmiş: kapanmış eskalasyonlar ───
+        // AYNI kapsam kuralı burada da geçerlidir: atanmamış VEYA bu agent'a atanmış olanlar.
+        // Filtresiz bırakılırsa her agent, diğer agent'ların kapattığı eskalasyonların müşteri
+        // sorularını ve çözüm notlarını okur — açık kayıtlarda uygulanan kısıtı geçmiş üzerinden
+        // dolaşmak olurdu.
+        group.MapGet("/escalations/recent", async (
+            HttpContext ctx, IEscalationPort escalations, CancellationToken ct, int count = 50) =>
+        {
+            if (!TryResolveEscalationScope(ctx, out var agentScope, out var denied)) return denied!;
+
+            // Daraltma ve limit birlikte, veri kaynağında (bkz. IEscalationPort.GetRecentForAgentAsync).
+            return Results.Json(agentScope is null
+                ? escalations.GetRecent(count)
+                : await escalations.GetRecentForAgentAsync(agentScope, count, ct));
+        });
+
         // ─── Agent'ın görebileceği açık eskalasyonlar ───
         // Kural: atanmamış VEYA bu agent'a atanmış olanlar
         group.MapGet("/escalations/open", (HttpContext ctx, IEscalationPort escalations) =>
         {
-            var agentId = GetLinkedAgentId(ctx);
+            if (!TryResolveEscalationScope(ctx, out var agentScope, out var denied)) return denied!;
+
             var all = escalations.GetOpen();
-            var visible = agentId is null
+            var visible = agentScope is null
                 ? all
                 : all.Where(e => string.IsNullOrEmpty(e.AssignedTo)
-                               || string.Equals(e.AssignedTo, agentId, StringComparison.OrdinalIgnoreCase))
+                               || string.Equals(e.AssignedTo, agentScope, StringComparison.OrdinalIgnoreCase))
                      .ToList();
             return Results.Json(visible);
         });
@@ -175,6 +198,15 @@ public static class AgentPanelEndpoints
 
         group.MapGet("/approvals/pending", async (IApprovalPort approvals, CancellationToken ct) =>
             Results.Json(await approvals.GetPendingAsync(ct)));
+
+        // Panelin "geçmiş" sekmesi bunu çağırır (AdminApiService rolü Agent ise /agent önekini
+        // ekler). Karşılığı tanımlı olmadığı için agent kullanıcıları sekmeye geçtiğinde 404
+        // alıyordu — admin'de çalışan bir ekran agent'ta sessizce boş kalıyordu.
+        group.MapGet("/approvals/recent", async (IApprovalPort approvals, CancellationToken ct, int count = 50) =>
+            Results.Json(await approvals.GetRecentAsync(count, ct)));
+
+        group.MapGet("/approvals/stuck", async (IApprovalPort approvals, CancellationToken ct) =>
+            Results.Json(await approvals.GetStuckExecutionsAsync(ct)));
 
         group.MapPost("/approvals/{id}/approve",
             async (string id, ApprovalDecisionInput? body, HttpContext ctx, IApprovalPort approvals, CancellationToken ct) =>
@@ -382,4 +414,35 @@ public static class AgentPanelEndpoints
     /// <summary>JWT claim'den linked_agent_id'yi çözer.</summary>
     private static string? GetLinkedAgentId(HttpContext ctx) =>
         ctx.User.FindFirstValue("linked_agent_id");
+
+    /// <summary>
+    /// Liste uçlarının kapsamı: <c>null</c> = sınırsız (tüm kayıtlar), aksi hâlde yalnızca o
+    /// agent'ın görebilecekleri. <c>false</c> dönerse çağıranın kapsamı yoktur.
+    ///
+    /// <para>
+    /// Sınırsız erişim <b>Admin rolünden</b> türetilir, <c>linked_agent_id</c> claim'inin
+    /// yokluğundan DEĞİL. Bu grup "AdminOrAgent" ile korunur ve <c>LinkedAgentId</c> veritabanında
+    /// nullable'dır; "claim yoksa hepsini göster" kuralı, bağlantısı kurulmamış bir Agent hesabını
+    /// sessizce Admin kapsamına yükseltirdi. Eylem uçları (acknowledge/resolve/dismiss) zaten
+    /// claim yoksa 400 döner — liste uçlarının onlardan daha geniş olması tutarsızlıktı.
+    /// </para>
+    /// </summary>
+    private static bool TryResolveEscalationScope(
+        HttpContext ctx, out string? agentScope, out IResult? denied)
+    {
+        agentScope = null;
+        denied = null;
+
+        if (ctx.User.IsInRole("Admin")) return true;
+
+        var agentId = GetLinkedAgentId(ctx);
+        if (string.IsNullOrWhiteSpace(agentId))
+        {
+            denied = Results.BadRequest(new { error = "Kullanıcıya bağlı agent kaydı yok." });
+            return false;
+        }
+
+        agentScope = agentId;
+        return true;
+    }
 }

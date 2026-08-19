@@ -148,15 +148,20 @@ CustomerSupportBot.Api/Prompts/
 
 ### Adımlar
 
-**1. `CustomerSupportToolsService.cs`'e metod ekle**:
+**1. İlgili tool servisine metod ekle** — iade sipariş alanına girdiği için `OrderToolsService`
+(şikayet işleri `ComplaintToolsService`, ürün işleri `ProductToolsService`;
+`CustomerSupportToolsService` bunları birleştiren cephedir):
 
 ```csharp
-// CustomerSupportBot.Application/Services/CustomerSupportToolsService.cs
+// CustomerSupportBot.Application/Services/Tools/OrderToolsService.cs
 [Description("Sipariş için iade süreci başlatır. orderId ve reason zorunlu. " +
              "Sonuç ToolResult olarak döner.")]
 public ToolResult RefundInitiateTool(
-    [Description("İade edilecek sipariş numarası (ör. '1')")] string orderId,
-    [Description("İade sebebi (en az 10 karakter)")] string reason)
+    [Description("İade edilecek sipariş numarası (ör. '1042')")] string orderId,
+    [Description("İade sebebi (en az 10 karakter)")] string reason,
+    // Description YOK ve en sonda: bu parametre LLM'e açılmaz, çağıran taraf
+    // (ApprovalGateService) JWT'den okuyup geçer.
+    string customerId)
 {
     // 1) Validation — parametre adları için WellKnown.ToolParameterNames kullan
     var missing = new List<string>();
@@ -172,6 +177,14 @@ public ToolResult RefundInitiateTool(
     // 2) Business logic — IOrderRepository port'u üzerinden erişim
     var order = _orderRepository.FindOrder(orderId);
     if (order == null)
+    {
+        return ToolResult.NotFound(
+            WellKnown.ToolErrorCodes.OrderNotFound,
+            $"'{orderId}' siparişi bulunamadı.");
+    }
+
+    // Sahiplik kontrolü — login'li müşteri yalnızca kendi siparişine iade açabilir.
+    if (!string.Equals(order.CustomerId, customerId, StringComparison.OrdinalIgnoreCase))
     {
         return ToolResult.NotFound(
             WellKnown.ToolErrorCodes.OrderNotFound,
@@ -203,20 +216,63 @@ REFUND İÇİN:
   - refund_initiate_tool'u çağır
 ```
 
-**3. Agent'ın `tools:` listesine ekle**:
+**3. Tool'u `ApprovalGateService`'te tanımla**:
+
+> ⚠️ Ajanlara tool'lar **doğrudan** `AIFunctionFactory.Create(_tools.XxxTool)` ile verilmez.
+> Hepsi `ApprovalGateService` üzerinden geçer; onay kapısını devreye sokan yer burasıdır.
+> Doğrudan bağlanan bir tool HITL kapısını **tamamen atlar** — iade/iptal gibi yan etkili bir
+> araçta bu, admin onayı olmadan çalışan bir işlem demektir.
 
 ```csharp
-// CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs
-var complaintAgent = new ChatClientAgent(
-    chatClient,
-    instructions: _prompts.Get("agents/complaint-agent"),
-    name: "ComplaintAgent",
-    description: "Müşteri şikayetlerini işler.",
-    tools: [
-        AIFunctionFactory.Create(_tools.ComplaintRegistrationTool),
-        AIFunctionFactory.Create(_tools.RefundInitiateTool)  // ← eklendi
-    ]);
+// CustomerSupportBot.Adapters.Agents/ApprovalGateService.cs
+public AIFunction BuildRefundInitiateTool() =>
+    AIFunctionFactory.Create(
+        async (
+            [Description("İade edilecek sipariş numarası (zorunlu, ör. '1042')")] string orderId,
+            [Description("İade sebebi (zorunlu, en az 10 karakter)")] string reason) =>
+            await ExecuteWithApprovalGateAsync(
+                WellKnown.ToolNames.RefundInitiate,
+                new Dictionary<string, object?>
+                    { ["orderId"] = orderId, ["reason"] = reason, ["customerId"] = CurrentCustomerId },
+                () => _tools.RefundInitiateTool(orderId, reason, CurrentCustomerId),
+                // Onay kaydı OLUŞTURULMADAN önceki salt-okunur ön kontrol: gerçek iş admin
+                // kararından sonra çalıştığı için, baştan başarısız olacağı belli bir talep
+                // yoksa boş yere kuyruğa düşer ve admin'in zamanını harcar.
+                preflight: () => _tools.ValidateOrderActionable(orderId, CurrentCustomerId)),
+        name: WellKnown.ToolNames.RefundInitiate,
+        description:
+            "Sipariş için iade süreci başlatır. order_id ve reason zorunludur; müşteri kimliği " +
+            "login'den otomatik alınır. Bu tool HITL approval gate'inden geçer — admin onaya " +
+            "gönderilir, sonucu bildirim olarak dönülür.");
 ```
+
+> **`customerId` parametre DEĞİLDİR.** Kimlik JWT'den okunur (`CurrentCustomerId`). Tool
+> imzasına eklenirse LLM onu kullanıcının serbest metninden çıkarır ve biri başkasının müşteri
+> numarasını söyleyip onun adına işlem başlatabilir.
+
+**3b. Onay gerektiren tool'lar listesine ekle** (`appsettings.json` → `HumanInTheLoop:ToolsRequiringApproval`),
+gerekçe (audit trail) zorunlu olacaksa ayrıca `WellKnown.HighRiskTools`'a.
+
+**3c. Ajanın `Tools` listesine bağla**:
+
+```csharp
+// CustomerSupportBot.Adapters.Agents/Team/OrderAgent.cs
+Tools = [
+    approvalGate.BuildOrderPlacementTool(),
+    approvalGate.BuildOrderCancelTool(),
+    approvalGate.BuildReturnRequestTool(),
+    approvalGate.BuildRefundInitiateTool()   // ← eklendi
+],
+```
+
+**3d. Onaylanınca gerçek işi tetikleyecek yönlendirmeyi ekle** — `ApprovalExecutionRouter`
+(`CustomerSupportBot.Application/Services/Approval/`). Tool artık admin kararını beklemez;
+onay geldiğinde işi çalıştıran yer burasıdır. Bu adım atlanırsa talep onaylanır ama **hiçbir
+şey olmaz**.
+
+> `CustomerSupportTeam.cs` bu iş için doğru yer değildir — o sınıf artık yalnızca compound ve
+> single sorgu ayrımını yapıp doğru koşucuya yönlendirir; ajan/tool kurulumu `Team/` altındaki
+> ajan sınıflarında ve `AgentTeamFactory`'dedir.
 
 **4. Evaluation senaryosu ekle** (isteğe bağlı ama tavsiye edilir):
 

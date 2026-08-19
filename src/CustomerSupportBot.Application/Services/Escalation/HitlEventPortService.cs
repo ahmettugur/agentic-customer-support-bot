@@ -152,7 +152,8 @@ public sealed class HitlEventPortService : IHitlEventPort
                     status = req.Status.ToString().ToLowerInvariant(),
                     reason = req.DecisionReason,
                     decidedBy = req.DecidedBy,
-                    executionResult = req.ExecutionResult
+                    executionResult = req.ExecutionResult,
+                    executionStatus = req.ExecutionStatus.ToString().ToLowerInvariant()
                 }));
             };
             _approvals.RequestDecided += _approvalDecidedHandler;

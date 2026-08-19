@@ -570,42 +570,69 @@ Bu sistemde **iki farklı HITL mekanizması** vardır ve birbirlerini tamamlar:
 │ 1. Specialist agent preToolCheck.canProceed=true üretti      │
 │    → MAF tool invocation başlatıyor                          │
 ├──────────────────────────────────────────────────────────────┤
-│ 2. CustomerSupportTeam.BuildOrderPlacementTool() lambda'sı   │
+│ 2. ApprovalGateService.BuildOrderPlacementTool() lambda'sı   │
 │    aracın gerçek çalışmasından ÖNCE approval request yazar   │
 ├──────────────────────────────────────────────────────────────┤
-│ 3. IApprovalQueue.Create(req)                                 │
+│ 3. IApprovalQueue.CreateAsync(req)                            │
 │    → event: RequestCreated                                    │
 │    → SSE: approval_required payload'ı client'a                │
 ├──────────────────────────────────────────────────────────────┤
-│ 4. Tool lambda: await queue.AwaitDecisionAsync(id)            │
-│    → TaskCompletionSource bekliyor (timeout: 60s)             │
+│ 4. Tool lambda HEMEN döner: ToolResult.Pending(...)           │
+│    → "Talebiniz onaya gönderildi"                             │
+│    → KULLANICININ TURU BURADA BİTER, beklemez                 │
+└──────────────────────────────────────────────────────────────┘
+
+            ⋯ saniyeler, saatler — kullanıcı sohbete devam eder ⋯
+
+┌──────────────────────────────────────────────────────────────┐
+│ 5. Admin /approvals/pending'i çeker, onaylar veya reddeder    │
 ├──────────────────────────────────────────────────────────────┤
-│ 5. Admin başka tab'dan /approvals/pending'i çeker,           │
-│    onaylar veya reddeder (/approvals/{id}/approve|reject)    │
+│ 6. IApprovalQueue.DecideAsync(id, approved, by, reason)       │
+│    → ClaimDecisionAsync: UPDATE ... WHERE status='Pending'    │
+│      (0 satır ⇒ kararı başkası verdi, yürütme ATLANIR)        │
+│    → status=Approved, executionStatus=Running                 │
 ├──────────────────────────────────────────────────────────────┤
-│ 6. IApprovalQueue.Decide(id, approved, by, reason)            │
-│    → TCS release                                              │
-│    → event: RequestDecided                                    │
+│ 7. IApprovalExecutionRouter GERÇEK işi burada çalıştırır      │
+│    - approved → _tools.OrderPlacementTool(...)                │
+│    - rejected → yürütme yok                                   │
+│    → executionStatus = Succeeded | Failed                     │
+├──────────────────────────────────────────────────────────────┤
+│ 8. → event: RequestDecided                                    │
 │    → SSE: approval_resolved payload'ı client'a                │
-├──────────────────────────────────────────────────────────────┤
-│ 7. Tool lambda await'ten çıkar:                               │
-│    - approved  → CustomerSupportTools.OrderPlacementTool(...)│
-│    - rejected  → ToolResult.ValidationError("onaylanmadı")   │
-│    - timeout   → Otomatik reject (config)                     │
+│    → client bağlı değilse: unseen listesinde birikir,         │
+│      kullanıcı döndüğünde badge olarak görür                  │
 └──────────────────────────────────────────────────────────────┘
 ```
 
+> **Neden bloklamıyor:** Eskiden 4. adımda tool lambda'sı `AwaitDecisionAsync` ile admin kararını
+> aynı HTTP isteği içinde bekliyordu (varsayılan 60 sn). 50-100 eşzamanlı onay biriktiğinde bir
+> admin bu süreye yetişemediği için istekler sessizce otomatik reddedilip kullanıcıya yanlış
+> sonuç dönüyordu. Şimdi bekleyen yok; talep admin karar verene ya da `StalePendingHours`
+> (72 saat) dolana kadar kalıcı olarak kuyrukta durur.
+
 **Gerçekleme**:
 
-- Queue: `CustomerSupportBot.Adapters.Persistence/InMemory/InMemoryApprovalQueue.cs` — `ConcurrentDictionary` + `TaskCompletionSource<ApprovalRequest>` per request
-- Tool wrapper: `CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.cs` (bkz. `BuildOrderPlacementTool`, `BuildComplaintRegistrationTool`, `RequestApprovalAsync`)
-- Config: `CustomerSupportBot.Application/Ports/Driven/ApprovalOptions.cs` (`appsettings.json > "HumanInTheLoop"`)
-- Endpoints: `/approvals/pending`, `/approvals/{id}/approve`, `/approvals/{id}/reject`
-- UI: `CustomerSupportBot.Web/Pages/Admin.razor` (Blazor WASM) — 15sn auto-refresh
+- Queue: `Adapters.Persistence/Postgres/PostgresApprovalQueue.cs` (üretim; `InMemoryApprovalQueue` tek-süreç/test için)
+- Tool wrapper: `Adapters.Agents/ApprovalGateService.cs` (`BuildOrderPlacementTool`, `ExecuteWithApprovalGateAsync`)
+- Ajana bağlama: `Adapters.Agents/Team/OrderAgent.cs`, `ComplaintAgent.cs`
+- Karar sonrası yürütme: `Application/Services/Approval/ApprovalExecutionRouter.cs`
+- Süresi geçenler: `Adapters.Persistence/EfCore/StaleApprovalSweepService.cs`
+- Config: `Application/Ports/Outbound/ApprovalOptions.cs` (`appsettings.json > "HumanInTheLoop"`)
+- Endpoints: `/approvals/pending`, `/approvals/{id}/approve`, `/approvals/{id}/reject`,
+  `/chat-sessions/{sessionId}/approvals/unseen`, `/customer/approvals/history`
+- UI: `Web/Pages/Admin.razor` (admin), `Web/Pages/Chat.razor` (müşteri bildirim/badge)
 
-**Context propagation** — tool lambda'sı session/trace/query bağlamını `AsyncLocal<ApprovalContext>` üzerinden alır; ChatEndpoints her workflow öncesi `CustomerSupportTeam.SetApprovalContext(...)` çağırır.
+**Context propagation** — tool lambda'sı session/trace/query/customerId bağlamını
+`AsyncLocal<ApprovalContext>` üzerinden alır (`IApprovalContextAccessor`). `customerId` LLM'e
+parametre olarak açılmaz; JWT claim'inden gelir.
 
-**Timeout davranışı**: `AutoApproveOnTimeout=false` (default) → süre dolarsa request `Expired` olur, tool lambda'sı `ValidationError` döner. `true` olarak ayarlanırsa auto-approve (demo senaryoları için).
+**Zaman aşımı davranışı**: `StalePendingHours` (varsayılan 72 saat) aşılan `Pending` kayıtlar
+`StaleApprovalSweepService` tarafından otomatik **reddedilir**. `TimeoutSeconds` ve
+`AutoApproveOnTimeout` bu tool'lar için **uygulanmaz** — yalnızca eski bloklayan yolun ayarlarıydı.
+
+**Karar ≠ yürütme**: `Status` admin'in kararı, `ExecutionStatus` o kararın hayata geçip geçmediği.
+`Approved + Running`'de kalmış bir kayıt yürütme sırasında sürecin kapandığını gösterir; sistem
+tekrar denemez (tool'lar idempotent değil), admin panelinde uyarıyla işaretlenir.
 
 ### 20.2 Asynchronous Escalation Sink
 

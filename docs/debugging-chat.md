@@ -16,7 +16,7 @@ Bu doküman bir kullanıcı mesajının baştan sona nasıl işlendiğini **kod 
        ▼
 [ASP.NET pipeline]
   AuthorizedHttpClientHandler (Web tarafı) → Bearer header
-  Api: UseAuthentication → UseAuthorization (anonim — chat public)
+  Api: UseAuthentication → UseAuthorization (chat "Customer" politikası ister — anonim DEĞİL)
        │
        ▼
 [Endpoint handler — ChatEndpoints.cs]
@@ -176,29 +176,53 @@ if (reasoning?.PreToolCheck?.CanProceed == false)    // ← BP
 
 ### 6. Approval Gate (HITL) — `ApprovalGateService.cs`
 
-**Ne için?** "Tool niye çağrılmadı / niye bekledi?" sorusu.
+**Ne için?** "Tool niye çağrılmadı / onaydan sonra niye bir şey olmadı?" sorusu.
+
+> Onay **bloklamaz**. Tool, admin kararını beklemez; kaydı oluşturup hemen döner. Bu yüzden
+> "onay yüzünden istek asılı kaldı" diye bir durum artık yoktur — sorun ararken bakılacak yer
+> turun kendisi değil, kararın *sonrası*dır.
+
+Kırılma iki ayrı yerde olabilir; hangisi olduğunu ayırt etmek ilk adımdır.
+
+**a) Talep hiç oluşmadı** — `ApprovalGateService.ExecuteWithApprovalGateAsync`:
 
 ```csharp
-public async Task<bool> RequestApprovalAsync(string toolName, ...)
-{
-    if (!_options.ToolsRequiringApproval.Contains(toolName))
-        return true;    // ← BP — ToolsRequiringApproval listesinde değilse direkt geçer
+if (!RequiresApproval(toolName))
+    return executeDirectly();                    // ← BP — listede değilse onaysız çalışır
 
-    var approval = new ApprovalRequest(...);
-    await _approvalQueue.EnqueueAsync(approval);    // ← BP — DB + Redis pub/sub
+if (preflight?.Invoke() is { } blocked)
+    return blocked;                              // ← BP — ön kontrol reddetti, kayıt AÇILMAZ
 
-    var decided = await _approvalQueue.AwaitDecisionAsync(approval.Id, timeout);    // ← BP — bloklayan await!
-    return decided?.Status == ApprovalStatus.Approved;
-}
+await _approvalQueue.CreateAsync(req);           // ← BP — DB INSERT + Redis pub/sub
+return ToolResult.Pending(...);                  // ← turn burada biter, beklemez
 ```
 
 **İzlenecek:**
-- `toolName` — `ApprovalOptions.ToolsRequiringApproval` listesinde mi? (default: `order_placement_tool`, `complaint_registration_tool`)
-- `decided` — null = timeout (SLA Guardian devre dışıysa veya OnTimeout=None ise sonsuza kadar bekler)
+- `toolName` → `ApprovalOptions.ToolsRequiringApproval` içinde mi?
+- `preflight` → sipariş var mı, login'li müşteriye ait mi? Reddederse admin'e hiç ulaşmaz.
+- `ctx.CustomerId` → boşsa kayıt sahipsiz kalır; JWT'den doldurulmuş olmalı.
 
-**Yaygın sorun:** Admin paneli açık değil → onay gelmiyor → request hang. Çözüm:
-- `Approval:Enabled = false` ile bypass et (dev)
-- `Approval:TimeoutSeconds` ile kısa tut + AutoReject
+**b) Talep onaylandı ama iş olmadı** — `PostgresApprovalQueue.DecideAsync`:
+
+```csharp
+claimed = await ClaimDecisionAsync(...);         // ← BP — UPDATE ... WHERE status='Pending'
+if (claimed == 0) { ...; return false; }         // ← BP — kararı başkası vermiş, YÜRÜTME ATLANIR
+
+var outcome = await _executionRouter.ExecuteAsync(entry.Request, ct);   // ← BP — gerçek iş
+```
+
+**İzlenecek:**
+- `claimed == 0` → karar zaten verilmiş. Beklenen davranış, hata değil.
+- `IApprovalExecutionRouter` içinde bu `ToolName` için bir dal var mı? Yoksa talep onaylanır
+  ama **hiçbir şey olmaz** — yeni tool eklerken en sık atlanan adım budur.
+- DB'de `execution_status`: `Running` kalmışsa yürütme sırasında süreç kapanmış demektir
+  (deploy/crash). Sistem tekrar denemez; elle doğrulanır.
+
+**Yaygın sorun:** Admin paneli açık değil → talep 72 saat (`StalePendingHours`) bekler, sonra
+otomatik reddedilir. İstek asılı KALMAZ. Dev'de hızlı ilerlemek için `HumanInTheLoop:Enabled = false`.
+
+> `TimeoutSeconds` / `AutoApproveOnTimeout` bu dört tool için **uygulanmaz** — yalnızca eski
+> bloklayan yolun ayarlarıydı.
 
 ### 7. Tool çağrısı — Tool sınıfları
 
@@ -390,7 +414,8 @@ Page navigation'da bunu unutmak browser'da memory artırır.
 ### 5. Approval timeout vs SLA Guardian
 
 `Approval:TimeoutSeconds` ve `Sla:Approval:BreachThresholdSeconds` farklı:
-- TimeoutSeconds: `AwaitDecisionAsync` ne kadar bekler (client perspective)
+- StalePendingHours: bekleyen bir onay kaç saat sonra otomatik reddedilir (varsayılan 72).
+  `TimeoutSeconds`/`AutoApproveOnTimeout` bu tool'lar için etkisizdir — onay artık bloklamıyor.
 - BreachThresholdSeconds: SLA event ne zaman warn/breach üretir (system perspective)
 
 İkincisini birinciden büyük yaparsanız SLA hiç tetiklenmez.

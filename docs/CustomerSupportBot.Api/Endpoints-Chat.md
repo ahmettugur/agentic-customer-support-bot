@@ -11,9 +11,25 @@
 
 | Route | Method | Auth | Rate limit | Açıklama |
 |---|---|---|---|---|
-| `/chat/` | POST | Anonymous | `chat` (20/dak) | Non-streaming chat |
-| `/chat/stream` | POST | Anonymous | `chat` (20/dak) | SSE stream (reasoning + delta + HITL) |
-| `/chat/events/{sessionId}` | GET | Anonymous | — | Persistent SSE (oturum boyu) |
+| `/chat/` | POST | **`Customer`** | `chat` (20/dak) | Non-streaming chat |
+| `/chat/stream` | POST | **`Customer`** | `chat` (20/dak) | SSE stream (reasoning + delta + HITL) |
+| `/chat/events/{sessionId}` | GET | **`Customer`** | — | Persistent SSE (oturum boyu) |
+| `/chat-sessions/{sessionId}/approvals/unseen` | GET | **`Customer`** | — | Kaçırılan onay sonuçları (badge) |
+| `/chat-sessions/{sessionId}/approvals/{id}/seen` | POST | **`Customer`** | — | Bildirimi "görüldü" işaretle |
+| `/customer/approvals/history` | GET | **`Customer`** | — | Müşterinin tüm onay geçmişi |
+
+> Chat anonim **değildir**. Müşteri e-posta+şifre ile login olur; `customerId` JWT claim'inden
+> okunur, kullanıcının serbest metninden çıkarılmaz. Bu olmadan biri başkasının müşteri
+> numarasını söyleyip onun adına sipariş iptali/iade başlatabilirdi.
+>
+> `/customer/approvals/history` müşteri kimliğini **route'tan değil** JWT'den alır — URL
+> değiştirerek başkasının geçmişini görmek mümkün değildir.
+>
+> Onay uçları oturum sahipliğine ek olarak **kaydın müşterisini** de doğrular. Sahiplik tek
+> başına yetmez: onay kayıtları oturumdan bağımsız yaşar (`session_id` için yabancı anahtar
+> yoktur) ve sahiplik kontrolü var olmayan oturumlara izin verir — ilk temas oturumu çağırana
+> bağlasın diye. İkisi birleşince, silinmiş bir oturumun id'sini öğrenen başka bir müşteri
+> bildirimleri okuyabilirdi.
 
 ---
 
@@ -150,8 +166,8 @@ WebSocket — sesli sohbet.
 
 | Route | Method | Auth | Mod |
 |---|---|---|---|
-| `/chat/realtime/{sessionId?}` | WS | Anonymous | Bridge — agent pipeline + TTS |
-| `/chat/realtime-native/{sessionId?}` | WS | Anonymous | Native — OpenAI direkt yanıt |
+| `/chat/realtime/{sessionId?}` | WS | **`Customer`** | Bridge — agent pipeline + TTS |
+| `/chat/realtime-native/{sessionId?}` | WS | **`Customer`** | Native — OpenAI direkt yanıt |
 
 WebSocket olmayan isteğe 400 döner. Her iki route da `WebSocketBrowserChannel` oluşturur ve ilgili bridge servisine delege eder.
 
@@ -207,9 +223,28 @@ Sidebar/debug — session geçmişi ve state göster.
 
 | Route | Method | Auth | Açıklama |
 |---|---|---|---|
-| `/sessions/` | GET | Anonymous | Tüm session'lar (metadata) |
-| `/sessions/{sessionId}/messages` | GET | Anonymous | Mesaj history |
-| `/sessions/{sessionId}/state` | GET | Anonymous | Session state (createdAt, lastActivity, state) |
+| `/sessions/` | GET | **`SessionAccess`** | Çağıranın oturumları (admin/agent: hepsi) |
+| `/sessions/{sessionId}/messages` | GET | **`SessionAccess`** + sahiplik | Mesaj history |
+| `/sessions/{sessionId}/state` | GET | **`SessionAccess`** + sahiplik | Session state (createdAt, lastActivity, state) |
+
+> Bu üç uç eskiden **anonimdi**: session id'sini bilen biri konuşmaları okuyabiliyor, `/sessions/`
+> ise tüm oturumları listeleyerek id'leri de veriyordu — yani `/chat/*` üzerindeki müşteri
+> yetkilendirmesi bu yoldan tamamen dolaşılabiliyordu.
+>
+> İki katman birden uygulanır:
+> 1. **Kimlik** — `SessionAccess` politikası: yalnızca `Customer`, `Admin`, `Agent`. Çıplak
+>    `RequireAuthorization()` yetmez: A2A token'ları da aynı JWT şemasıyla doğrulanır, yani
+>    "kimliği doğrulanmış olmak" ölçüt yapılırsa partner token'ı da girer. Partner token'ında
+>    `linked_customer_id` yoktur; kapsam "claim yoksa sınırsız" diye hesaplanırsa partner
+>    **admin gibi** değerlendirilip tüm müşterilerin oturumlarını okur. Sınırsız erişim bu
+>    yüzden claim'in yokluğundan değil **rolden** türetilir.
+> 2. **Sahiplik** — "bu kişi müşteri mi" ile "bu oturum onun mu" farklı sorulardır. Kontrol
+>    `SessionIdentityBinder` üzerinden yapılır, yani `/chat/*` ile **aynı** kuraldır.
+>
+> Liste ucunda sahipliğin karşılığı kapsamdır: müşteri yalnızca kendi oturumlarını görür.
+> Filtre uç noktada değil veri kaynağında (`ISessionManager.GetAllSessionsAsync(forCustomerId)`)
+> uygulanır. Admin/agent'ın `linked_customer_id` claim'i yoktur, bu yüzden kapsam sınırlaması
+> onlara uygulanmaz — panelin tüm oturumları görmesi bilinçlidir.
 
 ---
 

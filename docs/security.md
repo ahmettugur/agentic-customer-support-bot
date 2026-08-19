@@ -242,13 +242,41 @@ Veritabanına **yazan dört tool** çalıştırılmadan önce admin onayı gerek
       "return_request_tool",
       "complaint_registration_tool"
     ],
+    "StalePendingHours": 72,
     "TimeoutSeconds": 60,
     "AutoApproveOnTimeout": false
   }
 }
 ```
 
-`ApprovalGateService`, tool lambda'larını sararak `Enabled=true` ise onay bekletir, `false` ise pass-through yapar. Timeout sonrası `AutoApproveOnTimeout` ayarına göre otomatik onay veya red uygulanır.
+`ApprovalGateService`, tool lambda'larını sararak `Enabled=true` ise onay kaydı oluşturur, `false` ise pass-through yapar.
+
+#### Onay BLOKLAMAZ
+
+Tool çağrısı admin kararını **beklemez**. Onay gerekiyorsa kayıt oluşturulur ve tool hemen
+"talebiniz onaya gönderildi" sonucunu döner; kullanıcının turu orada biter ve sohbete devam
+edebilir. Gerçek iş (iptal, iade...) admin karar verdiğinde `IApprovalExecutionRouter` üzerinden
+ayrıca tetiklenir; sonucu kullanıcıya bildirim/badge olarak ulaşır.
+
+Bunun güvenlik açısından önemi: bekleyen bir onayın süreç-içi sahibi yoktur, bu yüzden yük
+altında veya restart sonrasında sessizce kaybolmaz — kalıcı olarak PostgreSQL'de durur.
+
+| Ayar | Bu dört tool için geçerli mi | Not |
+|---|---|---|
+| `StalePendingHours` (72) | ✅ | Bu süreyi aşan `Pending` kayıtlar `StaleApprovalSweepService` tarafından otomatik reddedilir. |
+| `TimeoutSeconds` (60) | ❌ | Yalnızca eski bloklayan yol (`AwaitDecisionAsync`) için anlamlıydı; bu tool'lar artık o yolu kullanmıyor. |
+| `AutoApproveOnTimeout` | ❌ | Aynı sebeple uygulanmaz. Bir talep zaman aşımına uğradığında sonuç **her zaman red**'dir. |
+
+> Bu iki ayara bakıp "60 saniyede otomatik karar var" varsaymayın — yok. Bir talep, admin karar
+> verene veya 72 saati doldurana kadar bekler.
+
+#### Karar ile yürütme ayrı izlenir
+
+`Status` (Pending/Approved/Rejected/Expired) admin'in kararıdır; `ExecutionStatus`
+(None/Running/Succeeded/Failed) o kararın hayata geçip geçmediğidir. `Approved + Running`
+durumunda kalmış bir kayıt, yürütme sırasında sürecin kapandığı anlamına gelir ve admin
+panelinde uyarıyla işaretlenir. **Sistem bunu kendiliğinden tekrar denemez** — bu dört tool
+idempotent olmadığı için otomatik retry, mükerrer iade/iptal riski taşır; doğrulama elle yapılır.
 
 #### Yüksek risk / gerekçe zorunluluğu — tek doğruluk kaynağı
 
