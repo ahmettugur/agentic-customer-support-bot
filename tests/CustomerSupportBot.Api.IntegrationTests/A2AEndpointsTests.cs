@@ -450,4 +450,21 @@ public class A2ADisabledByDefaultTests : IClassFixture<A2ADisabledByDefaultTests
         response.StatusCode.Should().Be(HttpStatusCode.NotFound,
             "kanal kapalıyken endpoint hiç map edilmemeli");
     }
+
+    [Fact]
+    public async Task TokenExchange_IsNotMapped_WhenDisabled()
+    {
+        // Yalnızca ajan uçlarını kaldırmak kanalı KAPATMAZ. Daha önce oluşturulmuş bir Partner
+        // hesabı, kanal kapatıldıktan sonra da özne token'ı üretmeye devam edebilirdi; ajanlar
+        // 404 döndüğü için veri sızmaz ama "kanal tamamen kapalı" garantisi yanlış olurdu ve
+        // kapatma işlemi eksik kalırdı.
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            "/auth/a2a/token-exchange", new { customerId = "1027" },
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound,
+            "token değişimi de kanalın parçasıdır; kapalıyken hiç map edilmemeli");
+    }
 }

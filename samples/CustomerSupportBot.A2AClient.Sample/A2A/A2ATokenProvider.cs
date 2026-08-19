@@ -34,40 +34,35 @@ public sealed class A2ATokenProvider(
 
     private readonly SemaphoreSlim _lock = new(1, 1);
     private string? _partnerToken;
+    private DateTimeOffset _partnerExpiresAt = DateTimeOffset.MinValue;
     private string? _subjectToken;
     private DateTimeOffset _subjectExpiresAt = DateTimeOffset.MinValue;
 
     public string CustomerId => config["A2A:CustomerId"] ?? "1027";
 
-    /// <summary>Partner token'i — "hangi SISTEM ariyor" sorusunun cevabi.</summary>
+    /// <summary>
+    /// Partner token'i — "hangi SISTEM ariyor" sorusunun cevabi. Ozne token'i gibi, suresi
+    /// dolmak uzereyse seffaf sekilde yenilenir.
+    ///
+    /// <para>
+    /// Bu token eskiden bir kez alinip SURESIZ saklaniyordu. Ozne token'i kisa omurlu oldugu
+    /// icin (varsayilan 5 dakika) sik sik yenileniyor ve her yenileme partner token'ini
+    /// kullaniyor; partner token'inin omru dolunca (varsayilan ~60 dakika) bayat token
+    /// yeniden gonderiliyor ve TUM cagrilar 401'e dusuyordu. Uzun sureli bir oturumda hata
+    /// bir saat sonra, hicbir sey degismemis gibi gorunurken ortaya cikiyordu.
+    /// </para>
+    /// </summary>
     public async Task<string> GetPartnerTokenAsync(CancellationToken ct = default)
     {
-        if (_partnerToken is not null) return _partnerToken;
+        if (IsPartnerTokenUsable()) return _partnerToken!;
 
         await _lock.WaitAsync(ct);
-        try
-        {
-            if (_partnerToken is not null) return _partnerToken;
-
-            var http = httpFactory.CreateClient("auth");
-            var user = config["A2A:Partner:Username"] ?? "demo-partner";
-            var pass = config["A2A:Partner:Password"] ?? "Partner123!";
-
-            var resp = await http.PostAsJsonAsync("/auth/login", new { username = user, password = pass }, ct);
-            if (!resp.IsSuccessStatusCode)
-                throw new InvalidOperationException(
-                    $"Partner girisi basarisiz ({(int)resp.StatusCode}). Kanal acik mi (A2A:Enabled=true)? "
-                  + "Partner hesabi YALNIZCA kanal acikken seed edilir.");
-
-            var body = await resp.Content.ReadFromJsonAsync<JsonElement>(Json, ct);
-            _partnerToken = body.GetProperty("accessToken").GetString()
-                ?? throw new InvalidOperationException("Yanitta accessToken yok.");
-
-            logger.LogInformation("Partner token alindi (kullanici={User}).", user);
-            return _partnerToken;
-        }
+        try { return await GetPartnerTokenAsyncNoLock(ct); }
         finally { _lock.Release(); }
     }
+
+    private bool IsPartnerTokenUsable() =>
+        _partnerToken is not null && DateTimeOffset.UtcNow + RefreshMargin < _partnerExpiresAt;
 
     /// <summary>
     /// Ozne token'i — "hangi MUSTERI adina" sorusunun cevabi. Tek musteriye kilitli.
@@ -142,15 +137,34 @@ public sealed class A2ATokenProvider(
 
     private async Task<string> GetPartnerTokenAsyncNoLock(CancellationToken ct)
     {
-        if (_partnerToken is not null) return _partnerToken;
+        if (IsPartnerTokenUsable()) return _partnerToken!;
 
         var http = httpFactory.CreateClient("auth");
         var user = config["A2A:Partner:Username"] ?? "demo-partner";
         var pass = config["A2A:Partner:Password"] ?? "Partner123!";
+
         var resp = await http.PostAsJsonAsync("/auth/login", new { username = user, password = pass }, ct);
-        resp.EnsureSuccessStatusCode();
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException(
+                $"Partner girisi basarisiz ({(int)resp.StatusCode}). Kanal acik mi (A2A:Enabled=true)? "
+              + "Partner hesabi YALNIZCA kanal acikken ve A2A:DevPartnerUsername/Password "
+              + "acikca verilmisse seed edilir.");
+
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>(Json, ct);
-        _partnerToken = body.GetProperty("accessToken").GetString();
-        return _partnerToken!;
+        _partnerToken = body.GetProperty("accessToken").GetString()
+            ?? throw new InvalidOperationException("Yanitta accessToken yok.");
+
+        // Sunucunun bildirdigi sureyi kullan. Alan yoksa temkinli bir varsayimla ilerle:
+        // fazla uzun tahmin etmek, tam da duzeltmeye calistigimiz sessiz 401'i geri getirir.
+        _partnerExpiresAt = body.TryGetProperty("accessTokenExpiresAt", out var exp)
+            && exp.TryGetDateTimeOffset(out var at)
+                ? at
+                : DateTimeOffset.UtcNow.AddMinutes(5);
+
+        logger.LogInformation(
+            "Partner token alindi (kullanici={User}, gecerlilik={Expiry:HH:mm:ss}).",
+            user, _partnerExpiresAt.ToLocalTime());
+
+        return _partnerToken;
     }
 }

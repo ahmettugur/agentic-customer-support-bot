@@ -2,6 +2,7 @@ using CustomerSupportBot.Api.Endpoints;
 using CustomerSupportBot.Api.Extensions;
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Services.A2A;
 using Microsoft.Extensions.Options;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -50,6 +51,36 @@ if (!app.Environment.IsDevelopment())
     }
 }
 
+// A2A guard: kanal açıkken kart adresleri dış istemcilerin okuyacağı adreslerdir.
+// PublicBaseUrl boşsa kartlarda GÖRELİ url'ler yayınlanır ve kartı okuyan dış istemci adresi
+// kendi başına çözmek zorunda kalır — proxy/gateway arkasında bu yanlış sonuç verir.
+// Spesifikasyon üretim HTTP arayüzleri için mutlak HTTPS adres bekler.
+if (a2aEnabled)
+{
+    var a2aOpts = app.Services.GetRequiredService<IOptions<A2AOptions>>().Value;
+    var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+
+    if (string.IsNullOrWhiteSpace(a2aOpts.PublicBaseUrl))
+    {
+        startupLogger.LogWarning(
+            "[A2A] PublicBaseUrl boş — agent card'larda göreli adresler yayınlanacak. "
+          + "Dışa açılan bir kurulumda mutlak HTTPS adresi verin (ör. https://api.ornek.com).");
+    }
+    else if (!Uri.TryCreate(a2aOpts.PublicBaseUrl, UriKind.Absolute, out var baseUri))
+    {
+        throw new InvalidOperationException(
+            $"A2A:PublicBaseUrl mutlak bir adres olmalı: '{a2aOpts.PublicBaseUrl}'. "
+          + "Göreli bir değer, kartlarda çözümlenemeyen adresler üretir.");
+    }
+    else if (baseUri.Scheme != Uri.UriSchemeHttps && !app.Environment.IsDevelopment())
+    {
+        // localhost üzerinde http ile çalışmak geliştiricinin işini kolaylaştırır; dışarıya
+        // http bir kart yayınlamak ise token'ları düz metin taşıyan bir kanal ilan etmektir.
+        throw new InvalidOperationException(
+            $"A2A:PublicBaseUrl Development dışında HTTPS olmalı: '{a2aOpts.PublicBaseUrl}'.");
+    }
+}
+
 await app.MigrateIfDevelopmentAsync();
 
 // Inbound boundary — domain exception → HTTP status/ProblemDetails çevirisi
@@ -77,9 +108,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapAuthEndpoints();
-app.MapA2AAuthEndpoints();
+// Token değişimi de bayrağa BAĞLI: kapalıyken yalnızca ajan uçlarını kaldırmak, kanalı
+// gerçekten kapatmaz. Daha önce oluşturulmuş bir Partner hesabı, kanal kapatıldıktan sonra
+// da özne token'ı üretmeye devam edebilirdi — ajanlar 404 döndüğü için veri sızmaz ama
+// "kanal tamamen kapalı" garantisi yanlış olur ve kapatma işlemi eksik kalır.
 if (a2aEnabled)
 {
+    app.MapA2AAuthEndpoints();
     app.MapA2AAgentEndpoints();
 }
 app.MapChatEndpoints();

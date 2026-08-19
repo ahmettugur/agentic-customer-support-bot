@@ -167,8 +167,25 @@ public sealed class DemoDataSeeder : IHostedService
         var hasher = GetService<IPasswordHasher>();
         if (dbFactory is null || hasher is null) return;
 
-        var username = _configuration["A2A:DevPartnerUsername"] ?? "demo-partner";
-        var password = _configuration["A2A:DevPartnerPassword"] ?? "Partner123!";
+        var username = _configuration["A2A:DevPartnerUsername"];
+        var password = _configuration["A2A:DevPartnerPassword"];
+
+        // VARSAYILAN PAROLA YOK. Burada eskiden "demo-partner"/"Partner123!" fallback'i vardı
+        // ve tek koşul A2A:Enabled idi; üretimde kanal açılıp bu anahtarlar verilmezse
+        // parolası herkesçe bilinen (bu depodaki örnek istemcide de yazılı) bir Partner hesabı
+        // sessizce oluşuyordu.
+        //
+        // Ortam kontrolü (yalnızca Development'ta seed et) YETERLİ DEĞİLDİR: ASPNETCORE_ENVIRONMENT
+        // yanlış ayarlanmış bir kurulumda aynı hesap yine oluşur ve hata sessizdir. Açık
+        // yapılandırma zorunluluğu ise yanlış ayarlanamaz — anahtar yoksa hesap da yoktur.
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            _logger.LogInformation(
+                "[Seeder] A2A partner hesabı oluşturulmadı: A2A:DevPartnerUsername ve "
+              + "A2A:DevPartnerPassword tanımlı değil. Geliştirme ortamında bir partner hesabı "
+              + "isteniyorsa bu iki anahtarı açıkça verin.");
+            return;
+        }
 
         await using var ctx = await dbFactory.CreateDbContextAsync(ct);
         if (await ctx.Users.AnyAsync(u => u.Username == username, ct)) return;

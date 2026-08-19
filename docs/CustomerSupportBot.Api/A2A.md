@@ -3,6 +3,11 @@
 **Durum:** Ürün, Sipariş ve Şikayet ajanları yayında — **hepsi salt-okunur**.
 **Varsayılan:** kanal **KAPALI** (`A2A:Enabled=false`) ve partner listesi boş.
 
+`Enabled=false` iken ajan uçlarının yanında **token değişimi de** (`/auth/a2a/token-exchange`)
+map edilmez. Yalnızca ajan uçlarını kaldırmak kanalı kapatmaz: daha önce oluşturulmuş bir
+partner hesabı özne token'ı üretmeye devam ederdi — ajanlar 404 döndüğü için veri sızmaz ama
+"kanal tamamen kapalı" garantisi yanlış olurdu.
+
 ## 1. Neden ayrı ajanlar — workflow ajanları doğrudan açılamaz
 
 Sohbet/sesli kanaldaki ajanlar (`Adapters.Agents/Team/`) kullanıcıya yönelik metin üretmez:
@@ -150,14 +155,42 @@ GET /a2a/order/card  →  200
 {"name":"A2A Agent","description":"","version":"","supportedInterfaces":[],"skills":[]}
 ```
 
-**Neden engelleyici değil:** A2A'nın kanonik keşif yolu `/.well-known/agent-card.json`'dır ve
-SDK istemcisi de oraya bakar — `A2ACardResolver`'ın varsayılan `agentCardPath` değeri
-`"/.well-known/agent-card.json"`. Bizim kartımız orada **eksiksiz** yayınlanıyor.
+**Neden engelleyici değil:** kart, ajan tabanının altındaki `.well-known` yolunda **eksiksiz**
+yayınlanıyor ve `A2ACardResolver` oraya bakacak şekilde yapılandırılabiliyor.
 
 > ⚠️ Partner entegrasyonlarında keşif için **`.well-known` yolu** kullanılmalıdır. `/card`
 > yolunu okuyan bir istemci boş kart alır ve `supportedInterfaces` boş olduğu için hangi
 > transport'a bağlanacağını çözemez. Köprünün sonraki sürümlerinde kart yapılandırması
 > gelirse burası güncellenmeli.
+
+#### Keşif adresleri — kökte DEĞİL, ajan başına
+
+Kartlar şu adreslerde yayınlanır:
+
+```
+/a2a/product/.well-known/agent-card.json
+/a2a/order/.well-known/agent-card.json
+/a2a/complaint/.well-known/agent-card.json
+```
+
+Spesifikasyonun **alan adı kökündeki** `/.well-known/agent-card.json` yolu bizde **yoktur**.
+Bu bilinçli bir sonuçtur: tek bir kök adres tek bir ajan tanımlar, bizde ise üç ayrı ajan var.
+Spesifikasyon doğrudan yapılandırılmış kart adreslerini de desteklediği için kurulum geçerlidir
+— ama şu ayrımı net tutmak gerekir:
+
+| | Durum |
+|---|---|
+| Kart adresi **verilmiş** bir istemci (bkz. `RemoteAgentCatalog`) | ✅ Çalışır |
+| Kökten keşif deneyen **genel amaçlı** bir istemci | ❌ Ajanları bulamaz |
+
+Yani entegrasyon dokümanında kart adresleri partnere **açıkça bildirilmelidir**; "kökte ararsın"
+demek yanlış olur. Dinamik/açık uçlu keşif isteniyorsa kökte bir katalog yayınlamak ayrı bir
+iştir ve bugün yapılmamıştır.
+
+**`PublicBaseUrl` zorunludur.** Boş bırakılırsa kartlarda göreli adresler yayınlanır; kartı
+okuyan dış istemci adresi kendi başına çözmek zorunda kalır ve proxy/gateway arkasında yanlış
+sonuç verir. Uygulama açılışta bunu denetler: boşsa uyarı, göreli veya (Development dışında)
+HTTPS olmayan bir değer verilmişse **başlatma hatası**.
 
 Aynı ölçümden çıkan diğer sonuçlar:
 
@@ -300,11 +333,30 @@ private static string ComplaintNotAccessibleMessage(string complaintId) =>
   "SubjectTokenMinutes": 5,
   "RequestsPerMinute": 60,
   "PublicBaseUrl": "",
+  "DevPartnerUsername": "",
+  "DevPartnerPassword": "",
   "Partners": [
     { "PartnerId": "acme", "AllowedCustomerIds": ["1027", "1044"] }
   ]
 }
 ```
+
+> ⚠️ **`DevPartnerUsername`/`DevPartnerPassword` bir partner hesabı OLUŞTURUR.** İkisi de
+> verilmedikçe `DemoDataSeeder` hiçbir partner hesabı yaratmaz — varsayılan bir kullanıcı
+> adı/parola **yoktur**.
+>
+> Bu bilinçli olarak katı: eskiden tek koşul `Enabled=true` idi ve anahtarlar verilmezse
+> `demo-partner` / `Partner123!` oluşuyordu — parolası bu depoda açıkça yazılı bir hesap.
+> Bunu "yalnızca Development'ta seed et" diye çözmek yetmez; `ASPNETCORE_ENVIRONMENT` yanlış
+> ayarlanmış bir kurulumda hesap yine oluşur ve hata sessizdir. Açık yapılandırma
+> zorunluluğu yanlış ayarlanamaz.
+>
+> Üretimde bu iki anahtarı **vermeyin**; partner hesaplarını normal kullanıcı yönetimiyle
+> oluşturun.
+
+> **`PublicBaseUrl` dışa açılan kurulumda zorunludur.** Boşsa kartlarda göreli adresler
+> yayınlanır ve uygulama açılışta uyarı basar. Göreli bir değer verilirse veya Development
+> dışında HTTPS olmayan bir adres verilirse uygulama **başlamaz**.
 
 > **`PartnerId` = partner kullanıcısının KULLANICI ADI**, veritabanı satırının GUID'i değil.
 > Token değişimi, çağıranın token'ındaki kullanıcı adı claim'ini (`name` / `unique_name`)
