@@ -5,7 +5,9 @@ using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Agents.AI;
+using CustomerSupportBot.Application.Services.A2A;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Adapters.Agents.A2A;
 
@@ -64,9 +66,12 @@ public sealed class A2AAgentCatalog
         IChatClient chatClient,
         IPromptRepository prompts,
         ApprovalGateService approvalGate,
-        ICustomerSupportToolsService tools)
+        ICustomerSupportToolsService tools,
+        IOptions<A2AOptions> a2aOptions)
     {
-        Product = WithTelemetry(new ChatClientAgent(chatClient, new ChatClientAgentOptions
+        var limits = a2aOptions.Value;
+
+        Product = Guarded(limits, new ChatClientAgent(chatClient, new ChatClientAgentOptions
         {
             Name = A2AAgentNames.Product,
             Description = "Ürün kataloğu sorguları: fiyat, stok, kategori listesi.",
@@ -81,7 +86,7 @@ public sealed class A2AAgentCatalog
             }
         }));
 
-        Order = WithTelemetry(new ChatClientAgent(chatClient, new ChatClientAgentOptions
+        Order = Guarded(limits, new ChatClientAgent(chatClient, new ChatClientAgentOptions
         {
             Name = A2AAgentNames.Order,
             Description = "Sipariş bilgisi (salt-okunur): durum sorgulama, son sipariş, sipariş listesi.",
@@ -97,7 +102,7 @@ public sealed class A2AAgentCatalog
             }
         }));
 
-        Complaint = WithTelemetry(new ChatClientAgent(chatClient, new ChatClientAgentOptions
+        Complaint = Guarded(limits, new ChatClientAgent(chatClient, new ChatClientAgentOptions
         {
             Name = A2AAgentNames.Complaint,
             Description = "Şikayet bilgisi (salt-okunur): durum sorgulama ve şikayet listesi.",
@@ -126,6 +131,19 @@ public sealed class A2AAgentCatalog
     /// </summary>
     private static AIAgent WithTelemetry(AIAgent agent)
         => agent.AsBuilder().UseOpenTelemetry(TelemetryConstants.ActivitySourceName).Build();
+
+    /// <summary>
+    /// Dış kanala açılan her ajanın geçtiği sarmalayıcı zinciri: önce girdi sınırı, sonra
+    /// telemetri.
+    ///
+    /// <para>
+    /// Sıra önemli — sınır <b>en dışta</b> olsaydı reddedilen çağrılar hiç span üretmez ve
+    /// kötüye kullanım izlerde görünmezdi. Bu hâliyle reddedilen çağrı da ölçülür, yalnızca
+    /// LLM'e gitmez.
+    /// </para>
+    /// </summary>
+    private static AIAgent Guarded(A2AOptions limits, AIAgent agent)
+        => WithTelemetry(new InputLimitedAgent(agent, limits));
 
     /// <summary>
     /// Verilen tool'ların hiçbirinin yan etkili olmadığını doğrular ve listeyi aynen döner.

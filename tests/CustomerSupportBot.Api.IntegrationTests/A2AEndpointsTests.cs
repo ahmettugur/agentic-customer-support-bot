@@ -407,6 +407,37 @@ public class A2AEndpointsTests : IClassFixture<A2AEnabledFactory>
 
         response.StatusCode.Should().BeOneOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden);
     }
+    // ═══ Girdi sınırları — istek SAYISI sınırı "ne kadar" sorusunu kapsamaz ═══
+
+    /// <summary>
+    /// Gövde sınırının gerçekten UYGULANDIĞINI ve hangi durum kodunu döndürdüğünü ölçer.
+    ///
+    /// <para>
+    /// Bu test bir varsayımı çürüttü: sınır önce yalnızca
+    /// <c>IHttpMaxRequestBodySizeFeature</c> üzerinden kuruluyordu ve o özellik burada
+    /// <b>null</b> dönüyor (ölçüldü) — yani sınır sessizce etkisizdi ve istek 200 ile
+    /// geçiyordu. Şimdi asıl kontrol <c>Content-Length</c>'tir; yapılandırmada görünen ama
+    /// hiçbir şey yapmayan bir güvenlik ayarı, hiç olmamasından kötüdür.
+    /// Belgede yazan durum kodu da buradan gelir, tahminden değil.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Request_ExceedingBodyLimit_IsRejectedBeforeReachingTheAgent()
+    {
+        var client = ClientWith(MintToken(A2ARoles.Partner));
+
+        // A2A:MaxRequestBytes varsayılanı 64 KB; bunun katbekat üstü.
+        var huge = new string('x', 512 * 1024);
+        var json = "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"method\":\"SendMessage\",\"params\":{\"message\":{"
+                 + "\"messageId\":\"m1\",\"role\":\"ROLE_USER\",\"parts\":[{\"text\":\"" + huge + "\"}]}}}";
+        var body = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync("/a2a/product", body, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge,
+            "gövde sınırı ayrıştırma öncesinde uygulanmalı");
+    }
+
 }
 
 /// <summary>

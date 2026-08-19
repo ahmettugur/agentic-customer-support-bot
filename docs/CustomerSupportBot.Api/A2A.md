@@ -163,29 +163,44 @@ yayınlanıyor ve `A2ACardResolver` oraya bakacak şekilde yapılandırılabiliy
 > transport'a bağlanacağını çözemez. Köprünün sonraki sürümlerinde kart yapılandırması
 > gelirse burası güncellenmeli.
 
-#### Keşif adresleri — kökte DEĞİL, ajan başına
-
-Kartlar şu adreslerde yayınlanır:
+#### Keşif adresleri
 
 ```
+/.well-known/agent-card.json                   ← kök (ürün ajanı)
 /a2a/product/.well-known/agent-card.json
 /a2a/order/.well-known/agent-card.json
 /a2a/complaint/.well-known/agent-card.json
 ```
 
-Spesifikasyonun **alan adı kökündeki** `/.well-known/agent-card.json` yolu bizde **yoktur**.
-Bu bilinçli bir sonuçtur: tek bir kök adres tek bir ajan tanımlar, bizde ise üç ayrı ajan var.
-Spesifikasyon doğrudan yapılandırılmış kart adreslerini de desteklediği için kurulum geçerlidir
-— ama şu ayrımı net tutmak gerekir:
+A2A üç keşif yolu tanımlar: **Well-Known URI**, **curated registry** ve **direct configuration**.
+Kökteki `/.well-known/agent-card.json` birincisidir ve tanım gereği **tek bir ajanı** tanımlar.
+Tek host üzerindeki birden fazla ajanı sıralamak için spesifikasyonda standart bir biçim
+(katalog/registry API'si) **yoktur** — registry yaklaşımı için bile "the current A2A
+specification does not prescribe a standard API".
 
-| | Durum |
+Bu yüzden kökte kendi icat ettiğimiz bir katalog yayınlamıyoruz: A2A gibi görünen ama A2A
+olmayan bir yüzey üretirdi. Bunun yerine kökte **gerçek ve çağrılabilir** bir kart yayınlıyoruz.
+
+**Neden ürün ajanı:** üç ajandan yalnızca o, tek başına partner token'ıyla çağrılabilir.
+Sipariş ve şikayet ajanları müşteriye kilitli bir özne token'ı ister; o token da ancak partnerin
+hangi müşteriler adına hareket edebileceği önceden tanımlandıysa alınabilir. Kökte onlardan
+birini ilan etmek, çağıranın kendi başına kullanamayacağı bir ajanı "giriş kapısı" göstermek
+olurdu.
+
+| İstemci | Durum |
 |---|---|
-| Kart adresi **verilmiş** bir istemci (bkz. `RemoteAgentCatalog`) | ✅ Çalışır |
-| Kökten keşif deneyen **genel amaçlı** bir istemci | ❌ Ajanları bulamaz |
+| Kart adresi **verilmiş** (bkz. `RemoteAgentCatalog`) | ✅ Üç ajana da erişir |
+| Kökten keşif deneyen **genel amaçlı** istemci | ✅ Ürün ajanını bulur ve çağırabilir |
+| Aynı istemcinin sipariş/şikayet ajanını **kendiliğinden** bulması | ❌ Mümkün değil — spesifikasyonda böyle bir alan yok |
 
-Yani entegrasyon dokümanında kart adresleri partnere **açıkça bildirilmelidir**; "kökte ararsın"
-demek yanlış olur. Dinamik/açık uçlu keşif isteniyorsa kökte bir katalog yayınlamak ayrı bir
-iştir ve bugün yapılmamıştır.
+Son satır kaçınılmazdır: `AgentCard`'da kardeş ajanları listeleyecek bir alan yoktur. Bu yüzden
+kök kart, diğer ajanların varlığını `description` içinde **açıkça** söyler ve (yapılandırılmışsa)
+`documentationUrl` ile entegrasyon dokümanına işaret eder. Partner entegrasyonlarında kart
+adresleri yine de açıkça bildirilmelidir.
+
+Kök kart, ürün kartından **türetilir** (yeniden kurulmaz) — ikisinin zamanla ayrışması, ör. yeni
+bir skill'in yalnızca birine eklenmesi, sessiz bir tutarsızlık olurdu. `A2AProtocolConformanceTests`
+bunu ayrıca doğrular.
 
 **`PublicBaseUrl` zorunludur.** Boş bırakılırsa kartlarda göreli adresler yayınlanır; kartı
 okuyan dış istemci adresi kendi başına çözmek zorunda kalır ve proxy/gateway arkasında yanlış
@@ -335,6 +350,10 @@ private static string ComplaintNotAccessibleMessage(string complaintId) =>
   "PublicBaseUrl": "",
   "DevPartnerUsername": "",
   "DevPartnerPassword": "",
+  "MaxMessageChars": 4000,
+  "MaxParts": 20,
+  "MaxRequestBytes": 65536,
+  "DocumentationUrl": "",
   "Partners": [
     { "PartnerId": "acme", "AllowedCustomerIds": ["1027", "1044"] }
   ]
@@ -353,6 +372,21 @@ private static string ComplaintNotAccessibleMessage(string complaintId) =>
 >
 > Üretimde bu iki anahtarı **vermeyin**; partner hesaplarını normal kullanıcı yönetimiyle
 > oluşturun.
+
+> **Girdi sınırları.** `RequestsPerMinute` "kaç kez" sorusunu sınırlar, "ne kadar" sorusunu
+> değil: hakkı olan istek sayısını çok büyük metinlerle kullanan bir partner token maliyetini
+> ve çağrı süresini serbestçe büyütebilir. Üç sınır birlikte çalışır:
+>
+> | Ayar | Nerede uygulanır | Ne ölçer |
+> |---|---|---|
+> | `MaxRequestBytes` (64 KB) | Endpoint filtresi | Ham gövde — daha ayrıştırılmadan reddedilir |
+> | `MaxMessageChars` (4000) | `InputLimitedAgent` | LLM'e gidecek toplam metin |
+> | `MaxParts` (20) | `InputLimitedAgent` | Parça sayısı — uzunluk sınırını bölerek dolaşmayı engeller |
+>
+> Karakter/parça sınırı **ajan seviyesindedir**, endpoint'te değil: aynı ajan JSON-RPC,
+> HTTP+JSON ve streaming olmak üzere üç yoldan çağrılır; kontrolü endpoint'e koymak üç yerde
+> tekrar (ve birinde unutma) demekti. Sınır aşıldığında LLM'e **hiç gidilmez** ve çağıran
+> protokol hatası değil, ne yapması gerektiğini söyleyen bir ajan yanıtı alır.
 
 > **`PublicBaseUrl` dışa açılan kurulumda zorunludur.** Boşsa kartlarda göreli adresler
 > yayınlanır ve uygulama açılışta uyarı basar. Göreli bir değer verilirse veya Development
@@ -582,11 +616,13 @@ A2A spesifikasyonu token *dağıtımını* tanımlamaz; kart yalnızca "bearer g
 Bu iki çağrı düz HTTP'dir ve her dilde standart bir HTTP istemcisiyle yapılır:
 
 ```bash
-# 1) Partner girişi
+# 1) Partner girişi — kullanıcı adı/parolayı SİZE OPERATÖR VERİR.
+#    Sabit bir "demo" hesabı YOKTUR: partner hesabı yalnızca sunucu tarafında
+#    A2A:DevPartnerUsername / A2A:DevPartnerPassword açıkça tanımlandığında oluşur.
 curl -s -X POST http://localhost:5021/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"demo-partner","password":"Partner123!"}'
-# -> {"accessToken":"eyJ...", ...}
+  -d '{"username":"<partner-kullanici-adi>","password":"<parola>"}'
+# -> {"accessToken":"eyJ...","accessTokenExpiresAt":"...","refreshToken":"...", ...}
 
 # 2) Özne token'ı (tek müşteriye kilitli)
 curl -s -X POST http://localhost:5021/auth/a2a/token-exchange \
@@ -600,11 +636,31 @@ curl -s -X POST http://localhost:5021/auth/a2a/token-exchange \
 > token'ı ister, ürün ise **partner** token'ı. Özne token'ıyla ürün ajanını çağırmak da 403
 > döner. Bölüm 5'teki tablo bağlayıcıdır.
 
+> **İKİ token'ın da ömrü vardır ve ikisi de yenilenmelidir.** Özne token'ı kısa ömürlüdür
+> (`A2A:SubjectTokenMinutes`, varsayılan 5 dk) ve sık yenilenir; partner token'ı daha uzun
+> yaşar, bu yüzden "bir kez al, sakla" tuzağı buradadır. Partner token'ının süresi dolduğunda
+> yeni bir özne token'ı istenemez ve **tüm çağrılar 401'e düşer** — üstelik bu, hiçbir şey
+> değişmemiş gibi görünürken saatler sonra olur. Girişte dönen `accessTokenExpiresAt` alanını
+> saklayın ve süre dolmadan yeniden giriş yapın. (Bu hata örnek istemcide de yaşandı; bkz.
+> bölüm 9 → Token yenileme.)
+
 ### Adım 3: kart keşfi
 
+Nereden başlanacağı, elinizde ne olduğuna bağlıdır:
+
 ```bash
+# a) Elinizde yalnızca alan adı varsa — A2A'nın standart kök keşif yolu.
+#    Bu kart ÜRÜN ajanını tanımlar (tek başına partner token'ıyla çağrılabilen tek ajan)
+#    ve açıklamasında diğer ajanların kart adreslerini verir.
+curl -s http://localhost:5021/.well-known/agent-card.json
+
+# b) Hedef ajanı biliyorsanız doğrudan onun kartı.
 curl -s http://localhost:5021/a2a/order/.well-known/agent-card.json
 ```
+
+> Tek host'ta birden fazla ajan var ve A2A bunları **sıralamak için standart bir biçim
+> tanımlamaz**. Yani kökten başlayan bir istemci ürün ajanını bulur ama sipariş/şikayet
+> ajanına kendiliğinden ulaşamaz — o adresler size ayrıca bildirilir. Ayrıntı için bölüm 6.
 
 Bağlanılacak URL ve binding buradan okunur — elle sabitlenmemelidir:
 
@@ -749,6 +805,61 @@ resmî SDK yayınlar:
 > dille entegrasyona başlarken **önce SDK'sız curl** ile bağlanıp sözleşmeyi doğrulamak, sonra
 > SDK'ya geçmek en kısa yoldur — böylece hatanın SDK'dan mı sunucudan mı geldiği karışmaz.
 
+### Kendi istemcinizi bağımsız olarak doğrulama
+
+A2A'nın resmî bir uyumluluk paketi vardır: [**a2a-tck**](https://github.com/a2aproject/a2a-tck)
+(pytest tabanlı; JSON-RPC, HTTP+JSON ve gRPC transport'larını RFC 2119 seviyelerine —
+MUST/SHOULD/MAY — göre ayırarak test eder, HTML/JSON rapor üretir).
+
+```bash
+git clone https://github.com/a2aproject/a2a-tck.git && cd a2a-tck
+uv venv && source .venv/bin/activate && uv pip install -e .
+./run_tck.py --sut-host http://localhost:5021 --level must
+```
+
+**Bizim uçlarımıza doğrudan çalıştırılamaz** ve sebebi bilinmelidir: TCK'nın belgelenmiş
+bayrakları (`--sut-host`, `--transport`, `--level`) arasında **kimlik doğrulama yoktur**,
+yani `Authorization` başlığı gönderemez ve bizdeki her çağrı `401` alır. Anlamlı bir koşu için
+araya `Authorization` ekleyen küçük bir yerel vekil koymak gerekir.
+
+> İkinci tuzak: kartlar `A2A:PublicBaseUrl` ile **mutlak** adres yayınlar. TCK önce kartı okuyup
+> oradaki adrese gider; vekili kurup `PublicBaseUrl`'ü sunucunun kendi adresinde bırakırsanız
+> TCK vekili atlar ve yine `401` alırsınız. Koşu sırasında `PublicBaseUrl` **vekilin** adresini
+> göstermelidir.
+
+Bu depoda TCK koşusu **kurulmadı** — yukarısı, kendi tarafını doğrulamak isteyen bir entegratör
+için yol tarifidir. Ayrıca bu sunucunun arka plan görevlerini desteklemediği (bkz. üstteki
+bölüm) unutulmamalı: TCK'nın task yaşam döngüsü testleri o yüzden başarısız görünecektir ve bu
+bir uyumsuzluk değil, bilinçli bir sınırdır.
+
+### Girdi sınırları — istemcinin bilmesi gerekenler
+
+İstek **sayısı** sınırı ("kaç kez") tek başına yetmediği için üç sınır daha vardır ("ne kadar"):
+
+| Sınır | Varsayılan | Aşılırsa ne olur |
+|---|---|---|
+| `A2A:MaxRequestBytes` | 64 KB | **HTTP 413** — gövde daha ayrıştırılmadan reddedilir (ölçüldü) |
+| `A2A:MaxMessageChars` | 4000 | **HTTP 200** + ajan yanıtı: *"İstek çok uzun (N karakter)…"* |
+| `A2A:MaxParts` | 20 | **HTTP 200** + ajan yanıtı: *"İstek çok fazla parça içeriyor (N)…"* |
+
+> ⚠️ **Son iki satır bir istemci için tuzaktır.** Karakter/parça sınırı aşıldığında protokol
+> hatası **dönmez**: istek başarıyla tamamlanır (`200`, geçerli bir A2A yanıtı) ama içerik
+> ajanın gerçek cevabı değil, reddetme metnidir. Durum koduna bakan bir istemci bunu başarı
+> sayar. Uzun girdi gönderme ihtimaliniz varsa **istemci tarafında da** kırpın; sunucunun
+> sınırlarını kartla değil, entegrasyon dokümanıyla öğrenirsiniz (A2A'da bunu ilan edecek bir
+> alan yoktur).
+>
+> Bu tasarım bilinçlidir: sınır aşıldığında istisna fırlatılsaydı köprü onu jenerik bir sunucu
+> hatasına çevirirdi ve çağıran nedenini hiç öğrenemezdi. Anlaşılır bir metin, sebebi
+> okunamayan bir `500`'den iyidir.
+
+### Desteklenmeyen: arka plan görevleri
+
+Ajanlar `AgentRunMode.DisallowBackground` ile yayınlanır. Her çağrı **istek ömrü içinde başlar
+ve biter**; uzun süreli bir task oluşturulup sonradan `tasks/get` ile yoklanması bu kanalda
+yoktur. Task yaşam döngüsü üzerine kurulu bir istemci yazmayın — bu bir eksiklik değil, dış
+çağıranın sunucuda iş biriktirmesini engelleyen bilinçli bir sınırdır.
+
 ### Hata karşılıkları (ölçüldü)
 
 | Durum | Yanıt |
@@ -757,7 +868,10 @@ resmî SDK yayınlar:
 | Partner token'ı ile sipariş/şikayet ajanı | `403` |
 | Özne token'ı ile ürün ajanı | `403` |
 | Yetkisiz müşteri için token değişimi | `403` |
+| Partner token'ının süresi dolmuş | `401` (bkz. yukarıdaki token ömrü uyarısı) |
 | Dakikadaki istek sınırı aşıldı | `429` (`A2A:RequestsPerMinute`, partner başına) |
+| İstek gövdesi çok büyük | `413` |
+| Kanal kapalı (`A2A:Enabled=false`) | `404` — ajan uçları **ve** `/auth/a2a/token-exchange` |
 | Yanlış sürüm biçimi | `-32601` / `-32602` (JSON-RPC) · `500` (HTTP+JSON) |
 
 `403`'ün sebebi **bilerek açıklanmaz**: "müşteri yok" ile "yetkin yok" ayrımı dışarıdan

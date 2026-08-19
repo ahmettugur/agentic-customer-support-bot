@@ -137,9 +137,11 @@ public class A2AProtocolConformanceTests : IClassFixture<A2AConformanceFactory>
         var http = _factory.CreateClient();
         // Taban KÖK, yol TAM verilir. Bu biçim tahmin değil ÖLÇÜLDÜ: resolver
         // `new Uri(base, path)` standart göreli çözümü uygular, yani taban "/a2a/order" iken
-        // son segmenti değiştirip "/a2a/.well-known/..." ister ve 404 alır. Tek host'ta birden
-        // çok ajan yayınlandığı için varsayılan kök kartı yoktur — partner tam yolu bilmelidir
-        // (bkz. A2A.md → keşif sözleşmesi).
+        // son segmenti değiştirip "/a2a/.well-known/..." ister ve 404 alır.
+        //
+        // Kökte AYRI bir kart vardır (bkz. RootCard testleri) ama o ÜRÜN ajanını tanımlar —
+        // A2A'nın kök keşif yolu tanım gereği tek bir ajanı gösterir. Sipariş/şikayet ajanına
+        // ulaşmak için partner tam yolu bilmelidir (bkz. A2A.md → keşif sözleşmesi).
         var resolver = new A2ACardResolver(
             new Uri("http://localhost"), http, "/a2a/order/.well-known/agent-card.json");
 
@@ -245,6 +247,86 @@ public class A2AProtocolConformanceTests : IClassFixture<A2AConformanceFactory>
 
         response.Should().NotBeNull();
     }
+
+    // ═══ Kök keşif — A2A'nın standart Well-Known URI yolu ═══
+
+    /// <summary>
+    /// Spesifikasyonun kök keşif yolu <c>/.well-known/agent-card.json</c>'dır. Burası boş
+    /// kaldığı sürece, kart adresleri kendisine önceden verilmemiş <b>genel amaçlı</b> bir
+    /// A2A istemcisi bu sunucuda hiçbir ajan bulamazdı.
+    /// </summary>
+    [Fact]
+    public async Task RootCard_IsResolvable_AtTheSpecWellKnownPath()
+    {
+        var http = _factory.CreateClient();
+
+        // Varsayılan yol KULLANILIYOR — testin kendisi spesifikasyondaki yolu sabitliyor.
+        var resolver = new A2ACardResolver(new Uri("http://localhost"), http);
+
+        var card = await resolver.GetAgentCardAsync(TestContext.Current.CancellationToken);
+
+        card.Should().NotBeNull();
+        card.SupportedInterfaces.Should().NotBeEmpty("istemci binding'i buradan seçer");
+        card.Skills.Should().NotBeEmpty();
+    }
+
+    /// <summary>
+    /// Kök kart ÜRÜN ajanını tanımlar: üç ajandan yalnızca o, tek başına partner token'ıyla
+    /// çağrılabilir. Sipariş/şikayet ajanları müşteriye kilitli bir özne token'ı ister, yani
+    /// kökte onlardan birini ilan etmek çağıranın kendi başına kullanamayacağı bir ajanı
+    /// giriş kapısı göstermek olurdu.
+    /// </summary>
+    [Fact]
+    public async Task RootCard_DescribesTheAgentThatAPartnerTokenCanActuallyCall()
+    {
+        var http = _factory.CreateClient();
+        var card = await new A2ACardResolver(new Uri("http://localhost"), http)
+            .GetAgentCardAsync(TestContext.Current.CancellationToken);
+
+        card.Name.Should().Be("ProductInfoAgent");
+        card.SupportedInterfaces.Should().Contain(i => i.Url.Contains("/a2a/product"),
+            "kökte ilan edilen ajan, gerçekten çağrılabilir bir uca işaret etmeli");
+    }
+
+    /// <summary>
+    /// AgentCard'da kardeş ajanları listeleyecek bir alan yoktur ve A2A tek host üzerindeki
+    /// birden fazla ajanı sıralamak için standart bir biçim tanımlamaz. Bu yüzden diğer
+    /// ajanların varlığı en azından insan tarafından okunabilir şekilde söylenmelidir —
+    /// aksi hâlde kök kartı "bu sunucuda tek ajan var" izlenimi verir.
+    /// </summary>
+    [Fact]
+    public async Task RootCard_PointsToTheOtherAgents_SinceTheSpecHasNoFieldForThem()
+    {
+        var http = _factory.CreateClient();
+        var card = await new A2ACardResolver(new Uri("http://localhost"), http)
+            .GetAgentCardAsync(TestContext.Current.CancellationToken);
+
+        card.Description.Should().Contain("/a2a/order/.well-known/agent-card.json");
+        card.Description.Should().Contain("/a2a/complaint/.well-known/agent-card.json");
+    }
+
+    /// <summary>
+    /// Kök kart, ürün kartından TÜRETİLİR (yeniden kurulmaz). İkisinin zamanla ayrışması —
+    /// ör. yeni bir skill'in yalnızca birine eklenmesi — sessiz bir tutarsızlık olurdu.
+    /// </summary>
+    [Fact]
+    public async Task RootCard_StaysInSyncWithTheProductCard()
+    {
+        var http = _factory.CreateClient();
+
+        var root = await new A2ACardResolver(new Uri("http://localhost"), http)
+            .GetAgentCardAsync(TestContext.Current.CancellationToken);
+        var product = await new A2ACardResolver(
+                new Uri("http://localhost"), http, "/a2a/product/.well-known/agent-card.json")
+            .GetAgentCardAsync(TestContext.Current.CancellationToken);
+
+        root.Name.Should().Be(product.Name);
+        root.Version.Should().Be(product.Version);
+        root.Skills.Select(x => x.Id).Should().BeEquivalentTo(product.Skills.Select(x => x.Id));
+        root.SupportedInterfaces.Select(x => x.Url)
+            .Should().BeEquivalentTo(product.SupportedInterfaces.Select(x => x.Url));
+    }
+
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════════

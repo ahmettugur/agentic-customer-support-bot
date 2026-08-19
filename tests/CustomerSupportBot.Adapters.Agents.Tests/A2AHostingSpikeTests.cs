@@ -1,16 +1,21 @@
 // Tests/Spikes/A2AHostingSpikeTests.cs
-// A2A (Agent2Agent) SPIKE — go/no-go. ÜRETİM KODU DEĞİL: production graph'a hiç bağlı değil.
+// A2A (Agent2Agent) köprü duman testi. ÜRETİM KODU DEĞİL: production graph'a hiç bağlı değil.
 //
-// Yanıtladığı TEK soru: MAF çekirdeği 1.17.0 iken, ona karşı DERLENMEMİŞ olan
-// Microsoft.Agents.AI.Hosting.A2A(.AspNetCore) 1.12.0-preview çalışma zamanında ayakta kalıyor mu?
+// Yanıtladığı TEK soru: MAF köprüsü (Microsoft.Agents.AI.Hosting.A2A[.AspNetCore]) çalışma
+// zamanında ayakta kalıyor mu?
 //
-// Risk neden gerçek: NuGet, Microsoft.Agents.AI.Abstractions'ı yukarı birleştiriyor —
-//   Microsoft.Agents.AI.Hosting.A2A.dll  → assembly sürümü 1.12.0.0
-//   Microsoft.Agents.AI.Abstractions.dll → assembly sürümü 1.17.0.0  (birleştirilen)
-// .NET Core assembly sürümünü katı bağlamadığı için bu DERLENİR ve YÜKLENİR; ama 1.12 ile 1.17
-// arasında bir tip/imza değiştiyse hata ancak o kod yolu ÇALIŞTIRILDIĞINDA
-// TypeLoadException / MissingMethodException olarak ortaya çıkar. Yani "dotnet build temiz"
-// hiçbir şey kanıtlamaz — köprünün gerçekten çağrılması gerekir.
+// Bu test bir sürüm ayrışmasını ölçmek için yazılmıştı: köprü 1.12-preview iken çekirdek
+// 1.17'ydi. İkisi artık 1.18'de hizalı, ama test KALDI ve kalmalı — çünkü ölçtüğü risk
+// sürüme özel değil, yapısal:
+//
+//   NuGet, Microsoft.Agents.AI.Abstractions'ı yukarı birleştirir ve .NET assembly sürümünü
+//   katı bağlamaz. Köprü ile çekirdek arasında sürüm farkı oluştuğunda proje DERLENİR ve
+//   YÜKLENİR; arada bir tip/imza değiştiyse hata ancak o kod yolu ÇALIŞTIRILDIĞINDA
+//   TypeLoadException / MissingMethodException olarak çıkar. Yani "dotnet build temiz"
+//   hiçbir şey kanıtlamaz — köprünün gerçekten çağrılması gerekir.
+//
+// Dolayısıyla bu test, iki paketin sürümü ileride yeniden ayrıştığında (ör. çekirdek
+// yükseltilip köprü unutulduğunda) ilk uyarıyı verecek yerdir.
 //
 // Bu yüzden aşağıdaki test LLM'siz sahte bir AIAgent'ı MapA2AJsonRpc ile yayınlayıp üstüne
 // gerçek bir A2A JSON-RPC isteği geçirir (TestServer). LLM/API key gerekmez — sahte ajan
@@ -105,7 +110,7 @@ public class A2AHostingSpikeTests
     }
 
     [Fact]
-    public async Task MapA2AJsonRpc_AgainstMafCore117_DoesNotThrowOnStartup()
+    public async Task MapA2AJsonRpc_WithCurrentMafCore_DoesNotThrowOnStartup()
     {
         // Mapping'in kendisi bile 1.12/1.17 uyumsuzluğunda patlayabilir (tip yükleme anı).
         var (_, host) = await StartAsync();

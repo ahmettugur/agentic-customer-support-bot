@@ -2,6 +2,7 @@
 // A2A (Agent2Agent) ajanlarının dış sistemlere yayınlanması.
 
 using System.Diagnostics;
+using Microsoft.AspNetCore.Http.Features;
 using System.Security.Claims;
 using CustomerSupportBot.Adapters.Agents.A2A;
 using CustomerSupportBot.Application.Ports.Outbound;
@@ -38,6 +39,9 @@ public static class A2AEndpoints
     /// </summary>
     public static IEndpointRouteBuilder MapA2AAgentEndpoints(this IEndpointRouteBuilder app)
     {
+        var a2aOptions = app.ServiceProvider.GetRequiredService<IOptions<A2AOptions>>().Value;
+        var maxRequestBytes = Math.Max(1024, a2aOptions.MaxRequestBytes);
+
         // İKİ transport da yayınlanır. A2A spesifikasyonu birden fazla binding tanımlar ve
         // SDK istemcisi hangisini kullanacağını AgentCard'dan seçer — varsayılan tercihi
         // HTTP+JSON'dır (bkz. A2AClient.CreateFromCard). Yalnızca JSON-RPC yayınlansaydı,
@@ -48,30 +52,36 @@ public static class A2AEndpoints
         app.MapA2AJsonRpc(A2AAgentNames.Product, "/a2a/product")
             .RequireAuthorization("Partner")
             .RequireRateLimiting("a2a")
-            .AddEndpointFilter(new A2ALogFilter("product"));
+            .AddEndpointFilter(new A2ALogFilter("product"))
+            .WithBodyLimit(maxRequestBytes);
         app.MapA2AHttpJson(A2AAgentNames.Product, "/a2a/product")
             .RequireAuthorization("Partner")
             .RequireRateLimiting("a2a")
-            .AddEndpointFilter(new A2ALogFilter("product"));
+            .AddEndpointFilter(new A2ALogFilter("product"))
+            .WithBodyLimit(maxRequestBytes);
 
         app.MapA2AJsonRpc(A2AAgentNames.Order, "/a2a/order")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
-            .AddEndpointFilter(new A2ASubjectScopeFilter("order"));
+            .AddEndpointFilter(new A2ASubjectScopeFilter("order"))
+            .WithBodyLimit(maxRequestBytes);
         app.MapA2AHttpJson(A2AAgentNames.Order, "/a2a/order")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
-            .AddEndpointFilter(new A2ASubjectScopeFilter("order"));
+            .AddEndpointFilter(new A2ASubjectScopeFilter("order"))
+            .WithBodyLimit(maxRequestBytes);
 
         // Şikayet ajanı da müşteri verisi döndürür — sipariş ajanıyla AYNI kimlik şartına tabi.
         app.MapA2AJsonRpc(A2AAgentNames.Complaint, "/a2a/complaint")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
-            .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"));
+            .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"))
+            .WithBodyLimit(maxRequestBytes);
         app.MapA2AHttpJson(A2AAgentNames.Complaint, "/a2a/complaint")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
-            .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"));
+            .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"))
+            .WithBodyLimit(maxRequestBytes);
 
         // AgentCard — A2A'nın keşif yarısı. Kart olmadan çağıran, ajanın hangi yetenekleri
         // olduğunu ve hangi kimlik doğrulamasını beklediğini deneyerek öğrenmek zorunda kalır.
@@ -83,8 +93,46 @@ public static class A2AEndpoints
         app.MapWellKnownAgentCard(BuildOrderCard(publicBaseUrl), "/a2a/order");
         app.MapWellKnownAgentCard(BuildComplaintCard(publicBaseUrl), "/a2a/complaint");
 
+        // Kök keşif: /.well-known/agent-card.json (A2A'nın standart "Well-Known URI" yolu).
+        // Bu olmadan, adresleri önceden verilmemiş genel amaçlı bir A2A istemcisi kökte 404
+        // alır ve HİÇBİR ajanı bulamaz.
+        app.MapWellKnownAgentCard(BuildRootCard(publicBaseUrl, a2aOptions.DocumentationUrl));
+
         return app;
     }
+
+    /// <summary>
+    /// A2A uçlarına istek gövdesi sınırı koyar.
+    ///
+    /// <para>
+    /// Kestrel'in varsayılanı 30 MB'dır ve metin tabanlı bir sorgu kanalı için anlamsız
+    /// derecede geniştir. Bu, ajan seviyesindeki karakter/parça sınırının (bkz.
+    /// <c>InputLimitedAgent</c>) yerine geçmez — onu tamamlar: burada ham bayt daha
+    /// AYRIŞTIRILMADAN reddedilir, orada LLM'e gidecek metin ölçülür.
+    /// </para>
+    /// </summary>
+    private static TBuilder WithBodyLimit<TBuilder>(this TBuilder builder, long maxBytes)
+        where TBuilder : IEndpointConventionBuilder =>
+        builder.AddEndpointFilter(async (context, next) =>
+        {
+            var http = context.HttpContext;
+
+            // ÖNCE Content-Length. Sunucunun gövde sınırı özelliğine güvenmek yetmez: o özellik
+            // her barındırma ortamında YOKTUR (ölçüldü — TestServer'da null döner) ve
+            // olmadığında sınır sessizce etkisiz kalır. Yapılandırmada görünen ama hiçbir şey
+            // yapmayan bir güvenlik ayarı, hiç olmamasından kötüdür.
+            if (http.Request.ContentLength is { } declared && declared > maxBytes)
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+
+            // Content-Length bildirilmemiş (chunked) gövdeler için sunucu tarafı sınır — varsa.
+            // Bu dal test ortamında doğrulanamaz (özellik orada yok); Content-Length kontrolü
+            // asıl korumadır, bu yalnızca onun kapsamadığı durum için yedektir.
+            var feature = http.Features.Get<IHttpMaxRequestBodySizeFeature>();
+            if (feature is { IsReadOnly: false })
+                feature.MaxRequestBodySize = maxBytes;
+
+            return await next(context);
+        });
 
     /// <summary>
     /// Ajanın desteklediği transport'ları ilan eder.
@@ -168,6 +216,50 @@ public static class A2AEndpoints
     /// </summary>
     private static AgentCapabilities CardCapabilities() =>
         new() { Streaming = true, PushNotifications = false, ExtendedAgentCard = false };
+
+    /// <summary>
+    /// Alan adı kökünde (<c>/.well-known/agent-card.json</c>) yayınlanan kart.
+    ///
+    /// <para>
+    /// <b>Neden tek bir ajan:</b> A2A'nın kök keşif yolu tanım gereği <b>bir</b> ajan
+    /// tanımlar. Spesifikasyon üç keşif yolu tarif eder — Well-Known URI, curated registry ve
+    /// direct configuration — ama tek bir host üzerindeki BİRDEN FAZLA ajanı sıralamak için
+    /// standart bir biçim (katalog/registry API'si) <b>tanımlamaz</b>. Kökte kendi icat
+    /// ettiğimiz bir katalog yayınlamak, A2A gibi görünen ama A2A olmayan bir yüzey üretirdi;
+    /// bilinçli olarak yapılmadı.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Neden ÜRÜN ajanı:</b> üç ajandan yalnızca bu, tek başına partner token'ıyla
+    /// çağrılabilir. Sipariş ve şikayet ajanları müşteriye kilitli bir özne token'ı ister; o
+    /// token ise ancak partnerin hangi müşteriler adına hareket edebileceği önceden
+    /// tanımlandıysa alınabilir. Yani kökte onlardan birini ilan etmek, çağıranın kendi başına
+    /// kullanamayacağı bir ajanı "giriş kapısı" göstermek olurdu.
+    /// </para>
+    ///
+    /// <para>
+    /// Diğer ajanların varlığı kartta hem <c>description</c> içinde açıkça söylenir hem de
+    /// (yapılandırılmışsa) <c>documentationUrl</c> ile işaret edilir — <c>AgentCard</c>'da
+    /// kardeş ajanları listeleyecek bir alan yoktur.
+    /// </para>
+    /// </summary>
+    private static AgentCard BuildRootCard(string publicBaseUrl, string documentationUrl)
+    {
+        // Ürün kartı YENİDEN KURULMAZ, olduğu gibi alınır: iki kartın zamanla ayrışması
+        // (ör. yeni bir skill yalnızca birine eklenmesi) sessiz bir tutarsızlık olurdu.
+        var card = BuildProductCard(publicBaseUrl);
+
+        card.Description =
+            "Ürün kataloğu sorguları: fiyat, stok durumu, kategori listeleri. Müşteri kimliği gerektirmez. "
+          + "NOT: Bu sunucuda ayrıca sipariş ve şikayet ajanları da yayındadır; onlar müşteriye "
+          + "kilitli bir özne token'ı gerektirir ve kartları /a2a/order/.well-known/agent-card.json "
+          + "ile /a2a/complaint/.well-known/agent-card.json adreslerindedir.";
+
+        if (!string.IsNullOrWhiteSpace(documentationUrl))
+            card.DocumentationUrl = documentationUrl;
+
+        return card;
+    }
 
     private static AgentCard BuildProductCard(string publicBaseUrl) => new()
     {

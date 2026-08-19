@@ -89,6 +89,43 @@ public sealed class A2AOptions
     /// <summary>Partner başına dakikadaki istek sınırı. Dış kanal olduğu için varsayılan muhafazakârdır.</summary>
     public int RequestsPerMinute { get; set; } = 60;
 
+    /// <summary>
+    /// Tek bir A2A çağrısındaki toplam metin uzunluğu (karakter).
+    ///
+    /// <para>
+    /// İstek SAYISI sınırı tek başına yetmez: dakikada 60 istek hakkı olan bir partner, her
+    /// isteğe çok büyük bir metin koyarak hem token maliyetini hem de çağrı süresini serbestçe
+    /// büyütebilir. Sınır burada, LLM'e gitmeden ÖNCE uygulanır — maliyet zaten oluştuktan
+    /// sonra tespit etmenin faydası olmaz.
+    /// </para>
+    /// </summary>
+    public int MaxMessageChars { get; set; } = 4000;
+
+    /// <summary>
+    /// Tek bir çağrıdaki azami mesaj/parça sayısı. Uzunluk sınırını çok sayıda küçük parçaya
+    /// bölerek dolaşmayı engeller.
+    /// </summary>
+    public int MaxParts { get; set; } = 20;
+
+    /// <summary>
+    /// A2A uçlarında azami istek gövdesi (bayt). Kestrel'in varsayılanı 30 MB'dır ve bu, metin
+    /// tabanlı bir sorgu kanalı için anlamsız derecede geniştir; gövde daha ayrıştırılmadan
+    /// reddedilmesi en ucuz savunmadır.
+    /// </summary>
+    public long MaxRequestBytes { get; set; } = 64 * 1024;
+
+    /// <summary>
+    /// Partner entegrasyon dokümanının adresi. Kök agent card'ında <c>documentationUrl</c>
+    /// olarak yayınlanır.
+    ///
+    /// <para>
+    /// Boş bırakılırsa alan hiç yazılmaz — var olmayan bir adresi ilan etmek, hiç ilan
+    /// etmemekten kötüdür. Bu alan özellikle önemli çünkü A2A'nın kök keşif yolu <b>tek</b>
+    /// bir ajan tanımlar; diğer ajanların kartlarına giden tek meşru işaret budur.
+    /// </para>
+    /// </summary>
+    public string DocumentationUrl { get; set; } = "";
+
     public List<A2APartnerOptions> Partners { get; set; } = new();
 }
 

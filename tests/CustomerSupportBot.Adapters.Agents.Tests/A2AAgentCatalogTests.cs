@@ -15,6 +15,7 @@ using CustomerSupportBot.Application.Services.Approval;
 using CustomerSupportBot.Application.Services.Escalation;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.AI;
+using CustomerSupportBot.Application.Services.A2A;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Adapters.Agents.Tests;
@@ -109,7 +110,8 @@ public class A2AAgentCatalogTests
             Substitute.For<IChatClient>(),
             prompts,
             approvalGate,
-            Substitute.For<ICustomerSupportToolsService>());
+            Substitute.For<ICustomerSupportToolsService>(),
+            Options.Create(new A2AOptions()));
     }
 
     /// <summary>

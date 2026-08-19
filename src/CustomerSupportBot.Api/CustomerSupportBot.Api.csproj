@@ -34,14 +34,17 @@
          doğrudan A2A endpoint'i olarak yayınlar (MapA2AJsonRpc(AIAgent, path)) ve
          uzun süreli (background/task) yürütmeyi AgentRunMode ile yönetir.
 
-         ⚠️ SÜRÜM RİSKİ: MAF çekirdeği (Adapters.Agents) 1.17.0, bu hosting paketi
-         1.12.0-preview. NuGet Microsoft.Agents.AI.Abstractions'ı 1.17.0'a birleştirir
-         ama hosting assembly'si 1.12'ye karşı derlendi — arada breaking change varsa
-         runtime'da TypeLoadException/MissingMethodException verir. Bu yüzden şu an
-         yalnızca uyumluluk spike'ı için duruyor; kalıcı kullanım öncesi doğrulanmalı. -->
+         SÜRÜM HİZASI: hosting köprüsü, MAF çekirdeğiyle (Adapters.Agents) AYNI sürüm
+         hattında tutulmalıdır — ikisi de 1.18. Köprü bir süre 1.12'de kalmıştı ve bu
+         sessiz bir risktir: NuGet Microsoft.Agents.AI.Abstractions'ı yukarı birleştirdiği
+         ve .NET assembly sürümünü katı bağlamadığı için proje DERLENİR ve YÜKLENİR; arada
+         bir tip/imza değiştiyse hata ancak o kod yolu ÇALIŞTIRILDIĞINDA
+         TypeLoadException/MissingMethodException olarak çıkar. Yani "build temiz" hiçbir
+         şey kanıtlamaz. Çekirdek sürümü yükseltilirken bu paket de birlikte yükseltilmeli;
+         köprünün gerçekten ayakta olduğunu A2AHostingSpikeTests ölçer. -->
     <PackageReference Include="A2A" Version="1.0.0-preview2" />
     <PackageReference Include="A2A.AspNetCore" Version="1.0.0-preview2" />
-    <PackageReference Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.12.0-preview.260629.1" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.18.0-preview.260818.1" />
   </ItemGroup>
 
   <!-- Knowledge Base markdown dosyalarını build çıktısına kopyala — KnowledgeBaseIngestor okur. -->
