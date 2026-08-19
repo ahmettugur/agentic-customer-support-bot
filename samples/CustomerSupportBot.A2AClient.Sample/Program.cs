@@ -17,6 +17,7 @@
 using System.Diagnostics;
 using CustomerSupportBot.A2AClient.Sample.A2A;
 using CustomerSupportBot.A2AClient.Sample.Agents;
+using CustomerSupportBot.A2AClient.Sample.Rendering;
 using CustomerSupportBot.A2AClient.Sample.Observability;
 using CustomerSupportBot.A2AClient.Sample.Verification;
 using Microsoft.Agents.AI;
@@ -178,7 +179,14 @@ while (!cts.IsCancellationRequested)
     {
         var reply = await agent.RunAsync(input.Trim(), session, cancellationToken: cts.Token);
         var text = reply.Text?.Trim();
-        Console.WriteLine(string.IsNullOrWhiteSpace(text) ? "(bos yanit)" : text);
+
+        // Ajanlar Markdown uretiyor (**kalin**, madde imleri, basliklar). Ham basilirsa
+        // kullanici cevabi degil isaretleri okur — bkz. MarkdownConsole.
+        if (string.IsNullOrWhiteSpace(text))
+            Console.WriteLine("  (bos yanit)");
+        else
+            MarkdownConsole.Write(text);
+
         Console.WriteLine($"  [correlation.id={correlationId}]");
     }
     catch (OperationCanceledException) { break; }
