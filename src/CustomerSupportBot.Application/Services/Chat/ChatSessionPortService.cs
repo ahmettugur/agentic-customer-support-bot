@@ -168,7 +168,14 @@ public sealed class ChatSessionPortService : IChatSessionPort
         var trimmedText = text.Trim();
         _chatBridge.PublishAdminMessage(sessionId, humanAgent, trimmedText);
         var agentLabel = string.IsNullOrWhiteSpace(humanAgent) ? "Temsilci" : humanAgent;
-        await _sessions.AppendUserMessageAsync(sessionId, $"[🧑‍💼 {agentLabel}]: {trimmedText}", ct);
+
+        // ASISTAN rolü — kullanıcı rolü DEĞİL. İnsan modunda temsilci, konuşmada botun yerini
+        // alır; söylediği şey müşteriden gelen bir GİRDİ değil, müşteriye verilen bir YANITTIR.
+        // Kullanıcı rolüyle yazıldığında, bot oturumu geri devraldığında temsilcinin cevabını
+        // müşterinin yeni bir mesajı sanıyor ve ona cevap vermeye çalışıyordu. Etiket korunur:
+        // modelin bunu kendi ürettiği bir yanıt değil, insan temsilcinin sözü olarak görmesi
+        // doğru bağlamı verir.
+        await _sessions.AppendAssistantMessageAsync(sessionId, $"[🧑‍💼 {agentLabel}]: {trimmedText}", ct);
         return new ChatSessionMessageResult(sessionId);
     }
 

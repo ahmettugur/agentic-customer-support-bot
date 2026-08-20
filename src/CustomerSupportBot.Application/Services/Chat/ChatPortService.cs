@@ -181,7 +181,11 @@ public sealed class ChatPortService : IChatPort
             });
             if (!string.IsNullOrWhiteSpace(query))
             {
-                await _sessions.AddExchangeAsync(sessionId, query, "", ct: ct);
+                // Yalnızca kullanıcı mesajı yazılır. AddExchangeAsync burada BOŞ bir asistan
+                // mesajı da bırakıyordu: insan modunda bota ait bir yanıt yoktur, temsilcinin
+                // cevabı geldiğinde ayrıca yazılır. Boş placeholder geçmişte doldurulmadan
+                // kalıyor ve bot oturumu geri devraldığında bağlamı bozuyordu.
+                await _sessions.AppendUserMessageAsync(sessionId, query, ct);
                 _chatBridge.PublishUserMessage(sessionId, query);
             }
             yield break;

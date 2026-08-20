@@ -51,6 +51,14 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
     /// </summary>
     private volatile bool _turnInFlight;
 
+    /// <summary>
+    /// Oturum turu kilidinin bekleme süresi. Metin sohbetindekinden (120sn) bilinçli olarak
+    /// KISA: sesli kullanıcı ekrana bakıp bekleyemez, karşısında sessizlik olur. 30 saniye
+    /// içinde sıra gelmezse beklemeye devam etmek yerine açıkça "hâlâ işleniyor" demek
+    /// dürüsttür.
+    /// </summary>
+    private static readonly TimeSpan TurnLockWait = TimeSpan.FromSeconds(30);
+
     /// <summary>Mikrofon sesi OpenAI'ye iletilmemeli mi — asistan konuşuyor VEYA tur işleniyor.</summary>
     private bool IsBusy => _assistantSpeaking || _turnInFlight;
 
@@ -277,6 +285,29 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
         var sessionId = session.SessionId;
         try
         {
+            // Oturum turu kilidi — metin sohbetiyle AYNI anahtar (SessionIdentityBinder.TurnLockKey).
+            //
+            // _turnInFlight yalnızca BU bağlantıyı korur; aynı oturuma ikinci bir WebSocket
+            // açıldığında ya da kullanıcı aynı anda metin sohbetini kullandığında iki tur
+            // paralel çalışıyordu: aynı geçmiş üzerinde iki workflow, aynı state üzerinde iki
+            // yazma ve aynı oturumda iki HITL akışı. Kilit aynı anahtarı kullandığı için ses
+            // ve metin birbirine göre de sıraya girer.
+            await using var turnLock = await _sessionLock.TryAcquireAsync(
+                SessionIdentityBinder.TurnLockKey(sessionId), TurnLockWait, ct);
+
+            if (turnLock is null)
+            {
+                _logger.LogWarning(
+                    "RealtimeBridge: oturum turu kilidi alınamadı, transkript atlandı session={Sid}",
+                    sessionId);
+                await channel.SendJsonAsync(new
+                {
+                    type = "error",
+                    message = "Bu oturumda hâlâ işlenen bir mesaj var. Lütfen yanıtı bekleyin."
+                }, ct);
+                return;
+            }
+
             var guard = _inputGuard.Inspect(transcript);
             if (guard.Verdict == InputGuardVerdict.Reject)
             {
