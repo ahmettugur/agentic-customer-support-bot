@@ -294,6 +294,9 @@ public class KnowledgeArticleServiceTests
             return Task.CompletedTask;
         }
 
+        public Task DeleteStaleAsync(MemoryKind kind, string tagKey, string tagValue, CancellationToken ct = default)
+            => Task.CompletedTask;
+
         public Task DeleteAsync(MemoryKind kind, string documentId, CancellationToken ct = default)
         {
             Deleted.Add(documentId);

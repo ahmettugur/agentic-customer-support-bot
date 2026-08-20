@@ -48,6 +48,20 @@ public class KnowledgeBaseReingestGuardTests
         public Task UpsertManyAsync(MemoryKind kind, IReadOnlyList<MemoryDocument> docs, CancellationToken ct = default)
         {
             Upserted.AddRange(docs);
+            UpsertedBeforeCleanup ??= Upserted.Count;
+            return Task.CompletedTask;
+        }
+
+        /// <summary>Temizlik çağrıldığında geçerli olan (tagKey, tagValue).</summary>
+        public (string Key, string Value)? Cleanup { get; private set; }
+
+        /// <summary>Temizlik anında kaç belge yazılmıştı — sıranın doğruluğunu ölçmek için.</summary>
+        public int? UpsertedBeforeCleanup { get; private set; }
+
+        public Task DeleteStaleAsync(
+            MemoryKind kind, string tagKey, string tagValue, CancellationToken ct = default)
+        {
+            Cleanup = (tagKey, tagValue);
             return Task.CompletedTask;
         }
     }
@@ -98,6 +112,8 @@ public class KnowledgeBaseReingestGuardTests
         public Task<long> CountAsync(MemoryKind kind, CancellationToken ct = default) => Task.FromResult(0L);
         public Task UpsertManyAsync(MemoryKind kind, IReadOnlyList<MemoryDocument> docs, CancellationToken ct = default)
             => Task.CompletedTask;
+        public Task DeleteStaleAsync(MemoryKind kind, string tagKey, string tagValue, CancellationToken ct = default)
+            => Task.CompletedTask;
     }
 
     private static KnowledgeBaseIngestionService BuildWith(ISemanticMemoryIngestor ingestor)
@@ -144,5 +160,68 @@ public class KnowledgeBaseReingestGuardTests
         var act = () => service.IngestAsync(TestContext.Current.CancellationToken);
 
         await act.Should().NotThrowAsync();
+    }
+
+    // ─── Yeniden yükleme: çoğalma ve artık kalan içerik ───────────────────────
+    //
+    // Dosya chunk'ları her yüklemede rastgele bir Guid alıyordu, yani upsert her seferinde
+    // insert'e dönüşüyordu. İki sonucu vardı: değişmeyen dosyalar her turda çoğalıyor ve
+    // düzenlenen bir dosyanın ESKİ metni aramada kalmaya devam ediyordu — düzeltilmiş ya da
+    // silinmiş bir bilgiyi bot yanıtlamaya devam edebiliyordu.
+
+    /// <summary>
+    /// Kimlik dosya yoluna ve chunk sırasına bağlı olmalı ki aynı içerik aynı kaydın üzerine
+    /// yazılsın. Rastgele kimlikle bu test, her çalıştırmada farklı değerler görürdü.
+    /// </summary>
+    [Fact]
+    public async Task FileChunks_GetStableIdentities_AcrossReloads()
+    {
+        var first = new CountingIngestor(existingCount: 0);
+        await Build(first).IngestAsync(TestContext.Current.CancellationToken);
+
+        var second = new CountingIngestor(existingCount: 0);
+        await Build(second).IngestAsync(TestContext.Current.CancellationToken);
+
+        first.Upserted.Should().NotBeEmpty();
+        second.Upserted.Select(d => d.Id).Should().Equal(
+            first.Upserted.Select(d => d.Id),
+            "aynı kaynak aynı kimlikleri üretmeli — yoksa her yükleme kopya ekler");
+
+        first.Upserted.Select(d => d.Id).Should().OnlyHaveUniqueItems();
+    }
+
+    /// <summary>
+    /// Kararlı kimlik, ARTIK ÜRETİLMEYEN belgeleri çözmez: kaynak dosyası silindiğinde ya da
+    /// küçüldüğünde o chunk'ların kimlikleri yeni turda hiç görünmez, dolayısıyla tek tek
+    /// silinemezler. Bu yüzden her tur kendi damgasını yazar ve damgası eski olanlar silinir.
+    /// </summary>
+    [Fact]
+    public async Task Reload_StampsDocuments_AndSweepsTheOnesNoLongerProduced()
+    {
+        var ingestor = new CountingIngestor(existingCount: 0);
+
+        await Build(ingestor).IngestAsync(TestContext.Current.CancellationToken);
+
+        ingestor.Cleanup.Should().NotBeNull("artık üretilmeyen belgeler temizlenmeli");
+        var (key, value) = ingestor.Cleanup!.Value;
+
+        ingestor.Upserted.Should().OnlyContain(d => d.Tags.ContainsKey(key) && d.Tags[key] == value,
+            "temizlik bu turun damgasını taşımayan her şeyi sileceği için, yazılan HER belge damgalanmış olmalı");
+    }
+
+    /// <summary>
+    /// Sıra önemli: temizlik yazmadan SONRA olmalı. Önce silinseydi, yazma başarısız olduğunda
+    /// bilgi tabanı tamamen boş kalırdı.
+    /// </summary>
+    [Fact]
+    public async Task Cleanup_RunsAfterTheWrite_NotBefore()
+    {
+        var ingestor = new CountingIngestor(existingCount: 0);
+
+        await Build(ingestor).IngestAsync(TestContext.Current.CancellationToken);
+
+        ingestor.Cleanup.Should().NotBeNull();
+        ingestor.UpsertedBeforeCleanup.Should().NotBeNull()
+            .And.Be(ingestor.Upserted.Count, "temizlik anında yazma tamamlanmış olmalı");
     }
 }

@@ -15,6 +15,9 @@ namespace CustomerSupportBot.Application.Services.Memory;
 
 public sealed class KnowledgeBaseIngestionService : IKnowledgeBaseIngestor
 {
+    /// <summary>Belgenin hangi ingest turunda üretildiğini taşıyan etiket.</summary>
+    private const string IngestStampTag = "ingest";
+
     private readonly IKnowledgeBaseSource _source;
     private readonly IKnowledgeArticleStore _articles;
     private readonly ISemanticMemoryIngestor _memory;
@@ -115,6 +118,13 @@ public sealed class KnowledgeBaseIngestionService : IKnowledgeBaseIngestor
                 {
                     docs.Add(new MemoryDocument
                     {
+                        // KARARLI kimlik — rastgele Guid DEĞİL. Guid ile her yeniden yükleme
+                        // aynı içeriği YENİ bir kayıt olarak ekliyordu: upsert, id yeni olduğu
+                        // için her seferinde insert'e dönüşüyordu. Sonuç, değişmeyen dosyaların
+                        // her turda çoğalması ve düzenlenen bir dosyanın ESKİ metninin
+                        // aramada kalmaya devam etmesiydi — yani düzeltilmiş bir bilgi
+                        // silinmiş olmasına rağmen bot onu yanıtlamaya devam edebiliyordu.
+                        Id     = $"file:{file.RelativePath}#{idx}",
                         Kind   = MemoryKind.Knowledge,
                         Title  = file.Title,
                         Source = file.RelativePath,
@@ -134,6 +144,12 @@ public sealed class KnowledgeBaseIngestionService : IKnowledgeBaseIngestor
         if (articles.Count > 0)
             _logger.LogInformation("KnowledgeBase ingest: {ArticleCount} makale dahil edildi", articles.Count);
 
+        // Bu turun damgası. Kararlı kimlik, ARTIK ÜRETİLMEYEN belgeleri çözmez: kaynak
+        // dosyası silindiğinde ya da küçüldüğünde (chunk sayısı azaldığında) o chunk'ların
+        // id'leri yeni turda hiç görünmez, dolayısıyla tek tek silinemezler. Tanımlanabilecekleri
+        // tek şey damgalarının eski kalmasıdır.
+        foreach (var doc in docs) doc.Tags[IngestStampTag] = currentHash;
+
         _logger.LogInformation("KnowledgeBase ingest başlıyor: {ChunkCount} chunk", docs.Count);
 
         if (docs.Count > 0)
@@ -141,6 +157,12 @@ public sealed class KnowledgeBaseIngestionService : IKnowledgeBaseIngestor
             try
             {
                 await _memory.UpsertManyAsync(MemoryKind.Knowledge, docs, ct);
+
+                // Temizlik yazmadan SONRA: önce silinirse, yazma başarısız olduğunda bilgi
+                // tabanı boş kalırdı. Bu sırada en kötü ihtimalle kısa bir süre fazladan
+                // kayıt bulunur — eksik kayıt bulunmasından iyidir.
+                await _memory.DeleteStaleAsync(MemoryKind.Knowledge, IngestStampTag, currentHash, ct);
+
                 _source.WriteStateHash(currentHash);
                 _logger.LogInformation("KnowledgeBase ingest tamamlandı: {ChunkCount} chunk", docs.Count);
             }

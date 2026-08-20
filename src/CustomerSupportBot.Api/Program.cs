@@ -115,7 +115,6 @@ app.UseExceptionHandler();
 app.MapAppHealthChecks();
 
 app.UseCors();
-app.UseRateLimiter();
 app.UseWebSockets();
 
 if (app.Environment.IsDevelopment())
@@ -131,6 +130,15 @@ if (a2aEnabled)
 }
 
 app.UseAuthentication();
+
+// Rate limiter kimlik doğrulamadan SONRA çalışmak ZORUNDA. A2A politikası bölümleme
+// anahtarını token claim'lerinden çıkarır (partner kimliği); UseAuthentication'dan önce
+// çalıştığında HttpContext.User henüz boştur, claim bulunamaz ve politika sessizce IP'ye
+// düşer. Yani "partner başına limit" diye yazılan kural fiilen IP başına limit olarak
+// çalışıyordu: aynı NAT/bulut çıkışı arkasındaki partnerler birbirinin kotasını tüketiyor,
+// IP değiştirebilen bir istemci ise sınırı tamamen dolaşabiliyordu.
+app.UseRateLimiter();
+
 app.UseAuthorization();
 
 // Endpoint metadata'sı routing sırasında hazırdır; guard yetkilendirmeden sonra, Minimal API
