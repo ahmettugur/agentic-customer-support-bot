@@ -104,7 +104,8 @@ var agentScope = app.MapGroup("/agent").RequireAuthorization("AdminOrAgent");
 | Scope | Endpoint'ler |
 |-------|-------------|
 | **Customer** | `POST /chat/`, `POST /chat/stream`, `GET /chat/events/{sid}`, `/chat-sessions/{sid}/approvals/*`, `GET /customer/approvals/history`, **`WS /chat/realtime/{sid?}`**, **`WS /chat/realtime-native/{sid?}`** |
-| **Public** (auth gerektirmez) | `GET /sessions/`, `POST/GET .../rating` |
+| **SessionAccess** (`Customer`, `Admin` veya `Agent`) | `GET /sessions/`, `GET /sessions/{sid}/messages`, `GET /sessions/{sid}/state` |
+| **Public** (auth gerektirmez) | `POST/GET /sessions/{sid}/rating` |
 | **Auth gerektirir** | `POST /auth/logout` |
 | **Admin** | Trace, Evaluation, Memory, Improvements, Telemetry, Personalization, Agents, SLA, Admin (HITL) |
 | **AdminOrAgent** | `/agent/escalations/*`, `/agent/approvals/*`, `/agent/chat-sessions/*`, `/agent/profile` |
@@ -175,7 +176,8 @@ bunu bearer token olarak okur. Aynı mekanizmayı SSE (`EventSource`) de kullan�
 | Policy | Limit | Kapsam |
 |--------|-------|--------|
 | `chat` | IP başına 20/dk | `POST /chat/`, `POST /chat/stream` |
-| `general` | IP başına 60/dk | `/analytics/*` (public) + tüm `Admin`/`AdminOrAgent` scope'ları (`adminScope`, `agentScope` — Program.cs) |
+| `general` | IP başına 60/dk | Tüm `Admin`/`AdminOrAgent` scope'ları (`adminScope`, `agentScope` — Program.cs). `/analytics/*` de bu gruptadır ve **`Admin` gerektirir** |
+| `a2a` | **Partner başına** `A2A:RequestsPerMinute` | `/a2a/*` |
 
 ```csharp
 app.MapPost("/chat/", HandleChatAsync).RequireRateLimiting("chat");
@@ -184,6 +186,8 @@ app.MapPost("/chat/stream", HandleChatStreamAsync).RequireRateLimiting("chat");
 var adminScope = app.MapGroup("").RequireAuthorization("Admin").RequireRateLimiting("general");
 var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRateLimiting("general");
 ```
+
+> **`a2a` politikası neden IP değil partner bazlı?** Dış sistemler proxy/bulut çıkışı arkasında IP paylaşabilir (bir partnerin trafiği diğerinin kotasını tüketirdi) ya da IP değiştirebilir (sınır fiilen ortadan kalkardı). Bölümleme anahtarı token'dan çıkarılır ve çağıran onu değiştiremez. Bunun çalışması **middleware sırasına bağlıdır**: `UseRateLimiter()` `UseAuthentication()`'dan SONRA gelmek zorundadır, aksi hâlde `HttpContext.User` henüz boştur, claim bulunamaz ve politika sessizce IP'ye düşer — kural "partner başına" yazılmış olsa bile fiilen IP başına çalışırdı.
 
 > Admin/agent uçları auth arkasında olsa da önceden rate limitsizdi — sızmış bir JWT veya kötü niyetli bir admin/agent hesabı sınırsız istek atabiliyordu. `general` politikası grup seviyesinde uygulanır; SSE endpoint'leri (`/chat-sessions/{sid}/subscribe` vb.) tek bir istek olarak sayıldığından uzun ömürlü bağlantılar limitten etkilenmez.
 

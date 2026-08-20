@@ -80,18 +80,23 @@ Koleksiyon adını ve hedef dimension'ı parametre olarak alır.
 ```
 1. collection var mı? → GetCollectionInfoAsync ile dim kontrol et
 2. Dim uyuşuyor → return (zaten doğru)
-3. Dim uyuşmuyor → DELETE + CREATE (dev-friendly mismatch handling)
+3. Dim uyuşmuyor → varsayılan: HATA. Açık izin verilmişse DELETE + CREATE
 4. collection yok → CREATE (Cosine distance, belirtilen dimension)
 ```
 
-### Dev-friendly mismatch handling
+### Boyut uyuşmazlığı: varsayılan fail-closed
 
-Eğer Qdrant collection 1536-dim ile yaratılmışsa ama config'de 3072 isteniyorsa:
+Qdrant koleksiyonu 1536 boyutlu yaratılmışken config 3072 isterse, koleksiyonu yeniden oluşturmak **içindeki tüm vektörleri siler**. Bu, embedding modeli değiştirildiğinde bilgi tabanının sessizce boşalması demektir.
 
-- **Eski collection silinir** (tüm vektörler kaybolur!)
-- Yeni collection 3072-dim ile yaratılır
+Bu yüzden karar varsayılan olarak fail-closed'dır: `RequiresRecreate` `InvalidOperationException` fırlatır ve uygulama açılmaz. Yıkıcı geçiş **kasıtlıysa** açıkça izin verilmelidir:
 
-⚠️ Production'da bu davranış **tehlikeli** — silmek yerine error fırlatmak gerekir. Bu kod development kolaylığı için (model değiştirme rahatlığı).
+```
+SemanticMemory:VectorStore:AllowDestructiveDimensionMigration=true
+```
+
+İzin verilmediğinde çözüm, embedding boyutunu eski değerine döndürmektir.
+
+> Karar bilinçli olarak ayrı bir `internal static` metotta (`RequiresRecreate`): gerçek `QdrantClient` mock'lanamadığı için `EnsureCollectionAsync`'in tamamı birim testiyle sürülemez, ama asıl riskli kısım — kararın kendisi — böylece test altına girer.
 
 Startup'ta `MemoryPortService.IngestAsync` bu metodu çağırır.
 

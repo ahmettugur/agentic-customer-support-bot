@@ -748,6 +748,8 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
 
 **Admin mesajının session geçmişine yazılması**: `POST /chat-sessions/{sid}/messages` artık `ISessionManager.AppendAssistantMessage()` ile admin mesajını LLM-facing session history'sine **assistant turu** olarak yazıyor. Bot moduna dönüldüğünde (release veya replan) `PlanningAgent` admin'in vaatlerini/yönlendirmelerini görür ve onları göz ardı etmez. `ISessionManager` ve `InMemorySessionManager` her ikisi de "son boş assistant turunu doldur, yoksa yeni tur ekle" mantığını uygular.
 
+> Bu satır bir dönem gerçeği anlatmıyordu: kod `AppendUserMessage` kullanıyor, yani temsilcinin cevabı geçmişe **kullanıcı** rolüyle giriyordu. Bot oturumu geri devraldığında temsilcinin cevabını müşterinin yeni bir mesajı sanıp ona cevap vermeye çalışıyordu. Aynı yerde ikinci bir kusur vardı: insan modunda müşteri mesajı `AddExchangeAsync` ile yazılıyor ve arkasında hiçbir zaman doldurulmayan **boş bir assistant turu** bırakıyordu. İkisi de düzeltildi — artık insan modunda yalnızca kullanıcı mesajı yazılır, temsilcinin cevabı geldiğinde asistan turu olarak eklenir. "Son boş assistant turunu doldur" yolu geriye dönük uyumluluk için duruyor (eski oturumlarda o placeholder'lar hâlâ olabilir).
+
 **Karakteristikleri**:
 
 - **In-memory** — restart kaybı kaçınılmaz; production için Redis Streams + persistent state

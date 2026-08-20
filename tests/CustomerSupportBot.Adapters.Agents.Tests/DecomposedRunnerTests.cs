@@ -499,4 +499,81 @@ public class DecomposedRunnerTests
         events.Should().Contain(e => e.Type == StreamEventTypes.Error);
         events.Should().NotContain(e => e.Type == StreamEventTypes.ResponseComplete);
     }
+
+    // ─── Alt görev sonucunun KAYNAĞI ──────────────────────────────────────────
+    //
+    // Alt görevin sonucu iki yere gidiyor: kullanıcıya gösterilen birleşik metne ve BAĞIMLI
+    // alt görevlerin girdisine. Bu sonuç ham delta birleşiminden alınıyordu; oysa terminal
+    // JSON temizliği ve routing canonicalization response_complete'te uygulanır, delta'larda
+    // değil. Yani temizlenmemiş JSON ve iç ajan adları hem geçmişe hem de bir sonraki alt
+    // görevin bağlamına taşınıyordu.
+
+    /// <summary>Kanonik metnin delta'lardan FARKLI olduğu koşucu — tam da düzeltmenin konusu.</summary>
+    private sealed class CanonicalDiffersRunner : IWorkflowRunner
+    {
+        public const string Raw = "OrderAgent size yardımcı olacak.";
+        public const string Canonical = "Sipariş ekibimiz size yardımcı olacak.";
+
+        public List<string> Calls { get; } = new();
+        public List<List<ConversationMessage>> Histories { get; } = new();
+
+        public Task<string> RunAsync(string query, List<ConversationMessage>? history,
+            AgentSession? session, ReasoningResult? reasoning, CancellationToken ct)
+            => Task.FromResult(Canonical);
+
+        public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(string query,
+            List<ConversationMessage>? history, AgentSession? session, ReasoningResult? reasoning,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            lock (Calls)
+            {
+                Calls.Add(query);
+                Histories.Add(history?.ToList() ?? []);
+            }
+            yield return new StreamEvent(StreamEventTypes.ResponseDelta, new TextDeltaPayload(Raw));
+            yield return new StreamEvent(StreamEventTypes.ResponseComplete,
+                new ResponseCompletePayload(Canonical));
+            await Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// ASIL BULGU. Nihai birleşik metin kanonik sonucu taşımalı — ham delta metnini değil.
+    /// Aksi hâlde müşteri iç ajan adını görür ve o metin geçmişe de öyle yazılır.
+    /// </summary>
+    [Fact]
+    public async Task SequentialSubTask_UsesCanonicalResult_NotRawDeltas()
+    {
+        var runner = new CanonicalDiffersRunner();
+        var subs = new[] { Sub(1, "selam", WellKnown.AgentNames.Product) };
+
+        var events = await CollectAsync(Build(runner), Reasoning(subs));
+
+        var complete = CompleteText(events);
+        complete.Should().Contain(CanonicalDiffersRunner.Canonical);
+        complete.Should().NotContain("OrderAgent",
+            "kanonik metin routing canonicalization'dan geçmiştir; ham delta geçmemiştir");
+    }
+
+    /// <summary>
+    /// Sonuç bağımlı alt görevin GİRDİSİ olduğu için, ham metin kullanmak sızıntıyı bir
+    /// sonraki adımın bağlamına da taşıyordu.
+    /// </summary>
+    [Fact]
+    public async Task DependentSubTask_ReceivesTheCanonicalResultOfThePreviousStep()
+    {
+        var runner = new CanonicalDiffersRunner();
+        var second = Sub(2, "ikinci", WellKnown.AgentNames.Product);
+        second.Dependencies.Add(1);   // bağımlı — sıralı dala düşer ve öncülün sonucunu görür
+        var subs = new[] { Sub(1, "ilk", WellKnown.AgentNames.Product), second };
+
+        await CollectAsync(Build(runner), Reasoning(subs));
+
+        runner.Histories.Should().HaveCountGreaterThan(1);
+        var secondStepContext = string.Join("\n",
+            runner.Histories[1].Select(m => m.Text));
+
+        secondStepContext.Should().NotContain("OrderAgent",
+            "önceki adımın ham metni bir sonraki alt görevin bağlamına sızmamalı");
+    }
 }

@@ -311,6 +311,14 @@ internal sealed class DecomposedRunner
                     var bodyStreamer = new TrimmingDeltaStreamer();
                     var subTaskFailed = false;
 
+                    // Alt görevin KANONİK sonucu. Ham delta birleşimi bunun yerine
+                    // kullanılamaz: terminal JSON temizliği ve routing canonicalization
+                    // response_complete'te uygulanır, delta'larda değil. Sonuç hem geçmişe
+                    // hem de BAĞIMLI alt görevlerin girdisine gittiği için, ham metin
+                    // kullanmak temizlenmemiş JSON'u ve ajan adı sızıntısını bir sonraki
+                    // alt görevin bağlamına taşıyordu.
+                    string? subCanonical = null;
+
                     _approvalContext.SetCurrentAgent(sub.TargetAgent);
                     string? subTaskException = null;
                     await foreach (var (evt, error) in EnumerateSubTaskEventsSafely(
@@ -337,8 +345,14 @@ internal sealed class DecomposedRunner
                                         new TextDeltaPayload(safe));
                                 break;
                             }
-                            case var t when t == StreamEventTypes.ResponseStart
-                                         || t == StreamEventTypes.ResponseComplete:
+                            case var t when t == StreamEventTypes.ResponseComplete:
+                                if (evt.Data is ResponseCompletePayload complete
+                                    && !string.IsNullOrWhiteSpace(complete.Text))
+                                {
+                                    subCanonical = complete.Text;
+                                }
+                                break;
+                            case var t when t == StreamEventTypes.ResponseStart:
                                 break;
                             case var t when t == StreamEventTypes.ReasoningStart
                                          || t == StreamEventTypes.ReasoningDelta
@@ -382,7 +396,9 @@ internal sealed class DecomposedRunner
                         yield break;
                     }
 
-                    var subResponse = subResponseBuilder.ToString().Trim();
+                    // Kanonik metin varsa o; yoksa güvenlik ağı olarak delta birleşimi —
+                    // response_complete hiç gelmediğinde sonuç tamamen kaybolmamalı.
+                    var subResponse = (subCanonical ?? subResponseBuilder.ToString()).Trim();
                     var part = SubTaskOrchestrator.FormatSubTaskResult(sub, subResponse);
                     collected[sub.Order] = part;
                     completed[sub.Order] = new CompletedSubTask(subQuery, subResponse);

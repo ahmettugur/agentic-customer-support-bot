@@ -216,6 +216,12 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         var assistantTextBuilder    = new StringBuilder();
         var pendingCalls            = new List<(string CallId, string Name, string ArgsJson)>();
         var userTranscriptSent      = false;
+
+        // Turun kullanıcı tarafı. Geçmişe "(sesli)" yazmak, konuşmanın YARISINI atmak demekti:
+        // müşteri sesli modda ne sorduysa hiçbir yerde durmuyordu. Bunun iki sonucu vardı —
+        // bot moduna geçildiğinde ajan önceki isteği bilmiyordu ve temsilci devraldığında
+        // panelde müşterinin ne dediği görünmüyordu.
+        string? lastUserTranscript = null;
         var bufferedAssistantDeltas = new List<string>();
 
         await foreach (var evt in _client.ReceiveEventsAsync(ct))
@@ -255,6 +261,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                     Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
                     await channel.SendJsonAsync(new { type = "user_transcript", text = transcript }, ct);
                     userTranscriptSent = true;
+                    lastUserTranscript = transcript;
                     foreach (var delta in bufferedAssistantDeltas)
                         await channel.SendJsonAsync(new { type = "assistant_text_delta", text = delta }, ct);
                     bufferedAssistantDeltas.Clear();
@@ -329,7 +336,16 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
 
                     var finalText = assistantTextBuilder.ToString().Trim();
                     if (!string.IsNullOrEmpty(finalText))
-                        _chatBridge.RecordBotExchange(session.SessionId, "(sesli)", finalText);
+                    {
+                        var userSide = lastUserTranscript ?? "(sesli)";
+                        _chatBridge.RecordBotExchange(session.SessionId, userSide, finalText);
+
+                        // Oturum geçmişine de yaz: chat bridge yalnızca admin panelini besler,
+                        // ajanın bağlamı ISessionManager'dan gelir. Bu yazma olmadan sesli
+                        // turlar konuşma geçmişinde hiç görünmüyordu.
+                        await _sessionManager.AddExchangeAsync(
+                            session.SessionId, userSide, finalText, ct: ct);
+                    }
                     await channel.SendJsonAsync(new { type = "assistant_text", text = finalText }, ct);
                     await channel.SendJsonAsync(new { type = "response_done" }, ct);
                     assistantTextBuilder.Clear();
