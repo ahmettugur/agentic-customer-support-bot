@@ -360,8 +360,18 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         // ⚠️ TEST BOŞLUĞU: bu SATIRIN kendisi test altında değil. Zincirin iki ucu test
         // ediliyor — CreateSubTaskReasoning alanı dolduruyor (SubTaskOrchestratorTests) ve
         // TurnFinalizer bayrağa uyuyor (CompoundTurnFinalizationTests) — ama ikisini bağlayan
-        // burası için WorkflowRunner'ı MAF workflow'uyla ayağa kaldıran bir entegrasyon testi
-        // gerekir. Ölçüldü: bu satır `false` yapıldığında hiçbir test düşmüyor.
+        // burası açıkta. Ölçüldü: bu satır `false` yapıldığında hiçbir test düşmüyor.
+        //
+        // Kapatma DENENDİ ve maliyeti ölçüldü: gerçek MAF workflow'unu sahte bir IChatClient
+        // ile koşturmak, sahte modelin TÜM ajan sözleşmelerini birden taklit etmesini
+        // gerektiriyor (planning JSON, specialist JSON, response metni + TERMINATE, ve doğru
+        // routing kararları). Şema uyumlu JSON'larla bile grup sohbeti sonlanmadı: tek turda
+        // ~13.900 model çağrısı yapılıp guard timeout'una düşüldü. Böyle bir test, koruduğu tek
+        // satırdan çok daha kırılgan olurdu — prompt'lardaki her değişiklik onu bozardı.
+        //
+        // Gerçek kapatma yolu: workflow'a enjekte edilebilir bir "senaryo ajanı" (ChatClientAgent
+        // yerine deterministik AIAgent) desteği. Bu, üretim kodunda test için bir kanca demek
+        // ve ayrı bir tasarım kararı.
         var isSubTaskRun = st.Trace.Reasoning?.ConstrainedTargetAgent != null;
 
         await _finalizer.FinalizeAsync(
