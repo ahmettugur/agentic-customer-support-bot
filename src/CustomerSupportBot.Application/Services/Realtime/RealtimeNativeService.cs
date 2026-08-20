@@ -11,6 +11,7 @@ using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Application.Services.Tools;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Services.Chat;
@@ -35,6 +36,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
     private readonly IInputGuard _inputGuard;
     private readonly CustomerIdentityHintBuilder _identityHint;
     private readonly IChatBridge _chatBridge;
+    private readonly IAppDistributedLock _sessionLock;
     private readonly ILogger<RealtimeNativeService> _logger;
 
     private volatile bool _assistantSpeaking;
@@ -49,6 +51,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         IInputGuard inputGuard,
         IChatBridge chatBridge,
         CustomerIdentityHintBuilder identityHint,
+        IAppDistributedLock sessionLock,
         ILogger<RealtimeNativeService> logger)
     {
         _client = client;
@@ -57,6 +60,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         _inputGuard = inputGuard;
         _identityHint = identityHint;
         _chatBridge = chatBridge;
+        _sessionLock = sessionLock;
         _logger = logger;
     }
 
@@ -75,12 +79,17 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
             return;
         }
 
-        var session = await _sessionManager.GetOrCreateAsync(sessionId, ct);
+        // Kimliği oturuma ATOMİK bağla: kilit + kalıcı depodan tazeleme + bağlama.
+        // Bu satır olmadan session.State.AuthenticatedCustomerId boş kalıyordu ve sipariş
+        // tool'ları customerId="" ile koşup sahiplik kontrolüne takılıyordu — kullanıcıya
+        // "sipariş bulunamadı" olarak yansıyordu (bkz. DispatchTool).
+        //
+        // Yazılı sohbetle AYNI mekanizma ve aynı kilit anahtarı kullanılır; iki kanal aynı
+        // oturuma eşzamanlı bağlanmaya çalıştığında sahiplik yarışı doğmaz.
+        var session = await SessionIdentityBinder.BindAtomicallyAsync(
+            sessionId, authenticatedCustomerId, _sessionManager, _sessionLock, ct);
 
-        // Kimliği oturuma bağla. Bu satır olmadan session.State.AuthenticatedCustomerId boş
-        // kalıyordu ve sipariş tool'ları customerId="" ile koşup sahiplik kontrolüne takılıyordu
-        // — kullanıcıya "sipariş bulunamadı" olarak yansıyordu (bkz. DispatchTool).
-        if (!await SessionIdentityBinder.TryBindAsync(session, authenticatedCustomerId, _sessionManager, ct))
+        if (session is null)
         {
             _logger.LogWarning(
                 "RealtimeNative: oturum başka bir müşteriye ait, bağlantı reddedildi session={Sid}", sessionId);

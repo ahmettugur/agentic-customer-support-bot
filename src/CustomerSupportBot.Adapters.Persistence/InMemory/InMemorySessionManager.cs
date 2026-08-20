@@ -27,6 +27,10 @@ public class InMemorySessionManager : ISessionManager
 
     // ─── ISessionManager ───
 
+    // Tek süreç: cache zaten tek kaynaktır, tazelenecek ayrı bir depo yoktur.
+    public Task<AgentSession> ReloadAsync(string sessionId, CancellationToken ct = default) =>
+        GetOrCreateAsync(sessionId, ct);
+
     public Task<AgentSession> GetOrCreateAsync(string? sessionId, CancellationToken ct = default)
     {
         sessionId ??= Guid.NewGuid().ToString();

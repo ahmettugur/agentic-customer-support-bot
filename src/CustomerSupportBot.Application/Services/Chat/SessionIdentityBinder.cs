@@ -1,6 +1,7 @@
 // Application/Services/Chat/SessionIdentityBinder.cs
 // Bir oturuma JWT-doğrulanmış müşteri kimliğini bağlar ve oturum sahipliğini doğrular.
 
+using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model;
 
@@ -35,6 +36,50 @@ public static class SessionIdentityBinder
     /// çalışamaz, kendi doğrulamalarında reddederler).
     /// </param>
     /// <returns>Oturum bu kullanıcı tarafından kullanılabiliyorsa <c>true</c>.</returns>
+    /// <summary>
+    /// Oturum kimliği bağlamanın kullanılması gereken tur/bağlantı kilidi anahtarı.
+    ///
+    /// <para>
+    /// <c>session:{id}</c> DEĞİL: o anahtar oturum durumu yazan alt işlemler tarafından
+    /// (<c>MutateStateAsync</c>, <c>AddExchangeAsync</c>) içeriden alınıyor ve Redis kilidi
+    /// yeniden girişli olmadığı için aynı anahtarı dışarıda tutmak kendi kendine kilitlenme
+    /// üretirdi.
+    /// </para>
+    /// </summary>
+    public static string TurnLockKey(string sessionId) => $"session-turn:{sessionId}";
+
+    /// <summary>
+    /// Kimlik bağlamayı <b>atomik</b> yapar: kilidi alır, oturumu kalıcı depodan tazeler,
+    /// sonra bağlar.
+    ///
+    /// <para>
+    /// Üç adımın birlikte olması şart, çünkü bağlama bir "oku-karar ver-yaz" dizisidir.
+    /// Kilitsiz hâlde sahipsiz aynı oturuma eşzamanlı gelen iki farklı müşteri de
+    /// "bağlı değil" görüp ikisi de bağlamayı deneyebilir. Tazeleme de gerekli: cache-first
+    /// okuma, kilidi beklerken başka bir pod'un yaptığı güncellemeyi görmez — uzak güncelleme
+    /// cache'e YENİ bir nesne koyar, bekleyenin elindeki referans eskir.
+    /// </para>
+    ///
+    /// <para>
+    /// Yazılı sohbet turu bu metodu çağırmaz çünkü kilidi <b>tur boyunca</b> tutar ve bağlamayı
+    /// zaten o kilidin altında yapar; ikisi <see cref="TurnLockKey"/> ile aynı anahtarı
+    /// paylaştığı için birbirini dışlar. Realtime kanalları ise kilidi bağlantı ömrü boyunca
+    /// tutamaz (bağlantı dakikalarca sürer), o yüzden yalnızca bağlama anını kilitler.
+    /// </para>
+    /// </summary>
+    public static async Task<AgentSession?> BindAtomicallyAsync(
+        string sessionId,
+        string? authenticatedCustomerId,
+        ISessionManager sessions,
+        IAppDistributedLock locks,
+        CancellationToken ct = default)
+    {
+        await using var handle = await locks.AcquireAsync(TurnLockKey(sessionId), ct: ct);
+
+        var session = await sessions.ReloadAsync(sessionId, ct);
+        return await TryBindAsync(session, authenticatedCustomerId, sessions, ct) ? session : null;
+    }
+
     public static async Task<bool> TryBindAsync(
         AgentSession session,
         string? authenticatedCustomerId,

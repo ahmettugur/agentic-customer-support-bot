@@ -23,6 +23,25 @@ public interface ISessionManager
     // ─── Session yönetimi ───
 
     Task<AgentSession> GetOrCreateAsync(string? sessionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Oturumu <b>kalıcı depodan</b> yeniden okur ve cache'i tazeleyip güncel nesneyi döner.
+    ///
+    /// <para>
+    /// <see cref="GetOrCreateAsync"/> cache-first çalışır ve bu, tur kilidi ile birleşince
+    /// bayat okuma üretir: kilidi bekleyen çağrı, beklemeye BAŞLAMADAN önce aldığı nesne
+    /// referansını tutmaya devam eder. Bu arada başka bir pod oturumu güncellerse Redis
+    /// dinleyicisi cache'e <b>yeni bir nesne</b> koyar (mevcut olanı değiştirmez) —
+    /// yani bekleyen çağrının elindeki referans sessizce eskir.
+    /// </para>
+    ///
+    /// <para>
+    /// Kimlik bağlama gibi "oku-karar ver-yaz" adımları bu yüzden kilidi aldıktan SONRA
+    /// tazelenmiş bir nesneyle çalışmalıdır; aksi hâlde iki pod aynı sahipsiz oturumu
+    /// birbirinden habersiz bağlayabilir.
+    /// </para>
+    /// </summary>
+    Task<AgentSession> ReloadAsync(string sessionId, CancellationToken ct = default);
     Task<AgentSession?> GetAsync(string sessionId, CancellationToken ct = default);
     Task UpdateAsync(AgentSession session, CancellationToken ct = default);
     Task<IReadOnlyList<AgentSession>> GetAllAsync(CancellationToken ct = default);

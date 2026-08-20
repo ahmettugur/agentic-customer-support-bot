@@ -496,6 +496,34 @@ public sealed class PostgresSessionManager : ISessionManager
     // Hydration
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// <summary>Oturumu DB'den yeniden okur — gerekçe için bkz. <see cref="ISessionManager.ReloadAsync"/>.</summary>
+    public async Task<AgentSession> ReloadAsync(string sessionId, CancellationToken ct = default)
+    {
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+
+        var row = await ctx.Sessions.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.SessionId == sessionId, ct);
+
+        // Kayıt yoksa (henüz yazılmamış yeni oturum) elimizdeki cache nesnesi geçerlidir.
+        if (row is null)
+            return await GetOrCreateAsync(sessionId, ct).ConfigureAwait(false);
+
+        var state = string.IsNullOrWhiteSpace(row.StateJson) || row.StateJson == "{}"
+            ? new SessionState()
+            : JsonSerializer.Deserialize<SessionState>(row.StateJson) ?? new SessionState();
+
+        var fresh = new AgentSession
+        {
+            SessionId = row.SessionId,
+            CreatedAt = row.CreatedAt,
+            LastActivity = row.LastActivity,
+            State = state
+        };
+
+        _sessions[sessionId] = fresh;
+        return fresh;
+    }
+
     private async Task EnsureSessionHydratedAsync(string sessionId, CancellationToken ct)
     {
         if (_hydratedSessions.ContainsKey(sessionId)) return;

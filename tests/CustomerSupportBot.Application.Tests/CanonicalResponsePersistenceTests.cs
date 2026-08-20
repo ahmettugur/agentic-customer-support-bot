@@ -73,6 +73,9 @@ public class CanonicalResponsePersistenceTests
 
         var sessions = Substitute.For<ISessionManager>();
         sessions.GetOrCreateAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(session);
+        // Tur kilidi altında oturum yeniden yüklenir (bkz. ChatPortService) — sahte de
+        // aynı nesneyi döndürmeli, aksi hâlde null dönüp turu kırar.
+        sessions.ReloadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(session);
         sessions.GetHistoryAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new List<ConversationMessage>());
 

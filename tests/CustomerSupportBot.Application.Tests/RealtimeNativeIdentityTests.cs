@@ -70,6 +70,7 @@ public class RealtimeNativeIdentityTests
             guard,
             Substitute.For<IChatBridge>(),
             new CustomerIdentityHintBuilder(customers),
+            new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 })),
             NullLogger<RealtimeNativeService>.Instance);
 
         await svc.RunAsync(ClosedChannel(), "voice-1", authenticatedCustomerId, CancellationToken.None);
@@ -134,6 +135,7 @@ public class RealtimeNativeIdentityTests
             Substitute.For<IInputGuard>(),
             Substitute.For<IChatBridge>(),
             new CustomerIdentityHintBuilder(Substitute.For<ICustomerRepository>()),
+            new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 })),
             NullLogger<RealtimeNativeService>.Instance);
 
         await svc.RunAsync(ClosedChannel(), "voice-1", "9999", CancellationToken.None);
@@ -145,5 +147,55 @@ public class RealtimeNativeIdentityTests
         // Ve oturumun sahibi değişmemeli.
         var reloaded = await sessions.GetOrCreateAsync("voice-1", CancellationToken.None);
         reloaded.State.AuthenticatedCustomerId.Should().Be("1027");
+    }
+
+    /// <summary>
+    /// Sesli kanal, oturumu <b>kalıcı depodan tazeleyerek</b> bağlamalı — yazılı sohbetle
+    /// aynı atomik mekanizma.
+    ///
+    /// <para>
+    /// <c>GetOrCreateAsync</c> cache-first çalışır; başka bir pod oturumu bağladıysa uzak
+    /// güncelleme cache'e YENİ bir nesne koyar ve elde tutulan referans eskir. Realtime
+    /// tarafı bir süre bu korumadan yoksundu: yazılı sohbet düzeltilirken sesli kanallar
+    /// atlanmıştı, yani aynı savunmanın ikinci kopyası eksik kalmıştı.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task VoiceBind_ReadsAuthoritativeSessionState_NotAStaleCachedObject()
+    {
+        var sessions = Substitute.For<ISessionManager>();
+
+        // Elde tutulan (bayat) nesne: henüz kimseye bağlı değil.
+        var stale = new AgentSession { SessionId = "voice-1" };
+        // Kalıcı depodaki gerçek durum: oturum başka bir müşteriye ait.
+        var authoritative = new AgentSession
+        {
+            SessionId = "voice-1",
+            State = new SessionState { AuthenticatedCustomerId = "1027" }
+        };
+
+        sessions.GetOrCreateAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(stale);
+        sessions.ReloadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(authoritative);
+
+        var client = ConnectedTransport();
+        var svc = new RealtimeNativeService(
+            client,
+            sessions,
+            TestFactory.CreateToolsService(
+                Substitute.For<IProductCatalogRepository>(),
+                Substitute.For<IOrderRepository>(),
+                Substitute.For<IComplaintRepository>()),
+            Substitute.For<IInputGuard>(),
+            Substitute.For<IChatBridge>(),
+            new CustomerIdentityHintBuilder(Substitute.For<ICustomerRepository>()),
+            new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 })),
+            NullLogger<RealtimeNativeService>.Instance);
+
+        await svc.RunAsync(ClosedChannel(), "voice-1", "9999", CancellationToken.None);
+
+        // Bayat nesne kullanılsaydı oturum "bağsız" görünür ve 9999 bağlanırdı.
+        await client.DidNotReceive().ConfigureNativeSessionAsync(
+            Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        authoritative.State.AuthenticatedCustomerId.Should().Be("1027");
     }
 }

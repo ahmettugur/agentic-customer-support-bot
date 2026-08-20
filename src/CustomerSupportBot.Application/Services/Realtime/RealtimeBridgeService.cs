@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Services.Chat;
@@ -24,6 +25,7 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
     private readonly IApprovalContextAccessor _approvalContext;
     private readonly IChatBridge _chatBridge;
     private readonly IInputGuard _inputGuard;
+    private readonly IAppDistributedLock _sessionLock;
     private readonly ILogger<RealtimeBridgeService> _logger;
 
     // Half-duplex gating: asistan konuşurken browser audio iletilmez.
@@ -60,6 +62,7 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
         IApprovalContextAccessor approvalContext,
         IChatBridge chatBridge,
         IInputGuard inputGuard,
+        IAppDistributedLock sessionLock,
         ILogger<RealtimeBridgeService> logger)
     {
         _client = client;
@@ -69,6 +72,7 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
         _approvalContext = approvalContext;
         _chatBridge = chatBridge;
         _inputGuard = inputGuard;
+        _sessionLock = sessionLock;
         _logger = logger;
     }
 
@@ -87,12 +91,14 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
             return;
         }
 
-        var session = await _sessionManager.GetOrCreateAsync(sessionId, ct);
-
+        // Kimliği ATOMİK bağla — yazılı sohbetle aynı mekanizma ve aynı kilit anahtarı.
         // Köprü modunda cevabı ajan pipeline'ı üretir ve HITL onay bağlamı buradaki
         // AuthenticatedCustomerId'yi taşır (bkz. aşağıda _approvalContext.SetScope) —
         // kimlik bağlanmazsa yan etkili tool'lar kimliksiz koşar.
-        if (!await SessionIdentityBinder.TryBindAsync(session, authenticatedCustomerId, _sessionManager, ct))
+        var session = await SessionIdentityBinder.BindAtomicallyAsync(
+            sessionId, authenticatedCustomerId, _sessionManager, _sessionLock, ct);
+
+        if (session is null)
         {
             _logger.LogWarning(
                 "Realtime köprü: oturum başka bir müşteriye ait, bağlantı reddedildi session={Sid}", sessionId);

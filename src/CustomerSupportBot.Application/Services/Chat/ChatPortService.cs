@@ -67,15 +67,17 @@ public sealed class ChatPortService : IChatPort
     /// </para>
     ///
     /// <para>
-    /// Anahtar <c>session:{id}</c> DEĞİL <c>session-turn:{id}</c>: ilki tur İÇİNDE
-    /// <c>MutateStateAsync</c>/<c>AddExchangeAsync</c> tarafından alınıyor ve Redis kilidi
-    /// yeniden girişli olmadığı için aynı anahtarı dışarıda tutmak kendi kendine kilitlenme
-    /// üretirdi.
+    /// Anahtar <see cref="SessionIdentityBinder.TurnLockKey"/>'den gelir — realtime kanalları
+    /// da kimlik bağlarken AYNI anahtarı kullanır, böylece yazılı tur ile sesli bağlantı
+    /// birbirini dışlar. (<c>session:{id}</c> kullanılamaz: onu tur İÇİNDE
+    /// <c>MutateStateAsync</c>/<c>AddExchangeAsync</c> alıyor ve Redis kilidi yeniden girişli
+    /// olmadığı için kendi kendine kilitlenme üretirdi.)
     /// </para>
     /// </summary>
     private async Task<IAsyncDisposable> AcquireTurnLockAsync(string sessionId, CancellationToken ct)
     {
-        var handle = await _turnLock.TryAcquireAsync($"session-turn:{sessionId}", TurnLockWait, ct);
+        var handle = await _turnLock.TryAcquireAsync(
+            SessionIdentityBinder.TurnLockKey(sessionId), TurnLockWait, ct);
         if (handle is not null) return handle;
 
         _logger.LogWarning(
@@ -98,6 +100,13 @@ public sealed class ChatPortService : IChatPort
         // bağlamayı deneyebilir — sahiplik yarışı. Kilit ayrıca "oku → yaz" turunun
         // tamamını kapsamalı, o yüzden geçmiş okunmadan önce de alınmış olur.
         await using var turnLock = await AcquireTurnLockAsync(sessionId, ct);
+
+        // Kilit altında TAZELE. Yukarıdaki nesne kilidi beklemeye başlamadan önce alındı;
+        // bu arada başka bir pod oturumu güncellediyse Redis dinleyicisi cache'e YENİ bir
+        // nesne koyar (mevcut olanı değiştirmez), yani elimizdeki referans sessizce eskir.
+        // Bind bir "oku-karar ver-yaz" adımı olduğu için bayat okuma iki pod'un aynı sahipsiz
+        // oturumu birbirinden habersiz bağlamasına yol açabilirdi.
+        session = await _sessions.ReloadAsync(sessionId, ct);
 
         await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
 
@@ -152,6 +161,9 @@ public sealed class ChatPortService : IChatPort
         // altındadır: orada bot turu yok ama geçmişe yazma var, dolayısıyla sıraya girmesi
         // doğrudur.
         await using var turnLock = await AcquireTurnLockAsync(sessionId, ct);
+
+        // Kilit altında tazele — gerekçe için bkz. HandleAsync.
+        session = await _sessions.ReloadAsync(sessionId, ct);
 
         await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
 

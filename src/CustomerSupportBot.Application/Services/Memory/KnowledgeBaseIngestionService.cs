@@ -53,6 +53,18 @@ public sealed class KnowledgeBaseIngestionService : IKnowledgeBaseIngestor
         {
             await _memory.EnsureCollectionsAsync(ct);
         }
+        catch (InvalidOperationException)
+        {
+            // Yapılandırma kararı YUTULMAZ — fırlatılır. Aşağıdaki genel catch, vektör
+            // deposuna ULAŞILAMAMASINI tolere etmek içindir (o geçici bir altyapı sorunudur
+            // ve servisin ayakta kalması doğrudur). Boyut uyuşmazlığı ise geçici değil:
+            // yanlış boyutlu bir koleksiyonla devam etmek, tüm memory işlemlerini bozar ve
+            // "veri kaybı bilinçli bir karar olmalı" güvencesini kâğıt üzerinde bırakır.
+            //
+            // Aynı yutma bir katman aşağıda (QdrantVectorMemoryAdapter) da vardı ve orada
+            // düzeltilmişti; burada tekrarlanıyordu.
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "VectorStore'a bağlanılamadı; KnowledgeBase ingest atlandı (servis çalışırken).");

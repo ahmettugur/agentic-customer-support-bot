@@ -9,6 +9,7 @@ using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Chat;
+using CustomerSupportBot.Domain.Exceptions;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Tests.Shared;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -69,6 +70,9 @@ public class SessionTurnSerializationTests
         var session = new AgentSession { SessionId = "s1" };
         var sessions = Substitute.For<ISessionManager>();
         sessions.GetOrCreateAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(session);
+        // Tur kilidi altında oturum yeniden yüklenir (bkz. ChatPortService) — sahte de
+        // aynı nesneyi döndürmeli, aksi hâlde null dönüp turu kırar.
+        sessions.ReloadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(session);
         sessions.GetHistoryAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ => new List<ConversationMessage>());
 
@@ -96,5 +100,51 @@ public class SessionTurnSerializationTests
 
         team.MaxConcurrent.Should().Be(1,
             "aynı oturumun turları sıraya girmeli; örtüşürlerse ikisi de aynı eski geçmişi okur");
+    }
+
+    /// <summary>
+    /// Tur kilidi alındıktan SONRA oturum kalıcı depodan tazelenmeli.
+    ///
+    /// <para>
+    /// Kilidi bekleyen çağrı, beklemeye başlamadan önce aldığı nesne referansını tutar.
+    /// Bu arada başka bir pod oturumu güncellerse Redis dinleyicisi cache'e <b>yeni bir
+    /// nesne</b> koyar (mevcut olanı değiştirmez) — yani bekleyen çağrının elindeki referans
+    /// sessizce eskir. Kimlik bağlama bir "oku-karar ver-yaz" adımı olduğu için bayat okuma,
+    /// iki pod'un aynı sahipsiz oturumu birbirinden habersiz bağlamasına yol açabilirdi.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Turn_ReloadsSessionAfterAcquiringTheLock()
+    {
+        var stale = new AgentSession { SessionId = "s1" };
+        var fresh = new AgentSession
+        {
+            SessionId = "s1",
+            State = new SessionState { AuthenticatedCustomerId = "1027" }
+        };
+
+        var sessions = Substitute.For<ISessionManager>();
+        sessions.GetOrCreateAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>()).Returns(stale);
+        sessions.ReloadAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(fresh);
+        sessions.GetHistoryAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ => new List<ConversationMessage>());
+
+        var team = new OverlapDetectingTeam();
+        var svc = new ChatPortService(
+            team, new NoopReasoning(), sessions,
+            Substitute.For<IChatModeRegistry>(), Substitute.For<IChatBridge>(),
+            new SessionStateService(sessions, NullLogger<SessionStateService>.Instance),
+            Substitute.For<IApprovalContextAccessor>(),
+            new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 30 })),
+            NullLogger<ChatPortService>.Instance);
+
+        // Farklı bir müşteri kimliğiyle gelen istek: TAZELENMİŞ oturum 1027'ye bağlı olduğu
+        // için reddedilmeli. Bayat (bağsız) nesne kullanılsaydı bind başarılı olurdu.
+        var act = () => svc.HandleAsync(
+            new ChatRequest("merhaba", "s1") { CustomerId = "9999" },
+            TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<UnauthorizedSessionAccessException>(
+            "bind kararı kilit altındaki güncel duruma göre verilmeli");
     }
 }

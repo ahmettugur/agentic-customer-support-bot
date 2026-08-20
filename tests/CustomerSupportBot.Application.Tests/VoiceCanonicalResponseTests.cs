@@ -15,6 +15,9 @@ using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Realtime;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Adapters.Redis;
+using CustomerSupportBot.Tests.Shared;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Application.Tests;
@@ -91,6 +94,7 @@ public class VoiceCanonicalResponseTests
             approvalContext,
             Substitute.For<IChatBridge>(),
             guard,
+            new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 })),
             NullLogger<RealtimeBridgeService>.Instance);
 
         await svc.HandleUserTranscriptAsync(
