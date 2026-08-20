@@ -41,6 +41,9 @@ public class A2APartnerSeedTests
             builder.UseSetting("A2A:Enabled", "true");
             builder.UseSetting("A2A:DevPartnerUsername", Username);
             builder.UseSetting("A2A:DevPartnerPassword", "Explicit#Pass1");
+            // Demo seed artık yalnızca Development'ta (veya açık izinle) çalışır; bu test
+            // bilinçli olarak seed davranışını ölçüyor, dolayısıyla izni açıkça verir.
+            builder.UseSetting("DemoData:Enabled", "true");
         }
     }
 

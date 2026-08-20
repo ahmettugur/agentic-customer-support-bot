@@ -37,6 +37,27 @@ if (a2aEnabled)
 
 var app = builder.Build();
 
+// Kimlik guard: depoya İŞLENMİŞ örnek imzalama anahtarı üretimde kabul edilemez.
+//
+// JwtAccessTokenProvider yalnızca "boş değil ve >= 32 karakter" kontrolü yapıyor; takip edilen
+// appsettings.json'daki yer tutucu bu koşulu SAĞLIYOR. Üretim override'ı unutulursa anahtar
+// herkesçe bilinir hâle gelir ve o anahtarla Admin/Agent/Customer token'ı üretilebilir —
+// yani tüm yetkilendirme zinciri geçersizdir. Uyarı değil, başlatma hatası: bu sessizce
+// devam edilebilecek bir durum değildir.
+if (!app.Environment.IsDevelopment())
+{
+    var signingKey = app.Services.GetRequiredService<IOptions<JwtOptions>>().Value.SigningKey ?? "";
+    string[] placeholderMarkers = ["DEV_ONLY", "REPLACE_IN_PRODUCTION", "CHANGE_ME", "PLACEHOLDER"];
+
+    if (placeholderMarkers.Any(m => signingKey.Contains(m, StringComparison.OrdinalIgnoreCase)))
+    {
+        throw new InvalidOperationException(
+            "Jwt:SigningKey hâlâ örnek/yer tutucu değerde. Bu anahtar depoda herkese açıktır; "
+          + "onunla üretimde token doğrulamak, yetkilendirmeyi tamamen devre dışı bırakmakla "
+          + "eşdeğerdir. Ortam değişkeni veya secret store ile gerçek bir anahtar verin.");
+    }
+}
+
 // HITL guard: production'da HITL devre dışıysa açık uyarı bas
 if (!app.Environment.IsDevelopment())
 {

@@ -31,9 +31,53 @@ public sealed class DemoDataSeeder : IHostedService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Demo verisinin seed edilmesine izin verilip verilmediği.
+    ///
+    /// <para>
+    /// Varsayılan: <b>yalnızca Development</b>. Burada eskiden hiçbir ortam kontrolü yoktu ve
+    /// boş bir üretim veritabanında bilinen varsayılan parolalarla admin, <b>onay yetkili
+    /// agent</b> ve müşteri hesapları oluşuyordu. A2A partner hesabı için aynı koruma daha önce
+    /// açık yapılandırma zorunluluğuyla getirilmişti; bu seed'ler o korumayı almamıştı.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>DemoData:Enabled</c> ile açıkça açılabilir — üretim benzeri bir ortamda demo verisi
+    /// isteyen kurulumlar için bilinçli bir kaçış. Ayar verilmemişse ortam kararı geçerlidir.
+    /// </para>
+    /// </summary>
+    private bool IsSeedingAllowed(out string reason)
+    {
+        var explicitFlag = _configuration.GetValue<bool?>("DemoData:Enabled");
+        if (explicitFlag is not null)
+        {
+            reason = explicitFlag.Value
+                ? "DemoData:Enabled=true (açık izin)"
+                : "DemoData:Enabled=false";
+            return explicitFlag.Value;
+        }
+
+        var env = _configuration["DOTNET_ENVIRONMENT"]
+               ?? _configuration["ASPNETCORE_ENVIRONMENT"]
+               ?? Environments.Production;
+
+        var isDevelopment = string.Equals(env, Environments.Development, StringComparison.OrdinalIgnoreCase);
+        reason = isDevelopment ? $"ortam={env}" : $"ortam={env} (Development değil)";
+        return isDevelopment;
+    }
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[Seeder] Demo veri seed başlıyor.");
+        if (!IsSeedingAllowed(out var reason))
+        {
+            _logger.LogInformation(
+                "[Seeder] Demo veri seed ATLANDI ({Reason}). Bilinen varsayılan parolalı hesaplar "
+              + "yalnızca geliştirme ortamında oluşturulur; gerekiyorsa DemoData:Enabled=true verin.",
+                reason);
+            return;
+        }
+
+        _logger.LogInformation("[Seeder] Demo veri seed başlıyor ({Reason}).", reason);
 
         // Auth — default admin kullanıcısı yoksa oluştur.
         try { await SeedDefaultAdminAsync(cancellationToken); }

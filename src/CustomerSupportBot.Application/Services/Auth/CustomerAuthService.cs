@@ -44,6 +44,28 @@ public sealed class CustomerAuthService : ICustomerAuthService
         if (!long.TryParse(customerId, out var customerIdLong) || !_customers.Exists(customerIdLong))
             return (null, "Geçerli bir müşteri kimlik numarası girin.");
 
+        // KİMLİK SAHİPLİĞİ. Müşterinin VAR OLMASI, kaydolanın O MÜŞTERİ OLDUĞU anlamına gelmez.
+        // Bu kontrol olmadan uç anonim olduğu için herkes başkasının müşteri numarasıyla hesap
+        // açıp o müşteri adına geçerli bir JWT alabiliyordu — ve sistemin geri kalanındaki tüm
+        // sahiplik kontrolleri (EntityVerifier, oturum sahipliği, tool sahiplik kuralları) o
+        // token'ı doğru müşteri sanıp geçiriyordu.
+        //
+        // SINIR: bu bir e-posta DOĞRULAMASI değil, eşleşmesidir. Müşterinin kayıtlı e-postasını
+        // bilen biri, gerçek sahip henüz kaydolmadıysa hesabı açabilir. Ancak hesabı O e-posta
+        // ile açmak zorundadır; kendi adresine bağlayamaz ve gerçek sahip aynı adresle giriş
+        // denediğinde durumu fark eder. Tam çözüm e-posta/OTP doğrulamasıdır ve bu kontrol
+        // onun doğal ön adımıdır.
+        if (!await _customers.IsEmailOwnedByCustomerAsync(customerIdLong, email, ct))
+        {
+            _logger.LogWarning(
+                "[Auth] Müşteri kaydı reddedildi — e-posta müşteri kaydıyla eşleşmiyor. "
+              + "email={Email} customerId={CustomerId}", email, customerId);
+
+            // Hata mesajı hangi alanın yanlış olduğunu SÖYLEMEZ: ayrım verilseydi, geçerli
+            // müşteri numaraları ile kayıtlı e-postalar deneme yanılmayla eşleştirilebilirdi.
+            return (null, "E-posta adresi ile müşteri kimlik numarası eşleşmiyor.");
+        }
+
         var existing = await _users.FindActiveByUsernameAsync(email, ct);
         if (existing is not null)
             return (null, "Bu e-posta adresiyle zaten bir hesap var.");

@@ -17,6 +17,21 @@ public sealed class CustomerRepository : ICustomerRepository
         return ctx.Customers.Any(c => c.Id == customerId);
     }
 
+    public async Task<bool> IsEmailOwnedByCustomerAsync(
+        long customerId, string email, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(email)) return false;
+
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        var stored = await ctx.Customers
+            .Where(c => c.Id == customerId)
+            .Select(c => c.Email)
+            .FirstOrDefaultAsync(ct);
+
+        return !string.IsNullOrWhiteSpace(stored)
+            && string.Equals(stored.Trim(), email.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
     public async Task<string?> GetFullNameAsync(long customerId, CancellationToken ct = default)
     {
         await using var ctx = await _dbFactory.CreateDbContextAsync(ct);

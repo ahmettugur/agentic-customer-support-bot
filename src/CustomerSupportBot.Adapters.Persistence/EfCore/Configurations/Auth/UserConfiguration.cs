@@ -60,6 +60,18 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<UserEntity>
             .HasDatabaseName("ux_users_username")
             .IsUnique();
 
+        // Bir müşteriye YALNIZCA BİR hesap. Kayıt akışı e-posta eşleşmesi istiyor ama tek
+        // başına yetmez: e-postayı bilen biri, gerçek sahip kaydolmadan önce hesabı açabilir.
+        // Bu kısıt ikinci bir hesabın sessizce eklenmesini engeller — çakışma DB seviyesinde
+        // reddedilir ve durum görünür olur.
+        //
+        // Filtreli index: linked_customer_id çoğu kullanıcıda (admin/agent/partner) NULL'dur
+        // ve Postgres'te NULL'lar unique kısıtı ihlal etmez; filtre bunu açık hâle getirir.
+        builder.HasIndex(u => u.LinkedCustomerId)
+            .HasDatabaseName("ux_users_linked_customer_id")
+            .IsUnique()
+            .HasFilter("linked_customer_id IS NOT NULL");
+
         // Default admin runtime'da PersistenceHydrator tarafından seed edilir
         // (BCrypt hash'i her ortamda runtime'da üretilir).
     }
