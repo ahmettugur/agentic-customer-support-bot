@@ -29,35 +29,6 @@ public sealed class ProductCatalogRepository : IProductCatalogRepository
         return product is null ? null : new ProductInfo(product.Price, product.Stock, product.Name, product.Category.Name);
     }
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// Atomiklik tek bir transaction ile sağlanır: her satır koşullu bir UPDATE
-    /// (<c>Stock &gt;= quantity</c>) ile düşülür; herhangi biri 0 satır etkilerse
-    /// transaction commit edilmez ve o ana kadar düşülenler geri alınır.
-    ///
-    /// <para>
-    /// Satırlar ürün adına göre sıralı işlenir. Bu kozmetik değil: iki eşzamanlı sipariş
-    /// aynı iki ürünü ters sırada kilitlerse Postgres deadlock verir. Sabit bir sıra
-    /// kilitleme düzenini deterministik yapar.
-    /// </para>
-    ///
-    /// <para>
-    /// Transaction <see cref="ExecutionStrategyExtensions"/> üzerinden çalıştırılır — bkz.
-    /// <see cref="ExecuteInTransaction{T}"/>.
-    /// </para>
-    /// </remarks>
-    public StockDeductionResult TryDeductStock(IReadOnlyList<OrderLine> lines)
-    {
-        if (lines.Count == 0) return StockDeductionResult.Ok();
-
-        return ExecuteInTransaction(ctx =>
-        {
-            var result = StockDeduction.TryDeduct(ctx, lines, _logger);
-            // Yetersizse commit edilmez → using tx dispose edilirken rollback olur.
-            return (Commit: result.Success, Result: result);
-        });
-    }
-
     /// <summary>
     /// Bir işi kendi transaction'ı içinde, <b>retry stratejisiyle uyumlu</b> biçimde çalıştırır.
     ///

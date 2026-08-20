@@ -163,4 +163,82 @@ public class PostgresSessionManagerHydrationTests
         seenByReader[0].Text.Should().Be("merhaba");
         seenByReader[1].Text.Should().Be("size nasıl yardımcı olabilirim");
     }
+
+    // ─── Eşzamanlı ilk hydrate ─────────────────────────────────────────────────
+    //
+    // Hydrate "yapılıyor mu" bilgisi bir BAYRAKTI ve bayrak, DB okuması başlamadan ÖNCE
+    // konuyordu. İkinci eşzamanlı çağrı bayrağı görüp hemen dönüyor, yani hydrate hâlâ
+    // sürerken boş bir session'la devam ediyordu. Bunun bedeli kalıcıdır: o boş State
+    // üzerinden yapılan bir yazma, DB'deki gerçek state'i — müşteri sahipliği dahil — {} ile
+    // ezer. Aynı oturuma iki isteğin hemen ardışık gelmesi bunun için yeterlidir.
+
+    /// <summary>
+    /// İki eşzamanlı çağrı: birincisi hydrate'i başlatıp DB'de bekler, ikincisi bu sırada
+    /// gelir. İkisi de DB'deki müşteri sahipliğini görmelidir.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentFirstAccess_BothCallersSeeTheHydratedState()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var sessionId = $"hydrate-race-{Guid.NewGuid():N}";
+        await InsertSessionRowAsync(sessionId, "1027");
+
+        var gated = new GatedDbContextFactory(_fixture.DbFactory);
+        var mgr = NewManager(gated);
+
+        // Birinci çağıran hydrate'e girer ve kapıda bekler.
+        var first = Task.Run(() => mgr.GetAsync(sessionId, ct), ct);
+        await gated.FirstCallEntered.WaitAsync(TimeSpan.FromSeconds(10), ct);
+
+        // İkinci çağıran tam bu anda gelir — hydrate HENÜZ BİTMEDİ.
+        var second = Task.Run(() => mgr.GetAsync(sessionId, ct), ct);
+
+        gated.OpenGate();
+
+        var firstResult = await first.WaitAsync(TimeSpan.FromSeconds(30), ct);
+        var secondResult = await second.WaitAsync(TimeSpan.FromSeconds(30), ct);
+
+        firstResult.Should().NotBeNull();
+        firstResult!.State.CustomerId.Should().Be("1027");
+
+        secondResult.Should().NotBeNull(
+            "hydrate sürerken gelen çağrı, işin bitmesini beklemeli — boş bir session'la dönmemeli");
+        secondResult!.State.CustomerId.Should().Be("1027",
+            "boş State ile devam etmek, sonraki bir yazmada DB'deki müşteri sahipliğini silerdi");
+    }
+
+    /// <summary>
+    /// Yarışın asıl zararı: hydrate beklenmediğinde boş State üzerinden yapılan yazma kalıcı
+    /// sahipliği siler. Burada ikinci çağıranın gördüğü session DB'ye geri yazılıyor ve
+    /// sahipliğin hayatta kalıp kalmadığına bakılıyor.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentFirstAccess_DoesNotWipeOwnershipOnWriteBack()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var sessionId = $"hydrate-wipe-{Guid.NewGuid():N}";
+        await InsertSessionRowAsync(sessionId, "1008");
+
+        var gated = new GatedDbContextFactory(_fixture.DbFactory);
+        var mgr = NewManager(gated);
+
+        var first = Task.Run(() => mgr.GetOrCreateAsync(sessionId, ct), ct);
+        await gated.FirstCallEntered.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        var second = Task.Run(() => mgr.GetOrCreateAsync(sessionId, ct), ct);
+        gated.OpenGate();
+
+        await first.WaitAsync(TimeSpan.FromSeconds(30), ct);
+        var secondSession = await second.WaitAsync(TimeSpan.FromSeconds(30), ct);
+
+        // İkinci çağıranın elindeki session normal akışta olduğu gibi geri yazılır.
+        await mgr.UpdateAsync(secondSession, ct);
+
+        // Taze bir manager — yalnızca DB'de kalanı görür.
+        var verifier = NewManager(_fixture.DbFactory);
+        var persisted = await verifier.GetAsync(sessionId, ct);
+
+        persisted.Should().NotBeNull();
+        persisted!.State.CustomerId.Should().Be("1008",
+            "müşteri sahipliği bir yarış yüzünden kalıcı olarak silinmemeli");
+    }
 }

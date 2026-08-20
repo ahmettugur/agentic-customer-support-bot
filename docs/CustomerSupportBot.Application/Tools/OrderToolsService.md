@@ -62,7 +62,7 @@ Sıra kasıtlıdır: ucuz ve yan etkisiz kontroller önce, stok en sonda. Böyle
 
 ### Neden 9. adım atomik olmak zorunda?
 
-Satırlar tek tek düşülseydi, üçüncü satır yetmediğinde ilk ikisinin stoğu düşmüş ama sipariş oluşmamış olurdu — stok sessizce kaybolurdu. `IProductCatalogRepository.TryDeductStock(lines)` tek transaction'da çalışır: bir satır bile yetmezse hiçbiri düşülmez.
+Satırlar tek tek düşülseydi, üçüncü satır yetmediğinde ilk ikisinin stoğu düşmüş ama sipariş oluşmamış olurdu — stok sessizce kaybolurdu. `IOrderRepository.PlaceOrder(order)` stok düşümünü **ve** siparişin yazılmasını tek transaction'da yapar: bir satır bile yetmezse hiçbiri düşülmez, sipariş yazılamazsa düşülen stok geri alınır.
 
 Kullanıcıya dönen mesaj bunu açıkça söyler: *"Siparişin tamamı iptal edildi — hiçbir ürün rezerve edilmedi."* `OrderAgent` prompt'unda da "diğer ürünler alındı" demesi yasaklanmıştır.
 

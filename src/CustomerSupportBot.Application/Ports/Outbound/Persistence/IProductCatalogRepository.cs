@@ -26,22 +26,6 @@ public interface IProductCatalogRepository
     /// tekrarlanmamalıdır — tekrar, aynı satırın iki kez düşülmesi demektir.
     /// </para>
     /// </summary>
-    /// <summary>
-    /// Stoğu kendi başına, kendi transaction'ında düşer.
-    ///
-    /// <para>
-    /// <b>Sipariş akışında KULLANILMAMALIDIR</b> — orada <see cref="IOrderRepository.PlaceOrder"/>
-    /// vardır. Sipariş verirken bu metodu çağırmak, düşümü siparişin yazılmasından ayrı bir
-    /// transaction'a koyar; ikisi arasında oluşan bir hata stoğu düşülmüş ama karşılığında hiç
-    /// sipariş oluşmamış hâlde bırakır ve bu hiçbir yerde görünmez. Sipariş akışı tam olarak
-    /// bu sebeple <c>PlaceOrder</c>'a taşındı.
-    /// </para>
-    ///
-    /// <para>
-    /// Şu an üretimde çağıranı yoktur; yalnızca kendi testleri kullanır.
-    /// </para>
-    /// </summary>
-    StockDeductionResult TryDeductStock(IReadOnlyList<OrderLine> lines);
 
     /// <summary>Tüm ürün listesi.</summary>
     IReadOnlyList<ProductInfo> GetAll();

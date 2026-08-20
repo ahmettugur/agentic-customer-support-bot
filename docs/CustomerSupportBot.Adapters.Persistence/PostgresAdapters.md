@@ -173,7 +173,8 @@ EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yarat
 
 | Metod | Açıklama |
 | ------- | --------- |
-| `Create(order)` | Yeni sipariş + **tüm** satırların INSERT'i; `Code` DB tarafından üretilir |
+| `PlaceOrder(order)` | **Stok düşümü + sipariş yazımı, tek transaction'da** — sipariş vermenin tek doğru yolu |
+| `Create(order)` | Yeni sipariş + **tüm** satırların INSERT'i; `Code` DB tarafından üretilir (stoğa dokunmaz) |
 | `Get(orderId)` | Tekil sipariş (Include: Details + Product) |
 | `GetByCustomer(customerId)` | Müşteriye ait tüm siparişler (OrderDate DESC) |
 | `GetLast(customerId)` | Son sipariş |
@@ -187,6 +188,14 @@ EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yarat
 - `MapToModel` tüm satırları okur ve `OrderInfo.Lines`'a doldurur (ürün adına göre sıralı — okuma deterministik olsun diye).
 - `Create` satırların hepsini yazar. Başlık ve satırlar iki ayrı `SaveChanges` gerektirir (sipariş kodu DB tarafından üretilir ve satırların FK'sı odur), bu yüzden **ikisi tek transaction'a alınır** — aksi hâlde araya düşen bir hata satırsız bir "hayalet sipariş" bırakırdı. Transaction, aşağıdaki retry kuralına uyar.
 - `Create`, satırsız bir `OrderInfo` gelirse `ArgumentException` fırlatır.
+
+### Sipariş vermek neden `PlaceOrder`?
+
+Sipariş vermek iki yazma içerir: ürün stoğunun düşülmesi ve siparişin yazılması. Bunlar bir süre ayrı transaction'lardaydı (`IProductCatalogRepository.TryDeductStock` + `Create`) ve aradaki herhangi bir hata — DB kesintisi, retry tükenmesi, pod'un ölmesi — stoğu düşülmüş ama karşılığında hiçbir sipariş oluşmamış hâlde bırakıyordu. Arıza sessizdi: kullanıcı hata alıp tekrar dener, stok bir daha geri gelmez; yeterince tekrarlandığında ürün, deposunda dururken "stokta yok" hâline gelir.
+
+`PlaceOrder` ikisini tek transaction'da yapar. Dönüş tipi `OrderPlacementResult`, "stok düşüldü ama sipariş yok" ara durumunu **temsil edemeyecek** şekilde tasarlanmıştır: `OrderId` doluysa ikisi de olmuştur, `Stock` başarısızsa hiçbiri.
+
+`TryDeductStock` bu yüzden **kaldırıldı** — tek başına stok düşmek, sipariş akışında her zaman yanlıştı.
 
 ---
 
@@ -212,7 +221,6 @@ EF Core `IDbContextFactory` ile her çağrıda kısa ömürlü `DbContext` yarat
 | Metod | Açıklama |
 | ------- | --------- |
 | `FindProduct(name)` | İsme göre ürün arama (exact match) |
-| `TryDeductStock(lines)` | Bir siparişin **tüm** satırlarının stoğunu tek transaction'da düşer |
 | `GetAll()` | Tüm ürünler (kategori dahil, Name sıralı) |
 | `GetByCategory(category)` | Kategoriye göre ürünler — **[`CategoryProducts`](../CustomerSupportBot.Domain/Model/CategoryProducts.md)** döner |
 | `GetSelectableCategories()` | **Yalnızca en az bir ürünü olan** kategori isimleri |

@@ -142,48 +142,10 @@ public sealed class ProductCatalogRepositoryIntegrationTests
         _fx.ProductRepo.FindProduct("ZZZ-yok-boyle-urun").Should().BeNull();
     }
 
-    [Fact]
-    public void TryDeductStock_SufficientStock_DeductsAndReturnsTrue()
-    {
-        var before = _fx.ProductRepo.FindProduct("Scones")!.Stock;
-        var result = _fx.ProductRepo.TryDeductStock([new OrderLine("Scones", 1)]);
-        result.Success.Should().BeTrue();
-        var after = _fx.ProductRepo.FindProduct("Scones")!.Stock;
-        after.Should().Be(before - 1);
-    }
-
-    [Fact]
-    public void TryDeductStock_InsufficientStock_ReturnsFailureWithShortage()
-    {
-        var available = _fx.ProductRepo.FindProduct("Çikolata")!.Stock;
-
-        var result = _fx.ProductRepo.TryDeductStock([new OrderLine("Çikolata", 99_999)]);
-
-        result.Success.Should().BeFalse();
-        result.Shortages.Should().ContainSingle()
-            .Which.Should().BeEquivalentTo(new StockShortage("Çikolata", 99_999, available));
-    }
-
-    [Fact]
-    public void TryDeductStock_MultiLine_AllOrNothing()
-    {
-        // Bir satır yetmezse diğerlerinin stoğu da düşülmemeli — aksi hâlde sipariş
-        // oluşmadığı hâlde stok sessizce kaybolurdu.
-        var sconesBefore = _fx.ProductRepo.FindProduct("Scones")!.Stock;
-
-        var result = _fx.ProductRepo.TryDeductStock(
-            [new OrderLine("Scones", 1), new OrderLine("Çikolata", 99_999)]);
-
-        result.Success.Should().BeFalse();
-        result.Shortages.Should().ContainSingle().Which.Product.Should().Be("Çikolata");
-        _fx.ProductRepo.FindProduct("Scones")!.Stock.Should().Be(sconesBefore);
-    }
-
-    [Fact]
-    public void TryDeductStock_EmptyLines_Succeeds()
-    {
-        _fx.ProductRepo.TryDeductStock([]).Success.Should().BeTrue();
-    }
+    // NOT: TryDeductStock kaldırıldı. Stok düşümü artık yalnızca sipariş yazımıyla AYNI
+    // transaction'da, IOrderRepository.PlaceOrder üzerinden yapılır — tek başına düşüm,
+    // stoğu düşülmüş ama karşılığında siparişi olmayan bir duruma kapı açıyordu.
+    // Buradaki senaryoların karşılıkları: PostgresOrderPlacementAtomicityTests.
 
     [Fact]
     public void GetAll_ReturnsAllProducts()

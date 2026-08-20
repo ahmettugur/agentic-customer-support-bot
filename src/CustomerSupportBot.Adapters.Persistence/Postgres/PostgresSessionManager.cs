@@ -48,7 +48,13 @@ public sealed class PostgresSessionManager : ISessionManager
     private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, AgentSession> _sessions = new();
     private readonly ConcurrentDictionary<string, List<ConversationMessage>> _messageHistory = new();
-    private readonly ConcurrentDictionary<string, byte> _hydratedSessions = new();
+    /// <summary>
+    /// Session başına hydrate işi. Değer bir <b>bayrak değil, işin kendisidir</b>: eşzamanlı
+    /// çağıranlar aynı Task'ı bekler. Bayrak kullanıldığında ikinci çağıran "biri hydrate
+    /// ediyor" bilgisiyle hemen dönüyor ve hydrate BİTMEDEN boş bir session'la devam ediyordu
+    /// — bkz. <see cref="EnsureSessionHydratedAsync"/>.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, Lazy<Task>> _hydratedSessions = new();
     private readonly SemaphoreSlim _allHydrationGate = new(1, 1);
     private volatile bool _allListHydrated;
 
@@ -524,17 +530,38 @@ public sealed class PostgresSessionManager : ISessionManager
         return fresh;
     }
 
+    /// <summary>
+    /// Session'ın DB'den yüklenmesini garanti eder — <b>tamamlanana kadar bekleyerek</b>.
+    ///
+    /// <para>
+    /// Eskiden bir bayrak vardı ve bayrak hydrate BAŞLAMADAN önce konuyordu: ikinci eşzamanlı
+    /// çağrı <c>TryAdd</c>'den false alıp hemen dönüyor, yani DB okuması sürerken boş bir
+    /// session'la devam ediyordu. Bunun bedeli kalıcıdır — o boş <c>State</c> üzerinden yapılan
+    /// bir yazma, DB'deki gerçek state'i (müşteri sahipliği dahil) <c>{}</c> ile ezer. Aynı
+    /// oturuma iki isteğin hemen ardışık gelmesi bunun için yeterlidir.
+    /// </para>
+    ///
+    /// <para>
+    /// Değer artık işin kendisi olduğu için ikinci çağıran aynı Task'ı bekler; hydrate bir kez
+    /// çalışır ve herkes tamamlanmış state'i görür.
+    /// </para>
+    /// </summary>
     private async Task EnsureSessionHydratedAsync(string sessionId, CancellationToken ct)
     {
-        if (_hydratedSessions.ContainsKey(sessionId)) return;
-        if (!_hydratedSessions.TryAdd(sessionId, 0)) return;
+        var work = _hydratedSessions.GetOrAdd(
+            sessionId,
+            id => new Lazy<Task>(
+                () => HydrateSessionAsync(id),
+                LazyThreadSafetyMode.ExecutionAndPublication));
 
-        try { await HydrateSessionAsync(sessionId).ConfigureAwait(false); }
+        try { await work.Value.ConfigureAwait(false); }
         catch (Exception ex)
         {
-            // Flag'i geri al — aksi halde geçici bir DB hatası (timeout, deadlock) bu
+            // Girdiyi geri al — aksi halde geçici bir DB hatası (timeout, deadlock) bu
             // session'ı process ömrü boyunca "hydrate edildi ama boş" olarak kalıcı hale
             // getirir; bir sonraki istek DB'yi tekrar denemeden geçmişsiz devam eder.
+            // Not: başarısız Task cache'lendiği için girdinin KALDIRILMASI şart — Lazy
+            // aynı hatayı sonsuza kadar yeniden fırlatırdı.
             _hydratedSessions.TryRemove(sessionId, out _);
             _logger.LogError(ex, "[Session] Hydrate başarısız. Id={Id}", sessionId);
         }
