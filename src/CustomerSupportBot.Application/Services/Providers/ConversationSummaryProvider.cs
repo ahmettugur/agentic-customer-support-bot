@@ -4,6 +4,7 @@
 // özetten bu yana DÜŞEN (yeni sınırın dışında kalan) mesajlar mevcut özetle katlanır
 // (fold). Bkz. FoldAsync.
 
+using CustomerSupportBot.Application.Ports.Outbound;
 using System.Text;
 
 using CustomerSupportBot.Application.Ports.Outbound.AI;
@@ -38,15 +39,19 @@ public class ConversationSummaryProvider : IContextProvider
     public string Name => ProviderName;
     public int Order => 5;
 
+    private readonly IContextSanitizer _sanitizer;
+
     public ConversationSummaryProvider(
         IGeneralChatClient chatClient,
         ISessionManager sessionRepository,
         IAppDistributedLock distributedLock,
+        IContextSanitizer sanitizer,
         ILogger<ConversationSummaryProvider> logger)
     {
         _chatClient = chatClient;
         _sessionRepository = sessionRepository;
         _distributedLock = distributedLock;
+        _sanitizer = sanitizer;
         _logger = logger;
     }
 
@@ -150,6 +155,23 @@ public class ConversationSummaryProvider : IContextProvider
         return await _chatClient.CompleteAsync(prompt, ct);
     }
 
-    private static string FormatSummaryContext(string summary)
-        => $"[Konuşma Özeti]\n{summary}";
+    /// <summary>
+    /// Özeti <c>&lt;retrieved_data&gt;</c> çitiyle sarar — semantik bellek içerikleriyle AYNI
+    /// muamele.
+    ///
+    /// <para>
+    /// Özet, kullanıcının kendi yazdıklarından üretilir ve tüm bağlam gibi <b>System</b>
+    /// rolüyle prompt'a girer. Çitsiz hâlde bu, kullanıcı metnine system yetkisi vermek
+    /// demekti: konuşmasına talimat benzeri cümleler serpiştiren biri, bunların özete
+    /// taşınmasını sağlayıp dolaylı prompt injection deneyebilirdi. Ajan promptlarındaki
+    /// "retrieved veri kuralı" bu etiketi zaten tanır ve içeriği talimat saymaz.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>WrapRetrieved</c> ayrıca kapanış etiketini nötralize eder, yani özet metni çiti
+    /// kırıp dışarı çıkamaz.
+    /// </para>
+    /// </summary>
+    private string FormatSummaryContext(string summary)
+        => "[Konuşma Özeti]\n" + _sanitizer.WrapRetrieved(summary, "conversation_summary");
 }

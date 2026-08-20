@@ -206,4 +206,79 @@ public class ContextPipelineTests
 
         result.Parts.Single().Status.Should().Be(ContextPartStatus.Empty);
     }
+
+    // ═══ Bütçe altında öncelik ve trace doğruluğu ═══
+
+    /// <summary>
+    /// Bütçe baskısı altında feda edilen, turun tam da hakkında olduğu veri OLAMAZ.
+    ///
+    /// <para>
+    /// Yerleştirme eskiden yalnızca <c>Order</c>'a bakıyordu; kritik olan müşteri bağlamı
+    /// Order=10 ile en son geldiği için özet/profil/semantik bellek bütçeyi tüketirse
+    /// düşüyordu.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Budget_KeepsCriticalProvider_EvenWhenLowerOrderFillsIt()
+    {
+        var providers = new IContextProvider[]
+        {
+            new FakeProvider("iyilestirici", order: 1, text: new string('a', 90)),
+            new FakeProvider("kritik", order: 10, text: "MÜŞTERİ BAĞLAMI", critical: true)
+        };
+        var options = new ContextPipelineOptions { MaxTotalChars = 100 };
+
+        var result = await Build(providers, options)
+            .BuildContextAsync(Session(), "soru", TestContext.Current.CancellationToken);
+
+        result.Text.Should().Contain("MÜŞTERİ BAĞLAMI", "kritik bağlam bütçeden düşmemeli");
+        result.Parts.Single(p => p.ProviderName == "iyilestirici").Status
+            .Should().Be(ContextPartStatus.Dropped, "feda edilen, iyileştirici olan olmalı");
+    }
+
+    /// <summary>
+    /// Yerleştirme önceliği ÇIKTI sırasını değiştirmemeli — prompt'un bölüm düzeni sabit kalır.
+    /// </summary>
+    [Fact]
+    public async Task Budget_PriorityDoesNotReorderTheProducedText()
+    {
+        var providers = new IContextProvider[]
+        {
+            new FakeProvider("once", order: 1, text: "BİRİNCİ"),
+            new FakeProvider("sonra", order: 10, text: "SONUNCU", critical: true)
+        };
+
+        var result = await Build(providers)
+            .BuildContextAsync(Session(), "soru", TestContext.Current.CancellationToken);
+
+        result.Text.IndexOf("BİRİNCİ", StringComparison.Ordinal)
+            .Should().BeLessThan(result.Text.IndexOf("SONUNCU", StringComparison.Ordinal),
+                "kritik provider önce YERLEŞİR ama metinde yine Order sırasına göre görünür");
+    }
+
+    /// <summary>
+    /// Kritik bir provider düştüğünde trace GERÇEK durumu göstermeli.
+    ///
+    /// <para>
+    /// Düşen kritik provider modele bir uyarı metni bırakır; o metin dahil edildiği için
+    /// trace'e koşulsuz <c>Included</c> yazılıyor ve asıl <c>Failed</c> bilgisi siliniyordu.
+    /// Yanlış yanıtların sebebi çoğu zaman eksik bağlamdır — o izi kaybetmek teşhisi
+    /// imkânsız kılar.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task FailedCriticalProvider_IsRecordedAsFailed_NotIncluded()
+    {
+        var providers = new IContextProvider[]
+        {
+            new FakeProvider("kritik", order: 1, text: null, critical: true,
+                throws: new InvalidOperationException("DB yok"))
+        };
+
+        var result = await Build(providers)
+            .BuildContextAsync(Session(), "soru", TestContext.Current.CancellationToken);
+
+        result.Parts.Single().Status.Should().Be(ContextPartStatus.Failed);
+        result.Text.Should().Contain("okunamıyor", "model eksikliği bilmeli");
+    }
 }

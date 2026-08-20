@@ -503,4 +503,29 @@ public class PromptContractTests
         dir.Should().NotBeNull($"repo kökü bulunamadı ({repoRelativePath} aranıyordu)");
         return File.ReadAllText(Path.Combine(dir!.FullName, repoRelativePath));
     }
+
+    // ─── Halka: prompt'un vaat ettiği ile kodun uyguladığı ayrımı ────────────────
+
+    /// <summary>
+    /// Planning prompt'u, intent'in "nihai karar" olduğunu söyler — ama bunu <b>kod
+    /// zorlamaz</b>: tek görevli akışta yönlendirme <c>plan.SelectedAgent</c> değerine göre
+    /// yapılır ve reasoning intent'iyle tutarlılığı ayrıca doğrulanmaz.
+    ///
+    /// <para>
+    /// Bu testin koruduğu şey davranış değil, <b>dürüstlük</b>: prompt bir güvenlik garantisi
+    /// gibi okunuyorsa, o garantinin kod tarafında karşılığı olmadığı aynı yerde yazılı
+    /// olmalıdır. Aksi hâlde okuyan kişi (veya sonraki geliştirici) var olmayan bir sınıra
+    /// güvenir.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void PlanningPrompt_MarksIntentRuleAsContract_NotSecurityBoundary()
+    {
+        var prompt = Prompt("agents/planning-agent");
+
+        prompt.Should().Contain("güvenlik kapısı değildir",
+            "prompt, kod tarafından zorlanmayan bir kuralı garanti gibi sunmamalı");
+        prompt.Should().Contain("selectedAgent",
+            "gerçekte yönlendirmeyi belirleyen alan adıyla anılmalı");
+    }
 }

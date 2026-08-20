@@ -167,7 +167,17 @@ public static class ToolErrorCategories
 }
 ```
 
-**Neden?** Yan etkili tool'lar (OrderPlacement, ComplaintRegistration) eksik parametreyle çalıştırılırsa veri bozulması olur. Hem prompt seviyesinde (preToolCheck) hem tool seviyesinde (ValidationError factory) iki katmanlı doğrulama güvenlik sağlar.
+**Neden?** Yan etkili tool'lar (OrderPlacement, ComplaintRegistration) eksik parametreyle çalıştırılırsa veri bozulması olur. İki katman vardır ama **ağırlıkları eşit değildir**:
+
+| Katman | Ne | Güvenilirlik |
+|---|---|---|
+| `preToolCheck` | Modelin kendi ön kontrol raporu | **Kalite sinyali** — model kendi hakkında rapor verir; atlayabilir veya yanlış doldurabilir |
+| `ValidationError` / tool gövdesi | Deterministik kod | **Uygulanan sınır** — atlanamaz |
+
+`preToolCheck` bir *executable güvenlik kapısı değildir*: LLM çıktısıdır ve LLM çıktısı bir
+kontrol düzlemi olamaz. Gerçek sınırlar JWT kimliği, tool seviyesindeki sahiplik kontrolleri,
+HITL onayı ve idempotency'dir. Aynı ayrım `postToolReflection` ve reasoning sanity sonuçları
+için de geçerlidir — hepsi model kaynaklı kalite sinyalleridir, güvenlik kontrolü değil.
 
 ---
 

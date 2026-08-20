@@ -43,11 +43,21 @@ public class ContextPipeline : IContextPipeline
         var outcomes = await Task.WhenAll(_providers.Select(p => RunProviderAsync(p, session, currentQuery, ct)));
 
         var parts = new List<ContextPart>();
-        var texts = new List<string>();
+        var placed = new List<(int Order, string Text)>();
         var used = 0;
 
-        // Order sırasıyla yerleştir: bütçe dolduğunda dışarıda kalan, en düşük öncelikli olur.
-        foreach (var o in outcomes.OrderBy(o => o.Provider.Order))
+        // YERLEŞTİRME SIRASI: önce kritik provider'lar, sonra Order.
+        //
+        // Eskiden yalnızca Order'a bakılıyordu ve kritik olan CustomerContextProvider Order=10
+        // ile EN SON geliyordu — yani özet, profil ve semantik bellek bütçeyi tüketirse
+        // müşterinin gerçek sipariş/şikayet bağlamı düşüyordu. Bütçe baskısı altında ilk
+        // feda edilen şey, turun tam da hakkında olduğu veri olamaz.
+        //
+        // Çıktı sırası bundan AYRI tutulur (aşağıda Order'a göre yeniden sıralanır): prompt'un
+        // bölüm düzeni yerleştirme önceliğine göre değişmemeli.
+        foreach (var o in outcomes
+            .OrderByDescending(o => o.Provider.IsCritical)
+            .ThenBy(o => o.Provider.Order))
         {
             if (string.IsNullOrWhiteSpace(o.Text))
             {
@@ -66,12 +76,19 @@ public class ContextPipeline : IContextPipeline
                 continue;
             }
 
-            texts.Add(text);
+            placed.Add((o.Provider.Order, text));
             used += text.Length;
-            parts.Add(new ContextPart(o.Provider.Name, o.Provider.Order, ContextPartStatus.Included, text.Length));
+
+            // DURUM KORUNUR. Buraya eskiden koşulsuz Included yazılıyordu; kritik bir
+            // provider düştüğünde Degraded(...) bir UYARI METNİ ürettiği için o metin de
+            // "dahil edildi" sayılıyor ve asıl Failed/TimedOut bilgisi trace'ten siliniyordu.
+            // Yanlış yanıtların sebebi çoğu zaman eksik bağlamdır; o izi kaybetmek, teşhisi
+            // imkânsız kılar.
+            parts.Add(new ContextPart(o.Provider.Name, o.Provider.Order, o.Status, text.Length));
         }
 
-        return new ContextResult(string.Join("\n\n", texts), parts);
+        var text2 = string.Join("\n\n", placed.OrderBy(p => p.Order).Select(p => p.Text));
+        return new ContextResult(text2, parts);
     }
 
     private async Task<ProviderOutcome> RunProviderAsync(
