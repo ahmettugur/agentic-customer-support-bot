@@ -79,8 +79,14 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
 
         try
         {
-            // Lock altında güncel durumu kontrol et — başka pod çoktan devralmış olabilir.
-            if (_states.TryGetValue(sessionId, out var current)
+            // Lock altında güncel durumu DB'DEN OKU — başka pod çoktan devralmış olabilir.
+            // Yerel cache'e bakmak yetmez: devralma bilgisi bu pod'a Redis pub/sub ile ulaşır
+            // ve o mesaj kaybolabilir. Mesajı kaçıran pod cache'inde hiçbir sahip görmez,
+            // devralmayı kabul eder ve koşulsuz UPSERT ile mevcut admin'i EZER. Kilit bunu
+            // engellemez — kilit yalnızca eş zamanlı çağrıları sıraya sokar, sonradan gelen
+            // bayat bir kararı değil.
+            var current = ReadStateFromDb(sessionId);
+            if (current is not null
                 && current.Mode == ChatMode.Human
                 && !string.Equals(current.HumanAgent, agent, StringComparison.OrdinalIgnoreCase))
             {
@@ -130,28 +136,91 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
         }
     }
 
+    /// <summary>
+    /// Oturumu insan modundan çıkarır.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TakeOver"/> ile AYNI kilidi alır ve kararını DB'den okunan durumla verir.
+    /// Eskiden ikisini de yapmıyordu: kilitsiz olduğu için bir devralma ile yarışabiliyor,
+    /// bayat cache'ten karar verdiği için de Redis mesajını kaçırmış bir pod'da başka bir
+    /// admin'in aktif oturumunu serbest bırakabiliyordu.
+    /// </remarks>
     public bool Release(string sessionId)
     {
+        if (string.IsNullOrWhiteSpace(sessionId)) return false;
         EnsureHydrated();
-        if (!_states.TryGetValue(sessionId, out var state)) return false;
-        if (state.Mode == ChatMode.Bot) return false;
 
-        state.Mode = ChatMode.Bot;
-        state.HumanAgent = null;
-        state.EnteredAt = null;
-        state.LastActivityAt = DateTime.UtcNow;
-
-        try { UpsertAsync(state).GetAwaiter().GetResult(); }
-        catch (Exception ex)
+        var handle = _distributedLock.TryAcquireAsync($"takeover:{sessionId}").GetAwaiter().GetResult();
+        if (handle is null)
         {
-            _logger.LogError(ex, "[HITL] Release DB UPSERT başarısız. Session={Session}", sessionId);
-            throw;
+            _logger.LogWarning(
+                "[HITL] Release distributed lock alınamadı; reddedildi. Session={Session}", sessionId);
+            return false;
         }
 
-        _logger.LogInformation("[HITL] Release: session={Session}", sessionId);
-        FireChanged(state);
-        PublishRedis(state);
-        return true;
+        try
+        {
+            var state = ReadStateFromDb(sessionId);
+            if (state is null || state.Mode == ChatMode.Bot) return false;
+
+            state.Mode = ChatMode.Bot;
+            state.HumanAgent = null;
+            state.EnteredAt = null;
+            state.LastActivityAt = DateTime.UtcNow;
+            _states[sessionId] = state;
+
+            try { UpsertAsync(state).GetAwaiter().GetResult(); }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[HITL] Release DB UPSERT başarısız. Session={Session}", sessionId);
+                throw;
+            }
+
+            _logger.LogInformation("[HITL] Release: session={Session}", sessionId);
+            FireChanged(state);
+            PublishRedis(state);
+            return true;
+        }
+        finally
+        {
+            handle.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+    }
+
+    /// <summary>
+    /// Oturum durumunu <b>kayıtların gerçek kaynağından</b> okur ve yerel cache'i tazeler.
+    /// Satır yoksa <c>null</c> döner. Sahiplik kararları bunun üzerinden verilmelidir.
+    /// </summary>
+    private ChatSessionState? ReadStateFromDb(string sessionId)
+    {
+        try
+        {
+            using var ctx = _dbFactory.CreateDbContext();
+            var row = ctx.ChatSessionModes.AsNoTracking()
+                .FirstOrDefault(m => m.SessionId == sessionId);
+            if (row is null) return null;
+
+            var state = new ChatSessionState
+            {
+                SessionId = row.SessionId,
+                Mode = Enum.TryParse<ChatMode>(row.Mode, ignoreCase: true, out var m) ? m : ChatMode.Bot,
+                HumanAgent = row.HumanAgent,
+                EnteredAt = row.EnteredAt,
+                LastActivityAt = row.LastActivityAt,
+                MessageCount = row.MessageCount
+            };
+
+            _states[sessionId] = state;
+            return state;
+        }
+        catch (Exception ex)
+        {
+            // DB okunamıyorsa cache'e DÜŞMÜYORUZ: bayat cache üzerinden verilen bir sahiplik
+            // kararı tam da bu düzeltmenin kapattığı hatadır. Okuyamamak, "sahip yok"
+            // anlamına gelmez.
+            _logger.LogError(ex, "[HITL] Sahiplik durumu DB'den okunamadı. Session={Session}", sessionId);
+            throw;
+        }
     }
 
     public IReadOnlyList<ChatSessionState> GetActive()

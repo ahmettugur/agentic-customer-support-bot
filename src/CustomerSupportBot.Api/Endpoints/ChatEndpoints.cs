@@ -235,7 +235,15 @@ public static class ChatEndpoints
         SseWriter.WriteHeaders(response);
 
         using var sse = new SseForwarder(response, httpContext.RequestAborted);
-        await orchestrator.ExecuteAsync(sessionId, sse, httpContext.RequestAborted);
+
+        // Açılıştaki kontrol tek başına yetmez: henüz kimseye bağlı OLMAYAN bir oturuma abone
+        // olmak serbesttir, ama oturum sonradan başka bir müşteriye bağlanabilir. Bu delege
+        // her olay yazımından önce yeniden çalışır.
+        await orchestrator.ExecuteAsync(
+            sessionId,
+            sse,
+            _ => IsSessionAccessibleAsync(sessionId, httpContext, sessions),
+            httpContext.RequestAborted);
     }
 
     /// <summary>

@@ -24,16 +24,46 @@ public sealed class ChatEventOrchestrator(
     /// Executes the persistent event stream for a chat session.
     /// Returns when the client disconnects or cancellation is requested.
     /// </summary>
-    public async Task ExecuteAsync(string sessionId, SseForwarder sse, CancellationToken ct)
+    /// <param name="stillAuthorized">
+    /// Akışın HÂLÂ bu aboneye ait olup olmadığını söyleyen kontrol. Bağlantı açılışındaki tek
+    /// seferlik kontrol yetmez: henüz kimseye bağlı OLMAYAN bir oturuma abone olmak serbesttir
+    /// (ilk temasın oturumu çağırana bağlaması için), ama oturum daha sonra BAŞKA bir müşteriye
+    /// bağlanabilir. Açık akış yeniden yetkilendirilmezse o müşterinin bot yanıtları, temsilci
+    /// mesajları ve onay sonuçları ilk aboneye akmaya devam ederdi. Bu yüzden kontrol her olay
+    /// yazımından önce tekrarlanır ve sahiplik değiştiği anda akış kapatılır.
+    /// </param>
+    public async Task ExecuteAsync(
+        string sessionId,
+        SseForwarder sse,
+        Func<CancellationToken, Task<bool>> stillAuthorized,
+        CancellationToken ct)
     {
+        using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        async Task GuardedWriteAsync(string eventType, object? data)
+        {
+            if (streamCts.IsCancellationRequested) return;
+
+            if (!await stillAuthorized(streamCts.Token).ConfigureAwait(false))
+            {
+                logger.LogWarning(
+                    "[SSE] Oturum sahipliği değişti — akış kapatılıyor. session={Session} event={Event}",
+                    sessionId, eventType);
+                await streamCts.CancelAsync().ConfigureAwait(false);
+                return;
+            }
+
+            await sse.WriteAsync(eventType, data).ConfigureAwait(false);
+        }
+
         await sse.WriteSessionAsync(sessionId);
-        await SendInitialStateAsync(sessionId, sse);
+        await SendInitialStateAsync(sessionId, GuardedWriteAsync);
 
         using var subscription = hitlEvents.SubscribeToChatEvents(
             sessionId,
-            (eventType, data) => sse.WriteAsync(eventType, data));
+            GuardedWriteAsync);
 
-        await ProcessBridgeMessagesAsync(sessionId, sse, ct);
+        await ProcessBridgeMessagesAsync(sessionId, GuardedWriteAsync, streamCts.Token);
 
         if (!appLifetime.ApplicationStopping.IsCancellationRequested)
         {
@@ -45,13 +75,13 @@ public sealed class ChatEventOrchestrator(
         }
     }
 
-    private async Task SendInitialStateAsync(string sessionId, SseForwarder sse)
+    private async Task SendInitialStateAsync(string sessionId, Func<string, object?, Task> write)
     {
         var state = chatSession.GetStateOrDefault(sessionId);
 
         if (state.Mode == ChatMode.Human)
         {
-            await sse.WriteAsync(StreamEventTypes.HumanJoined, new
+            await write(StreamEventTypes.HumanJoined, new
             {
                 sessionId,
                 humanAgent = state.HumanAgent ?? WellKnown.Defaults.Admin,
@@ -65,7 +95,7 @@ public sealed class ChatEventOrchestrator(
 
             if (pending != null)
             {
-                await sse.WriteAsync(StreamEventTypes.HandoffPending, new
+                await write(StreamEventTypes.HandoffPending, new
                 {
                     escalationId = pending.Id,
                     reason = pending.Reason,
@@ -75,7 +105,8 @@ public sealed class ChatEventOrchestrator(
         }
     }
 
-    private async Task ProcessBridgeMessagesAsync(string sessionId, SseForwarder sse, CancellationToken ct)
+    private async Task ProcessBridgeMessagesAsync(
+        string sessionId, Func<string, object?, Task> write, CancellationToken ct)
     {
         try
         {
@@ -83,7 +114,7 @@ public sealed class ChatEventOrchestrator(
             {
                 if (msg.Sender == ChatBridgeSender.BotTyping)
                 {
-                    await sse.WriteAsync(StreamEventTypes.BotTyping, new
+                    await write(StreamEventTypes.BotTyping, new
                     {
                         sessionId,
                         on = string.Equals(msg.Text, "on", StringComparison.OrdinalIgnoreCase)
@@ -91,7 +122,7 @@ public sealed class ChatEventOrchestrator(
                     continue;
                 }
 
-                await sse.WriteAsync(StreamEventTypes.HumanMessage, new
+                await write(StreamEventTypes.HumanMessage, new
                 {
                     id = msg.Id,
                     from = msg.Sender.ToString().ToLowerInvariant(),
