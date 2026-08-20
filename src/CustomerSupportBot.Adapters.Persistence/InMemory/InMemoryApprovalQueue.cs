@@ -149,6 +149,14 @@ public class InMemoryApprovalQueue : IApprovalQueue
             .OrderBy(r => r.RequestedAt)
             .ToList();
 
+    /// <summary>
+    /// Bu adaptörde cache ile kalıcı kaynak AYNI şeydir (süreç-içi sözlük), dolayısıyla
+    /// senkron sürümle aynı listeyi döner. Postgres adaptöründeki ayrım — cache'in Redis
+    /// mesajı kaybı yüzünden eksik kalabilmesi — burada var olamaz.
+    /// </summary>
+    public Task<IReadOnlyList<ApprovalRequest>> GetPendingAsync(CancellationToken ct = default) =>
+        Task.FromResult(GetPending());
+
     public IReadOnlyList<ApprovalRequest> GetRecent(int count = 50) =>
         _entries.Values
             .Select(e => e.Request)

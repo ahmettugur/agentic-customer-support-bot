@@ -17,8 +17,8 @@ public static class SlaEndpoints
             return Results.Ok(new { count = events.Count, items = events });
         });
 
-        app.MapGet("/sla/status", (ISlaPort slaPort) =>
-            Results.Ok(slaPort.GetStatus()));
+        app.MapGet("/sla/status", async (ISlaPort slaPort, CancellationToken ct) =>
+            Results.Ok(await slaPort.GetStatusAsync(ct)));
 
         return app;
     }

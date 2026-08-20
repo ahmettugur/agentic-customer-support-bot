@@ -58,7 +58,10 @@ public sealed class StaleApprovalSweepService : BackgroundService
     private async Task SweepAsync(CancellationToken ct)
     {
         var cutoff = DateTime.UtcNow - TimeSpan.FromHours(_options.StalePendingHours);
-        var stale = _approvals.GetPending().Where(r => r.RequestedAt < cutoff).ToList();
+        // Kalıcı okuma: süpürgenin göremediği talep hiçbir zaman zaman aşımına uğramaz
+        // ve sonsuza kadar bekler.
+        var pending = await _approvals.GetPendingAsync(ct);
+        var stale = pending.Where(r => r.RequestedAt < cutoff).ToList();
 
         foreach (var req in stale)
         {

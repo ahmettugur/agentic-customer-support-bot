@@ -10,7 +10,33 @@ public interface IApprovalQueue
     Task<ApprovalRequest> CreateAsync(ApprovalRequest request, CancellationToken ct = default);
     Task<ApprovalRequest> AwaitDecisionAsync(string id, CancellationToken ct = default);
     Task<bool> DecideAsync(string id, bool approved, string? decidedBy = null, string? reason = null, CancellationToken ct = default);
+    /// <summary>
+    /// Bekleyen kayıtların <b>süreç-içi cache görünümü</b>. Hızlıdır ama EKSİK olabilir:
+    /// başka bir pod'un oluşturduğu kayıt bu pod'a Redis pub/sub ile ulaşır ve o mesaj
+    /// kaybolabilir (pub/sub en fazla bir kez teslim eder; Redis restart'ı veya ağ kesintisi
+    /// mesajı düşürür). Cache bir kez hydrate olduktan sonra bir daha DB'ye bakmadığı için
+    /// böyle bir kayıp KALICI olur.
+    ///
+    /// <para>
+    /// Bu yüzden yalnızca eksikliğin zararsız olduğu yerde kullanılmalıdır — pratikte tek
+    /// meşru kullanımı, kaydı bu pod'un kendisinin oluşturduğu mükerrer-çağrı kontrolüdür.
+    /// "Bekleyen işler" listesi, SLA ve süpürme gibi <b>eksikliğin sessiz bir kayba
+    /// dönüştüğü</b> her yerde <see cref="GetPendingAsync"/> kullanılmalıdır.
+    /// </para>
+    /// </summary>
     IReadOnlyList<ApprovalRequest> GetPending();
+
+    /// <summary>
+    /// Bekleyen kayıtların <b>kalıcı</b> listesi — kayıtların gerçek kaynağından okur.
+    ///
+    /// <para>
+    /// Bir onay kaydının görünmemesi sessiz bir başarısızlıktır: müşteri talebini göndermiştir,
+    /// admin panelinde talep hiç belirmez, süpürme onu bulamadığı için zaman aşımına da
+    /// uğratılmaz. Talep sonsuza kadar bekler ve kimse bunu fark etmez. Bu okuma bu yüzden
+    /// cache'e güvenmez.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<ApprovalRequest>> GetPendingAsync(CancellationToken ct = default);
     IReadOnlyList<ApprovalRequest> GetRecent(int count = 50);
     ApprovalRequest? Get(string id);
 

@@ -30,7 +30,8 @@ public sealed class ApprovalPortService : IApprovalPort
 
     public async Task<IReadOnlyList<ApprovalRequest>> GetPendingAsync(CancellationToken ct = default)
     {
-        var pending = _approvalQueue.GetPending();
+        // Kalıcı okuma: admin panelinde görünmeyen bir talep hiç işlenmez.
+        var pending = await _approvalQueue.GetPendingAsync(ct);
         await EnrichCustomerNamesAsync(pending, ct);
         return pending;
     }

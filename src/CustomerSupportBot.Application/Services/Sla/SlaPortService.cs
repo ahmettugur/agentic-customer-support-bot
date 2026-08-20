@@ -35,7 +35,8 @@ public sealed class SlaPortService : ISlaPort
     {
         var now = DateTime.UtcNow;
 
-        foreach (var req in _approvals.GetPending())
+        // Kalıcı okuma: SLA'nın göremediği talep için ihlal de üretilmez.
+        foreach (var req in await _approvals.GetPendingAsync(ct))
         {
             var eval = SlaPolicyEvaluator.EvaluateApproval(req, opts.Approvals, _events, now);
             if (eval.WarnEvent is not null) _events.Record(eval.WarnEvent);
@@ -76,12 +77,12 @@ public sealed class SlaPortService : ISlaPort
         }
     }
 
-    public SlaStatusResult GetStatus()
+    public async Task<SlaStatusResult> GetStatusAsync(CancellationToken ct = default)
     {
         var opts = _options.CurrentValue;
         var now = DateTime.UtcNow;
 
-        var pending = _approvals.GetPending();
+        var pending = await _approvals.GetPendingAsync(ct);
         var open = _escalations.GetOpen();
         var recent = _events.GetRecent(200);
 

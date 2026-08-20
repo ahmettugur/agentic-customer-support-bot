@@ -18,6 +18,7 @@
 // artık ApprovalRequiredAIFunction ile sarılmıyor, dolayısıyla o event'i üretmiyorlar.
 // Köprü, ileride biri bilerek bir tool'u o modelde sararsa çalışsın diye korunuyor.
 
+using System.Text.Json;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Application.Services.Approval;
@@ -344,12 +345,54 @@ public class ApprovalGateService
         await _escalationPolicy.ProcessPendingEscalationsAsync(trace, userQuery, finalResponse, ct);
     }
 
+    /// <summary>
+    /// Mükerrer onay talebi tespiti için parametrelerin kanonik imzası.
+    ///
+    /// <para>
+    /// Eskiden imza <c>"anahtar=deger"</c> parçalarının <c>|</c> ile birleştirilmesiydi ve iki
+    /// ayrı şekilde yanlış cevap veriyordu:
+    /// </para>
+    ///
+    /// <para>
+    /// <b>1. Yanlış EŞLEŞME.</b> Ayraçlar kaçışlanmadığı için <c>{a:"x|b=y"}</c> ile
+    /// <c>{a:"x", b:"y"}</c> aynı imzayı üretiyordu. Farklı iki talep aynı sayıldığında
+    /// ikincisi sessizce birincinin kaydına katlanır ve hiçbir zaman yürütülmez.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>2. Yanlış AYRIŞMA.</b> <c>ToString()</c> geçerli kültürü kullanır. Kayıt Redis veya
+    /// veritabanından geri okunduğunda değerler <c>JsonElement</c> olur ve onların
+    /// <c>ToString()</c>'i ham JSON metnidir — kültürden bağımsız. Türkçe kurulumda ölçülen
+    /// fark: taze <c>amount=100,5</c> ile round-trip <c>amount=100.5</c>. Yani BAŞKA bir pod'da
+    /// oluşmuş (ya da restart'tan sonra DB'den yüklenmiş) bekleyen bir talep, aynı parametrelerle
+    /// gelen yeni çağrıyla asla eşleşmez. Mükerrer koruma tam da en çok gerektiği yerde —
+    /// çok pod'lu kurulumda — sessizce devre dışı kalır: iki onay kaydı oluşur, admin ikisini
+    /// de onaylarsa iş İKİ KEZ yürütülür.
+    /// </para>
+    ///
+    /// <para>
+    /// JSON serileştirme her ikisini birden çözer: yapısal olarak kaçışlıdır (çakışma olmaz) ve
+    /// sayı biçimi kültürden bağımsızdır, dolayısıyla CLR değeri ile onun <c>JsonElement</c>
+    /// karşılığı aynı metni üretir.
+    /// </para>
+    /// </summary>
     private static string BuildParamSignature(IReadOnlyDictionary<string, object?> parameters)
     {
         if (parameters.Count == 0) return string.Empty;
-        return string.Join("|", parameters
-            .OrderBy(kv => kv.Key, StringComparer.Ordinal)
-            .Select(kv => $"{kv.Key}={kv.Value?.ToString() ?? string.Empty}"));
+
+        // Anahtar sırası çağrıdan çağrıya değişebilir; imza sıradan bağımsız olmalı.
+        var ordered = new SortedDictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var kv in parameters) ordered[kv.Key] = kv.Value;
+
+        try { return JsonSerializer.Serialize(ordered); }
+        catch (NotSupportedException)
+        {
+            // Serileştirilemeyen bir değer (ör. beklenmeyen bir CLR tipi) imza üretimini
+            // engellememeli: mükerrer koruması bir OPTİMİZASYONDUR, onay akışının kendisi
+            // değil. Boş imza dönmek yerine benzersiz bir imza döneriz — böylece talep
+            // "mükerrer" sayılıp yanlışlıkla bastırılmaz, yalnızca kendi kaydını alır.
+            return Guid.NewGuid().ToString("N");
+        }
     }
 
 }

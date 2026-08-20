@@ -25,7 +25,11 @@ public class ApprovalPortServiceTests
         params ApprovalRequest[] pending)
     {
         var queue = Substitute.For<IApprovalQueue>();
-        queue.GetPending().Returns(pending);
+        // Yalnızca KALICI okuma stub'lanır. Senkron GetPending() bilinçli olarak boş
+        // bırakıldı: servis ona geri dönerse (cache okuması) bu testler kırılsın istiyoruz —
+        // admin panelinde görünmeyen bir onay talebi hiç işlenmez.
+        queue.GetPendingAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ApprovalRequest>>(pending));
         queue.GetRecent(Arg.Any<int>()).Returns(pending);
 
         var customers = Substitute.For<ICustomerRepository>();
@@ -87,7 +91,8 @@ public class ApprovalPortServiceTests
         // Ad yalnızca görüntüleme kolaylığı; çözülemezse onay kuyruğu YİNE DE açılmalı.
         // Aksi hâlde bir müşteri tablosu arızası tüm HITL akışını durdururdu.
         var queue = Substitute.For<IApprovalQueue>();
-        queue.GetPending().Returns([Request("a1", "1027")]);
+        queue.GetPendingAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<ApprovalRequest>>([Request("a1", "1027")]));
 
         var customers = Substitute.For<ICustomerRepository>();
         customers.GetFullNamesAsync(Arg.Any<IReadOnlyCollection<long>>(), Arg.Any<CancellationToken>())

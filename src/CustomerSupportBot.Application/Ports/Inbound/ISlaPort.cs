@@ -31,7 +31,7 @@ public sealed record SlaStatusResult(
 public interface ISlaPort
 {
     IReadOnlyList<SlaEvent> GetRecentEvents(int count = 100);
-    SlaStatusResult GetStatus();
+    Task<SlaStatusResult> GetStatusAsync(CancellationToken ct = default);
 
     /// <summary>Tek bir SLA tarama döngüsünü çalıştırır; arka plan worker'ı tarafından her iterasyonda çağrılır.</summary>
     Task ScanOnceAsync(SlaOptions opts, CancellationToken ct = default);

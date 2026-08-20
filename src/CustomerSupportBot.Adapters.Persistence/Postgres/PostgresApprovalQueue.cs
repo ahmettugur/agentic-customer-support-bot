@@ -307,6 +307,36 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             .ToList();
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// DB'den okur ve okuduğunu cache'e de yansıtır: Redis mesajı kaybolduğu için buraya hiç
+    /// ulaşmamış kayıtlar böylece bu pod'un cache'ine de girer ve bir daha kaybolmaz. Yani bu
+    /// çağrı aynı zamanda cache ile DB arasındaki uzlaştırma (reconciliation) noktasıdır.
+    /// Var olan girdiler EZİLMEZ — bu pod'un kendi TaskCompletionSource'u korunmalıdır.
+    /// </remarks>
+    public async Task<IReadOnlyList<ApprovalRequest>> GetPendingAsync(CancellationToken ct = default)
+    {
+        var pending = nameof(ApprovalStatus.Pending);
+
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var rows = await ctx.Approvals.AsNoTracking()
+            .Where(a => a.Status == pending)
+            .OrderBy(a => a.RequestedAt)
+            .ToListAsync(ct).ConfigureAwait(false);
+
+        var result = new List<ApprovalRequest>(rows.Count);
+        foreach (var row in rows)
+        {
+            var domain = ToDomain(row);
+            // Cache'te zaten varsa ONU döneriz: aynı kaydın iki farklı nesne örneğiyle
+            // dolaşması, TCS'i olan girdinin yanında sahipsiz bir kopya bırakırdı.
+            var entry = _entries.GetOrAdd(row.Id, _ => new QueueEntry(domain, tcs: null));
+            result.Add(entry.Request.Status == ApprovalStatus.Pending ? entry.Request : domain);
+        }
+
+        return result;
+    }
+
     public IReadOnlyList<ApprovalRequest> GetRecent(int count = 50)
     {
         EnsureHydrated();
@@ -644,8 +674,12 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
 
         foreach (var e in rows)
         {
-            // Orphan: TCS yok → AwaitDecisionAsync çağrılırsa hata atar (zaten karar verilmiş kayıtlar).
-            _entries[e.Id] = new QueueEntry(ToDomain(e), tcs: null);
+            // TryAdd — indeksleyici DEĞİL. Hydrate, CreateAsync ile aynı anda çalışabilir:
+            // indeksleyici kullanıldığında az önce oluşturulmuş bir kaydın girdisi, TCS'i
+            // null olan bir kopyayla eziliyordu. O kaydı bekleyen AwaitDecisionAsync'in
+            // TaskCompletionSource'u böylece kayboluyor ve karar geldiğinde hiçbir zaman
+            // tamamlanmıyordu. Cache'teki girdi her zaman en az DB satırı kadar tazedir.
+            _entries.TryAdd(e.Id, new QueueEntry(ToDomain(e), tcs: null));
         }
 
         _logger.LogInformation("[HITL] Approval cache hydrate: {Count} kayıt", rows.Count);
