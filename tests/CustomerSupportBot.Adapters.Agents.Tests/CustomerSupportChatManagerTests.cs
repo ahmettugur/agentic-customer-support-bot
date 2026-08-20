@@ -101,6 +101,31 @@ public class CustomerSupportChatManagerTests
     }
 
     [Fact]
+    public async Task SelectNextAgent_DecomposedConstraint_OverridesDifferentPlannedSpecialist()
+    {
+        var planning = MakeAgent(WellKnown.AgentNames.Planning);
+        var response = MakeAgent(WellKnown.AgentNames.Response);
+        var product = MakeAgent(WellKnown.AgentNames.Product);
+        var order = MakeAgent(WellKnown.AgentNames.Order);
+        var mgr = new CustomerSupportChatManager(
+            [planning, response, product, order],
+            new WorkflowGuardOptions(),
+            NullLogger<CustomerSupportChatManager>.Instance,
+            WellKnown.AgentNames.Product);
+        var history = new List<ChatMessage>
+        {
+            new(ChatRole.User, "ürün alt görevi"),
+            new(ChatRole.Assistant,
+                $"{{\"selectedAgent\":\"{WellKnown.AgentNames.Order}\",\"needsClarification\":false}}")
+                { AuthorName = WellKnown.AgentNames.Planning }
+        };
+
+        var picked = await InvokeSelectAsync(mgr, history);
+
+        picked.Name.Should().Be(WellKnown.AgentNames.Product);
+    }
+
+    [Fact]
     public async Task SelectNextAgent_HandoffLimitExceeded_FallsBackToResponse()
     {
         var mgr = BuildManager(new WorkflowGuardOptions { MaxHandoffsPerAgent = 1 });

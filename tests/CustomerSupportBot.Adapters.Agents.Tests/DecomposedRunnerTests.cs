@@ -1,7 +1,7 @@
 // Tests/DecomposedRunnerTests.cs
 //
 // Compound sorgu orkestrasyonu: alt görevlerin gruplanması, paralel/sıralı çalıştırılması,
-// sonuçların sub.Order sırasında toplanması ve TAMAMLANDIKÇA ilerlemeli yayınlanması.
+// sonuçların sub.Order sırasında toplanması ve sıralı grupların gerçek token akışı.
 //
 // Bu testler IWorkflowRunner arayüzü çıkarıldığı için mümkün: önceden DecomposedRunner somut
 // (sealed) WorkflowRunner'ı alıyordu, o da altı ajan + MAF workflow'u kurmayı gerektirdiğinden
@@ -45,6 +45,68 @@ public class DecomposedRunnerTests
             yield return new StreamEvent(StreamEventTypes.ResponseComplete,
                 new ResponseCompletePayload(_reply(query)));
             await Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingRunner : IWorkflowRunner
+    {
+        public List<RecordedCall> Calls { get; } = new();
+
+        public Task<string> RunAsync(string query, List<ConversationMessage>? history,
+            AgentSession? session, ReasoningResult? reasoning, CancellationToken ct)
+        {
+            lock (Calls)
+                Calls.Add(new RecordedCall(query, history?.ToList() ?? [], reasoning));
+            return Task.FromResult($"yanıt<{query}>");
+        }
+
+        public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(string query,
+            List<ConversationMessage>? history, AgentSession? session, ReasoningResult? reasoning,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            var response = await RunAsync(query, history, session, reasoning, ct);
+            yield return new StreamEvent(StreamEventTypes.ResponseDelta, new TextDeltaPayload(response));
+        }
+    }
+
+    private sealed record RecordedCall(
+        string Query,
+        List<ConversationMessage> History,
+        ReasoningResult? Reasoning);
+
+    private sealed class ErrorStreamingRunner : IWorkflowRunner
+    {
+        public int Calls { get; private set; }
+
+        public Task<string> RunAsync(string query, List<ConversationMessage>? history,
+            AgentSession? session, ReasoningResult? reasoning, CancellationToken ct)
+            => Task.FromResult("unused");
+
+        public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(string query,
+            List<ConversationMessage>? history, AgentSession? session, ReasoningResult? reasoning,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            Calls++;
+            yield return new StreamEvent(StreamEventTypes.Error, new { message = "alt görev hatası" });
+            yield return new StreamEvent(StreamEventTypes.ResponseComplete,
+                new ResponseCompletePayload("bu event tüketilmemeli"));
+            await Task.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingRunner : IWorkflowRunner
+    {
+        public Task<string> RunAsync(string query, List<ConversationMessage>? history,
+            AgentSession? session, ReasoningResult? reasoning, CancellationToken ct)
+            => Task.FromException<string>(new InvalidOperationException("koşucu patladı"));
+
+        public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(string query,
+            List<ConversationMessage>? history, AgentSession? session, ReasoningResult? reasoning,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            await Task.Yield();
+            yield return new StreamEvent(StreamEventTypes.ResponseStart, null);
+            throw new InvalidOperationException("stream patladı");
         }
     }
 
@@ -115,28 +177,6 @@ public class DecomposedRunnerTests
                 .ToList());
 
         CompleteText(events).Should().Be(expected);
-    }
-
-    // ═══ İlerlemeli yayın: sonuçlar TAMAMLANDIKÇA gitmeli ═══
-
-    /// <summary>
-    /// Asıl kazanç: ilk alt görevin metni, SON alt görev bitmeden önce yayınlanmış olmalı.
-    /// Eski davranışta hiçbir metin tüm alt görevler bitene kadar gönderilmiyordu.
-    /// </summary>
-    [Fact]
-    public async Task EmitsFirstResult_BeforeLastSubTaskCompletes()
-    {
-        var subs = new[] { Sub(1, "ilk", WellKnown.AgentNames.Product), Sub(2, "son", WellKnown.AgentNames.Product) };
-
-        var events = await CollectAsync(Build(new FakeRunner()), Reasoning(subs));
-
-        var firstDeltaIdx = events.FindIndex(e => e.Type == StreamEventTypes.ResponseDelta);
-        var lastSubTaskDoneIdx = events.FindLastIndex(e =>
-            e.Type == StreamEventTypes.Agent && (e.Data?.ToString() ?? "").Contains("SubTask#2"));
-
-        firstDeltaIdx.Should().BeGreaterThan(-1, "en az bir metin parçası yayınlanmalı");
-        firstDeltaIdx.Should().BeLessThan(lastSubTaskDoneIdx,
-            "ilk alt görevin sonucu, son alt görev bitmeden yayınlanmalı — yoksa ilerlemeli yayın yok demektir");
     }
 
     /// <summary>
@@ -324,5 +364,107 @@ public class DecomposedRunnerTests
 
         runner.Calls.Should().HaveCount(3);
         runner.Calls.Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task IndependentSubTasks_DoNotReceiveCompoundQueryOrSiblingResults()
+    {
+        var runner = new RecordingRunner();
+        var history = new List<ConversationMessage>
+        {
+            new(ConversationRoles.User, "önceki kullanıcı mesajı"),
+            new(ConversationRoles.Assistant, "önceki yanıt")
+        };
+        var reasoning = Reasoning(
+            Sub(1, "ürünleri göster", WellKnown.AgentNames.Product),
+            Sub(2, "siparişi sorgula", WellKnown.AgentNames.Order));
+
+        await Build(runner).RunDecomposedAsync(
+            "gizli compound ana sorgu", history, null, reasoning, CancellationToken.None);
+
+        runner.Calls.Should().HaveCount(2);
+        runner.Calls.Should().OnlyContain(call =>
+            call.History.Select(message => message.Text)
+                .SequenceEqual(new[] { "önceki kullanıcı mesajı", "önceki yanıt" }));
+        runner.Calls.Should().OnlyContain(call =>
+            call.Reasoning!.ConstrainedTargetAgent == reasoning.SubTasks.Single(
+                sub => SubTaskOrchestrator.FormatSubTaskQuery(sub) == call.Query).TargetAgent);
+    }
+
+    [Fact]
+    public async Task DependentSubTask_ReceivesOnlyDeclaredDependencyResult()
+    {
+        var runner = new RecordingRunner();
+        var first = Sub(1, "ürünleri göster", WellKnown.AgentNames.Product);
+        var second = Sub(2, "siparişi sorgula", WellKnown.AgentNames.Order);
+        second.Dependencies = [1];
+        var third = Sub(3, "şikayet aç", WellKnown.AgentNames.Complaint);
+
+        await Build(runner).RunDecomposedAsync(
+            "compound", null, null, Reasoning(first, second, third), CancellationToken.None);
+
+        var secondCall = runner.Calls.Single(call => call.Query.Contains("siparişi", StringComparison.Ordinal));
+        secondCall.History.Should().HaveCount(2);
+        secondCall.History[0].Text.Should().Contain("ürünleri göster");
+        secondCall.History[1].Text.Should().Contain("yanıt<");
+
+        var thirdCall = runner.Calls.Single(call => call.Query.Contains("şikayet", StringComparison.Ordinal));
+        thirdCall.History.Should().BeEmpty("üçüncü görev hiçbir kardeşe bağımlı değil");
+    }
+
+    [Fact]
+    public async Task SequentialSubTaskError_StopsWithoutDoneOrResponseComplete()
+    {
+        var runner = new ErrorStreamingRunner();
+        var events = await CollectAsync(Build(runner), Reasoning(
+            Sub(1, "siparişi sorgula", WellKnown.AgentNames.Order),
+            Sub(2, "şikayet aç", WellKnown.AgentNames.Complaint)));
+
+        runner.Calls.Should().Be(1, "ilk hata sonrası sonraki alt görev başlamamalı");
+        events.Should().Contain(e => e.Type == StreamEventTypes.Error);
+        events.Should().NotContain(e => e.Type == StreamEventTypes.ResponseComplete);
+        events.Where(e => e.Type == StreamEventTypes.Agent)
+            .Select(e => e.Data?.ToString())
+            .Should().Contain(text => text!.Contains("failed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InvalidFanOut_StreamReturnsErrorBeforeStartingAnySubTask()
+    {
+        var runner = new FakeRunner();
+        var options = new ParallelExecutionOptions { MaxSubTasks = 2 };
+        var reasoning = Reasoning(
+            Sub(1, "g1", WellKnown.AgentNames.Product),
+            Sub(2, "g2", WellKnown.AgentNames.Order),
+            Sub(3, "g3", WellKnown.AgentNames.Complaint));
+
+        var events = await CollectAsync(Build(runner, options), reasoning);
+
+        runner.Calls.Should().BeEmpty();
+        events.Should().ContainSingle(e => e.Type == StreamEventTypes.Error);
+        events.Should().NotContain(e => e.Type == StreamEventTypes.ResponseStart);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ThrownSubTaskException_IsNormalizedWithoutResponseComplete(bool parallel)
+    {
+        var subs = parallel
+            ? new[]
+            {
+                Sub(1, "ürün 1", WellKnown.AgentNames.Product),
+                Sub(2, "ürün 2", WellKnown.AgentNames.Product)
+            }
+            : new[]
+            {
+                Sub(1, "sipariş", WellKnown.AgentNames.Order),
+                Sub(2, "şikayet", WellKnown.AgentNames.Complaint)
+            };
+
+        var events = await CollectAsync(Build(new ThrowingRunner()), Reasoning(subs));
+
+        events.Should().Contain(e => e.Type == StreamEventTypes.Error);
+        events.Should().NotContain(e => e.Type == StreamEventTypes.ResponseComplete);
     }
 }

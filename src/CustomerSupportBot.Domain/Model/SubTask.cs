@@ -4,9 +4,8 @@
 // Reasoning modelinin query'yi birden fazla alt göreve ayırmasını sağlar. Her alt
 // Görev kendi intent + targetAgent + entities ile yapılandırılmış olarak saklanır.
 //
-// Şu an workflow mevcut akışı koruyor (tek planning + tek agent seçimi), ancak
-// Planning prompt'u subTasks'ı görür ve çoklu agent yönlendirmesi yapabilir.
-// İleride (Phase 4b) workflow iteration eklenebilir — her subtask için ayrı run.
+// DecomposedRunner her alt görevi ayrı ve hedef specialist'e kısıtlı bir workflow koşusunda
+// yürütür; Dependencies yalnızca açıkça bağımlı alt görevlerin sonuçlarını bağlama ekler.
 
 namespace CustomerSupportBot.Domain.Model;
 
@@ -38,7 +37,8 @@ public class SubTask
 
     /// <summary>
     /// Bu alt görevin ihtiyacı olan entity'ler (ör. { "order_id": "1030" }).
-    /// Reasoning tarafı VerifiedEntities'ten türetir.
+    /// LLM tarafından üretilir; yürütmeden önce SubTaskOrchestrator tarafından biçim ve
+    /// kaynak sorgu/parent verified entity ile bağlanma açısından doğrulanır.
     /// </summary>
     public Dictionary<string, string> Entities { get; set; } = new();
 
@@ -51,4 +51,3 @@ public class SubTask
     /// </summary>
     public List<int> Dependencies { get; set; } = new();
 }
-

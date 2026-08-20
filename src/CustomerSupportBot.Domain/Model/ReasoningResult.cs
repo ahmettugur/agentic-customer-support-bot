@@ -3,6 +3,8 @@
 // Eski alanlar (Analysis, Steps, Intent, RequiredInfo, Confidence) korundu.
 // Yeni alanlar: Rationale, Assumptions, NextAction, DecisionReason, ConfidenceScore.
 
+using System.Text.Json.Serialization;
+
 namespace CustomerSupportBot.Domain.Model;
 
 /// <summary>
@@ -89,6 +91,13 @@ public class ReasoningResult
     /// </summary>
     public List<SubTask> SubTasks { get; set; } = new();
 
+    /// <summary>
+    /// Decompose edilmiş bir alt workflow'un çalıştırabileceği tek specialist ajan.
+    /// Yalnızca uygulama içinde türetilir; LLM JSON sözleşmesinin ve trace çıktısının parçası değildir.
+    /// </summary>
+    [JsonIgnore]
+    public string? ConstrainedTargetAgent { get; set; }
+
     // ─── DUYGU ANALİZİ ───
 
     /// <summary>
@@ -141,4 +150,3 @@ public class ReasoningResult
         _ => 0.5
     };
 }
-

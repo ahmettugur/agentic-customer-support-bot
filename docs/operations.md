@@ -355,9 +355,9 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
 
 | Servis | Sorumluluk |
 |---|---|
-| `ParallelExecutionOptions` | `Enabled`, `MaxDegreeOfParallelism` (default 4), `ReadOnlyAgents` listesi (default: `ProductAgent`, `OrderAgent`) |
-| `SubTaskOrchestrator.Partition()` | Sıralı `SubTask` listesini gruplara ayırır: aynı türde (read-only / write) ardı ardına gelen alt görevler tek grup. Sıra (1→2→3) korunur |
-| `DecomposedRunner.RunDecomposedAsync` | Her grup için `Task.WhenAll` (paralel) veya `foreach` (serial) kullanır. Paralel batch için `SemaphoreSlim` ile throttle. Streaming sürümünde sub-task delta'ları dış stream'e sızmaz; yalnızca status (`running`/`done`) eventleri ve son aggregate response yayınlanır |
+| `ParallelExecutionOptions` | `Enabled`, `MaxDegreeOfParallelism` (4), `MaxSubTasks` (6), `TimeoutSeconds` (180). Yalnızca tüm tool'ları salt-okunur `ProductAgent` paralel çalışabilir |
+| `SubTaskOrchestrator` | Planı fan-out öncesi doğrular; sıra, agent, dependency ve entity bağlarını kontrol eder. Ardışık read-only/write grupları oluşturur |
+| `DecomposedRunner.RunDecomposedAsync` | Tüm koşu için ortak timeout uygular. Her grup için `Task.WhenAll` veya `foreach` kullanır; history'ye yalnızca açık `Dependencies` sonuçlarını ekler |
 | Sıra korunması | Tüm gruplar arası sırayla yürütülür; aggregate output `SortedDictionary<int, string>` üzerinden `Order`'a göre toplanır — paralel batch'te bile deterministic |
 
 ### SLA / Response Time Guardian (#H)

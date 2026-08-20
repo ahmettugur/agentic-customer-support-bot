@@ -16,6 +16,12 @@ public interface IApprovalContextAccessor
     /// zamanlamasına/sırasına bağlı kalmadan.
     /// </summary>
     void SetCurrentAgent(string? agentName);
+
+    /// <summary>
+    /// Workflow trace oluşturulduktan sonra mevcut ambient scope'a trace kimliğini bağlar.
+    /// Onay kayıtları bu değeri audit korelasyonu için kullanır.
+    /// </summary>
+    void SetTraceId(string? traceId);
 }
 
 public sealed record ApprovalContext(

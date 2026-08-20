@@ -1,4 +1,5 @@
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.Reasoning;
 
 namespace CustomerSupportBot.Application.Tests;
@@ -79,6 +80,7 @@ public class SubTaskOrchestratorTests
         derived.SubTasks.Should().BeEmpty(); // recursion guard
         derived.Confidence.Should().Be(WellKnown.Confidence.High);
         derived.ConfidenceScore.Should().Be(0.85);
+        derived.ConstrainedTargetAgent.Should().Be("AgentX");
     }
 
     [Fact]
@@ -241,5 +243,102 @@ public class SubTaskOrchestratorTests
     {
         SubTaskOrchestrator.AggregateSubTaskResults(["X", "Y"])
             .Should().Be($"X{SubTaskOrchestrator.ResultSeparator}Y");
+    }
+
+    [Fact]
+    public void ValidateExecutionPlan_TooManySubTasks_FailsClosed()
+    {
+        var reasoning = new ReasoningResult
+        {
+            SubTasks = Enumerable.Range(1, 3)
+                .Select(i => new SubTask
+                {
+                    Order = i,
+                    Description = $"görev {i}",
+                    TargetAgent = WellKnown.AgentNames.Product
+                }).ToList()
+        };
+
+        var act = () => SubTaskOrchestrator.ValidateExecutionPlan(
+            reasoning, "sorgu", new ParallelExecutionOptions { MaxSubTasks = 2 });
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*üst sınır 2*");
+    }
+
+    [Theory]
+    [InlineData(2, 2)]
+    [InlineData(2, 3)]
+    public void ValidateExecutionPlan_SelfOrMissingDependency_FailsClosed(int order, int dependency)
+    {
+        var reasoning = new ReasoningResult
+        {
+            SubTasks =
+            [
+                new SubTask { Order = 1, Description = "ilk", TargetAgent = WellKnown.AgentNames.Product },
+                new SubTask
+                {
+                    Order = order,
+                    Description = "ikinci",
+                    TargetAgent = WellKnown.AgentNames.Order,
+                    Dependencies = [dependency]
+                }
+            ]
+        };
+
+        var act = () => SubTaskOrchestrator.ValidateExecutionPlan(
+            reasoning, "sorgu", new ParallelExecutionOptions());
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void ValidateExecutionPlan_UnboundEntity_FailsClosed()
+    {
+        var reasoning = new ReasoningResult
+        {
+            SubTasks =
+            [
+                new SubTask
+                {
+                    Order = 1,
+                    Description = "1042 siparişini sorgula",
+                    TargetAgent = WellKnown.AgentNames.Order,
+                    Entities = new() { ["order_id"] = "1042" }
+                },
+                new SubTask { Order = 2, Description = "ürünleri listele", TargetAgent = WellKnown.AgentNames.Product }
+            ]
+        };
+
+        var act = () => SubTaskOrchestrator.ValidateExecutionPlan(
+            reasoning, "yalnızca ürünleri göster", new ParallelExecutionOptions());
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*kullanıcı girdisinden doğrulanamadı*");
+    }
+
+    [Fact]
+    public void ValidateExecutionPlan_EntityFromVerifiedParent_IsAccepted()
+    {
+        var reasoning = new ReasoningResult
+        {
+            VerifiedEntities = new VerifiedEntities
+            {
+                OrderId = new VerifiedEntity { Value = "1042" }
+            },
+            SubTasks =
+            [
+                new SubTask
+                {
+                    Order = 1,
+                    Description = "1042 siparişini sorgula",
+                    TargetAgent = WellKnown.AgentNames.Order,
+                    Entities = new() { ["order_id"] = "1042" }
+                },
+                new SubTask { Order = 2, Description = "ürünleri listele", TargetAgent = WellKnown.AgentNames.Product }
+            ]
+        };
+
+        SubTaskOrchestrator.ValidateExecutionPlan(
+                reasoning, "peki onun durumu ve ürünler", new ParallelExecutionOptions())
+            .Should().HaveCount(2);
     }
 }

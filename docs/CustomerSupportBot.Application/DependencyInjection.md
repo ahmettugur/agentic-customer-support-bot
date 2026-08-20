@@ -39,6 +39,8 @@ services.Configure<RoutingOptions>(configuration.GetSection("Routing"));
 services.AddOptions<ParallelExecutionOptions>()
     .Bind(configuration.GetSection(ParallelExecutionOptions.SectionName))
     .Validate(o => o.MaxDegreeOfParallelism > 0, "ParallelExecution:MaxDegreeOfParallelism pozitif olmalı.")
+    .Validate(o => o.MaxSubTasks >= 2, "ParallelExecution:MaxSubTasks en az 2 olmalı.")
+    .Validate(o => o.TimeoutSeconds > 0, "ParallelExecution:TimeoutSeconds pozitif olmalı.")
     .ValidateOnStart();
 
 services.AddOptions<WorkflowGuardOptions>()

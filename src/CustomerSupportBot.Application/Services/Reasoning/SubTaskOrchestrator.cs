@@ -16,6 +16,11 @@ namespace CustomerSupportBot.Application.Services.Reasoning;
 /// </summary>
 public class SubTaskOrchestrator
 {
+    private static readonly HashSet<string> AllowedEntityKeys = new(StringComparer.Ordinal)
+    {
+        "order_id", "customer_id", "complaint_id"
+    };
+
     /// <summary>
     /// Reasoning result'ın compound query olduğuna karar verir.
     /// En az 2 farklı TargetAgent olan 2+ subtask varsa decompose.
@@ -57,14 +62,113 @@ public class SubTaskOrchestrator
             Steps = new List<ReasoningStep>(),
             SanityIssues = new List<ReasoningIssue>(),
             SubTasks = new List<SubTask>(), // ← Recursive loop önleyici
-            // subTask.Entities zaten VerifiedEntities'ten türetilmişti (bkz. SubTask.Entities
-            // yorumu) — burada VerifiedEntities'e GERİ çevrilmezse WorkflowRunner.ResolveExtractedIds
+            ConstrainedTargetAgent = subTask.TargetAgent,
+            // subTask.Entities yürütme başlamadan önce ValidateExecutionPlan tarafından kaynak
+            // sorgu/parent verified entity ile bağlanmıştır. Burada VerifiedEntities'e çevrilmezse
+            // WorkflowRunner.ResolveExtractedIds
             // fallback'e düşüp FormatSubTaskQuery'nin "açıklama (order_id=1042)" biçimindeki
             // sentetik metnini IdExtractor.Extract ile regex'ten geçirmeye çalışır — bu metinde
             // "sipariş"/"müşteri" gibi Türkçe bağlam kelimeleri YOK, dolayısıyla o regex çoğu
             // zaman hiçbir şey bulamaz veya yanlış sınıflandırır.
             VerifiedEntities = BuildVerifiedEntities(subTask.Entities)
         };
+    }
+
+    /// <summary>
+    /// LLM tarafından üretilen alt görev planını workflow fan-out başlamadan önce doğrular.
+    /// Bağımlılıklar yalnızca daha önceki görevlere işaret edebilir; eksik kenarlar, ileri
+    /// bağımlılıklar ve döngüler yürütme başlamadan fail-closed davranır.
+    /// </summary>
+    public static List<SubTask> ValidateExecutionPlan(
+        ReasoningResult reasoning,
+        string originalQuery,
+        ParallelExecutionOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(reasoning);
+
+        var ordered = reasoning.SubTasks.OrderBy(s => s.Order).ToList();
+        if (ordered.Count == 0)
+            throw new InvalidOperationException("Alt görev planı boş olamaz.");
+        if (ordered.Count > options.MaxSubTasks)
+            throw new InvalidOperationException(
+                $"Compound plan {ordered.Count} alt görev içeriyor; izin verilen üst sınır {options.MaxSubTasks}.");
+
+        var orders = ordered.Select(s => s.Order).ToHashSet();
+        if (orders.Count != ordered.Count || ordered.Any(s => s.Order <= 0))
+            throw new InvalidOperationException("Alt görev sıraları pozitif ve benzersiz olmalıdır.");
+
+        foreach (var sub in ordered)
+        {
+            if (string.IsNullOrWhiteSpace(sub.Description))
+                throw new InvalidOperationException($"Alt görev {sub.Order} açıklama içermiyor.");
+            if (!WellKnown.AgentNames.Specialists.Contains(
+                    sub.TargetAgent, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Alt görev {sub.Order} bilinmeyen specialist hedefliyor: '{sub.TargetAgent}'.");
+
+            if (sub.Dependencies.Count != sub.Dependencies.Distinct().Count())
+                throw new InvalidOperationException($"Alt görev {sub.Order} yinelenen bağımlılık içeriyor.");
+            if (sub.Dependencies.Any(dependency => !orders.Contains(dependency)))
+                throw new InvalidOperationException($"Alt görev {sub.Order} mevcut olmayan bir göreve bağımlı.");
+            if (sub.Dependencies.Any(dependency => dependency >= sub.Order))
+                throw new InvalidOperationException(
+                    $"Alt görev {sub.Order} yalnızca kendisinden önceki görevlere bağımlı olabilir.");
+
+            ValidateEntities(sub, reasoning.VerifiedEntities, originalQuery);
+        }
+
+        return ordered;
+    }
+
+    private static void ValidateEntities(
+        SubTask sub,
+        VerifiedEntities? parentEntities,
+        string originalQuery)
+    {
+        foreach (var (key, value) in sub.Entities)
+        {
+            if (!AllowedEntityKeys.Contains(key))
+                throw new InvalidOperationException(
+                    $"Alt görev {sub.Order} desteklenmeyen entity içeriyor: '{key}'.");
+            if (string.IsNullOrWhiteSpace(value) || !value.All(char.IsAsciiDigit))
+                throw new InvalidOperationException(
+                    $"Alt görev {sub.Order} için '{key}' geçerli sayısal formatta değil.");
+            if (!ContainsNumericToken(sub.Description, value))
+                throw new InvalidOperationException(
+                    $"Alt görev {sub.Order} için '{key}' değeri görev açıklamasına bağlı değil.");
+
+            var appearsInQuery = ContainsNumericToken(originalQuery, value);
+            var appearsInVerifiedParent = ParentContains(parentEntities, key, value);
+            if (!appearsInQuery && !appearsInVerifiedParent)
+                throw new InvalidOperationException(
+                    $"Alt görev {sub.Order} için '{key}' değeri kullanıcı girdisinden doğrulanamadı.");
+        }
+    }
+
+    private static bool ParentContains(VerifiedEntities? parent, string key, string value) => key switch
+    {
+        "order_id" => string.Equals(parent?.OrderId?.Value, value, StringComparison.Ordinal),
+        "customer_id" => string.Equals(parent?.CustomerId?.Value, value, StringComparison.Ordinal),
+        "complaint_id" => string.Equals(parent?.ComplaintId?.Value, value, StringComparison.Ordinal),
+        _ => false
+    };
+
+    private static bool ContainsNumericToken(string text, string value)
+    {
+        var start = 0;
+        while (start <= text.Length - value.Length)
+        {
+            var index = text.IndexOf(value, start, StringComparison.Ordinal);
+            if (index < 0) return false;
+
+            var leftIsDigit = index > 0 && char.IsAsciiDigit(text[index - 1]);
+            var rightIndex = index + value.Length;
+            var rightIsDigit = rightIndex < text.Length && char.IsAsciiDigit(text[rightIndex]);
+            if (!leftIsDigit && !rightIsDigit) return true;
+
+            start = index + 1;
+        }
+        return false;
     }
 
     /// <summary>
@@ -133,7 +237,7 @@ public class SubTaskOrchestrator
     /// </summary>
     /// <summary>
     /// Alt görev sonuçlarını ayıran metin. <b>Sabit olması şart:</b> <c>DecomposedRunner</c>
-    /// alt görev sonuçlarını tamamlandıkça tek tek <c>response_delta</c> olarak yayınlar ve
+    /// alt görev sonuçlarını kanonik sırada tek tek <c>response_delta</c> olarak yayınlar ve
     /// aralarına bu ayırıcıyı koyar; yayınlanan parçaların birleşimi
     /// <see cref="AggregateSubTaskResults"/> çıktısına birebir eşit olmalıdır. Ayırıcı iki
     /// yerde ayrı ayrı yazılsaydı biri değiştiğinde ekranda akan metin ile nihai metin

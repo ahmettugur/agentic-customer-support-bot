@@ -39,60 +39,71 @@ internal sealed class DecomposedRunner
         ReasoningResult reasoning,
         CancellationToken ct)
     {
-        var runningHistory = conversationHistory != null
+        var ordered = SubTaskOrchestrator.ValidateExecutionPlan(reasoning, query, _parallelOptions);
+        var baseHistory = conversationHistory != null
             ? new List<ConversationMessage>(conversationHistory)
             : new List<ConversationMessage>();
-
-        runningHistory.Add(new ConversationMessage(ConversationRoles.User, query));
-
-        var groups = SubTaskOrchestrator.Partition(reasoning.SubTasks, _parallelOptions);
+        var completed = new Dictionary<int, CompletedSubTask>();
+        var groups = SubTaskOrchestrator.Partition(ordered, _parallelOptions);
         var collected = new SortedDictionary<int, string>();
 
-        foreach (var group in groups)
-        {
-            if (group.Parallel && group.Items.Count > 1)
-            {
-                using var sem = new SemaphoreSlim(
-                    Math.Max(1, _parallelOptions.MaxDegreeOfParallelism));
-                var historySnapshot = runningHistory.ToList();
+        using var timeoutCts = new CancellationTokenSource(
+            TimeSpan.FromSeconds(_parallelOptions.TimeoutSeconds));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        var effectiveCt = linkedCts.Token;
 
-                var tasks = group.Items.Select(async sub =>
+        try
+        {
+            foreach (var group in groups)
+            {
+                if (group.Parallel && group.Items.Count > 1)
                 {
-                    await sem.WaitAsync(ct).ConfigureAwait(false);
-                    try
+                    using var sem = new SemaphoreSlim(
+                        Math.Max(1, _parallelOptions.MaxDegreeOfParallelism));
+
+                    var tasks = group.Items.Select(async sub =>
+                    {
+                        await sem.WaitAsync(effectiveCt).ConfigureAwait(false);
+                        try
+                        {
+                            var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
+                            var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
+                            var history = BuildSubTaskHistory(baseHistory, sub, completed);
+                            var subResp = await _runner.RunAsync(
+                                    subQuery, history, session, subReasoning, effectiveCt)
+                                .ConfigureAwait(false);
+                            return (sub, subQuery, subResp);
+                        }
+                        finally { sem.Release(); }
+                    });
+
+                    var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+                    foreach (var (sub, subQuery, resp) in results.OrderBy(t => t.sub.Order))
+                    {
+                        collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, resp);
+                        completed[sub.Order] = new CompletedSubTask(subQuery, resp);
+                    }
+                }
+                else
+                {
+                    foreach (var sub in group.Items)
                     {
                         var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
                         var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
-                        var subResp = await _runner.RunAsync(subQuery, historySnapshot, session, subReasoning, ct)
+                        var history = BuildSubTaskHistory(baseHistory, sub, completed);
+                        var subResp = await _runner.RunAsync(
+                                subQuery, history, session, subReasoning, effectiveCt)
                             .ConfigureAwait(false);
-                        return (sub, subResp);
+                        collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, subResp);
+                        completed[sub.Order] = new CompletedSubTask(subQuery, subResp);
                     }
-                    finally { sem.Release(); }
-                });
-
-                var results = await Task.WhenAll(tasks).ConfigureAwait(false);
-
-                foreach (var (sub, resp) in results.OrderBy(t => t.sub.Order))
-                {
-                    collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, resp);
-                    runningHistory.Add(new ConversationMessage(ConversationRoles.User,
-                        SubTaskOrchestrator.FormatSubTaskQuery(sub)));
-                    runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, resp));
                 }
             }
-            else
-            {
-                foreach (var sub in group.Items)
-                {
-                    var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
-                    var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
-                    var subResp = await _runner.RunAsync(subQuery, runningHistory, session, subReasoning, ct)
-                        .ConfigureAwait(false);
-                    collected[sub.Order] = SubTaskOrchestrator.FormatSubTaskResult(sub, subResp);
-                    runningHistory.Add(new ConversationMessage(ConversationRoles.User, subQuery));
-                    runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, subResp));
-                }
-            }
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"Compound workflow {_parallelOptions.TimeoutSeconds}s timeout'a takıldı.");
         }
 
         return SubTaskOrchestrator.AggregateSubTaskResults(collected.Values.ToList());
@@ -106,18 +117,40 @@ internal sealed class DecomposedRunner
         [EnumeratorCancellation] CancellationToken ct)
     {
         var sessionId = session?.SessionId ?? string.Empty;
-        var runningHistory = conversationHistory != null
+        List<SubTask>? ordered = null;
+        string? validationError = null;
+        try
+        {
+            ordered = SubTaskOrchestrator.ValidateExecutionPlan(reasoning, query, _parallelOptions);
+        }
+        catch (Exception ex)
+        {
+            validationError = ex.Message;
+        }
+
+        if (validationError != null)
+        {
+            yield return new StreamEvent(StreamEventTypes.Error, new { message = validationError });
+            yield break;
+        }
+
+        var baseHistory = conversationHistory != null
             ? new List<ConversationMessage>(conversationHistory)
             : new List<ConversationMessage>();
-        runningHistory.Add(new ConversationMessage(ConversationRoles.User, query));
+        var completed = new Dictionary<int, CompletedSubTask>();
 
         var collected = new SortedDictionary<int, string>();
-        var total = reasoning.SubTasks.Count;
-        var groups = SubTaskOrchestrator.Partition(reasoning.SubTasks, _parallelOptions);
+        var total = ordered!.Count;
+        var groups = SubTaskOrchestrator.Partition(ordered, _parallelOptions);
         var parallelGroupCount = groups.Count(g => g.Parallel && g.Items.Count > 1);
 
-        // Alt görev sonuçları TAMAMLANDIKÇA yayınlanır; kullanıcı hepsinin bitmesini beklemez.
-        // Bu bayrak yalnızca ilk parçadan sonra ayırıcı koymak için.
+        using var timeoutCts = new CancellationTokenSource(
+            TimeSpan.FromSeconds(_parallelOptions.TimeoutSeconds));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        var effectiveCt = linkedCts.Token;
+
+        // Sıralı gruplar gerçek token akışıyla, paralel gruplar ise batch tamamlandıktan sonra
+        // deterministik sırayla yayınlanır. Bu bayrak yalnızca parçalar arasındaki ayırıcı içindir.
         var anyPartEmitted = false;
 
         // response_start, ilk delta'dan ÖNCE gönderilir — "yanıt metni akmaya başlıyor"
@@ -166,39 +199,56 @@ internal sealed class DecomposedRunner
                         });
                 }
 
-                var historySnapshot = runningHistory.ToList();
                 using var sem = new SemaphoreSlim(
                     Math.Max(1, _parallelOptions.MaxDegreeOfParallelism));
 
                 var tasks = group.Items.Select(async sub =>
                 {
-                    await sem.WaitAsync(ct).ConfigureAwait(false);
+                    await sem.WaitAsync(effectiveCt).ConfigureAwait(false);
                     try
                     {
                         var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
                         var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
+                        var history = BuildSubTaskHistory(baseHistory, sub, completed);
                         // Bu paralel dalın kendi (izole) async akışında ambient ajan adını
                         // sub.TargetAgent'a sabitle — RunAsync hint drain etmediği için
                         // (streaming değil), ürettiği ipuçları burada, kendi TargetAgent'ıyla
                         // etiketlenmiş biçimde kuyrukta bekler.
                         _approvalContext.SetCurrentAgent(sub.TargetAgent);
-                        var resp = await _runner.RunAsync(subQuery, historySnapshot, session, subReasoning, ct)
+                        var resp = await _runner.RunAsync(subQuery, history, session, subReasoning, effectiveCt)
                             .ConfigureAwait(false);
                         var hints = _uiHint.DrainPending(sessionId);
-                        return (sub, resp, hints);
+                        return (sub, subQuery, resp, hints);
                     }
                     finally { sem.Release(); }
                 }).ToList();
 
-                var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+                (SubTask sub, string subQuery, string resp, IReadOnlyList<StreamEvent> hints)[]? results = null;
+                Exception? batchError = null;
+                try
+                {
+                    results = await Task.WhenAll(tasks).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    batchError = ex;
+                }
 
-                foreach (var (sub, resp, hints) in results.OrderBy(t => t.sub.Order))
+                if (batchError != null)
+                {
+                    if (ct.IsCancellationRequested) yield break;
+                    var message = timeoutCts.IsCancellationRequested
+                        ? $"Compound işlem {_parallelOptions.TimeoutSeconds} saniyede tamamlanamadı."
+                        : batchError.Message;
+                    yield return new StreamEvent(StreamEventTypes.Error, new { message });
+                    yield break;
+                }
+
+                foreach (var (sub, subQuery, resp, hints) in results!.OrderBy(t => t.sub.Order))
                 {
                     var part = SubTaskOrchestrator.FormatSubTaskResult(sub, resp);
                     collected[sub.Order] = part;
-                    runningHistory.Add(new ConversationMessage(ConversationRoles.User,
-                        SubTaskOrchestrator.FormatSubTaskQuery(sub)));
-                    runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, resp));
+                    completed[sub.Order] = new CompletedSubTask(subQuery, resp);
 
                     foreach (var hint in hints)
                         yield return hint;
@@ -206,7 +256,7 @@ internal sealed class DecomposedRunner
                     yield return new StreamEvent(StreamEventTypes.Agent,
                         new { name = $"SubTask#{sub.Order}", status = "done", order = sub.Order });
 
-                    // Sonuç HAZIR olduğu anda yayınla — kalan alt görevler beklenmez.
+                    // Task.WhenAll tamamlandı; sonuçları kanonik sub.Order sırasında yayınla.
                     if (anyPartEmitted)
                         yield return new StreamEvent(StreamEventTypes.ResponseDelta,
                             new TextDeltaPayload(SubTaskOrchestrator.ResultSeparator));
@@ -232,6 +282,7 @@ internal sealed class DecomposedRunner
 
                     var subQuery = SubTaskOrchestrator.FormatSubTaskQuery(sub);
                     var subReasoning = SubTaskOrchestrator.CreateSubTaskReasoning(reasoning, sub);
+                    var history = BuildSubTaskHistory(baseHistory, sub, completed);
                     var subResponseBuilder = new StringBuilder();
 
                     // Sıralı dalda alt görevin GERÇEK token akışı kullanıcıya canlı iletilir —
@@ -248,11 +299,22 @@ internal sealed class DecomposedRunner
                     anyPartEmitted = true;
 
                     var bodyStreamer = new TrimmingDeltaStreamer();
+                    var subTaskFailed = false;
 
                     _approvalContext.SetCurrentAgent(sub.TargetAgent);
-                    await foreach (var evt in _runner.RunStreamingAsync(
-                        subQuery, runningHistory, session, subReasoning, ct))
+                    string? subTaskException = null;
+                    await foreach (var (evt, error) in EnumerateSubTaskEventsSafely(
+                        _runner.RunStreamingAsync(
+                            subQuery, history, session, subReasoning, effectiveCt),
+                        effectiveCt))
                     {
+                        if (error != null)
+                        {
+                            subTaskException = error;
+                            break;
+                        }
+                        if (evt == null) continue;
+
                         switch (evt.Type)
                         {
                             case var t when t == StreamEventTypes.ResponseDelta:
@@ -273,19 +335,47 @@ internal sealed class DecomposedRunner
                                          || t == StreamEventTypes.ReasoningComplete:
                                 break;
                             case var t when t == StreamEventTypes.Error:
+                                subTaskFailed = true;
                                 yield return evt;
                                 break;
                             default:
                                 yield return evt;
                                 break;
                         }
+                        if (subTaskFailed) break;
+                    }
+
+                    if (subTaskException != null)
+                    {
+                        if (ct.IsCancellationRequested) yield break;
+                        var message = timeoutCts.IsCancellationRequested
+                            ? $"Compound işlem {_parallelOptions.TimeoutSeconds} saniyede tamamlanamadı."
+                            : subTaskException;
+                        yield return new StreamEvent(StreamEventTypes.Error, new { message });
+                        yield return new StreamEvent(StreamEventTypes.Agent,
+                            new { name = $"SubTask#{sub.Order}", status = "failed", order = sub.Order });
+                        yield break;
+                    }
+
+                    if (subTaskFailed)
+                    {
+                        yield return new StreamEvent(StreamEventTypes.Agent,
+                            new { name = $"SubTask#{sub.Order}", status = "failed", order = sub.Order });
+                        yield break;
+                    }
+
+                    if (ct.IsCancellationRequested) yield break;
+                    if (timeoutCts.IsCancellationRequested)
+                    {
+                        yield return new StreamEvent(StreamEventTypes.Error,
+                            new { message = $"Compound işlem {_parallelOptions.TimeoutSeconds} saniyede tamamlanamadı." });
+                        yield break;
                     }
 
                     var subResponse = subResponseBuilder.ToString().Trim();
                     var part = SubTaskOrchestrator.FormatSubTaskResult(sub, subResponse);
                     collected[sub.Order] = part;
-                    runningHistory.Add(new ConversationMessage(ConversationRoles.User, subQuery));
-                    runningHistory.Add(new ConversationMessage(ConversationRoles.Assistant, subResponse));
+                    completed[sub.Order] = new CompletedSubTask(subQuery, subResponse);
 
                     yield return new StreamEvent(StreamEventTypes.Agent,
                         new { name = $"SubTask#{sub.Order}", status = "done", order = sub.Order });
@@ -308,5 +398,68 @@ internal sealed class DecomposedRunner
                 Revised: false,
                 Decomposed: true,
                 SubTaskCount: total));
+    }
+
+    private static List<ConversationMessage> BuildSubTaskHistory(
+        IReadOnlyCollection<ConversationMessage> baseHistory,
+        SubTask sub,
+        IReadOnlyDictionary<int, CompletedSubTask> completed)
+    {
+        var history = new List<ConversationMessage>(baseHistory);
+        foreach (var dependency in sub.Dependencies.Order())
+        {
+            if (!completed.TryGetValue(dependency, out var result))
+                throw new InvalidOperationException(
+                    $"Alt görev {sub.Order} bağımlılığı tamamlanmadan başlatıldı: {dependency}.");
+
+            history.Add(new ConversationMessage(ConversationRoles.User, result.Query));
+            history.Add(new ConversationMessage(ConversationRoles.Assistant, result.Response));
+        }
+        return history;
+    }
+
+    private sealed record CompletedSubTask(string Query, string Response);
+
+    private static async IAsyncEnumerable<(StreamEvent? Event, string? Error)>
+        EnumerateSubTaskEventsSafely(
+            IAsyncEnumerable<StreamEvent> stream,
+            [EnumeratorCancellation] CancellationToken ct)
+    {
+        var enumerator = stream.GetAsyncEnumerator(ct);
+        try
+        {
+            while (true)
+            {
+                StreamEvent? current = null;
+                string? error = null;
+                try
+                {
+                    if (!await enumerator.MoveNextAsync()) yield break;
+                    current = enumerator.Current;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    error = "Alt görev iptal edildi.";
+                }
+                catch (Exception ex)
+                {
+                    error = ex.Message;
+                }
+
+                yield return (current, error);
+                if (error != null) yield break;
+            }
+        }
+        finally
+        {
+            try
+            {
+                await enumerator.DisposeAsync();
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Üst akış iptali zaten error/cancel sonucu olarak normalize edildi.
+            }
+        }
     }
 }

@@ -50,12 +50,13 @@ internal sealed class TurnFinalizer
         AgentSession? session,
         string query,
         string result,
-        string terminationReason)
+        string terminationReason,
+        CancellationToken ct = default)
     {
-        await _approvalGate.ProcessPendingEscalationsAsync(trace, query, result);
+        await _approvalGate.ProcessPendingEscalationsAsync(trace, query, result, ct);
         PopulateAgentVisitOutputs(trace, result);
         WriteEpisodicMemorySafe(trace, query, result, session?.State.AuthenticatedCustomerId);
-        await UpdateCustomerProfileSafeAsync(session, trace, query, result);
+        await UpdateCustomerProfileSafeAsync(session, trace, query, result, ct);
 
         _traceStore.Complete(trace.TraceId,
             terminationReason: terminationReason,
@@ -125,7 +126,12 @@ internal sealed class TurnFinalizer
         });
     }
 
-    private async Task UpdateCustomerProfileSafeAsync(AgentSession? session, ReasoningTrace trace, string query, string response)
+    private async Task UpdateCustomerProfileSafeAsync(
+        AgentSession? session,
+        ReasoningTrace trace,
+        string query,
+        string response,
+        CancellationToken ct)
     {
         if (_profileService is null) return;
         // AuthenticatedCustomerId (JWT) — State.CustomerId DEĞİL: aksi halde kullanıcı
@@ -145,7 +151,12 @@ internal sealed class TurnFinalizer
                 botResponse: response,
                 intent: intent,
                 rating: null,
-                isNewSession: false);
+                isNewSession: false,
+                ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

@@ -55,6 +55,10 @@ public class ReasoningService : IReasoningPort
             result.VerifiedEntities = verified;
             return result;
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Reasoning başarısız, boş reasoning ile devam ediliyor");
@@ -90,6 +94,10 @@ public class ReasoningService : IReasoningPort
         try
         {
             stream = _reasoningClient.StreamAsync(messages, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -172,6 +180,10 @@ public class ReasoningService : IReasoningPort
                     if (!await enumerator.MoveNextAsync())
                         yield break;
                     item = (enumerator.Current, null);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {

@@ -543,11 +543,13 @@ public async Task<string> RunDecomposedAsync(...)
 
 **Karakteristikleri**:
 
-- **Paralel/sıralı gruplama** — `SubTaskOrchestrator.Partition` yan-etkisiz (read-only) alt görevleri paralel, yan-etkili olanları sıralı gruplara ayırır. `ParallelExecutionOptions.Enabled=false` ise tümü sıralı çalışır.
-- **Paralel eşzamanlılık sınırı** — `SemaphoreSlim` ile `ParallelExecutionOptions.MaxConcurrency` kadar task aynı anda çalışır.
-- **Continuity** — önceki alt görev sonucu history'ye eklenir, sonraki subtask context olarak görür.
+- **Paralel/sıralı gruplama** — yalnızca tüm tool'ları salt-okunur ajanlar paralel çalışır. Karma tool setli `OrderAgent`, LLM intent'i read-only olsa da sıralıdır.
+- **Paralel eşzamanlılık sınırı** — `SemaphoreSlim` ile `ParallelExecutionOptions.MaxDegreeOfParallelism` kadar task aynı anda çalışır.
+- **Fan-out ve süre sınırı** — `MaxSubTasks` plan genişliğini, `TimeoutSeconds` bütün compound koşusunun ortak zaman bütçesini sınırlar.
+- **İzolasyon/continuity** — ana compound sorgu kardeş workflow'lara taşınmaz; yalnızca açıkça bildirilen `Dependencies` sonuçları ilgili alt görevin history'sine eklenir.
+- **Hedef kısıtı** — her türetilen reasoning `ConstrainedTargetAgent` taşır; planning başka specialist seçerse chat manager doğrulanmış hedefi uygular, reflection ile kardeş specialist'e handoff engellenir.
 - **Recursion-safe** — derived reasoning'in `SubTasks=[]` olması sonsuz döngüyü engeller.
-- **Streaming uyumlu** — iç workflow event'leri forward edilir; sadece final response aggregated olarak yayın.
+- **Streaming uyumlu** — sıralı grupta gerçek token akışı iletilir; paralel batch sonuçları batch tamamlandıktan sonra deterministik `sub.Order` sırasıyla yayınlanır.
 
 **Neden?** MAF `GroupChatManager.SelectNextAgentAsync` bir turda tek next speaker seçer. Compound query için bu yetersiz. Kod katmanında orkestrasyon = *"N ayrı ama ilişkili konuşma = N workflow run"* modeli. Detay → [CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.md](CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.md).
 

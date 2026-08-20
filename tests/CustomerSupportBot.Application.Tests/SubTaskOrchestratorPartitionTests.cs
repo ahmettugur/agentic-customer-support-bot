@@ -147,9 +147,9 @@ public class SubTaskOrchestratorPartitionTests
     [Theory]
     [InlineData(WellKnown.Intents.OrderInquiry)]
     [InlineData(WellKnown.Intents.OrderListing)]
-    public void IsReadOnly_OrderAgentWithReadOnlyIntent_True(string intent)
+    public void IsReadOnly_OrderAgentWithReadOnlyIntent_False(string intent)
     {
-        DefaultOpts.IsReadOnly(Sub(1, WellKnown.AgentNames.Order, intent: intent)).Should().BeTrue();
+        DefaultOpts.IsReadOnly(Sub(1, WellKnown.AgentNames.Order, intent: intent)).Should().BeFalse();
     }
 
     [Theory]
@@ -162,7 +162,7 @@ public class SubTaskOrchestratorPartitionTests
     }
 
     [Fact]
-    public void Partition_TwoOrderStatusQueries_SingleParallelGroup()
+    public void Partition_TwoOrderStatusQueries_SingleSerialGroup()
     {
         // Gerçek kullanıcı senaryosu: "1042 ve 1043 numaralı siparişlerin durumu ne?"
         // İkisi de OrderAgent + sipariş_sorgulama — artık paralel çalışmalı.
@@ -175,15 +175,15 @@ public class SubTaskOrchestratorPartitionTests
         var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
 
         groups.Should().HaveCount(1);
-        groups[0].Parallel.Should().BeTrue();
+        groups[0].Parallel.Should().BeFalse();
         groups[0].Items.Should().HaveCount(2);
     }
 
     [Fact]
-    public void Partition_OrderInquiryThenOrderCancellation_TwoGroups()
+    public void Partition_OrderInquiryThenOrderCancellation_SingleSerialGroup()
     {
-        // Sorgu (read) sonra iptal (write) — yan-etkili adımdan önce/sonra sıralama
-        // korunmalı, ikisi tek paralel gruba alınmamalı.
+        // OrderAgent karma tool seti taşıdığı için LLM intent'i "read" dese bile iki görev de
+        // sıralı yürütülür; gerçek tool seçimi intent etiketiyle garanti edilemez.
         var subs = new[]
         {
             Sub(1, WellKnown.AgentNames.Order, intent: WellKnown.Intents.OrderInquiry),
@@ -192,9 +192,9 @@ public class SubTaskOrchestratorPartitionTests
 
         var groups = SubTaskOrchestrator.Partition(subs, DefaultOpts);
 
-        groups.Should().HaveCount(2);
-        groups[0].Parallel.Should().BeTrue();
-        groups[1].Parallel.Should().BeFalse();
+        groups.Should().ContainSingle();
+        groups[0].Parallel.Should().BeFalse();
+        groups[0].Items.Should().HaveCount(2);
     }
 
     // ─── Dependencies ────────────────────────────────────────────────────────────

@@ -61,11 +61,12 @@ internal sealed class WorkflowMessageBuilder
         string query,
         List<ConversationMessage>? conversationHistory,
         AgentSession? session,
-        ReasoningResult? reasoning)
+        ReasoningResult? reasoning,
+        CancellationToken ct = default)
     {
         var messages = new List<ChatMessage>();
 
-        var identityHint = await _identityHint.BuildAsync(session);
+        var identityHint = await _identityHint.BuildAsync(session, ct);
         if (!string.IsNullOrWhiteSpace(identityHint))
         {
             messages.Add(new ChatMessage(ChatRole.System, identityHint));
@@ -74,7 +75,7 @@ internal sealed class WorkflowMessageBuilder
         ContextResult contextResult = ContextResult.Empty;
         if (session != null)
         {
-            contextResult = await _contextPipeline.BuildContextAsync(session, query);
+            contextResult = await _contextPipeline.BuildContextAsync(session, query, ct);
             if (!string.IsNullOrWhiteSpace(contextResult.Text))
             {
                 messages.Add(new ChatMessage(ChatRole.System,

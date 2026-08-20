@@ -105,7 +105,9 @@ Opsiyonel:
   },
   "ParallelExecution": {
     "Enabled": true,
-    "MaxDegreeOfParallelism": 4
+    "MaxDegreeOfParallelism": 4,
+    "MaxSubTasks": 6,
+    "TimeoutSeconds": 180
   },
   "EvaluationQuality": {
     "Enabled": false

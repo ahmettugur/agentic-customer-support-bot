@@ -58,7 +58,7 @@ internal sealed class AgentTeamFactory
     private static AIAgent WrapWithTelemetry(AIAgent agent, string sourceName)
         => agent.AsBuilder().UseOpenTelemetry(sourceName).Build();
 
-    public Workflow CreateWorkflow()
+    public Workflow CreateWorkflow(string? constrainedSpecialistName = null)
     {
         return AgentWorkflowBuilder
             .CreateGroupChatBuilderWith(agents =>
@@ -66,7 +66,8 @@ internal sealed class AgentTeamFactory
                 return new CustomerSupportChatManager(
                     agents,
                     _guards,
-                    _loggerFactory.CreateLogger<CustomerSupportChatManager>())
+                    _loggerFactory.CreateLogger<CustomerSupportChatManager>(),
+                    constrainedSpecialistName)
                 {
                     MaximumIterationCount = _guards.MaxIterations
                 };

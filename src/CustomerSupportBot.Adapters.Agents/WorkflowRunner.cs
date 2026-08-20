@@ -62,19 +62,30 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         ReasoningResult? reasoning,
         CancellationToken ct)
     {
-        var prompt = await _messageBuilder.BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
-        var messages = prompt.Messages;
-
         using var timeoutCts = new CancellationTokenSource(
             TimeSpan.FromSeconds(_guards.TimeoutSeconds));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
         var effectiveCt = linkedCts.Token;
 
+        WorkflowPrompt prompt;
+        try
+        {
+            prompt = await _messageBuilder.BuildWorkflowMessagesAsync(
+                query, conversationHistory, session, reasoning, effectiveCt);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            throw ExceptionTranslator.Translate(
+                new TimeoutException($"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı."),
+                "RunAsync workflow mesaj hazırlığı timeout.");
+        }
+        var messages = prompt.Messages;
+
         var st = _traceProcessor.StartTraceState(session, query, reasoning);
         st.Trace.EstimatedTokens = TokenEstimator.Estimate(messages.Select(m => m.Text));
         st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
-        var workflow = _factory.CreateWorkflow();
+        var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent);
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
@@ -120,8 +131,20 @@ internal sealed class WorkflowRunner : IWorkflowRunner
                     "RunAsync workflow hatası.");
         }
 
-        var (result, _) = await BuildFinalResultAsync(st, session, query, effectiveCt);
-        return result;
+        try
+        {
+            var (result, _) = await BuildFinalResultAsync(st, session, query, effectiveCt);
+            return result;
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            _traceStore.Complete(st.Trace.TraceId,
+                terminationReason: WellKnown.Termination.ReasonTimeout,
+                error: $"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı during finalization");
+            throw ExceptionTranslator.Translate(
+                new TimeoutException($"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı."),
+                "RunAsync workflow finalization timeout.");
+        }
     }
 
     public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(
@@ -133,19 +156,40 @@ internal sealed class WorkflowRunner : IWorkflowRunner
     {
         var sessionId = session?.SessionId ?? string.Empty;
 
-        var prompt = await _messageBuilder.BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning);
-        var messages = prompt.Messages;
-
         using var timeoutCts = new CancellationTokenSource(
             TimeSpan.FromSeconds(_guards.TimeoutSeconds));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
         var effectiveCt = linkedCts.Token;
 
+        WorkflowPrompt? prompt = null;
+        Exception? promptError = null;
+        try
+        {
+            prompt = await _messageBuilder.BuildWorkflowMessagesAsync(
+                query, conversationHistory, session, reasoning, effectiveCt);
+        }
+        catch (Exception ex)
+        {
+            promptError = ex;
+        }
+
+        if (promptError != null)
+        {
+            if (ct.IsCancellationRequested) yield break;
+            var message = timeoutCts.IsCancellationRequested
+                ? $"İşlem {_guards.TimeoutSeconds} saniyede tamamlanamadı."
+                : promptError.Message;
+            yield return new StreamEvent(StreamEventTypes.Error, new { message });
+            yield break;
+        }
+
+        var messages = prompt!.Messages;
+
         var st = _traceProcessor.StartTraceState(session, query, reasoning);
         st.Trace.EstimatedTokens = TokenEstimator.Estimate(messages.Select(m => m.Text));
         st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
-        var workflow = _factory.CreateWorkflow();
+        var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent);
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
@@ -200,7 +244,34 @@ internal sealed class WorkflowRunner : IWorkflowRunner
                 yield break;
         }
 
-        var (result, terminationReason) = await BuildFinalResultAsync(st, session, query, effectiveCt);
+        (string Result, string TerminationReason)? finalResult = null;
+        Exception? finalizationError = null;
+        try
+        {
+            finalResult = await BuildFinalResultAsync(st, session, query, effectiveCt);
+        }
+        catch (Exception ex)
+        {
+            finalizationError = ex;
+        }
+
+        if (finalizationError != null)
+        {
+            if (ct.IsCancellationRequested) yield break;
+            var timedOut = timeoutCts.IsCancellationRequested;
+            var message = timedOut
+                ? $"İşlem {_guards.TimeoutSeconds} saniyede tamamlanamadı."
+                : finalizationError.Message;
+            _traceStore.Complete(st.Trace.TraceId,
+                terminationReason: timedOut
+                    ? WellKnown.Termination.ReasonTimeout
+                    : WellKnown.Termination.ReasonError,
+                error: message);
+            yield return new StreamEvent(StreamEventTypes.Error, new { message });
+            yield break;
+        }
+
+        var (result, terminationReason) = finalResult!.Value;
 
         // ResponseAgent'ın gerçek token akışı zaten ApplyTraceEvent içinde (AgentResponseUpdateEvent
         // dalı) yayınlandıysa response_start + delta'lar döngü sırasında gönderilmiş demektir —
@@ -281,7 +352,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
             }
         }
 
-        await _finalizer.FinalizeAsync(st.Trace, session, query, result, terminationReason);
+        await _finalizer.FinalizeAsync(st.Trace, session, query, result, terminationReason, turnCt);
 
         return (result, terminationReason);
     }

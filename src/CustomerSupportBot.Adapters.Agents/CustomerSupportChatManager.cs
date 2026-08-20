@@ -40,7 +40,8 @@ public class CustomerSupportChatManager : GroupChatManager
     public CustomerSupportChatManager(
         IReadOnlyList<AIAgent> agents,
         WorkflowGuardOptions guards,
-        ILogger<CustomerSupportChatManager> logger)
+        ILogger<CustomerSupportChatManager> logger,
+        string? constrainedSpecialistName = null)
     {
         _guards = guards;
         _logger = logger;
@@ -59,13 +60,26 @@ public class CustomerSupportChatManager : GroupChatManager
                 $"Required agent missing: {WellKnown.AgentNames.Response}");
         _responseAgent = response;
 
+        AIAgent? constrainedSpecialist = null;
+        if (!string.IsNullOrWhiteSpace(constrainedSpecialistName))
+        {
+            if (!WellKnown.AgentNames.Specialists.Contains(
+                    constrainedSpecialistName, StringComparer.OrdinalIgnoreCase)
+                || !agentsByName.TryGetValue(constrainedSpecialistName, out constrainedSpecialist))
+            {
+                throw new InvalidOperationException(
+                    $"Invalid constrained specialist: {constrainedSpecialistName}");
+            }
+        }
+
         var ctx = new RoutingContext
         {
             AgentsByName = agentsByName,
             PlanningAgent = _planningAgent,
             ResponseAgent = _responseAgent,
             Guards = _guards,
-            Logger = _logger
+            Logger = _logger,
+            ConstrainedSpecialist = constrainedSpecialist
         };
 
         _strategies =

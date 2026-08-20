@@ -49,7 +49,7 @@ Compound query (bileşik sorgu) orkestratörü. `ReasoningResult.SubTasks` liste
 - **`RunDecomposedAsync(query, history, session, reasoning, ct)`** — non-streaming, aggregated response döner.
 - **`RunDecomposedStreamingAsync(...)`** — iç workflow event'leri ve subtask sınır event'leri forward edilir.
 
-**Paralel gruplama**: `ParallelExecutionOptions.Enabled=true` ise yan-etkisiz (read-only) subtask'ler `Task.WhenAll` + `SemaphoreSlim(MaxConcurrency)` ile paralel, yan-etkili olanlar sıralı çalışır.
+**Paralel gruplama**: `Enabled=true` ise yalnızca bütün tool'ları salt-okunur ajanlar `Task.WhenAll` + `SemaphoreSlim(MaxDegreeOfParallelism)` ile paralel çalışır. `MaxSubTasks` fan-out'u, `TimeoutSeconds` bütün compound koşusunu sınırlar. Karma tool setli ajanlar sıralıdır.
 
 ---
 

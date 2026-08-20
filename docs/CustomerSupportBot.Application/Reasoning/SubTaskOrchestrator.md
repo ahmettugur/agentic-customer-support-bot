@@ -4,13 +4,17 @@
 
 ## 1. Ne İşe Yarar
 
-Compound query'lerde (birden fazla niyet) alt görevleri paralel veya sıralı olarak yürütme planı oluşturur. `SubTask.Dependencies` alanına göre bağımlılık analizi yapar.
+Compound query'lerde alt görev planını doğrular ve paralel/sıralı grupları oluşturur.
+`ValidateExecutionPlan` fan-out sınırı, specialist adı, sıra, dependency ve entity bağlarını
+yürütmeden önce kontrol eder. `Partition`, yalnızca tüm tool'ları salt-okunur ajanları paralel
+gruplar; karma tool setli ajanlar intent etiketinden bağımsız olarak sıralıdır.
 
 ## 2. Hangi Amaçla Kullanılır
 
 "Siparişim nerede VE şikayet açmak istiyorum" gibi çoklu istekleri ayrı agent'lara yönlendirir.
 
-> 💡 **Analiz notu:** Bağımlılığı olmayan görevler paralel, bağımlı olanlar sıralı çalışır — proje yönetimindeki Gantt şeması gibi.
+Bir alt görev yalnızca `Dependencies` içinde belirttiği tamamlanmış görevlerin soru/yanıtını
+history olarak görür; ilgisiz kardeşlerin ve ana compound sorgunun bağlamı sızdırılmaz.
 
 ## Bağlantılar
 

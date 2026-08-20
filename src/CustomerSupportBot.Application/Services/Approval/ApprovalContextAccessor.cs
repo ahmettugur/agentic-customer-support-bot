@@ -27,6 +27,14 @@ public sealed class ApprovalContextAccessor : IApprovalContextAccessor
             : current with { AgentName = agentName };
     }
 
+    public void SetTraceId(string? traceId)
+    {
+        var current = _current.Value;
+        _current.Value = current is null
+            ? new ApprovalContext(null, traceId, null)
+            : current with { TraceId = traceId };
+    }
+
     private sealed class ContextScope : IDisposable
     {
         private readonly ApprovalContext? _previous;

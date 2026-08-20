@@ -18,10 +18,12 @@ internal static class Branches
     public const string PlanClarification = "plan_clarification";
     public const string PlanUnknownAgent = "plan_unknown_agent";
     public const string Plan = "plan";
+    public const string PlanConstrained = "plan_constrained";
     public const string ReflectionMissing = "reflection_missing";
     public const string ReflectionEscalation = "reflection_escalation";
     public const string ReflectionHandoff = "reflection_handoff";
     public const string ReflectionComplete = "reflection_complete";
+    public const string ReflectionConstrained = "reflection_constrained";
 }
 
 internal sealed class RoutingContext
@@ -31,6 +33,7 @@ internal sealed class RoutingContext
     public required AIAgent ResponseAgent { get; init; }
     public required WorkflowGuardOptions Guards { get; init; }
     public required ILogger Logger { get; init; }
+    public AIAgent? ConstrainedSpecialist { get; init; }
 
     public AIAgent? Resolve(string? name) =>
         string.IsNullOrWhiteSpace(name) ? null
@@ -122,6 +125,14 @@ internal sealed class PlanRoutingStrategy : IRoutingStrategy
             return Result(_ctx.ResponseAgent, Branches.PlanUnknownAgent);
         }
 
+        if (_ctx.ConstrainedSpecialist != null && planned != _ctx.ConstrainedSpecialist)
+        {
+            _ctx.Logger.LogWarning(
+                "Plan selected {PlannedAgent}, but decomposed workflow is constrained to {AllowedAgent}",
+                planned.Name, _ctx.ConstrainedSpecialist.Name);
+            return Result(_ctx.ConstrainedSpecialist, Branches.PlanConstrained);
+        }
+
         return Result(planned, Branches.Plan);
     }
 
@@ -155,6 +166,13 @@ internal sealed class ReflectionRoutingStrategy : IRoutingStrategy
                 WellKnown.AgentNames.Response, StringComparison.OrdinalIgnoreCase))
         {
             var handoffTarget = _ctx.Resolve(reflection.HandoffSuggestion);
+            if (_ctx.ConstrainedSpecialist != null && handoffTarget != _ctx.ConstrainedSpecialist)
+            {
+                _ctx.Logger.LogWarning(
+                    "Reflection handoff to {HandoffAgent} blocked; decomposed workflow is constrained to {AllowedAgent}",
+                    reflection.HandoffSuggestion, _ctx.ConstrainedSpecialist.Name);
+                return Result(_ctx.ResponseAgent, Branches.ReflectionConstrained);
+            }
             if (handoffTarget != null)
                 return Result(handoffTarget, Branches.ReflectionHandoff);
 

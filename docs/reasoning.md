@@ -164,9 +164,10 @@ ReasoningAgent **kendini denetler** — JSON çıkışına `sanityIssues[]` ekle
 |---|---|
 | `Info` | Log'a yaz, devam et |
 | `Warn` | Log + telemetry, devam et |
-| `Error` | **Replan tetikle** — düşünceyi tekrar yaptır |
+| `Error` | `ReasoningResult.SanityIssues` ve trace'e kaydet, mevcut akışa devam et |
 
-Bu sayede LLM kendi hatasını fark edip düzeltir. Tek-shot bekleyip kötü output kabul etmek yerine.
+Sanity checker bugün gözlemleme ve audit katmanıdır; otomatik replan tetiklemez. Replan ayrı,
+admin tarafından başlatılan `ReplanService` akışıdır.
 
 📁 Kod: [`CustomerSupportBot.Domain/Model/ReasoningIssue.md`](CustomerSupportBot.Domain/Model/ReasoningIssue.md) (`ReasoningIssue`)
 
@@ -311,8 +312,9 @@ ReasoningAgent compound query'i **alt görevlere** böler:
 |---|---|
 | `dependencies: []` | Hemen başla |
 | `dependencies: [1]` | Subtask 1 tamamlanmasını bekle |
-| Yan-etkisiz (Inquiry, ProductInfo) | **Paralel** çalıştırılabilir (`Task.WhenAll`) |
+| Tüm tool'ları yan-etkisiz ajan (`ProductAgent`) | **Paralel** çalıştırılabilir (`Task.WhenAll`) |
 | Yan-etkili (OrderPlacement, Complaint) | **Sıralı** — onay kaydı tek olsun diye (gate beklemez) |
+| Karma tool setli ajan (`OrderAgent`) | Intent read-only görünse bile **sıralı** |
 
 ```
 Yan-etkisiz query: "1 ve 2 durumu"
@@ -528,7 +530,7 @@ Kullanıcı: **"5 ve 7 durumu nedir?"**
 | Tool seçimi yanlış olabilir | Confidence threshold + handoff koruması |
 | Debug imkansız | Steps + SanityIssues + AgentVisits trace |
 | Compound query yapılamaz | SubTask decomposition |
-| Self-correction yok | SanityIssues → Error → Replan |
+| Tutarlılık görünmez | SanityIssues → trace/audit; manuel Replan ayrı akış |
 | Cost öngörülemez | Per-katman optimize edilebilir |
 
 ---
@@ -701,7 +703,7 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
 |---|---|
 | **Deterministic preprocessing** | `regex` grounding'li step #1 — `001`, `1` LLM'siz çıkarıldı |
 | **Chain-of-Thought** | `reasoning.steps[]` — 4 adım, her biri action + grounding + confidence ile |
-| **Sanity check** | `sanityIssues: []` — bu örnekte temiz; uyumsuzluk olsaydı Replan tetiklenirdi |
+| **Sanity check** | `sanityIssues: []` — bu örnekte temiz; uyumsuzluk trace/audit kaydına girer |
 | **Confidence-aware routing** | `reasoning.confidenceScore: 0.95` yüksek, `planning.needsClarification: false` → clarification yok, direkt specialist |
 | **Grounding** | `regex` (×2), `session_state`, `derived` — sadece 1 step `derived`, çoğunluk delilli |
 | **ReAct (3 faz)** | ComplaintAgent: `preToolCheck.canProceed=true` → tool call → `postToolReflection.status=done` |

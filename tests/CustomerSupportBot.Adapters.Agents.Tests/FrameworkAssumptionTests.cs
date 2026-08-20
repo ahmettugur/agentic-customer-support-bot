@@ -23,6 +23,7 @@
 // beklediğimiz şekle sahip olduğudur (tip/imza değişirse bu dosya derlenmez).
 
 using CustomerSupportBot.Adapters.Agents;
+using CustomerSupportBot.Adapters.Persistence.InMemory;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model;
@@ -37,8 +38,21 @@ namespace CustomerSupportBot.Adapters.Agents.Tests;
 
 public class FrameworkAssumptionTests
 {
+    /// <summary>
+    /// Trace store GERÇEK olanı (<c>InMemoryReasoningTraceStore</c>) kullanılır, sahte değil.
+    ///
+    /// <para>
+    /// Sahte store <c>StartTrace</c> için <c>null</c> döndürüyordu; sözleşme ise non-nullable
+    /// <see cref="ReasoningTrace"/> vaat eder. Bu fark, dönen trace'e hiç dokunulmadığı sürece
+    /// zararsız görünüyordu — ta ki <c>StartTraceState</c> trace'i okumaya başlayana kadar
+    /// (ambient onay bağlamına trace id bağlanması), o an bu dosyadaki üç test birden
+    /// NullReferenceException ile düştü. Yani kırılan üretim kodu değil, gerçekçi olmayan
+    /// sahteydi. Gerçek store bellek içi ve bağımlılıksız; sahteyi tercih etmenin bir kazancı
+    /// yoktu.
+    /// </para>
+    /// </summary>
     private static WorkflowTraceEventProcessor CreateProcessor() =>
-        new(Substitute.For<IReasoningTraceStore>(), Substitute.For<IApprovalContextAccessor>());
+        new(new InMemoryReasoningTraceStore(), Substitute.For<IApprovalContextAccessor>());
 
     // ═══ 1. TurnToken ayrımı ═══
 

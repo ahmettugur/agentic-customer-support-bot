@@ -8,7 +8,7 @@
 
 Compound query (bileşik sorgu — ör. "1001'i iptal et ve iade başlat") orkestrasyonunu yapar: reasoning aşamasının ürettiği `SubTasks` listesini `SubTaskOrchestrator.Partition` ile yan-etkisiz/yan-etkili gruplara ayırır, her grubu (paralel veya sıralı) `WorkflowRunner` üzerinden çalıştırır ve sonuçları tek bir yanıtta birleştirir.
 
-> 💡 **Analiz notu:** "Siparişimi iptal et VE yeni sipariş oluştur" gibi çoklu isteklerde her alt görev ayrı bir workflow koşusudur. İptal ve oluşturma bağımsızsa paralel, bağımlıysa sıralı çalışır — proje yönetimindeki "Critical Path" gibi.
+> **Güvenlik notu:** Her alt görev ayrı ve hedef specialist'e kısıtlı bir workflow koşusudur. Yalnızca bütün tool'ları salt-okunur ajanlar paralel çalışır; `OrderAgent` gibi karma ajanlar her zaman sıralıdır.
 
 ## Hangi amaçla kullanılır?
 
@@ -18,9 +18,11 @@ Compound query (bileşik sorgu — ör. "1001'i iptal et ve iade başlat") orkes
 
 - Alt görevleri `SubTaskOrchestrator.Partition(reasoning.SubTasks, parallelOptions)` ile paralel/sıralı gruplara bölmek.
 - Paralel gruplar için `SemaphoreSlim` ile `ParallelExecutionOptions.MaxDegreeOfParallelism` sınırını uygulayıp `Task.WhenAll` ile eş zamanlı `WorkflowRunner.RunAsync`/`RunStreamingAsync` çağırmak.
-- Sıralı gruplar için alt görevleri birbiri ardına çalıştırıp `runningHistory`'yi (her alt görevin sorusu+yanıtı) bir sonrakine taşımak — böylece sonraki alt görev öncekinin bağlamını görür.
+- Planı `MaxSubTasks`, agent, pozitif/benzersiz sıra, geriye dönük dependency ve entity-source kurallarıyla yürütmeden önce doğrulamak.
+- Her alt görev history'sini normal konuşma geçmişi ve yalnızca açıkça belirtilmiş `Dependencies` sonuçlarıyla kurmak; compound ana sorguyu ve ilgisiz kardeşleri taşımamak.
 - Her alt görevin sonucunu `SubTaskOrchestrator.FormatSubTaskResult` ile etiketleyip `SortedDictionary<int, string>` (sıra numarasına göre) içinde toplamak, sonunda `SubTaskOrchestrator.AggregateSubTaskResults` ile birleştirmek.
-- Streaming yolda (`RunDecomposedStreamingAsync`) `Orchestrator`/`SubTask#N` durumlarını yaymak ve **her alt görev sonucunu tamamlandığı anda** `ResponseDelta` olarak göndermek (aşağıya bakın).
+- Tüm compound koşusuna ortak `ParallelExecutionOptions.TimeoutSeconds` bütçesi uygulamak; hata alan alt görevi `failed` işaretleyip sahte `ResponseComplete` üretmeden durmak.
+- Streaming yolda `Orchestrator`/`SubTask#N` durumlarını ve deterministik birleşik metni yayınlamak.
 
 **Üstlenmediği işler:** Tek bir alt görevin gerçek workflow koşusu (`WorkflowRunner`'a devredilir), reasoning'in sorguyu alt görevlere bölme kararı (`ReasoningService`/`SubTaskOrchestrator.IsCompoundQuery`).
 
@@ -45,18 +47,18 @@ Paralel dalda `_approvalContext.SetCurrentAgent(sub.TargetAgent)` her alt-görev
 | `RunDecomposedAsync(query, conversationHistory, session, reasoning, ct)` | Non-streaming compound query koşusu; birleşik nihai metni döner. |
 | `RunDecomposedStreamingAsync(query, conversationHistory, session, reasoning, ct)` | Streaming compound query koşusu; `Orchestrator`/`SubTask#N` durum event'leri + alt görev sonuçlarının **ilerlemeli** `ResponseDelta` akışı + `ResponseStart`/`ResponseComplete`. |
 
-## İlerlemeli yayın — sonuçlar tamamlandıkça gönderilir
+## Streaming davranışı
 
 Alt görev sonuçları artık turun sonunu beklemez. İki dal farklı davranır:
 
 | Dal | Yayın |
 |---|---|
 | **Sıralı** grup | Başlık önce, ardından alt görevin **gerçek LLM token akışı canlı iletilir** |
-| **Paralel** grup | Sonuç tamamlandığı anda tek parça hâlinde yayınlanır |
+| **Paralel** grup | Batch `Task.WhenAll` ile tamamlandıktan sonra sonuçlar `sub.Order` sırasıyla tek parça yayınlanır |
 
 Paralel dalda canlı iletim mümkün değil: alt görevler eşzamanlı koşuyor ve `RunAsync`
 (streaming olmayan) kullanılıyor; N akışı tek sıralı çıktıya araya girmeden örmek mümkün
-olmadığı için sonuçlar tamamlandıkça bütün hâlinde gönderilir. Sıralı dalda ise alt görevler
+olmadığı için sonuçlar batch tamamlandıktan sonra bütün hâlinde gönderilir. Sıralı dalda ise alt görevler
 zaten birbiri ardına çalıştığından token'lar doğrudan akıtılabilir.
 
 Sıralı dalda bir incelik var: alt görevin nihai metni `FormatSubTaskResult` içinde
@@ -103,7 +105,7 @@ orada alınır). Tek-sorgu yolu bit bit aynı kalır.
 > sorgularda sessizce yanlış çalışırdı. `ResponseStart_ComesBeforeAnyDelta_SoOrderingIsMeaningful`
 > ve `ResponseStart_CarriesDecomposedFlag_SoClientDefersChipSealing` bu iki ucu birlikte kilitler.
 
-> 🐞 **Kaldırılan: sondaki yapay parçalama.** Önceden tüm alt görevler bitene kadar hiçbir
+> **Kaldırılan: sondaki yapay parçalama.** Önceden tüm alt görevler bitene kadar hiçbir
 > metin gönderilmiyor, sonra birleşik metin kelime kelime 20 ms gecikmeyle "yazılıyormuş gibi"
 > akıtılıyordu. Yani kullanıcı hem tüm alt görevleri bekliyor hem de üstüne 4–8 saniyelik
 > sahte yazma süresi ödüyordu. Şimdi gerçek ilerleme gösteriliyor, sahte gecikme yok.

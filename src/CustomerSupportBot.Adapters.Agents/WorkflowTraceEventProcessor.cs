@@ -89,6 +89,7 @@ internal sealed class WorkflowTraceEventProcessor
     public TraceState StartTraceState(AgentSession? session, string query, ReasoningResult? reasoning)
     {
         var trace = _traceStore.StartTrace(session?.SessionId ?? "anonymous", query);
+        _approvalContext.SetTraceId(trace.TraceId);
         if (reasoning != null)
         {
             trace.Reasoning = reasoning;

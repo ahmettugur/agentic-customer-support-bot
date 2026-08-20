@@ -13,7 +13,7 @@ namespace CustomerSupportBot.Adapters.Agents;
 /// <para>
 /// <b>Neden var:</b> <c>DecomposedRunner</c> compound sorgu orkestrasyonunun tamamını taşıyor —
 /// alt görevleri gruplara ayırma, paralel/sıralı çalıştırma, sonuçları <c>sub.Order</c>
-/// sırasında toplama ve tamamlandıkça ilerlemeli olarak yayınlama. Bunların hepsi test edilmesi
+/// sırasında toplama ve sıralı gruplarda gerçek token akışını yayınlama. Bunların hepsi test edilmesi
 /// gereken gerçek mantık, ama <c>WorkflowRunner</c> <c>sealed</c> bir sınıf olduğu ve kendisi de
 /// altı ajanı + MAF workflow'unu kurmayı gerektirdiği için (yani Docker/Testcontainers'a bağımlı
 /// bir fixture) <c>DecomposedRunner</c> pratikte hiç izole test edilemiyordu. Bu arayüz, tek
