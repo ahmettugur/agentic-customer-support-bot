@@ -10,6 +10,18 @@ public interface IOrderRepository
     /// <summary>Yeni sipariş oluşturur ve oluşturulan sipariş ID'sini döner.</summary>
     string Create(OrderInfo order);
 
+    /// <summary>
+    /// Stoğu düşer ve siparişi yazar — <b>tek transaction</b> içinde.
+    ///
+    /// <para>
+    /// Ayrı ayrı yapıldığında (önce düş, sonra yaz) ikisinin arasında oluşan herhangi bir hata
+    /// stoğu düşülmüş ama karşılığında hiçbir sipariş oluşmamış hâlde bırakır. Hiçbir yerde
+    /// hata görünmez; ürün stoğu sessizce ve kalıcı olarak azalır. Bu yüzden sipariş verme
+    /// bölünemez bir işlemdir ve bu metot onu öyle temsil eder.
+    /// </para>
+    /// </summary>
+    OrderPlacementResult PlaceOrder(OrderInfo order);
+
     /// <summary>Sipariş ID ile sorgular. Bulunamazsa null döner.</summary>
     OrderInfo? Get(string orderId);
 

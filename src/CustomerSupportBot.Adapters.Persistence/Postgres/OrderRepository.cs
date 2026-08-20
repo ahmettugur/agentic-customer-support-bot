@@ -80,6 +80,62 @@ public sealed class OrderRepository : IOrderRepository
         });
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <see cref="Create"/> ile aynı transaction düzeni, tek farkla: stok düşümü de AYNI
+    /// transaction'ın içindedir. Herhangi bir adım başarısız olursa hiçbiri kalıcı olmaz.
+    /// </remarks>
+    public OrderPlacementResult PlaceOrder(OrderInfo order)
+    {
+        if (order.Lines.Count == 0)
+            throw new ArgumentException("Sipariş en az bir satır içermelidir.", nameof(order));
+
+        using var probe = _dbFactory.CreateDbContext();
+        var strategy = probe.Database.CreateExecutionStrategy();
+
+        return strategy.Execute(() =>
+        {
+            using var ctx = _dbFactory.CreateDbContext();
+            using var tx = ctx.Database.BeginTransaction();
+
+            // Stok ÖNCE düşülür: yetersizse sipariş hiç yazılmaz ve rollback ile
+            // kısmen düşülmüş satırlar da geri alınır.
+            var deduction = StockDeduction.TryDeduct(ctx, order.Lines, _logger);
+            if (!deduction.Success)
+                return OrderPlacementResult.OutOfStock(deduction);
+
+            var names = order.Lines.Select(l => l.Product).ToList();
+            var products = ctx.Products
+                .Where(p => names.Contains(p.Name))
+                .ToDictionary(p => p.Name, p => p.Id);
+
+            var orderEntity = new OrderEntity
+            {
+                CustomerId = long.Parse(order.CustomerId),
+                Status = order.Status,
+                OrderDate = order.OrderDate.Kind == DateTimeKind.Utc
+                    ? order.OrderDate
+                    : DateTime.SpecifyKind(order.OrderDate, DateTimeKind.Utc)
+            };
+            ctx.Orders.Add(orderEntity);
+            ctx.SaveChanges(); // Code DB tarafından üretilir, EF geri okur
+
+            foreach (var line in order.Lines)
+            {
+                ctx.OrderDetails.Add(new OrderDetailEntity
+                {
+                    OrderCode = orderEntity.Code,
+                    ProductId = products[line.Product],
+                    Quantity = line.Quantity
+                });
+            }
+
+            ctx.SaveChanges();
+            tx.Commit();
+            return OrderPlacementResult.Placed(orderEntity.Code.ToString());
+        });
+    }
+
     public OrderInfo? Get(string orderId)
     {
         if (!long.TryParse(orderId, out var id)) return null;

@@ -117,22 +117,27 @@ public sealed class OrderToolsService : IOrderToolsService
                 confidence: 0.9);
         }
 
-        var deduction = _products.TryDeductStock(merged);
-        if (!deduction.Success)
-            return ToolResult.Conflict(
-                WellKnown.ToolErrorCodes.StockInsufficient,
-                "Stok yetersiz, sipariş oluşturulamadı: " +
-                string.Join("; ", deduction.Shortages.Select(s =>
-                    $"{s.Product} için {s.Requested} adet istendi, stokta {s.Available} adet var")) +
-                ". Siparişin tamamı iptal edildi — hiçbir ürün rezerve edilmedi.");
-
-        var orderId = _orders.Create(new OrderInfo
+        // Stok düşümü ve siparişin yazılması TEK transaction'dadır. Ayrı yapıldıklarında
+        // aradaki bir hata (DB kesintisi, retry tükenmesi, pod'un ölmesi) stoğu düşülmüş ama
+        // karşılığında hiçbir sipariş oluşmamış hâlde bırakıyordu — hiçbir yerde hata
+        // görünmeden, ürün stoğu kalıcı olarak azalarak.
+        var placement = _orders.PlaceOrder(new OrderInfo
         {
             Lines      = merged,
             CustomerId = customerId,
             Status     = WellKnown.OrderStatuses.Processing,
             OrderDate  = DateTime.Now
         });
+
+        if (placement.OrderId is null)
+            return ToolResult.Conflict(
+                WellKnown.ToolErrorCodes.StockInsufficient,
+                "Stok yetersiz, sipariş oluşturulamadı: " +
+                string.Join("; ", placement.Stock.Shortages.Select(s =>
+                    $"{s.Product} için {s.Requested} adet istendi, stokta {s.Available} adet var")) +
+                ". Siparişin tamamı iptal edildi — hiçbir ürün rezerve edilmedi.");
+
+        var orderId = placement.OrderId;
 
         var result = ToolResult.Ok(
             message: $"Sipariş başarıyla oluşturuldu! Sipariş numarası: {orderId}. Ürünler: {FormatLines(merged)}",

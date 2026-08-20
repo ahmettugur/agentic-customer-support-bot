@@ -52,37 +52,9 @@ public sealed class ProductCatalogRepository : IProductCatalogRepository
 
         return ExecuteInTransaction(ctx =>
         {
-            var shortages = new List<StockShortage>();
-
-            foreach (var line in lines.OrderBy(l => l.Product, StringComparer.Ordinal))
-            {
-                var qty = line.Quantity;
-                var affected = ctx.Products
-                    .Where(p => p.Name == line.Product && p.Stock >= qty)
-                    .ExecuteUpdate(s => s.SetProperty(p => p.Stock, p => p.Stock - qty));
-
-                if (affected > 0) continue;
-
-                // Düşüm başarısız — sebebini kullanıcıya söyleyebilmek için mevcut stoğu oku.
-                // Ürün hiç yoksa Available=0 raporlanır; ürünün varlığı zaten çağrıdan önce
-                // FindProduct ile doğrulanmış olmalı, bu yalnızca yarış durumu için savunmadır.
-                var available = ctx.Products
-                    .Where(p => p.Name == line.Product)
-                    .Select(p => (int?)p.Stock)
-                    .FirstOrDefault() ?? 0;
-
-                shortages.Add(new StockShortage(line.Product, qty, available));
-            }
-
-            if (shortages.Count > 0)
-            {
-                _logger.LogInformation(
-                    "Stok düşümü tamamı geri alındı — yetersiz satır sayısı: {Count}", shortages.Count);
-                // Commit edilmez → using tx dispose edilirken rollback olur.
-                return (Commit: false, Result: StockDeductionResult.Insufficient(shortages));
-            }
-
-            return (Commit: true, Result: StockDeductionResult.Ok());
+            var result = StockDeduction.TryDeduct(ctx, lines, _logger);
+            // Yetersizse commit edilmez → using tx dispose edilirken rollback olur.
+            return (Commit: result.Success, Result: result);
         });
     }
 
