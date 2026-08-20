@@ -28,7 +28,7 @@ using ChatResponse = Microsoft.Extensions.AI.ChatResponse;
 namespace CustomerSupportBot.Api.IntegrationTests;
 
 /// <summary>A2A açık + LLM yerine deterministik sahte istemci.</summary>
-public sealed class A2AConformanceFactory : TestWebApplicationFactory
+public class A2AConformanceFactory : TestWebApplicationFactory
 {
     private sealed class EchoChatClient : IChatClient
     {

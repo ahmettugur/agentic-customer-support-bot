@@ -91,8 +91,8 @@ public class A2AEndpointsTests : IClassFixture<A2AEnabledFactory>
 
     /// <summary>
     /// Yetkili istemci. <paramref name="a2aVersion"/> varsayılan olarak gönderilir çünkü
-    /// spesifikasyon "Clients MUST send the <c>A2A-Version</c> header" der ve HTTP+JSON
-    /// uçlarımız bunu zorunlu tutar (bkz. <c>UseA2AProtocolGuards</c>). <c>null</c> geçmek,
+    /// spesifikasyon "Clients MUST send the <c>A2A-Version</c> header" der ve her iki binding
+    /// bunu zorunlu tutar (bkz. <c>UseA2AProtocolGuards</c>). <c>null</c> geçmek,
     /// başlığı hiç göndermeyen bir istemciyi taklit eder.
     /// </summary>
     private HttpClient ClientWith(string token, string? a2aVersion = "1.0")
@@ -415,6 +415,96 @@ public class A2AEndpointsTests : IClassFixture<A2AEnabledFactory>
 
         response.StatusCode.Should().BeOneOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden);
     }
+
+    // ═══ Protokol sürümü — iki binding aynı 1.0-only politikasına tabidir ═══
+
+    [Theory]
+    [InlineData(null, "0.3")]
+    [InlineData("0.3", "0.3")]
+    [InlineData("2.0", "2.0")]
+    public async Task JsonRpc_UnsupportedVersion_ReturnsVersionNotSupportedEnvelope(
+        string? requestedVersion,
+        string effectiveVersion)
+    {
+        var client = ClientWith(MintToken(A2ARoles.Partner), requestedVersion);
+
+        var response = await client.PostAsJsonAsync("/a2a/product", new
+        {
+            jsonrpc = "2.0",
+            id = "version-probe",
+            method = "UnknownMethod",
+            @params = new { }
+        }, TestContext.Current.CancellationToken);
+
+        // JSON-RPC protokol hataları HTTP durumuna değil JSON-RPC error alanına taşınır.
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+
+        using var body = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        body.RootElement.GetProperty("jsonrpc").GetString().Should().Be("2.0");
+        body.RootElement.GetProperty("error").GetProperty("code").GetInt32().Should().Be(-32009);
+        body.RootElement.GetProperty("error").GetProperty("message").GetString()
+            .Should().Contain(effectiveVersion);
+    }
+
+    [Fact]
+    public async Task JsonRpc_Version10_ReachesTheSdkProcessor()
+    {
+        var client = ClientWith(MintToken(A2ARoles.Partner), "1.0");
+
+        var response = await client.PostAsJsonAsync("/a2a/product", new
+        {
+            jsonrpc = "2.0",
+            id = "version-probe",
+            method = "UnknownMethod",
+            @params = new { }
+        }, TestContext.Current.CancellationToken);
+
+        using var body = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        body.RootElement.GetProperty("error").GetProperty("code").GetInt32().Should().Be(-32601,
+            "1.0 guard'ı geçmeli ve bilinmeyen metodu SDK işlemcisi reddetmeli");
+    }
+
+    [Theory]
+    [InlineData(null, "0.3")]
+    [InlineData("0.3", "0.3")]
+    [InlineData("2.0", "2.0")]
+    public async Task HttpJson_UnsupportedVersion_ReturnsA2AError(
+        string? requestedVersion,
+        string effectiveVersion)
+    {
+        var client = ClientWith(MintToken(A2ARoles.Partner), requestedVersion);
+
+        var response = await client.GetAsync(
+            "/a2a/product/card", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/a2a+json");
+
+        using var body = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var error = body.RootElement.GetProperty("error");
+        error.GetProperty("code").GetInt32().Should().Be(400);
+        error.GetProperty("details")[0].GetProperty("reason").GetString()
+            .Should().Be("VERSION_NOT_SUPPORTED");
+        error.GetProperty("details")[0].GetProperty("metadata")
+            .GetProperty("requestedVersion").GetString().Should().Be(effectiveVersion);
+    }
+
+    [Fact]
+    public async Task HttpJson_Version10_ReachesTheSdkProcessor()
+    {
+        var client = ClientWith(MintToken(A2ARoles.Partner), "1.0");
+
+        var response = await client.GetAsync(
+            "/a2a/product/card", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/a2a+json");
+    }
+
     // ═══ Girdi sınırları — istek SAYISI sınırı "ne kadar" sorusunu kapsamaz ═══
 
     /// <summary>
@@ -444,6 +534,55 @@ public class A2AEndpointsTests : IClassFixture<A2AEnabledFactory>
 
         response.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge,
             "gövde sınırı ayrıştırma öncesinde uygulanmalı");
+    }
+
+
+    /// <summary>
+    /// <b>Content-Length OLMADAN</b> gönderilen (chunked) bir gövde de sınırlanmalı.
+    ///
+    /// <para>
+    /// Bu, gövde sınırının endpoint filtresinden middleware'e taşınmasının asıl sebebidir:
+    /// bildirilen uzunluğa bakan bir kontrol, uzunluk bildirmeyen bir istemciyi hiç görmez ve
+    /// sınır sessizce atlanır. Burada okunan bayt SAYILIR, yani başlığa güvenilmez.
+    /// </para>
+    ///
+    /// <para>
+    /// Bu test bir kez kaybedildi ve yokluğunda akış tabanlı sayımı kaldırmak hiçbir testi
+    /// düşürmüyordu (ölçüldü) — yani koruma vardı ama korumasızdı.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task ChunkedRequest_ExceedingBodyLimit_IsRejected()
+    {
+        var client = ClientWith(MintToken(A2ARoles.Partner));
+        // ZORUNLU: aksi hâlde HttpClient içeriği tamponlayıp Content-Length yazar ve test,
+        // chunked yolu değil yine bildirilen-uzunluk yolunu ölçer (ölçüldü — bu hâliyle
+        // akış tabanlı sayımı kaldırmak testi düşürmüyordu).
+        client.DefaultRequestHeaders.TransferEncodingChunked = true;
+
+        using var content = new UnknownLengthContent(
+            System.Text.Encoding.UTF8.GetBytes(new string('x', 512 * 1024)));
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+        var response = await client.PostAsync(
+            "/a2a/product/message:send", content, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge,
+            "Content-Length bildirilmese de sınır uygulanmalı");
+    }
+
+    /// <summary>Content-Length bildirmeyen içerik — chunked aktarımı taklit eder.</summary>
+    private sealed class UnknownLengthContent(byte[] payload) : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+            stream.WriteAsync(payload, 0, payload.Length);
+
+        // false döndürmek "uzunluğu bilmiyorum" demektir; Content-Length yazılmaz.
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
     }
 
 }

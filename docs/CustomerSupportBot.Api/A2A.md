@@ -557,7 +557,7 @@ Etkileşimli mod ayrıca bir model anahtarı ister; `--verify` istemez.
 ### İzlenebilirlik: OpenTelemetry + correlation.id
 
 İstemci, sunucudaki `Adapters.Telemetry` desenini (`TelemetryAdapterServiceCollectionExtensions.cs`)
-aynı paket sürümüyle (1.17.0) yansıtır — `Telemetry:Enabled` (varsayılan **kapalı**), `Telemetry:Otlp:Endpoint`.
+aynı paket ailesiyle yansıtır — `Telemetry:Enabled` (varsayılan **kapalı**), `Telemetry:Otlp:Endpoint`.
 Endpoint boşsa açıldığında konsola span basar; bir collector'ınız varsa oraya gönderir.
 
 ```bash
@@ -592,6 +592,8 @@ Bu bölümdeki her istek/yanıt **çalışan sunucudan ölçülerek** alınmış
 ### Önce sürüm: hangi A2A lehçesini konuşuyoruz
 
 Sunucumuz **A2A 1.0** konuşur (kart `supportedInterfaces[].protocolVersion: "1.0"` ilan eder).
+Her ajan çağrısı `A2A-Version: 1.0` header'ını göndermelidir. Header boşsa spesifikasyon gereği
+`0.3` sayılır ve bu sunucu 0.3 semantiğini uygulamadığı için istek ajan çalıştırılmadan reddedilir.
 1.0 ile birlikte JSON adlandırması protobuf şemasından türetilir ve **eski sürümlerden farklıdır**:
 
 | | A2A 1.0 (bizim konuştuğumuz) | A2A 0.2 / 0.3 (eski) |
@@ -601,7 +603,8 @@ Sunucumuz **A2A 1.0** konuşur (kart `supportedInterfaces[].protocolVersion: "1.
 | Metin parçası | `{"text": "..."}` | `{"kind": "text", "text": "..."}` |
 
 > ⚠️ **En sık yapılacak hata bu.** İnternetteki A2A örneklerinin çoğu hâlâ 0.2/0.3 biçimindedir.
-> O biçimde gönderirseniz istek **çalışmaz** ve hata mesajı sebebi doğrudan söylemez. Ölçüldü:
+> Doğru `A2A-Version: 1.0` header'ıyla eski gövde biçimini gönderirseniz istek **çalışmaz** ve
+> hata mesajı gövde sürümünü doğrudan söylemez. Ölçüldü:
 >
 > | Gönderilen | Sonuç |
 > |---|---|
@@ -690,6 +693,7 @@ Bağlanılacak URL ve binding buradan okunur — elle sabitlenmemelidir:
 ```bash
 curl -s -X POST http://localhost:5021/a2a/order \
   -H "Authorization: Bearer $SUBJECT_TOKEN" \
+  -H 'A2A-Version: 1.0' \
   -H 'Content-Type: application/json' \
   -d '{
     "jsonrpc": "2.0",
@@ -727,7 +731,8 @@ Aynı işi JSON-RPC zarfı olmadan yapar; yol `:send` son ekiyle biter:
 ```bash
 curl -s -X POST http://localhost:5021/a2a/order/message:send \
   -H "Authorization: Bearer $SUBJECT_TOKEN" \
-  -H 'Content-Type: application/json' \
+  -H 'A2A-Version: 1.0' \
+  -H 'Content-Type: application/a2a+json' \
   -d '{"message":{"role":"ROLE_USER","messageId":"h1","parts":[{"text":"Merhaba"}]}}'
 # -> {"message":{"role":"ROLE_AGENT","parts":[{"text":"..."}],"messageId":"...","contextId":"..."}}
 ```
@@ -749,6 +754,7 @@ metnini verir.
 # JSON-RPC — metot adı farklı: SendStreamingMessage
 curl -sN -X POST http://localhost:5021/a2a/order \
   -H "Authorization: Bearer $SUBJECT_TOKEN" \
+  -H 'A2A-Version: 1.0' \
   -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":"1","method":"SendStreamingMessage",
        "params":{"message":{"role":"ROLE_USER","messageId":"s1",
@@ -757,7 +763,8 @@ curl -sN -X POST http://localhost:5021/a2a/order \
 # HTTP+JSON — yol soneki farklı: :stream
 curl -sN -X POST http://localhost:5021/a2a/order/message:stream \
   -H "Authorization: Bearer $SUBJECT_TOKEN" \
-  -H 'Content-Type: application/json' \
+  -H 'A2A-Version: 1.0' \
+  -H 'Content-Type: application/a2a+json' \
   -d '{"message":{"role":"ROLE_USER","messageId":"hs1",
                   "parts":[{"text":"Son siparişim ne durumda?"}]}}'
 ```
@@ -778,12 +785,16 @@ import json, urllib.request
 
 BASE = "http://localhost:5021"
 
-def post(path, body, token=None):
+def post(path, body, token=None, a2a=False):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    if a2a:
+        headers["A2A-Version"] = "1.0"
     req = urllib.request.Request(
         BASE + path, method="POST",
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json",
-                 **({"Authorization": f"Bearer {token}"} if token else {})})
+        headers=headers)
     with urllib.request.urlopen(req) as r:
         return json.load(r)
 
@@ -794,7 +805,7 @@ resp = post("/a2a/order", {
     "jsonrpc": "2.0", "id": "1", "method": "SendMessage",
     "params": {"message": {"role": "ROLE_USER", "messageId": "m1",
                            "parts": [{"text": "Son siparişim ne durumda?"}]}}
-}, subject)
+}, subject, a2a=True)
 
 print("".join(p.get("text", "") for p in resp["result"]["message"]["parts"]))
 ```
@@ -867,13 +878,20 @@ Bu tasarım bilinçlidir: sınır aşıldığında istisna fırlatılsaydı köp
 hatasına çevirirdi ve çağıran nedenini hiç öğrenemezdi. Anlaşılır bir metin, sebebi okunamayan
 bir `500`'den iyidir.
 
-### HTTP+JSON protokol guard'ları
+### Protokol sürümü guard'ları
 
-HTTP+JSON çağrılarında `A2A-Version` header'ı (ve uyumluluk için aynı adlı query parametresi)
-doğrulanır. Bu sunucu yalnızca `1.0` uygular. Spesifikasyon gereği boş değer `0.3` sayıldığından,
-boş/`0.3` veya başka bir sürüm ajan çalıştırılmadan `400 Protocol Version Not Supported` alır.
-Başarılı JSON yanıtları `application/a2a+json`, akış yanıtları `text/event-stream`, hata
-yanıtları ise `application/problem+json` medya türünü kullanır.
+JSON-RPC ve HTTP+JSON çağrılarının ikisinde de `A2A-Version` header'ı (uyumluluk için aynı adlı
+query parametresi de) doğrulanır. Bu sunucu yalnızca `1.0` uygular. Spesifikasyon gereği boş
+değer `0.3` sayıldığından boş/`0.3` veya başka bir sürüm ajan çalıştırılmadan reddedilir.
+
+Hata, binding'in kendi biçiminde döner:
+
+- JSON-RPC: HTTP `200` içinde JSON-RPC hata zarfı, `error.code = -32009`.
+- HTTP+JSON: HTTP `400`, `application/a2a+json` google.rpc.Status gövdesi ve
+  `ErrorInfo.reason = VERSION_NOT_SUPPORTED`.
+
+HTTP+JSON başarılı JSON yanıtları `application/a2a+json`, akış yanıtları `text/event-stream`
+medya türünü kullanır. JSON-RPC yanıtları `application/json` kalır.
 
 ### Desteklenmeyen: arka plan görevleri
 
@@ -894,7 +912,8 @@ yoktur. Task yaşam döngüsü üzerine kurulu bir istemci yazmayın — bu bir 
 | Dakikadaki istek sınırı aşıldı | `429` (`A2A:RequestsPerMinute`, partner başına) |
 | İstek gövdesi çok büyük | `413` |
 | Kanal kapalı (`A2A:Enabled=false`) | `404` — ajan uçları **ve** `/auth/a2a/token-exchange` |
-| Yanlış sürüm biçimi | `-32601` / `-32602` (JSON-RPC) · `500` (HTTP+JSON) |
+| Eksik/`0.3`/desteklenmeyen `A2A-Version` | `-32009` (JSON-RPC) · `400 VERSION_NOT_SUPPORTED` (HTTP+JSON) |
+| Header `1.0`, fakat eski 0.2/0.3 gövde biçimi | `-32601` / `-32602` (JSON-RPC) · köprü doğrulama hatası (HTTP+JSON) |
 
 `403`'ün sebebi **bilerek açıklanmaz**: "müşteri yok" ile "yetkin yok" ayrımı dışarıdan
 görülseydi müşteri numarası taranabilirdi (bkz. bölüm 3).

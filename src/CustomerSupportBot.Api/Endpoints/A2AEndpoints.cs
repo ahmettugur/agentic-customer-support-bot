@@ -53,35 +53,35 @@ public static class A2AEndpoints
             .RequireAuthorization("Partner")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ALogFilter("product"))
-            .WithProtocolGuards(maxRequestBytes, isHttpJson: false);
+            .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.JsonRpc);
         app.MapA2AHttpJson(A2AAgentNames.Product, "/a2a/product")
             .RequireAuthorization("Partner")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ALogFilter("product"))
-            .WithProtocolGuards(maxRequestBytes, isHttpJson: true);
+            .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.HttpJson);
 
         app.MapA2AJsonRpc(A2AAgentNames.Order, "/a2a/order")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ASubjectScopeFilter("order"))
-            .WithProtocolGuards(maxRequestBytes, isHttpJson: false);
+            .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.JsonRpc);
         app.MapA2AHttpJson(A2AAgentNames.Order, "/a2a/order")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ASubjectScopeFilter("order"))
-            .WithProtocolGuards(maxRequestBytes, isHttpJson: true);
+            .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.HttpJson);
 
         // Şikayet ajanı da müşteri verisi döndürür — sipariş ajanıyla AYNI kimlik şartına tabi.
         app.MapA2AJsonRpc(A2AAgentNames.Complaint, "/a2a/complaint")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"))
-            .WithProtocolGuards(maxRequestBytes, isHttpJson: false);
+            .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.JsonRpc);
         app.MapA2AHttpJson(A2AAgentNames.Complaint, "/a2a/complaint")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
             .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"))
-            .WithProtocolGuards(maxRequestBytes, isHttpJson: true);
+            .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.HttpJson);
 
         // AgentCard — A2A'nın keşif yarısı. Kart olmadan çağıran, ajanın hangi yetenekleri
         // olduğunu ve hangi kimlik doğrulamasını beklediğini deneyerek öğrenmek zorunda kalır.
@@ -113,9 +113,9 @@ public static class A2AEndpoints
     private static TBuilder WithProtocolGuards<TBuilder>(
         this TBuilder builder,
         long maxBytes,
-        bool isHttpJson)
+        A2AProtocolBinding binding)
         where TBuilder : IEndpointConventionBuilder =>
-        builder.WithMetadata(new A2AProtocolGuardMetadata(maxBytes, isHttpJson));
+        builder.WithMetadata(new A2AProtocolGuardMetadata(maxBytes, binding));
 
     /// <summary>
     /// A2A protokol sınırlarını endpoint çalışmadan ve gövde deserialize edilmeden önce uygular.
@@ -132,35 +132,27 @@ public static class A2AEndpoints
                 return;
             }
 
-            if (guard.IsHttpJson)
+            var requestedVersion = http.Request.Headers["A2A-Version"].FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(requestedVersion))
+                requestedVersion = http.Request.Query["A2A-Version"].FirstOrDefault();
+
+            // A2A-Version binding'den bağımsız bir servis parametresidir. Boş değer 0.3
+            // anlamına gelir; kartlarımız iki binding için de yalnızca 1.0 ilan eder. SDK'nın
+            // JSON-RPC preflight'ı 0.3'ü geriye uyumluluk için kabul etse de bu host 0.3
+            // semantiğini uygulamaz. Kontrolü SDK'ya bırakmak JSON-RPC ile HTTP+JSON arasında
+            // sessiz bir sürüm politikası farkı oluştururdu.
+            requestedVersion = string.IsNullOrWhiteSpace(requestedVersion) ? "0.3" : requestedVersion;
+            if (!string.Equals(requestedVersion, SupportedProtocolVersion, StringComparison.Ordinal))
             {
-                var requestedVersion = http.Request.Headers["A2A-Version"].FirstOrDefault();
-                if (string.IsNullOrWhiteSpace(requestedVersion))
-                    requestedVersion = http.Request.Query["A2A-Version"].FirstOrDefault();
+                await WriteVersionNotSupportedAsync(http, guard.Binding, requestedVersion);
+                return;
+            }
 
-                // Spesifikasyona göre boş değer 0.3 anlamına gelir. Bu uygulama ve kullanılan
-                // SDK yalnızca 1.0 semantiğini uygular; 0.3'ü kabul etmek sessiz ve hatalı bir
-                // protokol düşürmesi olurdu.
-                requestedVersion = string.IsNullOrWhiteSpace(requestedVersion) ? "0.3" : requestedVersion;
-                if (requestedVersion != "1.0")
-                {
-                    await Results.Problem(
-                        type: "https://a2a-protocol.org/errors/version-not-supported",
-                        title: "Protocol Version Not Supported",
-                        detail: $"The requested A2A protocol version '{requestedVersion}' is not supported. "
-                              + "Supported versions: 1.0.",
-                        statusCode: StatusCodes.Status400BadRequest,
-                        extensions: new Dictionary<string, object?>
-                        {
-                            ["supportedVersions"] = new[] { "1.0" }
-                        })
-                        .ExecuteAsync(http);
-                    return;
-                }
-
+            if (guard.Binding == A2AProtocolBinding.HttpJson)
+            {
                 // Upstream preview REST result'i application/json üretir. A2A 1.0 HTTP+JSON
                 // binding'i application/a2a+json önerir; istemci uyumluluğu için yalnızca
-                // başarılı JSON yanıtlarını düzelt, ProblemDetails ve SSE türlerine dokunma.
+                // başarılı JSON yanıtlarını düzelt; SSE türüne dokunma.
                 http.Response.OnStarting(() =>
                 {
                     if (http.Response.StatusCode < 400
@@ -200,6 +192,58 @@ public static class A2AEndpoints
 
             await next(http);
         });
+
+    private static async Task WriteVersionNotSupportedAsync(
+        HttpContext http,
+        A2AProtocolBinding binding,
+        string requestedVersion)
+    {
+        var message = $"The requested A2A protocol version '{requestedVersion}' is not supported. "
+                    + $"Supported versions: {SupportedProtocolVersion}.";
+
+        if (binding == A2AProtocolBinding.JsonRpc)
+        {
+            // Sürüm gövde okunmadan reddedildiği için request id henüz bilinmez. JSON-RPC
+            // protokol hatası yine JSON-RPC zarfında dönmelidir; REST ProblemDetails dönmek,
+            // istemcinin hata gövdesini ayrıştıramamasına neden olurdu.
+            var response = A2A.JsonRpcResponse.CreateJsonRpcErrorResponse(
+                new A2A.JsonRpcId((string?)null),
+                new A2A.A2AException(message, A2A.A2AErrorCode.VersionNotSupported));
+            await new JsonRpcResponseResult(response).ExecuteAsync(http);
+            return;
+        }
+
+        // HTTP+JSON binding A2A'ya özgü hataları google.rpc.Status biçiminde ve
+        // application/a2a+json medya türüyle taşır. ErrorInfo.reason, aynı HTTP 400'e
+        // eşlenen farklı A2A hatalarının makine tarafından ayrıştırılmasını sağlar.
+        await Results.Json(
+            new
+            {
+                error = new
+                {
+                    code = StatusCodes.Status400BadRequest,
+                    status = "FAILED_PRECONDITION",
+                    message,
+                    details = new object[]
+                    {
+                        new Dictionary<string, object?>
+                        {
+                            ["@type"] = "type.googleapis.com/google.rpc.ErrorInfo",
+                            ["reason"] = "VERSION_NOT_SUPPORTED",
+                            ["domain"] = "a2a-protocol.org",
+                            ["metadata"] = new Dictionary<string, string>
+                            {
+                                ["requestedVersion"] = requestedVersion,
+                                ["supportedVersions"] = SupportedProtocolVersion
+                            }
+                        }
+                    }
+                }
+            },
+            statusCode: StatusCodes.Status400BadRequest,
+            contentType: "application/a2a+json")
+            .ExecuteAsync(http);
+    }
 
     private static async Task<MemoryStream?> BufferBodyWithinLimitAsync(HttpContext http, long maxBytes)
     {
@@ -242,7 +286,17 @@ public static class A2AEndpoints
         }
     }
 
-    private sealed record A2AProtocolGuardMetadata(long MaxRequestBytes, bool IsHttpJson);
+    private const string SupportedProtocolVersion = "1.0";
+
+    private enum A2AProtocolBinding
+    {
+        JsonRpc,
+        HttpJson
+    }
+
+    private sealed record A2AProtocolGuardMetadata(
+        long MaxRequestBytes,
+        A2AProtocolBinding Binding);
 
     /// <summary>
     /// Ajanın desteklediği transport'ları ilan eder.
