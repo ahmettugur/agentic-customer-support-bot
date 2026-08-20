@@ -92,10 +92,14 @@ public sealed class ChatPortService : IChatPort
         var query = request.Query;
         var session = await _sessions.GetOrCreateAsync(request.SessionId, ct);
         var sessionId = session.SessionId;
-        await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
-
-        // Kilit, geçmiş OKUNMADAN önce alınır: "oku → yaz" dizisinin tamamı korunmalı.
+        // Kilit BİNDDEN ÖNCE alınır. Bind bir "oku-karar ver-yaz" dizisidir: oturum henüz
+        // kimseye bağlı değilse çağıranı bağlar. Kilidin dışında kalırsa, sahipsiz aynı
+        // oturuma eşzamanlı gelen iki farklı müşteri de "bağlı değil" görüp ikisi de
+        // bağlamayı deneyebilir — sahiplik yarışı. Kilit ayrıca "oku → yaz" turunun
+        // tamamını kapsamalı, o yüzden geçmiş okunmadan önce de alınmış olur.
         await using var turnLock = await AcquireTurnLockAsync(sessionId, ct);
+
+        await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
 
         var history = await _sessions.GetHistoryAsync(sessionId, ct);
 
@@ -143,6 +147,12 @@ public sealed class ChatPortService : IChatPort
         var query = request.Query;
         var session = await _sessions.GetOrCreateAsync(request.SessionId, ct);
         var sessionId = session.SessionId;
+
+        // Kilit BİNDDEN ÖNCE (gerekçe için bkz. HandleAsync). Human-mode dalı da kilit
+        // altındadır: orada bot turu yok ama geçmişe yazma var, dolayısıyla sıraya girmesi
+        // doğrudur.
+        await using var turnLock = await AcquireTurnLockAsync(sessionId, ct);
+
         await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
 
         yield return new StreamEvent(StreamEventTypes.Session, new SessionEventPayload(sessionId));
@@ -164,10 +174,6 @@ public sealed class ChatPortService : IChatPort
             }
             yield break;
         }
-
-        // Kilit human-mode dalından SONRA alınır: o dal bot turu çalıştırmaz, yalnızca mesajı
-        // temsilciye iletir; sıraya sokulacak bir "tur" yoktur.
-        await using var turnLock = await AcquireTurnLockAsync(sessionId, ct);
 
         var history = await _sessions.GetHistoryAsync(sessionId, ct);
 

@@ -5,6 +5,7 @@
 // tekrarlanırsa profil N tur ilerler ve birbirinden kopuk N sentetik episode yazılır. Episodic
 // bellek sonradan ARANAN bir kaynak olduğu için bu, kalıcı olarak kirlenmiş bellek demektir.
 
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
@@ -129,5 +130,84 @@ public class CompoundTurnFinalizationTests
     {
         for (var i = 0; i < 50 && memory.Episodes.Count == 0; i++)
             await Task.Delay(20);
+    }
+
+    // ═══ Streaming yol — asıl arayüzün kullandığı yol ═══
+
+    private sealed class EchoRunner : IWorkflowRunner
+    {
+        public Task<string> RunAsync(string query, List<ConversationMessage>? history = null,
+            AgentSession? session = null, ReasoningResult? reasoning = null, CancellationToken ct = default)
+            => Task.FromResult($"yanıt:{query}");
+
+        public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(string query,
+            List<ConversationMessage>? history = null, AgentSession? session = null,
+            ReasoningResult? reasoning = null,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            yield return new StreamEvent(StreamEventTypes.ResponseComplete,
+                new ResponseCompletePayload($"yanıt:{query}", WellKnown.Termination.ReasonCompleted));
+            await Task.CompletedTask;
+        }
+    }
+
+    private static DecomposedRunner BuildDecomposed(TurnFinalizer finalizer) =>
+        new(new EchoRunner(),
+            new ParallelExecutionOptions(),
+            Substitute.For<IUiHintEmitter>(),
+            Substitute.For<IApprovalContextAccessor>(),
+            finalizer);
+
+    private static ReasoningResult CompoundReasoning() => new()
+    {
+        Intent = WellKnown.Intents.OrderInquiry,
+        SubTasks =
+        [
+            new SubTask { Order = 1, Description = "sipariş durumu", TargetAgent = WellKnown.AgentNames.Order, Intent = "x" },
+            new SubTask { Order = 2, Description = "şikayet durumu", TargetAgent = WellKnown.AgentNames.Complaint, Intent = "y" }
+        ]
+    };
+
+    /// <summary>
+    /// STREAMING compound tur da tam BİR kez yazmalı.
+    ///
+    /// <para>
+    /// Bu, düzeltmenin ilk hâlinde atlanmış bir yoldu: alt koşular yan etkileri atlıyordu ama
+    /// streaming yolun sonunda aggregate çağrısı yoktu — yani kayıt sayısı N'den SIFIRA
+    /// düşmüştü. Asıl arayüz /chat/stream kullandığı için etkilenen yol tam da buydu.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task StreamingCompoundTurn_WritesExactlyOneEpisode()
+    {
+        var memory = new RecordingMemory();
+        var profile = new CountingProfile();
+        var runner = BuildDecomposed(Build(memory, profile));
+
+        await foreach (var _ in runner.RunDecomposedStreamingAsync(
+            "1030 nerede ve şikayetim ne oldu?", null, Session(), CompoundReasoning(),
+            TestContext.Current.CancellationToken)) { }
+
+        await WaitForEpisodeAsync(memory);
+        memory.Episodes.Should().ContainSingle()
+            .Which.Should().Be("1030 nerede ve şikayetim ne oldu?");
+        profile.Interactions.Should().Be(1);
+    }
+
+    /// <summary>Non-streaming yolun aynı davranışı — iki yol ayrışmamalı.</summary>
+    [Fact]
+    public async Task NonStreamingCompoundTurn_WritesExactlyOneEpisode()
+    {
+        var memory = new RecordingMemory();
+        var profile = new CountingProfile();
+        var runner = BuildDecomposed(Build(memory, profile));
+
+        await runner.RunDecomposedAsync(
+            "1030 nerede ve şikayetim ne oldu?", null, Session(), CompoundReasoning(),
+            TestContext.Current.CancellationToken);
+
+        await WaitForEpisodeAsync(memory);
+        memory.Episodes.Should().ContainSingle();
+        profile.Interactions.Should().Be(1);
     }
 }

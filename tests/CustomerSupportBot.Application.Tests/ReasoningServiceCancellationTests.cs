@@ -1,3 +1,4 @@
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
@@ -28,7 +29,7 @@ public class ReasoningServiceCancellationTests
         }
     }
 
-    private static ReasoningService Build()
+    private static ReasoningService Build(int timeoutSeconds = 45)
     {
         var prompts = Substitute.For<IPromptRepository>();
         prompts.Render(Arg.Any<string>(), Arg.Any<IDictionary<string, string?>?>())
@@ -44,7 +45,7 @@ public class ReasoningServiceCancellationTests
                 Substitute.For<IComplaintRepository>(),
                 NullLogger<EntityVerifier>.Instance),
             new ReasoningSanityChecker(NullLogger<ReasoningSanityChecker>.Instance),
-            Options.Create(new WorkflowGuardOptions()));
+            Options.Create(new WorkflowGuardOptions { ReasoningTimeoutSeconds = timeoutSeconds }));
     }
 
     [Fact]
@@ -75,5 +76,41 @@ public class ReasoningServiceCancellationTests
 
         Func<Task> act = EnumerateAsync;
         await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+
+    /// <summary>
+    /// STREAMING reasoning'in de bir bütçesi olmalı.
+    ///
+    /// <para>
+    /// Timeout ilk eklendiğinde yalnızca non-streaming <c>ReasonAsync</c>'e konmuştu — oysa
+    /// asıl arayüz <c>/chat/stream</c> kullanıyor, yani pratikte KORUNMAYAN yol buydu:
+    /// asılı kalan bir reasoning akışı hiçbir sınıra tabi değildi ve tur süresiz bekleyebiliyordu.
+    /// </para>
+    ///
+    /// <para>
+    /// Süre dolduğunda tur ÖLMEZ: fallback reasoning ile devam eder (niyet çıkarımı kaybolur,
+    /// kullanıcı yanıtsız kalmaz).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task ReasonStreamingAsync_WhenModelHangs_FallsBackWithinBudget()
+    {
+        var sut = Build(timeoutSeconds: 1);
+        var session = new AgentSession { SessionId = "s1" };
+
+        var events = new List<StreamEvent>();
+        var started = DateTimeOffset.UtcNow;
+
+        await foreach (var e in sut.ReasonStreamingAsync("soru", session, null, CancellationToken.None))
+            events.Add(e);
+
+        var elapsed = DateTimeOffset.UtcNow - started;
+        elapsed.Should().BeLessThan(TimeSpan.FromSeconds(20),
+            "asılı model çağrısı bütçeyle kesilmeli; aksi hâlde tur süresiz bekler");
+
+        var complete = events.Last(e => e.Type == StreamEventTypes.ReasoningComplete);
+        complete.Data.Should().BeOfType<ReasoningResult>()
+            .Which.Confidence.Should().Be(WellKnown.Confidence.Low, "timeout fallback'e düşmeli");
     }
 }

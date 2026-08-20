@@ -43,6 +43,33 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
             : new QdrantClient(q.Host, q.Port, q.UseHttps, q.ApiKey);
     }
 
+    /// <summary>
+    /// Boyut uyuşmazlığında ne yapılacağına karar verir: <c>true</c> → koleksiyon silinip
+    /// yeniden oluşturulur, <c>false</c> → dokunulmaz. İzin yoksa <b>fırlatır</b>.
+    ///
+    /// <para>
+    /// Karar bilinçli olarak ayrı bir metotta: gerçek <c>QdrantClient</c> mock'lanamadığı için
+    /// <see cref="EnsureCollectionAsync"/>'in tamamı birim testiyle sürülemez. Kararın kendisi
+    /// — asıl riskli kısım — böylece test altına girer.
+    /// </para>
+    /// </summary>
+    internal static bool RequiresRecreate(
+        string collection, int existingDim, int expectedDim, bool allowDestructive)
+    {
+        if (existingDim <= 0 || existingDim == expectedDim) return false;
+
+        if (!allowDestructive)
+        {
+            throw new InvalidOperationException(
+                $"Qdrant koleksiyonu '{collection}' {existingDim} boyutlu, beklenen {expectedDim}. "
+              + "Veri kaybı olmadan devam edilemez. Koleksiyonu yeniden oluşturmak KASITLIYSA "
+              + "SemanticMemory:VectorStore:AllowDestructiveDimensionMigration=true verin; "
+              + "aksi hâlde embedding boyutunu eski değerine döndürün.");
+        }
+
+        return true;
+    }
+
     public async Task EnsureCollectionAsync(string collection, int dimension, CancellationToken ct = default)
     {
         var exists = await _client.CollectionExistsAsync(collection, ct).ConfigureAwait(false);
@@ -60,17 +87,8 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
             {
                 var info = await _client.GetCollectionInfoAsync(collection, ct).ConfigureAwait(false);
                 var existingDim = (int)(info?.Config?.Params?.VectorsConfig?.Params?.Size ?? 0);
-                if (existingDim > 0 && existingDim != dimension)
+                if (RequiresRecreate(collection, existingDim, dimension, _allowDestructiveDimensionMigration))
                 {
-                    if (!_allowDestructiveDimensionMigration)
-                    {
-                        throw new InvalidOperationException(
-                            $"Qdrant koleksiyonu '{collection}' {existingDim} boyutlu, beklenen {dimension}. "
-                          + "Veri kaybı olmadan devam edilemez. Koleksiyonu yeniden oluşturmak KASITLIYSA "
-                          + "SemanticMemory:VectorStore:AllowDestructiveDimensionMigration=true verin; "
-                          + "aksi hâlde embedding boyutunu eski değerine döndürün.");
-                    }
-
                     _logger.LogWarning(
                         "Qdrant collection {Collection} dim={Existing}, beklenen={Expected}. "
                       + "AllowDestructiveDimensionMigration=true olduğu için yeniden oluşturuluyor "
@@ -82,6 +100,14 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
                 {
                     return;
                 }
+            }
+            catch (InvalidOperationException)
+            {
+                // Boyut uyuşmazlığı kararı YUTULMAZ. Aşağıdaki genel catch, Qdrant'a
+                // ulaşılamamasını tolere etmek içindir; fail-closed kararını da yutarsa
+                // "veri kaybını engelledik" güvencesi kâğıt üzerinde kalır — uygulama
+                // başlar ve yanlış boyutlu koleksiyonla çalışmaya devam ederdi.
+                throw;
             }
             catch (Exception ex)
             {

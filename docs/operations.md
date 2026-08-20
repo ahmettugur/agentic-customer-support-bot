@@ -609,7 +609,8 @@ Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 |---|---|---|
 | `InvalidOperationException: AI:OpenAI:ApiKey eksik` | Provider seçili ama anahtar yok | `dotnet user-secrets set "AI:OpenAI:ApiKey" "..."` |
 | Frontend SSE 5021'e bağlanmıyor | CORS / port farkı | `app.js` içinde `new ChatApp("http://localhost:5021")` |
-| Reasoning timeout | `WorkflowGuards:TimeoutSeconds` çok düşük veya model yavaş | TimeoutSeconds artır veya `ReasoningEffort: "low"` |
+| Reasoning timeout | `WorkflowGuards:ReasoningTimeoutSeconds` (varsayılan 45) çok düşük veya model yavaş | `ReasoningTimeoutSeconds` artır veya `ReasoningEffort: "low"`. `TimeoutSeconds` **workflow'a** aittir, reasoning'i kapsamaz — ikisi ayrı bütçedir |
+| Reasoning maliyeti/gecikmesi uzun oturumlarda artıyor | Modele giden geçmiş | `WorkflowGuards:ReasoningHistoryMessages` (varsayılan 12) — reasoning'e yalnızca yakın geçmiş gider |
 | `MaxDuplicateToolCalls` tetiklendi | Bot aynı tool'u 3+ kez çağırıyor | Reasoning prompt iyileştirmesi; `adapters-agents/` belgesindeki `preToolCheck` kuralı |
 | Approval expired | Talep `StalePendingHours` (72 saat) boyunca yanıtsız kaldı, sweep reddetti | Admin panelinin izlendiğinden emin olun; eşiği `HumanInTheLoop:StalePendingHours` ile ayarlayın. `TimeoutSeconds`/`AutoApproveOnTimeout` bu tool'lar için **etkisizdir** |
 | Onaylandı ama işlem olmadı | `execution_status='Running'` kalmış (yürütme sırasında süreç kapandı) veya `IApprovalExecutionRouter`'da o tool için dal yok | Kaydı admin panelinden kontrol edin; sistem otomatik retry **yapmaz**, elle doğrulanır |

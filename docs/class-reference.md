@@ -192,7 +192,9 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
 ### `CustomerContextProvider` — `Application/Services/Providers/CustomerContextProvider.cs`
 
-`Order=10`. Oturumdaki `State.CustomerId` varsa `IOrderRepository.GetByCustomer` + `IComplaintRepository.GetByCustomer` ile müşterinin siparişleri ve şikayetleri hakkında metin üretir. Format: `[Müşteri Bağlamı — {id}] ...`.
+`Order=10`, **kritik** (`IsCritical=true`). Oturumdaki `State.AuthenticatedCustomerId` (JWT'den; kullanıcının etkileyebildiği `State.CustomerId` **değil**) varsa `IOrderRepository.GetByCustomer` + `IComplaintRepository.GetByCustomer` ile müşterinin siparişleri ve şikayetleri hakkında metin üretir. Format: `[Müşteri Bağlamı — {id}] ...`.
+
+`Order` yalnızca **çıktı sırasını** belirler; bütçe altında yerleştirme önceliğini `IsCritical` belirler (bkz. `ContextPipeline`). Aksi hâlde en yüksek `Order`'a sahip bu kritik sağlayıcı, bütçe dolduğunda ilk düşen olurdu.
 
 ---
 

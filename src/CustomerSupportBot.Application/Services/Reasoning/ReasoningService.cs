@@ -102,10 +102,18 @@ public class ReasoningService : IReasoningPort
         var buffer = new StringBuilder();
         string? streamError = null;
 
+        // Timeout streaming yolda da uygulanır. Bu eklenmeden önce yalnızca non-streaming
+        // ReasonAsync korunuyordu — oysa asıl arayüz /chat/stream kullanıyor, yani pratikte
+        // KORUNMAYAN yol buydu: asılı kalan bir reasoning akışı hiçbir bütçeye tabi değildi.
+        using var timeoutCts = new CancellationTokenSource(
+            TimeSpan.FromSeconds(Math.Max(1, _guards.ReasoningTimeoutSeconds)));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        var streamCt = linkedCts.Token;
+
         IAsyncEnumerable<string>? stream = null;
         try
         {
-            stream = _reasoningClient.StreamAsync(messages, ct);
+            stream = _reasoningClient.StreamAsync(messages, streamCt);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -123,7 +131,7 @@ public class ReasoningService : IReasoningPort
             var lastEmit = DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(100);
             var minInterval = TimeSpan.FromMilliseconds(20);
 
-            await foreach (var (chunk, error) in EnumerateSafely(stream, ct))
+            await foreach (var (chunk, error) in EnumerateSafely(stream, streamCt, callerCt: ct))
             {
                 if (error != null)
                 {
@@ -136,6 +144,10 @@ public class ReasoningService : IReasoningPort
                 buffer.Append(chunk);
                 pendingChunks.Append(chunk);
 
+                // Throttle: emit'ler minInterval'dan sık olmaz, arada gelen chunk'lar birikir.
+                // Buradaki `Task.Delay(minInterval)` KALDIRILDI — elapsed kontrolü zaten
+                // throttling yapıyordu; ek bekleme yalnızca akışı yapay olarak yavaşlatıyor,
+                // hiçbir chunk'ı biriktirmiyordu (yani kullanıcı yanıtı geç görüyordu).
                 var elapsed = DateTimeOffset.UtcNow - lastEmit;
                 if (elapsed >= minInterval)
                 {
@@ -143,7 +155,6 @@ public class ReasoningService : IReasoningPort
                     pendingChunks.Clear();
                     yield return new StreamEvent(StreamEventTypes.ReasoningDelta, new TextDeltaPayload(chunkText));
                     lastEmit = DateTimeOffset.UtcNow;
-                    await Task.Delay(minInterval, ct);
                 }
             }
 
@@ -153,6 +164,15 @@ public class ReasoningService : IReasoningPort
 
         var fullText = buffer.ToString();
         ReasoningResult result;
+
+        // Süre dolduysa elde ne varsa onunla devam edilir; hiç metin gelmemişse fallback.
+        // Çağıranın kendi iptali BAŞKA bir şeydir ve yukarı fırlatılır (EnumerateSafely).
+        if (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested
+            && string.IsNullOrWhiteSpace(streamError))
+        {
+            streamError = $"Reasoning {_guards.ReasoningTimeoutSeconds}s içinde tamamlanamadı.";
+            _logger.LogWarning("Reasoning stream timeout ({Seconds}s)", _guards.ReasoningTimeoutSeconds);
+        }
 
         if (!string.IsNullOrWhiteSpace(streamError) || string.IsNullOrWhiteSpace(fullText))
         {
@@ -177,9 +197,20 @@ public class ReasoningService : IReasoningPort
         yield return new StreamEvent(StreamEventTypes.ReasoningComplete, result);
     }
 
+    /// <summary>
+    /// Akışı tüketirken hataları veriye çevirir — ama <paramref name="callerCt"/> ile iptal
+    /// edilmişse fırlatır.
+    ///
+    /// <para>
+    /// İki iptal kaynağı AYRIŞTIRILMAK zorunda: çağıranın iptali (kullanıcı bağlantıyı
+    /// kapattı) yukarı taşınmalı, bütçe timeout'u ise fallback'e dönüşmelidir. Tek token'a
+    /// bakılsaydı timeout da "çağıran iptal etti" sayılır ve tur yanıtsız kalırdı.
+    /// </para>
+    /// </summary>
     private static async IAsyncEnumerable<(string Chunk, string? Error)> EnumerateSafely(
         IAsyncEnumerable<string> stream,
-        [EnumeratorCancellation] CancellationToken ct)
+        [EnumeratorCancellation] CancellationToken ct,
+        CancellationToken callerCt = default)
     {
         var enumerator = stream.GetAsyncEnumerator(ct);
         try
@@ -193,7 +224,7 @@ public class ReasoningService : IReasoningPort
                         yield break;
                     item = (enumerator.Current, null);
                 }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                catch (OperationCanceledException) when (callerCt.IsCancellationRequested)
                 {
                     throw;
                 }

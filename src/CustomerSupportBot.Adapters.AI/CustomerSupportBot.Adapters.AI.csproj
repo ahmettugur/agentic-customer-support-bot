@@ -25,4 +25,10 @@
     <PackageReference Include="Qdrant.Client" Version="1.19.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Qdrant adapter'ının boyut-uyuşmazlığı KARARI test edilebilir olmalı; gerçek
+         QdrantClient mock'lanamadığı için karar ayrı bir internal metotta duruyor. -->
+    <InternalsVisibleTo Include="CustomerSupportBot.Adapters.AI.Tests" />
+  </ItemGroup>
+
 </Project>

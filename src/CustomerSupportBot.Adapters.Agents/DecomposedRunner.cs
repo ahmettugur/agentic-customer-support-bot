@@ -401,6 +401,14 @@ internal sealed class DecomposedRunner
 
         // Metin burada TEKRAR yayınlanmaz — parçalar tamamlandıkça zaten gönderildi ve
         // birleşimleri tam olarak `aggregated`a eşit (bkz. SubTaskOrchestrator.ResultSeparator).
+        // Tur bazlı yan etkiler streaming yolda da BİR KEZ yazılır.
+        //
+        // Alt koşular bunları atlar (TurnFinalizer.FinalizeAsync → isSubTaskRun). Bu çağrı
+        // eklenmeden önce streaming compound turda profil/episodic kaydı N değil SIFIR
+        // oluyordu — yani düzeltme bir sorunu (N kayıt) başkasıyla (hiç kayıt) değiştirmişti.
+        // Asıl arayüz /chat/stream kullandığı için etkilenen yol da buydu.
+        await _finalizer.FinalizeAggregateTurnAsync(session, query, aggregated, reasoning.Intent, ct);
+
         yield return new StreamEvent(StreamEventTypes.ResponseComplete,
             new ResponseCompletePayload(
                 aggregated,
