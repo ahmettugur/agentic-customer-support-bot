@@ -76,8 +76,21 @@ public sealed class KnowledgeBaseIngestionService : IKnowledgeBaseIngestor
         var currentHash = _source.ComputeDirectoryHash() + "|" + ComputeArticlesFingerprint(articles);
         if (lastHash == currentHash)
         {
-            _logger.LogInformation("KnowledgeBase değişmemiş; ingestion atlandı.");
-            return;
+            // Hash "kaynak değişmedi" der; koleksiyonun DOLU olduğunu söylemez. İkisi ayrı
+            // sorulardır ve ayrıştıkları bir durum var: koleksiyon dışarıdan yeniden
+            // oluşturulduğunda (ör. embedding boyutu değişimi) veri gider ama kaynak aynı
+            // kalır — o hâlde hash eşleşir ve re-ingest atlanır. Sonuç sessizce BOŞ bir bilgi
+            // tabanıdır: arama hiç sonuç döndürmez, hata da vermez.
+            var existing = await _memory.CountAsync(MemoryKind.Knowledge, ct);
+            if (existing > 0)
+            {
+                _logger.LogInformation("KnowledgeBase değişmemiş; ingestion atlandı.");
+                return;
+            }
+
+            _logger.LogWarning(
+                "KnowledgeBase kaynağı değişmemiş ama koleksiyon BOŞ — yeniden yükleniyor. "
+              + "Koleksiyon dışarıdan silinmiş/yeniden oluşturulmuş olabilir.");
         }
 
         var docs = new List<MemoryDocument>();

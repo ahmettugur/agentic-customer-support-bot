@@ -19,17 +19,20 @@ internal sealed class DecomposedRunner
     private readonly ParallelExecutionOptions _parallelOptions;
     private readonly IUiHintEmitter _uiHint;
     private readonly IApprovalContextAccessor _approvalContext;
+    private readonly TurnFinalizer _finalizer;
 
     public DecomposedRunner(
         IWorkflowRunner runner,
         ParallelExecutionOptions parallelOptions,
         IUiHintEmitter uiHint,
-        IApprovalContextAccessor approvalContext)
+        IApprovalContextAccessor approvalContext,
+        TurnFinalizer finalizer)
     {
         _runner = runner;
         _parallelOptions = parallelOptions;
         _uiHint = uiHint;
         _approvalContext = approvalContext;
+        _finalizer = finalizer;
     }
 
     public async Task<string> RunDecomposedAsync(
@@ -106,7 +109,14 @@ internal sealed class DecomposedRunner
                 $"Compound workflow {_parallelOptions.TimeoutSeconds}s timeout'a takıldı.");
         }
 
-        return SubTaskOrchestrator.AggregateSubTaskResults(collected.Values.ToList());
+        var aggregate = SubTaskOrchestrator.AggregateSubTaskResults(collected.Values.ToList());
+
+        // Tur bazlı yan etkiler BURADA, bir kez. Alt koşular bunları atlar
+        // (bkz. TurnFinalizer.FinalizeAsync → isSubTaskRun): aksi hâlde tek bir kullanıcı
+        // mesajı profil sayacını N tur ilerletir ve N kopuk episode yazardı.
+        await _finalizer.FinalizeAggregateTurnAsync(session, query, aggregate, reasoning.Intent, ct);
+
+        return aggregate;
     }
 
     public async IAsyncEnumerable<StreamEvent> RunDecomposedStreamingAsync(

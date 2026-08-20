@@ -14,4 +14,11 @@ public interface ISemanticMemoryIngestor
 
     /// <summary>Tek dokümanı indeksten siler. Kayıt yoksa sessizce geçer (idempotent).</summary>
     Task DeleteAsync(MemoryKind kind, string documentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Koleksiyondaki kayıt sayısı. Ingestion'ın "kaynak değişmedi" kısayolu, koleksiyonun
+    /// gerçekten dolu olduğunu da doğrulamak zorundadır — koleksiyon dışarıdan yeniden
+    /// oluşturulduğunda kaynak hash'i aynı kalır ve re-ingest sessizce atlanırdı.
+    /// </summary>
+    Task<long> CountAsync(MemoryKind kind, CancellationToken ct = default);
 }

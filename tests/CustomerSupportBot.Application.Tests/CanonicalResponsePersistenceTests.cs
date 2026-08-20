@@ -20,7 +20,10 @@ using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Chat;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Adapters.Redis;
+using CustomerSupportBot.Tests.Shared;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Application.Tests;
 
@@ -89,6 +92,7 @@ public class CanonicalResponsePersistenceTests
             Substitute.For<IChatBridge>(),
             new SessionStateService(sessions, NullLogger<SessionStateService>.Instance),
             Substitute.For<IApprovalContextAccessor>(),
+            new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 5 })),
             NullLogger<ChatPortService>.Instance);
 
         await foreach (var _ in svc.HandleStreamAsync(new ChatRequest("merhaba", "s1"))) { }

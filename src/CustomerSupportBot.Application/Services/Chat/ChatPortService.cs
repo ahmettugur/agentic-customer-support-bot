@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Exceptions;
@@ -21,7 +22,16 @@ public sealed class ChatPortService : IChatPort
     private readonly IChatBridge _chatBridge;
     private readonly SessionStateService _sessionState;
     private readonly IApprovalContextAccessor _approvalContext;
+    private readonly IAppDistributedLock _turnLock;
     private readonly ILogger<ChatPortService> _logger;
+
+    /// <summary>
+    /// Bir turun kilidi bekleyebileceği azami süre. Bir tur LLM çağrıları yüzünden onlarca
+    /// saniye sürebilir; ikinci mesaj REDDEDİLMEK yerine SIRAYA girmelidir, çünkü amaç
+    /// sıralamayı korumaktır. Medallion kilidi tutulduğu sürece kendini yeniler, dolayısıyla
+    /// uzun turlarda kilit düşmez.
+    /// </summary>
+    private static readonly TimeSpan TurnLockWait = TimeSpan.FromSeconds(120);
 
     public ChatPortService(
         IAgentTeamPort team,
@@ -31,6 +41,7 @@ public sealed class ChatPortService : IChatPort
         IChatBridge chatBridge,
         SessionStateService sessionState,
         IApprovalContextAccessor approvalContext,
+        IAppDistributedLock turnLock,
         ILogger<ChatPortService> logger)
     {
         _team = team;
@@ -40,7 +51,39 @@ public sealed class ChatPortService : IChatPort
         _chatBridge = chatBridge;
         _sessionState = sessionState;
         _approvalContext = approvalContext;
+        _turnLock = turnLock;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Aynı oturumdaki turları SIRAYA sokar.
+    ///
+    /// <para>
+    /// Bir tur "geçmişi oku → akıl yürüt → workflow → geçmişe yaz" adımlarından oluşur ve bu
+    /// dizi atomik değildi: aynı anda gelen iki mesaj AYNI eski geçmişi okuyup sonuçlarını
+    /// bitiş sırasına göre yazabiliyordu. Sonuç, nedensel bağlamın kaybı (ikinci mesaj
+    /// birincinin yanıtını görmez) ve <c>ForceReplanNextTurn</c> gibi tek kullanımlık
+    /// durumların tutarsız tüketilmesidir.
+    /// </para>
+    ///
+    /// <para>
+    /// Anahtar <c>session:{id}</c> DEĞİL <c>session-turn:{id}</c>: ilki tur İÇİNDE
+    /// <c>MutateStateAsync</c>/<c>AddExchangeAsync</c> tarafından alınıyor ve Redis kilidi
+    /// yeniden girişli olmadığı için aynı anahtarı dışarıda tutmak kendi kendine kilitlenme
+    /// üretirdi.
+    /// </para>
+    /// </summary>
+    private async Task<IAsyncDisposable> AcquireTurnLockAsync(string sessionId, CancellationToken ct)
+    {
+        var handle = await _turnLock.TryAcquireAsync($"session-turn:{sessionId}", TurnLockWait, ct);
+        if (handle is not null) return handle;
+
+        _logger.LogWarning(
+            "Oturum turu kilidi {Wait}s içinde alınamadı (sessionId={SessionId}) — "
+          + "aynı oturumda hâlâ süren bir tur var.", TurnLockWait.TotalSeconds, sessionId);
+
+        throw new InvalidOperationException(
+            "Bu oturumda hâlâ işlenen bir mesaj var. Lütfen yanıtı bekleyip tekrar deneyin.");
     }
 
     /// <inheritdoc/>
@@ -50,6 +93,10 @@ public sealed class ChatPortService : IChatPort
         var session = await _sessions.GetOrCreateAsync(request.SessionId, ct);
         var sessionId = session.SessionId;
         await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
+
+        // Kilit, geçmiş OKUNMADAN önce alınır: "oku → yaz" dizisinin tamamı korunmalı.
+        await using var turnLock = await AcquireTurnLockAsync(sessionId, ct);
+
         var history = await _sessions.GetHistoryAsync(sessionId, ct);
 
         var reasoningResult = await _reasoning.ReasonAsync(query, session, history, ct);
@@ -117,6 +164,10 @@ public sealed class ChatPortService : IChatPort
             }
             yield break;
         }
+
+        // Kilit human-mode dalından SONRA alınır: o dal bot turu çalıştırmaz, yalnızca mesajı
+        // temsilciye iletir; sıraya sokulacak bir "tur" yoktur.
+        await using var turnLock = await AcquireTurnLockAsync(sessionId, ct);
 
         var history = await _sessions.GetHistoryAsync(sessionId, ct);
 

@@ -52,7 +52,7 @@ public class CustomerSupportTeam : IAgentTeamPort
             factory, finalizer, guards, traceStore,
             approvalGate, uiHint, loggerFactory, traceProcessor, messageBuilder);
 
-        _decomposed = new DecomposedRunner(_runner, parallelOptions.Value, uiHint, approvalContext);
+        _decomposed = new DecomposedRunner(_runner, parallelOptions.Value, uiHint, approvalContext, finalizer);
     }
 
     public Task<string> RunAsync(

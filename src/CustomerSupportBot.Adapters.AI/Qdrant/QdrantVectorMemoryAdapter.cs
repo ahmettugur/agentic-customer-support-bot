@@ -20,6 +20,7 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
 {
     private readonly QdrantClient _client;
     private readonly ILogger<QdrantVectorMemoryAdapter> _logger;
+    private readonly bool _allowDestructiveDimensionMigration;
 
     // Payload alan adları — search hit → MemoryDocument hidrasyonu için.
     private const string PayloadKind = "_kind";
@@ -36,6 +37,7 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
     {
         _logger = logger;
         var q = options.Value.VectorStore;
+        _allowDestructiveDimensionMigration = q.AllowDestructiveDimensionMigration;
         _client = string.IsNullOrWhiteSpace(q.ApiKey)
             ? new QdrantClient(q.Host, q.Port, q.UseHttps)
             : new QdrantClient(q.Host, q.Port, q.UseHttps, q.ApiKey);
@@ -46,15 +48,33 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
         var exists = await _client.CollectionExistsAsync(collection, ct).ConfigureAwait(false);
         if (exists)
         {
-            // Dim uyuşmazlığında collection'ı sil ve yeniden yarat (dev-friendly).
+            // Boyut uyuşmazlığı: VARSAYILAN DAVRANIŞ SİLMEK DEĞİL, DURMAKTIR.
+            //
+            // Buradaki silme eskiden koşulsuzdu ve "dev-friendly" diye işaretlenmişti — ama
+            // ortam ayrımı yoktu, dolayısıyla üretimde de çalışıyordu. Embedding modelini
+            // değiştirmek (ör. -small → -large) knowledge base'i, dersleri ve episodic belleği
+            // sessizce siliyordu; üstelik knowledge base için re-ingest de atlanıyordu
+            // (KnowledgeBaseIngestionService kaynak hash'i değişmediği için "değişmemiş" sayar).
+            // Sonuç: boş bilgi tabanı, geri getirilemeyen bellek.
             try
             {
                 var info = await _client.GetCollectionInfoAsync(collection, ct).ConfigureAwait(false);
                 var existingDim = (int)(info?.Config?.Params?.VectorsConfig?.Params?.Size ?? 0);
                 if (existingDim > 0 && existingDim != dimension)
                 {
+                    if (!_allowDestructiveDimensionMigration)
+                    {
+                        throw new InvalidOperationException(
+                            $"Qdrant koleksiyonu '{collection}' {existingDim} boyutlu, beklenen {dimension}. "
+                          + "Veri kaybı olmadan devam edilemez. Koleksiyonu yeniden oluşturmak KASITLIYSA "
+                          + "SemanticMemory:VectorStore:AllowDestructiveDimensionMigration=true verin; "
+                          + "aksi hâlde embedding boyutunu eski değerine döndürün.");
+                    }
+
                     _logger.LogWarning(
-                        "Qdrant collection {Collection} dim={Existing}, beklenen={Expected}. Yeniden oluşturuluyor (mevcut veriler silinecek).",
+                        "Qdrant collection {Collection} dim={Existing}, beklenen={Expected}. "
+                      + "AllowDestructiveDimensionMigration=true olduğu için yeniden oluşturuluyor "
+                      + "(mevcut veriler SİLİNİYOR).",
                         collection, existingDim, dimension);
                     await _client.DeleteCollectionAsync(collection, cancellationToken: ct).ConfigureAwait(false);
                 }

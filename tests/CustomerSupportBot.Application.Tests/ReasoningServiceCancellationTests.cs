@@ -4,6 +4,7 @@ using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Reasoning;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Application.Tests;
 
@@ -42,7 +43,8 @@ public class ReasoningServiceCancellationTests
                 Substitute.For<IOrderRepository>(),
                 Substitute.For<IComplaintRepository>(),
                 NullLogger<EntityVerifier>.Instance),
-            new ReasoningSanityChecker(NullLogger<ReasoningSanityChecker>.Instance));
+            new ReasoningSanityChecker(NullLogger<ReasoningSanityChecker>.Instance),
+            Options.Create(new WorkflowGuardOptions()));
     }
 
     [Fact]

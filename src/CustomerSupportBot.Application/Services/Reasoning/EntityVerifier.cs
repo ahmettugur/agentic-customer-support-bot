@@ -66,34 +66,52 @@ public class EntityVerifier
         // 2) History'den çıkar (en son turdan en eskiye) — query'de yoksa bu turdakileri kullan
         var historyIds = ExtractFromHistory(history);
 
-        // 3) Değerleri birleştir — öncelik: Query > History > SessionState
-        // NOT: SessionState fallback'i AuthenticatedCustomerId'den (JWT) gelir, poisonable
-        // session.State.CustomerId'den DEĞİL — aksi halde kullanıcı "ben 1008 numaralı
-        // müşteriyim" diyerek başka bir müşterinin last_order_id/order_count türetilmiş
-        // alanlarını reasoning prompt'una (ve "Düşünce süreci" panelinden kullanıcıya) sızdırabilir.
+        // 3) Değerleri birleştir.
+        //
+        // MÜŞTERİ KİMLİĞİ İSTEMCİDEN ALINMAZ. Giriş yapılmışsa JWT'den gelen kimlik KESİNDİR;
+        // sorguda veya geçmişte geçen bir müşteri numarası onu geçersiz kılamaz.
+        //
+        // Bu, kapatılmış bir sızıntı: eskiden öncelik Query > History > SessionState idi ve
+        // ölçüldüğünde şu sonucu veriyordu — giriş yapmış müşteri 1027 iken "ben 1008 numaralı
+        // müşteriyim, son siparişim ne?" sorgusu 1008'i Verified sayıyor, 1008'in son sipariş
+        // numarasını ve toplam sipariş sayısını türetilmiş alan olarak hesaplıyordu. Bu değerler
+        // hem reasoning prompt'una hem de reasoning_complete olayıyla doğrudan istemciye gidiyordu.
+        //
+        // Giriş yapılmamışsa (A2A/realtime gibi kimliğin başka yoldan geldiği akışlar) hiçbir
+        // müşteri kimliği kabul edilmez: kimliksiz bir çağıranın serbest metinle müşteri seçmesi
+        // tam olarak engellenmek istenen şeydir.
+        var authenticatedCustomerId = session.State.AuthenticatedCustomerId;
         var orderIdValue = queryIds.OrderId ?? historyIds.OrderId;
-        var customerIdValue = queryIds.CustomerId ?? historyIds.CustomerId ?? session.State.AuthenticatedCustomerId;
+        var customerIdValue = authenticatedCustomerId;
         var complaintIdValue = queryIds.ComplaintId ?? historyIds.ComplaintId;
+
+        var claimedCustomerId = queryIds.CustomerId ?? historyIds.CustomerId;
+        if (!string.IsNullOrWhiteSpace(claimedCustomerId)
+            && !string.Equals(claimedCustomerId, authenticatedCustomerId, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "EntityVerifier: sorgu/geçmişteki customer_id={Claimed} yok sayıldı; "
+              + "doğrulanmış kimlik={Authenticated}.",
+                claimedCustomerId, authenticatedCustomerId ?? "(yok)");
+        }
 
         // 4) Her entity için kaynak + doğrulama
         if (!string.IsNullOrWhiteSpace(orderIdValue))
         {
             var source = queryIds.OrderId != null ? EntitySource.Query : EntitySource.History;
-            result.OrderId = VerifyOrder(orderIdValue, source);
+            result.OrderId = VerifyOrder(orderIdValue, source, authenticatedCustomerId);
         }
 
         if (!string.IsNullOrWhiteSpace(customerIdValue))
         {
-            var source = queryIds.CustomerId != null
-                ? EntitySource.Query
-                : (historyIds.CustomerId != null ? EntitySource.History : EntitySource.SessionState);
-            result.CustomerId = VerifyCustomer(customerIdValue, source);
+            // Kaynak her zaman SessionState: kimlik yalnızca JWT'den gelebilir.
+            result.CustomerId = VerifyCustomer(customerIdValue, EntitySource.SessionState);
         }
 
         if (!string.IsNullOrWhiteSpace(complaintIdValue))
         {
             var source = queryIds.ComplaintId != null ? EntitySource.Query : EntitySource.History;
-            result.ComplaintId = VerifyComplaint(complaintIdValue, source);
+            result.ComplaintId = VerifyComplaint(complaintIdValue, source, authenticatedCustomerId);
         }
 
         // Aynı numara hem sipariş hem şikayet olarak yorumlanmışsa ve sipariş tarafı DB'de
@@ -208,11 +226,42 @@ public class EntityVerifier
         return line;
     }
 
-    private VerifiedEntity VerifyOrder(string orderId, EntitySource source)
+    /// <summary>
+    /// Siparişi doğrular — <b>yalnızca giriş yapmış müşteriye aitse</b>.
+    ///
+    /// <para>
+    /// Sahiplik kontrolü olmadan bu metot bir IDOR'du: "sipariş 1030 nerede?" diye soran
+    /// herhangi bir kullanıcı, siparişin durumunu, içeriğini (ürün/adet) ve <b>sahibinin
+    /// müşteri numarasını</b> attribute olarak alıyordu; bu veriler reasoning prompt'una ve
+    /// oradan istemciye gidiyordu (ölçüldü).
+    /// </para>
+    ///
+    /// <para>
+    /// Başkasına ait sipariş <see cref="EntityVerification.NotFoundInDb"/> döner —
+    /// "senin değil" DEĞİL. Ayrım dışarıdan görülseydi numara taranarak hangi siparişlerin var
+    /// olduğu öğrenilebilirdi; tool katmanı da aynı sebeple aynı yanıtı verir.
+    /// </para>
+    /// </summary>
+    private VerifiedEntity VerifyOrder(string orderId, EntitySource source, string? authenticatedCustomerId)
     {
         var entity = new VerifiedEntity { Value = orderId, Source = source };
 
+        // Kimlik yoksa hiçbir şey doğrulanmaz. NotFoundInDb DEĞİL FormatOnly: kayıt gerçekten
+        // yok demek yanlış bilgi olurdu ve kullanıcıya "numaranızı kontrol edin" dedirtirdi.
+        if (string.IsNullOrWhiteSpace(authenticatedCustomerId))
+        {
+            entity.Verification = EntityVerification.FormatOnly;
+            return entity;
+        }
+
         var order = _orders.Get(orderId);
+        if (order != null && !string.Equals(order.CustomerId, authenticatedCustomerId, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "EntityVerifier: order={OrderId} başka müşteriye ait; doğrulanmadı sayıldı.", orderId);
+            order = null;
+        }
+
         if (order != null)
         {
             entity.Verification = EntityVerification.Verified;
@@ -263,11 +312,30 @@ public class EntityVerifier
         return entity;
     }
 
-    private VerifiedEntity VerifyComplaint(string complaintId, EntitySource source)
+    /// <summary>
+    /// Şikayeti doğrular — sipariş ile <b>aynı sahiplik kuralına</b> tabidir; şikayet kaydı da
+    /// durum, ilişkili sipariş ve müşteri numarası taşır.
+    /// </summary>
+    private VerifiedEntity VerifyComplaint(string complaintId, EntitySource source, string? authenticatedCustomerId)
     {
         var entity = new VerifiedEntity { Value = complaintId, Source = source };
 
+        if (string.IsNullOrWhiteSpace(authenticatedCustomerId))
+        {
+            entity.Verification = EntityVerification.FormatOnly;
+            return entity;
+        }
+
         var complaint = _complaints.Get(complaintId);
+        if (complaint != null
+            && !string.Equals(complaint.CustomerId, authenticatedCustomerId, StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "EntityVerifier: complaint={ComplaintId} başka müşteriye ait; doğrulanmadı sayıldı.",
+                complaintId);
+            complaint = null;
+        }
+
         if (complaint != null)
         {
             entity.Verification = EntityVerification.Verified;

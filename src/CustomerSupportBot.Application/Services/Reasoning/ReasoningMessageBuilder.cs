@@ -24,6 +24,7 @@ public class ReasoningMessageBuilder
     /// Reasoning çağrısı için tam mesaj listesini kurar.
     /// </summary>
     public List<ConversationMessage> Build(
+        int maxHistoryMessages,
         string query,
         AgentSession session,
         List<ConversationMessage>? history,
@@ -38,7 +39,12 @@ public class ReasoningMessageBuilder
 
         if (history is { Count: > 0 })
         {
-            messages.AddRange(history);
+            // Yalnızca YAKIN geçmiş. Tamamını göndermek uzun oturumlarda token maliyetini,
+            // gecikmeyi ve bağlam sınırını aşma riskini birlikte büyütüyordu; sınır aşılırsa
+            // reasoning fallback'e düşer ve tur sessizce kalitesizleşir.
+            // (Uzak turların özeti workflow bağlamında ayrıca taşınır.)
+            var take = Math.Max(1, maxHistoryMessages);
+            messages.AddRange(history.Count <= take ? history : history.Skip(history.Count - take));
         }
 
         // Admin "Yeniden Planla" tetiklediyse override hint'ini reasoning agent da görsün.

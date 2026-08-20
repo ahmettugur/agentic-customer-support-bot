@@ -9,6 +9,7 @@ using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Application.Services.Reasoning;
 
@@ -23,14 +24,17 @@ public class ReasoningService : IReasoningPort
     private readonly EntityVerifier _entityVerifier;
     private readonly ReasoningSanityChecker _sanityChecker;
     private readonly ReasoningMessageBuilder _messageBuilder;
+    private readonly WorkflowGuardOptions _guards;
 
     public ReasoningService(
         IReasoningChatClient reasoningClient,
         ILogger<ReasoningService> logger,
         IPromptRepository prompts,
         EntityVerifier entityVerifier,
-        ReasoningSanityChecker sanityChecker)
+        ReasoningSanityChecker sanityChecker,
+        IOptions<WorkflowGuardOptions> guards)
     {
+        _guards = guards.Value;
         _reasoningClient = reasoningClient;
         _logger = logger;
         _entityVerifier = entityVerifier;
@@ -45,11 +49,19 @@ public class ReasoningService : IReasoningPort
         CancellationToken ct = default)
     {
         var verified = _entityVerifier.Verify(query, session, history);
-        var messages = _messageBuilder.Build(query, session, history, verified);
+        var messages = _messageBuilder.Build(_guards.ReasoningHistoryMessages, query, session, history, verified);
+
+        // Reasoning workflow'dan ÖNCE çalışır ve WorkflowGuardOptions.TimeoutSeconds yalnızca
+        // workflow'u kapsar — yani asılı kalan bir reasoning çağrısının bütçesi yoktu.
+        // Süre dolarsa aşağıdaki catch bloğu devreye girer ve tur boş reasoning ile devam eder:
+        // niyet çıkarımı kaybolur ama kullanıcı yanıtsız kalmaz.
+        using var timeoutCts = new CancellationTokenSource(
+            TimeSpan.FromSeconds(Math.Max(1, _guards.ReasoningTimeoutSeconds)));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
         try
         {
-            var text = await _reasoningClient.CompleteAsync(messages, ct);
+            var text = await _reasoningClient.CompleteAsync(messages, linkedCts.Token);
             var result = ReasoningResultParser.Parse(text);
             result.SanityIssues = _sanityChecker.Check(result, verified);
             result.VerifiedEntities = verified;
@@ -85,7 +97,7 @@ public class ReasoningService : IReasoningPort
         yield return new StreamEvent(StreamEventTypes.ReasoningStart, null);
 
         var verified = _entityVerifier.Verify(query, session, history);
-        var messages = _messageBuilder.Build(query, session, history, verified);
+        var messages = _messageBuilder.Build(_guards.ReasoningHistoryMessages, query, session, history, verified);
 
         var buffer = new StringBuilder();
         string? streamError = null;

@@ -74,7 +74,8 @@ public class EvaluationRunnerTests
             NullLogger<ReasoningService>.Instance,
             prompts,
             entityVerifier,
-            sanityChecker);
+            sanityChecker,
+            Options.Create(new WorkflowGuardOptions()));
 
         var distributedLock = new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 }));
         var sessionManager = new InMemorySessionManager(distributedLock);

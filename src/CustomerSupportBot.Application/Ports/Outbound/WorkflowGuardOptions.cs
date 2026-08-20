@@ -21,6 +21,33 @@ public class WorkflowGuardOptions
     public int MaxDuplicateToolCalls { get; set; } = 3;
 
     /// <summary>
+    /// Reasoning çağrısına gönderilecek EN FAZLA geçmiş mesaj sayısı (en yeniler).
+    ///
+    /// <para>
+    /// Workflow tarafında geçmiş özetlenip kırpılıyordu ama reasoning aynı korumadan
+    /// yararlanmıyor, oturumun TAMAMINI modele gönderiyordu. Uzun oturumlarda bu üç şeyi
+    /// birden büyütür: token maliyeti, gecikme ve modelin bağlam sınırını aşma riski —
+    /// sınır aşılırsa reasoning fallback'e düşer ve tur sessizce kalitesizleşir.
+    /// </para>
+    ///
+    /// <para>
+    /// Reasoning'in işi niyet çıkarımı ve varlık takibidir; her ikisi de konuşmanın YAKIN
+    /// geçmişine dayanır. Uzak turların özeti zaten workflow bağlamında taşınır.
+    /// </para>
+    /// </summary>
+    public int ReasoningHistoryMessages { get; set; } = 12;
+
+    /// <summary>
+    /// Reasoning çağrısı için saniye cinsinden timeout.
+    ///
+    /// <para>
+    /// <see cref="TimeoutSeconds"/> yalnızca workflow'u kapsar ve reasoning ondan ÖNCE
+    /// çalışır — yani asılı kalan bir reasoning çağrısı hiçbir bütçeye tabi değildi.
+    /// </para>
+    /// </summary>
+    public int ReasoningTimeoutSeconds { get; set; } = 45;
+
+    /// <summary>
     /// Maksimum workflow iterasyon sayısı (MAF superstep).
     /// </summary>
     public int MaxIterations { get; set; } = 20;

@@ -21,6 +21,27 @@ public sealed class SemanticMemoryOptions
         public int Port { get; set; } = 6334;
         public bool UseHttps { get; set; }
         public string? ApiKey { get; set; }
+
+        /// <summary>
+        /// Embedding boyutu mevcut koleksiyonunkiyle uyuşmadığında koleksiyonun SİLİNİP yeniden
+        /// oluşturulmasına izin verir.
+        /// </summary>
+        ///
+        /// <remarks>
+        /// Varsayılan <c>false</c> — yani fail-closed. Eskiden bu davranış koşulsuzdu ve
+        /// "dev-friendly" diye işaretlenmişti; ortam ayrımı yoktu. Üretimde embedding modelini
+        /// değiştirmek (ör. -small → -large) tüm knowledge base'i, dersleri ve episodic belleği
+        /// sessizce siliyordu. Daha kötüsü: knowledge base silindikten sonra
+        /// <c>KnowledgeBaseIngestionService</c> kaynak hash'i değişmediği için re-ingest'i
+        /// atlıyor, sonuç BOŞ bir bilgi tabanı oluyordu. Episodic bellek ve dersler ise
+        /// yeniden üretilemez — onlar için geri dönüş yok.
+        ///
+        /// <para>
+        /// Bu bayrak açılmadan boyut uyuşmazlığı bir başlatma hatasıdır: veri kaybı, sessiz bir
+        /// yan etki değil bilinçli bir karar olmalıdır.
+        /// </para>
+        /// </remarks>
+        public bool AllowDestructiveDimensionMigration { get; set; }
     }
 
     public sealed class EmbeddingOptions

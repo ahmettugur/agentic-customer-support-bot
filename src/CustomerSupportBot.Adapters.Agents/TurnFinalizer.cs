@@ -45,22 +45,73 @@ internal sealed class TurnFinalizer
     /// Workflow başarıyla tamamlandığında trace'i kapatır ve bağlı yan etkileri
     /// (eskalasyon işleme, episodik bellek, müşteri profili) tetikler.
     /// </summary>
+    /// <summary>
+    /// Bir workflow koşusunun sonunu kapatır.
+    ///
+    /// <para>
+    /// <paramref name="isSubTaskRun"/> — bileşik (compound) bir sorgunun ALT görev koşusu.
+    /// Böyle koşularda <b>tur bazlı yan etkiler</b> (episodic bellek kaydı, müşteri profili
+    /// etkileşim sayacı) atlanır; onlar birleştirilmiş tur için bir kez, aggregate sonuçla
+    /// yazılır (bkz. <see cref="FinalizeAggregateTurnAsync"/>).
+    /// </para>
+    ///
+    /// <para>
+    /// Bu ayrım olmadan tek bir kullanıcı mesajı N alt göreve bölündüğünde profil sayacı N tur
+    /// ilerliyor ve birbirinden kopuk N sentetik episode yazılıyordu. Episodic bellek sonradan
+    /// aranan bir kaynak olduğu için bu, kalıcı olarak kirlenmiş bir bellek demekti.
+    /// </para>
+    ///
+    /// <para>
+    /// Eskalasyon ve trace tamamlama alt koşularda da çalışır: her alt koşunun kendi trace'i
+    /// vardır ve kapatılmalıdır, alt görevde doğan bir eskalasyon da kaybolmamalıdır.
+    /// </para>
+    /// </summary>
     public async Task FinalizeAsync(
         ReasoningTrace trace,
         AgentSession? session,
         string query,
         string result,
         string terminationReason,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        bool isSubTaskRun = false)
     {
         await _approvalGate.ProcessPendingEscalationsAsync(trace, query, result, ct);
         PopulateAgentVisitOutputs(trace, result);
-        WriteEpisodicMemorySafe(trace, query, result, session?.State.AuthenticatedCustomerId);
-        await UpdateCustomerProfileSafeAsync(session, trace, query, result, ct);
+
+        if (!isSubTaskRun)
+        {
+            WriteEpisodicMemorySafe(trace, query, result, session?.State.AuthenticatedCustomerId);
+            await UpdateCustomerProfileSafeAsync(session, trace, query, result, ct);
+        }
 
         _traceStore.Complete(trace.TraceId,
             terminationReason: terminationReason,
             finalResponse: result);
+    }
+
+    /// <summary>
+    /// Bileşik bir turun tur bazlı yan etkilerini <b>bir kez</b> yazar: kullanıcının tek
+    /// mesajı ve alt görev sonuçlarının birleşimi.
+    ///
+    /// <para>
+    /// Trace'e dokunmaz — alt koşuların kendi trace'leri zaten kapatılmıştır. Buradaki tek iş,
+    /// belleğin ve profilin turu <b>bir</b> etkileşim olarak görmesidir.
+    /// </para>
+    /// </summary>
+    public async Task FinalizeAggregateTurnAsync(
+        AgentSession? session,
+        string query,
+        string aggregateResult,
+        string? intent,
+        CancellationToken ct = default)
+    {
+        // Birleşik turun kendi trace'i YOKTUR — alt koşuların her biri kendi trace'ini zaten
+        // kapatmıştır. Bu yüzden burada trace değil, belleğin ihtiyaç duyduğu iki alan
+        // (oturum ve intent) doğrudan taşınır.
+        var sessionId = session?.SessionId ?? "";
+        WriteEpisodicMemory(sessionId, traceId: "", query, aggregateResult, intent,
+            session?.State.AuthenticatedCustomerId);
+        await UpdateCustomerProfileAsync(session, intent, query, aggregateResult, ct);
     }
 
     private static void PopulateAgentVisitOutputs(ReasoningTrace trace, string finalResult)
@@ -103,13 +154,15 @@ internal sealed class TurnFinalizer
     }
 
     private void WriteEpisodicMemorySafe(ReasoningTrace trace, string query, string response, string? customerId)
+        => WriteEpisodicMemory(trace.SessionId, trace.TraceId, query, response,
+            trace.Reasoning?.Intent, customerId);
+
+    private void WriteEpisodicMemory(
+        string sessionId, string traceId, string query, string response, string? intent, string? customerId)
     {
         if (_semanticMemory is null || !_semanticMemory.Enabled) return;
         if (string.IsNullOrWhiteSpace(query) || string.IsNullOrWhiteSpace(response)) return;
 
-        var sessionId = trace.SessionId;
-        var traceId = trace.TraceId;
-        var intent = trace.Reasoning?.Intent;
         var memory = _semanticMemory;
         var logger = _loggerFactory.CreateLogger<TurnFinalizer>();
 
@@ -126,9 +179,17 @@ internal sealed class TurnFinalizer
         });
     }
 
-    private async Task UpdateCustomerProfileSafeAsync(
+    private Task UpdateCustomerProfileSafeAsync(
         AgentSession? session,
         ReasoningTrace trace,
+        string query,
+        string response,
+        CancellationToken ct)
+        => UpdateCustomerProfileAsync(session, trace.Reasoning?.Intent, query, response, ct);
+
+    private async Task UpdateCustomerProfileAsync(
+        AgentSession? session,
+        string? intent,
         string query,
         string response,
         CancellationToken ct)
@@ -140,7 +201,6 @@ internal sealed class TurnFinalizer
         var customerId = session?.State.AuthenticatedCustomerId;
         if (string.IsNullOrWhiteSpace(customerId)) return;
 
-        var intent = trace.Reasoning?.Intent;
         var logger = _loggerFactory.CreateLogger<TurnFinalizer>();
 
         try

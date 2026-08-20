@@ -283,6 +283,10 @@ public class KnowledgeArticleServiceTests
 
         public Task EnsureCollectionsAsync(CancellationToken ct = default) => Task.CompletedTask;
 
+        /// <summary>Upsert edilen doküman sayısı — ingestion'ın "koleksiyon boş mu" kontrolü için.</summary>
+        public Task<long> CountAsync(MemoryKind kind, CancellationToken ct = default) =>
+            Task.FromResult((long)Upserted.Count);
+
         public Task UpsertManyAsync(MemoryKind kind, IReadOnlyList<MemoryDocument> docs, CancellationToken ct = default)
         {
             if (ThrowOnUpsert) throw new InvalidOperationException("vector store erişilemiyor");

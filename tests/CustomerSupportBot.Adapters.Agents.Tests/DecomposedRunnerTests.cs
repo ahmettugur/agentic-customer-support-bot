@@ -14,6 +14,11 @@ using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.Reasoning;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
+using CustomerSupportBot.Application.Ports.Outbound.Observability;
+using CustomerSupportBot.Application.Services.Escalation;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Adapters.Agents.Tests;
 
@@ -114,7 +119,34 @@ public class DecomposedRunnerTests
         => new(runner,
                opts ?? new ParallelExecutionOptions(),
                Substitute.For<IUiHintEmitter>(),
-               Substitute.For<IApprovalContextAccessor>());
+               Substitute.For<IApprovalContextAccessor>(),
+               BuildFinalizer());
+
+    /// <summary>
+    /// Gerçek <see cref="TurnFinalizer"/> — ama bellek/profil bağımlılıkları <c>null</c>.
+    /// Bileşik turun tur bazlı yan etkileri (episodic + profil) böylece no-op olur; bu
+    /// testlerin konusu alt görev orkestrasyonu, yan etkiler değil.
+    /// </summary>
+    private static TurnFinalizer BuildFinalizer()
+    {
+        var approvalOpts = Options.Create(new ApprovalOptions { Enabled = false });
+        var sink = Substitute.For<IEscalationSink>();
+
+        var approvalGate = new ApprovalGateService(
+            Substitute.For<IApprovalQueue>(),
+            approvalOpts,
+            sink,
+            Substitute.For<IApprovalContextAccessor>(),
+            Substitute.For<ICustomerSupportToolsService>(),
+            new EscalationPolicyService(sink, approvalOpts));
+
+        return new TurnFinalizer(
+            Substitute.For<IReasoningTraceStore>(),
+            approvalGate,
+            NullLoggerFactory.Instance,
+            semanticMemory: null,
+            profileService: null);
+    }
 
     private static ReasoningResult Reasoning(params SubTask[] subs)
         => new() { SubTasks = subs.ToList() };

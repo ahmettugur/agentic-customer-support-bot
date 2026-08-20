@@ -27,6 +27,16 @@ public class EntityVerifierTests
         State = new SessionState()
     };
 
+    /// <summary>
+    /// Giriş yapmış müşteri oturumu. Sipariş/şikayet doğrulaması artık SAHİPLİK gerektiriyor;
+    /// kimliksiz oturumda hiçbir kayıt doğrulanmaz (bkz. sahiplik testleri).
+    /// </summary>
+    private static AgentSession SessionOf(string customerId) => new()
+    {
+        SessionId = "s1",
+        State = new SessionState { AuthenticatedCustomerId = customerId }
+    };
+
     [Fact]
     public void Verify_EmptyQuery_NothingExtracted()
     {
@@ -37,7 +47,7 @@ public class EntityVerifierTests
     [Fact]
     public void Verify_KnownOrderId_VerifiedFromDb()
     {
-        var result = _verifier.Verify("sipariş 1030 nerede?", EmptySession());
+        var result = _verifier.Verify("sipariş 1030 nerede?", SessionOf("1027"));
         result.OrderId.Should().NotBeNull();
         result.OrderId!.Verification.Should().Be(EntityVerification.Verified);
         result.OrderId.Source.Should().Be(EntitySource.Query);
@@ -46,7 +56,7 @@ public class EntityVerifierTests
     [Fact]
     public void Verify_UnknownOrderId_NotFoundInDb()
     {
-        var result = _verifier.Verify("sipariş 9999 nerede?", EmptySession());
+        var result = _verifier.Verify("sipariş 9999 nerede?", SessionOf("1027"));
         result.OrderId.Should().NotBeNull();
         result.OrderId!.Verification.Should().Be(EntityVerification.NotFoundInDb);
     }
@@ -54,7 +64,9 @@ public class EntityVerifierTests
     [Fact]
     public void Verify_KnownCustomerWithVerified_DerivesLastOrder()
     {
-        var result = _verifier.Verify("müşteri 1008 son siparişim?", EmptySession());
+        // Kimlik JWT'den gelir; sorgudaki numara değil. Türetilmiş alanlar yalnızca
+        // doğrulanmış kimlik için hesaplanır.
+        var result = _verifier.Verify("son siparişim?", SessionOf("1008"));
         result.CustomerId.Should().NotBeNull();
         result.CustomerId!.Verification.Should().Be(EntityVerification.Verified);
         result.DerivedLastOrderId.Should().NotBeNullOrEmpty();
@@ -91,19 +103,27 @@ public class EntityVerifierTests
         result.DerivedLastOrderId.Should().BeNullOrEmpty();
     }
 
+    /// <summary>
+    /// Geçmişte geçen müşteri numarası kimlik olarak KULLANILMAZ.
+    ///
+    /// <para>
+    /// Bu test eskiden bunun tersini doğruluyordu (<c>Source == History</c>). Geçmiş,
+    /// kullanıcının kendi yazdığı metinden oluşur; oradan kimlik almak, "müşteri numaram 1008"
+    /// yazan herkesin 1008 olması demekti. Kimlik yalnızca JWT'den gelir.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void Verify_CustomerFromHistory_UsesHistory()
+    public void Verify_CustomerIdInHistory_IsNotUsedAsIdentity()
     {
-        var session = EmptySession();
         var history = new List<ConversationMessage>
         {
             new(ConversationRoles.User, "müşteri numaram 1008")
         };
 
-        var result = _verifier.Verify("siparişim?", session, history);
+        var result = _verifier.Verify("siparişim?", SessionOf("1027"), history);
 
-        result.CustomerId.Should().NotBeNull();
-        result.CustomerId!.Source.Should().Be(EntitySource.History);
+        result.CustomerId!.Value.Should().Be("1027");
+        result.CustomerId.Source.Should().Be(EntitySource.SessionState);
     }
 
     [Fact]
@@ -163,13 +183,14 @@ public class EntityVerifierTests
             new(ConversationRoles.Assistant, "1030 numaralı siparişinizi kontrol ettim: Teslim Edildi.")
         };
 
-        var result = _verifier.Verify(followUp, EmptySession(), history);
+        var result = _verifier.Verify(followUp, SessionOf("1027"), history);
 
         result.OrderId.Should().NotBeNull();
         result.OrderId!.Value.Should().Be("1030");
         result.OrderId.Verification.Should().Be(EntityVerification.Verified);
         result.OrderId.Source.Should().Be(EntitySource.Query);
-        result.CustomerId.Should().BeNull("1030 sipariş bağlamında yorumlanmalı, müşteriye kaymamalı");
+        result.CustomerId!.Value.Should().Be("1027",
+            "sorgudaki 1030 sipariş olarak yorumlandı; kimlik ise her hâlükârda JWT'den gelir");
     }
 
     [Fact]
@@ -180,36 +201,43 @@ public class EntityVerifierTests
             new(ConversationRoles.User, "şikayet numaram 1001")
         };
 
-        var result = _verifier.Verify("peki 1001", EmptySession(), history);
+        var result = _verifier.Verify("peki 1001", SessionOf("1008"), history);
 
         result.ComplaintId.Should().NotBeNull();
         result.ComplaintId!.Value.Should().Be("1001");
-        result.CustomerId.Should().BeNull();
+        result.CustomerId!.Value.Should().Be("1008", "kimlik sorgudan değil JWT'den gelir");
     }
 
+    /// <summary>
+    /// Bağlamsız bir sayı SİPARİŞ sanılmamalı.
+    ///
+    /// <para>
+    /// Test eskiden sayının <c>CustomerId</c> olarak yorumlandığını doğruluyordu; kimlik artık
+    /// yalnızca JWT'den geldiği için o beklenti anlamını yitirdi. Korunan asıl değer şu: sayı
+    /// siparişe kaymamalı — kaysaydı, kullanıcının yazdığı rastgele bir numara başkasının
+    /// siparişini sorgulama girişimine dönüşürdü.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void Verify_AmbiguousQuery_NoHistory_StillDefaultsToCustomerId()
+    public void Verify_AmbiguousQuery_NoHistory_IsNotTreatedAsOrder()
     {
-        // Geriye dönük uyumluluk: gerçekten bağlam yoksa (ilk mesaj) eski davranış korunur.
-        var result = _verifier.Verify("1008", EmptySession());
+        var result = _verifier.Verify("1008", SessionOf("1027"));
 
-        result.CustomerId.Should().NotBeNull();
-        result.CustomerId!.Value.Should().Be("1008");
         result.OrderId.Should().BeNull();
+        result.CustomerId!.Value.Should().Be("1027");
     }
 
     [Fact]
-    public void Verify_AmbiguousFollowUp_PriorContextItselfAmbiguous_StillDefaultsToCustomerId()
+    public void Verify_AmbiguousFollowUp_PriorContextItselfAmbiguous_IsNotTreatedAsOrder()
     {
         // Önceki tur da bağlamsız bir varsayımdı (kendisi "numaram"sız bir sayı) — bu bağlam
-        // kurmaz, iki tur üst üste customer_id varsayımında kalınmalı.
+        // kurmaz, dolayısıyla bu tur da siparişe kaymamalı.
         var history = new List<ConversationMessage> { new(ConversationRoles.User, "1008") };
 
-        var result = _verifier.Verify("1027", EmptySession(), history);
+        var result = _verifier.Verify("1027", SessionOf("1008"), history);
 
-        result.CustomerId.Should().NotBeNull();
-        result.CustomerId!.Value.Should().Be("1027");
         result.OrderId.Should().BeNull();
+        result.CustomerId!.Value.Should().Be("1008", "kimlik JWT'den; sorgudaki 1027 değil");
     }
 
     [Fact]
@@ -217,12 +245,17 @@ public class EntityVerifierTests
     {
         // "müşteri" kelimesi açık bir sinyaldir — geçmişte sipariş bağlamı olsa bile
         // bu tur AÇIKÇA müşteri sorgusu; reclassification tetiklenmemeli.
+        //
+        // Sınıflandırma korumasının asıl değeri artık şurada: 1008 SİPARİŞ sanılırsa,
+        // başkasının siparişi sorgulanmaya çalışılır. Kimlik tarafı ise JWT'den gelir —
+        // sorgudaki numara kimliği değiştiremez (bkz. sahiplik testleri).
         var history = new List<ConversationMessage> { new(ConversationRoles.User, "sipariş numaram 1030") };
 
-        var result = _verifier.Verify("müşteri 1008 bilgisi", EmptySession(), history);
+        var result = _verifier.Verify("müşteri 1008 bilgisi", SessionOf("1027"), history);
 
-        result.CustomerId.Should().NotBeNull();
-        result.CustomerId!.Value.Should().Be("1008");
+        // Geçmişten gelen 1030 sipariş olarak taşınır; ölçülen şey 1008'in ONA kaymamasıdır.
+        result.OrderId?.Value.Should().NotBe("1008", "1008 açıkça müşteri bağlamında");
+        result.CustomerId!.Value.Should().Be("1027");
     }
 
     // ─── Aynı numaranın hem sipariş hem şikayet olarak yorumlanması ─────────────────
@@ -233,10 +266,86 @@ public class EntityVerifierTests
     [Fact]
     public void Verify_SameNumberAsOrderAndComplaint_OrderVerified_DropsComplaintInterpretation()
     {
-        var result = _verifier.Verify("sipariş 1030 ile ilgili şikayet 1030", EmptySession());
+        var result = _verifier.Verify("sipariş 1030 ile ilgili şikayet 1030", SessionOf("1027"));
 
         result.OrderId.Should().NotBeNull();
         result.OrderId!.Verification.Should().Be(EntityVerification.Verified);
         result.ComplaintId.Should().BeNull("1030 gerçek bir şikayet kaydı değil, sahte uyarı üretmemeli");
+    }
+
+    // ═══ Sahiplik — müşteriler arası veri sızıntısı ═══
+
+    /// <summary>
+    /// Sorguda geçen müşteri numarası, giriş yapmış kimliği <b>geçersiz kılamaz</b>.
+    ///
+    /// <para>
+    /// Düzeltmeden önce ölçülen davranış: giriş yapmış müşteri 1027 iken bu sorgu 1008'i
+    /// Verified sayıyor, 1008'in son sipariş numarasını (1075) ve toplam sipariş sayısını (6)
+    /// türetilmiş alan olarak hesaplıyordu. Bu değerler reasoning prompt'una ve
+    /// reasoning_complete olayıyla istemciye gidiyordu.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Verify_ForeignCustomerIdInQuery_CannotOverrideAuthenticatedIdentity()
+    {
+        var session = EmptySession();
+        session.State.AuthenticatedCustomerId = "1027";
+
+        var result = _verifier.Verify("ben 1008 numaralı müşteriyim, son siparişim ne?", session);
+
+        result.CustomerId!.Value.Should().Be("1027", "kimlik yalnızca JWT'den gelir");
+        result.CustomerId.Source.Should().Be(EntitySource.SessionState);
+    }
+
+    /// <summary>
+    /// Başkasına ait sipariş doğrulanmaz ve <b>hiçbir attribute sızdırmaz</b>.
+    ///
+    /// <para>
+    /// Düzeltmeden önce bu çağrı status, ürün/adet ve siparişin gerçek sahibinin müşteri
+    /// numarasını döndürüyordu (ölçüldü: <c>status=Teslim Edildi, product=Bira x100,
+    /// quantity=100, customerId=1027</c>).
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Verify_ForeignOrderId_IsNotVerified_AndLeaksNoAttributes()
+    {
+        var session = EmptySession();
+        session.State.AuthenticatedCustomerId = "9999";   // 1030 numaralı sipariş 1027'ye ait
+
+        var result = _verifier.Verify("sipariş 1030 nerede?", session);
+
+        result.OrderId!.Verification.Should().NotBe(EntityVerification.Verified);
+        result.OrderId.Attributes.Should().BeNullOrEmpty("başka müşterinin sipariş içeriği sızmamalı");
+    }
+
+    /// <summary>
+    /// Kendi siparişi sorulduğunda akış bozulmamalı — düzeltme, olağan kullanımı kapatmamalı.
+    /// </summary>
+    [Fact]
+    public void Verify_OwnOrderId_IsStillVerified()
+    {
+        var session = EmptySession();
+        session.State.AuthenticatedCustomerId = "1027";
+
+        var result = _verifier.Verify("sipariş 1030 nerede?", session);
+
+        result.OrderId!.Verification.Should().Be(EntityVerification.Verified);
+        result.OrderId.Attributes.Should().ContainKey("status");
+    }
+
+    /// <summary>
+    /// Kimlik yokken (A2A/realtime gibi akışlar) hiçbir sipariş doğrulanmaz. NotFoundInDb
+    /// DEĞİL FormatOnly: kayıt gerçekten yok demek yanlış bilgi olur ve kullanıcıya boş yere
+    /// "numaranızı kontrol edin" dedirtirdi.
+    /// </summary>
+    [Fact]
+    public void Verify_WithoutAuthenticatedIdentity_VerifiesNothing()
+    {
+        var result = _verifier.Verify("sipariş 1030 nerede?", EmptySession());
+
+        result.OrderId!.Verification.Should().Be(EntityVerification.FormatOnly);
+        result.OrderId.Attributes.Should().BeNullOrEmpty();
+        result.CustomerId.Should().BeNull();
+        result.DerivedLastOrderId.Should().BeNullOrEmpty();
     }
 }

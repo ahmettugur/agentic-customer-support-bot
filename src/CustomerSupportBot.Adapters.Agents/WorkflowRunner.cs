@@ -352,7 +352,20 @@ internal sealed class WorkflowRunner : IWorkflowRunner
             }
         }
 
-        await _finalizer.FinalizeAsync(st.Trace, session, query, result, terminationReason, turnCt);
+        // ConstrainedTargetAgent yalnızca decompose edilmiş ALT görev koşularında dolar
+        // (SubTaskOrchestrator.CreateSubTaskReasoning) — yani "bu bir alt koşu" sinyali zaten
+        // elimizde; ayrı bir bayrak taşımaya gerek yok. Alt koşularda tur bazlı yan etkiler
+        // (episodic bellek, profil sayacı) atlanır; birleşik tur için bir kez yazılır.
+        //
+        // ⚠️ TEST BOŞLUĞU: bu SATIRIN kendisi test altında değil. Zincirin iki ucu test
+        // ediliyor — CreateSubTaskReasoning alanı dolduruyor (SubTaskOrchestratorTests) ve
+        // TurnFinalizer bayrağa uyuyor (CompoundTurnFinalizationTests) — ama ikisini bağlayan
+        // burası için WorkflowRunner'ı MAF workflow'uyla ayağa kaldıran bir entegrasyon testi
+        // gerekir. Ölçüldü: bu satır `false` yapıldığında hiçbir test düşmüyor.
+        var isSubTaskRun = st.Trace.Reasoning?.ConstrainedTargetAgent != null;
+
+        await _finalizer.FinalizeAsync(
+            st.Trace, session, query, result, terminationReason, turnCt, isSubTaskRun);
 
         return (result, terminationReason);
     }
