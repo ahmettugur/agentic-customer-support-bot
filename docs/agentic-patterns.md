@@ -267,24 +267,29 @@ public class ContextPipeline
 }
 ```
 
-İki provider var:
+Provider'lar (`Services/Providers/*.cs`):
 
-1. **`CustomerContextProvider`** (Order=10): Repository port'ları (`IOrderRepository`, `IComplaintRepository`) üzerinden müşterinin sipariş + şikayet geçmişini çeker (ilk 5 sipariş, ilk 3 şikayet).
-2. **`ConversationSummaryProvider`** (Order=5): Konuşma 8+ mesaja ulaştığında eskileri LLM ile özetler.
-
-**Dosya**: `Services/Providers/*.cs`
+1. **`ConversationSummaryProvider`** (Order=5): Konuşma 8+ mesaja ulaştığında eskileri LLM ile özetler.
+2. **`CustomerProfileContextProvider`** (Order=6): Müşteri profilini (tercihler, ton, çıkarımlar) `CustomerUnderstandingService` üzerinden render eder.
+3. **`SemanticMemoryContextProvider`** (Order=7): Knowledge + Lesson + geçmiş episode'lar.
+4. **`ProductRecommendationContextProvider`** (Order=8): Kural tabanlı, isteğe bağlı ürün önerisi.
 
 Sonuç tek bir system message olarak workflow'un başına eklenir:
 
 ```
-[Müşteri Bağlamı — 001]
-Toplam sipariş: 3
-  - 1: Dell XPS 15 x1, Durum: Kargolandı, Tarih: ...
 [Konuşma Özeti]
 Kullanıcı 1 hakkında daha önce...
+[Müşteri Profili]
+Ton tercihi: resmi; sık sorulan konu: kargo takibi
 ```
 
 **Neden?** Tüm history her prompt'a koyulursa token maliyeti patlar. Provider tabanlı yaklaşımla sadece ilgili bağlam seçilir, Order ile önceliklendirilir, yeni context türleri (ör. CRM, user preferences) kolay eklenir.
+
+> Beşinci bir provider — `CustomerContextProvider` — müşterinin sipariş/şikayet geçmişini her
+> turda koşulsuz enjekte ediyordu. Kaldırıldı: işlevi `get_last_order`/`get_all_orders`/
+> `order_status`/`complaint_status`/`get_all_complaints` tool'larıyla tam çakışıyordu ve
+> prompt'lar zaten tool-odaklı yazılmıştı — enjekte edilen bloğa hiç referans vermiyorlardı.
+> Bkz. [ContextProviders.md](CustomerSupportBot.Application/Providers/ContextProviders.md#customercontextprovider-kaldırıldı--toollara-taşındı).
 
 ---
 

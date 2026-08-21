@@ -329,7 +329,9 @@ hangi yeteneklerin olduğunu ve hangi kimliğin gerektiğini deneyerek değil ka
 
 Başlangıçta salt-okunur bir şikayet ajanının **çağıracağı hiçbir tool yoktu**:
 `IComplaintToolsService` yalnızca `ComplaintRegistrationTool` (yazma) içeriyordu ve şikayet
-verisi tool'la değil, `CustomerContextProvider` üzerinden bağlama enjekte edilerek geliyordu.
+verisi tool'la değil, `CustomerContextProvider` üzerinden bağlama enjekte edilerek geliyordu
+(bu sağlayıcı işlevi tool'larla tamamen çakıştığı için sonradan tümüyle kaldırıldı — bkz.
+[ContextProviders.md](../CustomerSupportBot.Application/Providers/ContextProviders.md#customercontextprovider-kaldırıldı--toollara-taşındı)).
 
 `complaint_status_tool` ve `get_all_complaints_tool` bu iş kapsamında eklendi. Sahiplik
 kontrolü **sipariş tarafındaki desenin birebir aynısıdır**:

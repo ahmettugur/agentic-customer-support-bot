@@ -136,7 +136,7 @@ public class IdExtractorTests
     // sayıya "sipariş"ten daha yakın olduğu için (boşluk 1'e karşı 9) sayı customer_id
     // sanılıyordu. Etkisi yalnızca prompt hint'i değildi: SessionStateExtractor bu sonucu
     // KALICI session state'ine yazıp (state.CustomerId) sonraki tüm turlarda EntityVerifier
-    // ve CustomerContextProvider'a yanlış müşteri kimliği besliyordu.
+    // yanlış müşteri kimliği besliyordu.
 
     [Theory]
     [InlineData("Sipariş numaram 1041.")]

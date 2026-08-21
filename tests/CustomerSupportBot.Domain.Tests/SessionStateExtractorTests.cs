@@ -3,7 +3,7 @@
 // SessionStateExtractor, IdExtractor'ın sonucunu KALICI oturum durumuna yazar — bu yüzden
 // buradaki bir yanlış sınıflandırma tek turluk bir hint hatası değil, oturumu zehirleyen
 // kalıcı bir hatadır: state.CustomerId sonraki her turda EntityVerifier'a bir "kaynak" olarak
-// ve CustomerContextProvider'a sipariş/şikayet geçmişi sorgusu olarak gider.
+// ve sipariş/şikayet sorgu tool'larına (get_all_orders vb.) girdi olur.
 //
 // Canlıda gözlemlenen hata: kullanıcı "Sipariş numaram 1041." dediğinde sipariş numarası
 // state.CustomerId'ye yazılıyor, LastMentionedOrderId ise hiç set edilmiyordu.

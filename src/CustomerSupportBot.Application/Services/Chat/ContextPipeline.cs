@@ -48,10 +48,11 @@ public class ContextPipeline : IContextPipeline
 
         // YERLEŞTİRME SIRASI: önce kritik provider'lar, sonra Order.
         //
-        // Eskiden yalnızca Order'a bakılıyordu ve kritik olan CustomerContextProvider Order=10
-        // ile EN SON geliyordu — yani özet, profil ve semantik bellek bütçeyi tüketirse
-        // müşterinin gerçek sipariş/şikayet bağlamı düşüyordu. Bütçe baskısı altında ilk
-        // feda edilen şey, turun tam da hakkında olduğu veri olamaz.
+        // Yalnızca Order'a bakılsaydı, kritik ama Order'ı büyük bir provider bütçe baskısı
+        // altında sessizce düşebilirdi — turun tam da hakkında olduğu veri, geç sıraya
+        // konduğu için ilk feda edilen şey olurdu. Şu an hiçbir provider IsCritical=true
+        // değil (varsayılan false), yani bu sıralama şu an fiilen düz Order sırasıyla
+        // aynı sonucu verir; mekanizma ileride kritik bir provider eklenirse devreye girer.
         //
         // Çıktı sırası bundan AYRI tutulur (aşağıda Order'a göre yeniden sıralanır): prompt'un
         // bölüm düzeni yerleştirme önceliğine göre değişmemeli.

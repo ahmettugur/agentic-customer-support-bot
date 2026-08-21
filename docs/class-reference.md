@@ -190,11 +190,11 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
 ---
 
-### `CustomerContextProvider` — `Application/Services/Providers/CustomerContextProvider.cs`
-
-`Order=10`, **kritik** (`IsCritical=true`). Oturumdaki `State.AuthenticatedCustomerId` (JWT'den; kullanıcının etkileyebildiği `State.CustomerId` **değil**) varsa `IOrderRepository.GetByCustomer` + `IComplaintRepository.GetByCustomer` ile müşterinin siparişleri ve şikayetleri hakkında metin üretir. Format: `[Müşteri Bağlamı — {id}] ...`.
-
-`Order` yalnızca **çıktı sırasını** belirler; bütçe altında yerleştirme önceliğini `IsCritical` belirler (bkz. `ContextPipeline`). Aksi hâlde en yüksek `Order`'a sahip bu kritik sağlayıcı, bütçe dolduğunda ilk düşen olurdu.
+> **`CustomerContextProvider` kaldırıldı.** Oturumdaki müşterinin sipariş/şikayet geçmişini
+> her turda koşulsuz bağlama enjekte ediyordu. İşlevi `IOrderToolsService`/`IComplaintToolsService`
+> altındaki sorgu tool'larıyla (`get_last_order`, `get_all_orders`, `order_status`,
+> `complaint_status`, `get_all_complaints`) tam olarak çakıştığı için kaldırıldı — bkz.
+> [ContextProviders.md](CustomerSupportBot.Application/Providers/ContextProviders.md#customercontextprovider-kaldırıldı--toollara-taşındı).
 
 ---
 

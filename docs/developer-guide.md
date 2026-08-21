@@ -442,7 +442,7 @@ namespace CustomerSupportBot.Application.Services.Providers;
 public class LoyaltyContextProvider : IContextProvider
 {
     public string Name => "LoyaltyContext";
-    public int Order => 20;  // CustomerContextProvider'dan (10) sonra
+    public int Order => 9;  // ProductRecommendationContextProvider'dan (8) sonra
 
     // currentQuery: kullanıcının BU turdaki mesajı. Geçmişten okunamaz — geçmiş workflow
     // bittikten sonra yazılır. Semantic retrieval yapan sağlayıcılar bunu kullanmalı.
@@ -468,8 +468,8 @@ public class LoyaltyContextProvider : IContextProvider
 
 ```csharp
 // CustomerSupportBot.Api/Extensions/ApplicationServicesExtensions.cs
-services.AddSingleton<IContextProvider, CustomerContextProvider>();
 services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
+services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();
 services.AddSingleton<IContextProvider, LoyaltyContextProvider>();  // ← yeni
 ```
 
@@ -477,7 +477,7 @@ services.AddSingleton<IContextProvider, LoyaltyContextProvider>();  // ← yeni
 
 ### Dikkat edilecekler
 
-- **`Order` değeri kritik**: Düşük = yüksek öncelik. `ConversationSummaryProvider`=5, `CustomerContextProvider`=10. Yeni provider'lar genelde 15-50 arası.
+- **`Order` değeri kritik**: Düşük = yüksek öncelik. `ConversationSummaryProvider`=5, `CustomerProfileContextProvider`=6, `SemanticMemoryContextProvider`=7, `ProductRecommendationContextProvider`=8. Yeni provider'lar genelde 9+ arası.
 - **Null dönmek OK**: Context yoksa `null` döndürün, pipeline geçecektir.
 - **Exception'lar yutulur**: `ContextPipeline` her provider'ı try-catch'te çalıştırır, hata olursa log atar ve devam eder. Yine de gereksiz exception atmaktan kaçının.
 - **Singleton scope**: Provider'lar singleton. Dış servis çağrısı yapıyorsa `IHttpClientFactory` gibi thread-safe client'lar kullanın.

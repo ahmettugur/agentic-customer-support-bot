@@ -47,13 +47,16 @@ sürmüyor.
 | İyileştirici (varsayılan) | Sessizce atlanır — bot yine makul cevap verebilir |
 | **Kritik** | Bağlama açık bir **[UYARI]** konur: "bu bilgi okunamıyor, tahminde bulunma" |
 
-Bugün tek kritik provider `CustomerContextProvider`.
+Şu an `IsCritical = true` yapan bir provider yok — mekanizma dorman ama yerinde duruyor.
 
-> 🐞 **Neden gerekli:** Eskiden her hata sessizce yutuluyordu. Müşteri bağlamı düştüğünde
-> model eksikliği fark etmiyor ve büyük olasılıkla *"kayıtlı siparişiniz bulunamadı"* diyordu
-> — yani **altyapı hatası kullanıcıya yanlış olgu olarak yansıyordu.** Bu, sesli kanalda
-> yaşanan hatayla aynı sınıf: eksik bağlam → yanlış-negatif cevap. Artık model uydurmak
-> yerine bilmediğini söylüyor.
+> 🐞 **Geçmişte gerekliydi, artık kaldırıldı:** Tek kritik provider `CustomerContextProvider`
+> idi — müşterinin sipariş/şikayet geçmişini her turda koşulsuz enjekte ediyordu ve düştüğünde
+> model eksikliği fark etmeyip *"kayıtlı siparişiniz bulunamadı"* diyebiliyordu (altyapı hatası
+> → yanlış olgu). Bu sınıf tamamen kaldırıldı: işlevi zaten sorgu tool'larıyla
+> (`get_last_order`, `get_all_orders` vb.) tam olarak çakışıyordu ve prompt'lar zaten
+> tool-odaklı yazılmıştı — enjekte edilen bloğa hiç referans vermiyorlardı. Bkz.
+> [ContextProviders.md](../Providers/ContextProviders.md#customercontextprovider-kaldırıldı--toollara-taşındı).
+> Yeni bir kritik provider eklenirse buradaki uyarı mekanizması devreye girer.
 
 ### 3.3 Bütçe (`MaxProviderChars`, `MaxTotalChars`)
 
@@ -85,7 +88,6 @@ Her provider **olgu tabanlı** erken çıkışa sahip ve bunlar zaten yerinde:
 | Provider | Erken çıkış |
 |---|---|
 | `SemanticMemoryContextProvider` | Bellek kapalıysa / sorgu boşsa |
-| `CustomerContextProvider` | Doğrulanmış müşteri kimliği yoksa |
 | `CustomerProfileContextProvider` | Kimlik yoksa / profil boşsa |
 | `ConversationSummaryProvider` | Geçmiş 8 mesajdan kısaysa |
 

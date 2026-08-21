@@ -15,12 +15,27 @@ Reasoning/agent prompt'una enjekte edilecek bağlam parçalarını üreten provi
 | Provider | Açıklama |
 | ---------- | ---------- |
 | `ConversationSummaryProvider` | Eski turları özetler — özet, o turların **yerine** geçer (aşağıya bakın) |
-| `CustomerContextProvider` | Müşterinin sipariş/şikayet geçmişi. Sipariş satırları `OrderInfo.LinesSummary()` ile tek satıra indirilir — `1082: Kahve x2, Çikolata x1, Durum: İşleniyor, Tarih: …` |
 | `CustomerIdentityHintBuilder` | AuthenticatedCustomerId → prompt hint |
 | `CustomerProfileContextProvider` | Müşteri profili (tercihler, ton, çıkarımlar) — `CustomerUnderstandingService`'in sentezini render eder |
 | `SemanticMemoryContextProvider` | Knowledge + Lesson + (kimlik doğrulandıysa) müşterinin geçmiş episode'ları |
 | `ProductRecommendationContextProvider` | Kural tabanlı ürün önerisi (isteğe bağlı, susma kuralları için bkz. [RecommendationService.md](../Personalization/RecommendationService.md)) |
 | `NoopContextProvider` | Hiçbir şey yapmaz (test/disable için) |
+
+## `CustomerContextProvider` kaldırıldı — tool'lara taşındı
+
+Bu provider müşterinin son 5 siparişini + son 3 şikayetini **her turda koşulsuz** çekip
+bağlama enjekte ediyordu — sorgunun sipariş/şikayetle ilgisi olsun olmasın. Kaldırıldı çünkü
+işlevi zaten `ApprovalGateService`'teki sorgu tool'larıyla (`get_last_order`, `get_all_orders`,
+`order_status`, `complaint_status`, `get_all_complaints`) tam olarak çakışıyordu — üstelik bu
+tool'lar daha eksiksizdi (`get_all_orders` TÜM siparişleri döner, provider yalnızca ilk 5'i).
+`order-agent.md` prompt'u zaten tamamen tool-odaklı yazılmıştı ve enjekte edilen bloğa hiç
+referans vermiyordu; model bu veriyi zaten tool ile almak üzere talimatlandırılmıştı.
+
+Provider'ın `IsCritical = true` olması ayrı bir maliyetti: zaman aşımına uğrarsa
+sipariş/şikayetle **hiç ilgisi olmayan** bir soruda bile modele "[UYARI] veriye erişemiyorum"
+enjeksiyonu yapılıyordu — konu dışı bir arızanın konu dışı bir soruyu bozması. Kaldırıldıktan
+sonra hiçbir provider `IsCritical = true` değil (bkz. `ContextPipeline.md`'deki kritik-önce
+sıralama notu).
 
 ## `ProductRecommendationContextProvider` — talimat değil, öneri
 
@@ -52,9 +67,9 @@ Bu provider üç koleksiyonu birleştirir: Knowledge (statik SSS/politika), Less
 > 🐞 **Bulundu ve düzeltildi — episodic bellek write-only ölü veriydi.** `TurnFinalizer` her
 > turun sonunda soru+yanıtı Episodic koleksiyonuna yazıyordu, ama bu provider yalnızca
 > Knowledge+Lesson arıyordu — yazılan hiçbir episode asla geri okunmuyordu. "Müşteriyle
-> geçmişte ne konuşuldu?" sorusunun cevabı yalnızca yapısal veriden (`CustomerContextProvider`
-> → sipariş/şikayet tabloları) geliyordu; konuşmasal geçmiş (ürün tercihleri, daha önce
-> sorulan sorular, verilen yanıtlar) hiç kullanılmıyordu.
+> geçmişte ne konuşuldu?" sorusunun cevabı yalnızca yapısal veriden (sipariş/şikayet
+> tool'larından döndürülen kayıtlardan) geliyordu; konuşmasal geçmiş (ürün tercihleri, daha
+> önce sorulan sorular, verilen yanıtlar) hiç kullanılmıyordu.
 >
 > Artık `session.State.AuthenticatedCustomerId` doluysa Episodic koleksiyonu `customerId`
 > tag'iyle filtrelenip aranıyor ve "🗂️ Bu Müşteriyle Geçmiş Görüşmeler" başlığı altında
@@ -105,7 +120,6 @@ belirler — ayrıntı: [ContextPipeline.md](../Chat/ContextPipeline.md#32-kriti
 
 | Provider | Kritik? | Gerekçe |
 |---|:---:|---|
-| `CustomerContextProvider` | ✅ | Düşerse model "siparişiniz bulunamadı" der — altyapı hatası **yanlış olguya** dönüşür |
 | `ConversationSummaryProvider` | ✗ | Düşerse geçmiş kırpılmaz, tam hâliyle gider (pahalı ama doğru) |
 | `SemanticMemoryContextProvider` | ✗ | Bilgi tabanı erişilemese de bot makul cevap verebilir |
 | `CustomerProfileContextProvider` | ✗ | Kişiselleştirme kaybı; olgu kaybı değil |

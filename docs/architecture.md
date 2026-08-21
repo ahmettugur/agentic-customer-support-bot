@@ -177,7 +177,6 @@ CustomerSupport.slnx
 │       │   └── ComplaintToolsService.cs # IComplaintToolsService impl
 │       ├── UiHint/                      # UiHintEmitter (IUiHintEmitter impl)
 │       ├── Providers/                   # IContextProvider implementasyonları
-│       │   ├── CustomerContextProvider.cs        # müşteri geçmişi (Order=10)
 │       │   ├── ConversationSummaryProvider.cs    # 8+ mesaj → LLM özet (Order=5)
 │       │   ├── SemanticMemoryContextProvider.cs  # Qdrant RAG (Order=20)
 │       │   └── CustomerProfileContextProvider.cs # Per-customer profil (Order=15)
@@ -422,8 +421,7 @@ EscalationPolicyService(singleton)  ─┤  Eskalasyon routing politikası (Appl
 InputGuard            (singleton)  ─┤  girdi güvenlik filtresi
 LessonMiner           (singleton)  ─┤  self-improvement lesson extraction
                                     │
-IContextProvider      (singleton)  ─├─ CustomerContextProvider (Order=10)
-                                    ├─ ConversationSummaryProvider (Order=5)
+IContextProvider      (singleton)  ─├─ ConversationSummaryProvider (Order=5)
                                     ├─ SemanticMemoryContextProvider (Order=20, SemanticMemory aktifse)
                                     ├─ CustomerProfileContextProvider (Order=15)
 ContextPipeline       (singleton)  ─┘  IContextPipeline impl — Order'a göre sıralı çalıştırır.

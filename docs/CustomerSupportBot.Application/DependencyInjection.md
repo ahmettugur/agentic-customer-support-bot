@@ -105,7 +105,6 @@ services.AddSingleton<SessionStateService>();
 ```csharp
 services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
 services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();
-services.AddSingleton<IContextProvider, CustomerContextProvider>();
 services.AddSingleton<ContextPipeline>();
 services.AddSingleton<IContextPipeline>(sp =>
     sp.GetRequiredService<ContextPipeline>());

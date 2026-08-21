@@ -43,7 +43,7 @@ public static class IdExtractor
     // ("Sipariş numaram 1041" → müşteri boşluğu 1, sipariş boşluğu 9) ve sayı customer_id
     // sanılıyordu. Bu yalnızca prompt hint'ini değil, SessionStateExtractor üzerinden KALICI
     // session state'ini de zehirliyordu: state.CustomerId sipariş numarasıyla doldurulup
-    // sonraki tüm turlarda EntityVerifier'a ve CustomerContextProvider'a yanlış müşteri
+    // sonraki tüm turlarda EntityVerifier'a yanlış müşteri
     // kimliği besliyordu.
     private static readonly Regex CustomerKeyword = new(
         @"\bmü[sş]teri|(?<!\bsipari[sş]\w*\s)(?<!\bşikayet\w*\s)\bnumaram\b",
