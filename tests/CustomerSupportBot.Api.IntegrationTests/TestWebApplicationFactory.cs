@@ -72,7 +72,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
             // InMemory modda PersistenceServicesExtensions auth repo'larını kaydetmez;
             // test ortamı için EF Core implementasyonlarını manuel olarak ekle.
             services.AddScoped<IUserAuthRepository, EfUserAuthRepository>();
-            services.AddScoped<IRefreshTokenRepository, EfRefreshTokenRepository>();
+
+            // EfRefreshTokenRepository DEĞİL — TryRevokeAsync'in dayandığı ExecuteUpdateAsync
+            // EF InMemory provider'ında desteklenmiyor (throws InvalidOperationException).
+            // Aynı koşullu-sahiplenme sözleşmesini test-only bir InMemory implementasyonuyla
+            // sağlıyoruz ki refresh rotasyonu uçtan uca gerçek HTTP çağrılarıyla sınanabilsin.
+            services.AddSingleton<IRefreshTokenRepository, InMemoryRefreshTokenRepository>();
 
             // Redis bağlantısını ve distributed lock'u test-only InMemory ile değiştir.
             // Bu sayede integration testleri gerçek Redis sunucusuna ihtiyaç duymaz.

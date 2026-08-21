@@ -4,15 +4,19 @@
 // hesabın LinkedCustomerId'sinden çözülür; istekten gelen hiçbir değerden değil.
 
 using CustomerSupportBot.Adapters.Persistence.Auth;
+using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
+using CustomerSupportBot.Tests.Shared;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Adapters.Persistence.Tests.Auth;
 
-public class TokenServiceFullNameTests
+[Collection("PostgresCatalog")]
+public class TokenServiceFullNameTests(PostgresCatalogFixture fixture)
 {
     private static readonly JwtOptions Jwt = new()
     {
@@ -23,10 +27,15 @@ public class TokenServiceFullNameTests
         RefreshTokenDays = 14
     };
 
-    private static (TokenPortService Tokens, ICustomerRepository Customers, TestDbContextFactory Db) Build()
+    /// <param name="dbFactory">
+    /// Gerçek bir veritabanı gerekiyorsa (bkz. TryRevokeAsync/ExecuteUpdateAsync notu,
+    /// AuthTestFactory.cs) — verilmezse izole InMemory kullanılır.
+    /// </param>
+    private static (TokenPortService Tokens, ICustomerRepository Customers, IDbContextFactory<CustomerSupportDbContext> Db) Build(
+        IDbContextFactory<CustomerSupportDbContext>? dbFactory = null)
     {
         var opts = Options.Create(Jwt);
-        var dbf = new TestDbContextFactory($"fullname-{Guid.NewGuid():N}");
+        var dbf = dbFactory ?? new TestDbContextFactory($"fullname-{Guid.NewGuid():N}");
         var customers = Substitute.For<ICustomerRepository>();
 
         var tokens = new TokenPortService(
@@ -44,7 +53,7 @@ public class TokenServiceFullNameTests
     /// okuduğu için persist edilmemiş bir UserInfo ile token üretilemez.
     /// </summary>
     private static UserInfo Seed(
-        TestDbContextFactory dbf, string role, string? linkedCustomerId, string username)
+        IDbContextFactory<CustomerSupportDbContext> dbf, string role, string? linkedCustomerId, string username)
     {
         using var ctx = dbf.CreateDbContext();
         var entity = new CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth.UserEntity
@@ -64,10 +73,11 @@ public class TokenServiceFullNameTests
             entity.LinkedCustomerId);
     }
 
-    private static UserInfo SeedCustomer(TestDbContextFactory dbf, string linkedCustomerId)
-        => Seed(dbf, "Customer", linkedCustomerId, "ahmet.tugur@example.com");
+    private static UserInfo SeedCustomer(
+        IDbContextFactory<CustomerSupportDbContext> dbf, string linkedCustomerId, string? username = null)
+        => Seed(dbf, "Customer", linkedCustomerId, username ?? "ahmet.tugur@example.com");
 
-    private static UserInfo SeedStaff(TestDbContextFactory dbf)
+    private static UserInfo SeedStaff(IDbContextFactory<CustomerSupportDbContext> dbf)
         => Seed(dbf, "Admin", null, "admin");
 
     [Fact]
@@ -122,9 +132,10 @@ public class TokenServiceFullNameTests
     {
         // Sayfa yenilendiğinde token refresh ediliyor; ad refresh yolunda düşerse başlık
         // ilk girişte doğru görünüp sonra sessizce nötr karşılamaya dönerdi.
-        var (tokens, customers, dbf) = Build();
+        // TryRevokeAsync ExecuteUpdateAsync kullanır — gerçek veritabanı gerekir.
+        var (tokens, customers, dbf) = Build(dbFactory: fixture.DbFactory);
         customers.GetFullNameAsync(1027, Arg.Any<CancellationToken>()).Returns("Ahmet Tügür");
-        var user = SeedCustomer(dbf, "1027");
+        var user = SeedCustomer(dbf, "1027", username: $"ahmet-{Guid.NewGuid():N}@example.com");
 
         var issued = await tokens.IssueAsync(user);
         var refreshed = await tokens.RefreshAsync(issued.RefreshToken);

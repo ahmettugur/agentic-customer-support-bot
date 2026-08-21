@@ -1,16 +1,19 @@
 // Tests/Services/Auth/TokenServiceTests.cs
 
 using CustomerSupportBot.Adapters.Persistence.Auth;
+using CustomerSupportBot.Adapters.Persistence.EfCore;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Auth;
 using CustomerSupportBot.Domain.Model.Auth;
+using CustomerSupportBot.Tests.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Adapters.Persistence.Tests.Auth;
 
-public class TokenServiceTests
+[Collection("PostgresCatalog")]
+public class TokenServiceTests(PostgresCatalogFixture fixture)
 {
-    private static UserInfo Seed(TestDbContextFactory dbf, string username = "alice", bool active = true)
+    private static UserInfo Seed(IDbContextFactory<CustomerSupportDbContext> dbf, string username = "alice", bool active = true)
     {
         using var ctx = dbf.CreateDbContext();
         var entity = new UserEntity
@@ -68,8 +71,10 @@ public class TokenServiceTests
     [Fact]
     public async Task RefreshAsync_ValidToken_RotatesAndRevokesOld()
     {
-        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build();
-        var user = Seed(dbf);
+        // TryRevokeAsync ExecuteUpdateAsync kullanır — EF InMemory'de desteklenmez.
+        // Rotasyonun koşullu sahiplenmesi gerçek bir veritabanı gerektirir.
+        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build(dbFactory: fixture.DbFactory);
+        var user = Seed(dbf, username: $"alice-{Guid.NewGuid():N}");
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
         var second = await tokens.RefreshAsync(first.RefreshToken, TestContext.Current.CancellationToken);

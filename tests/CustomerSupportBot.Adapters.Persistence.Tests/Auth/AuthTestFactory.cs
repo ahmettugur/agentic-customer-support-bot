@@ -32,9 +32,16 @@ internal sealed class TestDbContextFactory : IDbContextFactory<CustomerSupportDb
 
 internal static class AuthTestFactory
 {
+    /// <param name="dbFactory">
+    /// Gerçek bir <c>IDbContextFactory</c> (ör. <c>PostgresCatalogFixture.DbFactory</c>)
+    /// vermek için. <c>TryRevokeAsync</c> <c>ExecuteUpdateAsync</c> kullanır ve bu, EF
+    /// InMemory provider'da desteklenmez — refresh rotasyonunu sınayan testler gerçek bir
+    /// veritabanı GEREKTİRİR. Verilmezse varsayılan izole InMemory factory kullanılır.
+    /// </param>
     public static (ITokenService tokens, UserService users, IPasswordHasher hasher,
-        TestDbContextFactory dbf, IUserAuthRepository userRepo, IRefreshTokenRepository tokenRepo) Build(
-        JwtOptions? jwt = null)
+        IDbContextFactory<CustomerSupportDbContext> dbf, IUserAuthRepository userRepo,
+        IRefreshTokenRepository tokenRepo) Build(
+        JwtOptions? jwt = null, IDbContextFactory<CustomerSupportDbContext>? dbFactory = null)
     {
         jwt ??= new JwtOptions
         {
@@ -46,7 +53,7 @@ internal static class AuthTestFactory
         };
 
         var opts = Options.Create(jwt);
-        var dbf = new TestDbContextFactory($"auth-{Guid.NewGuid():N}");
+        var dbf = dbFactory ?? new TestDbContextFactory($"auth-{Guid.NewGuid():N}");
         var hasher = new BCryptPasswordHasher();
         var userRepo = new EfUserAuthRepository(dbf);
         var tokenRepo = new EfRefreshTokenRepository(dbf);

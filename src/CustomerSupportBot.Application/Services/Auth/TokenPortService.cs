@@ -65,7 +65,13 @@ public sealed class TokenPortService : ITokenService
         var now = DateTime.UtcNow;
         var newExpiry = now.AddDays(_options.RefreshTokenDays);
 
-        await _tokens.RevokeAsync(existing.Id, now, newHash, ct);
+        // Koşullu sahiplenme: yalnızca token HÂLÂ iptal edilmemişse iptal et. Eşzamanlı gelen
+        // ikinci bir yenileme isteği (aynı çalıntı/paylaşılan token'la) burada false alır ve
+        // reddedilir — okuma anında ikisi de "geçerli" görmüş olsa bile, tek bir token'dan iki
+        // ayrı oturum zinciri doğmaz.
+        if (!await _tokens.TryRevokeAsync(existing.Id, now, newHash, ct))
+            return null;
+
         await _tokens.CreateAsync(Guid.NewGuid().ToString("N"), user.Id, newHash, newExpiry, now, ct);
         await _users.UpdateLastLoginAsync(user.Id, now, ct);
 
