@@ -241,4 +241,61 @@ public class PostgresSessionManagerHydrationTests
         persisted!.State.CustomerId.Should().Be("1008",
             "müşteri sahipliği bir yarış yüzünden kalıcı olarak silinmemeli");
     }
+
+    // ─── Redis history mesajı kaybının uzlaştırılması ──────────────────────────
+    //
+    // Geçmiş, pod'lar arasında DELTA olarak Redis pub/sub ile yayılır. Pub/sub en fazla bir
+    // kez teslim eder; bir mesaj kaybolursa bu pod'un cache'i o andan itibaren KALICI olarak
+    // eksik kalır — hydrate yalnızca session ilk görüldüğünde bir kez çalışır. Eksik geçmiş,
+    // GetHistoryAsync her turda ajana verilen bağlamın kendisi olduğu için sessizce bozuk bir
+    // konuşma bağlamına dönüşür.
+
+    /// <summary>
+    /// ASIL BULGU. B pod'u önce hydrate olur (session'ı görür), sonra A pod'unda eklenen bir
+    /// mesaj — yayın kaybolduğu için — B'ye hiç ulaşmaz. GetHistoryAsync bunu fark edip DB'den
+    /// tamamlamalı.
+    /// </summary>
+    [Fact]
+    public async Task GetHistoryAsync_DetectsAndRecoversFromALostPubSubMessage()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var sessionId = $"history-loss-{Guid.NewGuid():N}";
+
+        // İki AYRI hub = birbirini duymayan iki pod (Redis pub/sub mesajı kayboldu).
+        // Aynı veritabanını paylaşırlar, gerçek kurulumdaki gibi.
+        var podA = new PostgresSessionManager(_fixture.DbFactory, _lock, new InMemoryMessageBusHub().CreateNode(), NullLogger<PostgresSessionManager>.Instance);
+        var podB = new PostgresSessionManager(_fixture.DbFactory, _lock, new InMemoryMessageBusHub().CreateNode(), NullLogger<PostgresSessionManager>.Instance);
+
+        // B'yi ÖNCE hydrate et: session'ı A'nın mesajından ÖNCEKİ (boş) hâliyle görsün.
+        // Kritik olan bu — hydrate bir kez çalışır, sonrasında B bir daha DB'ye bakmaz
+        // (bu düzeltmeden önce).
+        await podA.GetOrCreateAsync(sessionId, ct);
+        _ = await podB.GetHistoryAsync(sessionId, ct);
+
+        // A pod'unda mesaj eklenir. B ayrı hub'da olduğu için pub/sub'ı hiç duymaz —
+        // gerçek bir Redis mesaj kaybının doğrudan karşılığı.
+        await podA.AddExchangeAsync(sessionId, "siparişim nerede", "kargoda", ct: ct);
+
+        var recovered = await podB.GetHistoryAsync(sessionId, ct);
+
+        recovered.Should().Contain(m => m.Text == "siparişim nerede");
+        recovered.Should().Contain(m => m.Text == "kargoda");
+    }
+
+    /// <summary>Karşı yön: sapma yoksa (normal, pub/sub başarılı) gereksiz bir DB tam-yenilemesi olmamalı.</summary>
+    [Fact]
+    public async Task GetHistoryAsync_WhenCacheIsUpToDate_DoesNotReloadFromDb()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var sessionId = $"history-fresh-{Guid.NewGuid():N}";
+
+        var hub = new InMemoryMessageBusHub();
+        var pod = new PostgresSessionManager(_fixture.DbFactory, _lock, hub.CreateNode(), NullLogger<PostgresSessionManager>.Instance);
+
+        await pod.AddExchangeAsync(sessionId, "merhaba", "size nasıl yardımcı olabilirim", ct: ct);
+
+        var history = await pod.GetHistoryAsync(sessionId, ct);
+
+        history.Should().HaveCount(2);
+    }
 }

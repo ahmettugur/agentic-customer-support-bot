@@ -180,6 +180,8 @@ public sealed class PostgresSessionManager : ISessionManager
     public async Task<List<ConversationMessage>> GetHistoryAsync(string sessionId, CancellationToken ct = default)
     {
         await EnsureSessionHydratedAsync(sessionId, ct).ConfigureAwait(false);
+        await ReconcileHistoryIfStaleAsync(sessionId, ct).ConfigureAwait(false);
+
         if (_messageHistory.TryGetValue(sessionId, out var history))
         {
             lock (history)
@@ -188,6 +190,56 @@ public sealed class PostgresSessionManager : ISessionManager
             }
         }
         return new List<ConversationMessage>();
+    }
+
+    /// <summary>
+    /// Bu pod'un mesaj geçmişi cache'i DB'nin GERİSİNDE mi — ucuz bir sayım ile denetler ve
+    /// öyleyse yalnızca o session'ın mesaj listesini DB'den yeniden yükler.
+    ///
+    /// <para>
+    /// Geçmiş, pod'lar arasında DELTA olarak Redis pub/sub ile yayılır (bkz.
+    /// <see cref="PublishHistoryAppended"/>). Pub/sub en fazla bir kez teslim eder; bir mesaj
+    /// kaybolursa bu pod'un cache'i o andan itibaren KALICI olarak eksik kalır — hydrate yalnızca
+    /// bu session ilk görüldüğünde bir kez çalışır, sonrasında bir daha DB'ye bakılmaz. Eksik
+    /// geçmiş, GetHistoryAsync her turda ajana verilen bağlamın kendisi olduğu için sessizce
+    /// bozuk bir konuşma bağlamına dönüşür — onay kuyruğundaki bir kayıp gibi "bir liste eksik
+    /// eleman içerir" değil, ajanın konuşmayı YANLIŞ ANLAMASI demektir.
+    /// </para>
+    ///
+    /// <para>
+    /// Her turda tüm mesaj metnini DB'den çekmek (approval'daki <c>GetPendingAsync</c> gibi)
+    /// bu yolun sıklığında (her GetHistoryAsync çağrısı) gereksiz maliyetlidir. Bunun yerine
+    /// yalnızca SAYIM karşılaştırılır — ucuz, indeksli bir sorgu — ve yalnızca sayım
+    /// uyuşmadığında (gerçekten kayıp varsa) tam metin çekilir.
+    /// </para>
+    /// </summary>
+    private async Task ReconcileHistoryIfStaleAsync(string sessionId, CancellationToken ct)
+    {
+        if (!_messageHistory.TryGetValue(sessionId, out var history)) return;
+
+        int localCount;
+        lock (history) { localCount = history.Count; }
+
+        long dbCount;
+        try
+        {
+            await using var ctx = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+            dbCount = await ctx.Messages.LongCountAsync(m => m.SessionId == sessionId, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Sayım sorgusu başarısızsa eldeki (bayat olabilecek) cache ile devam ederiz —
+            // bu bir OPTİMİZASYONdur, turun kendisini engellememelidir.
+            _logger.LogWarning(ex, "[Session] Geçmiş uzlaştırma sayımı başarısız. Session={Session}", sessionId);
+            return;
+        }
+
+        if (dbCount <= localCount) return;
+
+        _logger.LogWarning(
+            "[Session] Geçmiş cache'i DB'nin gerisinde — yeniden yükleniyor. Session={Session} local={Local} db={Db}",
+            sessionId, localCount, dbCount);
+        await HydrateSessionAsync(sessionId).ConfigureAwait(false);
     }
 
     public async Task AddExchangeAsync(
