@@ -22,8 +22,8 @@ public class InMemoryChatBridge : IChatBridge
 
     // Her session için, her abone için ayrı bir channel tutuyoruz.
     // Aynı session'a birden fazla admin (veya user reload sonrası) bağlanabilsin.
-    private readonly ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> _toAdmin = new();
-    private readonly ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> _toUser = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> _toAdmin = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> _toUser = new();
     private readonly ConcurrentDictionary<string, List<ChatBridgeMessage>> _history = new();
     private readonly ILogger<InMemoryChatBridge> _logger;
 
@@ -152,9 +152,8 @@ public class InMemoryChatBridge : IChatBridge
         }
         finally
         {
-            // Bag'den çıkarmak C#'ta doğrudan yok; kapanmış channel'lar
-            // Broadcast'te skip ediliyor (TryWrite false döner). Burada sadece complete et.
             channel.Writer.TryComplete();
+            Unregister(_toAdmin, sessionId, channel);
         }
     }
 
@@ -173,6 +172,7 @@ public class InMemoryChatBridge : IChatBridge
         finally
         {
             channel.Writer.TryComplete();
+            Unregister(_toUser, sessionId, channel);
         }
     }
 
@@ -188,15 +188,15 @@ public class InMemoryChatBridge : IChatBridge
         _history.TryRemove(sessionId, out _);
         // Channel'ları complete et (subscriber'lar yield bitirip çıkar)
         if (_toAdmin.TryRemove(sessionId, out var a))
-            foreach (var ch in a) ch.Writer.TryComplete();
+            foreach (var ch in a.Keys) ch.Writer.TryComplete();
         if (_toUser.TryRemove(sessionId, out var u))
-            foreach (var ch in u) ch.Writer.TryComplete();
+            foreach (var ch in u.Keys) ch.Writer.TryComplete();
     }
 
     // ─── Internals ───
 
     private Channel<ChatBridgeMessage> CreateAndRegister(
-        ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> registry,
+        ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> registry,
         string sessionId)
     {
         var channel = Channel.CreateUnbounded<ChatBridgeMessage>(new UnboundedChannelOptions
@@ -204,18 +204,28 @@ public class InMemoryChatBridge : IChatBridge
             SingleReader = true,
             SingleWriter = false
         });
-        var bag = registry.GetOrAdd(sessionId, _ => new ConcurrentBag<Channel<ChatBridgeMessage>>());
-        bag.Add(channel);
+        var set = registry.GetOrAdd(sessionId, _ => new ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>());
+        set[channel] = 0;
         return channel;
     }
 
+    /// <summary>Aboneliği kaydından çıkarır — bkz. PostgresChatBridge.Unregister'daki gerekçe.</summary>
+    private static void Unregister(
+        ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> registry,
+        string sessionId,
+        Channel<ChatBridgeMessage> channel)
+    {
+        if (registry.TryGetValue(sessionId, out var set))
+            set.TryRemove(channel, out _);
+    }
+
     private void Broadcast(
-        ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> registry,
+        ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> registry,
         string sessionId,
         ChatBridgeMessage msg)
     {
         if (!registry.TryGetValue(sessionId, out var bag)) return;
-        foreach (var ch in bag)
+        foreach (var ch in bag.Keys)
         {
             // Channel kapalıysa (subscriber çıktı) sessizce skip
             ch.Writer.TryWrite(msg);

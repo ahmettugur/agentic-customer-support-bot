@@ -33,8 +33,8 @@ public sealed class PostgresChatBridge : IChatBridge
     private readonly ILogger<PostgresChatBridge> _logger;
     private readonly IMessageBusPort _messageBus;
 
-    private readonly ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> _toAdmin = new();
-    private readonly ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> _toUser = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> _toAdmin = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> _toUser = new();
     private readonly ConcurrentDictionary<string, List<ChatBridgeMessage>> _history = new();
     private readonly ConcurrentDictionary<string, byte> _hydratedSessions = new();
 
@@ -145,6 +145,7 @@ public sealed class PostgresChatBridge : IChatBridge
         finally
         {
             channel.Writer.TryComplete();
+            Unregister(_toAdmin, sessionId, channel);
         }
     }
 
@@ -164,6 +165,7 @@ public sealed class PostgresChatBridge : IChatBridge
         finally
         {
             channel.Writer.TryComplete();
+            Unregister(_toUser, sessionId, channel);
         }
     }
 
@@ -182,16 +184,16 @@ public sealed class PostgresChatBridge : IChatBridge
         _history.TryRemove(sessionId, out _);
         _hydratedSessions.TryRemove(sessionId, out _);
         if (_toAdmin.TryRemove(sessionId, out var a))
-            foreach (var ch in a) ch.Writer.TryComplete();
+            foreach (var ch in a.Keys) ch.Writer.TryComplete();
         if (_toUser.TryRemove(sessionId, out var u))
-            foreach (var ch in u) ch.Writer.TryComplete();
+            foreach (var ch in u.Keys) ch.Writer.TryComplete();
         // NOT: DB kayıtları silinmiyor (audit trail).
     }
 
     // ─── Internals ───
 
     private Channel<ChatBridgeMessage> CreateAndRegister(
-        ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> registry,
+        ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> registry,
         string sessionId)
     {
         var channel = Channel.CreateUnbounded<ChatBridgeMessage>(new UnboundedChannelOptions
@@ -199,18 +201,40 @@ public sealed class PostgresChatBridge : IChatBridge
             SingleReader = true,
             SingleWriter = false
         });
-        var bag = registry.GetOrAdd(sessionId, _ => new ConcurrentBag<Channel<ChatBridgeMessage>>());
-        bag.Add(channel);
+        var set = registry.GetOrAdd(sessionId, _ => new ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>());
+        set[channel] = 0;
         return channel;
     }
 
+    /// <summary>
+    /// Aboneliği (WebSocket/SSE kapandığında) kaydından çıkarır.
+    ///
+    /// <para>
+    /// Eskiden bu adım hiç yoktu: kanal <c>ConcurrentBag</c>'e eklendikten sonra bir daha asla
+    /// çıkarılmıyordu. <c>ConcurrentBag</c> zaten tekil eleman silmeyi desteklemez — bu yüzden
+    /// kayıt yapısı silme destekleyen bir <c>ConcurrentDictionary</c>'ye (küme olarak
+    /// kullanılıyor) çevrildi. Sonuç, sık bağlanıp kopan bir oturumda (sayfa yenileme, WebSocket
+    /// yeniden bağlanma) tamamlanmış-ama-hâlâ-tutulan kanalların process ömrü boyunca birikmesiydi:
+    /// bellek sınırsız büyür ve her <see cref="Broadcast"/> çağrısı, artık kimsenin okumadığı bu
+    /// kanalları da tarayarak session'ın yaşı ilerledikçe yavaşlardı.
+    /// </para>
+    /// </summary>
+    private static void Unregister(
+        ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> registry,
+        string sessionId,
+        Channel<ChatBridgeMessage> channel)
+    {
+        if (registry.TryGetValue(sessionId, out var set))
+            set.TryRemove(channel, out _);
+    }
+
     private void Broadcast(
-        ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> registry,
+        ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> registry,
         string sessionId,
         ChatBridgeMessage msg)
     {
         if (!registry.TryGetValue(sessionId, out var bag)) return;
-        foreach (var ch in bag)
+        foreach (var ch in bag.Keys)
         {
             ch.Writer.TryWrite(msg);
         }
@@ -310,7 +334,7 @@ public sealed class PostgresChatBridge : IChatBridge
     // ─── Redis cross-pod handlers ─────────────────────────────────────────────
 
     private void OnRemoteBridge(
-        ConcurrentDictionary<string, ConcurrentBag<Channel<ChatBridgeMessage>>> registry,
+        ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> registry,
         string val)
     {
         try
