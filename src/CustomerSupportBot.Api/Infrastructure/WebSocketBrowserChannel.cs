@@ -12,6 +12,19 @@ internal sealed class WebSocketBrowserChannel : IBrowserChannel
 {
     private readonly WebSocket _ws;
 
+    /// <summary>
+    /// Tek bir mantıksal WebSocket mesajının en fazla taşıyabileceği bayt sayısı.
+    ///
+    /// <para>
+    /// Alım döngüsü <c>EndOfMessage</c> gelene kadar parçaları bir <see cref="MemoryStream"/>'de
+    /// biriktirir. Bu sınır yoksa parçaları hiç bitirmeyen (kasıtlı ya da bozuk) bir istemci
+    /// sunucu belleğini sınırsız büyütebilirdi — tek bir bağlantı, tamamlanmayan tek bir
+    /// "mesaj" ile process'i tüketebilirdi. Sesli akıştaki gerçek parçalar (mikrofon
+    /// chunk'ları) birkaç KB'lik ayrık mesajlardır; 4 MB bu akışı asla sınırlamaz.
+    /// </para>
+    /// </summary>
+    private const int MaxMessageBytes = 4 * 1024 * 1024;
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -32,6 +45,7 @@ internal sealed class WebSocketBrowserChannel : IBrowserChannel
         {
             ms.SetLength(0);
             WebSocketReceiveResult result;
+            var tooLarge = false;
             do
             {
                 result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
@@ -40,9 +54,30 @@ internal sealed class WebSocketBrowserChannel : IBrowserChannel
                     yield return new BrowserMessage(BrowserMessageKind.Closed, null);
                     yield break;
                 }
+
+                if (ms.Length + result.Count > MaxMessageBytes)
+                {
+                    // Sınır aşılır aşılmaz döngüden HEMEN çıkıyoruz — parçaların bitmesini
+                    // (EndOfMessage) beklemek kötü niyetli bir istemcinin bağlantıyı süresiz
+                    // açık tutmasına izin verirdi; bellek büyümesi dursa bile bu başlı başına
+                    // bir kaynak tüketimi olurdu.
+                    tooLarge = true;
+                    break;
+                }
+
                 ms.Write(buffer, 0, result.Count);
             }
             while (!result.EndOfMessage);
+
+            if (tooLarge)
+            {
+                await _ws.CloseAsync(
+                    WebSocketCloseStatus.MessageTooBig,
+                    $"Mesaj {MaxMessageBytes} bayt sınırını aştı.",
+                    ct).ConfigureAwait(false);
+                yield return new BrowserMessage(BrowserMessageKind.Closed, null);
+                yield break;
+            }
 
             var payload = ms.ToArray();
             if (payload.Length == 0) continue;
