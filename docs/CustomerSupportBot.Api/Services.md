@@ -37,29 +37,27 @@ public sealed class ChatEventOrchestrator(
 ## `ExecuteAsync`
 
 ```csharp
-public async Task ExecuteAsync(string sessionId, SseForwarder sse, CancellationToken ct)
-{
-    // 1. İlk session event'i
-    await sse.WriteSessionAsync(sessionId);
-
-    // 2. Mevcut HITL state snapshot'ı
-    await SendInitialStateAsync(sessionId, sse);
-
-    // 3. HITL event'lere abone ol
-    using var subscription = hitlEvents.SubscribeToChatEvents(
-        sessionId,
-        (eventType, data) => sse.WriteAsync(eventType, data));
-
-    // 4. Bridge mesajlarını drain et
-    await ProcessBridgeMessagesAsync(sessionId, sse, ct);
-
-    // 5. Disconnect → orphan escalation temizliği (shutdown değilse)
-    if (!appLifetime.ApplicationStopping.IsCancellationRequested)
-    {
-        var dismissed = chatSession.DismissOrphanedEscalations(sessionId);
-    }
-}
+public async Task ExecuteAsync(
+    string sessionId,
+    SseForwarder sse,
+    Func<CancellationToken, Task<bool>> stillAuthorized,
+    CancellationToken ct)
 ```
+
+`stillAuthorized` — akışın HÂLÂ bu aboneye ait olup olmadığını söyleyen kontrol; uç nokta
+tarafından mevcut `IsSessionAccessibleAsync`'e bağlanır. Bağlantı açılışındaki tek seferlik
+kontrol yetmez: henüz kimseye bağlı OLMAYAN bir oturuma abone olmak serbesttir (ilk temasın
+oturumu çağırana bağlaması için), ama oturum daha sonra BAŞKA bir müşteriye bağlanabilir. Açık
+akış yeniden yetkilendirilmezse o müşterinin bot yanıtları, temsilci mesajları ve onay sonuçları
+ilk aboneye akmaya devam ederdi. Bu yüzden `ExecuteAsync` her olay yazımını `GuardedWriteAsync`
+üzerinden geçirir — kontrol her yazımdan önce tekrarlanır ve sahiplik değiştiği anda akış
+(`CancellationTokenSource.Cancel`) kapatılır. Akış:
+
+1. İlk session event'i (`sse.WriteSessionAsync`)
+2. Mevcut HITL state snapshot'ı (`SendInitialStateAsync`, artık `GuardedWriteAsync` üzerinden)
+3. HITL event'lere abone ol (`hitlEvents.SubscribeToChatEvents`, aynı guard'lı delege)
+4. Bridge mesajlarını drain et (`ProcessBridgeMessagesAsync`, guard'lı `streamCts.Token` ile)
+5. Disconnect → orphan escalation temizliği (shutdown değilse)
 
 ### 1. Initial session event
 
@@ -75,7 +73,7 @@ data: { "sessionId": "abc-123" }
 Browser bağlandığında **zaten devam eden bir state** olabilir:
 
 ```csharp
-private async Task SendInitialStateAsync(string sessionId, SseForwarder sse)
+private async Task SendInitialStateAsync(string sessionId, Func<string, object?, Task> write)
 {
     var state = chatSession.GetStateOrDefault(sessionId);
 

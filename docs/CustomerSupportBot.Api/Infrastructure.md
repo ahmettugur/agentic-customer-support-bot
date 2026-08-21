@@ -203,39 +203,46 @@ Task CloseAsync(string reason, CancellationToken ct);
 ### Frame okuma
 
 ```csharp
-public async IAsyncEnumerable<BrowserMessage> ReceiveMessagesAsync(CancellationToken ct)
+while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
 {
-    var buffer = new byte[16 * 1024];
-    var ms = new MemoryStream();
-
-    while (!ct.IsCancellationRequested && _ws.State == WebSocketState.Open)
+    ms.SetLength(0);
+    WebSocketReceiveResult result;
+    var tooLarge = false;
+    do
     {
-        ms.SetLength(0);
-        WebSocketReceiveResult result;
-        do
+        result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
+        if (result.MessageType == WebSocketMessageType.Close)
         {
-            result = await _ws.ReceiveAsync(new ArraySegment<byte>(buffer), ct);
-            if (result.MessageType == WebSocketMessageType.Close)
-            {
-                yield return new BrowserMessage(BrowserMessageKind.Closed, null);
-                yield break;
-            }
-            ms.Write(buffer, 0, result.Count);
+            yield return new BrowserMessage(BrowserMessageKind.Closed, null);
+            yield break;
         }
-        while (!result.EndOfMessage);
 
-        var kind = result.MessageType == WebSocketMessageType.Binary
-            ? BrowserMessageKind.Binary
-            : BrowserMessageKind.Text;
-
-        yield return new BrowserMessage(kind, ms.ToArray());
+        if (ms.Length + result.Count > MaxMessageBytes) { tooLarge = true; break; }
+        ms.Write(buffer, 0, result.Count);
     }
+    while (!result.EndOfMessage);
+
+    if (tooLarge)
+    {
+        await _ws.CloseAsync(WebSocketCloseStatus.MessageTooBig, "...", ct);
+        yield return new BrowserMessage(BrowserMessageKind.Closed, null);
+        yield break;
+    }
+
+    yield return new BrowserMessage(kind, ms.ToArray());
 }
 ```
 
 - 16 KB buffer her receive call'da
 - `EndOfMessage` false ise tek frame'in parçası — MemoryStream'de biriktir
 - Close frame → `Closed` mesajı yield et, enumeration biter
+
+**`MaxMessageBytes` = 4 MB.** Parçaları hiç bitirmeyen (kasıtlı ya da bozuk) bir istemci sınır
+olmadan sunucu belleğini tekli bir bağlantıdan sınırsız büyütebilirdi. Sınır aşılır aşılmaz
+döngüden **hemen** çıkılır — parçaların bitmesini (`EndOfMessage`) beklemek, bellek büyümesi
+dursa bile kötü niyetli bir istemcinin bağlantıyı süresiz meşgul tutmasına izin verirdi.
+Bağlantı `WebSocketCloseStatus.MessageTooBig` ile kapatılır. Sesli akıştaki gerçek parçalar
+(mikrofon chunk'ları) birkaç KB'lik ayrık mesajlardır; 4 MB bu akışı asla sınırlamaz.
 
 ### Send
 

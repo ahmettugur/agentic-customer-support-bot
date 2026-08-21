@@ -298,6 +298,14 @@ GET /sessions/sess-123/state
 
 Session bulunamazsa 404 döner.
 
+**`state` alanı çağırana göre farklıdır.** Admin/Agent ham `SessionState`'i görür.
+Customer rolündeki çağıran (kendi oturumu) **redakte edilmiş** bir görünüm alır — yalnızca
+kendi verisi olan alanlar (`customerId`, `collectedInfo`, `turnCount`, `phase`, `sentiment` vb.).
+`replanNote`, `replanRequestedBy`, `replanRequestedAt` dahil edilmez: bunlar admin'in ajanın iç
+bağlamına bıraktığı, müşterinin görmemesi gereken notlardır (bkz.
+[`WorkflowMessageBuilder`](../CustomerSupportBot.Adapters.Agents/README.md) — "sadece sana,
+müşteri görmez"). Bu ayrım `SessionEndpoints.CustomerVisibleState` içinde yapılır.
+
 ---
 
 ## Bağlantılar

@@ -178,6 +178,7 @@ bunu bearer token olarak okur. Aynı mekanizmayı SSE (`EventSource`) de kullan�
 | `chat` | IP başına 20/dk | `POST /chat/`, `POST /chat/stream` |
 | `general` | IP başına 60/dk | Tüm `Admin`/`AdminOrAgent` scope'ları (`adminScope`, `agentScope` — Program.cs). `/analytics/*` de bu gruptadır ve **`Admin` gerektirir** |
 | `a2a` | **Partner başına** `A2A:RequestsPerMinute` | `/a2a/*` |
+| `auth` | IP başına `Jwt:AuthRateLimitPerMinute` (varsayılan 10/dk) | `/auth/*` (login, customer/login, customer/register, refresh, logout) |
 
 ```csharp
 app.MapPost("/chat/", HandleChatAsync).RequireRateLimiting("chat");
@@ -190,6 +191,8 @@ var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRa
 > **`a2a` politikası neden IP değil partner bazlı?** Dış sistemler proxy/bulut çıkışı arkasında IP paylaşabilir (bir partnerin trafiği diğerinin kotasını tüketirdi) ya da IP değiştirebilir (sınır fiilen ortadan kalkardı). Bölümleme anahtarı token'dan çıkarılır ve çağıran onu değiştiremez. Bunun çalışması **middleware sırasına bağlıdır**: `UseRateLimiter()` `UseAuthentication()`'dan SONRA gelmek zorundadır, aksi hâlde `HttpContext.User` henüz boştur, claim bulunamaz ve politika sessizce IP'ye düşer — kural "partner başına" yazılmış olsa bile fiilen IP başına çalışırdı.
 
 > Admin/agent uçları auth arkasında olsa da önceden rate limitsizdi — sızmış bir JWT veya kötü niyetli bir admin/agent hesabı sınırsız istek atabiliyordu. `general` politikası grup seviyesinde uygulanır; SSE endpoint'leri (`/chat-sessions/{sid}/subscribe` vb.) tek bir istek olarak sayıldığından uzun ömürlü bağlantılar limitten etkilenmez.
+
+> `/auth/*` önceden TAMAMEN sınırsızdı — bu uçlar AllowAnonymous olduğu için kimlik bilgisi tahmin etme (credential stuffing/brute force) ve kayıt spam'i tek istemciden ucu bucaksız denenebiliyordu. IP tabanlı: bu uçlarda henüz doğrulanmış bir kimlik yok, `a2a`'daki gibi bir claim mevcut değil.
 
 ### CORS
 

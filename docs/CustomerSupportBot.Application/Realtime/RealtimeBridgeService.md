@@ -39,6 +39,15 @@ düşüyor hem de ikinci bir pipeline başlatıp ilk turun olay akışıyla kar�
 
 `IsBusy = _assistantSpeaking || _turnInFlight` bu pencereyi de kapatır.
 
+> 🐞 **Canlı hata (düzeltildi):** `_turnInFlight` **bağlantı kapsamlıydı** — yalnızca kendi
+> WebSocket bağlantısını koruyordu. Aynı oturuma ikinci bir WebSocket açıldığında (ya da
+> kullanıcı aynı anda metin sohbetini kullandığında) iki tur PARALEL çalışabiliyordu: aynı
+> geçmiş üzerinde iki workflow, aynı state üzerinde iki yazma, aynı oturumda iki HITL akışı.
+> `HandleUserTranscriptAsync` artık metin sohbetiyle **aynı** oturum turu kilidini alıyor
+> (`SessionIdentityBinder.TurnLockKey(sessionId)`, `IAppDistributedLock` üzerinden) — ses ve
+> metin de birbirine göre sıraya girer. Bekleme süresi (30sn) metindekinden (120sn) bilinçli
+> olarak kısa: sesli kullanıcı karşısında sessizlikle bekleyemez.
+
 ## 4. Bilinen risk — sesli metinde sayılar
 
 Bu modda reasoning çalıştığı için `IdExtractor` devrededir ve **4+ ardışık rakam** arar

@@ -55,6 +55,25 @@ LLM'e `customer_id` diye bir parametre hiç açılmaz. Dolayısıyla bu bağ kur
 Aynı çağrı sahipliği de doğrular: oturum başka bir müşteriye bağlıysa bağlantı reddedilir.
 Bkz. [security.md](../../security.md#oturum--müşteri-bağı).
 
+## 4.5. Turun geçmişe yazılması
+
+Native turun kullanıcı tarafı **gerçek transkript** ile — sabit bir `"(sesli)"` etiketiyle
+DEĞİL — hem `_chatBridge.RecordBotExchange` (admin paneli) hem `_sessionManager.AddExchangeAsync`
+(ajanın konuşma bağlamı) üzerinden yazılır.
+
+> 🐞 **Canlı hata (kısmen düzeltildi):** Bu bağ eskiden `"(sesli)"` sabit metniyle kurulup DB
+> geçmişine hiç yazılmıyordu — chat bridge'e bile yalnızca `RecordBotExchange` çağrısı gidiyordu,
+> `AddExchangeAsync` hiç çağrılmıyordu. Sonuç: bot moduna geçildiğinde ajan önceki sesli isteği
+> **bilmiyordu**, admin paneli de müşterinin ne söylediğini göremiyordu. `lastUserTranscript`
+> — `InputTranscriptCompleted` event'inden geleni tutan yerel bir değişken — artık `finalText`
+> ile birlikte hem bridge'e hem session yöneticisine geçiyor.
+>
+> **Kapatılmayan yarı:** `create_response=true` olduğu için model, transkript denetiminden
+> (`_inputGuard.Inspect`) ÖNCE ses veya read-only tool üretmeye başlayabiliyor. Guard reddettiğinde
+> zaten `SendInterruptAsync` ile kesiliyor ama bu bir tasarım kararı gerektiriyor:
+> `create_response=false` + her turda manuel `response.create` demek, native modun düşük
+> gecikme karakterini değiştirir.
+
 ## 5. Yasak tool'lar
 
 `order_placement_tool`, `order_cancel_tool`, `return_request_tool`,

@@ -123,9 +123,14 @@ new UserInfo(
 | ------- | --------- |
 | `CreateAsync(id, userId, hash, expiry, now)` | Yeni refresh token kaydı |
 | `FindByHashAsync(hash)` | Hash ile bul — plain text **asla** DB'ye yazılmaz |
-| `RevokeAsync(id, revokedAt, replacedByHash)` | Revoke et, rotation zinciri için `ReplacedByTokenHash` yaz |
+| `RevokeAsync(id, revokedAt, replacedByHash)` | Koşulsuz revoke — `RevokeAsync(refreshToken)` (logout) yolunda kullanılır |
+| `TryRevokeAsync(id, revokedAt, replacedByHash)` | **Koşullu** revoke (`WHERE Id = id AND RevokedAt IS NULL`, `ExecuteUpdateAsync`) — rotation bunu kullanır |
 
-**Rotation zinciri:** Her `RefreshAsync` çağrısında eski token revoke edilir, yeni token `replacedByTokenHash` ile bağlanır. Token çalınma tespiti için zincir izlenebilir.
+**Rotation zinciri:** Her `RefreshAsync` çağrısında eski token `TryRevokeAsync` ile iptal edilip yeni token `replacedByTokenHash` ile bağlanır. Token çalınma tespiti için zincir izlenebilir.
+
+**Neden koşullu?** Rotasyon bir oku-değiştir-yaz dizisidir. Koşulsuz `RevokeAsync` kullanılsaydı, aynı token'la (çalıntı ya da paylaşılmış) eşzamanlı gelen iki `RefreshAsync` çağrısı ikisi de "hâlâ geçerli" okuyup ikisi de yeni bir token üretebilirdi — tek bir token'dan iki geçerli oturum zinciri doğar ve rotasyonun asıl amacı olan "yeniden kullanım = hırsızlık" tespiti sessizce atlanırdı. `TryRevokeAsync` bunu tek bir koşullu UPDATE ile önler: yalnızca BİR çağıran satırı gerçekten değiştirir, `TokenPortService.RefreshAsync` kaybeden tarafta `null` döner.
+
+`ExecuteUpdateAsync` EF InMemory provider'da desteklenmez — bu metodu sınayan testler gerçek Postgres'e karşı koşar (bkz. `RefreshTokenConcurrentRotationTests`).
 
 ---
 
@@ -151,7 +156,7 @@ Refresh
   HashToken(refreshToken) → SHA-256
   EfRefreshTokenRepository.FindByHashAsync(hash)
     → geçerlilik kontrolleri (null / revoked / expired)
-  EfRefreshTokenRepository.RevokeAsync(old)    ← token rotation
+  EfRefreshTokenRepository.TryRevokeAsync(old) ← koşullu — kaybederse RefreshAsync null döner
   EfRefreshTokenRepository.CreateAsync(new)
   JwtAccessTokenProvider.GenerateAccessToken()
     ↓

@@ -20,6 +20,10 @@ Temel desen için önce [HybridPattern.md](HybridPattern.md) oku.
 
 **`ExtractAndUpdateStateCoreAsync`:** `SessionStateExtractor.ExtractAndApply`'ı (Domain) `session` nesnesi üzerinde `lock` altında çağırır, ardından `chat.sessions.state` JSONB günceller. Bu, turun türetilmiş state'inin (intent, sentiment, `ConsecutiveNegativeTurns`) **tek yazarıdır** — `signals` parametresi (`TurnSignals?`) reasoning'in bu tur için ürettiği intent/sentiment'i buraya girdi olarak taşır; `null` ise kural tabanlı çıkarıma düşülür. Kilit, `ConsecutiveNegativeTurns`'ün eşzamanlı isteklerde (çift-submit, çoklu sekme) bir artışı kaybetmesini önler. Detay: [`SessionStateExtractor.md`](../CustomerSupportBot.Domain/Services/SessionStateExtractor.md).
 
+**Eşzamanlı ilk hydrate:** `EnsureSessionHydratedAsync`'teki değer bir bayrak değil, işin kendisidir (`ConcurrentDictionary<string, Lazy<Task>>`). Eskiden bayrak DB okuması BAŞLAMADAN konuyordu — ikinci eşzamanlı çağrı hemen dönüp boş bir `SessionState` ile devam ediyordu; o boş state üzerinden yapılan bir yazma, DB'deki müşteri sahipliğini `{}` ile eziyordu. Artık ikinci çağıran aynı `Task`'ı bekler; hydrate bir kez çalışır.
+
+**Redis history mesajı kaybının uzlaştırılması:** Konuşma geçmişi pod'lar arasında DELTA olarak `csbot:session:history` kanalında yayılır (bkz. `PublishHistoryAppended`). Pub/sub en fazla bir kez teslim eder — bir mesaj kaybolursa cache o andan itibaren kalıcı olarak eksik kalırdı, çünkü hydrate yalnızca session ilk görüldüğünde bir kez çalışır. `GetHistoryAsync` artık her çağrıda ucuz bir SAYIM karşılaştırması yapar (`ReconcileHistoryIfStaleAsync` — indeksli `COUNT(*)`); yerel sayı DB'nin gerisindeyse yalnızca o session'ın mesaj listesi DB'den tam olarak yeniden yüklenir. Her turda tüm metni çekmek (approval'daki `GetPendingAsync` deseni) bu yolun sıklığında (her tur) gereksiz maliyetli olurdu — bu yüzden sayım-önce yaklaşımı seçildi.
+
 ---
 
 ## PostgresApprovalQueue
@@ -43,7 +47,8 @@ Temel desen için önce [HybridPattern.md](HybridPattern.md) oku.
 **Hydration:** Per-session lazy (session ilk abonelikte yüklenir).  
 **Yazma:** BotTyping hariç tüm mesajlar DB'ye yazılır (audit trail).  
 **Redis:** `csbot:bridge:touser` / `csbot:bridge:toadmin` — multi-pod live chat.  
-**Reset:** In-memory geçmişi temizler; DB kayıtlarına dokunmaz (audit korunur).
+**Reset:** In-memory geçmişi temizler; DB kayıtlarına dokunmaz (audit korunur).  
+**Abonelik kaydı:** Session başına `ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>` — bir küme olarak kullanılır. Eskiden `ConcurrentBag` idi ve abonelik sona erdiğinde (WebSocket/SSE kapanışı) yalnızca `Writer.TryComplete()` çağrılıyor, kanal koleksiyondan hiç çıkarılmıyordu — `ConcurrentBag` zaten tekil eleman silmeyi desteklemez. Sık bağlanıp kopan bir oturumda bu, tamamlanmış-ama-hâlâ-tutulan kanalların process ömrü boyunca birikmesi ve her `Broadcast`'in bu ölü kanalları da taraması demekti. `Unregister` artık aboneliğin `finally` bloğunda `TryRemove` ile kaydı gerçekten temizler. Aynı kusur (ve aynı düzeltme) `InMemoryChatBridge`'de de var.
 
 ---
 
@@ -53,7 +58,8 @@ Temel desen için önce [HybridPattern.md](HybridPattern.md) oku.
 
 **Hydration:** Tüm tablo lazy full-hydration.  
 **Yazma:** UPSERT `chat.session_modes`.  
-**Dağıtık lock:** `TakeOver()` sırasında `IAppDistributedLock.AcquireAsync("chatmode:{sessionId}")` — eş zamanlı iki TakeOver önlenir.  
+**Dağıtık lock:** `TakeOver()` VE `Release()` sırasında (ikisi de) `IAppDistributedLock.TryAcquireAsync("takeover:{sessionId}")` — eş zamanlı iki çağrı önlenir.  
+**Karar DB'den:** Kilit altında sahiplik kararı `ReadStateFromDb` ile kayıtların gerçek kaynağından verilir, yerel cache'ten DEĞİL. Eskiden `TakeOver` kilit alsa da kararı bayat yerel cache'ten veriyordu — devralma bilgisi pod'lara Redis pub/sub ile ulaşır ve o mesaj kaybolabilir; mesajı kaçıran pod cache'inde hiçbir sahip görmez, devralmayı kabul eder ve koşulsuz UPSERT ile aktif admin'i ezerdi. `Release` ise kilidi HİÇ almıyordu ve aynı bayat cache'ten karar veriyordu — başka bir admin'in aktif oturumunu serbest bırakabiliyordu. DB okunamazsa cache'e düşülmez (okuyamamak "sahip yok" anlamına gelmez).  
 **Redis:** `csbot:chatmode` kanalı — mod değişikliği broadcast.
 
 ---

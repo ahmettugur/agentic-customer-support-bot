@@ -83,6 +83,16 @@ Yayınlanan parçaların birleşimi, `ResponseComplete`'in taşıdığı
 diye tek sabitten okunur. `SubTaskOrchestratorTests.ProgressiveEmission_ConcatenatesTo_SameTextAsAggregate`
 bu bağı kilitler; aksi hâlde yanıtın sonunda metin gözle görülür şekilde "sıçrardı".
 
+**Alt görevin sonucu — kanonik metin, ham delta değil.** `collected[sub.Order]`'a giren
+`subResponse`, alt görevin akışındaki `response_complete` event'inin (`ResponseCompletePayload.Text`)
+taşıdığı `subCanonical` metnidir; yalnızca hiç `response_complete` gelmezse (güvenlik ağı)
+`subResponseBuilder`'daki ham delta birleşimine düşülür. Eskiden hep ham delta birleşimi
+kullanılıyordu — terminal JSON temizliği ve routing canonicalization (ör. `RewriteRoutingMessageAsync`)
+yalnızca `response_complete`'te uygulandığı için, temizlenmemiş JSON ve iç ajan adları hem
+`AggregateSubTaskResults`'a hem de **bağımlı** bir sonraki alt görevin girdisine (`BuildSubTaskHistory`)
+sızabiliyordu. `DecomposedRunnerTests.SequentialSubTask_UsesCanonicalResult_NotRawDeltas` ve
+`DependentSubTask_ReceivesTheCanonicalResultOfThePreviousStep` bunu kilitler.
+
 ### `ResponseStart` sıralaması ve `decomposed` bayrağı
 
 `ResponseStart` **ilk delta'dan önce** gönderilir — yani "yanıt metni akmaya başlıyor" anlamı
