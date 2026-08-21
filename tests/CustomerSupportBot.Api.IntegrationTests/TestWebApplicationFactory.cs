@@ -43,6 +43,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
         builder.UseSetting(
             "Jwt:SigningKey",
             "TEST_SIGNING_KEY_AT_LEAST_32_CHARS_LONG_FOR_HMAC_SHA256_!");
+        // /auth/* limiti varsayilan olarak IP basina 10/dk - testler ayni TestServer'i
+        // (ayni loopback IP) paylasan onlarca login cagrisi yapabiliyor (bkz. IClassFixture
+        // kullanan test siniflari). Uretim degeri burada yukseltilmiyor; yalnizca bu
+        // paylasilan test altyapisinin kendi mesru trafigiyle catismamasi icin. Sinirin
+        // GERCEKTEN uygulandigini olcen testler (AuthRateLimitTests) kendi factory'lerinde
+        // bu degeri geri dusurur.
+        builder.UseSetting("Jwt:AuthRateLimitPerMinute", "100000");
         // Redis connection string — AddRedisServices zorunlu kılıyor ama
         // test ortamında gerçek Redis yok; aşağıda IAppDistributedLock override ediliyor.
         builder.UseSetting("ConnectionStrings:Redis", "localhost:6379,abortConnect=false");

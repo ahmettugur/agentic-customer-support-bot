@@ -15,5 +15,12 @@ public sealed class JwtOptions
 
     /// <summary>Refresh token ömrü (gün).</summary>
     public int RefreshTokenDays { get; set; } = 14;
+
+    /// <summary>
+    /// /auth/* uçlarının (login, customer/login, customer/register, refresh) IP başına
+    /// dakikalık hız sınırı. Bu uçlar kimliksizdir (AllowAnonymous) — A2A'daki gibi partner
+    /// claim'i yoktur, tek ayırt edici çağıranın IP'sidir.
+    /// </summary>
+    public int AuthRateLimitPerMinute { get; set; } = 10;
 }
 

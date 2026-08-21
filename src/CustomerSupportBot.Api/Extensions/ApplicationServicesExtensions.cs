@@ -38,10 +38,33 @@ public static class ApplicationServicesExtensions
             o.SerializerOptions.Converters.Add(
                 new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase)));
 
-        // Rate limiting: "chat" = 20/dk, "general" = 60/dk (public rating endpoint'leri dahil)
+        // Rate limiting: "chat" = 20/dk, "general" = 60/dk (public rating endpoint'leri dahil),
+        // "auth" = 10/dk (kimlik doğrulama uçları — bkz. aşağıdaki not)
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            // /auth/* öncesinde SINIRSIZDI: login, customer/login, customer/register, refresh
+            // hiçbirinde sınır yoktu. Kimlik bilgisi tahmin etme (credential stuffing/brute
+            // force) ve kayıt spam'i tek istemciden ucu bucaksız denenebiliyordu. IP tabanlı —
+            // bu uçlarda henüz doğrulanmış bir kimlik yok, partner/subject claim'i A2A'daki
+            // gibi burada mevcut değil.
+            options.AddPolicy("auth", httpContext =>
+            {
+                var limit = httpContext.RequestServices
+                    .GetRequiredService<IOptions<JwtOptions>>().Value.AuthRateLimitPerMinute;
+
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = Math.Max(1, limit),
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    });
+            });
+
             options.AddPolicy("chat", httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
