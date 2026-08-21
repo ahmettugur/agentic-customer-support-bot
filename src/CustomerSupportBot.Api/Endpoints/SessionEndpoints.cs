@@ -64,12 +64,19 @@ public static class SessionEndpoints
             if (session == null)
                 return Results.NotFound();
 
+            // Ham SessionState'i olduğu gibi döndürmek admin'e ÖZEL alanları da müşteriye
+            // taşıyordu — en görüneni ReplanNote: WorkflowMessageBuilder/ReasoningMessageBuilder
+            // onu açıkça "sadece sana, müşteri görmez" diye ajanın iç bağlamına yazıyor, ama bu
+            // uç aynı nesneyi serileştirip müşteriye geri veriyordu. ReplanRequestedBy/At de
+            // aynı kümede — hangi admin'in ne zaman müdahale ettiğini açığa çıkarır.
+            var isStaff = http.User.IsInRole("Admin") || http.User.IsInRole("Agent");
+
             return Results.Json(new
             {
                 session.SessionId,
                 session.CreatedAt,
                 session.LastActivity,
-                session.State
+                State = isStaff ? (object)session.State : CustomerVisibleState(session.State)
             });
         }).RequireAuthorization("SessionAccess");
 
@@ -115,6 +122,26 @@ public static class SessionEndpoints
         if (!TryResolveScope(http, out var scope)) return false;
         return await SessionIdentityBinder.IsAccessibleAsync(sessionId, scope, sessions, ct);
     }
+
+    /// <summary>
+    /// Müşterinin görmesi GEREKMEYEN alanları çıkaran görünüm. Yalnızca <see cref="SessionState.ReplanNote"/>
+    /// ve devralma kaydı (kim/ne zaman) admin/agent iç iletişimidir; geri kalanı müşterinin
+    /// kendi verisidir (ne söylediği, hangi aşamada olduğu) ve zaten görebileceği şeydir.
+    /// </summary>
+    private static object CustomerVisibleState(SessionState state) => new
+    {
+        state.CustomerId,
+        state.AuthenticatedCustomerId,
+        state.CurrentIntent,
+        state.CollectedInfo,
+        state.TurnCount,
+        state.ConversationSummary,
+        state.SummarizedMessageCount,
+        state.Phase,
+        state.Sentiment,
+        state.SentimentScore,
+        state.ConsecutiveNegativeTurns
+    };
 
     private static IResult SessionForbidden() =>
         Results.Json(new

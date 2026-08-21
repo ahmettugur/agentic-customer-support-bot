@@ -14,6 +14,7 @@ using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
 using CustomerSupportBot.Application.Ports.Inbound.Auth;
 using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
+using Microsoft.EntityFrameworkCore;
 using CustomerSupportBot.Application.Services.A2A;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Auth;
@@ -333,4 +334,107 @@ public class ChatSessionOwnershipTests : IClassFixture<TestWebApplicationFactory
 
     private sealed record UnseenRow(string Id);
     private sealed record SessionListRow(string SessionId);
+
+    // ─── /sessions/{id}/state — müşteriye admin-özel alanlar sızmamalı ────────
+
+    /// <summary>
+    /// ASIL BULGU. Admin'in "replan notu" (WorkflowMessageBuilder/ReasoningMessageBuilder'da
+    /// açıkça "sadece sana, müşteri görmez" diye ajanın bağlamına yazılan not) bu uçtan ham
+    /// SessionState ile birlikte müşteriye geri dönüyordu.
+    /// </summary>
+    [Fact]
+    public async Task SessionState_OwnSession_DoesNotExposeTheAdminReplanNote()
+    {
+        var sessionId = await SeedSessionOwnedByAsync("1032");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var sessions = scope.ServiceProvider.GetRequiredService<ISessionManager>();
+            var session = await sessions.GetAsync(sessionId, TestContext.Current.CancellationToken);
+            session!.State.ReplanNote = "müşteriyi oyalayın, stok kontrolü bekleniyor";
+            session.State.ReplanRequestedBy = "admin-alice";
+            await sessions.UpdateAsync(session, TestContext.Current.CancellationToken);
+        }
+
+        var owner = await LoginAsync("own-owner-replan", "1032");
+        var resp = await owner.GetAsync($"/sessions/{sessionId}/state", TestContext.Current.CancellationToken);
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        body.Should().NotContain("stok kontrolü",
+            "admin notu ajanın iç bağlamı içindir — müşteriye görünmemeli");
+        body.Should().NotContain("admin-alice",
+            "hangi admin'in müdahale ettiği müşteriye görünmemeli");
+    }
+
+    /// <summary>Karşı yön: admin/agent aynı uçtan notu görebilmeli — koruma onları kapatmamalı.</summary>
+    [Fact]
+    public async Task SessionState_ForStaff_StillExposesTheReplanNote()
+    {
+        var sessionId = await SeedSessionOwnedByAsync("1033");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var sessions = scope.ServiceProvider.GetRequiredService<ISessionManager>();
+            var session = await sessions.GetAsync(sessionId, TestContext.Current.CancellationToken);
+            session!.State.ReplanNote = "eskalasyon bekleniyor";
+            await sessions.UpdateAsync(session, TestContext.Current.CancellationToken);
+        }
+
+        var admin = await AdminLoginAsync();
+        var resp = await admin.GetAsync($"/sessions/{sessionId}/state", TestContext.Current.CancellationToken);
+
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+            .Should().Contain("eskalasyon bekleniyor");
+    }
+
+    /// <summary>Sağlam alanların (kendi verisi) hâlâ döndüğünü doğrular — redaksiyon her şeyi silmemeli.</summary>
+    [Fact]
+    public async Task SessionState_OwnSession_StillExposesCustomerOwnedFields()
+    {
+        var sessionId = await SeedSessionOwnedByAsync("1034");
+        var owner = await LoginAsync("own-owner-fields", "1034");
+
+        var resp = await owner.GetAsync($"/sessions/{sessionId}/state", TestContext.Current.CancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        body.Should().Contain("\"authenticatedCustomerId\"");
+        body.Should().Contain("\"turnCount\"");
+    }
+
+    private async Task<HttpClient> AdminLoginAsync()
+    {
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IDbContextFactory<CustomerSupportBot.Adapters.Persistence.EfCore.CustomerSupportDbContext>>();
+            await using var ctx = await db.CreateDbContextAsync();
+            if (!ctx.Users.Any(u => u.Username == "own-admin-1"))
+            {
+                ctx.Users.Add(new UserEntity
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Username = "own-admin-1",
+                    PasswordHash = new BCryptPasswordHasher().Hash(Password),
+                    Role = "Admin",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+                await ctx.SaveChangesAsync();
+            }
+        }
+
+        var client = _factory.CreateClient();
+        var resp = await client.PostAsJsonAsync("/auth/login",
+            new { Username = "own-admin-1", Password },
+            cancellationToken: TestContext.Current.CancellationToken);
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var body = await resp.Content.ReadFromJsonAsync<AuthResponse>(
+            cancellationToken: TestContext.Current.CancellationToken);
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", body!.AccessToken);
+        return client;
+    }
 }
