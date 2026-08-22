@@ -49,4 +49,4 @@ Yok — saf veri sınıfı.
 
 - [ChatMode.md](ChatMode.md) — Bot/Human enum tanımı
 - [ChatBridgeMessage.md](ChatBridgeMessage.md) — Canlı sohbette akan mesajlar
-- [../../CustomerSupportBot.Application/ChatSessionPortService.md](../../CustomerSupportBot.Application/Chat/ChatSessionPortService.md) — Admin panel oturum yönetimi
+- [../../CustomerSupportBot.Application/ChatSessionPortService.md](../../CustomerSupportBot.Application/Services/Chat/ChatSessionPortService.md) — Admin panel oturum yönetimi

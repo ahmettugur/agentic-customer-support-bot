@@ -1,136 +1,74 @@
-# Port Arayüzleri
+# Application Ports (Giriş ve Çıkış Sözleşmeleri)
 
-Hexagonal mimaride **port**, bir katmanın dışarıya sunduğu veya dışarıdan beklediği sözleşmedir. Bu dosya Application katmanındaki tüm portları listeler.
+- **Kaynak:** `CustomerSupportBot.Application/Ports/`
+- **Namespace:** `CustomerSupportBot.Application.Ports`
 
-## Driving Ports (Gelen Portlar)
-
-API katmanı bu arayüzleri çağırır. Implementasyonlar `Services/` altındadır.
-
-| Arayüz | Implementasyon | Açıklama |
-|--------|---------------|---------|
-| `IChatPort` | `ChatPortService` | Ana chat use-case (HandleAsync / HandleStreamAsync) |
-| `IReasoningPort` | `ReasoningService` | Reasoning pipeline (ReasonAsync / ReasonStreamingAsync) |
-| `ISessionPort` | `SessionPortService` | Session listeleme, silme, geçmiş okuma |
-| `IChatSessionPort` | `ChatSessionPortService` | Admin chat panel — mesaj gönderme, geçmiş |
-| `IApprovalPort` | `ApprovalPortService` | HITL approval queue — listele, onayla, reddet |
-| `IEscalationPort` | `EscalationPortService` | Eskalasyon listesi ve yönetimi |
-| `IHitlEventPort` | `HitlEventPortService` | HITL olay akışı (SSE) |
-| `IHumanAgentPort` | `HumanAgentPortService` | İnsan temsilci kayıt ve mod yönetimi |
-| `IAnalyticsPort` | `AnalyticsPortService` | Oturum puanlama ve analitik |
-| `ITracePort` | `TracePortService` | Trace listeleme ve detay |
-| `ITelemetryPort` | `TelemetryPortService` | LLM maliyet ve kullanım istatistikleri |
-| `IEvaluationPort` | `EvaluationRunner` | Otomatik senaryo değerlendirme |
-| `IMemoryPort` | `MemoryPortService` | Semantik bellek CRUD (API üzerinden) |
-| `IPersonalizationPort` | `PersonalizationPortService` | Müşteri profil güncelleme |
-| `IImprovementsPort` | `ImprovementsPortService` | Lesson mining ve iyileştirme önerileri |
-| `ISlaPort` | `SlaPortService` | SLA olay listesi ve özet |
-| `IInputGuard` | `InputGuard` | Gelen mesaj güvenlik filtresi |
-| `IRealtimeBridge` | `RealtimeBridgeService` | Realtime voice (Scoped) |
-| `IRealtimeNativeBridge` | `RealtimeNativeService` | Native realtime transport (Scoped) |
-| `ITokenService` | `TokenPortService` | JWT token işlemleri |
-| `IUserService` | `UserService` | Kullanıcı kimlik doğrulama |
+Hexagonal Mimaride portlar, uygulamanın dış dünyayla olan sözleşmelerini (Contracts) tanımlar. Her bir portun bağımsız detaylı dokümanı aşağıda listelenmiştir.
 
 ---
 
-## Driven Ports (Giden Portlar)
+## Inbound Portlar (Giriş Portları - Driving)
 
-Application katmanı bu arayüzleri kullanır. Implementasyonlar Adapter projelerindedir.
+Sürücü adaptörlerin (ASP.NET Core Minimal API, Blazor Web, Arkaplan servisleri) Application katmanındaki iş akışlarını tetiklemek için çağırdığı arayüzlerdir.
 
-### Genel
-
-| Arayüz | Beklenen Adapter | Açıklama |
-|--------|-----------------|---------|
-| `IAgentTeamPort` | `CustomerSupportTeam` (Adapters.Agents) | Ajan workflow çalıştırma (`RunAsync`/`RunStreamingAsync`) + `GetWorkflowDiagram()` (admin panelindeki Mermaid diyagramı) |
-| `IContextPipeline` | `ContextPipeline` | Context provider zinciri |
-| `IPromptRepository` | `FileSystemPromptRepository` (Adapters.Persistence) | Prompt dosyaları okuyucu |
-| `ICustomerSupportToolsService` | `CustomerSupportToolsService` | Genel tool orchestrator |
-| `IComplaintToolsService` | `ComplaintToolsService` | Şikayet tool implementasyonları |
-| `IOrderToolsService` | `OrderToolsService` | Sipariş tool implementasyonları |
-| `IProductToolsService` | `ProductToolsService` | Ürün tool implementasyonları |
-| `IApprovalContextAccessor` | `ApprovalContextAccessor` | AsyncLocal HITL context |
-| `ICustomerProfileService` | `CustomerProfileService` | Müşteri profil güncelleme |
-| `ICustomerUnderstandingService` | `CustomerUnderstandingService` | `CustomerProfile`'ı tek, sentezlenmiş `CustomerUnderstanding` görünümüne çevirir (LLM çağırmaz) |
-| `IRecommendationService` | `RecommendationService` | Kural tabanlı ürün önerisi (LLM çağırmaz) — susma kuralları için bkz. [RecommendationService.md](Personalization/RecommendationService.md) |
-| `ISemanticMemoryWriter` | `SemanticMemoryService` | Episodik bellek yazma |
-| `ISkillsBasedRouter` | `SkillsBasedRouter` | Eskalasyon routing kararı |
-| `IUiHintEmitter` | `UiHintEmitter` | Tool → streaming pipeline UI ipuçları — `Emit` **`bool` döner**, aşağıya bakın |
-| `IBrowserChannel` | `WebSocketBrowserChannel` (Api) | WebSocket kanal abstraction |
-
-> ⚠️ **`IUiHintEmitter.Emit` teslimi garanti etmez.** İpucu ancak ambient bağlamda bir
-> session varsa kuyruğa girer; yoksa düşer ve metot `false` döner. Native sesli kanalda bu
-> bağlam hiç kurulmadığı için bu yol gerçekten yürünüyor.
->
-> Dolayısıyla bu port'u çağıran her tool, LLM'e döndürdüğü mesajı **dönüş değerine
-> koşullamak zorundadır** — aksi halde "kullanıcıya gösterildi" gibi doğrulanmamış bir iddia
-> üretir ve model kullanıcıyı olmayan bir arayüze yönlendirir. `Emit` eskiden `void`'di ve
-> `ProductListTool` tam olarak bu hatayı yapıyordu; bkz.
-> [`Tools/ProductToolsService.md`](Tools/ProductToolsService.md#31-picker-gerçekten-gösterildi-mi-showcategorypicker).
->
-> Genel kural: bu bir **yan kanaldır**, garanti değil. Bir ipucu hiç çizilmezse konuşmanın
-> yine de yürümesi gerekir — her ipucunun bir metin muadili olmalıdır.
-
-### Persistence
-
-| Arayüz | Implementasyon | Açıklama |
-|--------|---------------|---------|
-| `ISessionManager` | Postgres/InMemory | Session CRUD + geçmiş |
-| `ICustomerRepository` | Postgres | Müşteri kayıt sorgulama |
-| `IOrderRepository` | Postgres | Sipariş CRUD |
-| `IComplaintRepository` | Postgres | Şikayet CRUD |
-| `IProductCatalogRepository` | Postgres | Ürün kataloğu |
-| `IApprovalQueue` | Postgres/InMemory | HITL approval kuyruğu |
-| `IChatBridge` | Redis/InMemory | HITL live-chat köprüsü |
-| `IChatModeRegistry` | Postgres/InMemory | Bot/Human mod kaydı |
-| `IEscalationSink` | Postgres/InMemory | Eskalasyon kaydı |
-| `IHumanAgentRegistry` | Postgres/InMemory | İnsan temsilci kaydı |
-| `ICustomerProfileStore` | Postgres/InMemory | Müşteri profil deposu |
-| `IRatingStore` | Postgres/InMemory | Oturum puanlaması |
-| `ILessonStore` | Postgres/InMemory | Çıkarılan dersler |
-| `ISlaEventSink` | Postgres/InMemory | SLA olay kaydı |
-
-### AI
-
-| Arayüz | Beklenen Adapter | Açıklama |
-|--------|-----------------|---------|
-| `IReasoningChatClient` | `ReasoningChatClient` (Adapters.AI) | o-series LLM (reasoning) |
-| `IGeneralChatClient` | Adapters.AI | Genel amaçlı LLM (özet gibi) |
-| `IEmbeddingPort` | Adapters.AI | Text → embedding vektörü |
-| `IVectorMemoryPort` | Qdrant/InMemory | Vektör deposu |
-| `IKnowledgeBaseSource` | Adapters.AI | KB kaynak okuyucu |
-| `IRealtimeVoiceTransport` | Adapters.AI | Realtime ses protokolü |
-
-### Observability
-
-| Arayüz | Implementasyon | Açıklama |
-|--------|---------------|---------|
-| `IReasoningTraceStore` | Postgres/InMemory | Trace kayıt ve sorgulama |
-| `ICostUsageStorePort` | `CostUsageStore` (Adapters.Telemetry) | LLM maliyet in-memory özeti |
-| `ILlmCallPersistencePort` | `PostgresLlmCallUsageSink` (Adapters.Persistence) | LLM çağrı persist |
-| `ICostCalculatorPort` | `CostCalculator` (Adapters.AI) | Model bazlı maliyet hesaplama |
-
-### Mesajlaşma / Locking / Auth
-
-| Arayüz | Implementasyon | Açıklama |
-|--------|---------------|---------|
-| `IMessageBusPort` | Redis/InMemory | Pub/sub mesaj kanalı |
-| `IAppDistributedLock` | `RedisDistributedLockAdapter` | Dağıtık kilit (SLA guardian) |
-| `IJwtAccessTokenProvider` | Adapters (Auth) | JWT token üretme |
-| `IPasswordHasher` | Adapters (Auth) | Parola hash |
-| `IRefreshTokenRepository` | Postgres/InMemory | Refresh token deposu |
-| `IUserAuthRepository` | Postgres/InMemory | Kullanıcı kimlik doğrulama |
+| Port Arayüzü | Detaylı Doküman | Sorumluluk |
+|---|---|---|
+| `IChatPort` | [Ports/Inbound/IChatPort.md](Ports/Inbound/IChatPort.md) | Uçtan uca senkron ve canlı SSE sohbet işleme sözleşmesi. |
+| `IChatSessionPort` | [Ports/Inbound/IChatSessionPort.md](Ports/Inbound/IChatSessionPort.md) | Oturum durumu, mod yönetimi ve zorunlu yeniden planlama sözleşmesi. |
+| `IReasoningPort` | [Ports/Inbound/IReasoningPort.md](Ports/Inbound/IReasoningPort.md) | 2 aşamalı niyet analizi, varlık doğrulama ve muhakeme. |
+| `IApprovalPort` | [Ports/Inbound/IApprovalPort.md](Ports/Inbound/IApprovalPort.md) | HITL onay kuyruğu listeleme ve karar verme. |
+| `IEscalationPort` | [Ports/Inbound/IEscalationPort.md](Ports/Inbound/IEscalationPort.md) | İnsan temsilciye eskalasyon yönetimi. |
+| `IHumanAgentPort` | [Ports/Inbound/IHumanAgentPort.md](Ports/Inbound/IHumanAgentPort.md) | Temsilci havuzu ve durum yönetimi. |
+| `IHitlEventPort` | [Ports/Inbound/IHitlEventPort.md](Ports/Inbound/IHitlEventPort.md) | Canlı temsilci olay akışı. |
+| `IEvaluationPort` | [Ports/Inbound/IEvaluationPort.md](Ports/Inbound/IEvaluationPort.md) | Kalite ve regresyon test senaryolarını çalıştırma. |
+| `IAnalyticsPort` | [Ports/Inbound/IAnalyticsPort.md](Ports/Inbound/IAnalyticsPort.md) | Puanlama ve analitik veri sözleşmesi. |
+| `IImprovementsPort` | [Ports/Inbound/IImprovementsPort.md](Ports/Inbound/IImprovementsPort.md) | Çıkarılan iyileştirme derslerini listeleme. |
+| `IInputGuard` | [Ports/Inbound/IInputGuard.md](Ports/Inbound/IInputGuard.md) | Prompt Injection ve uzunluk güvenlik denetimi. |
+| `IKnowledgeBasePort` | [Ports/Inbound/IKnowledgeBasePort.md](Ports/Inbound/IKnowledgeBasePort.md) | Bilgi bankası makalelerini yönetme. |
+| `IMemoryPort` | [Ports/Inbound/IMemoryPort.md](Ports/Inbound/IMemoryPort.md) | RAG anlamsal arama ve doküman indeksleme. |
+| `IPersonalizationPort` | [Ports/Inbound/IPersonalizationPort.md](Ports/Inbound/IPersonalizationPort.md) | Müşteri profili ve ürün önerileri. |
+| `IRealtimeBridge` | [Ports/Inbound/IRealtimeBridge.md](Ports/Inbound/IRealtimeBridge.md) | Realtime ses köprüsü sözleşmesi. |
+| `IRealtimeNativeBridge` | [Ports/Inbound/IRealtimeNativeBridge.md](Ports/Inbound/IRealtimeNativeBridge.md) | Native WebRTC/WebSocket ses köprüsü. |
+| `ISessionPort` | [Ports/Inbound/ISessionPort.md](Ports/Inbound/ISessionPort.md) | Oturum CRUD ve mesaj geçmişi sözleşmesi. |
+| `ISlaPort` | [Ports/Inbound/ISlaPort.md](Ports/Inbound/ISlaPort.md) | SLA metrikleri ve ihlal raporlaması. |
+| `ITelemetryPort` | [Ports/Inbound/ITelemetryPort.md](Ports/Inbound/ITelemetryPort.md) | Telemetri ve maliyet verisi sözleşmesi. |
+| `ITracePort` | [Ports/Inbound/ITracePort.md](Ports/Inbound/ITracePort.md) | Çoklu ajan trace sorgulama sözleşmesi. |
+| `StreamEvent` | [Ports/Inbound/StreamEvent.md](Ports/Inbound/StreamEvent.md) | Canlı SSE olay modeli. |
+| `Auth Portları` | [Ports/Inbound/Auth/ICustomerAuthService.md](Ports/Inbound/Auth/ICustomerAuthService.md) | Kimlik doğrulama ve kullanıcı yönetimi sözleşmeleri. |
 
 ---
 
-## Yeni driven port eklemek
+## Outbound Portlar (Çıkış Portları - Driven)
 
-1. `Ports/Outbound/` altında arayüz dosyası oluşturun.
-2. İlgili adapter projesinde implementasyonu yazın.
-3. Adapter'ın DI extension metoduna kaydı ekleyin.
-4. `PortAliases.cs` dosyasına global using ekleyin (gerekiyorsa).
+Application katmanının veritabanı, LLM sağlayıcısı, Redis veya Telemetri gibi altyapı hizmetlerine erişmek için ihtiyaç duyduğu arayüzlerdir.
 
-## Yeni driving port eklemek
-
-1. `Ports/Inbound/` altında arayüz dosyası oluşturun.
-2. `Services/` altında implementasyonu yazın.
-3. `ApplicationServiceCollectionExtensions` içine kaydedin.
-4. `Api` projesinde endpoint oluşturun.
+| Port Arayüzü | Detaylı Doküman | Sorumluluk |
+|---|---|---|
+| `IReasoningChatClient` | [Ports/Outbound/AI/IReasoningChatClient.md](Ports/Outbound/AI/IReasoningChatClient.md) | o-serisi muhakeme modeli istemci sözleşmesi. |
+| `IGeneralChatClient` | [Ports/Outbound/AI/IGeneralChatClient.md](Ports/Outbound/AI/IGeneralChatClient.md) | Genel amaçlı LLM istemci sözleşmesi. |
+| `IEmbeddingPort` | [Ports/Outbound/AI/IEmbeddingPort.md](Ports/Outbound/AI/IEmbeddingPort.md) | Metin vektörleştirme sözleşmesi. |
+| `IVectorMemoryPort` | [Ports/Outbound/AI/IVectorMemoryPort.md](Ports/Outbound/AI/IVectorMemoryPort.md) | Vektör arama ve indeksleme sözleşmesi. |
+| `IRealtimeVoiceTransport` | [Ports/Outbound/AI/IRealtimeVoiceTransport.md](Ports/Outbound/AI/IRealtimeVoiceTransport.md) | Ses aktarımı sözleşmesi. |
+| `IKnowledgeBaseSource` | [Ports/Outbound/AI/IKnowledgeBaseSource.md](Ports/Outbound/AI/IKnowledgeBaseSource.md) | Bilgi bankası kaynak sözleşmesi. |
+| `IApprovalQueue` | [Ports/Outbound/Persistence/IApprovalQueue.md](Ports/Outbound/Persistence/IApprovalQueue.md) | HITL onay kuyruğu kalıcılık sözleşmesi. |
+| `ICustomerRepository` | [Ports/Outbound/Persistence/ICustomerRepository.md](Ports/Outbound/Persistence/ICustomerRepository.md) | Müşteri veritabanı sözleşmesi. |
+| `IOrderRepository` | [Ports/Outbound/Persistence/IOrderRepository.md](Ports/Outbound/Persistence/IOrderRepository.md) | Sipariş veritabanı ve stok sözleşmesi. |
+| `IProductCatalogRepository`| [Ports/Outbound/Persistence/IProductCatalogRepository.md](Ports/Outbound/Persistence/IProductCatalogRepository.md)| Ürün kataloğu veritabanı sözleşmesi. |
+| `IComplaintRepository` | [Ports/Outbound/Persistence/IComplaintRepository.md](Ports/Outbound/Persistence/IComplaintRepository.md) | Şikayet veritabanı sözleşmesi. |
+| `ISessionManager` | [Ports/Outbound/Persistence/ISessionManager.md](Ports/Outbound/Persistence/ISessionManager.md) | Oturum ve mesaj geçmişi kalıcılık sözleşmesi. |
+| `IChatBridge` | [Ports/Outbound/Persistence/IChatBridge.md](Ports/Outbound/Persistence/IChatBridge.md) | Canlı temsilci köprü mesajları kalıcılığı. |
+| `IChatModeRegistry` | [Ports/Outbound/Persistence/IChatModeRegistry.md](Ports/Outbound/Persistence/IChatModeRegistry.md) | Oturum modu kalıcılık sözleşmesi. |
+| `IEscalationSink` | [Ports/Outbound/Persistence/IEscalationSink.md](Ports/Outbound/Persistence/IEscalationSink.md) | Eskalasyon kaydı sözleşmesi. |
+| `IHumanAgentRegistry` | [Ports/Outbound/Persistence/IHumanAgentRegistry.md](Ports/Outbound/Persistence/IHumanAgentRegistry.md) | Temsilci havuzu kalıcılık sözleşmesi. |
+| `IKnowledgeArticleStore` | [Ports/Outbound/Persistence/IKnowledgeArticleStore.md](Ports/Outbound/Persistence/IKnowledgeArticleStore.md) | Bilgi makalesi kalıcılık sözleşmesi. |
+| `ILessonStore` | [Ports/Outbound/Persistence/ILessonStore.md](Ports/Outbound/Persistence/ILessonStore.md) | İyileştirme dersi kalıcılık sözleşmesi. |
+| `IRatingStore` | [Ports/Outbound/Persistence/IRatingStore.md](Ports/Outbound/Persistence/IRatingStore.md) | Puanlama kalıcılık sözleşmesi. |
+| `ISlaEventSink` | [Ports/Outbound/Persistence/ISlaEventSink.md](Ports/Outbound/Persistence/ISlaEventSink.md) | SLA olay kalıcılık sözleşmesi. |
+| `ICustomerProfileStore` | [Ports/Outbound/Persistence/ICustomerProfileStore.md](Ports/Outbound/Persistence/ICustomerProfileStore.md) | Müşteri profili kalıcılık sözleşmesi. |
+| `IAppDistributedLock` | [Ports/Outbound/Locking/IAppDistributedLock.md](Ports/Outbound/Locking/IAppDistributedLock.md) | Dağıtık kilit (RedLock) sözleşmesi. |
+| `IMessageBusPort` | [Ports/Outbound/Messaging/IMessageBusPort.md](Ports/Outbound/Messaging/IMessageBusPort.md) | Pub/Sub olay yayını sözleşmesi. |
+| `IPromptRepository` | [Ports/Outbound/IPromptRepository.md](Ports/Outbound/IPromptRepository.md) | Markdown prompt şablon ambarı sözleşmesi. |
+| `ICostCalculatorPort` | [Ports/Outbound/Observability/ICostCalculatorPort.md](Ports/Outbound/Observability/ICostCalculatorPort.md) | Model bazlı token USD maliyet hesaplama. |
+| `ICostUsageStorePort` | [Ports/Outbound/Observability/ICostUsageStorePort.md](Ports/Outbound/Observability/ICostUsageStorePort.md) | Anlık kümülatif kullanım ambarı. |
+| `ILlmCallPersistencePort` | [Ports/Outbound/Observability/ILlmCallPersistencePort.md](Ports/Outbound/Observability/ILlmCallPersistencePort.md) | LLM çağrı detayları kalıcılığı. |
+| `IReasoningTraceStore` | [Ports/Outbound/Observability/IReasoningTraceStore.md](Ports/Outbound/Observability/IReasoningTraceStore.md) | Akıl yürütme trace ambarı kalıcılığı. |

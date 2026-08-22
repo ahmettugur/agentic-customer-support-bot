@@ -46,4 +46,4 @@ Yok — saf veri sınıfı.
 ## Bağlantılar
 
 - [ReasoningResult.md](ReasoningResult.md) — Bu SubTask'ları taşıyan model
-- [../../CustomerSupportBot.Application/SubTaskOrchestrator.md](../../CustomerSupportBot.Application/Reasoning/SubTaskOrchestrator.md) — Alt görevleri yürüten orkestratör
+- [../../CustomerSupportBot.Application/SubTaskOrchestrator.md](../../CustomerSupportBot.Application/Services/Reasoning/SubTaskOrchestrator.md) — Alt görevleri yürüten orkestratör

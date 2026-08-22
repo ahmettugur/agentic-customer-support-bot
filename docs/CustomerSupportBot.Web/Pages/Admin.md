@@ -42,7 +42,7 @@ Tüm yönetim işlemlerinin tek noktadan yapıldığı kapsamlı dashboard'dur.
 - Approval onay/red işlemleri (gerekçe zorunluluğu dahil). Onay Kuyruğu sekmesindeki kayıt, admin
   karar verene ya da çok uzun süre (varsayılan 72 saat, `ApprovalOptions.StalePendingHours`)
   yanıtsız kalırsa arka planda otomatik reddedilene kadar kuyrukta bekler — sabit bir saniye
-  sayacı yoktur (bkz. [`SlaPortService.md`](../../CustomerSupportBot.Application/Sla/SlaPortService.md#slaapprovalsonbreach-varsayılanı--autoreject--none), eskiden burada yanlışlıkla 60 saniyede otomatik reddeden bir SLA config'i vardı).
+  sayacı yoktur (bkz. [`SlaPortService.md`](../../CustomerSupportBot.Application/Services/Sla/SlaPortService.md#slaapprovalsonbreach-varsayılanı--autoreject--none), eskiden burada yanlışlıkla 60 saniyede otomatik reddeden bir SLA config'i vardı).
 - Onay kartını çizmek — aşağıdaki bölüme bakın.
 - Escalation yönetimi (acknowledge, resolve, dismiss, replan).
 - Aktif chat oturumlarını izleme, mesaj geçmişi görme, takeover/release, mesaj gönderme.

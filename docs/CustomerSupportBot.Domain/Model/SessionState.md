@@ -97,5 +97,5 @@ Tek bir tur için duygu kaydı. `SessionState.SentimentHistory` listesinin elema
 
 - [AgentSession.md](AgentSession.md) — Bu state'i taşıyan oturum nesnesi
 - [../Services/SessionStateExtractor.md](../Services/SessionStateExtractor.md) — State'i güncelleme mantığı
-- [../../CustomerSupportBot.Application/SessionStateService.md](../../CustomerSupportBot.Application/Chat/SessionStateService.md) — State persist eden Application servisi
+- [../../CustomerSupportBot.Application/SessionStateService.md](../../CustomerSupportBot.Application/Services/Chat/SessionStateService.md) — State persist eden Application servisi
 - [../WellKnown.md](../WellKnown.md) — Phase, Sentiment, Intent sabitleri

@@ -1,44 +1,76 @@
 # WorkflowTraceEventProcessor
 
-> 💡 **Analiz notu:** Workflow çalışırken oluşan event'leri (agent geçişleri, tool çağrıları) trace kaydına yazar — bir uçuş kaydedicisi (black box) gibi, hata sonrası ne olduğunu anlamak için.
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/WorkflowTraceEventProcessor.cs`
+- **Tür:** `internal sealed class`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents`
 
-## Ne İşe Yarar
+## Ne işe yarar?
 
-Workflow event'lerini (executor invoked/completed, agent response update, workflow output) trace yan etkilerine ve stream event'lerine çeviren sınıftır.
+`WorkflowTraceEventProcessor`, Microsoft Agents Framework (MAF) iş akışı koşusu sırasında fırlatılan olayları (`ExecutorInvokedEvent`, `ExecutorCompletedEvent`, `AgentResponseUpdate`, `WorkflowOutputEvent`) dinleyerek; bu olayları hem adım adım [ReasoningTrace](../CustomerSupportBot.Domain/Model/ReasoningTrace.md) nesnesine yansıtan, hem de istemciye iletilecek SSE olaylarına ([StreamEvent](../CustomerSupportBot.Application/Ports/Inbound/StreamEvent.md)) dönüştüren işlemcidir.
 
-## Hangi Amaçla Kullanılır
+## Hangi amaçla kullanılır`?
 
-[WorkflowRunner](WorkflowRunner.md) bir workflow koşarken üretilen event'leri alır, trace state'i günceller ve reasoning trace store'a kaydeder. #47 refactor'ı ile WorkflowRunner'dan ayrıştırılmıştır.
+- **Adım Adım Gözlemlenebilirlik:** İş akışı yürütülürken hangi ajanın ne kadar süre çalıştığını (`AgentVisit`), hangi araçların hangi parametrelerle çağrıldığını (`ToolCall`) ve dönen sonuçları gerçek zamanlı kaydetmek.
+- **Canlı Yanıt Filtreleme (`ResponseStreamFilter`):** `ResponseAgent`'ın token akışındaki `TERMINATE: reason=...` işaretini tamponlayarak (buffer) yakalamak ve kullanıcıya sızdırmadan temiz bir token akışı sunmak.
+- **Broadcast Mesajlarını Ayırt Etme:** MAF `GroupChatHost`'un seçilmeyen ajanlara gönderdiği senkronizasyon yayınlarını (`BroadcastAsync`) `TurnToken` kontrolü ile filtreleyip yanlış tur sayımı yapılmasını önlemek.
 
 ## Sorumlulukları
 
-- Tek bir workflow koşusunun trace toplama durumunu (`TraceState`) yönetmek.
-- `ExecutorInvoked` / `ExecutorCompleted` event'lerini agent visit trace kaydına çevirmek.
-- `AgentResponseUpdate` event'lerini stream event'lerine ve tool call trace'lerine çevirmek.
-- `WorkflowOutput` event'ini final response trace'ine çevirmek.
-- `ResponseStreamFilter` ile ResponseAgent'ın ham token akışından "TERMINATE: reason=..." işaretini ve self-critique JSON bloğunu arındırmak.
-- Approval context'i trace'e bağlamak.
+- **Üstlendiği:**
+  - `StartTraceState` ile yeni bir izleme durumu oluşturmak.
+  - `ApplyTraceEvent` ile MAF olaylarını `TraceState` ve `StreamEvent` formatına çevirmek.
+  - Ajan başlangıç/bitiş olaylarında `AgentVisit` sürelerini ve çıktılarını kaydetmek.
+  - Araç çağrısı ve sonuç olaylarını `Trace.ToolCalls` listesine eklemek.
+  - `ResponseStreamFilter` ile token akışını filtrelemek.
 
-## Diğer Katman ve Bileşenlerle İlişkileri
+## Constructor ve Başlatma Mantığı
 
-- **DI ile inject edilen**: `IReasoningTraceStore`, `IApprovalContextAccessor`.
-- **Kullanan sınıf**: [WorkflowRunner](WorkflowRunner.md).
-- **Event kaynağı**: `Microsoft.Agents.AI.Workflows` — Workflow event modeli.
-- **İlişkili model**: `CustomerSupportBot.Domain.Model` → `ReasoningTrace`, `AgentVisit`.
+```csharp
+public WorkflowTraceEventProcessor(
+    IReasoningTraceStore traceStore,
+    IApprovalContextAccessor approvalContext)
+```
 
-## Kullanılma Nedeni ve Tasarım Yaklaşımı
+### Constructor İçerisinde Yapılan İşler:
+- `_traceStore` (`IReasoningTraceStore`): Trace kayıtlarını başlatmak ve güncellemek üzere atanır.
+- `_approvalContext` (`IApprovalContextAccessor`): Müşteri onay bağlamına `TraceId` enjekte etmek üzere atanır.
 
-WorkflowRunner'ın SRP ihlali çözülerek "bir event geldiğinde trace'e ne olur?" sorusunun cevabı bu sınıfa taşınmıştır. `ResponseStreamFilter` chunk sınırları marker'ı bölebileceğinden marker uzunluğu kadar güvenlik payı tutar; yalnızca kesinlikle marker'a ait olmadığı bilinen kısım hemen yayınlanır.
+## Dahili Sınıflar
 
-## İç Sınıflar
+### 1. `TraceState`
+- Tek bir workflow koşusunun trace durumunu taşır:
+  - `Trace` (`ReasoningTrace`): Canlı trace nesnesi.
+  - `ActiveVisits` (`Dictionary<string, AgentVisit>`): Ajan ziyaret kayıtları.
+  - `IterationCount` (`int`): Gerçekleşen tur sayısı.
+  - `ResponseStreamFilter` (`ResponseStreamFilter`): Token filtresi.
+  - `ResponseStreamStarted` (`bool`): Yanıt akışının başlayıp başlamadığı.
 
-| Sınıf | Açıklama |
-|-------|----------|
-| `TraceState` | Tek bir workflow koşusunun trace toplama durumu: Trace nesnesi, aktif agent visit'leri, iterasyon sayısı, sonuç metni, ResponseStreamStarted flag'i. |
-| `ResponseStreamFilter` | ResponseAgent'ın ham token akışından "TERMINATE" marker'ını ve sonrasındaki self-critique JSON'unu filtreleyen stateful mekanizma. |
+### 2. `ResponseStreamFilter`
+- `ResponseAgent`'tan akan ham token'ları `TERMINATE` işaretçisine karşı tamponlar. Parça sınırlarında bölünen kelimeleri (`TER` + `MINATE`) yakalar ve yalnızca güvenli metin parçalarını yayınlar.
+
+## Metotlar ve İç Çalışma Mantıkları
+
+### 1. `StartTraceState`
+```csharp
+public TraceState StartTraceState(AgentSession? session, string query, ReasoningResult? reasoning)
+```
+- **Ne işe yarar?:** Yeni bir trace kaydı açar ve `TraceState` nesnesini başlatır.
+- **İç Mantığı:** `_traceStore.StartTrace` çağrılır, `_approvalContext.SetTraceId` ile bağlama enjekte edilir, varsa `reasoning` verisi eklenir ve `TraceState` döndürülür.
+
+### 2. `ApplyTraceEvent`
+```csharp
+public List<StreamEvent> ApplyTraceEvent(TraceState st, WorkflowEvent evt)
+```
+- **Ne işe yarar?:** Gelen MAF iş akışı olayını analiz edip trace'e işler ve varsa istemciye gönderilecek `StreamEvent` listesini döner.
+- **İç Mantığı:**
+  - `ExecutorInvokedEvent`: `invoked.Data is TurnToken` kontrolü yapılır; seçilen ajana ait ziyaret kaydı (`AgentVisit`) başlatılır ve `AgentStarted` akış olayı üretilir.
+  - `ExecutorCompletedEvent`: Ajanın çalışma süresi hesaplanır, araç çağrıları ve UI Hint'leri ayıklanır (`ExtractToolCallsFromCompleted`), `AgentCompleted` olayı üretilir.
+  - `AgentResponseUpdate`: `ResponseAgent`'tan geliyorsa token'lar `ResponseStreamFilter`'dan geçirilerek `ResponseDelta` akış olayı üretilir.
 
 ## Bağımlılıklar
 
-- `IReasoningTraceStore` — Trace kaydetme.
-- `IApprovalContextAccessor` — Approval bağlamı.
-- `Microsoft.Agents.AI.Workflows` — Workflow event tipleri.
+- [IReasoningTraceStore](../CustomerSupportBot.Application/Ports/Outbound/Observability/IReasoningTraceStore.md)
+- [IApprovalContextAccessor](../CustomerSupportBot.Application/Ports/Outbound/IApprovalContextAccessor.md)
+- [ReasoningTrace](../CustomerSupportBot.Domain/Model/ReasoningTrace.md)
+- [StreamEvent](../CustomerSupportBot.Application/Ports/Inbound/StreamEvent.md)
+- `Microsoft.Agents.AI.Workflows`

@@ -18,7 +18,7 @@ Uygulamanın bootstrap aşamasında bir kez çalışır. Auth altyapısı, HTTP 
 
 ## Diğer Katman ve Bileşenlerle İlişkileri
 - **Kaydedilen servisler**: Tüm `Services/` altındaki sınıflar burada DI'a eklenir.
-- **Root bileşen**: [App.razor](../../CustomerSupportBot.Web/App.razor) — `Router` ve `CascadingAuthenticationState` içerir.
+- **Root bileşen**: [App.razor](../CustomerSupportBot.Web/App.razor) — `Router` ve `CascadingAuthenticationState` içerir.
 - **Backend adresi**: `https://localhost:7095` (development) hard-coded olarak `HttpClient.BaseAddress`'e atanır.
 
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı

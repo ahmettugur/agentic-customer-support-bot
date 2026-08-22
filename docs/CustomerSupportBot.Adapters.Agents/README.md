@@ -1,110 +1,32 @@
-# Adapters.Agents — Genel Bakış
+# CustomerSupportBot.Adapters.Agents
 
-`CustomerSupportBot.Adapters.Agents` projesi, uygulamanın **ajan katmanının** tüm orkestrasyon mantığını barındırır. Hexagonal mimaride bu proje bir **Driven Adapter**'dır: Application katmanının `IAgentTeamPort` ve `IEvaluationPort` portlarını, Microsoft Agent Framework (MAF) kullanarak implemente eder. Application katmanı kasıtlı olarak yalnızca Domain'e bağımlı kaldığı için (MAF referansı almaz), MAF tiplerine (`EvalItem`, `ApprovalRequiredAIFunction`, `ChatResponseFormat` vb.) dokunan HER ŞEY burada yaşar.
+Bu klasör, hexagonal mimaride **Driven Adapter (Çıkış Adaptörü)** rolünü üstlenen ve Application katmanındaki [IAgentTeamPort](../CustomerSupportBot.Application/Ports/Outbound/IAgentTeamPort.md) ile [IEvaluationPort](../CustomerSupportBot.Application/Ports/Inbound/IEvaluationPort.md) portlarını Microsoft Agents Framework (MAF) iş akışlarıyla (Workflows) somutlaştıran ajan adaptörünü barındırır.
 
-> 💡 **Analiz notu:** Bu katman projenin "beyni"dir. Application "bu soruyu çöz" der, bu adapter ise PlanningAgent → SpecialistAgent → ResponseAgent zincirini kurar, mesajları yönlendirir, tool çağrılarını yönetir ve sonucu döner. Bir orkestra şefinin notaları enstrümanlara dağıtması gibi — her agent bir enstrüman, bu katman onları koordine eden şeftir.
+## Dizin Yapısı
 
-## Bu projeyi ne zaman açarsınız?
+- [CustomerSupportTeam](CustomerSupportTeam.md) — `IAgentTeamPort` implementasyonu; tekil ve compound sorguları uygun koşucuya yönlendiren kompozisyon kökü.
+- [AgentTeamFactory](AgentTeamFactory.md) — MAF `AgentGroupWorkflow` oluşturucu; 6 uzman ajanı örnekleyen ve OpenTelemetry ile saran fabrika.
+- [CustomerSupportChatManager](CustomerSupportChatManager.md) — Çoklu ajan sohbetini yöneten, dinamik yönlendirme stratejilerini işleten ve sonlanma/tekrar kontrolü yapan `GroupChatManager`.
+- [WorkflowRunner](WorkflowRunner.md) — Tek alt görev veya tekil sorguları MAF workflow'u üzerinden koşturan ve token akışını yöneten motor.
+- [DecomposedRunner](DecomposedRunner.md) — Birleşik/karmaşık sorgulardaki alt görevleri (`SubTasks`) paralel veya sıralı gruplar halinde koordine eden koşucu.
+- [IWorkflowRunner](IWorkflowRunner.md) — `WorkflowRunner` ile `DecomposedRunner` arasındaki soyut koşucu sözleşmesi.
+- [ApprovalGateService](ApprovalGateService.md) — Yan etkili araç çağrılarını (sipariş, iptal, iade, şikayet) yakalayan ve HITL onay kapısını işleten güvenlik servisi.
+- [WorkflowTraceEventProcessor](WorkflowTraceEventProcessor.md) — MAF iş akışı olaylarını dinleyip adım adım `ReasoningTrace` oluşturan işlemci.
+- [WorkflowResponseExtractor](WorkflowResponseExtractor.md) — Ajanların yapılandırılmış `SpecialistReasoningSchema` JSON çıktılarını ve `ResponseAgent` metinlerini ayrıştıran bileşen.
+- [WorkflowMessageBuilder](WorkflowMessageBuilder.md) — Context pipeline, kimlik ipuçları ve prompt şablonlarından workflow için başlangıç mesajlarını hazırlayan derleyici.
+- [TurnFinalizer](TurnFinalizer.md) — Tur sonu yan etkilerini (trace tamamlama, onay temizleme, episodik hafıza ve müşteri profili güncelleme) yürüten sonlandırıcı.
+- [TrimmingDeltaStreamer](TrimmingDeltaStreamer.md) — Son yanıttan önce sızan reasoning veya termination işaretçilerini filtreleyerek istemciye temiz SSE akışı sunan akış işleyici.
+- [ExceptionTranslator](ExceptionTranslator.md) — MAF ve HTTP istisnalarını `ExternalServiceException` gibi domain istisnalarına çeviren yardımcı.
+- [PortAliases](PortAliases.md) — Global namespace ve port import tanımları.
+- [DependencyInjection](DependencyInjection/AgentAdapterServiceCollectionExtensions.md) — `AddAgentsAdapter` DI kayıt uzantısı.
+- [Team/](Team/README.md) — 6 uzman ajan (`PlanningAgent`, `ProductAgent`, `OrderAgent`, `ComplaintAgent`, `HumanHandoffAgent`, `ResponseAgent`), temel sınıf `SupportAgentBase` ve `SpecialistReasoningSchema`.
+- [A2A/](A2A/README.md) — Dış sistemlerle Agent-to-Agent protokolü üzerinden haberleşen salt-okunur ajan kataloğu (`A2AAgentCatalog`) ve `InputLimitedAgent`.
+- [Routing](Routing.md) — Grup sohbeti yönlendirme stratejileri (`FirstTurnStrategy`, `PlanRoutingStrategy`, `ReflectionRoutingStrategy`).
+- [Evaluation/](Evaluation/README.md) — YAML senaryolarını koşturan `EvaluationRunner` ve başarı kriterlerini denetleyen `CriteriaEvaluator`.
 
-- Yeni bir ajan (agent) eklemek veya mevcut ajanın prompt/tool/structured-output davranışını değiştirmek istediğinizde → [Team/](Team/README.md)
-- Workflow'un nasıl çalıştığını (mesaj hazırlığı, event işleme, HITL köprüsü, streaming) anlamak/değiştirmek istediğinizde → [WorkflowRunner](WorkflowRunner.md)
-- Yönlendirme (routing) mantığını değiştirmeniz gerektiğinde → [Routing](Routing.md), [CustomerSupportChatManager](CustomerSupportChatManager.md)
-- HITL (Human-in-the-Loop) onay kapısına yeni bir tool bağlamak istediğinizde → [ApprovalGateService](ApprovalGateService.md)
-- Compound query (bileşik sorgu) orkestrasyonunu değiştirmek istediğinizde → [DecomposedRunner](DecomposedRunner.md)
-- Tur-sonu yan etkilerini (eskalasyon, episodik bellek, müşteri profili) değiştirmek istediğinizde → [TurnFinalizer](TurnFinalizer.md)
-- Evaluation senaryolarının nasıl çalıştırıldığını/değerlendirildiğini anlamak istediğinizde → [Evaluation/](Evaluation/README.md)
+## Mimari Rolü ve Yetenekleri
 
-## Dosya haritası
-
-```
-CustomerSupportBot.Adapters.Agents/
-│
-├── CustomerSupportTeam.cs          # IAgentTeamPort implementasyonu — kompozisyon kökü (ince yönlendirici)
-├── AgentTeamFactory.cs             # 6 ajanı örnekler, her koşu için taze Workflow üretir
-├── WorkflowRunner.cs               # Gerçek orkestratör — tek sorgu koşusu, trace, HITL köprüsü, streaming
-├── WorkflowMessageBuilder.cs       # Workflow'a giden system/user mesajlarının inşası
-├── WorkflowTraceEventProcessor.cs  # Workflow event'lerini trace yan etkilerine çeviren işlemci
-├── DecomposedRunner.cs             # Compound query orkestrasyonu (paralel/sıralı alt-görevler)
-├── TurnFinalizer.cs                # Tur-sonu yan etkileri (eskalasyon, bellek, profil, trace kapatma)
-├── CustomerSupportChatManager.cs   # MAF GroupChatManager — ajan seçimi ve sonlandırma
-├── ApprovalGateService.cs          # HITL onay kapısı — yan etkili tool'lar buradan geçer
-├── WorkflowResponseExtractor.cs    # MAF çıktısından anlamlı veri çıkarma yardımcısı
-├── ExceptionTranslator.cs          # Framework exception → Domain exception dönüşümü
-├── PortAliases.cs                  # Global using direktifleri (proje geneli namespace kısayolları)
-│
-├── Team/                            # Bkz. Team/README.md — 6 ajan + ortak taban + structured-output şeması
-│   ├── SupportAgentBase.cs
-│   ├── PlanningAgent.cs / ProductAgent.cs / OrderAgent.cs / ComplaintAgent.cs
-│   ├── HumanHandoffAgent.cs / ResponseAgent.cs
-│   └── SpecialistReasoningSchema.cs
-│
-├── Evaluation/                      # Bkz. Evaluation/README.md — IEvaluationPort implementasyonu
-│   ├── EvaluationRunner.cs
-│   └── CriteriaEvaluator.cs
-│
-├── Routing/
-│   └── Routing.cs                  # Strategy pattern — 3 routing stratejisi + RoutingContext
-│
-└── DependencyInjection/
-    └── AgentsAdapterServiceCollectionExtensions.cs  # DI kaydı (AddAgentsAdapter)
-```
-
-## Bileşenler arası ilişki
-
-```
-IChatPort (Application)
-    │
-    ▼
-CustomerSupportTeam  ── implements IAgentTeamPort ── kompozisyon kökü
-    │
-    ├── new AgentTeamFactory(...)   ── 6 ajanı örnekler + CreateWorkflow()
-    ├── new TurnFinalizer(...)      ── tur-sonu yan etkileri
-    ├── new WorkflowRunner(factory, finalizer, ...)   ── GERÇEK orkestratör
-    │       │
-    │       ├─► AgentTeamFactory.CreateWorkflow()
-    │       │       └─► CustomerSupportChatManager (her koşuda taze)
-    │       │               ├── FirstTurnStrategy       ─┐
-    │       │               ├── PlanRoutingStrategy       │ Routing/Routing.cs
-    │       │               └── ReflectionRoutingStrategy─┘
-    │       │
-    │       ├─► HandleRequestInfoEventAsync()   ← ApprovalGateService (HITL köprüsü)
-    │       ├─► EnsureHumanHandoffEscalation()  ← kod-seviyesi eskalasyon garantisi
-    │       ├─► WorkflowResponseExtractor       ← sonuç temizleme
-    │       └─► TurnFinalizer.FinalizeAsync()   ← turun sonu
-    │
-    └── new DecomposedRunner(_runner=WorkflowRunner, ...)  ── compound query → WorkflowRunner'ı N kez çağırır
-
-IEvaluationPort (Application)
-    │
-    ▼
-Evaluation/EvaluationRunner  ── IAgentTeamPort üzerinden CustomerSupportTeam'i (dolaylı) kullanır
-    └── Evaluation/CriteriaEvaluator  ← MAF EvalCheck/EvalItem tipleri
-```
-
-## Detaylı dokümantasyon
-
-| Dosya | Açıklama |
-| --- | --- |
-| [CustomerSupportTeam](CustomerSupportTeam.md) | Kompozisyon kökü — `IAgentTeamPort` implementasyonu, ince yönlendirici |
-| [AgentTeamFactory](AgentTeamFactory.md) | 6 ajanı örnekler, taze `Workflow` üretir |
-| [WorkflowRunner](WorkflowRunner.md) | Gerçek orkestratör — tek sorgu koşusu, trace, HITL köprüsü, streaming |
-| [WorkflowMessageBuilder](WorkflowMessageBuilder.md) | Workflow'a giden system/user mesajlarının inşası |
-| [WorkflowTraceEventProcessor](WorkflowTraceEventProcessor.md) | Workflow event'lerini trace yan etkilerine çeviren işlemci |
-| [DecomposedRunner](DecomposedRunner.md) | Compound query orkestrasyonu |
-| [TurnFinalizer](TurnFinalizer.md) | Tur-sonu yan etkileri |
-| [CustomerSupportChatManager](CustomerSupportChatManager.md) | MAF GroupChatManager; ajan seçimi, sonlandırma korumaları |
-| [ApprovalGateService](ApprovalGateService.md) | HITL onay kapısı; sipariş ve şikayet tool'ları |
-| [Routing](Routing.md) | 3 routing stratejisi (Strategy pattern) |
-| [WorkflowResponseExtractor](WorkflowResponseExtractor.md) | MAF output → temiz metin dönüşümü |
-| [ExceptionTranslator](ExceptionTranslator.md) | Framework exception → Domain exception |
-| [DependencyInjection](DependencyInjection.md) | DI kaydı ve ön koşullar |
-| [Team/](Team/README.md) | 6 ajanın prompt/tool/schema tanımları |
-| [Evaluation/](Evaluation/README.md) | `IEvaluationPort` implementasyonu — otomatik senaryo değerlendirme |
-
-## Hızlı başlangıç: Yeni ajan eklemek
-
-1. `CustomerSupportBot.Api/Prompts/agents/` altına `yeni-ajan.md` prompt dosyası oluşturun.
-2. `Team/YeniAjan.cs` dosyasını oluşturun — `SupportAgentBase`'den türeyin, `BuildInner` static metodunda `ChatClientAgentOptions` ile `ChatClientAgent`'ı kurun (specialist ise `ResponseFormat = ChatResponseFormat.ForJsonSchema<SpecialistReasoningSchema>(...)` ekleyin, bkz. [Team/README.md](Team/README.md)).
-3. `AgentTeamFactory` constructor'ında yeni ajanı örnekleyip `AIAgent` property olarak ekleyin.
-4. `AgentTeamFactory.CreateWorkflow()`'daki `.AddParticipants(...)` çağrısına yeni ajanı ekleyin.
-5. `WellKnown.AgentNames` sınıfına yeni ajan adını sabit olarak ekleyin — specialist ise `WellKnown.AgentNames.Specialists` dizisine de ekleyin (`Routing/Routing.cs`'deki `RoutingContext.IsSpecialistMessage`/`GetSpecialistName` bu diziyi kullanır).
+- **Microsoft Agents Framework (MAF) Entegrasyonu:** `Microsoft.Agents.AI.Workflows` altyapısı ile deterministik, döngü korumalı ve gözlemlenebilir çoklu ajan takımı.
+- **2 Aşamalı ReAct & JSON Şeması:** Uzman ajanlar serbest metin yerine `SpecialistReasoningSchema` şemasıyla yapılandırılmış akıl yürütme (`preToolCheck`, `postToolReflection`, güven skoru) üretir.
+- **Decomposed Compound Query Desteği:** Birleşik kullanıcı isteklerini alt görevlere bölüp bağımsız olanları paralel, bağımlı olanları sıralı koşturma.
+- **A2A Protokolü:** Dış sistemlere açık, yan etkisiz, salt-okunur ve girdi boyutu korumalı özel ajan arayüzü.

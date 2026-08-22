@@ -1,46 +1,96 @@
 # AgentTeamFactory
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/AgentTeamFactory.cs`
-**Erişim:** `internal sealed`
-**Yaşam döngüsü:** Singleton (`CustomerSupportTeam` içinde `new` ile kurulur)
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/AgentTeamFactory.cs`
+- **Tür:** `internal sealed class`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents`
 
 ## Ne işe yarar?
 
-6 ajanı (`PlanningAgent`, `ProductAgent`, `OrderAgent`, `ComplaintAgent`, `HumanHandoffAgent`, `ResponseAgent`) bir kez örnekler ve her workflow koşusu için **taze** bir `Microsoft.Agents.AI.Workflows.Workflow` üretir.
+`AgentTeamFactory`, Microsoft Agents Framework (MAF) üzerinde çalışan 6 uzman ajanı (`PlanningAgent`, `ProductAgent`, `OrderAgent`, `ComplaintAgent`, `HumanHandoffAgent`, `ResponseAgent`) örnekleyen, her birine OpenTelemetry dağıtık izleme (tracing) yeteneği kazandıran ve her iş akışı koşusu için taze ve izole bir `AgentGroupWorkflow` inşa eden fabrika sınıfıdır.
 
-> 💡 **Analiz notu:** Bir futbol takımının kadrosu gibi — oyuncular (agent'lar) sabit ama her maç (workflow) için yeni bir strateji (ChatManager) ve yeni bir skor tablosu (handoff counts) kurulur.
+## Hangi amaçla kullanılır`?
 
-## Hangi amaçla kullanılır?
-
-`WorkflowRunner`, her `RunAsync`/`RunStreamingAsync` çağrısında `CreateWorkflow()`'u çağırır. Ajan örnekleri (dolayısıyla tool bağlamları ve `IChatClient` bağlantıları) süreç ömrü boyunca sabittir — yalnızca `CustomerSupportChatManager` (yönlendirme durumu, `_handoffCounts` dahil) ve graph bağlantıları her koşuda yeniden kurulur, böylece tur-başına izole olması gereken state garanti edilir.
+- **Performans ve Bellek Optimizasyonu:** Ajan örneklerini ve bunların araç bağlamlarını uygulama yaşam döngüsü boyunca bir kez oluşturup sabit tutarak gereksiz LLM istemcisi/araç fabrikası tahsisini engellemek.
+- **Tur Bazlı İzolasyon:** Her workflow koşusu için taze bir [CustomerSupportChatManager](CustomerSupportChatManager.md) ve graph bağlantıları kurarak, handoff limitlerinin (`_handoffCounts`) ve döngü sayaçlarının (`IterationCount`) turlar arasında birbirini kirletmesini önlemek.
+- **Gözlemlenebilirlik:** Her ajanın çağrısını `TelemetryConstants.ActivitySourceName` üzerinden OpenTelemetry span'leri ile sarmalayarak Jaeger, Aspire ve Application Insights gibi platformlara tam izleme verisi aktarmak.
+- **Kısıtlı Uzman Akışları (Sub-Tasks):** Birleşik/karmaşık sorgularda belirli bir uzman ajana özel (`constrainedSpecialistName`) izole alt iş akışları oluşturmak.
 
 ## Sorumlulukları
 
-- 6 ajanı, kendi `Team/*.cs` sınıflarından örnekleyip her birini `UseOpenTelemetry` ile sarmalamak (`WrapWithTelemetry`).
-- `AgentWorkflowBuilder.CreateGroupChatBuilderWith(...)` ile her koşuda yeni bir `CustomerSupportChatManager` kurup 6 ajanı `AddParticipants` ile graph'a eklemek.
+- **Üstlendiği:**
+  - 6 uzman ajanı kendi özelleştirilmiş prompt'ları, adları, açıklamaları ve araç kümeleriyle (`Team/` sınıfları) örneklemek.
+  - Ajanlara OpenTelemetry ActivitySource sarmalaması (`WrapWithTelemetry`) eklemek.
+  - `CreateWorkflow` çağrıldığında taze bir `CustomerSupportChatManager` ile `AgentWorkflowBuilder` üzerinden `Workflow` grafını derlemek.
+  - Workflow seviyesinde maksimum yineleme (`MaximumIterationCount`) sınırını korumak.
+- **Üstlenmediği:**
+  - İş akışını yürütmek ve event loop'u işletmek (bu sorumluluk [WorkflowRunner](WorkflowRunner.md) sınıfındadır).
+  - Kullanıcı mesajlarını veya RAG bağlamını hazırlamak (bu sorumluluk [WorkflowMessageBuilder](WorkflowMessageBuilder.md) sınıfındadır).
 
-**Üstlenmediği işler:** Ajanların kendi prompt/tool/schema tanımları (bkz. `Team/*.cs`), routing kararı (`CustomerSupportChatManager`), workflow'un çalıştırılması/event işlenmesi (`WorkflowRunner`).
+## Constructor ve Başlatma Mantığı
 
-## Diğer katman ve bileşenlerle ilişkileri
+```csharp
+public AgentTeamFactory(
+    IChatClient chatClient,
+    IPromptRepository prompts,
+    ApprovalGateService approvalGate,
+    ICustomerSupportToolsService tools,
+    WorkflowGuardOptions guards,
+    ILoggerFactory loggerFactory)
+```
 
-**Bağımlılıkları:** `IChatClient`, `IPromptRepository`, `ApprovalGateService`, `ICustomerSupportToolsService`, `WorkflowGuardOptions`, `ILoggerFactory` — tamamı `Team/*.cs` ajan constructor'larına ve `CustomerSupportChatManager`'a geçirilir.
+### Constructor İçerisinde Yapılan İşler:
+1. **Bağımlılıkların Saklanması:** `_guards` (`WorkflowGuardOptions`) ve `_loggerFactory` alanları özel değişkenlere atanır.
+2. **Telemetri Kaynak Adının Alınması:** `TelemetryConstants.ActivitySourceName` ("CustomerSupportBot") değeri okunur.
+3. **6 Ajanın Örneklenmesi ve Telemetriyle Sarılması:**
+   - **`PlanningAgent`**: `chatClient` ve `prompts` ile oluşturulur; `WrapWithTelemetry` ile sarılır.
+   - **`ProductAgent`**: `chatClient`, `prompts` ve salt-okunur ürün araçları (`tools`) ile oluşturulur; `WrapWithTelemetry` ile sarılır.
+   - **`OrderAgent`**: `chatClient`, `prompts` ve HITL onay kapılı sipariş araçları (`approvalGate`) ile oluşturulur; `WrapWithTelemetry` ile sarılır.
+   - **`ComplaintAgent`**: `chatClient`, `prompts` ve HITL onay kapılı şikayet araçları (`approvalGate`) ile oluşturulur; `WrapWithTelemetry` ile sarılır.
+   - **`HumanHandoffAgent`**: `chatClient` ve `prompts` ile oluşturulur; `WrapWithTelemetry` ile sarılır.
+   - **`ResponseAgent`**: `chatClient` ve `prompts` ile oluşturulur; `WrapWithTelemetry` ile sarılır.
 
-**Kimler çağırır:** `WorkflowRunner.RunAsync`/`RunStreamingAsync`/`GetWorkflowDiagram` — her biri `_factory.CreateWorkflow()` çağırır.
+> **Tasarım Kararı:** Ajan nesneleri süreç ömrü boyunca tekil (singleton) olarak yaşar. Böylece araç kayıtları ve prompt referansları her istekte yeniden yüklenmez.
 
-**Neyi örnekler:** `CustomerSupportBot.Adapters.Agents.Team` namespace'indeki `PlanningAgent`, `ProductAgent`, `OrderAgent`, `ComplaintAgent`, `HumanHandoffAgent`, `ResponseAgent` (bkz. [Team/README.md](Team/README.md)); `CustomerSupportChatManager` (bkz. [CustomerSupportChatManager.md](CustomerSupportChatManager.md)).
+## Metotlar ve İç Çalışma Mantıkları
 
-## Kullanılma nedeni ve tasarım yaklaşımı
+### 1. `CreateWorkflow`
+```csharp
+public Workflow CreateWorkflow(string? constrainedSpecialistName = null)
+```
+- **Ne işe yarar?:** Microsoft Agents Framework üzerinden yeni bir grup sohbeti iş akışı (`Workflow`) nesnesi inşa eder.
+- **İç Mantığı:**
+  1. `AgentWorkflowBuilder.CreateGroupChatBuilderWith(...)` çağrısı başlatılır.
+  2. Her çağrıda yeni bir [CustomerSupportChatManager](CustomerSupportChatManager.md) örneği oluşturulur. Bu yöneticiye 6 ajan listesi, güvenlik eşikleri (`_guards`), logger ve varsa kısıtlanmış uzman adı (`constrainedSpecialistName`) aktarılır.
+  3. Yöneticinin `MaximumIterationCount` özelliğine `_guards.MaxIterations` (varsayılan: 15) atanır.
+  4. `.AddParticipants(...)` metoduyla 6 uzman ajan (`PlanningAgent`, `ProductAgent`, `OrderAgent`, `ComplaintAgent`, `HumanHandoffAgent`, `ResponseAgent`) grup sohbetinin katılımcıları olarak eklenir.
+  5. `.Build()` çağrılarak çalıştırılmaya hazır `Workflow` grafı döndürülür.
 
-Ajan örneklerinin (dolayısıyla tool/prompt kurulumunun) her turda yeniden yaratılması gereksiz maliyet olurdu — bu yüzden yalnızca bir kez örneklenip `readonly` property olarak tutulur. Buna karşın `CustomerSupportChatManager` (özellikle `_handoffCounts` gibi tur-içi state taşıyan alanları) her `CreateWorkflow()` çağrısında **yeniden** kurulur — aksi halde bir önceki turun handoff sayaçları bir sonraki bağımsız turu etkilerdi. Bu ayrım (ajan = süreç-ömürlü, chat manager = tur-ömürlü) sınıfın tek amacıdır.
+### 2. `WrapWithTelemetry` (Private Static)
+```csharp
+private static AIAgent WrapWithTelemetry(AIAgent agent, string sourceName)
+```
+- **Ne işe yarar?:** Verilen bir `AIAgent` nesnesini Microsoft Agents AI telemetri middleware'i ile sarar.
+- **İç Mantığı:** `agent.AsBuilder().UseOpenTelemetry(sourceName).Build()` zincirini koşturarak ajanın her çağrısında (LLM istekleri, token sayıları, gecikme süreleri) otomatik OpenTelemetry Activity span'i üretmesini sağlar.
 
-## Metotlar / Üyeler
+## Özellikler (Properties)
 
-| Üye | Açıklama |
-| --- | --- |
-| `PlanningAgent` / `ProductAgent` / `OrderAgent` / `ComplaintAgent` / `HumanHandoffAgent` / `ResponseAgent` (`AIAgent`, get-only) | Süreç ömrü boyunca sabit ajan örnekleri, OpenTelemetry ile sarmalanmış. |
-| `CreateWorkflow()` | Yeni bir `CustomerSupportChatManager` + 6 katılımcıyla taze bir `Workflow` üretir. |
-| `WrapWithTelemetry(agent, sourceName)` (private static) | `agent.AsBuilder().UseOpenTelemetry(sourceName).Build()`. |
+| Özellik | Tür | Erişim | Açıklama |
+|---|---|---|---|
+| `PlanningAgent` | `AIAgent` | `public get;` | Kullanıcı talebini analiz edip yönlendirme planı (`PlanningResult`) üreten ajan örneği. |
+| `ProductAgent` | `AIAgent` | `public get;` | Ürün arama, stok ve kategori sorgularını yürüten uzman ajan örneği. |
+| `OrderAgent` | `AIAgent` | `public get;` | Sipariş sorgulama, sepet ve HITL onaylı sipariş işlemlerini yürüten uzman ajan örneği. |
+| `ComplaintAgent` | `AIAgent` | `public get;` | Şikayet sorgulama ve HITL onaylı şikayet kayıt işlemlerini yürüten uzman ajan örneği. |
+| `HumanHandoffAgent` | `AIAgent` | `public get;` | Canlı müşteri temsilcisine eskalasyon gereksinimini değerlendiren uzman ajan örneği. |
+| `ResponseAgent` | `AIAgent` | `public get;` | Uzmanların ReAct çıktılarını müşteriye yönelik samimi bir Türkçe yanıta dönüştüren ve akışı sonlandıran ajan örneği. |
 
 ## Bağımlılıklar
 
-Constructor injection: `IChatClient chatClient`, `IPromptRepository prompts`, `ApprovalGateService approvalGate`, `ICustomerSupportToolsService tools`, `WorkflowGuardOptions guards`, `ILoggerFactory loggerFactory`.
+- `Microsoft.Agents.AI.Workflows.AgentWorkflowBuilder`
+- `Microsoft.Agents.AI.Workflows.Workflow`
+- `Microsoft.Extensions.AI.IChatClient`
+- [CustomerSupportChatManager](CustomerSupportChatManager.md)
+- [ApprovalGateService](ApprovalGateService.md)
+- [WorkflowGuardOptions](../CustomerSupportBot.Application/Ports/Outbound/WorkflowGuardOptions.md)
+- [IPromptRepository](../CustomerSupportBot.Application/Ports/Outbound/IPromptRepository.md)
+- [ICustomerSupportToolsService](../CustomerSupportBot.Application/Ports/Outbound/ICustomerSupportToolsService.md)
+- `CustomerSupportBot.Adapters.Agents.Team.*`

@@ -25,7 +25,7 @@ davranır:
 | Kategori **var** ama içi boş | Tekrar denemek anlamsız; başka kategori öner |
 
 Eskiden `GetByCategory` her iki durumda da `[]` dönüyordu ve
-[`ProductListTool`](../../CustomerSupportBot.Application/Tools/ProductToolsService.md)
+[`ProductListTool`](../../CustomerSupportBot.Application/Services/Tools/ProductToolsService.md)
 ikisini de aynı hata koduyla (`PRODUCT_NOT_FOUND`) ve aynı cümleyle raporluyordu. LLM hangi
 durumda olduğunu bilemediği için ya boşuna aynı adla tekrar deniyor ya da pes ediyordu.
 
@@ -55,5 +55,5 @@ kanonik ad (`"İçecekler"`) yan yana dönüyordu — tek payload'da iki farklı
 ## Bağlantılar
 
 - [ProductInfo.md](ProductInfo.md) — Liste elemanı
-- [../../CustomerSupportBot.Application/Tools/ProductToolsService.md](../../CustomerSupportBot.Application/Tools/ProductToolsService.md) — Tek tüketici
-- [../../CustomerSupportBot.Adapters.Persistence/PostgresAdapters.md](../../CustomerSupportBot.Adapters.Persistence/PostgresAdapters.md) — Üreten repo
+- [../../CustomerSupportBot.Application/Services/Tools/ProductToolsService.md](../../CustomerSupportBot.Application/Services/Tools/ProductToolsService.md) — Tek tüketici
+- [../../CustomerSupportBot.Adapters.Persistence/Postgres/Repositories.md](../../CustomerSupportBot.Adapters.Persistence/Postgres/Repositories.md) — Üreten repo

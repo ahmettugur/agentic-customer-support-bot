@@ -289,7 +289,7 @@ Ton tercihi: resmi; sık sorulan konu: kargo takibi
 > turda koşulsuz enjekte ediyordu. Kaldırıldı: işlevi `get_last_order`/`get_all_orders`/
 > `order_status`/`complaint_status`/`get_all_complaints` tool'larıyla tam çakışıyordu ve
 > prompt'lar zaten tool-odaklı yazılmıştı — enjekte edilen bloğa hiç referans vermiyorlardı.
-> Bkz. [ContextProviders.md](CustomerSupportBot.Application/Providers/ContextProviders.md#customercontextprovider-kaldırıldı--toollara-taşındı).
+> Bkz. [ContextProviders.md](CustomerSupportBot.Application/Services/Providers/ConversationSummaryProvider.md#customercontextprovider-kaldırıldı--toollara-taşındı).
 
 ---
 
@@ -778,7 +778,7 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
 - **User feedback (thumbs up/down)** — post-hoc HITL, RLHF datası toplamak için. Trivial eklenebilir (`POST /feedback`).
 - **Admin authentication** — şu an `/approvals/*`, `/escalations/*` ve `/chat-sessions/*` endpoint'lerinde **hiçbir auth yok**. Production için JWT/role-based auth middleware eklenmeli.
 
-**Referans dokümantasyon**: [CustomerSupportBot.Api/Endpoints-Admin.md](CustomerSupportBot.Api/Endpoints-Admin.md).
+**Referans dokümantasyon**: [CustomerSupportBot.Api/Endpoints/AdminAndHitl.md](CustomerSupportBot.Api/Endpoints/AdminAndHitl.md).
 
 ### 20.4 Admin Replan (one-shot planning override + auto bot turn)
 

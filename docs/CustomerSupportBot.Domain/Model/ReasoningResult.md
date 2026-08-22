@@ -83,4 +83,4 @@ Yok — saf veri sınıfı, tüm property'ler varsayılan değerle başlatılır
 - [ConfidenceLevel.md](ConfidenceLevel.md) — Güven seviyesi enum
 - [TurnSignals.md](TurnSignals.md) — Session state'e sinyal aktarımı
 - [VerifiedEntities.md](VerifiedEntities.md) — Entity doğrulama sonucu
-- [../../CustomerSupportBot.Application/ReasoningPipeline.md](../../CustomerSupportBot.Application/Reasoning/ReasoningService.md) — Bu modeli üreten pipeline
+- [../../CustomerSupportBot.Application/ReasoningPipeline.md](../../CustomerSupportBot.Application/Services/Reasoning/ReasoningService.md) — Bu modeli üreten pipeline

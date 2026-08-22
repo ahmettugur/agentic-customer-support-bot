@@ -1,50 +1,62 @@
 # HumanHandoffAgent
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/Team/HumanHandoffAgent.cs`
-**Erişim:** `internal sealed`
-**Taban sınıf:** [SupportAgentBase](SupportAgentBase.md)
-**Ajan adı:** `WellKnown.AgentNames.HumanHandoff`
-**Tool'ları:** `human_handoff_tool` (yan etkisiz — veri tabanına yazmaz)
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/Team/HumanHandoffAgent.cs`
+- **Tür:** `internal sealed class : SupportAgentBase`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents.Team`
 
 ## Ne işe yarar?
 
-Kullanıcı açıkça insan/canlı temsilci istediğinde devreye girer ("temsilci bağla", "bottan sıkıldım" vb.). Somut bir iş yapmaz; eskalasyon kaydı açılmasını tetikler.
+`HumanHandoffAgent`, kullanıcının açıkça bir canlı/insan müşteri temsilcisi talep ettiği durumlarda ("temsilciye bağla", "yetkili biriyle görüşmek istiyorum" vb.) devreye girerek somut bir iş yapmak yerine eskalasyon kaydı (`human_handoff_tool`) oluşturan ve kullanıcıya yönlendirme bilgilendirmesi yapan uzman ajandır.
 
-> 💡 **Analiz notu:** Çağrı merkezindeki "operatöre bağla" tuşu gibi — bot çözemediğinde veya müşteri istediğinde gerçek insan temsilciye aktarır.
+## Hangi amaçla kullanılır`?
 
-## Hangi amaçla kullanılır?
-
-`PlanningAgent`, kullanıcının açıkça insan temsilci istediğini tespit ettiğinde (`selectedAgent="HumanHandoffAgent"`) bu ajana yönlendirir — bu kural diğer specialist seçimlerine göre **öncelikli**dir (sipariş/ürün/şikayet niyeti varsa bile kullanıcı doğrudan insan istiyorsa bu ajan seçilir). Intent tespiti `PlanningAgent`'ın kendi işi değildir (bkz. [PlanningAgent.md](PlanningAgent.md)) — bu karar, reasoning hint'indeki nihai intent + doğrudan kullanıcı ifadesi (`"temsilci bağla"` vb.) üzerinden verilir.
+Canlı temsilci taleplerini resmi eskalasyon sürecine dönüştürmek, eskalasyon gerekçesini (`escalationReason`) belirlemek ve çıktıyı [SpecialistReasoningSchema](SpecialistReasoningSchema.md) ile yapılandırarak `ResponseAgent`'a aktarmak için kullanılır.
 
 ## Sorumlulukları
 
-- `human_handoff_tool`'u çağırmak (`reason` parametresini kullanıcı mesajından çıkarır — zorunlu param eksikliği olmaz, `canProceed` her zaman `true`).
-- `postToolReflection.status="needs_escalation"` üretmek — **zorunlu**, çünkü `EscalationPolicyService.ProcessPendingEscalations` yalnızca bu status'e bakarak eskalasyon açar.
+- **Üstlendiği:**
+  - `agents/human-handoff-agent` sistem prompt'unu ve `HumanHandoffTool` fonksiyonunu bağlamak.
+  - [SpecialistReasoningSchema](SpecialistReasoningSchema.md) ile ReAct çıktısı üretmek.
+  - Breakpoint noktalarında (`OnBeforeRun`, `OnAfterRun`) eskalasyon araç çağrılarını izlemek.
 
-**Üstlenmediği işler:** Eskalasyon kaydının gerçekten oluşturulması (`EscalationPolicyService`); LLM bu status'ü yanlış/eksik üretirse `WorkflowRunner.EnsureHumanHandoffEscalation` bunu **kod seviyesinde** düzeltir (bkz. [../WorkflowRunner.md](../WorkflowRunner.md)) — bu, ajanın kendisi değil, güvenlik ağı.
+## Constructor ve Başlatma Mantığı
 
-## Diğer katman ve bileşenlerle ilişkileri
+```csharp
+public HumanHandoffAgent(IChatClient chatClient, IPromptRepository prompts)
+    : base(BuildInner(chatClient, prompts))
+```
 
-**Bağımlılıkları:** `IChatClient`, `IPromptRepository`, `CustomerSupportToolsService.HumanHandoffTool` (statik metot, `Application.Services.Tools` namespace'inden).
+### Constructor İçerisinde Yapılan İşler:
+- `BuildInner` statik metodunu çağırarak `HumanHandoffTool` fonksiyonuna sahip `ChatClientAgent` nesnesini yapılandırır ve `SupportAgentBase` temel sınıfına aktarır.
 
-**Prompt dosyası:** `CustomerSupportBot.Api/Prompts/agents/human-handoff-agent.md`.
+## Metotlar ve İç Çalışma Mantıkları
 
-**Kimler tüketir:** `ReflectionRoutingStrategy`, `WorkflowRunner.EnsureHumanHandoffEscalation` (`WorkflowResponseExtractor.ContainsHumanHandoffToolCall` ile tool çağrısının kendisini deterministik sinyal olarak kullanır), `EscalationPolicyService`.
+### 1. `BuildInner` (Private Static)
+```csharp
+private static ChatClientAgent BuildInner(IChatClient chatClient, IPromptRepository prompts)
+```
+- **Ne işe yarar?:** Eskalasyon ajanının MAF `ChatClientAgent` örneğini yapılandırır.
+- **İç Mantığı:**
+  1. `Name`: `WellKnown.AgentNames.HumanHandoff` ("HumanHandoffAgent") atanır.
+  2. `Instructions`: `prompts.Get("agents/human-handoff-agent")` ile yüklenir.
+  3. `Tools`: `CustomerSupportToolsService.HumanHandoffTool` bağlanır.
+  4. `ResponseFormat`: `SpecialistReasoningSchema` camelCase JSON şeması atanır.
 
-## Kullanılma nedeni ve tasarım yaklaşımı
+### 2. `OnBeforeRun` (Protected Override)
+```csharp
+protected override void OnBeforeRun(IReadOnlyList<ChatMessage> messages)
+```
+- **Ne işe yarar?:** LLM'e gidecek mesajları yakalar (Breakpoint noktası).
 
-**Structured output:** Diğer specialist'lerle aynı desen (bkz. [SpecialistReasoningSchema.md](SpecialistReasoningSchema.md)). Ama bu ajan için özellikle önemli: `status=needs_escalation` alanının **doğru format**ta üretilmesi (JSON şeması geçerliliği) garanti edilse bile, **doğru değer** taşıması garanti edilmez — bu yüzden `WorkflowRunner.EnsureHumanHandoffEscalation`'daki kod-seviyesi garanti hâlâ gereklidir (structured output format garantisi verir, değer doğruluğu garantisi vermez).
-
-**Neden garanti tek yönlü:** `human_handoff_tool` çağrıldıysa (deterministik `FunctionCallContent` sinyali) LLM'in reflection'ı ne derse desin eskalasyon açılır — kaçırılan eskalasyonun maliyeti fazladan eskalasyondan yüksek görüldüğü ve admin panelinde dismiss yolu bulunduğu için.
-
-## Metotlar / Üyeler
-
-| Üye | Açıklama |
-| --- | --- |
-| `BuildInner(chatClient, prompts)` (private static) | `ChatClientAgent` kurar: tek tool + `ResponseFormat` = `SpecialistReasoningSchema`. |
-| `OnBeforeRun(messages)` | Breakpoint — LLM'e gönderilen tam mesaj listesi. |
-| `OnAfterRun(response)` | Breakpoint — `toolCalls` (`human_handoff_tool` hangi gerekçeyle çağrıldı), `response.Text`. |
+### 3. `OnAfterRun` (Protected Override)
+```csharp
+protected override void OnAfterRun(AgentResponse response)
+```
+- **Ne işe yarar?:** Çağrılan eskalasyon araçlarını (`ToolCalls`) ve üretilen yönlendirme metnini inceler (Breakpoint noktası).
 
 ## Bağımlılıklar
 
-Constructor injection: `IChatClient chatClient`, `IPromptRepository prompts`.
+- [SupportAgentBase](SupportAgentBase.md)
+- [SpecialistReasoningSchema](SpecialistReasoningSchema.md)
+- `CustomerSupportBot.Application.Services.Tools.CustomerSupportToolsService`
+- `CustomerSupportBot.Application.Ports.Outbound.IPromptRepository`

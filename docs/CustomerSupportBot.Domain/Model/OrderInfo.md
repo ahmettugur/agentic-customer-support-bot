@@ -67,7 +67,7 @@ Makine tarafından okunması gereken taraf (ör. `ResponseAgent`) bu özeti değ
 ## Bağlantılar
 
 - [ToolResult.md](ToolResult.md) — Bu model `Data` alanında taşınır
-- [../../CustomerSupportBot.Application/Tools/OrderToolsService.md](../../CustomerSupportBot.Application/Tools/OrderToolsService.md) — Siparişi oluşturan tool
-- [../../CustomerSupportBot.Adapters.Persistence/PostgresAdapters.md](../../CustomerSupportBot.Adapters.Persistence/PostgresAdapters.md) — `OrderRepository` ve `order_details` eşlemesi
+- [../../CustomerSupportBot.Application/Services/Tools/OrderToolsService.md](../../CustomerSupportBot.Application/Services/Tools/OrderToolsService.md) — Siparişi oluşturan tool
+- [../../CustomerSupportBot.Adapters.Persistence/Postgres/Repositories.md](../../CustomerSupportBot.Adapters.Persistence/Postgres/Repositories.md) — `OrderRepository` ve `order_details` eşlemesi
 - [ComplaintInfo.md](ComplaintInfo.md) — Şikayet modeli
 - [ProductInfo.md](ProductInfo.md) — Ürün modeli

@@ -2,7 +2,7 @@
 
 Bu doküman botun **"akıl yürütme"** stratejisini anlatır: hangi reasoning pattern'leri kullanıldı, niçin seçildi, kod içinde nerede yaşıyor.
 
-> Implementasyon detayları için: [`CustomerSupportBot.Domain/Model/ReasoningResult.md`](CustomerSupportBot.Domain/Model/ReasoningResult.md), [`CustomerSupportBot.Application/Reasoning/ReasoningService.md`](CustomerSupportBot.Application/Reasoning/ReasoningService.md), [`CustomerSupportBot.Adapters.Agents/README.md`](CustomerSupportBot.Adapters.Agents/README.md).
+> Implementasyon detayları için: [`CustomerSupportBot.Domain/Model/ReasoningResult.md`](CustomerSupportBot.Domain/Model/ReasoningResult.md), [`CustomerSupportBot.Application/Services/Reasoning/ReasoningService.md`](CustomerSupportBot.Application/Services/Reasoning/ReasoningService.md), [`CustomerSupportBot.Adapters.Agents/README.md`](CustomerSupportBot.Adapters.Agents/README.md).
 
 ---
 
@@ -403,7 +403,7 @@ Sonra `ReplanService.ExecuteAsync` tetiklenir:
 4. ReplanNote LLM prompt'una **bağlam** olarak girer
 5. Yeni yanıt üretilir, `ForceReplanNextTurn = false` yapılır
 
-📁 Kod: [`CustomerSupportBot.Application/Reasoning/ReplanService.md`](CustomerSupportBot.Application/Reasoning/ReplanService.md), [`CustomerSupportBot.Domain/Model/SessionState.md`](CustomerSupportBot.Domain/Model/SessionState.md) (`ReplanControl`)
+📁 Kod: [`CustomerSupportBot.Application/Services/Reasoning/ReplanService.md`](CustomerSupportBot.Application/Services/Reasoning/ReplanService.md), [`CustomerSupportBot.Domain/Model/SessionState.md`](CustomerSupportBot.Domain/Model/SessionState.md) (`ReplanControl`)
 
 ---
 
@@ -432,7 +432,7 @@ Sonra `ReplanService.ExecuteAsync` tetiklenir:
 
 `ReasoningChatClient.ReasoningEffort` startup'ta belirlenir; ileride **dynamic** olarak senaryo karmaşıklığına göre değişebilir (örn. SubTasks ≥ 2 ise `high`).
 
-📁 Kod: [`CustomerSupportBot.Adapters.AI/ChatClients.md`](CustomerSupportBot.Adapters.AI/ChatClients.md) (`ReasoningChatClient`)
+📁 Kod: [`CustomerSupportBot.Adapters.AI/Chat/GeneralChatClientAdapter.md`](CustomerSupportBot.Adapters.AI/Chat/GeneralChatClientAdapter.md) (`ReasoningChatClient`)
 
 ---
 
@@ -468,7 +468,7 @@ Markdown dosyaları `FileSystemPromptRepository` startup'ta cache'ler. Prompt de
 2. Uygulamayı restart et (60s)
 3. Yeni davranış canlı — kod değişikliği yok
 
-📁 Kod: [`CustomerSupportBot.Adapters.Persistence/FileSystemAdapters.md`](CustomerSupportBot.Adapters.Persistence/FileSystemAdapters.md), `Prompts/README.md`
+📁 Kod: [`CustomerSupportBot.Adapters.Persistence/FileSystem/FileSystemPromptRepository.md`](CustomerSupportBot.Adapters.Persistence/FileSystem/FileSystemPromptRepository.md), `Prompts/README.md`
 
 ---
 
@@ -757,8 +757,8 @@ Tek konuşma turn'ü < yarım sentin altında. Bu deterministic preprocessing + 
   - [`CustomerSupportBot.Domain/Services/ReasoningResultParser.md`](CustomerSupportBot.Domain/Services/ReasoningResultParser.md) — LLM JSON parse mantığı
   - [`CustomerSupportBot.Domain/Services/IdExtractor.md`](CustomerSupportBot.Domain/Services/IdExtractor.md) — Regex ID çıkarımı
   - [`CustomerSupportBot.Domain/Services/SessionStateExtractor.md`](CustomerSupportBot.Domain/Services/SessionStateExtractor.md) — Deterministic state
-  - [`CustomerSupportBot.Application/README.md`](CustomerSupportBot.Application/README.md), [`CustomerSupportBot.Application/Reasoning/ReplanService.md`](CustomerSupportBot.Application/Reasoning/ReplanService.md)
-  - [`CustomerSupportBot.Adapters.AI/ChatClients.md`](CustomerSupportBot.Adapters.AI/ChatClients.md) — ReasoningChatClient
+  - [`CustomerSupportBot.Application/README.md`](CustomerSupportBot.Application/README.md), [`CustomerSupportBot.Application/Services/Reasoning/ReplanService.md`](CustomerSupportBot.Application/Services/Reasoning/ReplanService.md)
+  - [`CustomerSupportBot.Adapters.AI/Chat/GeneralChatClientAdapter.md`](CustomerSupportBot.Adapters.AI/Chat/GeneralChatClientAdapter.md) — ReasoningChatClient
 - **Patterns daha geniş:**
   - [`agentic-patterns.md`](agentic-patterns.md) — Genel agentic design pattern reference
   - [`intelligence.md`](intelligence.md) — Semantic memory + self-improvement döngüsü

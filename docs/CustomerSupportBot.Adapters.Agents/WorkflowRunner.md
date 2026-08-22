@@ -1,109 +1,105 @@
 # WorkflowRunner
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/WorkflowRunner.cs`
-**Erişim:** `internal sealed`
-**Yaşam döngüsü:** Singleton (DI'da `CustomerSupportTeam` içinde `new` ile kurulur, ayrıca kayıtlı değil)
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/WorkflowRunner.cs`
+- **Tür:** `internal sealed class : IWorkflowRunner`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents`
 
 ## Ne işe yarar?
 
-Tek bir (decompose edilmemiş) kullanıcı sorgusu için MAF `GroupChat` workflow'unu uçtan uca çalıştırır: mesaj hazırlığı → workflow execution → HITL onay köprüsü → trace toplama → sonuç temizleme → stream event üretimi. Katmanın **gerçek orkestratörü** budur — `CustomerSupportTeam` (bkz. [CustomerSupportTeam.md](CustomerSupportTeam.md)) yalnızca compound/single query ayrımını yapıp bu sınıfa veya `DecomposedRunner`'a yönlendiren ince bir kabuktur.
+`WorkflowRunner`, tekil bir kullanıcı sorgusunu veya [DecomposedRunner](DecomposedRunner.md) tarafından ayrıştırılmış tek bir alt görevi Microsoft Agents Framework (MAF) iş akışı (`AgentGroupWorkflow`) üzerinde koşturan, olay döngüsünü (event loop) yürüten ve anlık token/olay akışını (`StreamEvent`) yöneten temel yürütme motorudur.
 
-> 💡 **Analiz notu:** Bir yarış pistinin kontrol merkezi gibi — start (mesaj hazırlığı), tur geçişleri (agent handoff), pit stop (HITL onay), finiş (yanıt temizleme) ve telemetri (trace) hepsini yönetir.
+## Hangi amaçla kullanılır`?
 
-## Hangi amaçla kullanılır?
-
-`IAgentTeamPort.RunAsync`/`RunStreamingAsync` çağrıldığında (tek sorgu senaryosu) veya `DecomposedRunner` her bir alt-görevi çalıştırırken (compound query senaryosu — bkz. [DecomposedRunner.md](DecomposedRunner.md)) devreye girer. `CustomerSupportBot.Adapters.Agents/Evaluation/EvaluationRunner.cs` de `IAgentTeamPort` üzerinden dolaylı olarak bunu kullanır.
+Workflow mesajlarını [WorkflowMessageBuilder](WorkflowMessageBuilder.md) ile oluşturmak, [AgentTeamFactory](AgentTeamFactory.md) üzerinden taze bir iş akışı başlatmak, `WorkflowTraceEventProcessor` ile adımları izlemek, anormal sonlanma veya zaman aşımı durumlarını yönetmek ve tur sonunda [TurnFinalizer](TurnFinalizer.md) ile yan etkileri tetiklemek için kullanılır.
 
 ## Sorumlulukları
 
-- Workflow'a gidecek mesaj listesini kurmak (`BuildWorkflowMessagesAsync`): bağlam, reasoning özeti, ID hint'leri, konuşma geçmişi, replan notu, kullanıcı sorgusu — bu sırayla.
-- `AgentTeamFactory.CreateWorkflow()` ile taze bir `Workflow` alıp `InProcessExecution.RunStreamingAsync` ile başlatmak, timeout + dış `CancellationToken`'ı `CreateLinkedTokenSource` ile birleştirmek.
-- Workflow event akışını (`RequestInfoEvent`, `WorkflowErrorEvent`, `ExecutorInvokedEvent`, `ExecutorCompletedEvent`, `AgentResponseUpdateEvent`, `WorkflowOutputEvent`) yorumlayıp hem trace'e hem (streaming yolda) `StreamEvent`'lere çevirmek (`ApplyTraceEvent`).
-- HITL onay köprüsü: `RequestInfoEvent` içindeki `ToolApprovalRequestContent`'i yakalayıp `ApprovalGateService.RequestApprovalAsync`'i çağırmak, kararı `run.SendResponseAsync` ile workflow'a geri vermek (`HandleRequestInfoEventAsync`).
-- `human_handoff_tool` çağrıldığında eskalasyonun kod seviyesinde garanti edilmesi (`EnsureHumanHandoffEscalation`) — LLM'in `postToolReflection.status`'ü yanlış/eksik üretmesine karşı tek yönlü bir düzeltme.
-- HITL onaylı yan-etkili tool'lardan biri (`order_placement_tool`/`order_cancel_tool`/`return_request_tool`/`complaint_registration_tool`) BAŞARIYLA tamamlandığında görev durumunun kod seviyesinde `done`'a sabitlenmesi (`EnsureSideEffectToolCompletion`) — `EnsureHumanHandoffEscalation` ile aynı desenin ters yönde uygulanışı, yalnızca başarı yönünde çalışır.
-- Timeout/iptal/hata durumlarında kooperatif durdurma (`StopRunGracefullyAsync`) ve trace'in doğru `terminationReason`'la kapanmasını sağlamak.
-- Sonuç metnini temizlemek (`WorkflowResponseExtractor.RemoveTerminationMarkers`/`RemoveTechnicalJsonBlocks`) ve gerekiyorsa agent-routing sızıntısını LLM ile yeniden yazmak (`RewriteRoutingMessageAsync`).
-- Turun bitişini `TurnFinalizer.FinalizeAsync`'e devretmek (eskalasyon işleme, agent visit çıktıları, episodik bellek, müşteri profili, trace kapatma — bkz. [TurnFinalizer.md](TurnFinalizer.md)).
+- **Üstlendiği:**
+  - `IWorkflowRunner` arayüzünü uygulamak.
+  - `RunAsync` ile tam metin yanıtı üretmek.
+  - `RunStreamingAsync` ile token ve ara olay akışını (`StreamEvent`) yayımlamak.
+  - Zaman aşımı (`TimeoutSeconds`) ve iptal mekanizmalarını (`CancellationTokenSource`) yönetmek.
+  - MAF olay döngüsünü (`InProcessExecution.RunStreamingAsync`) tüketmek ve `RequestInfoEvent` gibi süperadım duraklamalarını karşılamak.
+  - MAF iş akışı diyagramını (`ToMermaidString()`) üretmek.
+- **Üstlenmediği:**
+  - RAG bağlamı ve prompt hazırlamak (bu [WorkflowMessageBuilder](WorkflowMessageBuilder.md) sınıfındadır).
+  - Olayların trace nesnesine çevrilmesi (bu [WorkflowTraceEventProcessor](WorkflowTraceEventProcessor.md) sınıfındadır).
+  - Tur sonu veri tabanı güncellemeleri (bu [TurnFinalizer](TurnFinalizer.md) sınıfındadır).
 
-**Üstlenmediği işler:** Ajan/tool tanımları (`AgentTeamFactory`/`Team/*`), routing kararı (`CustomerSupportChatManager`/`Routing/Routing.cs`), compound query bölme (`DecomposedRunner`), onay kuyruğunun kendisi (`ApprovalGateService`/`IApprovalQueue`).
+## Constructor ve Başlatma Mantığı
 
-## Diğer katman ve bileşenlerle ilişkileri
+```csharp
+public WorkflowRunner(
+    AgentTeamFactory factory,
+    TurnFinalizer finalizer,
+    WorkflowGuardOptions guards,
+    IReasoningTraceStore traceStore,
+    ApprovalGateService approvalGate,
+    IUiHintEmitter uiHint,
+    ILoggerFactory loggerFactory,
+    WorkflowTraceEventProcessor traceProcessor,
+    WorkflowMessageBuilder messageBuilder)
+```
 
-**Bağımlılıkları (constructor injection):** `AgentTeamFactory`, `TurnFinalizer`, `IContextPipeline`, `IChatClient`, `WorkflowGuardOptions`, `IReasoningTraceStore`, `IPromptRepository`, `ApprovalGateService`, `IUiHintEmitter`, `IApprovalContextAccessor`, `ILoggerFactory` — tamamı `CustomerSupportTeam` constructor'ında kurulur ve buraya geçirilir.
+### Constructor İçerisinde Yapılan İşler:
+- Fabrika (`_factory`), sonlandırıcı (`_finalizer`), güvenlik kuralları (`_guards`), izleme ambarı (`_traceStore`), onay kapısı (`_approvalGate`), UI ipucu yayıcı (`_uiHint`), log fabrikası (`_loggerFactory`), trace işlemci (`_traceProcessor`) ve mesaj derleyici (`_messageBuilder`) bağımlılıkları özel alanlara atanır.
 
-**Kimler çağırır:** `CustomerSupportTeam.RunAsync`/`RunStreamingAsync` (tek sorgu), `DecomposedRunner` (her alt-görev için).
+## Metotlar ve İç Çalışma Mantıkları
 
-**Ne kullanır:** `Microsoft.Agents.AI.Workflows` (`InProcessExecution`, `StreamingRun`, `TurnToken`, `RequestInfoEvent`), `WorkflowResponseExtractor` (sonuç/planning/reasoning çıkarımı — bkz. [WorkflowResponseExtractor.md](WorkflowResponseExtractor.md)), `ExceptionTranslator` (framework hatalarını domain exception'a çevirme), `IdExtractor` (Domain — sorgudan ID çıkarımı).
+### 1. `RunAsync`
+```csharp
+public async Task<string> RunAsync(
+    string query,
+    List<ConversationMessage>? conversationHistory,
+    AgentSession? session,
+    ReasoningResult? reasoning,
+    CancellationToken ct)
+```
+- **Ne işe yarar?:** Tekil bir sorguyu MAF iş akışında koşturur ve nihai yanıt metnini döndürür.
+- **İç Mantığı:**
+  1. `_guards.TimeoutSeconds` süresiyle zaman aşımı `CancellationTokenSource`'u oluşturulur ve `ct` ile bağlanır (`effectiveCt`).
+  2. `_messageBuilder.BuildWorkflowMessagesAsync` çağrılarak sistem, kullanıcı, ID ipucu ve reasoning mesajları derlenir.
+  3. `_traceProcessor.StartTraceState` ile yeni bir `TraceState` başlatılır; tahmini token sayısı ve bağlam parçaları trace'e yazılır.
+  4. `_factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent)` ile taze iş akışı oluşturulur.
+  5. `InProcessExecution.RunStreamingAsync` başlatılır ve ilk tur tetikleme belirteci (`TurnToken(emitEvents: true)`) gönderilir.
+  6. `EnumerateWorkflowEventsSafely` döngüsü ile workflow olayları dinlenir; `RequestInfoEvent` veya `WorkflowErrorEvent` durumları yönetilir, her olay `_traceProcessor.ApplyTraceEvent` ile işlenir.
+  7. Döngü bittiğinde `FinalizeAbnormalTerminationAsync` ile anormal sonlanma (Timeout, Cancelled, Error) denetlenir.
+  8. `BuildFinalResultAsync` çağrılarak sonuç metni oluşturulur ve `_finalizer.FinalizeTurnAsync` ile tur kapatılır.
 
-## Kullanılma nedeni ve tasarım yaklaşımı
+### 2. `RunStreamingAsync`
+```csharp
+public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(
+    string query,
+    List<ConversationMessage>? conversationHistory,
+    AgentSession? session,
+    ReasoningResult? reasoning,
+    [EnumeratorCancellation] CancellationToken ct)
+```
+- **Ne işe yarar?:** İş akışını çalıştırırken ara düşünceleri, araç çağrılarını ve LLM token'larını `StreamEvent` olarak anlık iletir.
+- **İç Mantığı:**
+  1. Mesajlar hazırlanır ve `TraceState` başlatılır.
+  2. MAF olay döngüsü başlatılır; gelen her `ExecutorInvokedEvent`, `ExecutorCompletedEvent` ve `AgentResponseUpdate` olayı `_traceProcessor` üzerinden SSE formatında yield edilir.
+  3. ResponseAgent'ın canlı token akışı `ResponseStreamFilter` ile filtrelenerek `ResponseDelta` olarak yayınlanır.
+  4. Akış tamamlandığında `response_complete` olayı ile nihai metin ve trace ID istemciye sunulur.
 
-Workflow her turda taze kurulup atılır (`CreateWorkflow()` + `await using`); MAF'ın checkpoint/durable execution katmanı **bilinçli olarak kapalıdır** ve kalıcılık Postgres'te tutulur. Fiilen kullanılan yetenekler superstep zamanlayıcı, olay akışı ve GroupChat çok-ajan koordinasyonudur. Bunun bedeli iki maddedir: "konuşma restart'tan kaldığı yerden devam etsin" senaryosu bugün mümkün değildir, ve her turda tüm geçmiş yeniden beslenir.
+### 3. `GetWorkflowDiagram`
+```csharp
+public string GetWorkflowDiagram()
+```
+- **Ne işe yarar?:** `_factory.CreateWorkflow().ToMermaidString()` çağrısıyla iş akışının Mermaid diyagramını üretir.
 
-Bu sınıfın bağlı olduğu iki belgesiz MAF davranışı (`TurnToken` ile gerçek-tur/broadcast ayrımı ve `AuthorName` öneki ile specialist tespiti) `CustomerSupportBot.Api.Tests/Spikes/FrameworkAssumptionTests.cs` ile çivilenmiştir — framework yükseltmesinde sessiz bozulma yerine kırmızı test verir.
+### 4. `EnumerateWorkflowEventsSafely` (Private)
+- **Ne işe yarar?:** MAF olay akışını dinlerken fırlatılabilecek bağlantı veya zaman aşımı istisnalarını güvenli şekilde yakalar ve döngüyü kontrollü şekilde sonlandırır.
 
-Tek Sorumluluk ilkesi gereği eskiden `CustomerSupportTeam` içinde toplu duran orkestrasyon mantığı buraya, `AgentTeamFactory`'ye (ajan/workflow kurulumu) ve `TurnFinalizer`'a (tur-sonu yan etkileri) bölündü — `CustomerSupportTeam` artık yalnızca compound/single ayrımı yapan bir kompozisyon kökü. `RunAsync` (non-streaming) ve `RunStreamingAsync` neredeyse birebir aynı adımları izler; ortak trace toplama mantığı (`TraceState`, `StartTraceState`, `ApplyTraceEvent`, `FinalizeTraceAsync`'e devir) tek yerde tanımlanarak iki yol arasındaki tutarsızlık riski ortadan kaldırıldı — streaming yol yalnızca `yield` sorumluluğunu üstüne ekler.
-
-HITL onay köprüsü (`HandleRequestInfoEventAsync`) framework'ün native `RequestInfoEvent`/`ApprovalRequiredAIFunction` mekanizmasını kullanır: bir tool `ApprovalRequiredAIFunction` ile sarılırsa workflow superstep'i gerçekten duraklar ve event burada yakalanıp aynı `IApprovalQueue`/SSE/SLA altyapısına bağlanır.
-
-> ⚠️ **Bu yol bugün ULAŞILAMAZ — bilerek korunuyor.** Onay gerektiren dört tool (sipariş verme/iptal, iade, şikayet) `ApprovalGateService` üzerinden **bloklamayan** modele geçti: tool anında `ToolResult.Pending` döner, superstep durmaz, karar geldiğinde iş `IApprovalExecutionRouter` ile ayrıca yürütülür. Kuyruk tabanlı onayın tercih sebebi, web isteğinin ömründen bağımsız olması ve checkpoint'e ihtiyaç duymaması.
->
-> **Ulaşılamazlık doğrulandı:** repo genelinde production kodunda `ApprovalRequiredAIFunction` ile sarma **yok** — tüm tool'lar düz `AIFunctionFactory.Create` ile kuruluyor. Tek gerçek örnekleme bir testte: `HitlRejectionFormatTests`.
->
-> **Neden silinmiyor:** (1) canlı tutmanın topolojik maliyeti **sıfır** — MAF 1.17.0 ile ölçüldü: bir ajana `ApprovalRequiredAIFunction` eklemek workflow graf'ına düğüm veya port EKLEMİYOR (`ReflectEdges`/`ReflectPorts` çıktısı değişmiyor). (2) Silinirse ve ileride biri bir tool'u o modelde sararsa, üretilen `RequestInfoEvent` işlenmeden kalır; superstep yanıt bekler ve o tur timeout'a kadar **asılı kalır**. Yani bu ölü kod değil, açık bırakılmış bir emniyet valfi.
->
-> **Yeniden devreye almak için** tek gereken ilgili tool'u `ApprovalGateService`'te `ApprovalRequiredAIFunction` ile sarmak; buradaki kod değişmeden çalışır. Ama önce terk edilme sebebine bakın: admin kararını turun içinde beklemek, onaylar birikince `TimeoutSeconds` içinde yetişilememesine ve isteklerin sessizce otomatik red'e düşmesine yol açıyordu.
-
-`EnsureHumanHandoffEscalation`'ın "tek yönlü garanti" tasarımı bilinçli bir takas: kaçırılan eskalasyonun maliyeti fazladan eskalasyondan yüksek görüldüğü için, `human_handoff_tool` çağrıldıysa LLM'in reflection'ı ne derse desin eskalasyon kaydı açılır (admin panelinde dismiss yolu var, tersi mümkün değil).
-
-Aynı desen `EnsureSideEffectToolCompletion` ile `WellKnown.HighRiskTools`'taki dört HITL-onaylı yan-etkili tool'a da (ters yönde) uygulanır — `order_placement_tool`/`order_cancel_tool`/`return_request_tool` (OrderAgent) ve `complaint_registration_tool` (ComplaintAgent): tool'un `ToolResult.Success=true` dönmesi deterministik bir sinyaldir, LLM'in reflection'ı bunu yanlışlıkla `needs_followup`/`failed` işaretlerse müşteri "işlem yapılamadı" gibi yanlış-negatif bir yanıt alabilirdi. Asimetri bilinçli: yalnızca BAŞARI yönünde düzeltilir — tool başarısız olduysa hiç dokunulmaz, çünkü tersi (başarısızlığı "done" yapmak) müşteriye gerçekleşmemiş bir işlemi onaylamak gibi çok daha riskli bir hata olurdu. `FunctionResultContent.Result`, çağrı yoluna göre ham `ToolResult` nesnesi veya `JsonElement` olabildiği için `TryGetToolResultSuccess` ikisini de normalize eder. Metod başlangıçta yalnızca `order_cancel_tool`'a eklenmişti, kullanıcı onayıyla diğer üç HITL-onaylı tool'a genelleştirildi.
-
-`RunAsync`/`RunStreamingAsync`'in anormal sonlanma (timeout/iptal/hata) mantığı `FinalizeAbnormalTerminationAsync`'te tek yerde toplanır — bu iki yolun neredeyse birebir kopya olan bu bloğu ayrı ayrı sürdürmesi zamanla sessizce sapmıştı: non-streaming iptal dalı `ProcessPendingEscalations`'ı hiç çağırmıyordu, streaming dalı (timeout/hata ile birlikte) çağırıyordu. Çoğunluk davranışı (üç yoldan üçü de eskalasyonu işliyordu) tek doğru davranış kabul edilip non-streaming iptal buna hizalandı — gerçek bir üretim tutarsızlığıydı, hiçbir test bunu yakalamamıştı.
-
-Aynı hikâyenin ikinci yarısı **koşu sonrası** blokta yaşandı ve `BuildFinalResultAsync` ile kapatıldı. `terminationReason` → `SelfCritique` → marker/JSON temizliği → routing rewrite → `FinalizeAsync` zinciri de iki yolda birebir kopyaydı ve o da sessizce sapmıştı: routing yeniden yazımına **non-streaming dalı `ct`'yi (çağıranın token'ı), streaming dalı `effectiveCt`'yi (timeout'a bağlı token) veriyordu.** Sonuç, 60sn'lik bütçenin 55'i workflow'da geçtiğinde rewrite'ın streaming'de 5 saniyeye sıkışması, non-streaming'de sınırsız sürebilmesiydi. Tek çağrı noktasına indirilerek fark yapısal olarak imkânsız hale getirildi.
-
-Bu birleştirme bir yan etki doğurdu ve bilinçli olarak ele alındı: token'lar ortaklaşınca timeout artık rewrite'ı da kesebiliyor, ki bu streaming iterator'ından dışarı sızan bir iptal istisnası üretirdi. Rewrite **kozmetik** olduğu için (elde zaten geçerli bir yanıt var; bu adım yalnızca "X ajanına yönlendiriyorum" tarzı iç mesajı kullanıcı diline çeviriyor) iptal yakalanıp ham metinle devam ediliyor — yanıtın tamamını kaybetmektense yeniden yazılmamış hâlini vermek doğru takas.
-
-> ⚠️ Bu iki blok da (`FinalizeAbnormalTerminationAsync`, `BuildFinalResultAsync`) aynı dersin ürünü: `RunAsync` ve `RunStreamingAsync`'in **kopyalanan her satırı zamanla sapıyor** ve hiçbir test bunu yakalamıyor. Kalan tekrar (kurulum bloğu ve olay döngüsü iskeleti) `yield` vs `throw` semantiği yüzünden birleştirilemedi; oralara dokunulurken iki tarafın da güncellendiğinden emin olun.
-
-**`ResolveExtractedIds` — canlıda gözlemlenen bug ve düzeltmesi:** Eskiden `BuildWorkflowMessagesAsync` entity hint'ini her zaman `IdExtractor.Extract(query)` ile (yalnızca güncel mesajdan, regex + Türkçe bağlam kelimesiyle) hesaplıyordu — `ReasoningService`'in aynı turda zaten `EntityVerifier` ile (query+geçmiş+session+DB birleştirerek) hesapladığı daha doğru sonuçtan (`reasoning.VerifiedEntities`) habersizdi. Sonuç: bağlam kelimesiz kısa takip mesajlarında ("sipariş numaram 1042" → "peki 1043") `IdExtractor` sayıyı `customer_id` sanıp yanlış tool'u (`get_last_order_tool`) öneriyor, DB'de gerçekten var olan siparişi "bulunamadı" olarak yanıtlıyordu. Aynı sınıftan ikinci bir örnek `SubTaskOrchestrator.CreateSubTaskReasoning`'de de vardı (compound query alt-görevleri için) — ikisi de düzeltildi, tek doğruluk kaynağı artık `EntityVerifier`'ın ürettiği `VerifiedEntities`.
-
-## Metotlar / Üyeler
-
-| Üye | Açıklama |
-| --- | --- |
-| `GetWorkflowDiagram()` | `_factory.CreateWorkflow().ToMermaidString()` — admin panelindeki workflow diyagramı endpoint'i için. |
-| `RunAsync(query, conversationHistory, session, reasoning, ct)` | Non-streaming tek sorgu koşusu; nihai temizlenmiş metni döner. |
-| `RunStreamingAsync(query, conversationHistory, session, reasoning, ct)` | Streaming tek sorgu koşusu; `StreamEvent` akışı üretir (`Agent`, `UiHint`, `ResponseStart`, `ResponseDelta`, `ResponseComplete`, `Error`). |
-| `TraceState` (private) | Tek koşunun trace durumu: `Trace`, `ActiveVisits`, `LastAgentSignature`, `IterationCount`, `Result`, `ResponseStreamStarted`, `ResponseFilter`. |
-| `ResponseStreamFilter` (private) | ResponseAgent'ın ham token akışından `"TERMINATE"` işaretini ve sonrasını arındırır; chunk sınırı marker'ı bölerse güvenlik payı tutar. |
-| `ApplyTraceEvent(st, evt)` (private) | Bir workflow event'inin trace yan etkilerini uygular, varsa (streaming için) `StreamEvent` listesi döner. |
-| `EnsureHumanHandoffEscalation(messages, reasonings)` (private static) | `human_handoff_tool` çağrıldıysa `postToolReflection.status`'ü `needs_escalation`'a zorlar (LLM zaten doğru işaretlediyse dokunmaz). |
-| `EnsureSideEffectToolCompletion(messages, reasonings, agentName, toolNames)` (internal static) | Belirtilen tool setinden biri BAŞARIYLA çağrıldıysa ilgili ajanın `postToolReflection.status`'ünü `done`'a zorlar; başarısız/belirsiz sonuçta dokunmaz. OrderAgent ve ComplaintAgent için ayrı ayrı çağrılır; tool setleri `WellKnown.SideEffectToolsOf(...)` ile tek kaynaktan türetilir. |
-| `FinalizeAbnormalTerminationAsync(run, st, query, timeoutCts, ct, workflowError)` (private) | Timeout/iptal/hata sonrası ortak sonlanma mantığı — `RunAsync`/`RunStreamingAsync` arasındaki eski kopya kodun tek kaynağı. |
-| `ToContextUsage(context)` (private static) | `ContextResult` parçalarını `ReasoningTrace.ContextParts`'a çevirir — "model bu turda neyi biliyordu" kaydı. Düşen (hata/timeout/bütçe) parçalar da yazılır; asıl değeri orada, çünkü yanlış yanıtların sebebi çoğu zaman **eksik** bağlamdır. |
-| `BuildFinalResultAsync(st, session, query, turnCt)` (private) | **Normal** sonlanma sonrası ortak blok: `terminationReason` çözümü, `SelfCritique` ayrıştırması, marker/teknik-JSON temizliği, routing rewrite (iptal edilirse ham metinle devam) ve `TurnFinalizer.FinalizeAsync`. `(Result, TerminationReason)` döner. Yukarıdakiyle simetrik — iki koşu yolunun ikinci kopya bloğunu tek kaynağa indirir. |
-| `HandleRequestInfoEventAsync(run, requestInfo, st, ct)` (private) | HITL onay köprüsü — `ToolApprovalRequestContent`'i `ApprovalGateService.RequestApprovalAsync`'e, kararı `run.SendResponseAsync`'e bağlar. `st` trace durumu, onay kaydına gerçek gerekçe koyabilmek için geçilir. |
-| `ResolveApprovalJustification(st)` (private static) | Admin'e gösterilecek "bu tool neden çağrılıyor" gerekçesini seçer: PlanningAgent rationale → ReasoningService rationale → boş (servis jenerik şablona düşer). `preToolCheck.reasoning` **kullanılamaz** — o alan uzmanın final JSON'ının parçasıdır, onay anında henüz üretilmemiştir. |
-| `BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning)` (private) | Workflow'a gidecek `ChatMessage` listesini kurar (bağlam → reasoning hint → entity hint → geçmiş → replan notu → sorgu). |
-| `ResolveExtractedIds(query, reasoning)` (internal static) | Entity hint'i için ID kaynağını çözer — `reasoning.VerifiedEntities` mevcutsa (ReasoningService'in query+geçmiş+session+DB'yi birleştirdiği sonuç) onu kullanır, yoksa `IdExtractor.Extract(query)` (yalnızca güncel mesaj, bağlamsız) fallback'ine düşer. Bkz. tasarım notu — bu ayrım gerçek bir üretim bug'ını (bağlam kelimesiz takip mesajlarında yanlış tool seçimi) düzeltmek için eklendi. |
-| `RewriteRoutingMessageAsync(routingMessage, originalQuery, ct)` (private) | Yanıt metninde ajan adı sızıntısı varsa LLM ile (`routing-rewrite-*` promptları) yeniden yazar; hata olursa sabit fallback mesajı döner. |
-| `StopRunGracefullyAsync(run)` (private) | Timeout/iptal anında `run.CancelRunAsync()` ile koşuyu durdurur (best-effort). Sonraki ajan turunu engellemenin yanında **devam eden LLM çağrısına da iptali yayar** — bkz. aşağıdaki ölçüm notu. |
-
-> 🐞 **Düzeltildi — "framework devam eden LLM çağrısını kesemez" iddiası artık yanlış.**
-> Kodda bu metodun yorumu MAF 1.15.0'a atıfla "`CancelRunAsync` hâlihazırda devam eden bir LLM
-> HTTP çağrısını anında kesmez (framework sınırlaması)" diyordu. MAF 1.17.0 ile ölçüldüğünde
-> bunun geçerli olmadığı görüldü:
->
-> | Senaryo | LLM çağrısının token'ı iptal edildi mi? |
-> |---|:---:|
-> | `CancelRunAsync()` çağrıldı | **evet** (~3 ms) |
-> | Kontrol: çağrılmadı | hayır |
->
-> Kontrol deneyi nedenselliği doğrular. Ölçülen şey framework'ün iptali **yaydığı**dır;
-> soketin gerçekten kapanması alttaki HTTP istemcisine bağlıdır. Sürüm yükseltmelerinde
-> yeniden ölçün — yanlış bilgiye dayanıp olmayan bir kısıt için çözüm yazılmasın.
+### 5. `BuildFinalResultAsync` (Private)
+- **Ne işe yarar?:** İş akışının çıktısını [WorkflowResponseExtractor](WorkflowResponseExtractor.md) ile analiz eder, uzman JSON'larını ayıklar ve kullanıcıya gösterilecek temiz metni derler.
 
 ## Bağımlılıklar
 
-Constructor injection: `AgentTeamFactory factory`, `TurnFinalizer finalizer`, `IContextPipeline contextPipeline`, `IChatClient chatClient`, `WorkflowGuardOptions guards`, `IReasoningTraceStore traceStore`, `IPromptRepository prompts`, `ApprovalGateService approvalGate`, `IUiHintEmitter uiHint`, `IApprovalContextAccessor approvalContext`, `ILoggerFactory loggerFactory`.
+- `Microsoft.Agents.AI.Workflows`
+- [AgentTeamFactory](AgentTeamFactory.md)
+- [TurnFinalizer](TurnFinalizer.md)
+- [WorkflowTraceEventProcessor](WorkflowTraceEventProcessor.md)
+- [WorkflowMessageBuilder](WorkflowMessageBuilder.md)
+- [ApprovalGateService](ApprovalGateService.md)
+- [ExceptionTranslator](ExceptionTranslator.md)

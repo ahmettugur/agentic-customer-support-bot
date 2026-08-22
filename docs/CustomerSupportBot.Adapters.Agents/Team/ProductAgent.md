@@ -1,47 +1,68 @@
 # ProductAgent
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/Team/ProductAgent.cs`
-**Erişim:** `internal sealed`
-**Taban sınıf:** [SupportAgentBase](SupportAgentBase.md)
-**Ajan adı:** `WellKnown.AgentNames.Product`
-**Tool'ları:** `product_inquiry_tool`, `product_list_tool` (ikisi de salt-okunur)
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/Team/ProductAgent.cs`
+- **Tür:** `internal sealed class : SupportAgentBase`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents.Team`
 
 ## Ne işe yarar?
 
-Ürün sorgularını yanıtlar — tek ürün sorgulama ve katalog/kategori bazlı listeleme. Tüm tool'ları salt-okunur olduğu için compound query'lerde diğer read-only specialist'lerle paralel çalıştırılabilir (bkz. `WellKnown.AgentNames.ReadOnly`, `ParallelExecutionOptions.IsReadOnly`, [../DecomposedRunner.md](../DecomposedRunner.md)).
+`ProductAgent`, e-ticaret ürün arama, stok durumu, fiyat ve kategori listeleme sorgularını yanıtlayan uzman ajandır. Tüm araçları salt-okunur olduğu için compound sorgularda diğer salt-okunur görevlerle eşzamanlı/paralel olarak çalıştırılabilir (`WellKnown.AgentNames.ReadOnly`).
 
-> 💡 **Analiz notu:** Mağazadaki ürün danışmanı gibi — "bu ürün ne kadar?", "elektronik kategorisinde ne var?" sorularını yanıtlar. Stok/fiyat bilgisi verir ama sipariş almaz.
+## Hangi amaçla kullanılır`?
 
-## Hangi amaçla kullanılır?
-
-`PlanningAgent` ürün sorgusu/listesi niyeti tespit ettiğinde devreye girer.
+Müşterilerin ürün kataloğu sorgularını (`product_inquiry_tool`, `product_list_tool`) karşılamak, araç öncesinde arama parametrelerini değerlendirmek (`preToolCheck`), araç sonrasında dönen ürün listesini incelemek (`postToolReflection`) ve çıktıyı [SpecialistReasoningSchema](SpecialistReasoningSchema.md) ile yapılandırılmış JSON olarak üretmek için kullanılır.
 
 ## Sorumlulukları
 
-- Uygun tool'u (tek ürün vs. liste/kategori) seçip çağırmak.
-- Tool sonrası `postToolReflection` üretmek — ör. ürün bulunamadıysa `status="partial"`, `resultConfidence=0.4`.
-- Sonuç UI ipuçları (ör. `category_picker`) üretebilecek şekilde tool sonucunu döndürmek (`IUiHintEmitter` tool implementasyon tarafında devreye girer).
+- **Üstlendiği:**
+  - `agents/product-agent` sistem prompt'unu ve ürün araçlarını bağlamak.
+  - `ChatResponseFormat.ForJsonSchema<SpecialistReasoningSchema>` ile ReAct çıktısı üretmek.
+  - Breakpoint noktalarında (`OnBeforeRun`, `OnAfterRun`) araç çağrılarını izlemek.
 
-## Diğer katman ve bileşenlerle ilişkileri
+## Constructor ve Başlatma Mantığı
 
-**Bağımlılıkları:** `IChatClient`, `IPromptRepository`, `ICustomerSupportToolsService` (her iki tool da salt-okunur, HITL gerektirmez).
+```csharp
+public ProductAgent(
+    IChatClient chatClient,
+    IPromptRepository prompts,
+    ICustomerSupportToolsService tools)
+    : base(BuildInner(chatClient, prompts, tools))
+```
 
-**Prompt dosyası:** `CustomerSupportBot.Api/Prompts/agents/product-agent.md`.
+### Constructor İçerisinde Yapılan İşler:
+- `BuildInner` statik metodunu çağırarak ürün aracına sahip `ChatClientAgent` nesnesini oluşturur ve `SupportAgentBase` temel sınıfına aktarır.
 
-**Kimler tüketir:** `ReflectionRoutingStrategy`, `WorkflowRunner.ApplyTraceEvent`/`TurnFinalizer`.
+## Metotlar ve İç Çalışma Mantıkları
 
-## Kullanılma nedeni ve tasarım yaklaşımı
+### 1. `BuildInner` (Private Static)
+```csharp
+private static ChatClientAgent BuildInner(
+    IChatClient chatClient,
+    IPromptRepository prompts,
+    ICustomerSupportToolsService tools)
+```
+- **Ne işe yarar?:** Ürün ajanının MAF `ChatClientAgent` örneğini yapılandırır.
+- **İç Mantığı:**
+  1. `Name`: `WellKnown.AgentNames.Product` ("ProductAgent") atanır.
+  2. `Instructions`: `prompts.Get("agents/product-agent")` ile yüklenir.
+  3. `Tools`: `ProductInquiryTool` ve `ProductListTool` fonksiyonları eklenir.
+  4. `ResponseFormat`: `SpecialistReasoningSchema` camelCase JSON şeması atanır.
 
-**Structured output:** [OrderAgent](OrderAgent.md)/[ComplaintAgent](ComplaintAgent.md) ile aynı desen — `SpecialistReasoningSchema` (bkz. [SpecialistReasoningSchema.md](SpecialistReasoningSchema.md)). Tool'ları salt-okunur olduğu için HITL red-format kısıtı bu ajanı etkilemez.
+### 2. `OnBeforeRun` (Protected Override)
+```csharp
+protected override void OnBeforeRun(IReadOnlyList<ChatMessage> messages)
+```
+- **Ne işe yarar?:** Ajanın LLM'e göndereceği mesaj listesini yakalar (Breakpoint noktası).
 
-## Metotlar / Üyeler
-
-| Üye | Açıklama |
-| --- | --- |
-| `BuildInner(chatClient, prompts, tools)` (private static) | `ChatClientAgent` kurar: 2 tool + `ResponseFormat` = `SpecialistReasoningSchema`. |
-| `OnBeforeRun(messages)` | Breakpoint — LLM'e gönderilen tam mesaj listesi. |
-| `OnAfterRun(response)` | Breakpoint — `toolCalls`/`toolResults` (UI hint'leri ör. `category_picker` bu sonuçtan üretilir), `response.Text`. |
+### 3. `OnAfterRun` (Protected Override)
+```csharp
+protected override void OnAfterRun(AgentResponse response)
+```
+- **Ne işe yarar?:** LLM'in çağırdığı araçları (`ToolCalls`), araçların getirdiği ürün verilerini (`ToolResults`) ve ReAct JSON metnini inceler (Breakpoint noktası).
 
 ## Bağımlılıklar
 
-Constructor injection: `IChatClient chatClient`, `IPromptRepository prompts`, `ICustomerSupportToolsService tools`.
+- [SupportAgentBase](SupportAgentBase.md)
+- [SpecialistReasoningSchema](SpecialistReasoningSchema.md)
+- [ICustomerSupportToolsService](../../CustomerSupportBot.Application/Ports/Outbound/ICustomerSupportToolsService.md)
+- `CustomerSupportBot.Application.Ports.Outbound.IPromptRepository`

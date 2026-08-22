@@ -1,65 +1,79 @@
 # EvaluationRunner
 
-> 💡 **Analiz notu:** Test koşucusu — her senaryo için bot'a soru sorar, yanıtı alır ve `CriteriaEvaluator`'a "bu yanıt kabul edilebilir mi?" diye sorar.
-
-**Dosya:** `CustomerSupportBot.Adapters.Agents/Evaluation/EvaluationRunner.cs`
-**Implements:** `IEvaluationPort` (Application katmanı portu)
-**Yaşam döngüsü:** Singleton
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/Evaluation/EvaluationRunner.cs`
+- **Tür:** `public class : IEvaluationPort`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents.Evaluation`
 
 ## Ne işe yarar?
 
-`docs/evaluation-scenarios.yaml`'daki senaryoları sistem üzerinde otomatik çalıştırır: her senaryo için izole bir session açar, reasoning + workflow akışını koşturur, trace'i inceler ve `CriteriaEvaluator` ile başarı kriterlerini değerlendirir.
+`EvaluationRunner`, Application katmanındaki [IEvaluationPort](../../CustomerSupportBot.Application/Ports/Inbound/IEvaluationPort.md) portunu uygulayan; YAML formatındaki test senaryolarını (`EvaluationScenario`) izole oturumlarda otomatik olarak çalıştıran, reasoning + workflow + LLM değerlendirme adımlarını yürüten ve ayrıntılı başarı raporu (`EvaluationRunResult`) üreten değerlendirme motorudur.
 
-## Hangi amaçla kullanılır?
+## Hangi amaçla kullanılır`?
 
-`EvaluationEndpoints` (`GET /eval/scenarios`, `POST /eval/run`, `POST /eval/run/{id}`), admin panelinden veya API'den tetiklenir — regresyon testi, yeni ajan/tool doğrulaması ve prompt değişikliği etkisini ölçmek için kullanılır.
+- **Regresyon ve Kalite Testleri:** Model, prompt veya araç değişikliklerinin mevcut senaryoları bozup bozmadığını test etmek.
+- **Tekrarlı Koşu ve Determinizm Ölçümü (`Repetitions`):** `scenario.Repetitions > 1` olduğunda senaryoyu N kez koşturarak modelin kararlılığını (`RepetitionPassRate`) ölçmek.
+- **İzole Oturumlar:** Her senaryo için taze bir `AgentSession` oluşturarak önceki testlerin bağlam kirliliği yaratmasını engellemek.
+- **Kriter Değerlendirmesi:** Senaryo çıktılarını [CriteriaEvaluator](CriteriaEvaluator.md) üzerinden MAF `EvalCheck` kurallarıyla doğrulamak.
 
 ## Sorumlulukları
 
-- `RunAsync(scenarios, ct)`: senaryoları sırayla çalıştırır, `EvaluationRunResult` (toplam/geçen/kalan/kısmi sayıları + `PassRate`) üretir.
-- `RunScenarioAsync(scenario, ct)`: `scenario.Repetitions <= 1` ise doğrudan `RunSingleAsync`'e devreder; `> 1` ise senaryoyu N kez ayrı ayrı çalıştırıp `AggregateRepetitions` ile tek bir `ScenarioResult`'a indirger (bkz. §4a aşağıda ve [evaluation.md §4a](../../evaluation.md)).
-- `RunSingleAsync(scenario, ct)` (private): senaryonun TEK bir koşusu —
-  1. `_sessionManager.GetOrCreate(null)` ile yeni session.
-  2. `_reasoningService.ReasonAsync` (PlanningAgent ön-analiz bağlamı için önce çalıştırılır).
-  3. `_team.RunAsync` (`IAgentTeamPort` — gerçek workflow).
-  4. `_traceStore.GetBySession(...)`'dan son trace'i alıp sonuçları toplamak.
-  5. `trace.ToolCalls`'tan gerçek tool adı listesini çıkarmak (**önceki heuristic'in yerine** — bkz. tasarım notu).
-  6. `EvalChecks.ToolCalledCheck` gibi built-in'lerin çalışabilmesi için sentetik bir `EvalItem.Conversation` kurmak (`trace.ToolCalls`'tan türetilen `FunctionCallContent`'li mesajlar).
-  7. Her `success_criteria` girdisini `CriteriaEvaluator.Evaluate` ile değerlendirmek.
-  8. `expected_intent` varsa otomatik intent-match kontrolü eklemek.
-  9. `scenario.QualityChecks` doluysa her check için `RunQualityCheckAsync` çağırmak (bkz. §4b aşağıda).
-- `RunQualityCheckAsync(checkName, query, response, ct)`: MEAI `RelevanceEvaluator`/`CoherenceEvaluator`'ı (LLM-judge) çalıştırır — `EvaluationQualityOptions.Enabled=false` (varsayılan) ise gerçek çağrı yapmadan `Skipped="quality_checks_disabled"` döner.
-- `AggregateRepetitions(runs)` (internal static, saf fonksiyon): N koşunun `Passed` sonuçlarını `RepetitionOutcomes`/`RepetitionPassRate`'e indirger; ilk koşunun diğer tüm alanlarını (Response, CriteriaResults vb.) korur.
+- **Üstlendiği:**
+  - `IEvaluationPort.RunAsync` sözleşmesini karşılamak.
+  - Senaryoları sırayla koşturup genel istatistikleri (`PassedScenarios`, `FailedScenarios`, `PartialScenarios`) toplamak.
+  - `RunScenarioAsync` ile tekil ve tekrarlı senaryoları çalıştırmak.
+  - `AggregateRepetitions` ile N koşunun sonuçlarını özetlemek.
 
-**Üstlenmediği işler:** Kriterlerin gerçek değerlendirme mantığı (`CriteriaEvaluator`), YAML yükleme (`ScenarioLoader` — `CustomerSupportBot.Api/Infrastructure/`), HTTP sözleşmesi (`EvaluationEndpoints`).
+## Constructor ve Başlatma Mantığı
 
-## Diğer katman ve bileşenlerle ilişkileri
+```csharp
+public EvaluationRunner(
+    IAgentTeamPort team,
+    IReasoningPort reasoningService,
+    ISessionManager sessionManager,
+    IReasoningTraceStore traceStore,
+    IChatClient chatClient,
+    IOptions<EvaluationQualityOptions> qualityOptions)
+```
 
-**Implements:** `CustomerSupportBot.Application.Ports.Inbound.IEvaluationPort`.
+### Constructor İçerisinde Yapılan İşler:
+- Ajan takımı (`_team`), muhakeme servisi (`_reasoningService`), oturum yöneticisi (`_sessionManager`), trace ambarı (`_traceStore`), LLM istemcisi (`_chatClient`) ve değerlendirme kalite seçenekleri (`_qualityOptions`) bağımlılıkları saklanır.
 
-**Bağımlılıkları:** `IAgentTeamPort` (gerçek workflow koşusu — somut tipten habersiz), `IReasoningPort`, `ISessionManager`, `IReasoningTraceStore` — dördü de Application port'ları, framework-agnostic. Ayrıca `IChatClient` (MEAI quality check'lerin judge modeli için) ve `IOptions<EvaluationQualityOptions>` (global açma/kapama).
+## Metotlar ve İç Çalışma Mantıkları
 
-**Kimler çağırır:** `EvaluationEndpoints` (`CustomerSupportBot.Api`), DI kaydı `AgentsAdapterServiceCollectionExtensions.AddAgentsAdapter`'da.
+### 1. `RunAsync`
+```csharp
+public async Task<EvaluationRunResult> RunAsync(
+    List<EvaluationScenario> scenarios,
+    CancellationToken ct = default)
+```
+- **Ne işe yarar?:** Verilen senaryo listesini koşturup `EvaluationRunResult` raporu döner.
+- **İç Mantığı:** Senaryoları `foreach` döngüsünde `RunScenarioAsync` ile çalıştırır; tam geçenleri (`Passed`), kısmi geçenleri (`PartialScenarios`) ve kalanları (`FailedScenarios`) sayar.
 
-**Ne kullanır:** `CriteriaEvaluator` (aynı klasör), `Microsoft.Agents.AI.EvalItem`/`ExpectedToolCall`, `Microsoft.Extensions.AI.ChatMessage`/`FunctionCallContent`, `Microsoft.Extensions.AI.Evaluation.Quality.RelevanceEvaluator`/`CoherenceEvaluator` (LLM-judge kalite değerlendiricileri, `Microsoft.Extensions.AI.Evaluation.Quality` paketi — MEAI 10.6.0 treni).
+### 2. `RunScenarioAsync`
+```csharp
+public async Task<ScenarioResult> RunScenarioAsync(
+    EvaluationScenario scenario,
+    CancellationToken ct = default)
+```
+- **Ne işe yarar?:** Tek bir senaryoyu (varsa N tekrarlı olarak) koşturur.
+- **İç Mantığı:** `scenario.Repetitions <= 1` ise doğrudan `RunSingleAsync` çağrılır. `> 1` ise döngüde N kez çalıştırılıp `AggregateRepetitions` ile birleştirilir.
 
-## Kullanılma nedeni ve tasarım yaklaşımı
+### 3. `RunSingleAsync` (Private)
+- **Ne işe yarar?:** Senaryonun tek bir koşusunu yürütür.
+- **İç Mantığı:**
+  1. `_sessionManager.GetOrCreateAsync` ile taze oturum açılır.
+  2. `_reasoningService.ReasonAsync` ile sorgu analiz edilir.
+  3. `_team.RunAsync` ile çoklu ajan iş akışı koşturulur.
+  4. Trace kaydı `_traceStore.GetBySession` üzerinden çekilir.
+  5. [CriteriaEvaluator.EvaluateAll](CriteriaEvaluator.md) ile senaryo başarı kriterleri puanlanır ve `ScenarioResult` döndürülür.
 
-Bu sınıfın kendisi `IAgentTeamPort`/`IReasoningPort`/`ISessionManager`/`IReasoningTraceStore` gibi soyutlamalar üzerinden çalıştığı için MAF'a doğrudan bağımlı DEĞİLDİ — `Adapters.Agents`'a taşınmasının tek sebebi, `CriteriaEvaluator.Evaluate`'i çağırmak için gereken `EvalItem`/`ChatMessage`/`FunctionCallContent` inşasıdır (bkz. [Evaluation/README.md](README.md)'deki hexagonal mimari notu).
-
-**Tool listesi doğruluğu düzeltmesi:** Önceki tasarımda `ToolsCalled`, `SpecialistReasonings`'den agent-adı → tool-adı **heuristic**'iyle tahmin ediliyordu (kod yorumunda "Hangi tool çağrıldı bilinmiyor — agent adından türet" deniyordu — ör. `OrderAgent` → her zaman `order_status_tool` varsayılırdı, oysa 6 farklı tool'dan biri olabilirdi). `ReasoningTrace.ToolCalls` (`List<ToolInvocation>`) zaten gerçek `ToolName`'i tutuyordu ama kullanılmıyordu. `CriteriaEvaluator` redesign'ının `EvalItem.Conversation`'ı doğru sentezlemesi için doğru veri gerektiği için bu heuristic gerçek veri kaynağıyla değiştirildi — hem doğruluk düzeltmesi hem redesign'ın önkoşuluydu.
-
-## Metotlar / Üyeler
-
-| Üye | Açıklama |
-| --- | --- |
-| `RunAsync(scenarios, ct)` | Tüm senaryoları sırayla çalıştırır, `EvaluationRunResult` döner. |
-| `RunScenarioAsync(scenario, ct)` | `Repetitions`'a göre `RunSingleAsync`'i 1 veya N kez çağırır, `ScenarioResult` döner. |
-| `RunSingleAsync(scenario, ct)` (private) | Eski (repetitions öncesi) `RunScenarioAsync`'in kendisi — tek koşu. |
-| `RunQualityCheckAsync(checkName, query, response, ct)` (internal) | MEAI relevance/coherence LLM-judge çağrısı; `EvaluationQualityOptions.Enabled=false` ise no-op. `internal` — `EvaluationRunnerRepetitionsAndQualityTests.cs`'te workflow'a dokunmadan doğrudan test edilir. |
-| `AggregateRepetitions(runs)` (internal static) | N koşuyu tek `ScenarioResult`'a indirger — saf fonksiyon, ayrı test edilebilir. |
-| `SimplifyAgentName(name)` (private static) | Agent adından `_` sonrası (varsa) kısmı atarak sadeleştirir (trace görünümü için). |
+### 4. `AggregateRepetitions` (Internal Static)
+- **Ne işe yarar?:** N adet koşu sonucunu (`List<ScenarioResult>`) tek bir sonuç nesnesine indirger; `Repetitions`, `RepetitionOutcomes` ve `RepetitionPassRate` oranlarını hesaplar.
 
 ## Bağımlılıklar
 
-Constructor injection: `IAgentTeamPort team`, `IReasoningPort reasoningService`, `ISessionManager sessionManager`, `IReasoningTraceStore traceStore`, `IChatClient chatClient`, `IOptions<EvaluationQualityOptions> qualityOptions`.
+- [IEvaluationPort](../../CustomerSupportBot.Application/Ports/Inbound/IEvaluationPort.md)
+- [IAgentTeamPort](../../CustomerSupportBot.Application/Ports/Outbound/IAgentTeamPort.md)
+- [IReasoningPort](../../CustomerSupportBot.Application/Ports/Inbound/IReasoningPort.md)
+- [CriteriaEvaluator](CriteriaEvaluator.md)
+- [IReasoningTraceStore](../../CustomerSupportBot.Application/Ports/Outbound/Observability/IReasoningTraceStore.md)

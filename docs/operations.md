@@ -133,7 +133,7 @@ kullanıcının turu biter. Bu yüzden "approval bekleme süresi" diye bir kavra
 | `TimeoutSeconds` | ❌ | Yalnızca eski bloklayan yol (`AwaitDecisionAsync`) içindi. |
 | `AutoApproveOnTimeout` | ❌ | Aynı sebeple uygulanmaz; zaman aşımının sonucu **her zaman red**'dir. |
 
-`Enabled = false` yaparsanız **tüm HITL mekanizması** bypass edilir (klasik bot davranışı). Detay → [CustomerSupportBot.Api/Endpoints-Admin.md](CustomerSupportBot.Api/Endpoints-Admin.md).
+`Enabled = false` yaparsanız **tüm HITL mekanizması** bypass edilir (klasik bot davranışı). Detay → [CustomerSupportBot.Api/Endpoints/AdminAndHitl.md](CustomerSupportBot.Api/Endpoints/AdminAndHitl.md).
 
 ### `Routing`
 
@@ -167,7 +167,7 @@ Smart Routing & Skills-Based Escalation konfigürasyonu. Bir eskalasyon (`needs_
 }
 ```
 
-`Enabled = false` yaparsanız routing devre dışı kalır; eskalasyonlar admin manuel atayana kadar atanmamış kalır. `EscalationRequest`'in yeni alanları: `RequiredSkills`, `Priority`, `SuggestedAgentId`, `SuggestedAgentName`, `MatchScore`, `RoutingNote`. Detay → [CustomerSupportBot.Api/Endpoints-Admin.md](CustomerSupportBot.Api/Endpoints-Admin.md).
+`Enabled = false` yaparsanız routing devre dışı kalır; eskalasyonlar admin manuel atayana kadar atanmamış kalır. `EscalationRequest`'in yeni alanları: `RequiredSkills`, `Priority`, `SuggestedAgentId`, `SuggestedAgentName`, `MatchScore`, `RoutingNote`. Detay → [CustomerSupportBot.Api/Endpoints/AdminAndHitl.md](CustomerSupportBot.Api/Endpoints/AdminAndHitl.md).
 
 ### `Telemetry`
 
@@ -478,7 +478,7 @@ Uygulama **iki ayrı SSE kanalı** kullanır — birbirini tamamlar:
 
 Frontend açılışta `EventSource` ile persistent kanalı açar (`app.js _ensurePersistentEvents`), her kullanıcı mesajı için ayrıca per-request stream başlatır. İki kanal aynı `sessionId` etrafında birleşir.
 
-Tam SSE event sözleşmeleri → [CustomerSupportBot.Api/Endpoints-Chat.md](CustomerSupportBot.Api/Endpoints-Chat.md).
+Tam SSE event sözleşmeleri → [CustomerSupportBot.Api/Endpoints/ChatAndRealtime.md](CustomerSupportBot.Api/Endpoints/ChatAndRealtime.md).
 
 ---
 
@@ -643,7 +643,7 @@ Tüm telemetri pipeline'ı kapatmak için `Telemetry.Enabled = false`.
 - **Class/interface sözleşmeleri** → [class-reference.md](class-reference.md)
 - **Yeni feature/agent/tool ekleme** → [developer-guide.md](developer-guide.md)
 - **Semantic memory, Self-Improving Loop, Personalization** → [intelligence.md](intelligence.md)
-- **Sesli konuşma (Realtime)** → [CustomerSupportBot.Adapters.AI/Realtime.md](CustomerSupportBot.Adapters.AI/Realtime.md)
+- **Sesli konuşma (Realtime)** → [CustomerSupportBot.Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md](CustomerSupportBot.Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md)
 - **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
 - **Veritabanı ve kalıcılık** → [CustomerSupportBot.Adapters.Persistence/README.md](CustomerSupportBot.Adapters.Persistence/README.md)
 - **Telemetri ve maliyet takibi** → [CustomerSupportBot.Adapters.Telemetry/README.md](CustomerSupportBot.Adapters.Telemetry/README.md)

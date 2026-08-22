@@ -1,49 +1,62 @@
 # ResponseAgent
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/Team/ResponseAgent.cs`
-**Erişim:** `internal sealed`
-**Taban sınıf:** [SupportAgentBase](SupportAgentBase.md)
-**Ajan adı:** `WellKnown.AgentNames.Response`
-**Tool'ları:** Yok. **Structured output kullanmaz** — serbest metin üretir.
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/Team/ResponseAgent.cs`
+- **Tür:** `internal sealed class : SupportAgentBase`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents.Team`
 
 ## Ne işe yarar?
 
-Turun **son** ajanıdır: specialist'in (veya `PlanningAgent`'ın, netleştirme gerekiyorsa) yapılandırılmış çıktısını kullanıcıya sunulacak nihai, doğal dilde metne dönüştürür ve `"TERMINATE: reason=..."` işaretiyle workflow'u sonlandırır.
+`ResponseAgent`, çoklu ajan grup sohbetinin son adımında devreye giren; önceki uzman ajanların araç çıktılarını ve ReAct akıl yürütme JSON'larını kullanıcıya sunulacak nihai, nazik ve tutarlı bir Türkçe yanıta dönüştüren ve sonuna `TERMINATE: reason=...` belirtecini ekleyerek MAF iş akışını sonlandıran sentezleyici ajandır. Hiçbir aracı (tool) yoktur.
 
-> 💡 **Analiz notu:** Haber spikeri gibi — muhabir (specialist agent) haberi ham veri olarak getirir, spiker (ResponseAgent) bunu güzel bir Türkçe ile izleyiciye sunar ve "haberler bitti" (TERMINATE) der.
+## Hangi amaçla kullanılır`?
 
-## Hangi amaçla kullanılır?
-
-`ReflectionRoutingStrategy`, her specialist mesajından sonra (eskalasyon/tamamlanma/bilinmeyen handoff durumlarında) bu ajana yönlenir. `PlanRoutingStrategy` da netleştirme gerektiğinde (`needsClarification=true` veya düşük confidence) doğrudan bu ajana yönlenir.
+- Uzmanların teknik JSON çıktılarını ve ara durumlarını son kullanıcıya göstermemek.
+- Kullanıcıya canlı olarak akan SSE token akışını üretmek (Kullanıcının gördüğü gerçek zamanlı yanıt bu ajandan akar).
+- Cevabın sonuna `TERMINATE` ekleyerek iş akışının başarıyla durmasını sağlamak.
 
 ## Sorumlulukları
 
-- Specialist'in ham çıktısını (tool sonuçları + `SpecialistReasoningSchema` JSON'u — `resultNotes`/`postToolReflection.summary`) okuyup kullanıcı diline (Türkçe, doğal) çevirmek.
-- `"TERMINATE: reason=<sebep>"` işaretiyle mesajı bitirmek — `CustomerSupportChatManager.ShouldTerminateAsync` bu marker'ı arar.
-- **Kullanıcıya akan gerçek zamanlı token'lar bu ajanın çıktısıdır** — `WorkflowRunner.ApplyTraceEvent`'teki `AgentResponseUpdateEvent` dalı yalnızca `ResponseAgent`'ın delta'larını `StreamEvent.ResponseDelta` olarak yayınlar; diğer ajanların (Planning/specialist) ham JSON çıktısı kullanıcıya asla akıtılmaz.
+- **Üstlendiği:**
+  - `agents/response-agent` sistem istemini bağlamak.
+  - Düz metin Türkçe yanıt üretmek ve sonlanma belirtecini eklemek.
+  - Breakpoint noktalarında (`OnBeforeRun`, `OnAfterRun`) uzmanların ham çıktılarını ve üretilen nihai metni yakalamak.
 
-**Üstlenmediği işler:** Karar verme/routing (zaten kendisi turun sonu), tool çağrısı (tool'u yok).
+## Constructor ve Başlatma Mantığı
 
-## Diğer katman ve bileşenlerle ilişkileri
+```csharp
+public ResponseAgent(IChatClient chatClient, IPromptRepository prompts)
+    : base(BuildInner(chatClient, prompts))
+```
 
-**Bağımlılıkları:** `IChatClient`, `IPromptRepository`.
+### Constructor İçerisinde Yapılan İşler:
+- `BuildInner` statik metodunu çağırarak `ChatClientAgent` nesnesini yapılandırır ve `SupportAgentBase` temel sınıfına devreder.
 
-**Prompt dosyası:** `CustomerSupportBot.Api/Prompts/agents/response-agent.md`.
+## Metotlar ve İç Çalışma Mantıkları
 
-**Kimler tüketir:** `CustomerSupportChatManager.ShouldTerminateAsync` (`TERMINATE` marker'ını arar), `WorkflowRunner.ResponseStreamFilter` (marker'ı kullanıcıya akan metinden filtreler), `WorkflowResponseExtractor` (`ParseTerminationReasonFromResult`, `RemoveTerminationMarkers`).
+### 1. `BuildInner` (Private Static)
+```csharp
+private static ChatClientAgent BuildInner(IChatClient chatClient, IPromptRepository prompts)
+```
+- **Ne işe yarar?:** Yanıt sentezleyici ajan için MAF `ChatClientAgent` örneğini kurar.
+- **İç Mantığı:**
+  1. `Name`: `WellKnown.AgentNames.Response` ("ResponseAgent") atanır.
+  2. `Instructions`: `prompts.Get("agents/response-agent")` ile yüklenir.
+  3. Düz metin yanıt ürettiği için özel bir `ResponseFormat` atanmaz.
 
-## Kullanılma nedeni ve tasarım yaklaşımı
+### 2. `OnBeforeRun` (Protected Override)
+```csharp
+protected override void OnBeforeRun(IReadOnlyList<ChatMessage> messages)
+```
+- **Ne işe yarar?:** LLM'e giden tam mesaj listesini (uzman ajanların ReAct JSON'ları ve araç sonuçları) inceler (Breakpoint noktası).
 
-Bu ajan **bilinçli olarak** structured output kullanmaz — diğer 5 ajanın aksine ürettiği metin doğrudan kullanıcıya gider, bu yüzden serbest, doğal dilde kalmalıdır. `TERMINATE` marker'ının chunk sınırlarını bölebilme riski `WorkflowRunner.ResponseStreamFilter` tarafından ele alınır (marker uzunluğu kadar güvenlik payı tutularak).
-
-## Metotlar / Üyeler
-
-| Üye | Açıklama |
-| --- | --- |
-| `BuildInner(chatClient, prompts)` (private static) | `ChatClientAgent` kurar: tool yok, `ResponseFormat` yok. |
-| `OnBeforeRun(messages)` | Breakpoint — specialist'in ürettiği ham çıktı (tool sonuçları + reasoning JSON) burada görülür. |
-| `OnAfterRun(response)` | Breakpoint — `response.Text` (kullanıcıya gidecek nihai metin + sonundaki `TERMINATE` işareti). |
+### 3. `OnAfterRun` (Protected Override)
+```csharp
+protected override void OnAfterRun(AgentResponse response)
+```
+- **Ne işe yarar?:** Üretilen nihai yanıt metnini ve sonundaki `TERMINATE` işaretçisini yakalar (Breakpoint noktası).
 
 ## Bağımlılıklar
 
-Constructor injection: `IChatClient chatClient`, `IPromptRepository prompts`.
+- [SupportAgentBase](SupportAgentBase.md)
+- `CustomerSupportBot.Application.Ports.Outbound.IPromptRepository`
+- `Microsoft.Extensions.AI.IChatClient`

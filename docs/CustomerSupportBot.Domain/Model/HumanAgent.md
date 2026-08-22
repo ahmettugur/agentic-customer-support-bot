@@ -55,4 +55,4 @@ Skills-based router'ın çıktısı — hangi temsilci, neden, eşleşme skoru.
 ## Bağlantılar
 
 - [EscalationRequest.md](EscalationRequest.md) — Bu temsilcilere atanan eskalasyonlar
-- [../../CustomerSupportBot.Application/SkillsBasedRouter.md](../../CustomerSupportBot.Application/Routing/SkillsBasedRouter.md) — Routing algoritması
+- [../../CustomerSupportBot.Application/SkillsBasedRouter.md](../../CustomerSupportBot.Application/Services/Routing/SkillsBasedRouter.md) — Routing algoritması

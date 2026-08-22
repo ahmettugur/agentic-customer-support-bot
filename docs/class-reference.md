@@ -184,7 +184,7 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 
 ### `ContextPipeline` + `IContextProvider` — `Services/ContextPipeline.cs`, `Services/IContextProvider.cs`
 
-**Interface `IContextProvider`** — her sağlayıcı bir `Name`, `Order` (öncelik), `GetContextAsync(session, currentQuery)` metodu uygular. `currentQuery` kullanıcının o turdaki mesajıdır — oturum geçmişinden okunamaz, çünkü geçmiş workflow bittikten sonra yazılır (bkz. [ContextPipeline.md](CustomerSupportBot.Application/Chat/ContextPipeline.md)).
+**Interface `IContextProvider`** — her sağlayıcı bir `Name`, `Order` (öncelik), `GetContextAsync(session, currentQuery)` metodu uygular. `currentQuery` kullanıcının o turdaki mesajıdır — oturum geçmişinden okunamaz, çünkü geçmiş workflow bittikten sonra yazılır (bkz. [ContextPipeline.md](CustomerSupportBot.Application/Services/Chat/ContextPipeline.md)).
 
 **`ContextPipeline.BuildContextAsync(session)` → string** — tüm kayıtlı provider'ları `Order`'a göre sıralı çalıştırır ve üretilen metinleri `\n\n` ile birleştirir. Bir provider exception fırlatırsa loglanır ve atlanır.
 
@@ -194,7 +194,7 @@ Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
 > her turda koşulsuz bağlama enjekte ediyordu. İşlevi `IOrderToolsService`/`IComplaintToolsService`
 > altındaki sorgu tool'larıyla (`get_last_order`, `get_all_orders`, `order_status`,
 > `complaint_status`, `get_all_complaints`) tam olarak çakıştığı için kaldırıldı — bkz.
-> [ContextProviders.md](CustomerSupportBot.Application/Providers/ContextProviders.md#customercontextprovider-kaldırıldı--toollara-taşındı).
+> [ContextProviders.md](CustomerSupportBot.Application/Services/Providers/ConversationSummaryProvider.md#customercontextprovider-kaldırıldı--toollara-taşındı).
 
 ---
 
@@ -585,7 +585,7 @@ ChatManager `ShouldTerminateAsync` bu ayarları kullanır.
 **Özel davranışlar**:
 
 - `ProductListTool` — `category` opsiyonel; boş gelirse tüm katalog döner, doluysa kategori adı `LOWER()` karşılaştırmasıyla filtrelenir.
-- `OrderPlacementTool` — **çok ürünlü**: tek çağrıda N satır alır, tek sipariş oluşturur. Aynı ürünün satırları birleştirilir (`order_details` PK'sı `(order_code, product_id)`). Stok düşümü **tek transaction**'da ya hep ya hiç yapılır — bir satır yetmezse hiçbiri düşülmez. Eksik alan → `ValidationError`, ürün yok → `NotFound(WellKnown.ToolErrorCodes.ProductNotFound)` (bulunamayanların hepsi tek mesajda), stok yetersiz → `Conflict(WellKnown.ToolErrorCodes.StockInsufficient)`. Ayrıntı: [OrderToolsService](CustomerSupportBot.Application/Tools/OrderToolsService.md).
+- `OrderPlacementTool` — **çok ürünlü**: tek çağrıda N satır alır, tek sipariş oluşturur. Aynı ürünün satırları birleştirilir (`order_details` PK'sı `(order_code, product_id)`). Stok düşümü **tek transaction**'da ya hep ya hiç yapılır — bir satır yetmezse hiçbiri düşülmez. Eksik alan → `ValidationError`, ürün yok → `NotFound(WellKnown.ToolErrorCodes.ProductNotFound)` (bulunamayanların hepsi tek mesajda), stok yetersiz → `Conflict(WellKnown.ToolErrorCodes.StockInsufficient)`. Ayrıntı: [OrderToolsService](CustomerSupportBot.Application/Services/Tools/OrderToolsService.md).
 - `OrderCancelTool` — yalnızca `"İşleniyor"` veya `"Kargolandı"` durumundaki siparişler iptal edilebilir. Diğer durumlarda → `Conflict(WellKnown.ToolErrorCodes.OrderNotCancellable)`.
 - `ReturnRequestTool` — yalnızca `"Teslim Edildi"` durumundaki ve 14 gün içindeki siparişler için iade talebi açılabilir. Zaten iade talebi varsa → `Conflict(WellKnown.ToolErrorCodes.ReturnAlreadyRequested)`.
 - `ComplaintRegistrationTool` — `customerId` opsiyonel; boşsa `OrdersDb[orderId].CustomerId`'den türetir. Verilen customerId order sahibiyle uyuşmuyorsa → `Conflict(WellKnown.ToolErrorCodes.CustomerIdMismatch)`.
@@ -810,5 +810,5 @@ Secondary port. Postgres adaptörlerinin Redis'e doğrudan bağımlılığını 
 - **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
 - **Veritabanı ve kalıcılık** → [CustomerSupportBot.Adapters.Persistence/README.md](CustomerSupportBot.Adapters.Persistence/README.md)
 - **Telemetri ve maliyet takibi** → [CustomerSupportBot.Adapters.Telemetry/README.md](CustomerSupportBot.Adapters.Telemetry/README.md)
-- **Routing ve eskalasyon** → [CustomerSupportBot.Application/Routing/SkillsBasedRouter.md](CustomerSupportBot.Application/Routing/SkillsBasedRouter.md)
+- **Routing ve eskalasyon** → [CustomerSupportBot.Application/Services/Routing/SkillsBasedRouter.md](CustomerSupportBot.Application/Services/Routing/SkillsBasedRouter.md)
 - **Yeni sınıf/tool/agent nasıl eklenir** → [developer-guide.md](developer-guide.md)

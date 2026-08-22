@@ -60,4 +60,4 @@ Yok — record tipi.
 
 - [ReasoningResult.md](ReasoningResult.md) — Sinyallerin kaynak modeli
 - [SessionState.md](SessionState.md) — Sinyallerin yazılacağı hedef
-- [../../CustomerSupportBot.Application/SessionStateService.md](../../CustomerSupportBot.Application/Chat/SessionStateService.md) — Sinyalleri işleyen servis
+- [../../CustomerSupportBot.Application/SessionStateService.md](../../CustomerSupportBot.Application/Services/Chat/SessionStateService.md) — Sinyalleri işleyen servis

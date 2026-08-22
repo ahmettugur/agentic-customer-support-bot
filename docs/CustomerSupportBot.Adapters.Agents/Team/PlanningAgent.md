@@ -1,51 +1,64 @@
 # PlanningAgent
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/Team/PlanningAgent.cs`
-**Erişim:** `internal sealed`
-**Taban sınıf:** [SupportAgentBase](SupportAgentBase.md)
-**Ajan adı:** `WellKnown.AgentNames.Planning`
-**Tool'ları:** Yok — yalnızca yönlendirme kararı verir.
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/Team/PlanningAgent.cs`
+- **Tür:** `internal sealed class : SupportAgentBase`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents.Team`
 
 ## Ne işe yarar?
 
-Müşteri talebini analiz eder, yapılandırılmış bir plan (JSON: `PlanningResult`) üretir ve uygun specialist ajana yönlendirir. Workflow'un **her turda ilk çalışan** ajanıdır (bkz. `Routing/Routing.cs` → `FirstTurnStrategy`).
+`PlanningAgent`, Microsoft Agents Framework (MAF) iş akışında ilk adımı yürüten; kullanıcı talebini, geçmişi ve varlık ipuçlarını (`order_id MEVCUT` vb.) analiz ederek `ChatResponseFormat.ForJsonSchema<PlanningResult>` ile strict JSON şemasında bir plan ([PlanningResult](../../CustomerSupportBot.Domain/Model/PlanningResult.md)) üreten ve akışı uygun uzman ajana yönlendiren orkestratör ajandır. Hiçbir aracı (tool) yoktur.
 
-> 💡 **Analiz notu:** Bir hastanede triaj hemşiresi gibi — "bu hasta kardiyolojiye gitsin, şu hasta ortopediye" diye karar verir ama tedavi yapmaz.
+## Hangi amaçla kullanılır`?
 
-## Hangi amaçla kullanılır?
-
-`CustomerSupportChatManager.SelectNextAgentAsync`, sohbette hiç `PlanningAgent` mesajı yoksa (`FirstTurnStrategy`) her zaman bu ajanı seçer. Ürettiği `PlanningResult.SelectedAgent`, bir sonraki ajanı belirler (`PlanRoutingStrategy`).
+- Kullanıcının niyetini (`DetectedIntent`) belirlemek.
+- Görevi üstlenecek uzman ajanı (`SelectedAgent`: "ProductAgent", "OrderAgent", "ComplaintAgent", "HumanHandoffAgent") seçmek.
+- Bilgi eksikliği varsa kullanıcıya netleştirme sorusu sorulup sorulmayacağını (`NeedsClarification`) ve netleştirme sorusunu (`ClarificationQuestion`) üretmek.
+- Çıktıyı `PlanRoutingStrategy`'nin deterministik olarak okuyabileceği hatasız JSON formatında sunmak.
 
 ## Sorumlulukları
 
-- Kanıtları (`supportingEvidence`) toplamak. **Niyet (intent) tespiti yapmaz** — niyet ReasoningService'in tekil sorumluluğudur; reasoning hint'indeki intent nihai karar olarak kabul edilir.
-- Uygun specialist ajanı seçmek (`selectedAgent`) ve gerekçesini (`rationale`) + reddedilen alternatifleri (`alternativesRejected`) üretmek.
-- Netleştirme gerekip gerekmediğine (`needsClarification`) karar vermek — emin değilse `needsClarification=true` üretir; bu durumda `PlanRoutingStrategy` specialist yerine `ResponseAgent`'a yönlendirir.
-- Seçilen ajana iletilecek görev tanımını (`taskDescription`) yazmak.
-- Prompt injection / rol değiştirme girişimlerini kullanıcı niyeti olarak yorumlamak, sistem talimatlarını asla ifşa etmemek (`docs/`'taki "Talimat ayırımı" bölümü).
+- **Üstlendiği:**
+  - `agents/planning-agent` sistem istemini yüklemek.
+  - LLM çıktısını `PlanningResult` JSON şemasına zorlamak.
+  - Hata ayıklama (`OnBeforeRun`, `OnAfterRun`) hook'larında üretilen planı yakalamak.
 
-**Üstlenmediği işler:** Gerçek işlemi yapmak (sipariş/şikayet/ürün sorgusu) — yalnızca yönlendirir, tool'u yoktur.
+## Constructor ve Başlatma Mantığı
 
-## Diğer katman ve bileşenlerle ilişkileri
+```csharp
+public PlanningAgent(IChatClient chatClient, IPromptRepository prompts)
+    : base(BuildInner(chatClient, prompts))
+```
 
-**Kimler tüketir:** `Routing/Routing.cs` → `PlanRoutingStrategy` (çıktısını `PlanningResultParser.TryParse` ile ayrıştırır, `SelectedAgent`'a göre yönlendirir); `WorkflowRunner.ApplyTraceEvent` (planı trace'e ekler).
+### Constructor İçerisinde Yapılan İşler:
+- `BuildInner` statik metodunu çağırarak `ChatClientAgent` nesnesini yapılandırır ve `SupportAgentBase` temel sınıfına devreder.
 
-**Prompt dosyası:** `CustomerSupportBot.Api/Prompts/agents/planning-agent.md`.
+## Metotlar ve İç Çalışma Mantıkları
 
-## Kullanılma nedeni ve tasarım yaklaşımı
+### 1. `BuildInner` (Private Static)
+```csharp
+private static ChatClientAgent BuildInner(IChatClient chatClient, IPromptRepository prompts)
+```
+- **Ne işe yarar?:** Planlama ajanı için MAF `ChatClientAgent` örneğini kurar.
+- **İç Mantığı:**
+  1. `Name`: `WellKnown.AgentNames.Planning` ("PlanningAgent") atanır.
+  2. `Instructions`: `prompts.Get("agents/planning-agent")` ile yüklenir.
+  3. `ResponseFormat`: `ChatResponseFormat.ForJsonSchema<PlanningResult>(PlanningSchemaJsonOptions)` atanarak modelin strict JSON üretmesi sağlanır.
 
-**Structured output:** `PlanningAgent`'ın çıktısı `ChatOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema<PlanningResult>(camelCaseOptions)` ile `PlanningResult` şemasına zorlanır (OpenAI/Azure OpenAI strict JSON schema). Bu, K3 analizinin "en yüksek kaldıraç" önerisiydi çünkü `PlanningAgent`'ın tool'u yok, saf JSON üretiyor — hiçbir prose/tool-call karışması riski taşımıyor, en düşük riskli ve en net kazançlı structured-output adayı. Prompt'taki eski "Bölüm 2 — Routing" satırı (`selectedAgent`'ı tekrar düz metin olarak yazma talimatı) koddan hiç okunmuyordu (`Routing.cs` yalnızca parse edilmiş `PlanningResult.SelectedAgent`'a bakıyor) — bu yüzden kaldırılması güvenliydi.
+### 2. `OnBeforeRun` (Protected Override)
+```csharp
+protected override void OnBeforeRun(IReadOnlyList<ChatMessage> messages)
+```
+- **Ne işe yarar?:** LLM'e gönderilen tam mesaj listesini (kullanıcı sorgusu, entity hint, bağlam) inceler (Breakpoint noktası).
 
-`PlanningResultParser`'ın fence-temizleme + alan-bazlı defensive parse mantığı **kaldırılmadı** — provider strict schema'yı honor etmediği durumda tek çalışan güvence bu parser'dır.
-
-## Metotlar / Üyeler
-
-| Üye | Açıklama |
-| --- | --- |
-| `BuildInner(chatClient, prompts)` (private static) | `ChatClientAgent` kurar: `Instructions` = `planning-agent.md`, `ResponseFormat` = `PlanningResult` şeması. |
-| `OnBeforeRun(messages)` | Breakpoint — kullanıcı sorgusu, reasoning hint'i, entity extraction hint'i. |
-| `OnAfterRun(response)` | Breakpoint — üretilen plan JSON'u (`response.Text`). |
+### 3. `OnAfterRun` (Protected Override)
+```csharp
+protected override void OnAfterRun(AgentResponse response)
+```
+- **Ne işe yarar?:** LLM'in ürettiği plan JSON'unu (`response.Text`) yakalar (Breakpoint noktası).
 
 ## Bağımlılıklar
 
-Constructor injection: `IChatClient chatClient`, `IPromptRepository prompts`.
+- [SupportAgentBase](SupportAgentBase.md)
+- [PlanningResult](../../CustomerSupportBot.Domain/Model/PlanningResult.md)
+- `CustomerSupportBot.Application.Ports.Outbound.IPromptRepository`
+- `Microsoft.Extensions.AI.IChatClient`

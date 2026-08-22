@@ -1,124 +1,29 @@
-# CustomerSupportBot.Adapters.Persistence — Genel Bakış
+# CustomerSupportBot.Adapters.Persistence
 
-Application katmanının **driven port** sözleşmelerini (ISessionManager, IApprovalQueue, vb.) implement eden persistence adaptör katmanıdır. Auth altyapısı ve dosya sistemi adaptörlerini de içerir.
+Bu klasör, hexagonal mimaride **Driven Adapter (Çıkış Adaptörü)** rolünü üstlenen; ilişkisel veritabanı (PostgreSQL + EF Core 10), dosya sistemi (Markdown Prompt & KnowledgeBase) ve testler/fallback için bellek içi (InMemory) ambarları yöneten kalıcılık adaptörüdür.
 
-> 💡 **Analiz notu:** Bu katman projenin "hafızası"dır. Application "bu siparişi kaydet" der ama nereye, hangi DB'ye, hangi tablo yapısıyla — hepsini bu adapter bilir. Domain ve Application hiçbir zaman `DbContext` veya SQL görmez. Yarın Postgres yerine MongoDB kullansak, sadece bu klasör değişir.
+## Dizin Yapısı
 
-> ⚠️ Üretimde çalışan tek backend **Postgres**'tir. `InMemory/` altında 13 adapter sınıfı mevcuttur ve testlerde kullanılır, ancak `PersistenceOptions.Provider` enum'u yalnızca `Postgres` değerine sahiptir — `PersistenceAdapterServiceCollectionExtensions.AddPersistenceAdapters` hiçbir koşula bağlı kalmadan sadece Postgres implementasyonlarını kaydeder. Runtime'da seçilebilen bir "InMemory modu" yoktur.
+- [EfCore/](EfCore/README.md) — EF Core 10 DbContext, şemalar, varlık modelleri (Entities), arkaplan süpürme ve başlangıç tohumlayıcıları:
+  - [CustomerSupportDbContext](EfCore/CustomerSupportDbContext.md) — Npgsql tabanlı PostgreSQL DbContext.
+  - [Schemas](EfCore/Schemas.md) — Çoklu şema (`chat`, `hitl`, `catalog`, `auth`, `observability` vb.) sabitleri.
+  - [PersistenceHydrator](EfCore/PersistenceHydrator.md) — Yeniden başlatmalarda yarım kalan in-flight trace'leri toparlayan başlangıç servisi.
+  - [StaleApprovalSweepService](EfCore/StaleApprovalSweepService.md) — Bloklamayan modelde süresi geçen HITL onaylarını otomatik reddeden periyodik süpürge.
+  - [DemoDataSeeder](EfCore/DemoDataSeeder.md) & [NorthwindSeedData](EfCore/NorthwindSeedData.md) — Başlangıç demo verisi tohumlayıcıları.
+  - [EfUserAuthRepository](EfCore/Auth/EfUserAuthRepository.md) & [EfRefreshTokenRepository](EfCore/Auth/EfRefreshTokenRepository.md) — Kullanıcı ve JWT refresh token ambarları.
+  - [Entities/](EfCore/Entities/README.md) — PostgreSQL tablolarını temsil eden EF Core entity modelleri.
+- [Postgres/](Postgres/README.md) — PostgreSQL + IDbContextFactory tabanlı kalıcı depo implementasyonları:
+  - [Repositories](Postgres/Repositories.md) — [ICustomerRepository](../CustomerSupportBot.Application/Ports/Outbound/Persistence/ICustomerRepository.md), [IOrderRepository](../CustomerSupportBot.Application/Ports/Outbound/Persistence/IOrderRepository.md), [IProductCatalogRepository](../CustomerSupportBot.Application/Ports/Outbound/Persistence/IProductCatalogRepository.md), [IComplaintRepository](../CustomerSupportBot.Application/Ports/Outbound/Persistence/IComplaintRepository.md).
+  - [HitlAndChat](Postgres/HitlAndChat.md) — [IApprovalQueue](../CustomerSupportBot.Application/Ports/Outbound/Persistence/IApprovalQueue.md), [IEscalationSink](../CustomerSupportBot.Application/Ports/Outbound/Persistence/IEscalationSink.md), [IHumanAgentRegistry](../CustomerSupportBot.Application/Ports/Outbound/Persistence/IHumanAgentRegistry.md), [IChatBridge](../CustomerSupportBot.Application/Ports/Outbound/Persistence/IChatBridge.md), [ISessionManager](../CustomerSupportBot.Application/Ports/Outbound/Persistence/ISessionManager.md).
+  - [StoresAndSinks](Postgres/StoresAndSinks.md) — [IKnowledgeArticleStore](../CustomerSupportBot.Application/Ports/Outbound/Persistence/IKnowledgeArticleStore.md), [ILessonStore](../CustomerSupportBot.Application/Ports/Outbound/Persistence/ILessonStore.md), [IReasoningTraceStore](../CustomerSupportBot.Application/Ports/Outbound/Observability/IReasoningTraceStore.md), [ILlmCallPersistencePort](../CustomerSupportBot.Application/Ports/Outbound/Observability/ILlmCallPersistencePort.md), [IRatingStore](../CustomerSupportBot.Application/Ports/Outbound/Persistence/IRatingStore.md), [ISlaEventSink](../CustomerSupportBot.Application/Ports/Outbound/Persistence/ISlaEventSink.md), [ICustomerProfileStore](../CustomerSupportBot.Application/Ports/Outbound/Persistence/ICustomerProfileStore.md).
+- [InMemory/](InMemory/README.md) — Geliştirme, birim/entegrasyon testleri ve veritabanı yokluğunda devreye giren bellek içi fallback depoları.
+- [FileSystem/](FileSystem/README.md) — Markdown prompt şablonları (`FileSystemPromptRepository`) ve dosya sistemi bilgi bankası kaynakları (`FileSystemKnowledgeBaseSource`).
+- [HealthChecks/](HealthChecks/PostgresHealthCheck.md) — Npgsql bağlantı sağlık kontrolcüsü (`PostgresHealthCheck`).
+- [DependencyInjection/](DependencyInjection/PersistenceAdapterServiceCollectionExtensions.md) — `AddPersistenceAdapters` IoC kayıt uzantısı.
+- [ExceptionTranslator](ExceptionTranslator.md) — Npgsql ve EF Core istisnalarını DomainException'a çevirici.
 
----
+## Mimari Rolü ve Yetenekleri
 
-## Belgeler
-
-| Konu | Dosya |
-| ------ | ------- |
-| DI kayıtları ve yapılandırma | [DependencyInjection.md](DependencyInjection.md) |
-| Hybrid cache+DB deseni (temel mimari) | [HybridPattern.md](HybridPattern.md) |
-| EF Core DbContext ve şemalar | [DbContext.md](DbContext.md) |
-| DB varlık modelleri (Entity'ler) | [Entities.md](Entities.md) |
-| Startup kurtarma servisi | [PersistenceHydrator.md](PersistenceHydrator.md) |
-| InMemory adaptörler | [InMemoryAdapters.md](InMemoryAdapters.md) |
-| Postgres adaptörler | [PostgresAdapters.md](PostgresAdapters.md) |
-| Auth adaptörleri (JWT, BCrypt, EF) | [AuthAdapters.md](AuthAdapters.md) |
-| Dosya sistemi adaptörleri | [FileSystemAdapters.md](FileSystemAdapters.md) |
-| Exception çevirici | [ExceptionTranslator.md](ExceptionTranslator.md) |
-| Demo veri seed servisi | [DemoDataSeeder.md](DemoDataSeeder.md) |
-| Northwind statik seed verisi | [NorthwindSeedData.md](NorthwindSeedData.md) |
-| Stale approval temizleme servisi | [StaleApprovalSweepService.md](StaleApprovalSweepService.md) |
-
----
-
-## Klasör yapısı
-
-```
-CustomerSupportBot.Adapters.Persistence/
-│
-├── DependencyInjection/
-│   └── PersistenceAdapterServiceCollectionExtensions.cs  ← Ana DI giriş noktası
-│
-├── EfCore/
-│   ├── CustomerSupportDbContext.cs     ← EF Core DbContext (9 şema)
-│   ├── PersistenceHydrator.cs          ← Startup kurtarma (IHostedService)
-│   ├── PersistenceOptions.cs           ← Provider ayarı (şu an yalnızca Postgres)
-│   ├── PersistenceServiceCollectionExtensions.cs
-│   ├── DesignTimeDbContextFactory.cs   ← migration üretimi için
-│   ├── Schemas.cs                      ← şema sabitleri
-│   ├── Auth/                           ← EF Auth repository'leri
-│   ├── Entities/                       ← DB varlık sınıfları
-│   └── Configurations/                 ← Fluent API konfigürasyonları
-│
-├── InMemory/                           ← Geliştirme / tek instance
-│   ├── InMemorySessionManager.cs
-│   ├── InMemoryApprovalQueue.cs
-│   ├── InMemoryChatBridge.cs
-│   └── ... (13 adapter)
-│
-├── Postgres/                           ← Üretim (Hybrid cache+DB+Redis)
-│   ├── PostgresSessionManager.cs
-│   ├── PostgresApprovalQueue.cs
-│   ├── PostgresChatBridge.cs
-│   ├── OrderRepository.cs
-│   ├── ComplaintRepository.cs
-│   ├── ProductCatalogRepository.cs
-│   ├── CustomerRepository.cs
-│   └── ... (17 adapter)
-│
-├── Auth/                               ← BCrypt, JWT
-│   ├── BCryptPasswordHasher.cs
-│   ├── JwtAccessTokenProvider.cs
-│   └── TokenService.cs
-│
-├── FileSystem/                         ← Prompt ve KB dosyaları
-│   ├── FileSystemPromptRepository.cs
-│   ├── FileSystemKnowledgeBaseSource.cs
-│   └── PromptOptions.cs
-│
-├── HealthChecks/
-│   └── PostgresHealthCheck.cs
-│
-└── ExceptionTranslator.cs
-```
-
----
-
-## Postgres vs InMemory
-
-| Özellik | Postgres (üretimde kayıtlı olan) | InMemory (yalnızca testlerde kullanılır) |
-| --------- | --------- | ---------- |
-| Kalıcılık | EF Core + Npgsql | Yok (process sonlanınca sıfırlanır) |
-| Yatay ölçekleme | Desteklenir | — |
-| Dağıtık lock | Redis `IAppDistributedLock` | — |
-| Startup kurtarma | `PersistenceHydrator` | — |
-| DI'da nasıl seçilir | `AddPersistenceAdapters` içinde koşulsuz kayıtlıdır | Yalnızca test projelerinde `new InMemoryXxx(...)` ile elle örneklenir |
-
----
-
-## Port → Adapter eşleme
-
-Aşağıdaki tablo **üretimde gerçekten kayıtlı olan** (Postgres) implementasyonları gösterir. "InMemory" sütunu, testlerde kullanılabilen — ama runtime'da bir config anahtarıyla seçilemeyen — karşılıkları listeler.
-
-| Driven Port | Postgres (kayıtlı) | InMemory (yalnızca test) |
-| ------------ | --------- | --------- |
-| `ISessionManager` | `PostgresSessionManager` | `InMemorySessionManager` |
-| `IApprovalQueue` | `PostgresApprovalQueue` | `InMemoryApprovalQueue` |
-| `IChatBridge` | `PostgresChatBridge` | `InMemoryChatBridge` |
-| `IChatModeRegistry` | `PostgresChatModeRegistry` | `InMemoryChatModeRegistry` |
-| `IEscalationSink` | `PostgresEscalationSink` | `InMemoryEscalationSink` |
-| `IHumanAgentRegistry` | `PostgresHumanAgentRegistry` | `InMemoryHumanAgentRegistry` |
-| `IOrderRepository` | `OrderRepository` | — |
-| `ICustomerRepository` | `CustomerRepository` | — |
-| `IComplaintRepository` | `ComplaintRepository` | — |
-| `IProductCatalogRepository` | `ProductCatalogRepository` | — |
-| `IRatingStore` | `PostgresRatingStore` | `InMemoryRatingStore` |
-| `IReasoningTraceStore` | `PostgresReasoningTraceStore` | `InMemoryReasoningTraceStore` |
-| `ISlaEventSink` | `PostgresSlaEventSink` | `InMemorySlaEventSink` |
-| `ILessonStore` | `PostgresLessonStore` | `InMemoryLessonStore` |
-| `ICustomerProfileStore` | `PostgresCustomerProfileStore` | `InMemoryCustomerProfileStore` |
-| `IMessageBusPort` | — (Redis ayrı adapter, `Adapters.Redis`) | `InMemoryMessageBusAdapter` |
-| `ILlmCallPersistencePort` | `PostgresLlmCallUsageSink` | — |
-| `IPasswordHasher` | `BCryptPasswordHasher` | — |
-| `IJwtAccessTokenProvider` | `JwtAccessTokenProvider` | — |
-| `IRefreshTokenRepository` | `EfRefreshTokenRepository` | — |
-| `IUserAuthRepository` | `EfUserAuthRepository` | — |
-| `IPromptRepository` | `FileSystemPromptRepository` (provider'dan bağımsız) | — |
-| `IKnowledgeBaseSource` | `FileSystemKnowledgeBaseSource` (provider'dan bağımsız) | — |
+- **Çoklu PostgreSQL Şeması:** Veritabanı tabloları mantıksal bounded context'lere göre (`catalog`, `chat`, `hitl`, `observability`, `knowledge`, `auth` vb.) ayrılmıştır.
+- **Hibrit Cache + DB Mimarisi:** Kritik onay ve sohbet akışlarında (ör. `PostgresApprovalQueue`), yüksek okuma performansı için yerel `ConcurrentDictionary` ve pod'lar arası senkronizasyon için Redis pub/sub ile desteklenir.
+- **Güvenli Stok Düşümü:** `StockDeduction.DeductAsync` ile eşzamanlı siparişlerde eksiye düşmeyi engelleyen atomik SQL `UPDATE products SET units_in_stock = units_in_stock - @qty WHERE id = @id AND units_in_stock >= @qty` kontrolü.

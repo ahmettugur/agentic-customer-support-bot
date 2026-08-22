@@ -1,123 +1,112 @@
 # CustomerSupportChatManager
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`  
-**Base class:** `GroupChatManager` (Microsoft.Agents.AI.Workflows)  
-**Yaşam döngüsü:** Her `CreateWorkflow()` çağrısında yeni instance oluşturulur
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs`
+- **Tür:** `public class : GroupChatManager`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents`
 
-## Ne yapar?
+## Ne işe yarar?
 
-MAF (Microsoft Agents Framework), bir workflow içinde birden fazla ajanı "grup sohbet" modunda çalıştırır. Bu modda **kim konuşacak?** sorusunu cevaplamak `GroupChatManager`'ın görevidir. `CustomerSupportChatManager` bu soruyu iki farklı hook ile yanıtlar:
+`CustomerSupportChatManager`, Microsoft Agents Framework'ün `GroupChatManager` sınıfından türeyen; çoklu ajan takımındaki konuşma sırasını (`SelectNextAgentAsync`) ve iş akışının ne zaman sonlanacağını (`ShouldTerminateAsync`) yöneten akıllı orkestrasyon yöneticisidir.
 
-> 💡 **Analiz notu:** Bir toplantı yöneticisi gibi — "şimdi sıra muhasebede (OrderAgent), sonra hukuk kontrolü (ResponseAgent)" diye söz hakkı verir. Toplantı sonlanma koşullarını da kontrol eder.
+## Hangi amaçla kullanılır`?
 
-1. **`SelectNextAgentAsync`** — Her turda hangi ajan çalışmalı?
-2. **`ShouldTerminateAsync`** — Konuşma bitmeli mi?
+- Konuşma geçmişine bakarak bir sonraki ajanı dinamik stratejilerle ([FirstTurnStrategy](Routing.md), [PlanRoutingStrategy](Routing.md), [ReflectionRoutingStrategy](Routing.md)) belirlemek.
+- Ajanlar arası sonsuz devirleri ve döngüleri (`EnforceHandoffLimit` ve `MaxHandoffsPerAgent`) engellemek.
+- Mükerrer araç çağrılarını (`DetectRepeatedToolCall` ve `BuildToolSignature`) tespit edip akışı güvenle sonlandırmak.
+- `WellKnown.Termination.Marker` görüldüğünde akışı başarıyla bitirmek.
 
-## Ajan seçimi: 3-Strategy zinciri
+## Sorumlulukları
 
-Ajan seçimi bir **Chain of Responsibility** (Strategy zinciri) ile yapılır. Stratejiler sırayla denenir; ilki uygun ajanı bulursa zincir durur.
+- **Üstlendiği:**
+  - `SelectNextAgentAsync` ile konuşma sırasındaki sonraki ajanı seçmek.
+  - Handoff limitini aşan ajanları doğrudan `ResponseAgent`'a zorlamak.
+  - `ShouldTerminateAsync` ile sonlanma belirteçlerini ve tekrarlı araç çağrılarını denetlemek.
+  - Araç çağrı imzalarını (`BuildToolSignature`) takip ederek deterministik döngü kırmak.
+- **Üstlenmediği:**
+  - Ajanların prompt'larını veya araçlarını doğrudan çalıştırmak (bu MAF executor'ları tarafından yapılır).
 
-```
-SelectNextAgentAsync(history)
-    │
-    ├─► [1] FirstTurnStrategy       → PlanningAgent ile başla
-    │
-    ├─► [2] PlanRoutingStrategy     → PlanningAgent çıktısını parse et, ilgili ajana git
-    │
-    └─► [3] ReflectionRoutingStrategy → Specialist ajanın yansımasını oku, sonraki adımı seç
-            │
-            └─► (hiçbiri uygun değilse) → PlanningAgent fallback
-```
-
-Detaylar için bkz. [Routing.md](Routing.md).
-
-## Handoff limit koruması: `EnforceHandoffLimit`
-
-Bir ajan sonsuz döngüye girmesini engellemek için her ajan için handoff sayacı tutulur:
-
-```csharp
-private readonly Dictionary<string, int> _handoffCounts;
-```
-
-Bir ajana `WorkflowGuardOptions.MaxHandoffsPerAgent` kez handoff yapıldıktan sonra, o ajana olan sonraki yönlendirme `ResponseAgent`'a çevrilir. Branch adına `+handoff_limited` eklenir ve log'a kaydedilir.
-
-> **Not:** PlanningAgent ve ResponseAgent bu limitten muaftır — bunlara sınırsız geçiş yapılabilir.
-
-## Sonlandırma: `ShouldTerminateAsync`
-
-Workflow'u sonlandıran iki koşul vardır:
-
-### 1. TERMINATE marker
-
-Herhangi bir mesaj `WellKnown.Termination.Marker` stringini içeriyorsa (ResponseAgent bu marker'ı bilinçli olarak yazar) workflow durur.
-
-```
-"Siparişiniz oluşturuldu. TERMINATE reason=completed"
-                          ^^^^^^^^^^^
-                          Bu görülünce workflow sona erer
-```
-
-### 2. Tekrarlayan tool çağrısı tespiti: `DetectRepeatedToolCall`
-
-Son 10 mesaj içinde aynı tool, aynı parametrelerle `WorkflowGuardOptions.MaxDuplicateToolCalls` kez çağrıldıysa workflow sonlandırılır. Bu, ajanın bir döngüye girip gereksiz API çağrıları yapmasını engeller.
-
-**Nasıl çalışır?**
-
-```csharp
-// Tool imzası: "tool_name:{"param1":"val1","param2":"val2"}"
-// Parametreler alfabetik sırayla serialize edilir → deterministik karşılaştırma
-private static string BuildToolSignature(string toolName, IDictionary<string, object?>? args)
-```
-
-Tool'ların parametreleri `OrderBy(kv => kv.Key)` ile sıralandıktan sonra JSON olarak serialize edilir. Bu sayede parametre sırası farklı olsa da aynı çağrı olduğu doğru tespit edilir.
-
-## Constructor parametreleri
+## Constructor ve Başlatma Mantığı
 
 ```csharp
 public CustomerSupportChatManager(
-    IReadOnlyList<AIAgent> agents,        // Workflow'daki tüm ajanlar
-    WorkflowGuardOptions guards,          // Koruma eşikleri
-    ILogger<CustomerSupportChatManager> logger)
+    IReadOnlyList<AIAgent> agents,
+    WorkflowGuardOptions guards,
+    ILogger<CustomerSupportChatManager> logger,
+    string? constrainedSpecialistName = null)
 ```
 
-Constructor içinde `PlanningAgent` ve `ResponseAgent`'ın listede mevcut olduğu doğrulanır. Eksikse `InvalidOperationException` fırlatılır.
+### Constructor İçerisinde Yapılan İşler:
+1. **Ajan Sözlüğünün Oluşturulması:** `agents` listesindeki tüm ajanlar büyük/küçük harf duyarsız adlarına (`StringComparer.OrdinalIgnoreCase`) göre `Dictionary<string, AIAgent>` yapısına aktarılır.
+2. **Zorunlu Ajan Doğrulaması:**
+   - `PlanningAgent` ve `ResponseAgent` sözlükte aranır; bulunamazsa fail-fast olarak `InvalidOperationException` fırlatılır.
+3. **Kısıtlanmış Uzman Denetimi:**
+   - Eğer `constrainedSpecialistName` verilmişse, bunun geçerli bir uzman (`WellKnown.AgentNames.Specialists`) olup olmadığı denetlenir ve `constrainedSpecialist` değişkenine atanır.
+4. **RoutingContext Oluşturulması:**
+   - Ajan sözlüğü, `PlanningAgent`, `ResponseAgent`, güvenlik kuralları (`Guards`), `Logger` ve varsa `ConstrainedSpecialist` referansları [RoutingContext](Routing.md) nesnesi altında toplanır.
+5. **Yönlendirme Stratejilerinin Sıraya Dizilmesi:**
+   - `_strategies` listesine sırasıyla `FirstTurnStrategy`, `PlanRoutingStrategy` ve `ReflectionRoutingStrategy` eklenir.
 
-## WorkflowGuardOptions referansı
+## Metotlar ve İç Çalışma Mantıkları
 
-Bu sınıf tarafından kullanılan ayarlar (`appsettings.json` → `Workflow:` bölümü):
-
-| Ayar | Tür | Kullanım yeri |
-| ------ | ----- | --------------- |
-| `MaxIterations` | int | `GroupChatManager.MaximumIterationCount` |
-| `MaxHandoffsPerAgent` | int | `EnforceHandoffLimit` |
-| `MaxDuplicateToolCalls` | int | `DetectRepeatedToolCall` |
-| `TimeoutSeconds` | int | `CustomerSupportTeam` (burada kullanılmaz) |
-
-## Örnek akış
-
+### 1. `SelectNextAgentAsync` (Protected Override)
+```csharp
+protected override async ValueTask<AIAgent> SelectNextAgentAsync(
+    IReadOnlyList<ChatMessage> history,
+    CancellationToken cancellationToken = default)
 ```
-Turn 1: SelectNextAgent → FirstTurnStrategy → PlanningAgent
-        PlanningAgent: { "selected_agent": "OrderAgent", "intent": "order_inquiry" }
+- **Ne işe yarar?:** Konuşma geçmişinin son durumunu inceleyerek sıradaki ajanın kim olması gerektiğine karar verir.
+- **İç Mantığı:**
+  1. Geçmişin son mesajı (`lastMessage`) alınır.
+  2. `_strategies` listesindeki stratejiler sırayla denenir (`strategy.TrySelectAsync(...)`):
+     - `FirstTurnStrategy`: Konuşma henüz başladıysa `PlanningAgent` (veya kısıtlanmış uzman) seçilir.
+     - `PlanRoutingStrategy`: Son mesaj `PlanningAgent`'tan gelmişse ve plan hazırsa seçilen uzman ajan belirlenir.
+     - `ReflectionRoutingStrategy`: Son mesaj bir uzman ajandan gelmişse ve görev bittiyse `ResponseAgent`, eskalasyon gerekiyorsa `HumanHandoffAgent` seçilir.
+  3. Eşleşen strateji sonucu (`RoutingResult`) dönerse, `EnforceHandoffLimit` çağrılarak handoff sınırı denetlenir ve seçilen ajan döndürülür.
+  4. Hiçbir strateji eşleşmezse emniyet sübabı olarak `PlanningAgent`'a geri dönülür (fallback).
 
-Turn 2: SelectNextAgent → PlanRoutingStrategy → OrderAgent
-        OrderAgent: { "preToolCheck": {...}, "postToolReflection": { "handoffSuggestion": "ResponseAgent" } }
-
-Turn 3: SelectNextAgent → ReflectionRoutingStrategy → ResponseAgent
-        ResponseAgent: "Siparişiniz 3. kargo gününde teslim edilecek. TERMINATE"
-
-ShouldTerminate → true (TERMINATE bulundu) → Workflow biter
+### 2. `EnforceHandoffLimit` (Private)
+```csharp
+private void EnforceHandoffLimit(ref AIAgent selected, ref string branch)
 ```
+- **Ne işe yarar?:** Bir uzman ajana aynı tur içerisinde maksimum izin verilen devir sayısından (`_guards.MaxHandoffsPerAgent`) fazla gidilmesini engeller.
+- **İç Mantığı:**
+  - `PlanningAgent` ve `ResponseAgent` bu kontrolden muaftır.
+  - Seçilen uzmanın devir sayısı `_handoffCounts` tablosunda artırılır.
+  - Sınır aşılmışsa seçim zorla `ResponseAgent` yapılır ve loglanır (`branch += "+handoff_limited"`).
 
-## Sık karşılaşılan durumlar
+### 3. `ShouldTerminateAsync` (Protected Override)
+```csharp
+protected override ValueTask<bool> ShouldTerminateAsync(
+    IReadOnlyList<ChatMessage> history,
+    CancellationToken cancellationToken = default)
+```
+- **Ne işe yarar?:** Çoklu ajan grup sohbetinin tamamlanıp tamamlanmadığını belirler.
+- **İç Mantığı:**
+  1. Son mesajın metninde `WellKnown.Termination.Marker` ("TERMINATE") varsa akış hemen sonlandırılır (`true`).
+  2. `DetectRepeatedToolCall(history)` kontrol edilir; aynı araç aynı argümanlarla limitin üzerinde çağrılmışsa döngü kırılarak akış sonlandırılır (`true`).
+  3. Aksi halde akış devam eder (`false`).
 
-### "No routing strategy matched; falling back to PlanningAgent"
+### 4. `DetectRepeatedToolCall` (Private)
+```csharp
+private bool DetectRepeatedToolCall(IReadOnlyList<ChatMessage> history)
+```
+- **Ne işe yarar?:** Modelin halüsinasyona girip aynı aracı aynı parametrelerle defalarca çağırmasını (infinite tool loop) tespit eder.
+- **İç Mantığı:**
+  - Son 10 mesaj taranır.
+  - Bulunan `FunctionCallContent` nesneleri `BuildToolSignature` ile benzersiz bir imza metnine dönüştürülür.
+  - Bir imzanın sayısı `_guards.MaxDuplicateToolCalls` eşiğine ulaşırsa `true` döner.
 
-Log'da bu uyarıyı görüyorsanız, 3 stratejinin hiçbiri eşleşmedi demektir. Olası nedenler:
+### 5. `BuildToolSignature` (Private Static)
+```csharp
+private static string BuildToolSignature(string toolName, IDictionary<string, object?>? args)
+```
+- **Ne işe yarar?:** Araç adı ve parametrelerinden sıralı, deterministik bir imza anahtarı (ör. `product_inquiry_tool:{"query":"ayakkabı"}`) üretir.
+- **İç Mantığı:** Argüman anahtarları alfabetik sıralanır (`StringComparer.Ordinal`) ve JSON formatında serileştirilir. Serileştirme hatası durumunda fallback parametre dizgisi oluşturulur.
 
-- `lastMessage` null
-- Mesajın `AuthorName`'i beklenen ajan adıyla eşleşmiyor
-- `RoutingContext.IsSpecialistMessage` false döndürüyor (yeni ajan eklendiyse `WellKnown.AgentNames.Specialists` dizisini kontrol edin)
+## Bağımlılıklar
 
-### Handoff limit tetikleniyor ama beklenmiyordu
-
-`WorkflowGuardOptions.MaxHandoffsPerAgent` değerini artırın veya ajanın neden tekrar tekrar seçildiğini araştırın — genellikle tool başarısız olduğunda ajan tekrar çağrılmaya çalışılır.
+- `Microsoft.Agents.AI.Workflows.GroupChatManager`
+- `Microsoft.Extensions.AI.ChatMessage`
+- [RoutingContext](Routing.md)
+- [WorkflowGuardOptions](../CustomerSupportBot.Application/Ports/Outbound/WorkflowGuardOptions.md)
+- `CustomerSupportBot.Adapters.Agents.Routing.*`

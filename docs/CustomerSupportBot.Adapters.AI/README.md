@@ -1,174 +1,25 @@
 # CustomerSupportBot.Adapters.AI
 
-LLM, embedding, vector store ve gerçek zamanlı ses altyapısı için adapter katmanı.
+Bu klasör, hexagonal mimaride **Driven Adapter (Çıkış Adaptörü)** rolünü üstlenen; yapay zeka (LLM), akıl yürütme (Reasoning), metin vektörleştirme (Embedding), gerçek zamanlı ses iletişimi (Realtime WebSocket) ve vektör veritabanı (Qdrant) entegrasyonlarını Microsoft Extensions AI (MEAI) standartlarıyla somutlaştıran adaptördür.
 
-> 💡 **Analiz notu:** Bu katman projenin "konuşma yeteneği"dir. Application katmanı "bir LLM'e sor" der ama hangi LLM, hangi API, hangi SDK — hepsini bu adapter bilir. Application hiçbir zaman `OpenAIClient` görmez, sadece `IReasoningChatClient.CompleteAsync()` çağırır. Bu sayede yarın OpenAI yerine Anthropic kullansak, sadece bu klasör değişir.
+## Dizin Yapısı
 
-İki sağlayıcı desteklenir:
+- [Chat/](Chat/README.md) — Standart sohbet, özetleme ve o-serisi muhakeme istemcileri:
+  - [AiClientFactory](Chat/AiClientFactory.md) — Sağlayıcı türüne (`OpenAI`, `AzureOpenAI`) göre `IChatClient` ve `ReasoningChatClient` inşa eden fabrika.
+  - [GeneralChatClientAdapter](Chat/GeneralChatClientAdapter.md) — [IGeneralChatClient](../CustomerSupportBot.Application/Ports/Outbound/AI/IGeneralChatClient.md) uygulayıcısı; bağlam özetleme ve genel metin üretim adaptörü.
+  - [ReasoningChatClient](Chat/ReasoningChatClient.md) — [IReasoningChatClient](../CustomerSupportBot.Application/Ports/Outbound/AI/IReasoningChatClient.md) uygulayıcısı; `reasoning_effort` parametresiyle derin muhakeme yürüten adaptör.
+- [Realtime/](Realtime/README.md) — OpenAI Realtime API (WebSocket / Ses) entegrasyonu:
+  - [OpenAiRealtimeClientAdapter](Realtime/OpenAiRealtimeClientAdapter.md) — [IRealtimeClientPort](../CustomerSupportBot.Application/Ports/Outbound/AI/IRealtimeVoiceTransport.md) uygulayıcısı; çift yönlü ses/metin akışı ve araç çağırma köprüsü.
+  - [RealtimeFunctionTools](Realtime/RealtimeFunctionTools.md) — Realtime ses oturumu için tanımlanan araç şemaları.
+- [Qdrant/](Qdrant/QdrantVectorMemoryAdapter.md) — [IVectorMemoryPort](../CustomerSupportBot.Application/Ports/Outbound/AI/IVectorMemoryPort.md) uygulayıcısı; Qdrant gRPC istemcisiyle koleksiyon yönetimi, payload filtreleme ve cosine similarity vektör araması.
+- [OpenAi/](OpenAi/OpenAiEmbeddingAdapter.md) — [IEmbeddingPort](../CustomerSupportBot.Application/Ports/Outbound/AI/IEmbeddingPort.md) uygulayıcısı; metinleri vektörleştiren adaptör.
+- [Options/](Options/AiProviderOptions.md) — `AiOptions`, `OpenAiOptions`, `AzureOpenAiOptions`, `OllamaOptions` ve `QdrantOptions` yapılandırma modelleri.
+- [DependencyInjection/](DependencyInjection/AiAdapterServiceCollectionExtensions.md) — `AddAiAdapter` DI kayıt uzantısı.
+- [ExceptionTranslator](ExceptionTranslator.md) — OpenAI, Azure ve Qdrant altyapı istisnalarını DomainException'a çevirici.
 
-- **OpenAI** (GPT-4o, GPT-4-turbo, o1-mini reasoning, vb.)
-- **Azure OpenAI** (aynı modeller, Azure deployment'lar)
+## Mimari Rolü ve Yetenekleri
 
-Ek hizmetler:
-
-- **OpenAI Embedding API** — text-embedding-3-small/large
-- **Qdrant** vector store — semantic memory
-- **OpenAI Realtime API** — voice I/O (WebSocket)
-
----
-
-## Klasör yapısı
-
-```
-CustomerSupportBot.Adapters.AI/
-├── Chat/
-│   ├── AiClientFactory.cs              ← Provider switch (OpenAI/Azure)
-│   ├── GeneralChatClientAdapter.cs     ← IGeneralChatClient
-│   └── ReasoningChatClient.cs          ← IReasoningChatClient (o-series reasoning)
-├── OpenAi/
-│   └── OpenAiEmbeddingAdapter.cs       ← IEmbeddingPort
-├── Qdrant/
-│   └── QdrantVectorMemoryAdapter.cs    ← IVectorMemoryPort
-├── Realtime/
-│   ├── OpenAiRealtimeClientAdapter.cs  ← IRealtimeVoiceTransport
-│   └── RealtimeFunctionTools.cs        ← Read-only tool registry
-├── DependencyInjection/
-│   └── AiAdapterServiceCollectionExtensions.cs
-├── Options/
-│   └── AiProviderOptions.cs
-└── ExceptionTranslator.cs
-```
-
----
-
-## Dokümantasyon haritası
-
-| Doküman | Kapsam |
-| --- | --- |
-| [DependencyInjection.md](DependencyInjection.md) | `AddAiAdapters`, options binding, Composition Root pattern |
-| [Options.md](Options.md) | AiProviderOptions yapılandırma şeması |
-| [ChatClients.md](ChatClients.md) | AiClientFactory + GeneralChatClientAdapter + ReasoningChatClient |
-| [Embedding.md](Embedding.md) | OpenAiEmbeddingAdapter (batch + provider fallback) |
-| [VectorMemory.md](VectorMemory.md) | QdrantVectorMemoryAdapter (payload şeması, search, filter) |
-| [Realtime.md](Realtime.md) | OpenAiRealtimeClientAdapter + RealtimeFunctionTools |
-| [ExceptionTranslator.md](ExceptionTranslator.md) | HTTP + gRPC exception mapping |
-
----
-
-## Port → Adapter eşlemesi
-
-| Port (Application) | Adapter | Singleton/Scoped |
-| --- | --- | --- |
-| `IGeneralChatClient` | `GeneralChatClientAdapter` | Singleton |
-| `IReasoningChatClient` | `ReasoningChatClient` | Singleton |
-| `IEmbeddingPort` | `OpenAiEmbeddingAdapter` | Singleton |
-| `IVectorMemoryPort` | `QdrantVectorMemoryAdapter` | Singleton |
-| `IRealtimeVoiceTransport` | `OpenAiRealtimeClientAdapter` | **Scoped** (per WebSocket) |
-
-`IRealtimeVoiceTransport` Scoped çünkü her browser WebSocket bağlantısı kendi OpenAI WebSocket'ine sahip — Singleton paylaşım imkansız.
-
----
-
-## Provider seçimi
-
-Tek `AI:Provider` config değeri uygulamanın hangi sağlayıcıya gideceğini belirler:
-
-```json
-{
-  "AI": {
-    "Provider": "OpenAI",   // veya "AzureOpenAI"
-    "OpenAI": {
-      "ApiKey": "sk-...",
-      "Model": "gpt-4o-mini",
-      "ReasoningModel": "o1-mini",
-      "ReasoningEffort": "medium"
-    },
-    "AzureOpenAI": {
-      "Endpoint": "https://...openai.azure.com",
-      "ApiKey": "...",
-      "Deployment": "gpt-4o-mini-prod",
-      "ReasoningDeployment": "o1-mini-prod"
-    },
-    "Realtime": {
-      "Enabled": true,
-      "Model": "gpt-realtime-2",
-      "Voice": "alloy",
-      "VadSilenceMs": 600,
-      "ReasoningEffort": "low",
-      "TranscriptionModel": "gpt-4o-transcribe",
-      "TranscriptionLanguage": "tr"
-    }
-  }
-}
-```
-
----
-
-## Composition Root pattern
-
-`AddAiAdapters` **`IChatClient`'ı kayıt etmez** — bu sorumluluk `Api` katmanına bırakılmıştır.
-
-Neden? `IChatClient` `Adapters.Telemetry/TelemetryChatClient` ile sarmalanmalı. Bu compose adımı:
-
-- `Adapters.AI` → asıl client'ı sağlar (OpenAI/Azure)
-- `Adapters.Telemetry` → decorator (TelemetryChatClient)
-- `Api` (Composition Root) → ikisini birleştirir
-
-`AddAiAdapters` sadece embedding + vector + realtime + options kaydeder. Chat client kaydı için `CustomerSupportBot.Api/Extensions/AiServicesExtensions.cs` (`AddAiServices`) bak.
-
----
-
-## Yapay zekâ akışları
-
-### Chat (text)
-
-```
-PortService → IGeneralChatClient.CompleteAsync()
-              IReasoningChatClient.CompleteAsync() / StreamAsync()
-   ↓
-GeneralChatClientAdapter / ReasoningChatClient
-   ↓
-TelemetryChatClient (decorator)
-   ↓
-Microsoft.Extensions.AI.IChatClient
-   ↓
-Provider SDK (OpenAI / Azure)
-   ↓
-HTTPS API
-```
-
-### Semantic Memory
-
-```
-LessonMiner / CustomerProfileService → IVectorMemoryPort.SearchAsync()
-   ↓
-QdrantVectorMemoryAdapter
-   ├─ IEmbeddingPort.EmbedAsync(query)     → OpenAI embedding API
-   └─ Qdrant.SearchAsync(vector, topK)     → gRPC
-```
-
-### Realtime (voice)
-
-```
-Browser WebSocket (PCM 24kHz)
-   ↓
-Api/Realtime endpoint
-   ↓
-RealtimeBridge / RealtimeNative (Application)
-   ↓
-OpenAiRealtimeClientAdapter (Adapters.AI)
-   ↓
-OpenAI Realtime WebSocket
-```
-
----
-
-## Bağımlılıklar
-
-| Paket | Amaç |
-| --- | --- |
-| `Microsoft.Extensions.AI` | `IChatClient` interface |
-| `Microsoft.Agents.AI.OpenAI` | OpenAI istemcisi (OpenAI SDK'yı transitive getirir — doğrudan `OpenAI` paket referansı yoktur) |
-| `Azure.AI.OpenAI` | Azure OpenAI SDK |
-| `Qdrant.Client` | Qdrant gRPC client |
-| `System.Net.WebSockets` | Realtime WS bağlantısı |
+- **Microsoft Extensions AI (MEAI) Uyumluluğu:** Tüm LLM istemcileri `Microsoft.Extensions.AI.IChatClient` ve `IEmbeddingGenerator` standartlarını temel alır.
+- **Çoklu Sağlayıcı Desteği:** `appsettings.json` üzerinden tek satırla OpenAI ve Azure OpenAI arasında geçiş yapabilme.
+- **Realtime Ses Protokolü:** WebSocket üzerinden OpenAI Realtime API ile düşük gecikmeli (low-latency) çift yönlü PCM16 ses akışı ve ses üzerinden anlık araç çalıştırma.
+- **Qdrant Vektör Belleği:** Şirket bilgi bankası (`cs_knowledge`) ve kullanıcı episodik hafızası (`cs_episodes`) için gRPC tabanlı yüksek performanslı anlamsal arama.

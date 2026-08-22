@@ -403,7 +403,7 @@ public static class ToolParameterNames
 
 Tool parametrelerinin standart isimleri — `CollectedInfo` Dict'iyle uyumlu.
 
-> `Lines`, `order_placement_tool`'un satır listesi parametresidir (çok ürünlü sipariş). Satırların tamamı eksikse eksik-alan bildiriminde `ProductName`/`Quantity` yerine bu ad kullanılır — LLM'in doldurması gereken alan tek başına ürün adı değil, satırların tamamıdır. Bkz. [OrderToolsService](../CustomerSupportBot.Application/Tools/OrderToolsService.md).
+> `Lines`, `order_placement_tool`'un satır listesi parametresidir (çok ürünlü sipariş). Satırların tamamı eksikse eksik-alan bildiriminde `ProductName`/`Quantity` yerine bu ad kullanılır — LLM'in doldurması gereken alan tek başına ürün adı değil, satırların tamamıdır. Bkz. [OrderToolsService](../CustomerSupportBot.Application/Services/Tools/OrderToolsService.md).
 
 ### Defaults
 

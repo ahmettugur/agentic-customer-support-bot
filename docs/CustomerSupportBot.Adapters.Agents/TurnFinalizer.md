@@ -1,48 +1,85 @@
 # TurnFinalizer
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/TurnFinalizer.cs`
-**Erişim:** `internal sealed`
-**Yaşam döngüsü:** Singleton (`CustomerSupportTeam` içinde `new` ile kurulur)
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/TurnFinalizer.cs`
+- **Tür:** `internal sealed class`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents`
 
 ## Ne işe yarar?
 
-Bir workflow turu **başarıyla** tamamlandığında tetiklenmesi gereken tüm yan etkileri tek bir metotta (`FinalizeAsync`) toplar: bekleyen eskalasyonları işleme, agent visit çıktılarını doldurma, episodik bellek yazımı, müşteri profili güncellemesi ve trace'in kapatılması.
+`TurnFinalizer`, bir iş akışı turu tamamlandığında (başarı, zaman aşımı veya hata); bekleyen eskalasyonların işlenmesi, ajan ziyaret çıktılarının doldurulması, episodik bellek kaydı, müşteri profili güncellemesi ve [IReasoningTraceStore](../CustomerSupportBot.Application/Ports/Outbound/Observability/IReasoningTraceStore.md) üzerinde trace'in kapatılması gibi tüm tur sonu yan etkilerini tek bir merkezde toplayan ve yöneten sınıftır.
 
-> 💡 **Analiz notu:** Bir maçın bitiminde yapılan işlemler gibi — skortabelasını güncelle, istatistikleri kaydet, maç raporunu yaz. Workflow bitti ama arka planda yapılması gereken işler var.
+## Hangi amaçla kullanılır`?
 
-## Hangi amaçla kullanılır?
-
-`WorkflowRunner.RunAsync`/`RunStreamingAsync`, workflow başarıyla tamamlandığında (timeout/iptal/hata değil) sonuç metni temizlendikten hemen sonra `_finalizer.FinalizeAsync(...)` çağırır.
+- **Episodik Bellek Kirliliğini Önleme:** Compound (bileşik) bir sorgu N alt göreve bölündüğünde, her alt görev için ayrı sentetik episodik bellek yazılmasını ve müşteri profili sayacının N kez artırılmasını engellemek; alt koşularda bu yan etkileri atlayıp (`isSubTaskRun = true`), en sonda aggregate birleşik sonuçla tek bir kez (`FinalizeAggregateTurnAsync`) yazmak.
+- **Trace Çıktılarını Tamamlama (`PopulateAgentVisitOutputs`):** Ziyaret edilen ajanların boş kalan çıktı alanlarını (PlanningResult JSON, SpecialistReasoning JSON, ResponseAgent metni) otomatik doldurarak `/traces` ve `/replay` panellerinde eksiksiz görünmesini sağlamak.
+- **Güvenli Yan Etki Yürütümü:** Bellek yazımı veya profil güncellemelerinde hata oluşsa bile kullanıcının yanıt almasını engellemeyecek şekilde korumalı (`Safe`) metodlar işletmek.
 
 ## Sorumlulukları
 
-- `ApprovalGateService.ProcessPendingEscalations(trace, query, result)` çağırarak `needs_escalation` durumundaki specialist reasoning'leri eskalasyon sink'ine yazdırmak.
-- `PopulateAgentVisitOutputs`: trace'teki her `AgentVisit`'in boş kalan `Output` alanını, o ajanın türüne göre (Planning → `trace.Planning` JSON'u, Response → nihai metin, specialist → eşleşen `SpecialistReasoning` JSON'u) 1500 karakterle sınırlı olarak doldurmak — admin panelindeki trace görünümü için.
-- `WriteEpisodicMemorySafe`: `ISemanticMemoryWriter` etkinse (`Enabled`), sorgu+yanıtı fire-and-forget (`Task.Run`, hata yutulup loglanır) olarak episodik belleğe yazmak.
-- `UpdateCustomerProfileSafeAsync`: `ICustomerProfileService` kayıtlıysa ve session'da `CustomerId` varsa etkileşimi müşteri profiline işlemek (hata yutulup loglanır, yanıtı etkilemez).
-- `_traceStore.Complete(...)` ile trace'i `terminationReason` ve `finalResponse` ile kapatmak.
+- **Üstlendiği:**
+  - `FinalizeAsync` ile tek alt görev veya tekil tur trace'ini kapatmak.
+  - `FinalizeAggregateTurnAsync` ile compound sorgunun birleşik sonucunu ve episodik belleğini yazmak.
+  - Eskalasyon durumunda onay kapısı üzerinden `ProcessPendingEscalationsAsync` çağırmak.
+  - Ajan ziyaret kayıtlarındaki JSON çıktılarını biçimlendirmek (`PrettyJson`).
 
-**Üstlenmediği işler:** Timeout/iptal/hata durumlarındaki trace kapatma (bunlar `WorkflowRunner` içinde doğrudan yapılır — `TurnFinalizer` yalnızca **başarılı** turlar için çağrılır), eskalasyon kararının kendisi (`EscalationPolicyService`'e delege edilir).
+## Constructor ve Başlatma Mantığı
 
-## Diğer katman ve bileşenlerle ilişkileri
+```csharp
+public TurnFinalizer(
+    IReasoningTraceStore traceStore,
+    ApprovalGateService approvalGate,
+    ILoggerFactory loggerFactory,
+    ISemanticMemoryWriter? semanticMemory,
+    ICustomerProfileService? profileService)
+```
 
-**Bağımlılıkları:** `IReasoningTraceStore`, `ApprovalGateService`, `ILoggerFactory`, `ISemanticMemoryWriter?` (opsiyonel), `ICustomerProfileService?` (opsiyonel) — son ikisi `null` gelirse ilgili özellik sessizce atlanır.
+### Constructor İçerisinde Yapılan İşler:
+- `_traceStore`: Trace kapatma işlemlerini yürütür.
+- `_approvalGate`: Eskalasyonları işler.
+- `_loggerFactory`: Günlükleme motorunu kurar.
+- `_semanticMemory`: Vektör tabanlı episodik bellek yazıcısını saklar.
+- `_profileService`: Müşteri etkileşim profili güncelleyicisini saklar.
 
-**Kimler çağırır:** Yalnızca `WorkflowRunner.RunAsync`/`RunStreamingAsync` (başarılı tamamlanma dalı).
+## Metotlar ve İç Çalışma Mantıkları
 
-## Kullanılma nedeni ve tasarım yaklaşımı
+### 1. `FinalizeAsync`
+```csharp
+public async Task FinalizeAsync(
+    ReasoningTrace trace,
+    AgentSession? session,
+    string query,
+    string result,
+    string terminationReason,
+    CancellationToken ct = default,
+    bool isSubTaskRun = false)
+```
+- **Ne işe yarar?:** Tek bir iş akışı koşusunu sonlandırır.
+- **İç Mantığı:**
+  1. `_approvalGate.ProcessPendingEscalationsAsync`: Varsa tur sırasında doğan eskalasyonları işler.
+  2. `PopulateAgentVisitOutputs(trace, result)`: Ajan ziyaret kayıtlarının çıktılarını doldurur.
+  3. `if (!isSubTaskRun)`: Alt görev koşusu DEĞİLSE; `WriteEpisodicMemorySafe` ile episodik belleği ve `UpdateCustomerProfileSafeAsync` ile müşteri profilini günceller.
+  4. `_traceStore.Complete`: Trace kaydını `finalResponse` ve `terminationReason` ile tamamlandı durumuna çeker.
 
-Tur-sonu yan etkileri (`ApprovalGateService`, `ISemanticMemoryWriter`, `ICustomerProfileService`, `IReasoningTraceStore`) `WorkflowRunner`'ın kendi akış kontrolü mantığından (event döngüsü, timeout, HITL köprüsü) ayrılarak buraya toplandı — `WorkflowRunner`'ı "workflow'u nasıl çalıştırırım" sorusuna, `TurnFinalizer`'ı "başarılı bir turdan sonra ne yapmam gerekir" sorusuna odaklı tutar. Episodik bellek ve müşteri profili güncellemeleri bilinçli olarak **fire-and-forget/best-effort**: bu yan etkilerin başarısız olması kullanıcının yanıtını etkilememeli, yalnızca loglanmalıdır.
+### 2. `FinalizeAggregateTurnAsync`
+```csharp
+public async Task FinalizeAggregateTurnAsync(
+    AgentSession? session,
+    string query,
+    string aggregateResult,
+    string? intent,
+    CancellationToken ct = default)
+```
+- **Ne işe yarar?:** Compound bir sorgunun tüm alt görevleri bittiğinde tur bazlı yan etkileri bir kez yazar.
+- **İç Mantığı:** Kullanıcının orijinal sorusunu (`query`) ve birleşik yanıtını (`aggregateResult`) alarak tek bir episodik bellek kaydı oluşturur ve müşteri profilini 1 tur ilerletir.
 
-## Metotlar / Üyeler
-
-| Üye | Açıklama |
-| --- | --- |
-| `FinalizeAsync(trace, session, query, result, terminationReason)` | Ana giriş noktası — eskalasyon, agent visit çıktıları, episodik bellek, müşteri profili, trace kapatma sırasıyla çağrılır. |
-| `PopulateAgentVisitOutputs(trace, finalResult)` (private static) | Boş `AgentVisit.Output` alanlarını ajan türüne göre doldurur (1500 karakterle kırpılır). |
-| `WriteEpisodicMemorySafe(trace, query, response, customerId)` (private) | Fire-and-forget episodik bellek yazımı. `customerId` (`session?.State.AuthenticatedCustomerId`) doldurulur — episode retrieval'ın (bkz. [ContextProviders.md](../CustomerSupportBot.Application/Providers/ContextProviders.md#semanticmemorycontextprovider--episode-retrieval-canlandırıldı)) bu müşteriye ait geçmiş turları bulabilmesi buna dayanır. |
-| `UpdateCustomerProfileSafeAsync(session, trace, query, response)` (private) | Best-effort müşteri profili güncellemesi. |
+### 3. `PopulateAgentVisitOutputs` (Private Static)
+- **Ne işe yarar?:** `ReasoningTrace.AgentVisits` koleksiyonundaki her bir ziyaret kaydını inceler; Planning için `trace.Planning` JSON'unu, uzmanlar için `trace.SpecialistReasonings` JSON'unu, ResponseAgent için ise nihai metni ziyaret çıktısı olarak yazar (uzun metinler 1500 karakterle kırpılır).
 
 ## Bağımlılıklar
 
-Constructor injection: `IReasoningTraceStore traceStore`, `ApprovalGateService approvalGate`, `ILoggerFactory loggerFactory`, `ISemanticMemoryWriter? semanticMemory`, `ICustomerProfileService? profileService`.
+- [IReasoningTraceStore](../CustomerSupportBot.Application/Ports/Outbound/Observability/IReasoningTraceStore.md)
+- [ApprovalGateService](ApprovalGateService.md)
+- [ReasoningTrace](../CustomerSupportBot.Domain/Model/ReasoningTrace.md)
+- [AgentSession](../CustomerSupportBot.Domain/Model/AgentSession.md)
+- `CustomerSupportBot.Application.Services.ISemanticMemoryWriter`
+- `CustomerSupportBot.Application.Services.ICustomerProfileService`

@@ -1,49 +1,80 @@
 # WorkflowMessageBuilder
 
-> 💡 **Analiz notu:** Workflow'a gönderilecek system prompt'u ve kullanıcı mesajını hazırlar — reasoning hint'leri, session state, context bilgileri birleştirilip tek bir mesaj paketi olarak sunulur.
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/WorkflowMessageBuilder.cs`
+- **Tür:** `internal sealed class`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents`
 
-## Ne İşe Yarar
+## Ne işe yarar?
 
-Workflow çalıştırıcısına (WorkflowRunner) giden system/user mesajlarını inşa eden sınıftır. Bağlam, reasoning özeti, entity hint ve replan notlarından oluşan mesaj listesini oluşturur.
+`WorkflowMessageBuilder`, Microsoft Agents Framework (MAF) grup sohbeti iş akışı başlatılmadan önce; context pipeline (RAG + episodik bellek), müşteri kimliği ipuçları, Reasoning özetleri, çıkarılan ID'ler (`ExtractedIds`), yönetici replan notları ve geçmiş konuşma mesajlarını sıralı ve optimize bir şekilde derleyerek `WorkflowPrompt` (mesajlar + bağlam durumu) üreten derleyicidir.
 
-## Hangi Amaçla Kullanılır
+## Hangi amaçla kullanılır`?
 
-[WorkflowRunner](WorkflowRunner.md) bir agent workflow'u başlatmadan önce, LLM'e gönderilecek mesaj listesinin hazırlanması için kullanılır. #47 refactor'ı ile WorkflowRunner'dan ayrıştırılmıştır.
+- **Sistem İpuçlarının Doğru Sırada Enjeksiyonu:** Ajan prompt'larının beklediği formatta kimlik (`CustomerIdentityHint`), bağlam (`ContextResult`), muhakeme (`ReasoningSummaryHint`) ve varlık (`IdExtractor.BuildHintMessage`) sistem mesajlarını üretmek.
+- **Akıllı Geçmiş Kırpma (Token Optimizasyonu):** `ConversationSummaryProvider` eski mesajları özetleyip bağlama eklediğinde, özetlenen mesajları sohbet geçmişinden akıllıca atlayarak (`SelectHistoryToSend`) mükerrer token harcamasını engellemek.
+- **Hatasız Fallback Güvencesi:** Özetleyici LLM çağrısı zaman aşımına uğradığında veya özet prompt'a girmediğinde geçmişin kırpılmasını önleyerek mesaj kaybını engellemek.
 
 ## Sorumlulukları
 
-- Context pipeline'ından bağlam bilgisi çekmek (konuşma geçmişi, müşteri profili, semantik hafıza).
-- Prompt repository'den sistem prompt'unu yüklemek.
-- Reasoning sonuçlarından özet mesaj oluşturmak.
-- Entity hint mesajları inşa etmek (IdExtractor üzerinden — "order_id MEVCUT" gibi ifadeler).
-- Replan notu varsa ek sistem mesajı eklemek.
-- Sipariş yönlendirme mesajını yeniden yazmak.
+- **Üstlendiği:**
+  - `BuildWorkflowMessagesAsync` ile tüm sistem, bağlam ve kullanıcı mesajlarını sıraya dizmek.
+  - Özet (summary) bağlama girmişse geçmişi kırpmak (`SelectHistoryToSend`), girmemişse tam geçmişi göndermek.
+  - Doğrulanmış müşteri kimliği ipucunu (`CustomerIdentityHintBuilder`) eklemek.
+  - Yönetici replan notunu tüketip sisteme eklemek (`ConsumeForceReplanHint`).
 
-## Diğer Katman ve Bileşenlerle İlişkileri
+## Constructor ve Başlatma Mantığı
 
-- **DI ile inject edilen**: `IContextPipeline`, `IPromptRepository`, `IChatClient`, `ILoggerFactory`.
-- **Kullanan sınıf**: [WorkflowRunner](WorkflowRunner.md).
-- **İlişkili bileşenler**: `CustomerSupportBot.Application` → `ContextPipeline`, `IdExtractor`.
-- **Prompt dosyaları**: `CustomerSupportBot.Api/Prompts/agents/*.md` — gizli sözleşme (entity hint metni ve mesaj sırası prompt'larla uyumlu olmalıdır).
+```csharp
+public WorkflowMessageBuilder(
+    IContextPipeline contextPipeline,
+    IPromptRepository prompts,
+    IChatClient chatClient,
+    ILoggerFactory loggerFactory,
+    CustomerIdentityHintBuilder identityHint)
+```
 
-## Kullanılma Nedeni ve Tasarım Yaklaşımı
+### Constructor İçerisinde Yapılan İşler:
+- Bağlam hattı (`_contextPipeline`), prompt deposu (`_prompts`), LLM istemcisi (`_chatClient`), log fabrikası (`_loggerFactory`) ve müşteri kimlik ipucu üreticisi (`_identityHint`) alanları başlatılır.
 
-WorkflowRunner'ın SRP ihlali #47'de çözülerek mesaj inşası bu sınıfa taşınmıştır. Prompt dosyalarıyla belgesiz bir sözleşme vardır: entity hint metni ve mesaj sırası değiştirilirken ilgili prompt dosyalarının da gözden geçirilmesi gerekir.
+## Metotlar ve İç Çalışma Mantıkları
 
-## Metotlar / Üyeler
+### 1. `BuildWorkflowMessagesAsync`
+```csharp
+public async Task<WorkflowPrompt> BuildWorkflowMessagesAsync(
+    string query,
+    List<ConversationMessage>? conversationHistory,
+    AgentSession? session,
+    ReasoningResult? reasoning,
+    CancellationToken ct = default)
+```
+- **Ne işe yarar?:** İş akışına beslenecek tüm mesaj listesini ve bağlam nesnesini oluşturur.
+- **İç Mantığı (Mesaj Enjeksiyon Sırası):**
+  1. `_identityHint.BuildAsync`: Doğrulanmış müşteri kimliği sistem mesajı olarak eklenir.
+  2. `_contextPipeline.BuildContextAsync`: Oturum hakkındaki RAG/episodik bağlam sistem mesajı olarak eklenir.
+  3. `BuildReasoningSummaryHint`: Reasoning adımında üretilen niyet ve alt görevler sistem mesajı olarak eklenir.
+  4. `IdExtractor.BuildHintMessage`: Sorgudan veya reasoning'den çıkarılan sipariş/ürün ID'leri sistem mesajı olarak eklenir.
+  5. `SelectHistoryToSend`: Sohbet geçmişi kırpılarak eklenir.
+  6. `ConsumeForceReplanHint`: Varsa yönetici müdahale notu sistem mesajı olarak eklenir.
+  7. Son olarak kullanıcının anlık sorusu (`query`) `ChatRole.User` rolüyle eklenir.
+  8. `WorkflowPrompt(messages, contextResult)` döndürülür.
 
-| Metot | Açıklama |
-|-------|----------|
-| `BuildWorkflowMessagesAsync(query, conversationHistory, session, reasoning)` | Tam mesaj listesini oluşturur: system prompt, context, reasoning özeti, entity hints, replan notu, kullanıcı mesajı. |
-| `BuildReasoningSummaryHint(ReasoningResult r)` | Reasoning sonucundan PlanningAgent'a giden özet system mesajını (`services/reasoning-hint`) üretir — Analiz, Niyet (`Niyet (nihai — ReasoningService kararı): ...`), Önerilen adımlar, gerekli bilgiler, önerilen aksiyon satırları. |
+### 2. `SelectHistoryToSend` (Private)
+```csharp
+private IEnumerable<ConversationMessage> SelectHistoryToSend(
+    List<ConversationMessage>? conversationHistory,
+    AgentSession? session,
+    ContextResult contextResult)
+```
+- **Ne işe yarar?:** Özetlenmiş mesajların tekrar gönderilmesini önler.
+- **İç Mantığı:** Eğer özet bu turda gerçekten bağlama eklenmişse, `SessionState.SummarizedMessageCount` kadar eski mesaj atlanır (`.Skip(count)`), yalnızca güncel mesajlar iletilir. Özet başarısız olmuşsa hiçbir mesaj atlanmaz.
 
-### `BuildReasoningSummaryHint` — kaldırılan `COMPOUND QUERY` bloğu
-
-Bu metotta eskiden, `SubTasks.Count >= 2` olduğunda PlanningAgent'a *"her alt görevi sırayla aynı yanıtta yönlendir"* diyen bir `COMPOUND QUERY` bloğu vardı. Kaldırıldı çünkü **gerçek yürütme yolunu yanlış tarif ediyordu**: `SubTaskOrchestrator.IsCompoundQuery` (2+ alt görev VE 2+ farklı hedef ajan) `true` döndüğünde `SubTaskOrchestrator.CreateSubTaskReasoning`, türetilen mini `ReasoningResult`'ın `SubTasks` listesini bilerek **boşaltır** (sonsuz recursive decomposition'ı önlemek için) — yani bu blok gerçek decompose senaryosunda PlanningAgent'a hiç ulaşmıyordu. Tek tetiklendiği durum `IsCompoundQuery`'nin `false` döndüğü (aynı ajana hedeflenmiş 2+ alt görev) tek-runner yoluydu; orada da PlanningAgent'ın artık desteklemediği (strict JSON şema, tek `selectedAgent` alanı) bir "sırayla yönlendir" çıktı formatını talep ediyordu. Karşılık gelen `planning-agent.md` bölümü de sadeleştirildi — bkz. [`Prompts.md`](../CustomerSupportBot.Api/Prompts.md).
+### 3. `BuildReasoningSummaryHint` (Private)
+- **Ne işe yarar?:** `ReasoningResult` içerisindeki `Intent`, `Confidence`, `MissingContext` ve `SubTasks` bilgilerini uzman ajanların anlayacağı kısa bir sistem ipucu metnine dönüştürür.
 
 ## Bağımlılıklar
 
-- `IContextPipeline` — Bağlam toplama.
-- `IPromptRepository` — Prompt template yükleme.
-- `IChatClient` — (Reasoning özeti için LLM çağrısı gerekebilir).
-- `IdExtractor` (Domain) — Entity hint metni.
+- `Microsoft.Extensions.AI.ChatMessage`
+- `CustomerSupportBot.Application.Services.Providers.CustomerIdentityHintBuilder`
+- `CustomerSupportBot.Application.Ports.Outbound.IPromptRepository`
+- [ReasoningResult](../CustomerSupportBot.Domain/Model/ReasoningResult.md)
+- [AgentSession](../CustomerSupportBot.Domain/Model/AgentSession.md)

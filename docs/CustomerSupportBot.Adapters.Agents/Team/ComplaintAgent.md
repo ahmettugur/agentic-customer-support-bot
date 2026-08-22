@@ -1,50 +1,68 @@
 # ComplaintAgent
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/Team/ComplaintAgent.cs`
-**Erişim:** `internal sealed`
-**Taban sınıf:** [SupportAgentBase](SupportAgentBase.md)
-**Ajan adı:** `WellKnown.AgentNames.Complaint`
-**Tool'ları:** `complaint_registration_tool` (HITL)
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/Team/ComplaintAgent.cs`
+- **Tür:** `internal sealed class : SupportAgentBase`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents.Team`
 
 ## Ne işe yarar?
 
-Müşteri şikayetlerini kaydeder. Tek tool'u yan etkilidir ve `ApprovalGateService` HITL kapısından geçer (admin onayı beklenir).
+`ComplaintAgent`, müşteri şikayetlerini ve memnuniyetsizliklerini karşılayan; şikayet kaydını (`complaint_registration_tool`) [ApprovalGateService](../ApprovalGateService.md) üzerinden HITL onay kapısıyla oluşturan uzman ajandır.
 
-> 💡 **Analiz notu:** Müşteri hizmetleri şikayet birimi — "ürünüm bozuk geldi" dediğinde şikayeti kayıt altına alır. Ama kayıt admin onayına tabidir çünkü şikayet açmak geri dönüşü olmayan bir işlemdir.
+## Hangi amaçla kullanılır`?
 
-## Hangi amaçla kullanılır?
-
-`PlanningAgent` şikayet niyeti tespit ettiğinde (`selectedAgent="ComplaintAgent"`) veya bir başka specialist'in dinamik handoff önerisiyle devreye girer.
+Müşterinin siparişle ilgili şikayetini almak (`orderId`, `complaintText`), siparişin geçerliliğini doğrulamak, onay kuyruğuna yazıp kullanıcıya pending bildirim dönmek ve gerektiğinde eskalasyon önerisi (`handoffSuggestion: "HumanHandoffAgent"`) sunmak için kullanılır.
 
 ## Sorumlulukları
 
-- Zorunlu parametrelerin (`orderId`, `description`) toplanıp toplanmadığını denetlemek — `customerId` opsiyoneldir, tool otomatik türetir, `missingParams`'a sayılmaz.
-- Eksik zorunlu alan varsa **tek mesajda** hepsini istemek (ping-pong yok).
-- Tool sonrası `postToolReflection` üretmek.
-- HITL reddi durumunda düz metin red formatını tanıyıp `status="failed"` üretmek.
+- **Üstlendiği:**
+  - `agents/complaint-agent` sistem prompt'unu ve şikayet aracını bağlamak.
+  - [SpecialistReasoningSchema](SpecialistReasoningSchema.md) ile ReAct çıktısı üretmek.
+  - Breakpoint noktalarında (`OnBeforeRun`, `OnAfterRun`) şikayet araç çağrılarını izlemek.
 
-## Diğer katman ve bileşenlerle ilişkileri
+## Constructor ve Başlatma Mantığı
 
-**Bağımlılıkları:** `IChatClient`, `IPromptRepository`, `ApprovalGateService` (tek tool HITL-gated).
+```csharp
+public ComplaintAgent(
+    IChatClient chatClient,
+    IPromptRepository prompts,
+    ApprovalGateService approvalGate)
+    : base(BuildInner(chatClient, prompts, approvalGate))
+```
 
-**Prompt dosyası:** `CustomerSupportBot.Api/Prompts/agents/complaint-agent.md`.
+### Constructor İçerisinde Yapılan İşler:
+- `BuildInner` statik metodunu çağırarak `ApprovalGateService` üzerinden şikayet kayıt aracını bağlar ve `SupportAgentBase` temel sınıfına aktarır.
 
-**Kimler tüketir:** `ReflectionRoutingStrategy`, `WorkflowRunner.ApplyTraceEvent`/`TurnFinalizer`.
+## Metotlar ve İç Çalışma Mantıkları
 
-## Kullanılma nedeni ve tasarım yaklaşımı
+### 1. `BuildInner` (Private Static)
+```csharp
+private static ChatClientAgent BuildInner(
+    IChatClient chatClient,
+    IPromptRepository prompts,
+    ApprovalGateService approvalGate)
+```
+- **Ne işe yarar?:** Şikayet ajanının MAF `ChatClientAgent` örneğini yapılandırır.
+- **İç Mantığı:**
+  1. `Name`: `WellKnown.AgentNames.Complaint` ("ComplaintAgent") atanır.
+  2. `Instructions`: `prompts.Get("agents/complaint-agent")` ile yüklenir.
+  3. `Tools`: `approvalGate.BuildComplaintRegistrationTool()` bağlanır.
+  4. `ResponseFormat`: `SpecialistReasoningSchema` camelCase JSON şeması atanır.
 
-**Structured output:** [OrderAgent](OrderAgent.md) ile aynı desen — `ChatOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema<SpecialistReasoningSchema>(...)` (bkz. [SpecialistReasoningSchema.md](SpecialistReasoningSchema.md)). Çıktısı kullanıcıya doğrudan gitmediği için (`ReflectionRoutingStrategy` her zaman `ResponseAgent`'a yönlenir) güvenli. Eski "JSON'dan sonra kullanıcı mesajı yaz" talimatı kaldırıldı.
+### 2. `OnBeforeRun` (Protected Override)
+```csharp
+protected override void OnBeforeRun(IReadOnlyList<ChatMessage> messages)
+```
+- **Ne işe yarar?:** LLM'e gidecek mesaj geçmişini ve kullanıcı şikayet detaylarını yakalar (Breakpoint noktası).
 
-**Red-format kısıtı:** [OrderAgent.md](OrderAgent.md)'deki ile aynı — `complaint-agent.md` promptuna `"Tool call invocation rejected. {reason}"` düz metnini tanıyacak özel talimat eklendi.
-
-## Metotlar / Üyeler
-
-| Üye | Açıklama |
-| --- | --- |
-| `BuildInner(chatClient, prompts, approvalGate)` (private static) | `ChatClientAgent` kurar: tek tool + `ResponseFormat` = `SpecialistReasoningSchema`. |
-| `OnBeforeRun(messages)` | Breakpoint — LLM'e gönderilen tam mesaj listesi. |
-| `OnAfterRun(response)` | Breakpoint — `toolCalls` (`orderId`, `complaintText`, `customerId`), `toolResults` (onay reddedildiyse `ValidationError` burada görülür). |
+### 3. `OnAfterRun` (Protected Override)
+```csharp
+protected override void OnAfterRun(AgentResponse response)
+```
+- **Ne işe yarar?:** Çağrılan araçları (`ToolCalls`) ve dönen onay/pending sonuçlarını (`ToolResults`) inceler (Breakpoint noktası).
 
 ## Bağımlılıklar
 
-Constructor injection: `IChatClient chatClient`, `IPromptRepository prompts`, `ApprovalGateService approvalGate`.
+- [SupportAgentBase](SupportAgentBase.md)
+- [ApprovalGateService](../ApprovalGateService.md)
+- [SpecialistReasoningSchema](SpecialistReasoningSchema.md)
+- `CustomerSupportBot.Application.Ports.Outbound.IPromptRepository`

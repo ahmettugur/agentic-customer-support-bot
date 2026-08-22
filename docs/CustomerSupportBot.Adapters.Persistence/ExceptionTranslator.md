@@ -1,66 +1,34 @@
 # ExceptionTranslator
 
-> 💡 **Analiz notu:** EF Core / Npgsql unique constraint ihlali, connection timeout gibi DB hatalarını domain exception'larına çevirir. Application katmanı `NpgsqlException` görmez, `ConcurrencyConflictException` görür.
+- **Kaynak:** `CustomerSupportBot.Adapters.Persistence/ExceptionTranslator.cs`
+- **Tür:** `internal static class`
+- **Namespace:** `CustomerSupportBot.Adapters.Persistence`
 
-**Dosya:** `ExceptionTranslator.cs`  
-**Tür:** `internal static class`
+## Ne işe yarar?
 
-## Ne yapar?
+`ExceptionTranslator`, PostgreSQL (Npgsql) ve Entity Framework Core altyapı istisnalarını (`PostgresException`, `DbUpdateConcurrencyException`, `DbUpdateException`) Domain katmanındaki [ConcurrencyConflictException](../CustomerSupportBot.Domain/Exceptions/ConcurrencyConflictException.md), [EntityNotFoundException](../CustomerSupportBot.Domain/Exceptions/EntityNotFoundException.md) ve [ExternalServiceException](../CustomerSupportBot.Domain/Exceptions/ExternalServiceException.md) türlerine dönüştüren yardımcı sınıftır.
 
-EF Core ve Npgsql'den gelen altyapı exception'larını domain exception'larına çevirir. Postgres adaptörlerinin `catch` bloklarında çağrılır; Application katmanı altyapı detaylarından izole kalır.
+## Hangi amaçla kullanılır`?
 
----
+- Benzersizlik ihlali (Unique Constraint `23505`) ve yabancı anahtar ihlali (`23503`) gibi PostgreSQL SQLState kodlarını standart domain istisnalarına çevirmek.
+- İyimser kilitlenme (Optimistic Concurrency) hatalarını yakalamak.
 
-## `Translate`
+## Metotlar ve İç Çalışma Mantıkları
 
+### 1. `Translate`
 ```csharp
 public static DomainException Translate(Exception ex, string? context = null)
 ```
+- **Ne işe yarar?:** Veritabanı istisnasını domain istisnasına dönüştürür.
+- **İç Mantığı:**
+  - `PostgresException { SqlState: "23505" }` ➔ `ConcurrencyConflictException` (Benzersizlik çakışması).
+  - `PostgresException { SqlState: "23503" }` ➔ `EntityNotFoundException` (İlişkili kayıt bulunamadı).
+  - `DbUpdateConcurrencyException` ➔ `ConcurrencyConflictException` (Eşzamanlı güncelleme çakışması).
+  - Diğer ➔ `ExternalServiceException("Postgres", ...)`
 
-Gelen exception'ı inceler ve uygun `DomainException` alt sınıfını döner (üst tip `Exception` değil). `context` verilirse hata mesajının başına eklenir. Tanınmayan exception'lar `PersistenceException` olarak sarmalanır.
+## Bağımlılıklar
 
----
-
-## Eşleme tablosu
-
-| Gelen Exception | Koşul | Domain Exception |
-| ---------------- | ------- | ----------------- |
-| `DbUpdateConcurrencyException` | — | `ConcurrencyConflictException` |
-| `DbUpdateException` içinde `PostgresException` | — | `TranslatePostgres` ile aşağıdaki tabloya göre |
-| `PostgresException` | `SqlState = "23505"` (unique violation) | `ConcurrencyConflictException` (**`DuplicateEntityException` diye bir sınıf yoktur**) |
-| `PostgresException` | `SqlState = "23503"` (foreign key violation) | `EntityNotFoundException("İlişkili kayıt", pgEx.Detail)` |
-| `PostgresException` | `SqlState = "40001"` (serialization) veya `"40P01"` (deadlock) | `ConcurrencyConflictException` (`PersistenceException` **değil**) |
-| `PostgresException` | `SqlState = "57014"` (query timeout) | `PersistenceException` |
-| `PostgresException` | `SqlState = "08000/08001/08003/08006"` (connection error) | `PersistenceException` |
-| `InvalidOperationException` (mesajında "connection" geçiyorsa) | — | `PersistenceException` |
-| `TimeoutException` | — | `PersistenceException` |
-| Diğer | — | `PersistenceException(orijinal)` |
-
-`Translate` metodu **`OperationCanceledException`'ı özel olarak ele almaz** — yeniden fırlatma davranışı, çağıran tarafın `catch (Exception ex) when (ex is not OperationCanceledException)` filtresinden gelir (aşağıdaki kullanım örneğine bakın), `ExceptionTranslator` içinde değil.
-
----
-
-## Kullanım
-
-```csharp
-try
-{
-    await db.SaveChangesAsync(ct);
-}
-catch (Exception ex) when (ex is not OperationCanceledException)
-{
-    throw ExceptionTranslator.Translate(ex, "Sipariş kaydedilemedi.");
-}
-```
-
----
-
-## Domain exception'lar
-
-| Sınıf | Açıklama |
-| ------- | --------- |
-| `ConcurrencyConflictException` | Eş zamanlı güncelleme çakışması **veya** unique/deadlock/serialization ihlali |
-| `EntityNotFoundException` | FK referans ettiği kayıt yok |
-| `PersistenceException` | Genel altyapı hatası (timeout, bağlantı, tanınmayan hata) |
-
-Bu exception'lar Application katmanında `try/catch` ile yakalanabilir; HTTP response'a dönüştürme API katmanında yapılır.
+- [DomainException](../CustomerSupportBot.Domain/Exceptions/DomainException.md)
+- [ConcurrencyConflictException](../CustomerSupportBot.Domain/Exceptions/ConcurrencyConflictException.md)
+- [EntityNotFoundException](../CustomerSupportBot.Domain/Exceptions/EntityNotFoundException.md)
+- `Npgsql.PostgresException`

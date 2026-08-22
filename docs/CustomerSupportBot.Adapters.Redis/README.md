@@ -1,117 +1,18 @@
 # CustomerSupportBot.Adapters.Redis
 
-Redis tabanlı **dağıtık altyapı** adapter'ları. İki ana hizmet sunar:
+Bu klasör, hexagonal mimaride **Driven Adapter (Çıkış Adaptörü)** rolünü üstlenen; dağıtık kilit yönetimi (Distributed Lock - RedLock), yatay ölçeklendirme mesajlaşması (Pub/Sub Message Bus) ve sistem sağlık kontrollerini (Health Check) Redis altyapısıyla somutlaştıran adaptördür.
 
-1. **Distributed Lock** — `IAppDistributedLock` (Medallion RedLock)
-2. **Message Bus** — `IMessageBusPort` (Redis pub/sub)
+## Dizin Yapısı
 
-Ek olarak: health check, exception translator, DI extension.
+- [Locking/RedisDistributedLockAdapter](Locking/RedisDistributedLockAdapter.md) — [IAppDistributedLock](../CustomerSupportBot.Application/Ports/Outbound/Locking/IAppDistributedLock.md) portunu uygulayan; `Medallion.Threading.Redis` tabanlı dağıtık kilit adaptörü.
+- [Messaging/RedisMessageBusAdapter](Messaging/RedisMessageBusAdapter.md) — [IMessageBusPort](../CustomerSupportBot.Application/Ports/Outbound/Messaging/IMessageBusPort.md) portunu uygulayan; Redis Pub/Sub üzerinden pod'lar arası asenkron olay yayını ve abonelik adaptörü.
+- [HealthChecks/RedisHealthCheck](HealthChecks/RedisHealthCheck.md) — ASP.NET Core Health Checks için `IHealthCheck` uygulayıcısı.
+- [Options/RedisOptions](Options/RedisOptions.md) — `RedisOptions` strongly-typed yapılandırma modeli.
+- [DependencyInjection/RedisAdapterServiceCollectionExtensions](DependencyInjection/RedisAdapterServiceCollectionExtensions.md) — `AddRedisAdapters` DI kayıt uzantısı.
+- [ExceptionTranslator](ExceptionTranslator.md) — Redis istisnalarını DomainException'a çevirici.
 
----
+## Mimari Rolü ve Yetenekleri
 
-## Redis zorunlu mu?
-
-**Evet, zorunlu.** Bağlantı dizisi yoksa uygulama startup'ta `InvalidOperationException` fırlatır.
-
-### Neden?
-
-- **Distributed lock** olmazsa multi-pod ortamda race condition'lar oluşur:
-  - İki admin aynı approval'ı aynı anda onaylar → duplicate karar
-  - İki pod aynı session için TakeOver yapar → conflicting state
-- **Pub/sub** olmazsa multi-pod cache senkronizasyonu çalışmaz:
-  - Pod A'da yapılan değişiklik Pod B'nin cache'inde görünmez
-  - Live chat mesajları doğru pod'a ulaşmaz
-
-Tek pod ile dev/test yapıyor olsan bile Redis lazım — uygulama mimari olarak Redis varlığını varsayar.
-
----
-
-## Klasör yapısı
-
-```
-CustomerSupportBot.Adapters.Redis/
-├── DependencyInjection/
-│   └── RedisAdapterServiceCollectionExtensions.cs
-├── HealthChecks/
-│   └── RedisHealthCheck.cs
-├── Locking/
-│   └── RedisDistributedLockAdapter.cs
-├── Messaging/
-│   └── RedisMessageBusAdapter.cs
-├── ExceptionTranslator.cs
-└── RedisOptions.cs
-```
-
----
-
-## Dokümantasyon haritası
-
-| Doküman | Kapsam |
-|---|---|
-| [DependencyInjection.md](DependencyInjection.md) | `AddRedisAdapters`, connection string çözümleme, retry policy, RedisOptions |
-| [DistributedLock.md](DistributedLock.md) | RedisDistributedLockAdapter — Medallion RedLock |
-| [MessageBus.md](MessageBus.md) | RedisMessageBusAdapter — pub/sub kanalları, NodeId |
-| [HealthCheck.md](HealthCheck.md) | RedisHealthCheck + ExceptionTranslator |
-
----
-
-## Port → Adapter eşlemesi
-
-| Port (Application) | Adapter (Redis) |
-|---|---|
-| `IAppDistributedLock` | `RedisDistributedLockAdapter` |
-| `IMessageBusPort` | `RedisMessageBusAdapter` |
-
-Her ikisi de `Singleton` olarak DI'a kaydedilir — `IConnectionMultiplexer` paylaşılan.
-
----
-
-## Bağımlılıklar
-
-| Paket | Amaç |
-|---|---|
-| `StackExchange.Redis` | Redis client (multiplexer, pub/sub, DB) |
-| `Medallion.Threading.Redis` | RedLock algoritması (dağıtık lock) |
-
----
-
-## Kullanım örneği
-
-`Program.cs`:
-
-```csharp
-services.AddRedisAdapters(configuration);
-```
-
-`appsettings.json`:
-
-```json
-{
-  "Redis": {
-    "ConnectionString": "localhost:6379",
-    "KeyPrefix": "csbot",
-    "DefaultLockTimeoutSeconds": 10,
-    "LockExpirySeconds": 30
-  }
-}
-```
-
-Alternatif olarak `ConnectionStrings:Redis` da kullanılabilir.
-
----
-
-## Pub/sub kanal kataloğu
-
-Adapter **hardcoded kanal tanımlamaz** — Application/Adapters katmanları runtime'da kanal adı geçer. Projedeki tanımlı kanallar:
-
-| Kanal | Yayınlayan | Amaç |
-|---|---|---|
-| `csbot:approval:created` | PostgresApprovalQueue | Yeni approval bildirimi |
-| `csbot:approval:decided` | PostgresApprovalQueue | Karar bildirimi |
-| `csbot:escalation:created` | PostgresEscalationSink | Yeni escalation |
-| `csbot:escalation:decided` | PostgresEscalationSink | Escalation karar |
-| `csbot:bridge:touser` | PostgresChatBridge | Bot/Admin → kullanıcı mesajları |
-| `csbot:bridge:toadmin` | PostgresChatBridge | Kullanıcı → admin mesajları |
-| `csbot:chatmode` | PostgresChatModeRegistry | Bot/Human mod değişikliği |
-
-Detay için ilgili adapter dokümanlarına bak: [PostgresAdapters.md](../CustomerSupportBot.Adapters.Persistence/PostgresAdapters.md).
+- **RedLock Algoritması:** Aynı oturumda veya aynı sipariş üzerinde aynı anda birden fazla isteğin yarışmasını (Race Condition) önlemek için güvenli dağıtık kilit mekanizması.
+- **Yatay Ölçeklendirme (Pub/Sub):** Çoklu container/pod ortamlarında canlı oturum güncellemelerinin ve olayların tüm sunuculara anında dağıtımı.
+- **Otomatik Yeniden Bağlanma:** Bağlantı koptuğunda `ExponentialRetry(5000)` politikası ile otomatik iyileşme ve loglama.

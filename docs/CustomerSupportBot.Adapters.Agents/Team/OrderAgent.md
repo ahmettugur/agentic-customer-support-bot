@@ -1,53 +1,69 @@
 # OrderAgent
 
-**Dosya:** `CustomerSupportBot.Adapters.Agents/Team/OrderAgent.cs`
-**Erişim:** `internal sealed`
-**Taban sınıf:** [SupportAgentBase](SupportAgentBase.md)
-**Ajan adı:** `WellKnown.AgentNames.Order`
-**Tool'ları:** `order_placement_tool` (HITL, **çok ürünlü**), `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`, `order_cancel_tool` (HITL), `return_request_tool` (HITL)
+- **Kaynak:** `CustomerSupportBot.Adapters.Agents/Team/OrderAgent.cs`
+- **Tür:** `internal sealed class : SupportAgentBase`
+- **Namespace:** `CustomerSupportBot.Adapters.Agents.Team`
 
 ## Ne işe yarar?
 
-Sipariş oluşturma, sorgulama, iptal ve iade işlemlerini yürütür. Salt-okunur tool'lar (`order_status`/`get_last_order`/`get_all_orders`) doğrudan çalışır; yan etkili olanlar (`placement`/`cancel`/`return`) `ApprovalGateService` HITL kapısından geçer.
+`OrderAgent`, e-ticaret sipariş süreçlerine ilişkin sorgulama, sepet/sipariş oluşturma, sipariş iptali ve iade talebi işlemlerini yürüten uzman ajandır. Tüm araçlarını [ApprovalGateService](../ApprovalGateService.md) üzerinden temin eder; müşteri kimliği LLM parametresi olarak değil, doğrulanmış oturumdan (`CurrentCustomerId`) otomatik enjekte edilir.
 
-> 💡 **Analiz notu:** E-ticaret sitesinin sipariş departmanı — "siparişim nerede?" sorularını yanıtlar, yeni sipariş oluşturur. Ama sipariş oluşturma/iptal gibi kritik işlemler için admin onayı gerekir.
+## Hangi amaçla kullanılır`?
 
-## Hangi amaçla kullanılır?
-
-`PlanningAgent` sipariş niyeti tespit ettiğinde (`selectedAgent="OrderAgent"`) veya bir başka specialist'in `postToolReflection.handoffSuggestion="OrderAgent"` demesiyle (`ReflectionRoutingStrategy`) devreye girer.
+Müşterinin mevcut siparişlerini takip etmesini (`order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`), yeni sipariş vermesini (`create_order_tool`), siparişini iptal etmesini (`order_cancel_tool`) veya iade talebi açmasını (`return_request_tool`) sağlamak; yan etkili işlemleri HITL onay kapısıyla güvenceye almak ve çıktısını [SpecialistReasoningSchema](SpecialistReasoningSchema.md) ile yapılandırılmış ReAct JSON olarak üretmek için kullanılır.
 
 ## Sorumlulukları
 
-- 6 tool arasından doğruyu seçmek (`preToolCheck.selectedTool` — yalnızca bu ajanda var, birden fazla aday tool olduğu için model muhakemesini netleştiren bir alan; parser tarafından okunmaz).
-- **Çok ürünlü siparişi tek çağrıda toplamak.** `order_placement_tool`'un `lines` parametresi bir dizidir; kullanıcı *"2 kahve ve 1 çikolata"* dediğinde her iki satır da **aynı** çağrıya konur. Ürün başına ayrı çağrı yapmak ayrı onay kayıtları ve ayrı siparişler üretir — admin birini onaylayıp diğerini reddedebilir ve müşteri yarım sipariş alır (bkz. [ApprovalGateService](../ApprovalGateService.md)).
-- Zorunlu parametrelerin (ör. `customerId`, `orderId`, `reason`) toplanıp toplanmadığını denetlemek (`preToolCheck.canProceed`); eksikse **tek mesajda** hepsini istemek (ping-pong yok).
-- Tool sonrası `postToolReflection` üretmek — sonucun durumu (`status`), tamamlanma bilgisi, olası dinamik handoff önerisi.
-- HITL reddi durumunda (`"Tool call invocation rejected. {reason}"` düz metnini, JSON değil, tanıyıp `status="failed"` üretmek — bkz. aşağı).
+- **Üstlendiği:**
+  - `agents/order-agent` sistem talimatlarını bağlamak.
+  - 6 adet sipariş aracını `ApprovalGateService` üzerinden entegre etmek.
+  - `ChatResponseFormat.ForJsonSchema<SpecialistReasoningSchema>` ile ReAct çıktısını (`preToolCheck`, `postToolReflection`) şemaya zorlamak.
+  - Hata ayıklama noktalarında (`OnBeforeRun`, `OnAfterRun`) araç çağrılarını ve sonuçlarını izlemek.
 
-**Üstlenmediği işler:** Onay bekleme mekaniği (`ApprovalGateService`), gerçek veri erişimi (`ICustomerSupportToolsService`).
+## Constructor ve Başlatma Mantığı
 
-## Diğer katman ve bileşenlerle ilişkileri
+```csharp
+public OrderAgent(
+    IChatClient chatClient,
+    IPromptRepository prompts,
+    ApprovalGateService approvalGate)
+    : base(BuildInner(chatClient, prompts, approvalGate))
+```
 
-**Bağımlılıkları:** `IChatClient`, `IPromptRepository`, `ApprovalGateService` (HITL-gated 3 tool için), `ICustomerSupportToolsService` (salt-okunur 3 tool için).
+### Constructor İçerisinde Yapılan İşler:
+- `BuildInner` statik metodunu çağırarak `ChatClientAgent` nesnesini oluşturur ve temel sınıf olan [SupportAgentBase](SupportAgentBase.md)'e aktarır.
 
-**Prompt dosyası:** `CustomerSupportBot.Api/Prompts/agents/order-agent.md`.
+## Metotlar ve İç Çalışma Mantıkları
 
-**Kimler tüketir:** `ReflectionRoutingStrategy` (`postToolReflection`'a göre `ResponseAgent`'a veya başka bir specialist'e yönlendirir), `WorkflowRunner.ApplyTraceEvent`/`TurnFinalizer` (specialist reasoning'i trace'e ekler).
+### 1. `BuildInner` (Private Static)
+```csharp
+private static ChatClientAgent BuildInner(
+    IChatClient chatClient,
+    IPromptRepository prompts,
+    ApprovalGateService approvalGate)
+```
+- **Ne işe yarar?:** Sipariş ajanının MAF `ChatClientAgent` örneğini yapılandırır.
+- **İç Mantığı:**
+  1. `Name`: `WellKnown.AgentNames.Order` ("OrderAgent") olarak atanır.
+  2. `Instructions`: `prompts.Get("agents/order-agent")` ile yüklenir.
+  3. `Tools`: `approvalGate` üzerinden 6 araç bağlanır (`BuildOrderPlacementTool`, `BuildOrderStatusTool`, `BuildGetLastOrderTool`, `BuildGetAllOrdersTool`, `BuildOrderCancelTool`, `BuildReturnRequestTool`).
+  4. `ResponseFormat`: `SpecialistReasoningSchema` camelCase JSON şeması atanır.
 
-## Kullanılma nedeni ve tasarım yaklaşımı
+### 2. `OnBeforeRun` (Protected Override)
+```csharp
+protected override void OnBeforeRun(IReadOnlyList<ChatMessage> messages)
+```
+- **Ne işe yarar?:** LLM çağrısı öncesi ajana iletilen mesaj geçmişini, sipariş ID ipuçlarını (`order_id MEVCUT`) ve sistem prompt'unu yakalar (Breakpoint noktası).
 
-**Structured output:** Çıktısı `ChatOptions.ResponseFormat = ChatResponseFormat.ForJsonSchema<SpecialistReasoningSchema>(...)` ile şemaya zorlanır (bkz. [SpecialistReasoningSchema.md](SpecialistReasoningSchema.md)). Bu güvenli çünkü `OrderAgent`'ın çıktısı **hiçbir zaman kullanıcıya doğrudan gitmez** — `ReflectionRoutingStrategy` her zaman `ResponseAgent`'a yönlenir. Prompt'taki eski "JSON'dan sonra kullanıcı mesajı yaz" talimatı bu yüzden kaldırıldı (kodun hiç okumadığı, artık strict şema altında zaten üretilemeyecek bir alan).
-
-**Red-format kısıtı:** Admin bir HITL isteğini reddettiğinde `FunctionInvokingChatClient`, LLM'e JSON değil düz metin (`"Tool call invocation rejected. {reason}"`) döner — bu özelleştirilemez (bkz. [../ApprovalGateService.md](../ApprovalGateService.md)). `order-agent.md` promptuna bu formatı JSON gibi parse etmeye çalışmadan tanıyıp `status="failed"` üretecek özel bir talimat/tablo eklendi.
-
-## Metotlar / Üyeler
-
-| Üye | Açıklama |
-| --- | --- |
-| `BuildInner(chatClient, prompts, approvalGate, tools)` (private static) | `ChatClientAgent` kurar: 6 tool + `ResponseFormat` = `SpecialistReasoningSchema`. |
-| `OnBeforeRun(messages)` | Breakpoint — kullanıcı sorgusu, ENTITY EXTRACTION hint'i (`order_id` vb.), o ana kadarki grup sohbeti. |
-| `OnAfterRun(response)` | Breakpoint — `toolCalls`, `toolResults` (not-found burada görülür), `response.Text`. |
+### 3. `OnAfterRun` (Protected Override)
+```csharp
+protected override void OnAfterRun(AgentResponse response)
+```
+- **Ne işe yarar?:** LLM yanıtını yakalar; çağrılan araçları (`ToolCalls`), araçların döndüğü sonuçları (`ToolResults`) ve üretilen ReAct JSON metnini (`response.Text`) inceler (Breakpoint noktası).
 
 ## Bağımlılıklar
 
-Constructor injection: `IChatClient chatClient`, `IPromptRepository prompts`, `ApprovalGateService approvalGate`, `ICustomerSupportToolsService tools`.
+- [SupportAgentBase](SupportAgentBase.md)
+- [ApprovalGateService](../ApprovalGateService.md)
+- [SpecialistReasoningSchema](SpecialistReasoningSchema.md)
+- `CustomerSupportBot.Application.Ports.Outbound.IPromptRepository`
