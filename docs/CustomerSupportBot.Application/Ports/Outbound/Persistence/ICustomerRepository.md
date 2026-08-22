@@ -1,27 +1,49 @@
 # ICustomerRepository
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Persistence/ICustomerRepository.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Persistence`
+**Kaynak:** `Ports/Outbound/Persistence/ICustomerRepository.cs`
+**Implementasyon:** [`CustomerRepository`](../../../../CustomerSupportBot.Adapters.Persistence/Postgres/CustomerRepository.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ICustomerRepository`, <summary> Verilen e-postanın <b>bu müşteriye</b> ait olup olmadığını söyler (büyük/küçük harf duyarsız). Müşteri yoksa veya kayıtlı e-postası yoksa <c>false</c>.  <para> Public kayıt akışının kimlik sahipliği kontrolüdür. Bu olmadan <see cref="Exists"/> yalnızca "böyle bir müşteri var mı" sorusunu yanıtlıyordu ve herkes başkasının müşteri numarasıyla hesap açıp o müşteri adına geçerli bir JWT alabiliyordu — yani sistemin geri kalanındaki tüm sahiplik kontrolleri (EntityVerifier, oturum sahipliği, tool sahiplik kuralları) doğru müşteri sanıp geçiriyordu. </para> </summary> <summary> Birden çok müşterinin adını tek sorguda getirir; bulunamayan kimlikler sonuçta yer almaz.  <para> Tekil <see cref="GetFullNameAsync"/> yerine bunun var olma sebebi N+1'dir: admin onay kuyruğu bir listedir ve her kart için ayrı sorgu atmak, kuyruk büyüdükçe panelin açılışını doğrusal olarak yavaşlatırdı. </para>
+Gerçek müşteri kaydının (katalogdaki `CustomerEntity`) varlığını ve kimlik sahipliğini
+doğrulayan secondary port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Müşteri self-servis kaydı (`/auth/customer/register`) sırasında `IsEmailOwnedByCustomerAsync`
+ile "bu e-posta gerçekten bu müşteri numarasına mı ait" kontrolü yapılır; admin onay
+kuyruğu/geçmişi ekranlarında `GetFullNameAsync`/`GetFullNamesAsync` ile müşteri adı gösterilir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ICustomerRepository`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Müşteri varlığı ve kimlik-sahipliği doğrulaması, ad bilgisi okuma.
+- **Üstlenmediği:** Kullanıcı hesabı/login kaydı — o [`IUserAuthRepository`](../Auth/IUserAuthRepository.md)'nin işi (bu port yalnızca *iş* katalogundaki `Customer` varlığını okur).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Persistence/Postgres/CustomerRepository` implemente eder.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+> 🐞 **`IsEmailOwnedByCustomerAsync` neden var:** public kayıt akışının kimlik sahipliği
+> kontrolüdür. Bu olmadan `Exists` yalnızca "böyle bir müşteri var mı" sorusunu yanıtlıyordu ve
+> herkes başkasının müşteri numarasıyla hesap açıp o müşteri adına geçerli bir JWT alabiliyordu
+> — yani sistemin geri kalanındaki tüm sahiplik kontrolleri (EntityVerifier, oturum sahipliği,
+> tool sahiplik kuralları) doğru müşteri sanıp geçiriyordu.
+
+`GetFullNamesAsync` toplu sorgu olarak var çünkü admin onay kuyruğu bir listedir; her kart için
+ayrı `GetFullNameAsync` sorgusu atmak N+1 problemi yaratır ve kuyruk büyüdükçe panelin açılışını
+doğrusal olarak yavaşlatırdı.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `bool Exists(long customerId)` | Müşteri kaydı var mı. |
+| `Task<bool> IsEmailOwnedByCustomerAsync(long customerId, string email, CancellationToken ct = default)` | E-posta gerçekten bu müşteriye mi ait (case-insensitive). |
+| `Task<string?> GetFullNameAsync(long customerId, CancellationToken ct = default)` | Tekil ad sorgusu. |
+| `Task<IReadOnlyDictionary<long, string>> GetFullNamesAsync(IReadOnlyCollection<long> customerIds, CancellationToken ct = default)` | Toplu ad sorgusu (N+1'i önlemek için). |
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü bağımlılıksızdır (yalnızca ilkel tipler).

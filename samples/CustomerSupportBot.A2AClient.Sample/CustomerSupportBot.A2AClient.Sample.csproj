@@ -32,11 +32,11 @@
          W3C traceparent ekler — sunucu da AddAspNetCoreInstrumentation ile bunu okuduğu için
          (Adapters.Telemetry/DependencyInjection/TelemetryAdapterServiceCollectionExtensions.cs)
          tek bir iz, iki sürecin sınırını GERÇEKTEN geçer; süslü bir correlationId değil. -->
-    <PackageReference Include="OpenTelemetry" Version="1.17.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.17.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />
+    <PackageReference Include="OpenTelemetry" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
   </ItemGroup>
 
   <ItemGroup>
