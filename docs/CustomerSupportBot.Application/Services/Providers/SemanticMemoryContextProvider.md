@@ -1,54 +1,76 @@
 # SemanticMemoryContextProvider
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Providers/SemanticMemoryContextProvider.cs`
+- **Kaynak:** `Services/Providers/SemanticMemoryContextProvider.cs`
 - **Tür:** `public sealed class : IContextProvider`
 - **Namespace:** `CustomerSupportBot.Application.Services.Providers`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`SemanticMemoryContextProvider`, kullanıcının anlık mesajını ([SemanticMemoryService](../Memory/SemanticMemoryService.md)) üzerinden Qdrant vektör ambarında aratarak, şirketin iade, kargo, garanti ve SSS kurallarını içeren ilgili RAG makale parçacıklarını `"## 📚 İlgili Bilgi Bankası (RAG)"` bloğu halinde bağlama ekleyen sağlayıcıdır.
+Kullanıcının **bu turdaki** mesajını bir kez embed edip **üç ayrı** vektör koleksiyonunda
+(Knowledge, Episodic, Lesson) paralel arama yapan, bulunan sonuçları bütçe sınırı içinde
+markdown bloklarına dönüştüren sağlayıcıdır. `SemanticMemoryService.Enabled=false` ise
+(bellek kapalıysa) hiç çalışmaz.
 
-## Hangi amaçla kullanılır`?
+## 2. Hangi Amaçla Kullanılır
 
-- Ajanların şirket politikaları hakkında doğru ve güncel bilgilerle yanıt vermesini sağlamak (Hallucination önleme).
-- [ContextSanitizer](../Memory/ContextSanitizer.md) ile vektör ambarından gelen harici metinleri temizleyerek prompt enjeksiyonu riskini bertaraf etmek.
+Ajanların şirket politikaları/SSS (Knowledge), bu müşteriyle **geçmiş oturumlardaki**
+konuşmalar (Episodic) ve admin onaylı öğrenilmiş dersler (Lesson) hakkında halüsinasyon
+üretmeden, gerçek veriye dayalı yanıt vermesini sağlamak. `IContextSanitizer` ile vektör
+ambarından gelen harici metinler prompt enjeksiyonuna karşı temizlenir.
 
-## Constructor ve Başlatma Mantığı
+## 3. Sorumlulukları
 
-```csharp
-public SemanticMemoryContextProvider(
-    IMemoryPort memoryPort,
-    IContextSanitizer sanitizer,
-    ILogger<SemanticMemoryContextProvider> logger)
-```
+**Üstlendiği:**
+- Sorguyu **bir kez** embed edip üç `SearchByVectorAsync` çağrısını paralel (`Task.WhenAll`)
+  çalıştırmak.
+- Doğrulanmış müşteri kimliği varsa (`session.State.AuthenticatedCustomerId`), Episodic
+  aramasını o müşterinin `customerId` etiketiyle filtrelemek.
+- Karakter bütçesi (`_memory.Options.Retrieval.MaxContextChars`) dahilinde sonuçları kırpmak.
+- Tüm hataları yutup `null` dönmek — bu provider **iyileştirici**dir (`IsCritical` yok/false),
+  düşerse tur yine de devam eder.
 
-### Constructor İçerisinde Yapılan İşler:
-- `_memoryPort`: Vektör anlamsal arama portu (`IMemoryPort`).
-- `_sanitizer`: Metin sterilizasyon arayüzü (`IContextSanitizer`).
-- `_logger`: Günlükleme motoru.
+**Üstlenmediği:** Embedding/arama altyapısı (`SemanticMemoryService`'in işi), metin
+sterilizasyonu (`IContextSanitizer`'ın işi).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-### 1. `GetContextAsync`
-```csharp
-public async Task<string?> GetContextAsync(
-    AgentSession session,
-    string currentQuery,
-    CancellationToken ct = default)
-```
-- **Ne işe yarar?:** Kullanıcı sorgusuna en yakın 3 bilgi bankası dokümanını çeker ve formatlar.
-- **İç Mantığı:**
-  1. `_memoryPort.SearchAsync(currentQuery, limit: 3, ct)` ile anlamsal arama yapılır.
-  2. Sonuç yoksa `null` döner.
-  3. Dönen dokümanların başlık ve içerikleri `_sanitizer.Sanitize` ile temizlenir ve numaralandırılmış liste olarak birleştirilir.
+- `SemanticMemoryService` (Services/Memory) — embed + vektör arama.
+- `IContextSanitizer` — başlık ve içerik metinlerini sterilize eder, retrieved-content'i
+  wrap eder (`WrapRetrieved`).
+- [`ContextPipeline`](../Chat/ContextPipeline.md) — bu provider'ı `Order=7` ile çalıştıran
+  tüketici; ağ/LLM çağrısı içerdiği için pipeline'ın per-provider timeout mekanizmasına tabidir.
 
-## Özellikler/Properties
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `Name` (`string`): Sabit `"SemanticMemory"`.
-- `Order` (`int`): `7`.
+> 🐞 **Geçmişte iki kez embed ediliyordu:** Eskiden Knowledge ve Lesson için iki ayrı
+> `SearchAsync` çağrısı vardı ve her biri aynı metni kendi içinde yeniden embed ediyordu —
+> embedder'da cache olmadığı için tur başına iki embedding çağrısı (iki kat maliyet)
+> oluşuyordu. Artık sorgu **bir kez** embed edilip aynı vektörle üç koleksiyonda da aranıyor.
 
-## Bağımlılıklar
+> 🐞 **Episodic bellek write-only ölü veriydi:** `WriteEpisodeAsync` her turda bir kayıt
+> üretiyordu ama `SearchAsync(MemoryKind.Episodic, …)` kod tabanında hiçbir yerde
+> çağrılmıyordu. Bu provider, doğrulanmış müşteri kimliği varsa episode'ları `customerId`
+> tag'iyle (session ID'siyle değil — aksi halde aynı müşterinin dünkü ve bugünkü oturumu
+> birbirine hiç bağlanamazdı) arayarak bu ölü veriyi canlandırdı.
 
-- [IContextProvider](IContextProvider.md)
-- [IMemoryPort](../Memory/MemoryPortService.md)
-- [IContextSanitizer](../Memory/ContextSanitizer.md)
+`currentQuery`'nin neden ayrı bir parametre olarak geldiği (oturum geçmişinden değil) için
+bkz. [IContextProvider.md](IContextProvider.md) — aynı kök nedenin bu sınıftaki somut sonucu.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `Name` (`string`) | Sabit `"SemanticMemory"`. |
+| `Order` (`int`) | `7` — `CustomerProfileContextProvider` (6) sonrası, `ProductRecommendationContextProvider` (8) öncesi. |
+| `GetContextAsync(session, currentQuery, ct)` | `_memory.Enabled` değilse veya sorgu boşsa `null`. Aksi halde: sorguyu embed eder → 3 koleksiyonu paralel arar (Episodic sadece kimlik doğrulanmışsa) → hiçbiri sonuç vermezse `null` → varsa `"## 📚 İlgili Bilgi Tabanı"`, `"## 🗂️ Bu Müşteriyle Geçmiş Görüşmeler"`, `"## 🎓 Geçmiş Derslerden Öğrenilenler"` bölümlerini bütçe sırasıyla doldurur. `try/catch` içinde — arama başarısız olursa loglanır ve `null` döner (tur bloklanmaz). |
+| `AppendHits(sb, hits, ref budget)` *(private)* | Her sonucu `- **[başlık]** _(score=…, kaynak=…)_` satırı + sanitize edilmiş/kırpılmış/wrap'lenmiş içerik olarak ekler; `budget <= 100` olunca durur. Sırasıyla: sanitize → bütçe kırpması → wrap (fence hiçbir zaman bölünmez). |
+
+## 7. Bağımlılıklar
+
+Constructor injection ile: `SemanticMemoryService`, `IContextSanitizer`, `ILogger<SemanticMemoryContextProvider>`.
+
+## Bağlantılar
+
+- [IContextProvider.md](IContextProvider.md)
+- [../Memory/SemanticMemoryService.md](../Memory/SemanticMemoryService.md)
+- [../Memory/ContextSanitizer.md](../Memory/ContextSanitizer.md)

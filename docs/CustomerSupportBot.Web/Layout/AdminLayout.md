@@ -1,30 +1,43 @@
-# AdminLayout & AdminNavBar
+# AdminLayout
+
+**Dosya:** `Layout/AdminLayout.razor`
 
 ## Ne İşe Yarar
-Admin sayfaları için layout yapısı ve üst navigasyon barını sağlar.
+
+Admin/Agent paneli sayfaları (`/admin`, `/traces`, `/replay`, `/sla`, `/knowledge`) için
+kabuk (shell) layout'udur: üst navigasyon barını ve toast bildirim alanını sabit tutar,
+sayfa içeriğini `@Body` ile ortasına basar.
 
 ## Hangi Amaçla Kullanılır
-`/admin/*` yolundaki tüm sayfalar bu layout'u kullanır. Üst barda navigasyon linkleri, tema toggle ve kullanıcı bilgisi gösterilir.
+
+Her admin/agent sayfasının `@layout AdminLayout` direktifiyle bu kabuğa sarıldığı yerdir.
+Sayfa değiştiğinde yalnızca `@Body` yeniden render edilir, üst bar ve toast alanı sabit kalır.
 
 ## Sorumlulukları
 
-### AdminLayout.razor
-- `@Body` render alanını tanımlamak.
-- `AdminNavBar` bileşenini üst barda göstermek.
-
-### AdminNavBar.razor
-- Admin navigasyon menüsü: Admin Panel, Traces, Replay, SLA, Knowledge.
-- Aktif sayfayı vurgulamak.
-- Dark/Light tema toggle butonu.
-- Kullanıcı rolü ve adı gösterme.
-- Logout butonu.
+- `admin.css` stylesheet'ini yüklemek.
+- [`AdminNavBar`](AdminNavBar.md) bileşenini üstte sabit göstermek.
+- `@Body` ile aktif sayfa içeriğini render etmek.
+- [`ToastContainer`](../Components/ToastContainer.md) bileşenini sayfa altında tutmak — böylece
+  hangi admin sayfasında olunursa olunsun toast bildirimleri (ör. "Onay kaydedildi") aynı yerde çıkar.
 
 ## Diğer Katman ve Bileşenlerle İlişkileri
-- **DI ile inject edilen**: `NavigationManager`, [AuthService](../Services/AuthService.md), [AppAuthStateProvider](../Services/AppAuthStateProvider.md), [ThemeService](../Services/ThemeService.md).
-- **Kullanan sayfalar**: [Admin](../Pages/Admin.md), [Traces](../Pages/Traces.md), [Sla](../Pages/Sla.md), [Knowledge](../Pages/Knowledge.md).
-- **CSS**: `AdminNavBar.razor.css` (component-scoped).
+
+- `LayoutComponentBase`'den türer (`@inherits`), Blazor'un standart layout mekanizmasını kullanır.
+- Alt bileşenler: [`AdminNavBar`](AdminNavBar.md), [`ToastContainer`](../Components/ToastContainer.md).
+- Kullanan sayfalar: [Admin](../Pages/Admin.md), [Traces](../Pages/Traces.md), [Replay](../Pages/Replay.md), [Sla](../Pages/Sla.md), [Knowledge](../Pages/Knowledge.md).
+
+## Kullanılma Nedeni ve Tasarım Yaklaşımı
+
+Kod içermeyen saf bir kompozisyon dosyasıdır — kendi state'i veya `@code` bloğu yoktur. Tüm
+mantık (tema, logout, navigasyon) [`AdminNavBar`](AdminNavBar.md)'a devredilmiştir; bu ayrım
+tek-sorumluluk ilkesine hizmet eder: layout yalnızca "hangi bileşenler nerede duracak"ı
+belirler, davranışı barındırmaz.
+
+## Metotlar / Üyeler
+
+Yok — yalnızca markup kompozisyonu.
 
 ## Bağımlılıklar
-- [AuthService](../Services/AuthService.md) — Logout.
-- [AppAuthStateProvider](../Services/AppAuthStateProvider.md) — Kullanıcı bilgisi.
-- [ThemeService](../Services/ThemeService.md) — Tema toggle.
+
+Yok (constructor injection / `@inject` kullanılmaz).

@@ -1,27 +1,40 @@
 # ICostCalculatorPort
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Observability/ICostCalculatorPort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Observability`
+**Kaynak:** `Ports/Outbound/Observability/ICostCalculatorPort.cs`
+**Implementasyon:** [`CostCalculator`](../../../../CustomerSupportBot.Adapters.Telemetry/OpenTelemetry/CostCalculator.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ICostCalculatorPort`, <summary> LLM kullanım maliyeti hesaplama için secondary port. TelemetryChatClient bu port üzerinden token başına maliyet hesaplar. </summary> <summary> Verilen model + token sayısı için USD maliyeti hesaplar. </summary> <summary>Bilinen model adlarını döner (UI için).</summary>
+LLM kullanım maliyetini (USD) model/sağlayıcı/token sayısına göre hesaplayan secondary port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`TelemetryChatClient` (Adapters.Telemetry) her LLM çağrısından sonra bu port ile maliyeti
+hesaplar ve `ICostUsageStorePort`/`ILlmCallPersistencePort`'a kaydeder.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ICostCalculatorPort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Model+sağlayıcı+token sayısından USD maliyeti hesaplamak, bilinen model
+  listesini raporlamak.
+- **Üstlenmediği:** Maliyetin biriktirilmesi/saklanması — o [`ICostUsageStorePort`](ICostUsageStorePort.md)'un işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Telemetry/OpenTelemetry/CostCalculator` implemente eder; model başına fiyat
+tablosunu (input/output token başı USD) sabit kodlu tutar.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Maliyet hesaplama mantığının telemetri adaptöründe izole tutulması, fiyat tablosu güncellemesinin
+(sağlayıcılar fiyat değiştirdiğinde) Application katmanına dokunmadan yapılabilmesini sağlar.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `decimal CalculateCost(string modelHint, string provider, int inputTokens, int outputTokens)` | Verilen model+sağlayıcı+token sayısı için USD maliyeti hesaplar. |
+| `IReadOnlyCollection<string> KnownModels { get; }` | Bilinen model adları (UI için — örn. admin dashboard'da filtre). |
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü bağımlılıksızdır.

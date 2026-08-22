@@ -29,7 +29,7 @@ Bu klasör, Onion / Hexagonal Mimari'de **Use Cases & Application Core (İş Ak�
   - [ApprovalPortService](Services/Approval/ApprovalPortService.md) — [IApprovalPort](Ports.md) uygulayıcısı.
   - [ApprovalExecutionRouter](Services/Approval/ApprovalExecutionRouter.md) — Onaylanan talepleri (sipariş/şikayet) otomatik işleten yönlendirici.
   - [ApprovalContextAccessor](Services/Approval/ApprovalContextAccessor.md) — Ambient `CurrentCustomerId` ve `TraceId` güvenliği.
-- [Providers/](Providers/ContextProviders.md) — Dinamik Bağlam Sağlayıcılar (`ConversationSummaryProvider`, `CustomerIdentityHintBuilder`, `SemanticMemoryContextProvider`, `ProductRecommendationContextProvider`, `CustomerProfileContextProvider`).
+- [Providers/](Services/Providers/IContextProvider.md) — Dinamik Bağlam Sağlayıcılar (`IContextProvider` sözleşmesi + `ConversationSummaryProvider`, `CustomerIdentityHintBuilder`, `SemanticMemoryContextProvider`, `ProductRecommendationContextProvider`, `CustomerProfileContextProvider`, `NoopContextProvider`).
 - [Memory/](Services/Memory/SemanticMemoryService.md) — RAG ve Anlamsal Bellek Servisleri (`SemanticMemoryService`, `KnowledgeArticleService`, `KnowledgeBaseIngestionService`, `ContextSanitizer`).
 - [Personalization/](Services/Personalization/PersonalizationPortService.md) — Müşteri Profili ve Öneri Servisleri (`CustomerProfileService`, `CustomerUnderstandingService`, `RecommendationService`).
 - [Realtime/](Services/Realtime/RealtimeNativeService.md) — Sesli Görüşme Servisleri (`RealtimeNativeService`, `RealtimeBridgeService`).

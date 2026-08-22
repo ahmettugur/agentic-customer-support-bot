@@ -1,40 +1,48 @@
-# CostModelUsageSnapshot
+# ICostUsageStorePort (+ CostModelUsageSnapshot, CostUsageSnapshot)
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Observability/ICostUsageStorePort.cs`
-- **Tür:** `public sealed record`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Observability`
+**Kaynak:** `Ports/Outbound/Observability/ICostUsageStorePort.cs`
+**Implementasyon:** [`CostUsageStore`](../../../../CustomerSupportBot.Adapters.Telemetry/OpenTelemetry/CostUsageStore.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`CostModelUsageSnapshot`, <summary> Toplam token/maliyet sayaçlarını okuyan secondary port. </summary>
+Toplam token/maliyet sayaçlarını tutan ve okuyan secondary port. `CostUsageSnapshot`
+uygulama genelindeki toplamı, `CostModelUsageSnapshot` model bazlı kırılımı temsil eder.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Admin dashboard'daki maliyet/kullanım paneli `GetUsageSnapshot()` ile anlık durumu çeker;
+`ResetUsage()` sayaçları sıfırlar (örn. faturalama dönemi başında).
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`CostModelUsageSnapshot`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Süreç içinde biriken sayaçları okuma/sıfırlama.
+- **Üstlenmediği:** Maliyet hesaplama ([`ICostCalculatorPort`](ICostCalculatorPort.md)'ın işi),
+  kalıcı (veritabanı) kayıt ([`ILlmCallPersistencePort`](ILlmCallPersistencePort.md)'ın işi —
+  bu port yalnızca **in-memory** toplam sayaçtır, pod yeniden başlarsa sıfırlanır).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Telemetry/OpenTelemetry/CostUsageStore` implemente eder; `TelemetryChatClient` her
+çağrıdan sonra buraya yazar.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `CostUsageSnapshot`
-```csharp
-public sealed record CostUsageSnapshot(
-    long TotalCalls,
-    long TotalInputTokens,
-    long TotalOutputTokens,
-    decimal TotalCostUsd,
-    IReadOnlyList<CostModelUsageSnapshot> ByModel)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+In-memory bir sayaç olmasının nedeni hız — dashboard'ın her yenilenişinde veritabanına gitmesi
+gerekmez. Kalıcı geçmiş gerektiğinde `ILlmCallPersistencePort` üzerinden Postgres'e yazılan
+kayıtlar kullanılır; bu iki port'un ayrı olması "hızlı anlık görünüm" ile "kalıcı audit
+kaydı" sorumluluklarını birbirinden ayırır.
 
-## Bağımlılıklar
+## 6. Metotlar / Üyeler
 
-- `CustomerSupportBot.Domain`
+| Üye | Açıklama |
+|---|---|
+| `CostUsageSnapshot GetUsageSnapshot()` | Toplam ve model bazlı kullanım özetini döner. |
+| `void ResetUsage()` | Tüm sayaçları sıfırlar. |
+
+**`CostModelUsageSnapshot(string Model, long Calls, long InputTokens, long OutputTokens, decimal CostUsd, double AverageLatencyMs, DateTime LastUsed)`** — tek bir modelin kullanım özeti.
+
+**`CostUsageSnapshot(long TotalCalls, long TotalInputTokens, long TotalOutputTokens, decimal TotalCostUsd, IReadOnlyList<CostModelUsageSnapshot> ByModel)`** — uygulama genelindeki toplam + model bazlı kırılım.
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü bağımlılıksızdır.

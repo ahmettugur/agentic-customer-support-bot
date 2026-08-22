@@ -1,27 +1,42 @@
 # IChatPort
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/IChatPort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/IChatPort.cs`
+**Tür:** `interface`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`IChatPort`, <summary> Chat kullanım senaryosu için primary (driving) port. HTTP adaptörü (Endpoints) bu arayüze bağımlıdır; Core implementasyonuna değil. </summary> <summary> Non-streaming chat: kullanıcı sorgusunu işler ve tek JSON yanıt döndürür. </summary> <summary> SSE streaming chat: reasoning → workflow → yanıt deltalarını stream'ler. </summary>
+Chat kullanım senaryosunun (bir kullanıcı mesajını işleyip bot yanıtı üretmek) primary/driving port'u. Sistemin en merkezi arayüzü — kullanıcı-bot etkileşiminin girişi budur.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Api katmanındaki HTTP adaptörü (chat endpoint'leri) bu arayüze bağımlıdır, somut implementasyona (`ChatPortService`) değil — hexagonal mimarinin temel prensibi budur.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IChatPort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Bir chat turunu iki modda sunmak: tek seferde tam yanıt (non-streaming) veya artımlı event akışı (SSE streaming).
+- **Üstlenmediği:** Turun içindeki reasoning/routing/tool-çağırma detayları — bunlar implementasyonun (`ChatPortService`, `WorkflowRunner`) içindedir.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu: `ChatPortService` (Application/Services/Chat).
+- Api katmanındaki chat endpoint'leri (`ChatAndRealtime` grubu) bu portu kullanır.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+İki ayrı metodun (streaming/non-streaming) var olmasının nedeni farklı istemci ihtiyaçlarıdır: web arayüzü kullanıcıya token-token akan bir yanıt göstermek ister (SSE), programatik/test entegrasyonları ise tek bir tam yanıt bekler.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `Task<ChatResponse> HandleAsync(ChatRequest request, CancellationToken ct = default)` | Non-streaming chat: sorguyu işler ve tek bir JSON yanıt döner. |
+| `IAsyncEnumerable<StreamEvent> HandleStreamAsync(ChatRequest request, CancellationToken ct = default)` | SSE streaming chat: reasoning → workflow → yanıt deltalarını olay akışı olarak yayar. |
+
+## 7. Bağımlılıklar
+
+[ChatRequest](ChatRequest.md), [ChatResponse](ChatResponse.md), [StreamEvent](StreamEvent.md).
+
+## Bağlantılar
+
+- [ChatRequest](ChatRequest.md), [ChatResponse](ChatResponse.md), [StreamEvent](StreamEvent.md)

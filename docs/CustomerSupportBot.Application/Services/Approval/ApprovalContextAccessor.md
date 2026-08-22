@@ -1,54 +1,78 @@
 # ApprovalContextAccessor
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Approval/ApprovalContextAccessor.cs`
-- **Tür:** `public sealed class : IApprovalContextAccessor`
-- **Namespace:** `CustomerSupportBot.Application.Services.Approval`
+**Dosya:** `Services/Approval/ApprovalContextAccessor.cs`
+**Tür:** `public sealed class : IApprovalContextAccessor`
+**Namespace:** `CustomerSupportBot.Application.Services.Approval`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ApprovalContextAccessor`, <summary> AsyncLocal tabanlı IApprovalContextAccessor implementasyonu. Her async akış kendi bağlamını taşır — paralel workflow'lar izoledir. </summary>
+`IApprovalContextAccessor` port'unun `AsyncLocal<T>` tabanlı implementasyonu — bir workflow
+turunun **hangi oturuma, hangi trace'e, hangi müşteriye ait olduğunu**, o turun tüm async
+çağrı zinciri boyunca (agent → tool → tool içindeki başka bir await) taşıyan "ambient context"
+mekanizması. ASP.NET Core'daki `HttpContext.Items` benzeri, ama HTTP isteğiyle değil,
+**bir workflow turunun yürütme akışıyla** kapsamlı.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Bir tool metodu (ör. `OrderCancelTool`) LLM tarafından çağrıldığında, tool'un "hangi müşteri
+adına çalıştığını" bilmesi gerekir. Bu bilgi LLM'e **parametre olarak sorulmaz** (LLM'in
+serbest metinden `customerId` uydurmasına izin vermek güvenlik açığıdır); bunun yerine
+[`ApprovalGateService`](../../../../CustomerSupportBot.Adapters.Agents/ApprovalGateService.md)
+bir turun başında `SetScope(...)` ile context'i kurar, tool içindeki kod ise
+`IApprovalContextAccessor.Context.CustomerId`'yi okur.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ApprovalContextAccessor`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Context'i `AsyncLocal` alanında tutmak, kapsam (`scope`) açılıp kapandığında
+  önceki değere geri dönmek (`IDisposable` ile), agent adı/trace id gibi tekil alanları
+  kapsamı yeniden açmadan güncelleyebilmek (`SetCurrentAgent`, `SetTraceId`).
+- **Üstlenmediği:** Context'in İÇERİĞİNİN doğruluğunu doğrulamak (bu, context'i kuran tarafın
+  — `ApprovalGateService`'in — sorumluluğudur); bu sınıf sadece bir taşıyıcıdır.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- `IApprovalContextAccessor` port'unu implemente eder (`Ports/Outbound/IApprovalContextAccessor.cs`).
+- Kapsamı kimin açtığı: `ApprovalGateService` (Adapters.Agents katmanı), her workflow turunun
+  başında `SetScope` çağırır.
+- Kapsamı kimin okuduğu: `OrderToolsService`/`ComplaintToolsService` gibi tool servisleri ve
+  [`ApprovalExecutionRouter`](ApprovalExecutionRouter.md) (onay kararı sonrası gerçek işi
+  tetiklerken müşteri kimliğini buradan değil `ApprovalRequest.CustomerId`'den okur — orası
+  zaten kalıcı kayıtta saklı bir alan).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `SetScope`
-```csharp
-public IDisposable SetScope(string? sessionId, string? traceId, string? userQuery, string? customerId = null)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**Neden `AsyncLocal<T>` ve neden statik alan:** `AsyncLocal<T>`, .NET'in bir `Task`/`async`
+zincirinin çatallandığı her noktada değeri **otomatik olarak kopyalayan**, ama zincirler
+birbirinden bağımsız kaldığı sürece birbirini **etkilemeyen** özel bir depolama mekanizmasıdır.
+Bu, uygulamanın aynı anda birden çok workflow turunu (farklı oturumlar, farklı müşteriler)
+paralel işleyebildiği bu kod tabanında kritik: statik bir `ApprovalContext` alanı kullanılsaydı,
+iki eşzamanlı turun context'leri birbirine karışırdı (turun A'nın tool'u, turun B'nin
+müşteri kimliğini görebilirdi — ciddi bir veri sızıntısı). `AsyncLocal` sayesinde her turun
+kendi async akışı kendi kopyasını görür.
 
-### `SetCurrentAgent`
-```csharp
-public void SetCurrentAgent(string? agentName)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`SetScope` bir `IDisposable` döner ve önceki değeri saklar: bu, `using (accessor.SetScope(...))`
+deseniyle kapsamın **iç içe geçebilmesini** (nested scope) ve kapsam kapandığında önceki
+duruma (genelde `null`) güvenle dönülmesini sağlar — bir workflow bir alt-workflow tetiklerse
+alt-workflow'un context'i üst workflow'unkini kalıcı olarak ezmez.
 
-### `SetTraceId`
-```csharp
-public void SetTraceId(string? traceId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`SetCurrentAgent`/`SetTraceId`, mevcut context `null` olsa bile çalışır (yoksa yeni bir context
+yaratır) — bu, agent yönlendirmesi (routing) context kurulmadan önce başlarsa `NullReferenceException`
+yerine sessizce eksik bir context oluşmasını sağlar.
 
-### `Dispose`
-```csharp
-public void Dispose()
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-## Bağımlılıklar
+| Üye | Açıklama |
+|---|---|
+| `Context` (`ApprovalContext?`, salt okunur) | Mevcut async akışın context'i; kapsam açılmamışsa `null`. |
+| `SetScope(string? sessionId, string? traceId, string? userQuery, string? customerId = null): IDisposable` | Yeni bir context kapsamı açar, `Dispose()` çağrıldığında önceki context'e döner. |
+| `SetCurrentAgent(string? agentName): void` | Mevcut context'te (varsa) `AgentName`'i günceller; yoksa yeni bir context oluşturur. |
+| `SetTraceId(string? traceId): void` | Mevcut context'te (varsa) `TraceId`'yi günceller; yoksa yeni bir context oluşturur. |
 
-- `CustomerSupportBot.Domain`
-- `IApprovalContextAccessor`
+## 7. Bağımlılıklar
+
+Yok — dışarıdan hiçbir servis inject etmez; sadece `AsyncLocal<ApprovalContext?>` statik alanını yönetir.
+
+## Bağlantılar
+
+- [ApprovalExecutionRouter.md](ApprovalExecutionRouter.md) — onay sonrası gerçek işi tetikleyen taraf
+- [ApprovalPortService.md](ApprovalPortService.md) — admin panelin onay kuyruğunu yönettiği servis

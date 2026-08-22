@@ -1,46 +1,59 @@
-# RealtimeToolResult
+# RealtimeModels (RealtimeToolResult, RealtimeServerEvent, RealtimeServerEventType)
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/AI/RealtimeModels.cs`
-- **Tür:** `public sealed record`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.AI`
+**Kaynak:** `Ports/Outbound/AI/RealtimeModels.cs`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`RealtimeToolResult`, Application/Ports/Driven/AI/RealtimeModels.cs IRealtimeVoiceTransport port'u için domain-nötr veri modelleri. OpenAI protokolüne özgü tipler (JsonNode, base64, event string'leri) burada yoktur.
+[`IRealtimeVoiceTransport`](IRealtimeVoiceTransport.md) port'unun kullandığı, sağlayıcıdan
+(OpenAI vb.) bağımsız veri modellerini tanımlar: `RealtimeToolResult` (tool sonucu göndermek
+için), `RealtimeServerEvent` (sağlayıcıdan gelen bir event'in vendor-nötr temsili) ve
+`RealtimeServerEventType` (event türleri enum'u).
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+`OpenAiRealtimeClientAdapter`, OpenAI'nin JSON tabanlı event'lerini (`response.audio.delta`,
+`conversation.item.input_audio_transcription.completed` vb.) bu tiplere çevirip Application
+katmanına o şekilde sunar.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`RealtimeToolResult`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** OpenAI'ye özgü alan adlarını (JsonNode, base64 string'ler, event adı
+  string'leri) taşımayan, sağlayıcıdan bağımsız bir sözleşme sunmak.
+- **Üstlenmediği:** Sağlayıcı protokolünün ayrıştırılması — bu adaptörün işidir.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`IRealtimeVoiceTransport.ReceiveEventsAsync` bu tipleri yield eder;
+`SendToolResultsAsync(IReadOnlyList<RealtimeToolResult>, ...)` bunları parametre olarak alır.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `RealtimeServerEvent`
-```csharp
-public sealed record RealtimeServerEvent(RealtimeServerEventType EventType)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Vendor-nötr olması bilinçlidir: `OpenAiRealtimeClientAdapter`'ın dışında hiçbir yerde OpenAI'ye
+özgü JSON tipleri (`JsonNode`, base64, event string'leri) görünmez — sağlayıcı değişirse
+yalnızca adaptör değişir.
 
-## Özellikler/Properties
+## 6. Metotlar / Üyeler
 
-- `Transcript` (`string?`): İlgili veriyi temsil eden özellik.
-- `AudioDelta` (`byte[]?`): İlgili veriyi temsil eden özellik.
-- `TextDelta` (`string?`): İlgili veriyi temsil eden özellik.
-- `FullText` (`string?`): İlgili veriyi temsil eden özellik.
-- `ErrorMessage` (`string?`): İlgili veriyi temsil eden özellik.
-- `ToolCallId` (`string?`): İlgili veriyi temsil eden özellik.
-- `ToolName` (`string?`): İlgili veriyi temsil eden özellik.
-- `ToolArguments` (`string?`): İlgili veriyi temsil eden özellik.
+**`RealtimeToolResult(string CallId, string Name, string OutputJson)`** — bir tool çağrısının
+sonucunu taşır (`CallId`: hangi çağrıya ait, `Name`: tool adı, `OutputJson`: sonucun JSON
+serileştirmesi).
 
-## Bağımlılıklar
+**`RealtimeServerEvent(RealtimeServerEventType EventType)`** — sağlayıcıdan gelen tek bir olay.
+Ek alanlar (hepsi nullable, `EventType`'a göre hangisi dolu olduğu değişir):
 
-- `CustomerSupportBot.Domain`
+| Alan | Ne zaman dolu |
+|---|---|
+| `Transcript` | Kullanıcı konuşmasının transkripti tamamlandığında |
+| `AudioDelta` | Modelin ses çıktısı parça parça geldiğinde |
+| `TextDelta` / `FullText` | Modelin metin çıktısı (delta / tam) |
+| `ErrorMessage` | `Error` event'inde |
+| `ToolCallId` / `ToolName` / `ToolArguments` | Model bir tool çağırmak istediğinde |
+
+**`RealtimeServerEventType`** enum değerleri: `SpeechStarted`, `SpeechStopped`,
+`InputTranscriptCompleted`, `ResponseCreated`, `AudioDelta`, `AssistantTextDelta`,
+`AssistantTextDone`, `ToolCallReady`, `ResponseDone`, `ResponseCancelled`, `Error`,
+`ConnectionClosed`.
+
+## 7. Bağımlılıklar
+
+Yok — saf veri modelleri, dış bağımlılık taşımaz.

@@ -1,54 +1,89 @@
 # ConfiguredA2ASubjectAuthorizer
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/A2A/ConfiguredA2ASubjectAuthorizer.cs`
-- **Tür:** `public sealed class : IA2ASubjectAuthorizer`
-- **Namespace:** `CustomerSupportBot.Application.Services.A2A`
+**Dosya:** `Services/A2A/ConfiguredA2ASubjectAuthorizer.cs`
+**Tür:** `public sealed class : IA2ASubjectAuthorizer` + yapılandırma tipleri (`A2AOptions`, `A2APartnerOptions`)
+**Namespace:** `CustomerSupportBot.Application.Services.A2A`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ConfiguredA2ASubjectAuthorizer`, Application/Services/A2A/ConfiguredA2ASubjectAuthorizer.cs IA2ASubjectAuthorizer'ın yapılandırma tabanlı, VARSAYILAN OLARAK REDDEDEN implementasyonu. <summary> Partner → müşteri yetkisini <see cref="A2AOptions"/> üzerinden okur.  <para> <b>Varsayılan davranış REDDETMEKTİR.</b> Hiçbir yapılandırma yoksa, partner tanımlı değilse veya müşteri o partnerin listesinde değilse <c>false</c> döner. Bu bilinçli: A2A kanalı dış sistemlere açık ve bu kapı yanlış açıldığında bedeli başka bir müşterinin sipariş geçmişidir. "Yapılandırmayı unuttum" durumunun sonucu <b>sızıntı değil, çalışmama</b> olmalıdır. </para>  <para> Bu sınıf gerçek iş kuralının <b>yerini tutmaz</b>, yalnızca güvenli bir başlangıç noktasıdır. Partner-müşteri ilişkisi bir tabloya/sözleşmeye bağlanacaksa bu port yeniden implemente edilmeli; çağıran taraf hiç değişmez. </para> </summary>
+`IA2ASubjectAuthorizer` port'unun, `appsettings.json`'daki `A2A:Partners` listesine dayalı
+implementasyonu: "bu partner, bu müşteri adına hareket edebilir mi?" sorusunu statik bir
+yapılandırma listesine bakarak cevaplar.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+[`A2ATokenExchangeService.ExchangeAsync`](A2ATokenExchangeService.md), özne token'ı üretmeden
+önce `CanActForCustomerAsync`'i çağırır. Bu sınıf, partner kimliğinin `A2AOptions.Partners`
+listesinde tanımlı olup olmadığına ve o partnerin `AllowedCustomerIds` listesinin istenen
+müşteriyi (veya joker `"*"`) içerip içermediğine bakar.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ConfiguredA2ASubjectAuthorizer`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Statik/yapılandırma tabanlı yetki kontrolü, red durumlarını loglamak.
+- **Üstlenmediği:** Dinamik/veritabanı tabanlı partner-müşteri ilişkisi (bkz. §5), token üretimi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-```csharp
-public ConfiguredA2ASubjectAuthorizer(IOptions<A2AOptions> options,
-        ILogger<ConfiguredA2ASubjectAuthorizer> logger)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- `IA2ASubjectAuthorizer` port'unu implemente eder (port: `Ports/Outbound/A2A/IA2ASubjectAuthorizer.cs`).
+- [`A2ATokenExchangeService`](A2ATokenExchangeService.md) tarafından inject edilip çağrılır.
+- `A2AOptions`, Api katmanındaki A2A endpoint'lerinin rate-limit/gövde-boyutu/keşif ayarlarını da taşır.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `CanActForCustomerAsync`
-```csharp
-public Task<bool> CanActForCustomerAsync(string partnerId, string customerId, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+> 🐞 **Varsayılan davranış REDDETMEKTİR.** Partner tanımlı değilse, hiç yapılandırma yoksa veya
+> müşteri o partnerin izin listesinde yoksa sonuç kesin olarak `false`'tur. Bu bilinçli bir
+> tasarım kararı: A2A kanalı dış sistemlere açık bir kapı ve bu kapı yanlış açıldığında bedeli
+> başka bir müşterinin sipariş/şikayet geçmişinin sızmasıdır. "Yapılandırmayı unuttum" durumunun
+> sonucu **sızıntı değil, çalışmama** olmalıdır — fail-closed, fail-open değil.
 
-## Özellikler/Properties
+`"*"` joker değeri (`AllowedCustomerIds` içinde) bir partnerin **tüm** müşteriler adına hareket
+edebileceği anlamına gelir — yalnızca gerçekten güvenilen, sözleşmeli bir sistem için
+kullanılmalıdır; tek bir sızan partner token'ı tüm müşteri verisini açar.
 
-- `Enabled` (`bool`): İlgili veriyi temsil eden özellik.
-- `SubjectTokenMinutes` (`int`): İlgili veriyi temsil eden özellik.
-- `PublicBaseUrl` (`string`): İlgili veriyi temsil eden özellik.
-- `RequestsPerMinute` (`int`): İlgili veriyi temsil eden özellik.
-- `MaxMessageChars` (`int`): İlgili veriyi temsil eden özellik.
-- `MaxParts` (`int`): İlgili veriyi temsil eden özellik.
-- `MaxRequestBytes` (`long`): İlgili veriyi temsil eden özellik.
-- `DocumentationUrl` (`string`): İlgili veriyi temsil eden özellik.
-- `Partners` (`List<A2APartnerOptions>`): İlgili veriyi temsil eden özellik.
-- `PartnerId` (`string`): İlgili veriyi temsil eden özellik.
-- `AllowedCustomerIds` (`List<string>`): İlgili veriyi temsil eden özellik.
+> Bu sınıf gerçek iş kuralının **yerini tutmaz**, yalnızca güvenli bir başlangıç noktasıdır.
+> Partner-müşteri ilişkisi ileride bir veritabanı tablosuna/sözleşme yönetim sistemine
+> bağlanacaksa, bu port başka bir sınıfla yeniden implemente edilmelidir — `IA2ASubjectAuthorizer`
+> arayüzü sabit kaldığı sürece çağıran taraf ([`A2ATokenExchangeService`](A2ATokenExchangeService.md))
+> hiç değişmez. Bu, Dependency Inversion prensibinin klasik bir uygulamasıdır: iş kuralı arkasında
+> değişebilir bir implementasyon.
 
-## Bağımlılıklar
+`A2AOptions` içindeki `MaxMessageChars`/`MaxParts`/`MaxRequestBytes` gibi limitler, LLM'e istek
+gitmeden ÖNCE, Api katmanında uygulanır — maliyet zaten oluştuktan sonra sınır koymanın faydası
+olmadığı için (bkz. sınıf içi yorum).
 
-- `CustomerSupportBot.Domain`
-- `IA2ASubjectAuthorizer`
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `CanActForCustomerAsync(string partnerId, string customerId, CancellationToken ct = default): Task<bool>` | Partner tanımlı mı ve müşteri izin listesinde mi (veya `"*"` var mı) kontrol eder; girdi boşsa da `false`. |
+
+### `A2AOptions` (appsettings.json → `A2A`)
+
+| Alan | Varsayılan | Açıklama |
+|---|---|---|
+| `Enabled` | `false` | Kapalıysa A2A endpoint'leri hiç map edilmez. |
+| `SubjectTokenMinutes` | `5` | Özne token ömrü. |
+| `PublicBaseUrl` | `""` | Agent card'larda ilan edilecek dış adres; boşsa göreli URL kullanılır (proxy arkasında yanlış çözülebilir). |
+| `RequestsPerMinute` | `60` | Partner başına dakikalık istek sınırı. |
+| `MaxMessageChars` | `4000` | Tek çağrıdaki toplam metin karakter sınırı (LLM öncesi uygulanır). |
+| `MaxParts` | `20` | Tek çağrıdaki azami parça sayısı (uzunluk sınırını küçük parçalara bölerek atlatmayı engeller). |
+| `MaxRequestBytes` | `64 * 1024` | Azami istek gövdesi (Kestrel varsayılanı 30MB'dır, metin kanalı için gereksiz geniştir). |
+| `DocumentationUrl` | `""` | Kök agent card'ında `documentationUrl`; boşsa alan hiç yazılmaz. |
+| `Partners` | `[]` | `A2APartnerOptions` listesi. |
+
+### `A2APartnerOptions`
+
+| Alan | Açıklama |
+|---|---|
+| `PartnerId` | Partnerin kimliği. |
+| `AllowedCustomerIds` | Bu partnerin adına hareket edebileceği müşteri kimlikleri; `"*"` = tümü. |
+
+## 7. Bağımlılıklar (Constructor Injection)
+
+- `IOptions<A2AOptions>` — partner listesi ve limitler.
+- `ILogger<ConfiguredA2ASubjectAuthorizer>` — tanımsız partner/yetkisiz müşteri denemelerini loglar.
+
+## Bağlantılar
+
+- [A2ATokenExchangeService.md](A2ATokenExchangeService.md) — bu kararı tüketen taraf
+- [A2ASubjectIdentity.md](A2ASubjectIdentity.md) — üretilen token'ın kimlik biçimi

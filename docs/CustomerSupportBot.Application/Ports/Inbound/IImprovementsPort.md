@@ -1,27 +1,46 @@
 # IImprovementsPort
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/IImprovementsPort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/IImprovementsPort.cs`
+**Tür:** `interface`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`IImprovementsPort`, <summary> Lesson madenciliği ve onay/ret akışı için primary (driving) port. </summary>
+"Self-improving loop" (kendi kendini geliştirme döngüsü) özelliğinin admin tarafı için primary port — geçmiş konuşmalardan çıkarılan "ders"leri (Lesson) listeler, admin onay/red kararını uygular.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Bir arka plan işi (mining) geçmiş konuşmaları tarayıp iyileştirme fırsatlarını (`Lesson`) tespit eder; admin panelinde bu dersler listelenir ve admin onaylarsa (muhtemelen prompt/davranış güncellemesine girdi olarak) kullanılır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IImprovementsPort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Mining sürecini tetiklemek, ders listesini sunmak, onay/red kararını uygulamak.
+- **Üstlenmediği:** Onaylanan dersin nasıl uygulanacağı (prompt güncelleme vb.) — bu port sadece karar sürecini kapsar.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu `Services/Improvement` altında.
+- `Lesson`, `LessonStatus`, `MiningRunReport` tiplerini kullanır (Domain.Model.Improvement / Services.Improvement).
+- Admin panelindeki "improvements" sayfası tüketicisidir.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Otomatik üretilen "ders"lerin doğrudan uygulanmaması, admin onayından geçmesi (`ApproveAsync`/`Reject`) bilinçli bir HITL tasarımıdır — LLM'in çıkardığı bir gözlemin yanlış/aşırı genelleyici olma riskine karşı insan denetimi katmanı ekler.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `Task<MiningRunReport> MineAsync(CancellationToken ct = default)` | Ders madenciliği sürecini tetikler ve raporunu döner. |
+| `IReadOnlyList<Lesson> GetLessons(LessonStatus? status = null)` | Dersleri (isteğe bağlı durum filtresiyle) listeler. |
+| `Lesson? GetLesson(string id)` | Tek ders. |
+| `Task<bool> ApproveAsync(string id, string decidedBy, string? reason, CancellationToken ct = default)` | Dersi onaylar. |
+| `bool Reject(string id, string decidedBy, string? reason)` | Dersi reddeder. |
+
+## 7. Bağımlılıklar
+
+`CustomerSupportBot.Application.Services.Improvement.MiningRunReport`, `CustomerSupportBot.Domain.Model.Improvement.Lesson`.
+
+## Bağlantılar
+
+- [Lesson](../../Domain/Model/Improvement/Lesson.md)

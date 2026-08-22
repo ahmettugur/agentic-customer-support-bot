@@ -18,7 +18,7 @@ Bu klasör, hexagonal mimaride **Driven Adapter (Çıkış Adaptörü)** rolün�
 - [TrimmingDeltaStreamer](TrimmingDeltaStreamer.md) — Son yanıttan önce sızan reasoning veya termination işaretçilerini filtreleyerek istemciye temiz SSE akışı sunan akış işleyici.
 - [ExceptionTranslator](ExceptionTranslator.md) — MAF ve HTTP istisnalarını `ExternalServiceException` gibi domain istisnalarına çeviren yardımcı.
 - [PortAliases](PortAliases.md) — Global namespace ve port import tanımları.
-- [DependencyInjection](DependencyInjection/AgentAdapterServiceCollectionExtensions.md) — `AddAgentsAdapter` DI kayıt uzantısı.
+- [DependencyInjection](DependencyInjection/AgentsAdapterServiceCollectionExtensions.md) — `AddAgentsAdapter` DI kayıt uzantısı.
 - [Team/](Team/README.md) — 6 uzman ajan (`PlanningAgent`, `ProductAgent`, `OrderAgent`, `ComplaintAgent`, `HumanHandoffAgent`, `ResponseAgent`), temel sınıf `SupportAgentBase` ve `SpecialistReasoningSchema`.
 - [A2A/](A2A/README.md) — Dış sistemlerle Agent-to-Agent protokolü üzerinden haberleşen salt-okunur ajan kataloğu (`A2AAgentCatalog`) ve `InputLimitedAgent`.
 - [Routing](Routing.md) — Grup sohbeti yönlendirme stratejileri (`FirstTurnStrategy`, `PlanRoutingStrategy`, `ReflectionRoutingStrategy`).

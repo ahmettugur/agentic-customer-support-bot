@@ -21,8 +21,9 @@ public sealed class ProductRecommendationContextProvider : IContextProvider
     public string Name => "ProductRecommendation";
 
     /// <summary>
-    /// SemanticMemory (7)'den sonra, CustomerContext (10)'dan önce — öneri, sipariş/şikayet
-    /// gibi kritik olgulardan daha düşük öncelikli; bütçe dolarsa önce bu düşer.
+    /// SemanticMemory (7)'den sonra — pipeline'daki tüm provider'lar arasında en yüksek
+    /// (en düşük öncelikli) Order; öneri, sipariş/şikayet gibi kritik olgulardan daha düşük
+    /// öncelikli; bütçe dolarsa önce bu düşer.
     /// </summary>
     public int Order => 8;
 

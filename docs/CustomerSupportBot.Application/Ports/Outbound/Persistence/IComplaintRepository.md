@@ -1,27 +1,42 @@
 # IComplaintRepository
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Persistence/IComplaintRepository.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Persistence`
+**Kaynak:** `Ports/Outbound/Persistence/IComplaintRepository.cs`
+**Implementasyon:** [`ComplaintRepository`](../../../../CustomerSupportBot.Adapters.Persistence/Postgres/ComplaintRepository.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IComplaintRepository`, <summary> Şikayet yönetimi için secondary port. </summary> <summary>Yeni şikayet oluşturur ve şikayet ID'sini döner.</summary> <summary>Şikayet ID ile sorgular. Bulunamazsa null döner.</summary> <summary>Sipariş ID'ye göre şikayetler.</summary> <summary>Müşteri ID'ye göre tüm şikayetler.</summary>
+Şikayet kaydı yönetimi için secondary port: oluşturma, id/sipariş/müşteri bazlı sorgulama.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`ComplaintToolsService` şikayet kaydı tool'unun (onaylandıktan sonra
+[`IApprovalExecutionRouter`](../IApprovalExecutionRouter.md) tarafından tetiklenir) ve şikayet
+durumu sorgulama tool'larının arkasında bu port'u çağırır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IComplaintRepository`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Şikayet kaydı CRUD'unun okuma/oluşturma tarafı.
+- **Üstlenmediği:** Sahiplik kontrolü — `customerId` doğrulaması çağıran serviste
+  (`ComplaintToolsService`) yapılır, bu port ham veri erişimidir.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Persistence/Postgres/ComplaintRepository` implemente eder.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`Create` bir `string` (yeni şikayet id'si) döner, exception fırlatmaz — çağıran taraf id'yi
+doğrudan kullanıcıya/LLM'e döndürebilir.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `string Create(ComplaintInfo complaint)` | Yeni şikayet oluşturur, id döner. |
+| `ComplaintInfo? Get(string complaintId)` | Id ile sorgular. |
+| `IReadOnlyList<(string ComplaintId, ComplaintInfo Complaint)> GetByOrder(string orderId)` | Siparişe bağlı şikayetler. |
+| `IReadOnlyList<(string ComplaintId, ComplaintInfo Complaint)> GetByCustomer(string customerId)` | Müşterinin tüm şikayetleri. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.ComplaintInfo`'ya bağımlıdır.

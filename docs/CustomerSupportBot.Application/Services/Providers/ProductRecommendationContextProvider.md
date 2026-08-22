@@ -1,52 +1,62 @@
 # ProductRecommendationContextProvider
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Providers/ProductRecommendationContextProvider.cs`
+- **Kaynak:** `Services/Providers/ProductRecommendationContextProvider.cs`
 - **Tür:** `public sealed class : IContextProvider`
 - **Namespace:** `CustomerSupportBot.Application.Services.Providers`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ProductRecommendationContextProvider`, müşterinin geçmiş siparişleri, şikayet geçmişi ve ilgi duyduğu kategoriler doğrultusunda [IRecommendationService](../Personalization/RecommendationService.md) tarafından üretilen dinamik ürün önerilerini `"## 💡 Önerilen Ürünler"` başlığıyla sistem bağlamına aktaran sağlayıcıdır.
+[`IRecommendationService.Recommend(session)`](../Personalization/RecommendationService.md)'in
+ürettiği (varsa) ürün önerilerini `"## 💡 Olası İlgi Alanı"` başlığıyla bağlama ekleyen
+sağlayıcıdır. Öneri motorunun kendisi burada değil `RecommendationService`'te yaşar — bu sınıf
+sadece sonucu metne çevirir.
 
-## Hangi amaçla kullanılır`?
+## 2. Hangi Amaçla Kullanılır
 
-- Kullanıcı ürün sorguladığında veya genel tavsiye istediğinde, ajanın müşterinin satın alma geçmişine uygun çapraz satış (cross-sell) ve tamamlayıcı ürün önerileri sunmasını sağlamak.
-- Önerilen ürünün adı, fiyatı ve neden önerildiğini (`Reason`) ajana ipucu olarak vermek.
+Ajanın, uygun olduğunda (zorlanmadan) müşteriye ilgilenebileceği başka bir ürün önerebilmesi
+için bir **ipucu** sağlamak. Bu blok bir talimat değildir — ajanı hiçbir tool'u tetiklemeye
+veya otonom bir eylem başlatmaya zorlamaz; şikayet/sipariş akışlarındaki ajanlar bu bloğu
+görmezden gelmekte tamamen serbesttir.
 
-## Constructor ve Başlatma Mantığı
+## 3. Sorumlulukları
 
-```csharp
-public ProductRecommendationContextProvider(
-    IRecommendationService recommendationService,
-    ILogger<ProductRecommendationContextProvider> logger)
-```
+**Üstlendiği:** `_recommendations.Recommend(session)` sonucunu (varsa) markdown listesine
+çevirmek; sonuç boşsa `null` dönmek.
 
-### Constructor İçerisinde Yapılan İşler:
-- `_recommendationService`: Kural ve geçmiş bazlı öneri motoru.
-- `_logger`: Günlükleme motoru.
+**Üstlenmediği:** Önerinin ne zaman uygun olduğuna karar vermek — susma kuralları (negatif
+sentiment, aktif şikayet/iade/iptal niyeti, veri yetersizliği) tamamen
+[`RecommendationService`](../Personalization/RecommendationService.md)'te toplanmıştır; bu
+provider sonucu sorgusuz kabul eder.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-### 1. `GetContextAsync`
-```csharp
-public async Task<string?> GetContextAsync(
-    AgentSession session,
-    string currentQuery,
-    CancellationToken ct = default)
-```
-- **Ne işe yarar?:** Oturumdaki müşteri için en fazla 3 adet ürün önerisi üretir.
-- **İç Mantığı:**
-  1. `session.State.AuthenticatedCustomerId` üzerinden `_recommendationService.GetRecommendationsAsync(customerId, limit: 3, ct)` çağrılır.
-  2. Öneri listesi boşsa `null` döner.
-  3. `StringBuilder` ile ürünlerin adı, birim fiyatı ve öneri gerekçesi formatlanıp döndürülür.
+- `IRecommendationService` — tek veri kaynağı.
+- [`ContextPipeline`](../Chat/ContextPipeline.md) — bu provider'ı `Order=8` ile çalıştıran tüketici.
 
-## Özellikler/Properties
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `Name` (`string`): Sabit `"ProductRecommendation"`.
-- `Order` (`int`): `8` (Semantik RAG bilgisinden sonra eklenir).
+`Order=8` — pipeline'daki tüm provider'lar arasında en yüksek (en düşük öncelikli) `Order`
+(`NoopContextProvider`'ın `int.MaxValue`'su hariç). Bilinçli sıralama: ürün önerisi, sipariş/
+şikayet gibi kritik olgulardan daha düşük öncelikli bir "iyileştirme"dir — karakter bütçesi
+dolduğunda `ContextPipeline` önce bunu düşürür, kritik bilgiyi değil.
 
-## Bağımlılıklar
+Metin bilinçli olarak "**isteğe bağlı, YALNIZCA uygun bağlamda bahset — zorlama**" ifadesiyle
+başlar; bu, öneri motorunun kendi susma kurallarına ek bir güvenlik katmanı — LLM'in agresif
+bir satış tonuna kaymasını önlemeyi hedefler.
 
-- [IContextProvider](IContextProvider.md)
-- [IRecommendationService](../Personalization/RecommendationService.md)
-- [ProductRecommendation](../../../CustomerSupportBot.Domain/Model/Memory/ProductRecommendation.md)
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `Name` (`string`) | Sabit `"ProductRecommendation"`. |
+| `Order` (`int`) | `8`. |
+| `GetContextAsync(session, currentQuery, ct)` | `_recommendations.Recommend(session)` çağırır (senkron, `ct` kullanılmaz — LLM/ağ çağrısı yok); sonuç boşsa `null`, doluysa her öneriyi `"- {ProductName} — {Reason}"` satırı olarak listeler. |
+
+## 7. Bağımlılıklar
+
+Constructor injection ile: `IRecommendationService`, `ILogger<ProductRecommendationContextProvider>`.
+
+## Bağlantılar
+
+- [IContextProvider.md](IContextProvider.md)
+- [../Personalization/RecommendationService.md](../Personalization/RecommendationService.md) — susma kurallarının gerçek kaynağı

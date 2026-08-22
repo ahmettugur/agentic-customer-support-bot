@@ -2,7 +2,7 @@
 
 - **Kaynak:** `CustomerSupportBot.Adapters.Telemetry/Options/TelemetryOptions.cs`
 - **Tür:** `public sealed class`
-- **Namespace:** `CustomerSupportBot.Adapters.Telemetry.Options`
+- **Namespace:** `CustomerSupportBot.Adapters.Telemetry` (dosya `Options/` klasöründe olsa da namespace klasör adını içermiyor — dikkat)
 
 ## Ne işe yarar?
 

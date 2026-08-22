@@ -53,7 +53,7 @@ protected override void OnBeforeRun(IReadOnlyList<ChatMessage> messages)
 ```csharp
 protected override void OnAfterRun(AgentResponse response)
 ```
-- **Ne işe yarar?:** Üretilen nihai yanıt metnini ve sonundaki `TERMINATE` işaretçisini yakalar (Breakpoint noktası).
+- **Ne işe yarar?:** Üretilen nihai yanıt metnini ve sonundaki `TERMINATE` işaretçisini yakalar (Breakpoint noktası). Bu işaret kullanıcıya akan gerçek token akışından [WorkflowTraceEventProcessor](../WorkflowTraceEventProcessor.md)'ın `ResponseStreamFilter`'ı tarafından süzülür (`WorkflowRunner`'da değil).
 
 ## Bağımlılıklar
 

@@ -1,59 +1,71 @@
 # SessionStateService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Chat/SessionStateService.cs`
-- **Tür:** `public sealed class`
-- **Namespace:** `CustomerSupportBot.Application.Services.Chat`
+**Dosya:** `Services/Chat/SessionStateService.cs`
+**Tür:** `public sealed class` (+ yardımcı DTO `SentimentAlertResult`)
+**Namespace:** `CustomerSupportBot.Application.Services.Chat`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`SessionStateService`, Application/Services/SessionStateService.cs Session state yönetimi — sentiment güncellemesi, intent güncellemesi, sentiment alert kontrolü. ChatStreamOrchestrator (Api) bu servisi kullanır; iş mantığı Application katmanında kalır. <summary> Oturum durumu iş mantığı — sentiment güncelleme, intent yönetimi, alert kontrolü. Transport katmanından (SSE, WebSocket) bağımsızdır. </summary> <summary> Konuşmayı (exchange) session history'ye kaydeder, turun state çıkarımını tetikler ve ChatBridge'e bildirir.
+Oturum durumu iş mantığını (bir konuşmayı kalıcılığa yazmak, duygu-durumu uyarısı olup
+olmadığını kontrol etmek) transport katmanından (SSE, WebSocket) bağımsız hale getirir.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+[`ChatPortService.HandleStreamAsync`](ChatPortService.md) ve Api katmanındaki
+`ChatEventOrchestrator` (streaming transport) bu servisi kullanır — ikisi de aynı "turu kaydet,
+duygu durumunu kontrol et" mantığını tekrarlamak yerine buraya devreder.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`SessionStateService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Bir konuşmayı (`query`+`response`) geçmişe yazmak ve `IChatBridge`'e
+  bildirmek (`PersistExchangeAsync`); ardışık negatif tur eşiğini kontrol edip uyarı gerekip
+  gerekmediğine karar vermek (`CheckSentimentAlert`).
+- **Üstlenmediği:** Duygu durumunun NASIL hesaplandığı (bu `SessionStateExtractor`'da, Domain
+  katmanında — LLM sinyali veya kural tabanlı), transport'a özgü olay biçimlendirme (SSE/WebSocket
+  event şeması Api katmanında kurulur, bu servis sadece `SentimentAlertResult` DTO'sunu döner).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-```csharp
-public SessionStateService(ISessionManager sessionManager,
-        ILogger<SessionStateService> logger)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- **Inject eder:** `ISessionManager`, `ILogger`.
+- **Kimin tarafından çağrılır:** [`ChatPortService`](ChatPortService.md) (streaming yol),
+  Api katmanındaki `ChatEventOrchestrator`.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `PersistExchangeAsync`
-```csharp
-public async Task PersistExchangeAsync(
-        string sessionId,
-        string query,
-        string response,
-        IChatBridge chatBridge,
-        TurnSignals? signals = null,
-        CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+> 🐞 **Intent/sentiment neden turun KAPANIŞINDA, TEK yerde işlenir.** Eskiden ayrı
+> `UpdateSessionIntentAsync`/`UpdateSessionSentiment` metotları vardı ve bunlar tur ORTASINDA
+> state'e yazıyordu; hemen ardından `PersistExchangeAsync` → `SessionStateExtractor` aynı
+> alanları kural tabanlı değerlerle **bir kez daha** eziyordu. İki somut hata sonucu:
+> (1) LLM'in ürettiği (daha isabetli) karar, her turda kural tabanlı çıkarım tarafından
+> sessizce eziliyordu; (2) `ConsecutiveNegativeTurns` sayacı tur başına **iki kez** artıyordu
+> (biri erken yazımdan, biri geç yazımdan), yani gerçekte 2 negatif tur geçince değil 1 negatif
+> tur geçince alarm eşiği aşılıyordu. Düzeltme: LLM'in ürettiği sinyaller artık `TurnSignals`
+> olarak sadece bir GİRDİ biçiminde taşınır (yazılmaz), türetilmiş alanların TEK yazarı
+> `SessionStateExtractor.ExtractAndApply`'dır — `AddExchangeAsync` içinden, turun kapanışında,
+> tam olarak bir kez çağrılır.
 
-### `CheckSentimentAlert`
-```csharp
-public SentimentAlertResult CheckSentimentAlert(AgentSession session)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`PersistExchangeAsync` yalnızca `response` boş DEĞİLSE yazar — boş bir bot cevabının geçmişe
+"boş bir tur" olarak eklenmesi anlamsızdır (ör. bir hata/iptal durumunda).
 
-## Özellikler/Properties
+`CheckSentimentAlert`'teki `lock (session)` kilidi, oturum nesnesinin (bellekte, cache'te
+paylaşılan) birden fazla eşzamanlı okuyucu/yazıcı tarafından erişilebilmesine karşı bir
+korumadır — okunan alanlar (`Sentiment`, `SentimentScore`, `ConsecutiveNegativeTurns`) tutarlı
+bir anlık görüntü (snapshot) olarak alınır, yarı güncellenmiş bir durum okunmaz.
 
-- `Sentiment` (`string?`): İlgili veriyi temsil eden özellik.
-- `Score` (`double`): İlgili veriyi temsil eden özellik.
-- `ConsecutiveNegativeTurns` (`int`): İlgili veriyi temsil eden özellik.
-- `SessionId` (`string`): İlgili veriyi temsil eden özellik.
-- `ShouldAlert` (`bool`): İlgili veriyi temsil eden özellik.
+## 6. Metotlar / Üyeler
 
-## Bağımlılıklar
+| Üye | Açıklama |
+|---|---|
+| `PersistExchangeAsync(string sessionId, string query, string response, IChatBridge chatBridge, TurnSignals? signals = null, CancellationToken ct = default): Task` | Konuşmayı (yanıt boş değilse) geçmişe yazar ve `IChatBridge.RecordBotExchange` ile bildirir. |
+| `CheckSentimentAlert(AgentSession session): SentimentAlertResult` | Ardışık negatif tur sayısını eşikle (`WellKnown.SentimentThresholds.AutoEscalationConsecutiveNegative`) karşılaştırır; aşıldıysa uyarı loglar ve `ShouldAlert=true` döner. |
+| `SentimentAlertResult` (DTO) | `Sentiment`, `Score`, `ConsecutiveNegativeTurns`, `SessionId`, `ShouldAlert`, hesaplanan `AlertMessage`. |
 
-- `CustomerSupportBot.Domain`
+## 7. Bağımlılıklar (Constructor Injection)
+
+- `ISessionManager` — oturum kalıcılığı.
+- `ILogger<SessionStateService>` — duygu-durumu uyarılarını loglar.
+
+## Bağlantılar
+
+- [ChatPortService.md](ChatPortService.md) — bu servisi streaming yolda çağıran taraf
+- [ContextPipeline.md](ContextPipeline.md) — aynı klasördeki bağlam toplama pipeline'ı

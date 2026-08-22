@@ -1,27 +1,42 @@
 # IGeneralChatClient
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/AI/IGeneralChatClient.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.AI`
+**Kaynak:** `Ports/Outbound/AI/IGeneralChatClient.cs`
+**Implementasyon:** [`GeneralChatClientAdapter`](../../../../CustomerSupportBot.Adapters.AI/Chat/GeneralChatClientAdapter.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IGeneralChatClient`, <summary> Genel LLM metin tamamlama için secondary (driven) port. Framework'e özgü IChatClient'ı core'dan gizler. </summary> <summary>Verilen mesaj listesi ile LLM'den metin yanıtı alır.</summary>
+Genel amaçlı (reasoning olmayan) LLM metin tamamlama için tek metot içeren minimal port:
+mesaj listesi verilir, tam metin cevabı alınır.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Reasoning modeli kadar güçlü/pahalı olmasına gerek olmayan iç işler için kullanılır — örn.
+`ConversationSummaryProvider`'ın konuşma özetini üretmesi.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IGeneralChatClient`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** `ConversationMessage` listesini alıp tek bir `string` cevap döndürmek.
+- **Üstlenmediği:** Streaming (bkz. [`IReasoningChatClient.StreamAsync`](IReasoningChatClient.md)
+  reasoning tarafında var, bu port'ta yok), framework'e özgü tip sızıntısı (MAF'ın
+  `IChatClient`/`ChatMessage` tipleri bu port'un arkasında kalır).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.AI/Chat/GeneralChatClientAdapter` implemente eder; içeride MAF'ın `IChatClient`'ını
+sarar ve `ConversationMessage` ↔ `ChatMessage` dönüşümünü yapar.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Application katmanı Microsoft.Extensions.AI'nin somut tiplerine bağımlı olmasın diye bu ince
+port var — DIP (Dependency Inversion Principle). Ayrı bir port olmasının nedeni
+`IReasoningChatClient`'tan farklı bir model/ayar kullanabilmesi (daha ucuz/hızlı bir model).
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `Task<string> CompleteAsync(IReadOnlyList<ConversationMessage> messages, CancellationToken ct = default)` | Verilen mesaj listesiyle LLM'den tam metin yanıtı alır. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü yalnızca `CustomerSupportBot.Domain.Model.ConversationMessage`'a bağımlıdır.

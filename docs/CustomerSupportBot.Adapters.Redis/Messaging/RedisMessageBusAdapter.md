@@ -20,6 +20,16 @@
   - `Subscribe` ile belirtilen kanala dinleyici bağlamak ve gelen mesajı işleyici fonksiyona (`handler`) iletmek.
   - Olası ağ hatalarında ve işleyici istisnalarında loglama yaparak uygulamanın çökmesini engellemek.
 
+## Diğer Katman ve Bileşenlerle İlişkileri
+
+- [`IMessageBusPort`](../../CustomerSupportBot.Application/Ports/Outbound/Messaging/IMessageBusPort.md) portunu uygular.
+- `CustomerSupportBot.Adapters.Persistence` katmanındaki neredeyse tüm Postgres store/registry sınıfları (`PostgresSessionManager`, `PostgresApprovalQueue`, `PostgresChatBridge`, `PostgresChatModeRegistry`, `PostgresEscalationSink`, `PostgresSlaEventSink`, `PostgresReasoningTraceStore`, `PostgresLessonStore`, `PostgresRatingStore`, `PostgresCustomerProfileStore`, `PostgresHumanAgentRegistry`) bu portu enjekte eder ve **kendi payload'larına `nodeId = _messageBus.NodeId` ekleyip, gelen mesajda `nodeId` kendi `NodeId`'siyle eşleşiyorsa mesajı yok sayarak** kendi kendine yankılanmayı (self-echo) önler — bu filtreleme mantığı bu sınıfın DEĞİL, her tüketicinin kendi sorumluluğundadır; `RedisMessageBusAdapter` sadece ham `Publish`/`Subscribe` sağlar.
+- `InMemory/InMemoryMessageBusAdapter.cs` aynı portun test/tekli-pod ortamı için bellek-içi kopyasıdır — üretimde Redis, testlerde/local'de InMemory kullanılır.
+
+## Kullanılma Nedeni ve Tasarım Yaklaşımı
+
+Bu sınıf bilinçli olarak **ince (thin)** tutulmuştur: sadece `Publish`/`Subscribe` sağlar, mesaj formatını veya self-echo filtrelemesini bilmez. Böylece Redis'e özgü hiçbir semantik Application katmanına sızmaz — `IMessageBusPort` portu "kanal + string payload" kadar basit bir soyutlamadır, her tüketici kendi JSON şemasını ve filtreleme kuralını kendi belirler. `NodeId`'nin `Guid.NewGuid()` ile örnek-başına (instance-per) üretilmesi, her pod/worker'ın süreç ömrü boyunca sabit ve benzersiz bir kimliğe sahip olmasını sağlar.
+
 ## Constructor ve Başlatma Mantığı
 
 ```csharp

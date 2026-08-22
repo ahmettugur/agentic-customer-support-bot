@@ -63,6 +63,14 @@ public async Task<string> RunAsync(
   4. `_factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent)` ile taze iş akışı oluşturulur.
   5. `InProcessExecution.RunStreamingAsync` başlatılır ve ilk tur tetikleme belirteci (`TurnToken(emitEvents: true)`) gönderilir.
   6. `EnumerateWorkflowEventsSafely` döngüsü ile workflow olayları dinlenir; `RequestInfoEvent` veya `WorkflowErrorEvent` durumları yönetilir, her olay `_traceProcessor.ApplyTraceEvent` ile işlenir.
+
+     > 🐞 **`RequestInfoEvent` işleyicisi şu an tetiklenmiyor:** `HandleRequestInfoEventAsync` →
+     > `ApprovalGateService.RequestApprovalAsync` köprüsü koddadır ama bloklayan/senkron eski
+     > onay modeline aitti (admin karar verene kadar await eder). Yan etkili 4 tool (sipariş,
+     > iptal, iade, şikayet) artık `ApprovalRequiredAIFunction` ile SARILMIYOR — bu yüzden hiçbir
+     > zaman bir `RequestInfoEvent` üretmiyorlar, bu kod yolu şu an ölü değil ama **kullanılmayan**
+     > bir güvenlik ağı. Güncel bloklamayan akış için bkz.
+     > [ApprovalGateService.md](ApprovalGateService.md#6-executewithapprovalgateasync-private).
   7. Döngü bittiğinde `FinalizeAbnormalTerminationAsync` ile anormal sonlanma (Timeout, Cancelled, Error) denetlenir.
   8. `BuildFinalResultAsync` çağrılarak sonuç metni oluşturulur ve `_finalizer.FinalizeTurnAsync` ile tur kapatılır.
 

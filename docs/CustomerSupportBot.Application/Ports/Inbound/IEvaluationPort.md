@@ -1,27 +1,42 @@
 # IEvaluationPort
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/IEvaluationPort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/IEvaluationPort.cs`
+**Tür:** `interface`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`IEvaluationPort`, Application katmanında ilgili sorumluluk alanı için sözleşme ve metot tanımlarını belirten arayüzdür.
+Değerlendirme (evaluation) senaryolarını koşturmak için primary port — bir veya birden çok senaryoyu gerçek workflow üzerinde çalıştırıp sonuç raporu üretir.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Api katmanındaki (muhtemelen dev/admin-only) bir evaluation endpoint'i veya CLI/test aracı, YAML'dan okunan senaryoları bu port üzerinden koşturur; sonuç bir regresyon/kalite raporu olarak kullanılır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IEvaluationPort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Bir senaryo listesini veya tek bir senaryoyu botun gerçek workflow'unda koşturup yapılandırılmış sonuç döndürmek.
+- **Üstlenmediği:** Senaryoların nereden okunduğu (dosya sistemi, YAML parse) — bu `ScenarioLoader`'ın (Api katmanı) işidir; kriterlerin nasıl değerlendirildiği — bu `CriteriaEvaluator`'ın işidir.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu `EvaluationRunner` (Adapters.Agents).
+- `ScenarioLoader` (Api) senaryoları YAML'dan okuyup bu porta besler.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Botun davranışını manuel test yerine otomatik, tekrarlanabilir senaryolarla doğrulamak için vardır — bir prompt/tool değişikliğinin regresyon yaratıp yaratmadığını hızlıca görmeyi sağlar.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `Task<EvaluationRunResult> RunAsync(List<EvaluationScenario> scenarios, CancellationToken ct = default)` | Birden çok senaryoyu koşturup toplu rapor döner. |
+| `Task<ScenarioResult> RunScenarioAsync(EvaluationScenario scenario, CancellationToken ct = default)` | Tek bir senaryoyu koşturur. |
+
+## 7. Bağımlılıklar
+
+[EvaluationModels.cs](EvaluationModels.md) içindeki tipler (`EvaluationScenario`, `ScenarioResult`, `EvaluationRunResult`).
+
+## Bağlantılar
+
+- [EvaluationModels](EvaluationModels.md)

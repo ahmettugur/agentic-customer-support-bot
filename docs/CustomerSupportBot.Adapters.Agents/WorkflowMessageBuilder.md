@@ -58,23 +58,69 @@ public async Task<WorkflowPrompt> BuildWorkflowMessagesAsync(
   7. Son olarak kullanıcının anlık sorusu (`query`) `ChatRole.User` rolüyle eklenir.
   8. `WorkflowPrompt(messages, contextResult)` döndürülür.
 
-### 2. `SelectHistoryToSend` (Private)
+### 2. `SelectHistoryToSend` (Internal Static)
 ```csharp
-private IEnumerable<ConversationMessage> SelectHistoryToSend(
+internal static IEnumerable<ConversationMessage> SelectHistoryToSend(
     List<ConversationMessage>? conversationHistory,
     AgentSession? session,
     ContextResult contextResult)
 ```
-- **Ne işe yarar?:** Özetlenmiş mesajların tekrar gönderilmesini önler.
-- **İç Mantığı:** Eğer özet bu turda gerçekten bağlama eklenmişse, `SessionState.SummarizedMessageCount` kadar eski mesaj atlanır (`.Skip(count)`), yalnızca güncel mesajlar iletilir. Özet başarısız olmuşsa hiçbir mesaj atlanmaz.
+- **Ne işe yarar?:** Özetlenmiş mesajların tekrar gönderilmesini önler. `internal static`'tir — dış bağımlılık gerektirmediği için birim testlerinde doğrudan çağrılabilir.
+- **İç Mantığı (savunmacı sırayla):**
+  1. Geçmiş boşsa `[]` döner.
+  2. `SessionState.SummarizedMessageCount` `0` ise ya da `ConversationSummary` boşsa — özet hiç üretilmemiş demektir, hiçbir mesaj atlanmaz (tam geçmiş döner).
+  3. Özet bu turda **gerçekten** `ContextResult`'a girmediyse (`contextResult.Included(ConversationSummaryProvider.ProviderName)` `false`) — özetleyici LLM çağrısı hata verdi/zaman aşımına uğradı demektir; geçmiş yine kırpılmaz. Bu kontrol olmadan (yalnızca `SessionState`'e bakılsaydı) o turlar modelin görüş alanından tamamen kaybolurdu, çünkü `SessionState.ConversationSummary` provider `null` dönse bile eski değerini korur.
+  4. `summarized >= conversationHistory.Count` ise (state geçmişten büyükse, ör. geçmiş temizlenmiş ama state kalmışsa) yine kırpılmaz — özetlenmemiş bir mesajı yanlışlıkla düşürmektense fazladan mesaj göndermek tercih edilir.
+  5. Aksi halde `conversationHistory.Skip(summarized)` — özetin kapsadığı baştaki turlar atlanır.
 
-### 3. `BuildReasoningSummaryHint` (Private)
-- **Ne işe yarar?:** `ReasoningResult` içerisindeki `Intent`, `Confidence`, `MissingContext` ve `SubTasks` bilgilerini uzman ajanların anlayacağı kısa bir sistem ipucu metnine dönüştürür.
+### 3. `ResolveExtractedIds` (Internal Static)
+```csharp
+internal static ExtractedIds ResolveExtractedIds(string query, ReasoningResult? reasoning)
+```
+- **Ne işe yarar?:** Workflow'a giden entity-extraction ipucu için hangi ID kaynağının kullanılacağına karar verir.
+- **İç Mantığı:** `reasoning.VerifiedEntities` doluysa (ReasoningService zaten `EntityVerifier` ile query+geçmiş+session+DB'yi birleştirip doğrulamıştır) o kullanılır. `reasoning` yoksa veya doğrulanmış varlık yoksa `IdExtractor.Extract(query)` ile YALNIZCA güncel mesaja bakan eski (query-only) davranışa düşülür — bu ikinci yol önceki turdaki bağlamı (ör. "peki 1043" gibi takip mesajını) kaçırabilir.
+
+### 4. `ConsumeForceReplanHint` (Private Static)
+```csharp
+private static string? ConsumeForceReplanHint(AgentSession? session)
+```
+- **Ne işe yarar?:** Admin panelinden tetiklenen `ForceReplanNextTurn` bayrağını okuyup **tek kullanımlık** olarak temizler.
+- **İç Mantığı:** `lock (session)` içinde bayrak kontrol edilir; `true` ise `WellKnown.FallbackMessages.ReplanPlanningHint` (+ varsa admin'in `ReplanNote`'u) döndürülür ve bayrak+not hemen sıfırlanır. Kilit, paralel alt görevlerin veya eşzamanlı isteklerin aynı bayrağı birden fazla kez tüketmesini engeller.
+
+### 5. `BuildReasoningSummaryHint` (Internal)
+```csharp
+internal string BuildReasoningSummaryHint(ReasoningResult r)
+```
+- **Ne işe yarar?:** `ReasoningResult` içerisindeki `Analysis`, `Intent`, `Steps` ve `RequiredInfo`, `NextAction` alanlarını uzman ajanların anlayacağı kısa bir sistem ipucu metnine dönüştürür (`services/reasoning-hint` prompt şablonu üzerinden render edilir).
+- **Not:** Burada eskiden birleşik (compound) sorgular için PlanningAgent'a "alt görevleri sırayla aynı yanıtta yönlendir" diyen bir blok vardı; kaldırıldı çünkü `DecomposedRunner`'ın gerçek çalışma şeklini (her alt görev AYRI bir `_runner.RunAsync` çağrısıyla koşar) yanlış tarif ediyordu.
+
+### 6. `RewriteRoutingMessageAsync`
+```csharp
+public async Task<string> RewriteRoutingMessageAsync(
+    string routingMessage, string originalQuery, CancellationToken ct)
+```
+- **Ne işe yarar?:** Bir uzman ajanın iç yönlendirme/handoff mesajını (teknik, İngilizce olabilen) müşteriye gösterilecek doğal bir Türkçe cümleye LLM ile yeniden yazar.
+- **İç Mantığı:** `services/routing-rewrite-system`/`-user` prompt şablonlarıyla `_chatClient.GetResponseAsync` çağrılır. Hata olursa (zaman aşımı, LLM hatası) sessizce yutulmaz — `LogWarning` ile loglanır ve `WellKnown.FallbackMessages.RoutingRewrite` sabit mesajı döner; bu, sürekli patlayan bir çağrının görünmez kalmasını önler.
+
+### 7. `ToChatRole` (Private Static)
+```csharp
+private static ChatRole ToChatRole(string role)
+```
+- **Ne işe yarar?:** Uygulama içi `ConversationRoles` string sabitlerini (`User`, `System`, diğer her şey `Assistant` sayılır) MAF'ın `ChatRole` tipine çevirir.
+
+## `WorkflowPrompt` (record)
+
+```csharp
+internal sealed record WorkflowPrompt(List<ChatMessage> Messages, ContextResult Context);
+```
+
+`BuildWorkflowMessagesAsync`'in dönüş tipi. `Context` alanı yalnızca gözlemlenebilirlik için değildir — çağıran taraf (`WorkflowRunner`), özetin bu turda gerçekten prompt'a girip girmediğine göre geçmişi kırpma kararı verir (bkz. `SelectHistoryToSend`).
 
 ## Bağımlılıklar
 
-- `Microsoft.Extensions.AI.ChatMessage`
+- `Microsoft.Extensions.AI.ChatMessage` / `IChatClient`
 - `CustomerSupportBot.Application.Services.Providers.CustomerIdentityHintBuilder`
 - `CustomerSupportBot.Application.Ports.Outbound.IPromptRepository`
 - [ReasoningResult](../CustomerSupportBot.Domain/Model/ReasoningResult.md)
 - [AgentSession](../CustomerSupportBot.Domain/Model/AgentSession.md)
+- [IdExtractor](../CustomerSupportBot.Domain/Services/IdExtractor.md)

@@ -48,3 +48,11 @@ public void Record(
 
 - [ICostUsageStorePort](../../CustomerSupportBot.Application/Ports/Outbound/Observability/ICostUsageStorePort.md)
 - `System.Collections.Concurrent.ConcurrentDictionary`
+
+## Aynı dosyada tanımlı yardımcı tipler
+
+Bu üç sınıf ayrı dosya açılacak kadar bağımsız değil — sadece bu sınıfın döndürdüğü salt-veri (DTO) sonuçlarıdır, bu yüzden ayrı `.md` dosyası yerine burada belgeleniyor:
+
+- **`ModelUsage`** — tek bir model için birikmiş kullanım: `Model`, `Calls`, `InputTokens`, `OutputTokens`, `CostUsd`, `AverageLatencyMs`, `LastUsed`.
+- **`CostSnapshot`** — `GetSnapshot()`'ın döndürdüğü tüm sistem anlık görüntüsü: toplamlar + `List<ModelUsage> ByModel`.
+- **`CostUsageSnapshot`** / **`CostModelUsageSnapshot`** — Application katmanında [ICostUsageStorePort](../../CustomerSupportBot.Application/Ports/Outbound/Observability/ICostUsageStorePort.md) sözleşmesinde tanımlı, port-bağımsız (Telemetry adaptörüne bağımlı olmayan) eşdeğer kayıtlar; `GetUsageSnapshot()` bu tiplere dönüştürerek döner. `CostSnapshot`/`ModelUsage` bu Telemetry adaptörüne özgüyken, `CostUsageSnapshot`/`CostModelUsageSnapshot` Application katmanının portunda tanımlıdır — böylece Application, Telemetry adaptörünün somut tiplerine bağımlı olmaz.

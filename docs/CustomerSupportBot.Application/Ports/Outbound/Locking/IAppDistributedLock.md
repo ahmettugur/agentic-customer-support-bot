@@ -1,27 +1,48 @@
 # IAppDistributedLock
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Locking/IAppDistributedLock.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Locking`
+**Kaynak:** `Ports/Outbound/Locking/IAppDistributedLock.cs`
+**Implementasyon:** [`RedisDistributedLockAdapter`](../../../../CustomerSupportBot.Adapters.Redis/Locking/RedisDistributedLockAdapter.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IAppDistributedLock`, <summary> Dağıtık kilit için secondary port. Core concurrent state mutasyonlarını bu port üzerinden serialize eder. </summary> <summary> Verilen resource key için kilit almayı dener. Kilit alınırsa IAsyncDisposable handle döner; dispose edildiğinde release olur. Timeout içinde alınamazsa null döner. </summary> <summary>Kilit alana kadar bekler. Timeout aşılırsa TimeoutException fırlatır.</summary>
+Pod'lar arası dağıtık kilit için secondary port. `TryAcquireAsync` (timeout içinde denemeli) ve
+`AcquireAsync` (kilit alana kadar bekleyen, timeout aşılırsa `TimeoutException` fırlatan) iki
+varyant sunar; ikisi de kilit tutan bir `IAsyncDisposable` handle döner — dispose edildiğinde
+kilit otomatik serbest kalır.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Aynı oturuma (`sessionId`) çoklu pod'dan aynı anda gelen turların birbirini ezmemesi için tur
+işleme kilidi olarak kullanılır — `ChatPortService` bir turu işlerken aynı session için gelen
+ikinci bir isteği bu kilitle serialize eder.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IAppDistributedLock`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Verilen `resourceKey` için karşılıklı dışlama (mutual exclusion) sağlamak.
+- **Üstlenmediği:** Neyin kilitlendiği/korunduğu — çağıran taraf hangi kaynağı hangi anahtarla
+  temsil edeceğine karar verir.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Redis/Locking/RedisDistributedLockAdapter` implemente eder (Redis `SET NX PX` tabanlı
+kilit). ⚠️ `RedisOptions`'taki `DefaultLockTimeoutSeconds`/`LockExpirySeconds` alanları **ölü
+konfigürasyondur** — hiçbiri okunmaz, gerçek kilit süresi adaptörde sabit kodlanmıştır (bkz.
+`Adapters.Redis/README.md`).
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`using`/`await using` ile kullanılabilir bir `IAsyncDisposable` dönmesi, kilit serbest bırakmayı
+unutma riskini ortadan kaldırır — çağıran kodun try/finally yazmasına gerek kalmaz.
+`TryAcquireAsync` ile `AcquireAsync` ayrımı, çağıranın "kilit alınamazsa hemen vazgeç" ile
+"kilit alınana kadar bekle" arasında bilinçli bir seçim yapmasını sağlar.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `Task<IAsyncDisposable?> TryAcquireAsync(string resourceKey, TimeSpan? timeout = null, CancellationToken ct = default)` | Kilit almayı dener; timeout içinde alınamazsa `null` döner. |
+| `Task<IAsyncDisposable> AcquireAsync(string resourceKey, TimeSpan? timeout = null, CancellationToken ct = default)` | Kilit alana kadar bekler; timeout aşılırsa `TimeoutException` fırlatır. |
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü bağımlılıksızdır.

@@ -12,6 +12,14 @@
 
 Uzman ajanların serbest metin yerine araç çağırmadan önceki muhakemesini (`PreToolCheckSchema`) ve araç sonrasındaki değerlendirmesini (`PostToolReflectionSchema`) kesin ve güvenilir bir JSON yapısında üretmesini sağlamak amacıyla kullanılır.
 
+## Kullanılma nedeni ve tasarım yaklaşımı
+
+`Domain.Model.SpecialistReasoning`/`PreToolCheck`/`PostToolReflection` BİLİNÇLİ OLARAK yeniden kullanılmadı: o tiplerde `PostToolReflection.StatusEnum` gibi salt-okunur computed property'ler var ve bunlar JSON schema'ya sızıp modele anlamsız/gereksiz bir alan gösterirdi. Bu şema sınıfları yalnızca LLM'e sunulacak JSON şeklini tanımlar; gerçek ayrıştırma hâlâ `SpecialistReasoningParser` üzerinden yapılır — sağlayıcı strict schema'yı tam onurlandırmazsa parser'ın savunmacı (fence/alan bazlı) mantığı yedek güvence olarak devrededir.
+
+`SpecialistReasoningSchemaOptions.CamelCase` — `JsonSerializerOptions` ile alan adlarını `camelCase`'e çeviren paylaşımlı ayar; şemanın OpenAI'ye gönderilen JSON'da C# `PascalCase` değil beklenen `camelCase` anahtarlarıyla görünmesini sağlar.
+
+`PreToolCheckSchema.SelectedTool` yalnızca `OrderAgent` tarafından kullanılır (6 aday tool arasından seçim gerekçesini netleştirmek için); diğer ajanların promptları bu alandan bahsetmez, model boş bırakır. `OptionalParams` Complaint/HumanHandoff promptlarında kullanılır (ör. `customer_id` — otomatik türetildiği için `missingParams`'a sayılmaz); parser tarafından okunmaz, yalnızca modelin kendi muhakemesi içindir.
+
 ## Şema Sınıfları ve Alanlar
 
 | Sınıf | Alanlar | Açıklama |

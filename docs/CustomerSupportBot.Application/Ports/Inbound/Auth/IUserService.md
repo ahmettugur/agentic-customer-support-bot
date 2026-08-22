@@ -1,27 +1,42 @@
 # IUserService
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/Auth/IUserService.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound.Auth`
+**Dosya:** `Ports/Inbound/Auth/IUserService.cs`
+**Tür:** `interface`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound.Auth`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`IUserService`, Application katmanında ilgili sorumluluk alanı için sözleşme ve metot tanımlarını belirten arayüzdür.
+Staff (admin/agent) kullanıcılarının kimlik doğrulaması için primary port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Api katmanındaki `/auth/login` (staff girişi) endpoint'i, kullanıcı adı+şifreyi bu porta iletir; başarılıysa dönen `UserInfo` `ITokenService.IssueAsync`'e verilir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IUserService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Kullanıcı adı+şifre kombinasyonunun `UserEntity` tablosuna karşı doğrulanması.
+- **Üstlenmediği:** Müşteri hesap doğrulaması — bu `ICustomerAuthService`'in işidir; iki hesap türü kasıtlı olarak ayrılmıştır.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu `Services/Auth` altında; `BCryptPasswordHasher` ile şifre karşılaştırması yapar.
+- Staff login endpoint'i tüketicisidir.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Tek metotlu, minimal bir arayüzdür — staff kimlik doğrulamasının tek sorumluluğu budur; kayıt (registration) staff için bu port üzerinden yapılmaz (staff hesapları farklı bir yönetim akışıyla oluşturulur, self-servis kayıt yoktur — bu da `ICustomerAuthService.RegisterAsync`'in neden yalnızca müşteri tarafında olduğunu açıklar).
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `Task<UserInfo?> AuthenticateAsync(string username, string password, CancellationToken ct = default)` | Kullanıcı adı+şifre ile doğrulama; başarısızsa `null`. |
+
+## 7. Bağımlılıklar
+
+`CustomerSupportBot.Domain.Model.Auth.UserInfo`.
+
+## Bağlantılar
+
+- [ICustomerAuthService](ICustomerAuthService.md) — müşteri tarafındaki karşılığı.
+- [ITokenService](ITokenService.md)

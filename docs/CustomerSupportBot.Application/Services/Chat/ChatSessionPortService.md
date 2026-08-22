@@ -1,125 +1,93 @@
 # ChatSessionPortService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Chat/ChatSessionPortService.cs`
-- **Tür:** `public sealed class : IChatSessionPort`
-- **Namespace:** `CustomerSupportBot.Application.Services.Chat`
+**Dosya:** `Services/Chat/ChatSessionPortService.cs`
+**Port:** `IChatSessionPort` (driving/inbound port)
+**Namespace:** `CustomerSupportBot.Application.Services.Chat`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ChatSessionPortService`, Application/Services/ChatSessionPortService.cs DRIVING PORT IMPL — IChatSessionPort → canlı takeover ve replan orkestrasyonu.
+Admin panelinin **canlı devralma (human takeover)** ve **yeniden planlama (replan)**
+işlemlerini orkestre eder: bir temsilcinin bir oturumu bot'tan devralması/bırakması, temsilci
+mesajı göndermesi, sohbet geçmişini/duygu durumunu okuması, açık eskalasyonları yönetmesi.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Api katmanındaki admin/agent panel endpoint'leri (canlı sohbet ekranı) bu servisi çağırır:
+oturum listesini göstermek, bir oturumu devralmak, temsilci mesajı yazmak, bir eskalasyonu
+"yeniden planla" ile bota geri döndürmek.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ChatSessionPortService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Mod geçişlerini (`TakeOver`/`Release`) `IChatModeRegistry`'ye yaptırmak ve
+  yan etkilerini (sistem mesajı yayınlama, eskalasyon kapatma, temsilci yükünü artırma/azaltma)
+  koordine etmek; replan akışında oturum bayraklarını (`ForceReplanNextTurn` vb.) kurup
+  `IReplanService`'i tetiklemek.
+- **Üstlenmediği:** Mod durumunun kalıcılığı (`IChatModeRegistry`), gerçek replan LLM çağrısı
+  (`IReplanService`), sohbet mesajlarının dağıtımı (`IChatBridge`).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-```csharp
-public ChatSessionPortService(IChatModeRegistry chatModes,
-        IChatBridge chatBridge,
-        ISessionManager sessions,
-        IEscalationSink escalations,
-        IHumanAgentRegistry agents,
-        IReplanService replanService)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- `IChatSessionPort` port'unu implemente eder.
+- **Inject eder:** `IChatModeRegistry`, `IChatBridge`, `ISessionManager`, `IEscalationSink`,
+  `IHumanAgentRegistry`, `IReplanService`.
+- **Kimin tarafından çağrılır:** Api katmanındaki admin panel endpoint'leri (canlı devralma,
+  temsilci mesajlaşma, yeniden planlama uçları).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `GetActive`
-```csharp
-public IReadOnlyList<ChatSessionState> GetActive()
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**`SendAdminMessageAsync` — neden `AppendAssistantMessageAsync`, `AppendUserMessageAsync` değil:**
+Temsilcinin insan modunda yazdığı mesaj **asistan rolüyle** geçmişe yazılır, kullanıcı rolüyle
+DEĞİL. Gerekçe kodda açıkça belirtilir: insan modunda temsilci konuşmada botun yerini alır;
+söylediği şey müşteriden gelen bir GİRDİ değil, müşteriye verilen bir YANITTIR. Kullanıcı
+rolüyle yazılsaydı, bot oturumu geri devraldığında temsilcinin cevabını müşterinin yeni bir
+mesajı sanıp ona "cevap vermeye" çalışırdı — bağlam bozulurdu. Mesaj etiketlenerek
+(`[🧑‍💼 {agentLabel}]: ...`) yazılır ki model bunu kendi ürettiği bir yanıt değil, insan
+temsilcinin sözü olarak görsün.
 
-### `GetStateOrDefault`
-```csharp
-public ChatSessionState GetStateOrDefault(string sessionId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**Replan akışının adımları (`ReplanSessionAsync`/`ReplanEscalationAsync`) neden bu sırada:**
+1. Oturuma replan bayrakları yazılır (`ApplyReplanState`) — bir sonraki turda reasoning'in
+   yeniden planlama yapması için.
+2. Açık eskalasyonlar çözülür (bir replan, o oturuma ait bekleyen "insan gerekiyor" taleplerini
+   geçersiz kılar).
+3. Human mode'daysa bot moduna serbest bırakılır (`ReleaseIfHumanMode`) — replan bot'un işi
+   olduğu için insan modunda kalması anlamsız.
+4. Admin'e özel + müşteriye görünür sistem mesajları yayınlanır.
+5. `IReplanService.ExecuteAsync` **`_ = ...` ile ateşle-unut (fire-and-forget)** çağrılır —
+   replan LLM çağrısı gerektirebilir ve admin'in "yeniden planla" isteğinin HTTP cevabı bunu
+   beklememelidir; müşteri replan sonucunu normal sohbet akışında görecektir.
 
-### `GetHistory`
-```csharp
-public IReadOnlyList<ChatBridgeMessage> GetHistory(string sessionId, int take = 50)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+İki farklı replan giriş noktası (`ReplanSessionAsync` doğrudan sessionId ile,
+`ReplanEscalationAsync` bir eskalasyon kaydı üzerinden) aynı `ApplyReplanState` yardımcı
+metodunu paylaşır — replan mantığının iki farklı tetikleyicide birbirinden sapmaması için.
 
-### `GetSentimentAsync`
-```csharp
-public async Task<ChatSessionSentimentSnapshot?> GetSentimentAsync(string sessionId, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-### `PublishSystemMessage`
-```csharp
-public void PublishSystemMessage(string sessionId, string text)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+| Üye | Açıklama |
+|---|---|
+| `GetActive(): IReadOnlyList<ChatSessionState>` | Şu an human/bot modda olan tüm oturumları döner. |
+| `GetStateOrDefault(string sessionId): ChatSessionState` | Oturumun mod durumunu döner; kayıt yoksa varsayılan `Bot` modu üretir. |
+| `GetHistory(string sessionId, int take = 50): IReadOnlyList<ChatBridgeMessage>` | Sohbet köprüsü geçmişini döner. |
+| `GetSentimentAsync(string sessionId, CancellationToken ct = default): Task<ChatSessionSentimentSnapshot?>` | Oturumun güncel duygu durumu + son 10 kayıt. |
+| `PublishSystemMessage(string sessionId, string text): void` | Sohbet köprüsüne sistem mesajı yayınlar. |
+| `TakeOver(string sessionId, string humanAgent, string? agentId = null): ChatSessionTakeoverResult` | Oturumu bota devralır (Human moda geçer), açık eskalasyonları onaylar, temsilci yükünü artırır. |
+| `Release(string sessionId, string? agentId = null): ChatSessionReleaseResult` | Oturumu bota geri bırakır, açık eskalasyonları çözer, temsilci yükünü azaltır. |
+| `SendAdminMessageAsync(string sessionId, string humanAgent, string text, CancellationToken ct = default): Task<ChatSessionMessageResult>` | Yalnızca Human moddaki oturumlarda temsilci mesajı yayınlar ve asistan rolüyle geçmişe yazar. |
+| `ReplanSessionAsync(string sessionId, string requestedBy, string? note, CancellationToken ct = default): Task<ChatSessionReplanResult>` | Belirtilen oturumu yeniden planlamaya zorlar. |
+| `ReplanEscalationAsync(string escalationId, string requestedBy, string? note, CancellationToken ct = default): Task<ChatSessionReplanResult>` | Bir eskalasyon kaydı üzerinden bağlı oturumu yeniden planlamaya zorlar. |
+| `SubscribeToAdminAsync`/`SubscribeToUserAsync(string sessionId, CancellationToken ct): IAsyncEnumerable<ChatBridgeMessage>` | Canlı sohbet köprüsüne (admin veya kullanıcı tarafı) abone olur. |
+| `GetOpenEscalations(): IReadOnlyList<EscalationRequest>` | Açık eskalasyonları döner. |
+| `DismissOrphanedEscalations(string sessionId): int` | Bağlantısı kesilen müşterinin eskalasyonlarını reddeder. |
 
-### `TakeOver`
-```csharp
-public ChatSessionTakeoverResult TakeOver(string sessionId, string humanAgent, string? agentId = null)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 7. Bağımlılıklar (Constructor Injection)
 
-### `Release`
-```csharp
-public ChatSessionReleaseResult Release(string sessionId, string? agentId = null)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+- `IChatModeRegistry` — bot/human mod durumu.
+- `IChatBridge` — canlı mesaj yayınlama.
+- `ISessionManager` — oturum okuma/güncelleme.
+- `IEscalationSink` — eskalasyon kayıtları.
+- `IHumanAgentRegistry` — temsilci yük takibi.
+- `IReplanService` — yeniden planlama LLM çağrısı.
 
-### `SendAdminMessageAsync`
-```csharp
-public async Task<ChatSessionMessageResult> SendAdminMessageAsync(
-        string sessionId, string humanAgent, string text, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## Bağlantılar
 
-### `ReplanSessionAsync`
-```csharp
-public async Task<ChatSessionReplanResult> ReplanSessionAsync(
-        string sessionId, string requestedBy, string? note, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-### `ReplanEscalationAsync`
-```csharp
-public async Task<ChatSessionReplanResult> ReplanEscalationAsync(
-        string escalationId, string requestedBy, string? note, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-### `SubscribeToAdminAsync`
-```csharp
-public IAsyncEnumerable<ChatBridgeMessage> SubscribeToAdminAsync(string sessionId, CancellationToken ct)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-### `SubscribeToUserAsync`
-```csharp
-public IAsyncEnumerable<ChatBridgeMessage> SubscribeToUserAsync(string sessionId, CancellationToken ct)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-### `GetOpenEscalations`
-```csharp
-public IReadOnlyList<EscalationRequest> GetOpenEscalations()
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-### `DismissOrphanedEscalations`
-```csharp
-public int DismissOrphanedEscalations(string sessionId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-## Bağımlılıklar
-
-- `CustomerSupportBot.Domain`
-- `IChatSessionPort`
+- [ChatPortService.md](ChatPortService.md) — sohbet turunun ana orkestrasyonu
+- [../Escalation/EscalationPortService.md](../Escalation/EscalationPortService.md) — eskalasyon yönetimi

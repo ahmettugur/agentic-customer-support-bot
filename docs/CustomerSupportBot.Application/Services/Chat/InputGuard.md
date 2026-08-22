@@ -1,36 +1,82 @@
 # InputGuard
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Chat/InputGuard.cs`
-- **Tür:** `public  class : IInputGuard`
-- **Namespace:** `CustomerSupportBot.Application.Services.Chat`
+**Dosya:** `Services/Chat/InputGuard.cs`
+**Port:** `IInputGuard`
+**Namespace:** `CustomerSupportBot.Application.Services.Chat`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`InputGuard`, Application/Services/InputGuard.cs Deterministic input gate — runs BEFORE the user message reaches any LLM. Catches obvious abuse vectors that prompt-level guardrails alone cannot reliably stop: - Length DoS / token bomb - Suspicious prompt-injection / jailbreak patterns - Zero-width / RTL Unicode tricks - Excessive token-like ID enumeration (cost bomb) Returns an InputGuardResult with a verdict (Allow / Sanitize / Reject) plus reasoning. <summary>Maksimum kullanıcı mesaj uzunluğu (karakter).</summary> <summary>Maksimum tek mesajda görünebilecek ID sayısı (4+ haneli rakamsal ID).</summary> <summary>Tehlike sinyali — eşleşince mesaj reddedilir (LLM'e gitmez).</summary> <summary>Yumuşak sinyal — flag'lenir ama mesaj geçer (sanitize edilebilir).</summary> <summary>HTML/script/img injection — admin paneline veya trace store'a sızma riski.</summary>
+Kullanıcı mesajı **herhangi bir LLM'e ulaşmadan ÖNCE** çalışan deterministik bir kapı
+(gate). Regex tabanlı kurallarla açık kötüye kullanım vektörlerini yakalar: aşırı uzunluk
+(DoS/token bombası), prompt-injection/jailbreak kalıpları, görünmez Unicode hileleri
+(zero-width/RTL), aşırı ID sayımı (maliyet bombası), HTML/script enjeksiyonu.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+`ChatPortService`/reasoning zincirinin en başında her kullanıcı mesajı `Inspect` ile
+denetlenir. Sonuç `Allow` / `Sanitize` / `Reject` — reddedilen mesaj LLM'e hiç gönderilmez,
+sabit bir red mesajı döner.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`InputGuard`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Deterministik, regex-tabanlı ön filtreleme; her regex için 200ms
+  `matchTimeoutMilliseconds` ile ReDoS (regex tabanlı DoS) riskine karşı kendini korumak.
+- **Üstlenmediği:** Anlamsal/bağlamsal kötüye kullanım tespiti (bu prompt-seviyesi
+  guardrail'lerin işi) — bu sınıf yalnızca **prompt-seviyesi korumaların TEK BAŞINA
+  güvenilir şekilde yakalayamadığı** açık, kalıp-tabanlı vektörleri yakalar.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- `IInputGuard` port'unu implemente eder.
+- **Kimin tarafından çağrılır:** `ChatPortService`/reasoning zincirinin en başı — mesaj
+  herhangi bir `IChatClient`/LLM çağrısına gitmeden önce.
+- Bağımsız, durumsuz bir sınıf; başka hiçbir servise bağımlı değildir.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `Inspect`
-```csharp
-public InputGuardResult Inspect(string? input)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**Neden LLM'den önce, LLM'in kendisine değil:** Prompt içi talimatlarla ("kullanıcı seni
+kandırmaya çalışırsa reddet") kötüye kullanımı önlemek güvenilir değildir — modelin kendisi
+ikna edilebilir (jailbreak). Deterministik bir regex kapısı, modelin kararına bağlı olmayan,
+**her zaman aynı sonucu üreten** bir ilk savunma hattıdır. Ayrıca modelin bu mesajları hiç
+GÖRMEMESİ, hem maliyet (gereksiz token) hem de veri sızıntısı riskini (ör. admin paneline
+sızabilecek HTML/script) daha ilk adımda keser.
 
-## Bağımlılıklar
+**Beş ayrı kontrol, sırayla, en ucuzdan en pahalıya:**
+1. **Uzunluk sınırı** (`MaxInputLength = 2000`) — en ucuz kontrol, hemen reddeder.
+2. **Unicode normalizasyonu + görünmez karakter temizliği** — zero-width/RTL-override
+   karakterleri (bidi saldırıları, gizli talimat gizleme) temizler, mesajı REDDETMEZ, sadece
+   temizler ve `invisible_chars_stripped` flag'i ekler.
+3. **Sert injection kalıbı** (`InjectionPattern`) → **reddet.** "ignore previous instructions",
+   "system prompt", "jailbreak", "dan mode", "kuralları yok say" gibi çok dilli (TR/EN) kalıplar.
+4. **HTML/script kalıbı** → **reddet.** `<script>`, `<img onerror=...>` gibi enjeksiyonlar —
+   admin paneline veya trace store'a XSS sızıntısı riskine karşı.
+5. **ID sayımı** (`MaxIdMentions = 8`, 4+ haneli rakam dizileri) → **reddet.** Tek mesajda
+   `1030 1031 1032 ... 2030` gibi ardışık çok sayıda ID, her biri ayrı bir tool çağrısı/LLM
+   turu tetikleyebileceği için bir **maliyet bombasıdır** — LLM'e gitmeden önce kesilir.
+6. **Yumuşak şüpheli kalıp** (` ```json`, `[INST]`, `"approved":true` gibi) → **reddet.**
+   Bunlar LLM'in çıktı biçimini taklit eden payload'lardır; LLM'e ulaşırsa modelin kendi
+   çıktısıyla karıştırılıp yanlış bir karar (ör. sahte onay) tetikleyebilir.
 
-- `CustomerSupportBot.Domain`
-- `IInputGuard`
+Tüm regex'ler `matchTimeoutMilliseconds: 200` ile derlenmiştir (`[GeneratedRegex]`,
+kaynak-üretimli/compile-time) — kötü niyetli girdiyle regex motorunu katastrofik geri
+izlemeye (catastrophic backtracking) sokup sunucuyu kilitlemeye çalışan bir saldırı
+(ReDoS), 200ms'de zaman aşımına uğrar; guard bu durumda mesajı reddeder, sunucu asla kilitlenmez.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `MaxInputLength` (`const int = 2000`) | Azami mesaj uzunluğu (karakter). |
+| `MaxIdMentions` (`const int = 8`) | Tek mesajda izin verilen azami 4+ haneli ID sayısı. |
+| `Inspect(string? input): InputGuardResult` | Tüm kontrolleri sırayla uygular; ilk reddeden kontrolde durur, aksi halde `Allow` (temizlenmiş metinle) döner. |
+
+Regex'ler (private, `[GeneratedRegex]` ile derleme-zamanı üretilir): `InjectionPattern`,
+`SoftSuspiciousPattern`, `HtmlScriptPattern`, `IdMentionPattern`, `InvisibleCharPattern`.
+
+## 7. Bağımlılıklar
+
+Yok — durumsuz, dışarıdan hiçbir servis inject etmez. Tüm regex'ler statik/compile-time.
+
+## Bağlantılar
+
+- [ChatPortService.md](ChatPortService.md) — bu guard'ı ilk adımda çağıran taraf

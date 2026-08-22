@@ -1,42 +1,82 @@
-# A2ARoles
+# A2ATokenExchangeService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/A2A/A2ATokenExchangeService.cs`
-- **Tür:** `public static class`
-- **Namespace:** `CustomerSupportBot.Application.Services.A2A`
+**Dosya:** `Services/A2A/A2ATokenExchangeService.cs`
+**Tür:** `public sealed class` + yardımcı tipler (`A2ARoles` statik sınıf, `A2ATokenResult` record)
+**Namespace:** `CustomerSupportBot.Application.Services.A2A`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`A2ARoles`, Application/Services/A2A/A2ATokenExchangeService.cs Partner makine kimliği → tek müşteriye kilitli, kısa ömürlü ÖZNE token'ı. <summary>A2A kanalında kullanılan roller.</summary> <summary> Partner makine kimliği. Müşteri bağımsız ürün ajanını doğrudan çağırabilir; müşteri verisi döndüren ajanlar için önce tek müşteriye kilitli bir özne token'ı almalıdır. </summary> <summary> Değişimle üretilen özne token'ı — tek bir müşteriye kilitlidir ve yalnızca A2A endpoint'lerinde geçerlidir. Sohbet/sesli kanal <c>"Customer"</c> rolü ister, bu rol oraya girmez; tersi de geçerlidir. Ayrım bilinçli: bir kanalın token'ı diğerinde kullanılamasın. </summary> <summary>Değişim sonucu.</summary>
+Bir **partner** (dış sistem, kendi makine kimliğiyle kimlik doğrulanmış) belirli bir **müşteri**
+adına A2A ajanlarını çağırmak istediğinde, partner'ın kendi token'ını doğrudan kullanmasına izin
+vermek yerine, o partner+müşteri çifti için **kısa ömürlü, tek müşteriye kilitli bir "özne
+token'ı"** üretir (OAuth 2.0 Token Exchange / RFC 8693 deseni).
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+A2A akışı iki aşamalıdır:
+1. Partner kendi makine kimlik bilgileriyle giriş yapar → `Partner` rolünde bir token alır.
+2. Partner, belirli bir müşteri adına işlem yapmak istediğinde bu partner-token'ı ile
+   `ExchangeAsync`'i çağırır → yetkiliyse, `Subject` rolünde, `sub` claim'i
+   `A2ASubjectIdentity.BuildId(partnerId, customerId)` olan yeni bir token alır. Bundan sonraki
+   tüm A2A çağrıları bu özne token'ı ile yapılır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`A2ARoles`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Yetki kontrolünü ([`IA2ASubjectAuthorizer`](../../Ports/Outbound/A2A/README.md)'a
+  sorarak) tetiklemek, yetki varsa `IJwtAccessTokenProvider` ile imzalı token üretmek, üretimi loglamak.
+- **Üstlenmediği:** Yetki kararının KENDİSİ (bu iş kuralı [`ConfiguredA2ASubjectAuthorizer`](ConfiguredA2ASubjectAuthorizer.md)'da),
+  token'ın imzalanma/doğrulanma mekaniği (`IJwtAccessTokenProvider`, Adapters katmanında).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- **Inject eder:** `IA2ASubjectAuthorizer` (yetki kararı), `IJwtAccessTokenProvider` (token üretimi),
+  `IOptions<A2AOptions>` (özne token ömrü), `ILogger`, `TimeProvider` (test edilebilirlik için).
+- **Kimin tarafından çağrılır:** Api katmanındaki A2A token-exchange endpoint'i.
+- [`A2ASubjectIdentity`](A2ASubjectIdentity.md)'yi kullanarak `sub` claim'ini kurar.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `A2ATokenResult`
-```csharp
-public sealed record A2ATokenResult(string AccessToken, DateTime ExpiresAt, string CustomerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+> 🐞 **Neden partner token'ı A2A çağrılarında doğrudan kullanılmıyor:** Partner token'ı "hangi
+> sistem konuşuyor" sorusunu cevaplar, "hangi müşteri adına" sorusunu cevaplamaz. Doğrudan
+> kullanılsaydı, müşteri kimliğinin her çağrının gövdesinde bir **parametre** olarak taşınması
+> gerekirdi — yani tool'ların güvendiği kimlik, istemcinin serbestçe değiştirebildiği bir alan
+> olurdu. Bu tam olarak sohbet kanalında kapatılan güvenlik açığının (LLM'e serbest metinden
+> `customerId` sorduramama, bunun yerine `SessionState.AuthenticatedCustomerId`'yi kullanma)
+> A2A tarafında yeniden açılması anlamına gelirdi. Değişim sonrası müşteri kimliği artık
+> **imzalı token'ın içinde** geliyor — çağıran taraf değiştiremez.
 
-### `ExchangeAsync`
-```csharp
-public async Task<A2ATokenResult?> ExchangeAsync(
-        string partnerId, string customerId, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Üretilen `UserInfo` nesnesi (subject) **kalıcı bir kullanıcı kaydı değildir** — sadece token'ın
+taşıyacağı iddiaların (claims) geçici bir kabıdır; `Id` alanına hem partner hem müşteri kimliği
+gömülür ki denetim kaydında ("audit log") "bu token hangi partner adına, hangi müşteri için
+üretildi" sorusu cevaplanabilsin.
 
-## Bağımlılıklar
+`ExchangeAsync` yetkisiz durumda **neden fırlatmadan sessizce `null` döner**: çağıran (Api
+endpoint'i) bunu 403'e çevirmeli ve **sebebi istemciye açmamalıdır** — "bu müşteri yok" ile "bu
+müşteriye yetkin yok" cevapları arasındaki fark, dışarıdan müşteri numarası taramasını (enumeration
+attack) kolaylaştırır.
 
-- `CustomerSupportBot.Domain`
+`A2ARoles` sınıfı `Partner` ve `Subject` rollerini ayrı tutar; bilinçli bir izolasyon: sohbet/sesli
+kanalın kullandığı `"Customer"` rolü A2A'da geçersizdir, A2A'nın `Subject` rolü de sohbet kanalında
+geçersizdir — bir kanalın token'ı diğer kanalda asla kullanılamaz.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `A2ARoles.Partner` (`const string = "Partner"`) | Partner makine kimliğinin rolü. |
+| `A2ARoles.Subject` (`const string = "A2ASubject"`) | Değişimle üretilen, tek müşteriye kilitli özne token'ının rolü. |
+| `A2ATokenResult(string AccessToken, DateTime ExpiresAt, string CustomerId)` | Değişim sonucu — üretilen token, son kullanma zamanı ve hangi müşteri için üretildiği. |
+| `ExchangeAsync(string partnerId, string customerId, CancellationToken ct = default): Task<A2ATokenResult?>` | Yetki kontrolü yapar, geçerse özne token'ı üretir; yetkisizse veya girdi boşsa `null` döner. |
+
+## 7. Bağımlılıklar (Constructor Injection)
+
+- `IA2ASubjectAuthorizer` — yetki kararı.
+- `IJwtAccessTokenProvider` — imzalı access token üretimi.
+- `IOptions<A2AOptions>` — `SubjectTokenMinutes` (varsayılan 5dk, kısa tutulur çünkü tek bir çağrı için yeterli).
+- `ILogger<A2ATokenExchangeService>` — üretim/red loglaması.
+- `TimeProvider?` (opsiyonel, varsayılan `TimeProvider.System`) — test edilebilir zaman kaynağı.
+
+## Bağlantılar
+
+- [A2ASubjectIdentity.md](A2ASubjectIdentity.md) — `sub` claim biçimi
+- [ConfiguredA2ASubjectAuthorizer.md](ConfiguredA2ASubjectAuthorizer.md) — yetki kararı ve `A2AOptions`

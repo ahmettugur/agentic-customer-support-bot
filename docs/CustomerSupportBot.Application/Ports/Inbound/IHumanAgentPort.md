@@ -1,27 +1,52 @@
-# RerouteResult
+# IHumanAgentPort ve RerouteResult
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/IHumanAgentPort.cs`
-- **Tür:** `public sealed record`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/IHumanAgentPort.cs`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`RerouteResult`, <summary> İnsan temsilci CRUD ve eskalasyon reroute işlemleri için primary (driving) port. </summary>
+İnsan temsilci (human agent) kayıtlarının CRUD'u ve bir eskalasyonun başka bir agent'a yeniden yönlendirilmesi (reroute) için primary port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Admin panelinin "temsilciler" sayfası bu portla agent ekler/günceller/siler; bir eskalasyon üzerinde "başka birine ata" işlemi `RerouteEscalation` ile yapılır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`RerouteResult`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Agent CRUD, yük sayacı artırma/azaltma (`IncrementLoad`/`DecrementLoad`), reroute.
+- **Üstlenmediği:** Eskalasyonun kendisinin CRUD'u — bu `IEscalationPort`'tadır; bu port sadece agent tarafını ve reroute'u kapsar.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu Application/Services altında; `HumanAgent` kayıtlarını hem statik konfigürasyondan hem de dinamik DB kayıtlarından "merge" ederek döner (`GetAllMergedAsync`).
+- Admin endpoint'leri tüketicisidir.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`RerouteResult` ayrı bir kayıt olarak tanımlanmıştır çünkü reroute işlemi hem başarı (`Updated` dolu) hem hata (`Error` dolu) durumunu tek bir tipte taşımalıdır — `bool` dönüş tipi hatanın nedenini kaybederdi.
+
+## 6. Tipler ve Üyeler
+
+### `RerouteResult(EscalationRequest? Updated, string? Error)`
+Reroute işleminin sonucu — başarılıysa `Updated` dolu, başarısızsa `Error` dolu.
+
+### `IHumanAgentPort`
+
+| Metot | Açıklama |
+|---|---|
+| `Task<IReadOnlyList<HumanAgent>> GetAllMergedAsync(CancellationToken ct = default)` | Tüm agent'ları (statik+dinamik birleştirilmiş) döner. |
+| `HumanAgent? GetAgent(string id)` | Tek agent. |
+| `HumanAgent CreateAgent(HumanAgent agent)` | Yeni agent oluşturur. |
+| `HumanAgent? UpdateAgent(string id, HumanAgentInput input)` | Agent günceller; yoksa `null`. |
+| `bool DeleteAgent(string id)` | Agent siler. |
+| `bool IncrementLoad(string id)` | Agent'ın aktif yük sayacını 1 artırır. |
+| `bool DecrementLoad(string id)` | Agent'ın aktif yük sayacını 1 azaltır. |
+| `RerouteResult RerouteEscalation(string escalationId, string? agentId, string? reason)` | Bir eskalasyonu başka bir agent'a (veya `agentId=null` ise atamayı kaldırarak) yeniden yönlendirir. |
+
+## 7. Bağımlılıklar
+
+`CustomerSupportBot.Domain.Model.HumanAgent`, `EscalationRequest`.
+
+## Bağlantılar
+
+- [IEscalationPort](IEscalationPort.md)

@@ -1,27 +1,45 @@
 # IPersonalizationPort
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/IPersonalizationPort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/IPersonalizationPort.cs`
+**Tür:** `interface`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`IPersonalizationPort`, <summary> Müşteri profili CRUD ve konsolidasyon için primary (driving) port. </summary>
+Müşteri profillerinin (uzun ömürlü, LLM tarafından türetilmiş kişiselleştirme verisi) admin panelinden yönetimi için primary port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Admin panelinin "müşteri profilleri" sayfası, profilleri listelemek, tek bir profili görmek, admin notu eklemek/silmek ve profili manuel olarak yeniden hesaplatmak (`RefreshProfileAsync`) için kullanır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IPersonalizationPort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Profil CRUD'unun admin tarafı.
+- **Üstlenmediği:** Profilin runtime'da (chat sırasında) nasıl okunduğu/güncellendiği — bu `CustomerProfileContextProvider`/`Services/Personalization` içindeki arka plan sürecinin işidir.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu `Services/Personalization` altında.
+- Admin panelindeki müşteri profilleri sayfası tüketicisidir.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`SetAdminNote`, LLM'in ürettiği çıkarımların üzerine admin'in manuel bir not ekleyebilmesini sağlar — otomatik kişiselleştirmenin yanlış/eksik olduğu durumlarda insan düzeltmesi için bir kaçış kapısıdır.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `(int Count, IReadOnlyList<CustomerProfile> Items) GetProfiles(int take = 100)` | Profilleri (toplam sayıyla birlikte) listeler. |
+| `CustomerProfile? GetProfile(string customerId)` | Tek müşteri profili. |
+| `Task<CustomerProfile?> RefreshProfileAsync(string customerId, CancellationToken ct = default)` | Profili manuel olarak yeniden hesaplatır. |
+| `CustomerProfile SetAdminNote(string customerId, string? note)` | Admin notu ekler/günceller/temizler. |
+| `bool DeleteProfile(string customerId)` | Profili siler. |
+
+## 7. Bağımlılıklar
+
+`CustomerSupportBot.Domain.Model.Memory.CustomerProfile`.
+
+## Bağlantılar
+
+- [CustomerProfile](../../Domain/Model/Memory/CustomerProfile.md)

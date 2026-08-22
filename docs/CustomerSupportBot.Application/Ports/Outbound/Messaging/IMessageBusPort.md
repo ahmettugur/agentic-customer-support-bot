@@ -1,27 +1,48 @@
 # IMessageBusPort
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Messaging/IMessageBusPort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Messaging`
+**Kaynak:** `Ports/Outbound/Messaging/IMessageBusPort.cs`
+**İmplementasyonlar:** [`RedisMessageBusAdapter`](../../../../CustomerSupportBot.Adapters.Redis/Messaging/RedisMessageBusAdapter.md) (prod, çoklu pod), [`InMemoryMessageBusAdapter`](../../../../CustomerSupportBot.Adapters.Persistence/InMemory/InMemoryMessageBusAdapter.md) (tek pod/test)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IMessageBusPort`, <summary> Yatay ölçeklendirme için pod'lar arası pub/sub mesaj yolu. Persistence adaptörleri bu port üzerinden diğer pod'lara bildirim yapar. </summary> <summary>Belirtilen kanala JSON payload yayınlar.</summary> <summary>Belirtilen kanalı dinler; mesaj geldiğinde handler çağrılır.</summary> <summary>Bu node'un benzersiz kimliği. Kendi mesajlarını filtrelemek için kullanılır.</summary>
+Yatay ölçeklendirme için pod'lar arası pub/sub mesaj yolu. `Publish`/`Subscribe` ile kanal
+bazlı JSON payload yayınlama/dinleme sağlar; `NodeId` bu node'un benzersiz kimliğidir.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Persistence adaptörleri (`PostgresSessionManager`, `PostgresApprovalQueue`,
+`PostgresChatBridge`, `PostgresChatModeRegistry` vb.) bir pod'da yapılan değişikliği diğer
+pod'lara bildirmek için bu port'u kullanır — böylece her pod kendi in-process cache'ini günceller.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IMessageBusPort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Kanal bazlı yayın/dinleme ve node kimliği sağlamak.
+- **Üstlenmediği:** Teslimat garantisi — pub/sub **en fazla bir kez** teslim eder; Redis
+  restart'ı veya ağ kesintisi mesajı sessizce düşürebilir. Bu yüzden kalıcılığı önemli olan
+  okumalar (bkz. `IApprovalQueue.GetPendingAsync`, `ISessionManager.ReloadAsync`) cache'e değil
+  doğrudan veritabanına gitmelidir.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Prod: `RedisMessageBusAdapter` (Redis pub/sub).
+- Tek-pod/test: `InMemoryMessageBusAdapter` — süreç içi, kayıp yaşanmaz (bu yüzden
+  Redis-kaynaklı mesaj kaybı senaryolarını test etmek için bilinçli olarak İKİ AYRI
+  `InMemoryMessageBusHub` örneği kullanılması gerekir, tek hub kaybı simüle etmez).
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`NodeId`'nin var olma nedeni: bir pod kendi yaptığı değişikliği pub/sub üzerinden tekrar
+işlememelidir (zaten in-process state'i güncel) — abonelik handler'ları mesajın `NodeId`'sini
+kendi `NodeId`'siyle karşılaştırıp kendi mesajlarını filtreler.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `void Publish(string channel, string jsonPayload)` | Belirtilen kanala JSON payload yayınlar. |
+| `void Subscribe(string channel, Action<string> handler)` | Kanalı dinler; mesaj geldiğinde handler senkron çağrılır. |
+| `string NodeId { get; }` | Bu node'un benzersiz kimliği. |
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü bağımlılıksızdır.

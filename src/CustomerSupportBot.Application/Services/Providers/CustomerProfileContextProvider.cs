@@ -25,7 +25,7 @@ public sealed class CustomerProfileContextProvider : IContextProvider
     public string Name => "CustomerProfile";
 
     /// <summary>
-    /// CustomerContext (3) ile SemanticMemory (7) arasında — müşterinin uzun
+    /// ConversationSummary (5) ile SemanticMemory (7) arasında — müşterinin uzun
     /// vadeli tercihleri, semantik knowledge'tan önce ajan dikkatini çekmeli.
     /// </summary>
     public int Order => 6;

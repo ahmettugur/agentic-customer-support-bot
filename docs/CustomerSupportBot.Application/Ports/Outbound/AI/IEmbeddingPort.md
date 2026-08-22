@@ -1,27 +1,49 @@
 # IEmbeddingPort
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/AI/IEmbeddingPort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.AI`
+**Kaynak:** `Ports/Outbound/AI/IEmbeddingPort.cs`
+**Implementasyon:** [`OpenAiEmbeddingAdapter`](../../../../CustomerSupportBot.Adapters.AI/OpenAi/OpenAiEmbeddingAdapter.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IEmbeddingPort`, <summary> Metin → embedding (float[]) üreten secondary port. </summary> <summary>Tek metin için embedding üretir.</summary> <summary>Toplu embedding (KB ingest gibi pahalı işlemler için).</summary> <summary>Vektör boyutu — koleksiyon yaratırken kullanılır.</summary> <summary>Geçerli bir API key/endpoint ile çalışıyor mu? (false ise memory devre dışı kabul edilmeli.)</summary>
+Metni embedding vektörüne (`float[]`) çeviren secondary port. Semantic memory ve knowledge
+base'in vektör aramasının temelini oluşturur.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`SemanticMemoryService` gibi Application servisleri, bir metni Qdrant'a yazmadan veya Qdrant'ta
+arama yapmadan önce onu vektöre çevirmek için bu port'u çağırır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IEmbeddingPort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Tekil (`EmbedAsync`) ve toplu (`EmbedBatchAsync`) embedding üretimi, vektör
+  boyutunu (`Dimension`) ve sağlayıcının kullanılabilir olup olmadığını (`IsConfigured`)
+  bildirmek.
+- **Üstlenmediği:** Vektörün nereye/nasıl yazılacağı — o [`IVectorMemoryPort`](IVectorMemoryPort.md)'un işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- `Adapters.AI/OpenAi/OpenAiEmbeddingAdapter` implemente eder (OpenAI embedding API'sini sarar).
+- `SemanticMemoryOptions.EmbeddingOptions` (bkz. [SemanticMemoryOptions](SemanticMemoryOptions.md))
+  hangi modelin/boyutun kullanılacağını konfigüre eder — `Dimension` property'si burayla
+  senkron olmalıdır (uyuşmazlıkta bkz. `AllowDestructiveDimensionMigration` notu).
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Hexagonal mimaride Application katmanı hangi embedding sağlayıcısının (OpenAI, yerel model vb.)
+kullanıldığını bilmemelidir — yalnızca "metni vektöre çevir" sözleşmesini bilir. `IsConfigured`
+özellikle önemlidir: API key yoksa bellek özelliği sessizce devre dışı kalmalı, uygulama
+çökmemelidir.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `Task<float[]> EmbedAsync(string text, CancellationToken ct = default)` | Tek metin için embedding üretir. |
+| `Task<IReadOnlyList<float[]>> EmbedBatchAsync(IReadOnlyList<string> texts, CancellationToken ct = default)` | Toplu embedding — KB ingest gibi pahalı işlemler için tek istekte birden çok metin gönderir. |
+| `int Dimension { get; }` | Vektör boyutu; Qdrant koleksiyonu yaratılırken kullanılır. |
+| `bool IsConfigured { get; }` | Geçerli bir API key/endpoint var mı? `false` ise çağıran taraf belleği devre dışı kabul etmelidir. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü bağımlılıksızdır. İmplementasyon bağımlılıkları için
+`OpenAiEmbeddingAdapter.md`'ye bakın.

@@ -1,41 +1,52 @@
-# TracedSessionSummary
+# ITracePort ve Trace Özet Kayıtları
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/ITracePort.cs`
-- **Tür:** `public sealed record`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/ITracePort.cs`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`TracedSessionSummary`, <summary> Reasoning trace okuma ve istatistik için primary (driving) port. </summary>
+Reasoning trace (bir turun tüm akıl yürütme/tool-çağırma kaydı) okuma ve istatistik için primary port — geliştiricinin/admin'in "bu turda bot ne düşündü, hangi tool'ları çağırdı" sorusunu cevaplamasını sağlar.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Admin panelindeki "trace/debug" sayfası, son trace'leri listelemek, tek bir trace'i incelemek, bir oturumun tüm trace'lerini görmek ve genel istatistikleri (ortalama süre, hata oranı vb.) göstermek için kullanır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`TracedSessionSummary`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Trace okuma ve istatistik sözleşmesini sunmak.
+- **Üstlenmediği:** Trace'in nasıl üretildiği/yazıldığı — bu `WorkflowTraceEventProcessor` (Adapters.Agents) ve ilgili persistence adaptörünün işidir; bu port yalnızca okuma tarafıdır.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu, trace'lerin saklandığı persistence adaptörünü (Postgres/InMemory) sarar.
+- Admin panelindeki debug/trace sayfası tüketicisidir.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-### `TraceStatsSummary`
-```csharp
-public sealed record TraceStatsSummary(
-    int TotalTraces,
-    int CompletedCount,
-    int ErrorCount,
-    double AvgDurationMs,
-    double AvgIterationCount,
-    IReadOnlyDictionary<string, int> TerminationReasons)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Reasoning trace mekanizması, LLM tabanlı bir sistemde "neden bu cevabı verdi" sorusuna cevap verebilmek için kritiktir — bu port, o kaydın dışa açılan tek okuma yüzeyidir. `TraceStatsSummary` içindeki `TerminationReasons` sözlüğü, turların ne şekilde sonlandığının dağılımını (ör. kaç tanesi normal TERMINATE, kaç tanesi hata/timeout ile bitti) tek bakışta görmeyi sağlar.
 
-## Bağımlılıklar
+## 6. Tipler ve Üyeler
 
-- `CustomerSupportBot.Domain`
+### `TracedSessionSummary(string SessionId, string Title, int TraceCount, DateTime LastTraceAt, string? LastQuery, int MessageCount)`
+Bir oturumun trace özeti — kaç trace'i var, son trace zamanı, son sorgu, mesaj sayısı.
+
+### `TraceStatsSummary(int TotalTraces, int CompletedCount, int ErrorCount, double AvgDurationMs, double AvgIterationCount, IReadOnlyDictionary<string, int> TerminationReasons)`
+Genel trace istatistikleri — toplam/tamamlanan/hatalı trace sayısı, ortalama süre ve iterasyon sayısı, sonlanma sebeplerinin dağılımı.
+
+### `ITracePort`
+
+| Metot | Açıklama |
+|---|---|
+| `IReadOnlyList<ReasoningTrace> GetRecentTraces(int count = 20)` | Son N trace. |
+| `ReasoningTrace? GetTrace(string traceId)` | Tek trace. |
+| `IReadOnlyList<ReasoningTrace> GetTracesBySession(string sessionId)` | Bir oturumun tüm trace'leri. |
+| `Task<IReadOnlyList<TracedSessionSummary>> GetSessionsSummaryAsync(CancellationToken ct = default)` | Oturum bazlı trace özetleri. |
+| `TraceStatsSummary GetStats()` | Genel istatistikler. |
+
+## 7. Bağımlılıklar
+
+`CustomerSupportBot.Domain.Model.ReasoningTrace`.
+
+## Bağlantılar
+
+- [WorkflowTraceEventProcessor](../../Adapters.Agents/WorkflowTraceEventProcessor.md) — trace'lerin üretildiği yer.

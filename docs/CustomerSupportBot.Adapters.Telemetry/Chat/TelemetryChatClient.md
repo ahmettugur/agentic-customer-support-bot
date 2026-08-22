@@ -21,6 +21,9 @@
   - `GetResponseAsync` ve `GetStreamingResponseAsync` çağrılarını telemetri ile sarmalamak.
   - `CustomerSupportTelemetry.LlmCallsCounter`, `InputTokensCounter`, `OutputTokensCounter`, `CostUsdCounter` sayaçlarını artırmak.
   - Varsa kalıcı ambar (`ILlmCallPersistencePort`) üzerine `PersistAsync` ile arka planda asenkron kayıt yazmak.
+- **Üstlenmediği:**
+  - Gerçek LLM çağrısını yapmak — bu iş tamamen `base` (sarmalanan `inner` `IChatClient`) tarafından yürütülür; bu sınıf yalnızca çağrıyı gözlemler.
+  - Maliyet formülünü hesaplamak — bu iş [ICostCalculatorPort](../../CustomerSupportBot.Application/Ports/Outbound/Observability/ICostCalculatorPort.md) implementasyonuna (`CostCalculator`) devredilir.
 
 ## Constructor ve Başlatma Mantığı
 
@@ -71,6 +74,20 @@ public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseA
 
 ### 3. `RecordSuccess` (Private)
 - **Ne işe yarar?:** Token sayıları (`input`, `output`), süre (`durationMs`) ve hesaplanan maliyet (`cost`) değerlerini `CustomerSupportTelemetry` sayaçlarına, histogramına, `_usageStore` ambarına ve span etiketlerine yazar.
+- **İç Mantığı:** Önce `_costCalculator.CalculateCost` ile maliyet hesaplanır; ardından sayaçlar (`LlmCallsCounter` her zaman, `InputTokensCounter`/`OutputTokensCounter`/`CostUsdCounter` yalnızca değer > 0 ise) artırılır, `_usageStore.Record` çağrılır, `PersistAsync` tetiklenir ve son olarak `Debug` seviyesinde log yazılır.
+
+### 4. `PersistAsync` (Private)
+```csharp
+private void PersistAsync(string model, long input, long output, decimal cost, double durationMs)
+```
+- **Ne işe yarar?:** `ILlmCallPersistencePort` enjekte edilmişse (opsiyonel), çağrı kaydını kalıcı depoya (ör. veritabanı) yazar.
+- **İç Mantığı:** `_persistence == null` ise hiçbir şey yapmaz. Aksi halde `Task.Run` ile **fire-and-forget** bir arka plan görevi başlatır ve olası istisnayı yutar (persistence katmanının kendi içinde zaten logladığı varsayılır) — böylece kalıcı kayıt yazma gecikmesi veya hatası, kullanıcıya dönen LLM yanıtını asla bloklamaz veya bozmaz.
+
+### 5. `RecordFailure` (Private)
+```csharp
+private void RecordFailure(Activity? activity, Exception ex)
+```
+- **Ne işe yarar?:** LLM çağrısı istisna fırlattığında span'i `Error` durumuna işaretler (`activity.SetStatus`, `error.type` tag'i) ve `Warning` seviyesinde log yazar. Sayaçlara herhangi bir değer yazılmaz — başarısız çağrılar `LlmCallsCounter`'a dahil edilmez.
 
 ## Bağımlılıklar
 

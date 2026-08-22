@@ -10,7 +10,7 @@
 
 ## Hangi amaçla kullanılır`?
 
-Müşterinin mevcut siparişlerini takip etmesini (`order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`), yeni sipariş vermesini (`create_order_tool`), siparişini iptal etmesini (`order_cancel_tool`) veya iade talebi açmasını (`return_request_tool`) sağlamak; yan etkili işlemleri HITL onay kapısıyla güvenceye almak ve çıktısını [SpecialistReasoningSchema](SpecialistReasoningSchema.md) ile yapılandırılmış ReAct JSON olarak üretmek için kullanılır.
+Müşterinin mevcut siparişlerini takip etmesini (`order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`), yeni sipariş vermesini (`order_placement_tool`), siparişini iptal etmesini (`order_cancel_tool`) veya iade talebi açmasını (`return_request_tool`) sağlamak; yan etkili işlemleri (placement/cancel/return) HITL onay kapısıyla güvenceye almak ve çıktısını [SpecialistReasoningSchema](SpecialistReasoningSchema.md) ile yapılandırılmış ReAct JSON olarak üretmek için kullanılır. Salt-okunur olanlar dahil TÜM araçlar `ApprovalGateService` üzerinden kurulur — böylece `customerId` login'den (JWT/`IApprovalContextAccessor`) otomatik alınır, hiçbir tool'un tanımında LLM'e görünen bir parametre olarak yer almaz.
 
 ## Sorumlulukları
 

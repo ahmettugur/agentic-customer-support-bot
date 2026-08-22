@@ -1,27 +1,40 @@
 # IPasswordHasher
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Auth/IPasswordHasher.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Auth`
+**Kaynak:** `Ports/Outbound/Auth/IPasswordHasher.cs`
+**Implementasyon:** [`BCryptPasswordHasher`](../../../../CustomerSupportBot.Adapters.Persistence/Auth/BCryptPasswordHasher.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IPasswordHasher`, Application katmanında ilgili sorumluluk alanı için sözleşme ve metot tanımlarını belirten arayüzdür.
+Şifre hash'leme ve doğrulama için minimal secondary port: `Hash(password)` ve
+`Verify(password, hash)`.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Kullanıcı kaydı (admin/agent/müşteri) sırasında şifre hash'lenirken, login sırasında girilen
+şifre saklanan hash ile karşılaştırılırken kullanılır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IPasswordHasher`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Yalnızca hash üretme/doğrulama.
+- **Üstlenmediği:** Kullanıcı kaydının kalıcılığı — o [`IUserAuthRepository`](IUserAuthRepository.md)'nin işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Persistence/Auth/BCryptPasswordHasher` implemente eder — BCrypt.Net-Next kütüphanesini
+sarar.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Application katmanı hangi hash algoritmasının (BCrypt, Argon2 vb.) kullanıldığını bilmemelidir;
+bu port sayesinde algoritma değişikliği tek bir adaptör dosyasıyla sınırlı kalır.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `string Hash(string password)` | Düz metin şifreyi hash'ler. |
+| `bool Verify(string password, string hash)` | Düz metin şifrenin verilen hash ile eşleşip eşleşmediğini kontrol eder. |
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü bağımlılıksızdır.

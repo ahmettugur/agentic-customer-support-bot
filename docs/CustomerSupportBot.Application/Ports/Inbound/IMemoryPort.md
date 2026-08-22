@@ -1,27 +1,49 @@
-# MemoryConfig
+# IMemoryPort ve MemoryConfig
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/IMemoryPort.cs`
-- **Tür:** `public sealed record`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/IMemoryPort.cs`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`MemoryConfig`, <summary> Semantic memory dashboard ve yönetim işlemleri için primary (driving) port. Disabled durumda Enabled = false döner; diğer metotlar no-op sonuç verir. </summary>
+Semantic memory (vektör bellek) dashboard ve yönetim işlemleri için primary port — kaç kayıt olduğunu saymak, arama yapmak, yeniden indekslemek.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Admin panelindeki "bellek" dashboard'u, hangi tür (`MemoryKind`) kaç kayıt içerdiğini göstermek ve admin'in manuel arama/test yapabilmesi için bu portu kullanır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`MemoryConfig`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Bellek durumunu (etkin mi, kaç kayıt, arama) admin'e sunmak.
+- **Üstlenmediği:** Belleğin runtime'da (chat turlarında) nasıl kullanıldığı — bu iş `SemanticMemoryContextProvider`'dadır; bu port sadece yönetim/gözlem amaçlıdır.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu vektör store adaptörünü (`QdrantVectorMemoryAdapter`) kullanır.
+- Admin panelindeki bellek sayfası tüketicisidir.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`Enabled` property'si, bellek özelliği config'te kapalıyken (`Memory:Enabled=false`) diğer metotların no-op sonuç dönmesini (hata fırlatmak yerine) sağlar — admin panelinin özelliği "kapalı" olarak gösterip çökmemesini garanti eder.
+
+## 6. Tipler ve Üyeler
+
+### `MemoryConfig(string EmbeddingModel, int Dimension, int TopK, double MinScore)`
+O an aktif embedding modelini ve arama parametrelerini (boyut, kaç sonuç, minimum benzerlik skoru) taşır — admin panelinde konfigürasyon özeti olarak gösterilir.
+
+### `IMemoryPort`
+
+| Üye | Açıklama |
+|---|---|
+| `bool Enabled { get; }` | Bellek özelliği etkin mi. |
+| `MemoryConfig Config { get; }` | Aktif konfigürasyon özeti. |
+| `Task<long> CountAsync(MemoryKind kind, CancellationToken ct = default)` | Belirtilen türde kaç kayıt olduğunu döner. |
+| `Task<IReadOnlyList<MemorySearchHit>> SearchAsync(MemoryKind kind, string query, int? topK = null, CancellationToken ct = default)` | Manuel test/arama. |
+| `Task IngestAsync(CancellationToken ct = default)` | Yeniden indeksleme sürecini tetikler. |
+
+## 7. Bağımlılıklar
+
+`CustomerSupportBot.Domain.Model.Memory` (`MemoryKind`, `MemorySearchHit`).
+
+## Bağlantılar
+
+- [IKnowledgeBasePort](IKnowledgeBasePort.md) — yazma tarafı.

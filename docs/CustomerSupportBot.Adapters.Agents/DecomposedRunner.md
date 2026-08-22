@@ -76,10 +76,14 @@ public async IAsyncEnumerable<StreamEvent> RunDecomposedStreamingAsync(
 ```
 - **Ne işe yarar?:** Compound sorgudaki alt görevlerin başlangıç, düşünce, araç ve token akışlarını gerçek zamanlı SSE olarak stream eder.
 - **İç Mantığı:**
-  1. Alt görev başladığında `SubTaskStarted` olayı yayınlanır.
-  2. Sıralı görevlerde LLM'den akan gerçek token'lar [TrimmingDeltaStreamer](TrimmingDeltaStreamer.md) ile temizlenip canlı yayınlanır.
-  3. Paralel görevlerde arka planda tamamlanan sonuçlar sıraya girdikçe `SubTaskCompleted` olayları fırlatılır.
-  4. En sonda tüm görevlerin birleşimi `response_complete` olayı ile istemciye sunulur.
+  1. Baştan tek bir `response_start` (`decomposed: true`, `subTaskCount`) yayınlanır — akışın tek-sorgu/compound ayrımı tüketici (Blazor) için bu bayrakla yapılır; Blazor normalde `response_start`'ta ajan çiplerini mühürler ama `decomposed:true` iken bunu `response_complete`'e erteler (aksi halde "SubTask#N" ilerleme çipleri erken silinirdi).
+  2. Her alt görev için `Agent` tipinde bir olay `status: "running"` ile başlar, tamamlandığında `status: "done"` (hata durumunda `"failed"`) ile kapanır — ayrı bir "SubTaskStarted/Completed" olay tipi YOKTUR, hepsi aynı `StreamEventTypes.Agent` olayının `status` alanıyla ayırt edilir.
+  3. **Sıralı gruplar:** alt görevin GERÇEK LLM token akışı [TrimmingDeltaStreamer](TrimmingDeltaStreamer.md) ile temizlenip `response_delta` olarak canlı yayınlanır; alt görevler arası `SubTaskOrchestrator.ResultSeparator` eklenir.
+  4. **Paralel gruplar:** `Task.WhenAll` tamamlanana kadar hiçbir token akmaz; tüm grup bitince sonuçlar `sub.Order` sırasına göre toplu `response_delta` olarak yayınlanır (araya girmesin diye).
+  5. En sonda `_finalizer.FinalizeAggregateTurnAsync` çağrılır ve tüm görevlerin birleşimi tek bir `response_complete` olayı (`Decomposed: true`, `SubTaskCount`) ile istemciye sunulur.
+
+### 4. `EnumerateSubTaskEventsSafely` (Private Static)
+- **Ne işe yarar?:** Bir alt görevin `IAsyncEnumerable<StreamEvent>` akışını, `MoveNextAsync` sırasında fırlayabilecek istisnaları (iptal veya başka bir hata) yutup `(event, error)` çiftine çeviren güvenli sarmalayıcıdır — akışın ortasında bir istisna, tüm `RunDecomposedStreamingAsync` iterator'ünü `yield` zincirinin dışında çökertmesin diye.
 
 ### 3. `BuildSubTaskHistory` (Private Static)
 - **Ne işe yarar?:** Bir alt görev çalıştırılmadan önce, kendisinden önce tamamlanan kardeş alt görevlerin soru-cevaplarını sohbet geçmişine asistan mesajı olarak ekler; böylece birbirini takip eden adımlarda veri sürekliliği sağlanır.

@@ -115,24 +115,46 @@ public static class ToolNames
     public const string ProductList = "product_list_tool";
     public const string OrderPlacement = "order_placement_tool";
     public const string OrderStatus = "order_status_tool";
+    public const string ComplaintRegistration = "complaint_registration_tool";
+    public const string ComplaintStatus = "complaint_status_tool";       // salt-okunur; yazma karşılığı ComplaintRegistration
+    public const string GetAllComplaints = "get_all_complaints_tool";     // salt-okunur
     public const string GetLastOrder = "get_last_order_tool";
     public const string GetAllOrders = "get_all_orders_tool";
     public const string OrderCancel = "order_cancel_tool";
     public const string ReturnRequest = "return_request_tool";
-    public const string ComplaintRegistration = "complaint_registration_tool";
     public const string HumanHandoff = "human_handoff_tool";
 }
-
-public static readonly IReadOnlySet<string> HighRiskTools = new HashSet<string>
-{
-    ToolNames.OrderPlacement,
-    ToolNames.OrderCancel,
-    ToolNames.ReturnRequest,
-    ToolNames.ComplaintRegistration
-};
 ```
 
-**HighRiskTools:** Admin approve etmek için gerekçe (reason) zorunludur — audit trail için. `AdminEndpoints` bu listeyi approve request'te gerekçe validasyonu için kullanır.
+> 🐞 **`HighRiskTools` artık elle yazılan bir set değil — `SideEffectToolOwners`'dan türetilir.**
+> Eskiden `HighRiskTools` burada elle bir `HashSet` olarak, ayrıca `ResolveAgentName`
+> switch'inde, `WorkflowRunner`'daki ajan-bazlı setlerde ve Blazor admin panelinde **beş ayrı
+> yerde** tekrar tanımlanıyordu. Panel listesi `order_cancel_tool`/`return_request_tool`
+> eklendiğinde güncellenmeyi kaçırdı ve bu tool'ların onayı "gerekçe isteğe bağlı" gösterilip
+> backend'den 400 dönmesine yol açtı. Artık tek doğruluk kaynağı `SideEffectToolOwners`:
+
+```csharp
+/// Yan etkili (veritabanına YAZAN) tool → o tool'u sahiplenen ajan eşlemesi.
+/// HighRiskTools, SideEffectToolsOf(agent) ve ApprovalGateService.ResolveAgentName
+/// hepsi buradan türetilir. Yeni bir yazma tool'u eklendiğinde YALNIZCA burası güncellenir.
+public static readonly IReadOnlyDictionary<string, string> SideEffectToolOwners = new Dictionary<string, string>
+{
+    [ToolNames.OrderPlacement]        = AgentNames.Order,
+    [ToolNames.OrderCancel]           = AgentNames.Order,
+    [ToolNames.ReturnRequest]         = AgentNames.Order,
+    [ToolNames.ComplaintRegistration] = AgentNames.Complaint
+};
+
+/// Admin onayında gerekçe (audit trail) zorunlu olan tool'lar — SideEffectToolOwners.Keys.
+public static readonly IReadOnlySet<string> HighRiskTools = SideEffectToolOwners.Keys.ToHashSet();
+
+/// Belirtilen ajanın sahiplendiği yan etkili tool'lar — WorkflowRunner'ın elle tuttuğu
+/// ajan-bazlı setlerin yerini alır.
+public static IReadOnlySet<string> SideEffectToolsOf(string agentName) => ...;
+```
+
+Frontend artık kendi `HighRiskTools` listesini tutmuyor — `ApprovalRequest.ReasonRequired`
+alanıyla sunucudan öğreniyor (bkz. [ApprovalRequest.md](Model/ApprovalRequest.md)).
 
 ### TaskStatuses
 
@@ -144,6 +166,7 @@ public static class TaskStatuses
     public const string NeedsEscalation = "needs_escalation";
     public const string Failed = "failed";
     public const string Partial = "partial";
+    public const string PendingApproval = "pending_approval";   // bloklamayan HITL modeli — bkz. TaskCompletionStatus.md
 
     // NormalizeStatus tarafından kabul edilen alias'lar
     public const string Completed = "completed";
@@ -156,6 +179,7 @@ public static class TaskStatuses
     public const string Error = "error";
     public const string Fail = "fail";
     public const string Incomplete = "incomplete";
+    public const string Pending = "pending";
 }
 ```
 
@@ -235,6 +259,7 @@ public static class FallbackMessages
     public const string RoutingRewrite = "Talebinizi inceliyorum. Lütfen müşteri kimlik numaranızı paylaşır mısınız?";
     public const string ApprovalRejected = "İşlem onaylanmadı";
     public const string ComplaintRejected = "Şikayet kaydı onaylanmadı";
+    public const string ApprovalPending = "Talebiniz onaya gönderildi (Kayıt: {0}). Sonucu bildirim olarak alacaksınız, beklemenize gerek yok.";
     public const string RequestCancelled = "İstek iptal edildi (timeout veya bağlantı koptu)";
     public const string NewChat = "Yeni sohbet";
     public const string HumanJoined = "Müşteri temsilcisi {0} sohbete katıldı.";
@@ -273,6 +298,8 @@ public static class ToolErrorCodes
     public const string StockInsufficient = "STOCK_INSUFFICIENT";
     public const string CustomerIdMismatch = "CUSTOMER_ID_MISMATCH";
     public const string NoOrdersForCustomer = "NO_ORDERS_FOR_CUSTOMER";
+    public const string ComplaintNotFound = "COMPLAINT_NOT_FOUND";
+    public const string NoComplaintsForCustomer = "NO_COMPLAINTS_FOR_CUSTOMER";
     public const string OrderAlreadyCancelled = "ORDER_ALREADY_CANCELLED";
     public const string OrderNotCancellable = "ORDER_NOT_CANCELLABLE";
     public const string ReturnNotEligible = "RETURN_NOT_ELIGIBLE";
@@ -393,6 +420,7 @@ public static class ToolParameterNames
 {
     public const string CustomerId = "customer_id";
     public const string OrderId = "order_id";
+    public const string ComplaintId = "complaint_id";
     public const string ProductName = "product_name";
     public const string Quantity = "quantity";
     public const string Lines = "lines";
@@ -404,6 +432,22 @@ public static class ToolParameterNames
 Tool parametrelerinin standart isimleri — `CollectedInfo` Dict'iyle uyumlu.
 
 > `Lines`, `order_placement_tool`'un satır listesi parametresidir (çok ürünlü sipariş). Satırların tamamı eksikse eksik-alan bildiriminde `ProductName`/`Quantity` yerine bu ad kullanılır — LLM'in doldurması gereken alan tek başına ürün adı değil, satırların tamamıdır. Bkz. [OrderToolsService](../CustomerSupportBot.Application/Services/Tools/OrderToolsService.md).
+
+### CritiqueTones
+
+```csharp
+public static class CritiqueTones
+{
+    public const string Appropriate = "appropriate";
+    public const string TooFormal = "too_formal";
+    public const string TooCasual = "too_casual";
+    public const string Robotic = "robotic";
+    public const string Impolite = "impolite";
+}
+```
+
+`SelfCritique.Tone` değerleri — `response-agent.md`'deki `tone` listesiyle birebir hizalı
+tutulmalı (`PromptContractTests` bunu doğrular). Bkz. [SelfCritique.md](Model/SelfCritique.md).
 
 ### Defaults
 

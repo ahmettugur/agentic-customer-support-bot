@@ -1,27 +1,66 @@
 # CustomerIdentityHintBuilder
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Providers/CustomerIdentityHintBuilder.cs`
-- **Tür:** `public static class`
+- **Kaynak:** `Services/Providers/CustomerIdentityHintBuilder.cs`
+- **Tür:** `public sealed class` (`IContextProvider` implemente **etmez** — bkz. madde 4)
 - **Namespace:** `CustomerSupportBot.Application.Services.Providers`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`CustomerIdentityHintBuilder`, oturumdaki müşteri kimlik bilgilerini (giriş yapmış müşteri veya serbest sorguda doğrulanmış müşteri) ajanların ve muhakeme modelinin anlayacağı standart Türkçe sistem talimatı ipucuna dönüştüren yardımcı sınıftır.
+Giriş yapmış müşterinin adı + bugünün tarihinden oluşan tek bir Türkçe sistem mesajı üretir.
+İsim `SessionState.AuthenticatedCustomerId` (JWT'den doğrulanmış) üzerinden `ICustomerRepository`
+ile çözülür.
 
-## Hangi amaçla kullanılır`?
+## 2. Hangi Amaçla Kullanılır
 
-- Kullanıcının `AuthenticatedCustomerId` (JWT login) veya `CustomerId` bilgilerini `"KULLANICI KİMLİK BİLGİSİ: Aktif müşteri ID: 1008. Sipariş veya şikayet sorgularında bu ID'yi kullanın."` şeklinde sistem mesajı formatında üretmek.
-- Bilgi yoksa `null` dönerek istemi gereksiz yere uzatmamak.
+Aynı cümle **iki farklı kanalda** birebir gerekir: yazılı workflow (`WorkflowMessageBuilder`,
+mesaj listesinin başına system mesajı olarak) ve sesli native mod (`RealtimeNativeService` →
+`ConfigureNativeSessionAsync` instructions'ına eklenerek). Bu sınıf o metni **tek bir yerde**
+üretir ki iki kanal birbirinden sapmasın.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 3. Sorumlulukları
 
-### 1. `Build`
-```csharp
-public static string? Build(AgentSession session)
-```
-- **Ne işe yarar?:** Oturumdaki kimlik alanlarını kontrol eder ve formatlar.
-- **İç Mantığı:** `session.State.AuthenticatedCustomerId` veya `session.State.CustomerId` mevcutsa biçimlendirilmiş talimat metnini döner.
+**Üstlendiği:** Kimliği doğrulanmış müşterinin tam adını çözmek, bugünün tarihini `tr-TR`
+kültüründe biçimlendirmek, ikisini tek bir sistem mesajına birleştirmek.
 
-## Bağımlılıklar
+**Üstlenmediği:** `SessionState.CustomerId`'yi (LLM'in serbest metinden çıkardığı, güvenilmeyen
+alan) **hiç kullanmaz** — bkz. madde 5, güvenlik gerekçesi.
 
-- [AgentSession](../../../CustomerSupportBot.Domain/Model/AgentSession.md)
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
+
+- `ICustomerRepository.GetFullNameAsync(customerId, ct)` — isim çözümü.
+- `TimeProvider` — test edilebilirlik için enjekte edilebilir saat kaynağı (varsayılan `TimeProvider.System`).
+- Tüketicileri: `WorkflowMessageBuilder` (yazılı akış) ve `RealtimeNativeService` (sesli native mod).
+- **`IContextProvider` implemente etmez** — `ContextPipeline`'ın parçası değildir, doğrudan
+  yazılı/sesli mesaj kurucuları tarafından çağrılır. Bu, [`IContextProvider.md`](IContextProvider.md)'de
+  listelenen diğer sağlayıcılardan yapısal farkıdır.
+
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
+
+> 🐞 **Neden ortak bir servis:** Metin iki kanalda ayrı ayrı yazılsaydı, biri güncellenip
+> diğeri unutulabilirdi — sesli kanalın kimliği/tarihi hiç görmemesi geçmişte tam olarak
+> böyle bir sapmadan kaynaklanmıştı.
+
+**Güvenlik kısıtı:** İsim `AuthenticatedCustomerId` (JWT'den) üzerinden çözülür,
+`SessionState.CustomerId` (LLM'in metinden çıkardığı, kullanıcının serbestçe değiştirebildiği
+alan) KULLANILMAZ — aksi halde kullanıcı "ben 1008'im" diyerek ajanı başka birinin adıyla
+hitap etmeye ikna edebilirdi.
+
+İsim çözülemezse (misafir/anonim oturum veya repository'de kayıt yoksa) çıktı asla boş
+dönmez — yalnızca tarih döner, çünkü tarih her zaman faydalıdır: "yarın", "bu ay" gibi göreli
+ifadeler bunun üzerinden yorumlanır.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `BuildAsync(session, ct)` | Tarihi `"d MMMM yyyy, dddd"` formatında (tr-TR) üretir, `ResolveFullNameAsync` ile ismi çözer. İsim varsa `"Şu an sizinle görüşen, kimliği doğrulanmış müşteri: {isim}. Bugünün tarihi: {tarih}. Uygun olduğunda müşteriye adıyla hitap edebilir…"`; yoksa yalnızca `"Bugünün tarihi: {tarih}."` döner. |
+| `ResolveFullNameAsync(session, ct)` *(private)* | `session?.State.AuthenticatedCustomerId` yoksa veya `long`'a parse edilemiyorsa `null` döner; aksi halde `ICustomerRepository.GetFullNameAsync` çağrılır. |
+
+## 7. Bağımlılıklar
+
+Constructor injection ile: `ICustomerRepository` (zorunlu), `TimeProvider?` (opsiyonel,
+verilmezse `TimeProvider.System`).
+
+## Bağlantılar
+
+- [IContextProvider.md](IContextProvider.md) — yapısal fark için karşılaştırma

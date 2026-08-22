@@ -1,36 +1,49 @@
 # JwtOptions
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Auth/JwtOptions.cs`
-- **Tür:** `public sealed class`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Auth`
+**Kaynak:** `Ports/Outbound/Auth/JwtOptions.cs`
+**Ayar bölümü:** `appsettings.json` → `"Jwt"` (`JwtOptions.SectionName`)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`JwtOptions`, Ports/Driven/Auth/JwtOptions.cs\n// JWT altyapı yapılandırması — Application katmanında tanımlıdır çünkü\n// hem Adapters.Persistence (TokenService) hem de API (AuthServicesExtensions) tarafından kullanılır.\n\nnamespace CustomerSupportBot.Application.Ports.Outbound.Auth; <summary>HMAC-SHA256 signing key (UTF-8). Üretimde rotate edilmeli.</summary> <summary>Access token ömrü (dakika).</summary> <summary>Refresh token ömrü (gün).</summary> <summary> /auth/* uçlarının (login, customer/login, customer/register, refresh) IP başına dakikalık hız sınırı. Bu uçlar kimliksizdir (AllowAnonymous) — A2A'daki gibi partner claim'i yoktur, tek ayırt edici çağıranın IP'sidir. </summary>
+JWT altyapısının tüm konfigürasyonunu taşır: issuer/audience, imzalama anahtarı, token
+ömürleri ve `/auth/*` uçları için hız sınırı.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Hem `Adapters.Persistence` (`JwtAccessTokenProvider`, `EfRefreshTokenRepository`) hem
+`Api` (`AuthServicesExtensions`, `AuthEndpoints`) tarafından okunur — bu yüzden bu options
+sınıfı, her iki katmanın da bağımlı olduğu Application katmanında tanımlıdır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`JwtOptions`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Yalnızca yapılandırma değerlerini taşımak.
+- **Üstlenmediği:** Token üretimi/doğrulama mantığı — [`IJwtAccessTokenProvider`](IJwtAccessTokenProvider.md)'da.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`AuthServicesExtensions` (Api katmanı) JWT bearer authentication middleware'ini bu ayarlarla
+konfigüre eder; `AuthEndpoints` `/auth` grubuna `AuthRateLimitPerMinute` ile rate limiting
+uygular.
 
-## Özellikler/Properties
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `Issuer` (`string`): İlgili veriyi temsil eden özellik.
-- `Audience` (`string`): İlgili veriyi temsil eden özellik.
-- `SigningKey` (`string`): İlgili veriyi temsil eden özellik.
-- `AccessTokenMinutes` (`int`): İlgili veriyi temsil eden özellik.
-- `RefreshTokenDays` (`int`): İlgili veriyi temsil eden özellik.
-- `AuthRateLimitPerMinute` (`int`): İlgili veriyi temsil eden özellik.
+`AuthRateLimitPerMinute`'ün ayrı bir konfigürasyon alanı olmasının nedeni: `/auth/*` uçları
+kimliksizdir (`AllowAnonymous`) — A2A'daki gibi bir partner claim'i yoktur, tek ayırt edici
+çağıranın IP'sidir. Bu limit sabit kodlanmak yerine appsettings'ten okunabilir olmalıdır ki
+test ortamında (çok sayıda ardışık login çağıran paylaşımlı test fixture'ları) veya
+prod'da farklı değerlerle çalışılabilsin.
 
-## Bağımlılıklar
+## 6. Metotlar / Üyeler
 
-- `CustomerSupportBot.Domain`
+| Üye | Varsayılan | Açıklama |
+|---|---|---|
+| `string Issuer` | `"CustomerSupportBot.Api"` | JWT `iss` claim'i. |
+| `string Audience` | `"CustomerSupportBot.Api"` | JWT `aud` claim'i. |
+| `string SigningKey` | `""` | HMAC-SHA256 imzalama anahtarı (UTF-8). Üretimde rotate edilmelidir. |
+| `int AccessTokenMinutes` | `30` | Access token ömrü. |
+| `int RefreshTokenDays` | `14` | Refresh token ömrü. |
+| `int AuthRateLimitPerMinute` | `10` | `/auth/*` uçlarının IP başına dakikalık hız sınırı. |
+
+## 7. Bağımlılıklar
+
+Yok — saf options sınıfı.

@@ -1,40 +1,63 @@
 # RecommendationService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Personalization/RecommendationService.cs`
+- **Kaynak:** `Services/Personalization/RecommendationService.cs`
 - **Tür:** `public sealed class : IRecommendationService`
 - **Namespace:** `CustomerSupportBot.Application.Services.Personalization`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`RecommendationService`, Application/Services/Personalization/RecommendationService.cs IRecommendationService implementasyonu — kural tabanlı, LLM ÇAĞIRMAZ.  Kural: müşterinin en yeni ürün ilgisiyle AYNI KATEGORİDE, henüz ilgilenmediği, stokta olan ürünleri önerir. Kolaylıkla genişleyebilecek bir yer değil — susma kuralları kadar önemli olan şey, bu servisin ne YAPMADIĞI: işbirlikçi filtreleme yok, satın alma geçmişi analizi yok, LLM'e "bu müşteriye ne satarız" diye sorulmuyor. Veri bunu desteklemiyor (yalnızca bu müşterinin kendi ilgi kaydı var, başka müşterilerle karşılaştırma yok) ve destek bağlamında agresif bir öneri motoru istenmiyor. Bu niyetlerde müşteri zaten aktif bir sorunla/işlemle meşgul — araya ürün önerisi sokmak, "şikayetimi çözmek yerine bana bir şey satmaya çalışıyor" izlenimi verir.
+Müşteriye en fazla `maxResults` (varsayılan 2) ürün önerisi üretir. **Kural tabanlıdır, LLM
+çağırmaz.** Tek kural: müşterinin en son ilgilendiği ürünle **aynı kategoride**, henüz
+ilgilenmediği ve stokta olan ürünleri öner.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+`ProductRecommendationContextProvider` tarafından, sohbet bağlamına "önerilebilecek ürünler"
+bloğu eklenmeden önce çağrılır. Amaç, agresif olmayan, veriye dayalı ve **bağlama duyarlı**
+(müşteri zaten bir sorunla uğraşıyorsa hiç öneri sunmayan) bir öneri katmanı sağlamak.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`RecommendationService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+**Üstlendiği:** Dört "susma kuralını" sırayla uygulamak ve kategori eşleşmesi yapmak.
 
-## Constructor ve Başlatma Mantığı
+**Bilinçli olarak üstlenmediği:**
+- İşbirlikçi filtreleme (collaborative filtering) — başka müşterilerin verisiyle karşılaştırma yok.
+- Satın alma geçmişi analizi.
+- LLM'e "bu müşteriye ne satarız" diye sormak.
 
-```csharp
-public RecommendationService(ICustomerUnderstandingService understanding,
-        IProductCatalogRepository products)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+Sebep kaynak yorumunda net: veri bunu desteklemiyor (yalnızca bu müşterinin kendi ilgi kaydı
+var) ve destek bağlamında agresif bir öneri motoru istenmiyor.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-### `Recommend`
-```csharp
-public IReadOnlyList<ProductRecommendation> Recommend(AgentSession session, int maxResults = 2)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+- `ICustomerUnderstandingService.Build(session)` — uzun vadeli sentezlenmiş ilgi listesini alır.
+- `IProductCatalogRepository` — kategori/stok bilgisi için katalog sorgusu.
+- Tüketicisi: `ProductRecommendationContextProvider` (Services/Providers).
+- **Bilerek** `CustomerUnderstandingService`'ten değil `session.State.CurrentIntent`/`Sentiment`'tan
+  okur — `CustomerUnderstanding` kasıtlı olarak yalnızca uzun vadeli sentezi taşır, "şu an" bilgisini
+  taşımaz (bkz. [CustomerUnderstandingService.md](CustomerUnderstandingService.md)).
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
-- `IRecommendationService`
+Dört susma kuralı, hepsi "yanlış zamanda/yanlış müşteriye satış izlenimi vermeme" ilkesine hizmet eder:
+
+1. **Sentiment negatif/öfkeli ise hiç öneri yok** — destek isteyen birine satış denemesi kötü izlenim bırakır.
+2. **Turun niyeti zaten bir sorun/işlem çözme niyetiyse (iade/iptal/şikayet/temsilci) susulur** — ucuz bir kısa devre olarak `CustomerUnderstanding` inşa edilmeden önce kontrol edilir.
+3. **Hiç ilgi kaydı yoksa öneri yok** — rastgele ürün önermek "understanding"e dayanmaz, tahmindir.
+4. **İlgilenilen ürün kataloğa çözülemiyorsa (silinmiş/değişmiş) veya kategorisizse öneri kurulamaz.**
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `Recommend(session, maxResults = 2)` | Yukarıdaki 4 susma kuralını sırayla uygular; geçerse `understanding.ProductInterests[0]` ile aynı kategoride, stokta (`Stock > 0`), henüz bilinmeyen ürünleri `maxResults` kadar döner. Her öneri `"'X' ile aynı kategoride (Y)"` şeklinde bir açıklama taşır. |
+| `SilentIntents` *(private static readonly)* | Öneri üretilmeyecek niyetler kümesi: `Complaint`, `ReturnRequest`, `OrderCancellation`, `HumanHandoffRequest`. |
+
+## 7. Bağımlılıklar
+
+Constructor injection ile: `ICustomerUnderstandingService`, `IProductCatalogRepository`.
+
+## Bağlantılar
+
+- [CustomerUnderstandingService.md](CustomerUnderstandingService.md) — girdi verisinin kaynağı
+- [../Providers/ProductRecommendationContextProvider.md](../Providers/ProductRecommendationContextProvider.md) — tüketici

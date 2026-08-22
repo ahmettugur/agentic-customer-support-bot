@@ -1,83 +1,70 @@
 # SessionPortService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Chat/SessionPortService.cs`
-- **Tür:** `public sealed class : ISessionPort`
-- **Namespace:** `CustomerSupportBot.Application.Services.Chat`
+**Dosya:** `Services/Chat/SessionPortService.cs`
+**Port:** `ISessionPort` (driving/inbound port)
+**Namespace:** `CustomerSupportBot.Application.Services.Chat`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`SessionPortService`, Application/Services/SessionPortService.cs DRIVING PORT IMPL — ISessionPort → Driven portları orkestrasyonla kullanır. <summary> Oturum yönetimi driving port implementasyonu. HTTP adaptörü (SessionEndpoints) bu sınıfı ISessionPort olarak kullanır. </summary>
+`ISessionManager`'ın (Outbound/driven port — kalıcılık) genel amaçlı oturum işlemlerini
+`ISessionPort`'a (Inbound/driving port — use case) bağlayan ince bir orkestrasyon katmanı.
+HTTP adaptörü (`SessionEndpoints`, Api katmanı) oturumla ilgili tüm işlemler için bu sınıfı kullanır.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Oturum oluşturma/getirme, güncelleme, listeleme, geçmiş okuma ve genel amaçlı "konuşma ekle"
+işlemleri için Api katmanının çağırdığı port implementasyonu.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`SessionPortService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** `ISessionManager` çağrılarını debug-seviyesinde loglamak, "reasoning turuna
+  bağlı olmayan" genel amaçlı `AddExchangeAsync` çağrılarında LLM sinyali olmadığını açıkça
+  belirtmek (`signals: null`).
+- **Üstlenmediği:** Oturumun kalıcılığı/cache senkronizasyonu (`ISessionManager`
+  implementasyonlarında — `PostgresSessionManager` vb.), state çıkarımı mantığı
+  (`SessionStateExtractor`, Domain katmanı).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-```csharp
-public SessionPortService(ISessionManager sessions,
-        ILogger<SessionPortService> logger)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- `ISessionPort` port'unu implemente eder.
+- **Inject eder:** `ISessionManager`, `ILogger`.
+- **Kimin tarafından çağrılır:** Api katmanındaki `SessionEndpoints`.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `GetOrCreateSessionAsync`
-```csharp
-public async Task<AgentSession> GetOrCreateSessionAsync(string? sessionId, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Bu sınıf kasıtlı olarak inceliğini korur (thin orchestration) — asıl karmaşıklık
+`ISessionManager` implementasyonlarında (cache senkronizasyonu, çok-pod dağıtımı, Postgres
+kalıcılığı) yaşar. `SessionPortService`'in tek katma değeri, **`AddExchangeAsync`'in bu genel
+amaçlı (port üzerinden gelen, herhangi bir reasoning turuna bağlı olmayan) versiyonunun
+`signals: null` ile çağrılmasını açıkça belgelemesidir** — [`ChatPortService`](ChatPortService.md)
+kendi `AddExchangeAsync` çağrısında gerçek `TurnSignals` (LLM'in ürettiği intent/sentiment)
+geçirirken, bu port üzerinden gelen çağrıların böyle bir sinyali yoktur; state çıkarımı bu
+durumda kural tabanlı (deterministik) yola düşer.
 
-### `GetSessionAsync`
-```csharp
-public Task<AgentSession?> GetSessionAsync(string sessionId, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Hexagonal mimaride bu sınıfın var oluş nedeni: `ISessionManager` bir **driven port** (dışarıya,
+kalıcılığa bakan), `ISessionPort` ise bir **driving port** (içeriye, use case'e bakan) —
+aradaki bu ince servis, iki port'u birbirine bağlayan somut implementasyondur; Api katmanı
+doğrudan `ISessionManager`'ı görmez, yalnızca `ISessionPort`'u görür.
 
-### `UpdateSessionAsync`
-```csharp
-public async Task UpdateSessionAsync(AgentSession session, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-### `GetAllSessionsAsync`
-```csharp
-public async Task<IReadOnlyList<SessionInfo>> GetAllSessionsAsync(
-        string? forCustomerId = null, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+| Üye | Açıklama |
+|---|---|
+| `GetOrCreateSessionAsync(string? sessionId, CancellationToken ct = default): Task<AgentSession>` | Oturumu getirir, yoksa oluşturur. |
+| `GetSessionAsync(string sessionId, CancellationToken ct = default): Task<AgentSession?>` | Oturumu getirir; yoksa `null`. |
+| `UpdateSessionAsync(AgentSession session, CancellationToken ct = default): Task` | Oturumu kalıcılığa yazar. |
+| `GetAllSessionsAsync(string? forCustomerId = null, CancellationToken ct = default): Task<IReadOnlyList<SessionInfo>>` | Tüm oturumları (isteğe bağlı müşteri filtresiyle) listeler. |
+| `GetHistoryAsync(string sessionId, CancellationToken ct = default): Task<List<ConversationMessage>>` | Konuşma geçmişini döner. |
+| `AddExchangeAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default): Task` | Genel amaçlı konuşma ekleme; `signals: null` ile kural tabanlı state çıkarımı tetikler. |
+| `ExtractAndUpdateStateAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default): Task` | State çıkarımını (intent/duygu) ayrıca tetikler. |
+| `MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default): Task` | Oturum durumunu doğrudan bir mutator delegesiyle günceller (ör. replan bayrakları). |
 
-### `GetHistoryAsync`
-```csharp
-public Task<List<ConversationMessage>> GetHistoryAsync(string sessionId, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 7. Bağımlılıklar (Constructor Injection)
 
-### `AddExchangeAsync`
-```csharp
-public async Task AddExchangeAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+- `ISessionManager` — oturum kalıcılığı ve senkronizasyonu.
+- `ILogger<SessionPortService>` — çağrıları debug seviyesinde loglar.
 
-### `ExtractAndUpdateStateAsync`
-```csharp
-public Task ExtractAndUpdateStateAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## Bağlantılar
 
-### `MutateStateAsync`
-```csharp
-public async Task MutateStateAsync(string sessionId, Action<SessionState> mutator, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-## Bağımlılıklar
-
-- `CustomerSupportBot.Domain`
-- `ISessionPort`
+- [ChatPortService.md](ChatPortService.md) — reasoning turu bağlamında oturum işlemleri
+- [SessionStateService.md](SessionStateService.md) — sentiment/kalıcılık yardımcıları

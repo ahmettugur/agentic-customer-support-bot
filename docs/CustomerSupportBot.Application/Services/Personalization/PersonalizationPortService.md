@@ -1,57 +1,59 @@
 # PersonalizationPortService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Personalization/PersonalizationPortService.cs`
+- **Kaynak:** `Services/Personalization/PersonalizationPortService.cs`
 - **Tür:** `public sealed class : IPersonalizationPort`
 - **Namespace:** `CustomerSupportBot.Application.Services.Personalization`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`PersonalizationPortService`, Application/Services/PersonalizationPortService.cs DRIVING PORT IMPL — IPersonalizationPort → CustomerProfileService + ICustomerProfileStore.
+`IPersonalizationPort` (Inbound/Driving port) implementasyonu — Api katmanının admin panel
+uçlarının müşteri profillerini okuma/düzenleme/silme ve yeniden özetletme (LLM ile) için
+kullandığı tek giriş noktası.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Api katmanındaki admin endpoint'leri (`/admin/profiles` gibi) doğrudan `CustomerProfileService`
+veya `ICustomerProfileStore`'a bağımlı olmasın diye araya konan ince bir port implementasyonu.
+Kendi iş mantığı neredeyse yok — çağrıları doğru alt bileşene yönlendirir (thin adapter /
+delegating port pattern).
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`PersonalizationPortService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+**Üstlendiği:** `IPersonalizationPort` sözleşmesindeki 5 metodu, `CustomerProfileService`
+(yazma/consolidate) ve `ICustomerProfileStore`'a (okuma/silme) delege ederek karşılamak.
 
-## Constructor ve Başlatma Mantığı
+**Üstlenmediği:** Profil güncelleme kurallarının kendisi ([`CustomerProfileService`](CustomerProfileService.md)'in
+işi) veya profilin nasıl saklandığı (`ICustomerProfileStore`'un işi).
 
-```csharp
-public PersonalizationPortService(CustomerProfileService profileService, ICustomerProfileStore profiles)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-## Metotlar ve İç Çalışma Mantıkları
+- Api katmanındaki admin endpoint'leri tarafından çağrılır (Inbound port).
+- [`CustomerProfileService`](CustomerProfileService.md) — `RefreshProfileAsync` bunun
+  `ConsolidateAsync`'ine delege eder.
+- `ICustomerProfileStore` (Outbound port) — `GetProfiles`/`GetProfile`/`SetAdminNote`/`DeleteProfile`
+  doğrudan bu store üzerinden çalışır.
 
-### `GetProfile`
-```csharp
-public CustomerProfile? GetProfile(string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `RefreshProfileAsync`
-```csharp
-public Task<CustomerProfile?> RefreshProfileAsync(string customerId, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Hexagonal mimaride Api katmanının Application katmanının iç servislerine (`CustomerProfileService`)
+değil, portlara (`IPersonalizationPort`) bağımlı olması gerekir — bu sınıf o sözleşmeyi
+gerçekleştiren "driving adapter"dır. İçinde iş kuralı yoktur, bilerek: kurallar zaten
+`CustomerProfileService` içinde toplanmış durumda, burada tekrarlanmaz (DRY).
 
-### `SetAdminNote`
-```csharp
-public CustomerProfile SetAdminNote(string customerId, string? note)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-### `DeleteProfile`
-```csharp
-public bool DeleteProfile(string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+| Üye | Açıklama |
+|---|---|
+| `GetProfiles(take = 100)` | `_profiles.Count` ve `_profiles.List(take)`'i birlikte döner — admin panelindeki profil listesi sayfası için. |
+| `GetProfile(customerId)` | Tek bir müşterinin profilini döner, yoksa `null`. |
+| `RefreshProfileAsync(customerId, ct)` | `CustomerProfileService.ConsolidateAsync`'e delege eder — admin panelden "profili yeniden özetle" butonunun arkasındaki çağrı. |
+| `SetAdminNote(customerId, note)` | Profile serbest metin bir admin notu ekler/temizler (`note` boşsa `null`'a çevrilir); profil yoksa `GetOrCreate` ile oluşturulur. |
+| `DeleteProfile(customerId)` | Profili store'dan siler, başarılıysa `true` döner. |
 
-## Bağımlılıklar
+## 7. Bağımlılıklar
 
-- `CustomerSupportBot.Domain`
-- `IPersonalizationPort`
+Constructor injection ile: `CustomerProfileService`, `ICustomerProfileStore`.
+
+## Bağlantılar
+
+- [CustomerProfileService.md](CustomerProfileService.md) — asıl iş mantığı burada

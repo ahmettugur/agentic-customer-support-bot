@@ -1,27 +1,44 @@
 # IJwtAccessTokenProvider
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Auth/IJwtAccessTokenProvider.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Auth`
+**Kaynak:** `Ports/Outbound/Auth/IJwtAccessTokenProvider.cs`
+**Implementasyon:** [`JwtAccessTokenProvider`](../../../../CustomerSupportBot.Adapters.Persistence/Auth/JwtAccessTokenProvider.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IJwtAccessTokenProvider`, <summary> JWT access token üretimi için secondary (driven) port. </summary> <summary> Erişim token'ı üretir. </summary> <param name="lifetimeMinutes"> Token ömrü. <c>null</c> ise yapılandırmadaki varsayılan (<c>AccessTokenMinutes</c>) kullanılır — mevcut tüm çağıranlar bu davranışı korur. A2A özne token'ları gibi tek bir çağrı için üretilen, dış sisteme verilen token'lar bilinçli olarak çok daha kısa bir ömürle istenir. </param>
+JWT access token üretimi için secondary port. `GenerateAccessToken(UserInfo, DateTime, int?)`
+imzalı bir token ve son geçerlilik zamanını döner.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Login (admin/agent/müşteri), refresh-token yenileme ve A2A özne token'ı üretimi bu port
+üzerinden çalışır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IJwtAccessTokenProvider`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** `UserInfo`'dan JWT claim'lerini (rol, kullanıcı id, `LinkedCustomerId` vb.)
+  çıkarıp imzalı bir token üretmek.
+- **Üstlenmediği:** Refresh token yönetimi (bkz. [`IRefreshTokenRepository`](IRefreshTokenRepository.md)),
+  şifre doğrulama (bkz. [`IPasswordHasher`](IPasswordHasher.md)).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Persistence/Auth/JwtAccessTokenProvider` implemente eder; `System.IdentityModel.Tokens.Jwt`
+kullanır. `JwtOptions`'tan (bkz. [JwtOptions](JwtOptions.md)) `SigningKey`, `Issuer`,
+`Audience`, `AccessTokenMinutes` okur.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`lifetimeMinutes` parametresi opsiyoneldir; `null` ise yapılandırmadaki varsayılan
+(`AccessTokenMinutes`) kullanılır, mevcut çağıranların davranışı korunur. A2A özne token'ları
+gibi tek bir çağrı için üretilen, dış sisteme verilen token'lar bilinçli olarak çok daha kısa
+bir ömürle istenir — bu yüzden parametre override edilebilir bırakılmıştır.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `(string Token, DateTime ExpiresAt) GenerateAccessToken(UserInfo user, DateTime nowUtc, int? lifetimeMinutes = null)` | Erişim token'ı üretir. `lifetimeMinutes` verilmezse `JwtOptions.AccessTokenMinutes` kullanılır. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.Auth.UserInfo`'ya bağımlıdır.

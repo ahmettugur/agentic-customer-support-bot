@@ -1,41 +1,61 @@
 # UserService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Auth/UserService.cs`
-- **Tür:** `public sealed class : IUserService`
-- **Namespace:** `CustomerSupportBot.Application.Services.Auth`
+**Dosya:** `Services/Auth/UserService.cs`
+**Port:** `IUserService` (driving/inbound port)
+**Namespace:** `CustomerSupportBot.Application.Services.Auth`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`UserService`, Application katmanında ilgili iş akışını ve domain kurallarını yürüten temel bileşendir.
+Staff (Admin/Agent) kullanıcılarının kullanıcı adı+şifre ile kimlik doğrulamasını yapar.
+[`CustomerAuthService`](CustomerAuthService.md)'in staff tarafındaki karşılığıdır — aynı
+`users` tablosunu kullanır ama kayıt akışı yoktur (staff hesapları önceden, admin tarafından
+oluşturulur; self-servis kayıt yok).
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Api katmanındaki `/auth/login` endpoint'i bu servisi çağırır. Başarılı sonuç
+[`TokenPortService.IssueAsync`](TokenPortService.md)'e verilip JWT'ye çevrilir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`UserService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Kullanıcı adı+şifre doğrulaması, başarısız denemeleri (sebebiyle birlikte,
+  ama çağırana sebep söylemeden) loglamak.
+- **Üstlenmediği:** JWT üretimi (`TokenPortService`), self-servis kayıt (bu rol için yok —
+  staff hesapları admin tarafından açılır).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-```csharp
-public UserService(IUserAuthRepository users,
-        IPasswordHasher hasher,
-        ILogger<UserService> logger)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- `IUserService` port'unu implemente eder.
+- **Inject eder:** `IUserAuthRepository`, `IPasswordHasher`, `ILogger`.
+- **Kimin tarafından çağrılır:** Api katmanındaki `/auth/login` endpoint'i.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `AuthenticateAsync`
-```csharp
-public async Task<UserInfo?> AuthenticateAsync(string username, string password, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Basit ve kasıtlı olarak ince (thin) bir servistir — tüm karmaşıklık (hash doğrulama,
+kullanıcı bulma) alt katmanlardadır (`IUserAuthRepository`, `IPasswordHasher`). Bu sınıfın
+tek katma değeri, **iki farklı başarısızlık nedenini (kullanıcı yok / şifre yanlış) ayrı ayrı
+loglarken, çağırana ikisi için de aynı `null` sonucunu döndürmesidir** — [`CustomerAuthService`](CustomerAuthService.md)'teki
+aynı prensip: hata mesajı "hangi alan yanlış" bilgisini sızdırmamalı, aksi halde bir saldırgan
+geçerli kullanıcı adlarını deneme-yanılmayla (enumeration) tespit edebilir.
 
-## Bağımlılıklar
+`CustomerAuthService`'ten ayrı bir sınıf olarak tutulmasının nedeni: iki akış birbirinden
+bağımsız evrilebilir olmalı (ör. staff için ileride MFA eklenirse, müşteri akışını etkilememeli)
+ve iki rolün iş kuralları (customerId sahiplik kontrolü staff'ta anlamsız) doğası gereği
+farklıdır — tek bir "hepsi bir arada" servis, ilgisiz iş kurallarını aynı sınıfa sıkıştırırdı.
 
-- `CustomerSupportBot.Domain`
-- `IUserService`
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `AuthenticateAsync(string username, string password, CancellationToken ct = default): Task<UserInfo?>` | Kullanıcı adı+şifre doğrular; hesap yok/pasif veya şifre yanlışsa `null` döner (ikisi de aynı sonuç, ayrı log). |
+
+## 7. Bağımlılıklar (Constructor Injection)
+
+- `IUserAuthRepository` — kullanıcı (auth) tablosu erişimi.
+- `IPasswordHasher` — BCrypt tabanlı doğrulama.
+- `ILogger<UserService>` — başarısız login denemelerini loglar.
+
+## Bağlantılar
+
+- [TokenPortService.md](TokenPortService.md) — bu servisin sonucunu JWT'ye çeviren taraf
+- [CustomerAuthService.md](CustomerAuthService.md) — müşteri tarafındaki paralel akış

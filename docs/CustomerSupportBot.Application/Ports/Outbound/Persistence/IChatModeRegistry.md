@@ -1,27 +1,46 @@
 # IChatModeRegistry
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Persistence/IChatModeRegistry.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Persistence`
+**Kaynak:** `Ports/Outbound/Persistence/IChatModeRegistry.cs`
+**İmplementasyonlar:** [`InMemoryChatModeRegistry`](../../../../CustomerSupportBot.Adapters.Persistence/InMemory/InMemoryChatModeRegistry.md), [`PostgresChatModeRegistry`](../../../../CustomerSupportBot.Adapters.Persistence/Postgres/PostgresChatModeRegistry.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IChatModeRegistry`, <summary> Session başına chat modunu tutan secondary port. </summary>
+Session başına chat modunu (Bot / İnsan devraldı) tutan secondary port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Admin bir sohbeti devraldığında (`TakeOver`) o oturumdaki gelen mesajlar artık bota değil
+admin'e yönlendirilir; `Release` bot moduna geri döner. `ChatPortService` her turda
+`GetMode` ile hangi modda olduğunu kontrol eder.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IChatModeRegistry`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Mod durumunun (kim devraldı, ne zaman) tutulması ve sorgulanması.
+- **Üstlenmediği:** Mesajların taşınması — o [`IChatBridge`](IChatBridge.md)'nin işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`PostgresChatModeRegistry`'nin `TakeOver`/`Release` metotları DB-authoritative'dir (Redis
+cache'e değil, doğrudan DB'ye yazıp okur) — iki adminin aynı oturumu eşzamanlı devralma
+yarışını (race) önlemek için.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`TakeOver`/`Release` `bool` döner (exception değil) çünkü "zaten devralınmış" veya "zaten
+serbest" beklenen, sık karşılaşılan durumlardır — çağıran taraf (admin panel endpoint'i) bunu
+kullanıcıya "bu oturum zaten X tarafından devralınmış" gibi anlamlı bir mesajla iletir.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `ChatMode GetMode(string sessionId)` | Oturumun mevcut modu (Bot/Human). |
+| `ChatSessionState? GetState(string sessionId)` | Oturumun tam durumu (kim devraldı, ne zaman). |
+| `bool TakeOver(string sessionId, string? humanAgent)` | Oturumu devralır. Zaten devralınmışsa `false`. |
+| `bool Release(string sessionId)` | Devri bırakır, bot moduna döner. |
+| `IReadOnlyList<ChatSessionState> GetActive()` | Şu an insan tarafından yönetilen tüm oturumlar. |
+| `event EventHandler<ChatSessionState>? ModeChanged` | Mod değiştiğinde fırlar. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.ChatMode`/`ChatSessionState`'e bağımlıdır.

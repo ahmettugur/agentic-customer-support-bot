@@ -1,27 +1,51 @@
 # IRefreshTokenRepository
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Auth/IRefreshTokenRepository.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Auth`
+**Kaynak:** `Ports/Outbound/Auth/IRefreshTokenRepository.cs`
+**Implementasyon:** [`EfRefreshTokenRepository`](../../../../CustomerSupportBot.Adapters.Persistence/EfCore/Auth/EfRefreshTokenRepository.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IRefreshTokenRepository`, Application/Ports/Driven/Auth/IRefreshTokenRepository.cs Secondary port — refresh token persistence. <summary> Yalnızca kayıt HÂLÂ iptal edilmemişse iptal eder — koşullu sahiplenme.  <para> <see cref="RevokeAsync"/>'in aksine oku-değiştir-yaz DEĞİLDİR: tek bir koşullu UPDATE'tir (<c>WHERE Id = id AND RevokedAt IS NULL</c>). Fark önemlidir — aynı refresh token'la eşzamanlı gelen iki yenileme isteği ikisi de "hâlâ geçerli" okuyup ikisi de yeni bir token üretebilirdi; tek bir çalıntı/paylaşılan token'dan iki geçerli oturum zinciri doğar ve yeniden kullanım tespiti sessizce atlanırdı. Bu metotla yalnızca BİR çağıran satırı gerçekten değiştirir; kaybeden <c>false</c> alır ve reddedilmelidir. </para> </summary> <returns>Bu çağrı kaydı iptal ettiyse <c>true</c>; kayıt zaten iptal edilmişse <c>false</c>.</returns>
+Refresh token kalıcılığı için secondary port: oluşturma, hash ile bulma, iptal etme
+(koşulsuz ve koşullu iki farklı metotla).
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`TokenPortService.RefreshAsync` akışında: gelen refresh token hash'lenip `FindByHashAsync` ile
+bulunur, geçerliyse eski token `TryRevokeAsync` ile iptal edilip yeni bir token üretilir
+(refresh token rotation).
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IRefreshTokenRepository`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Refresh token kaydının CRUD'u ve iptal mantığı.
+- **Üstlenmediği:** JWT access token üretimi ([`IJwtAccessTokenProvider`](IJwtAccessTokenProvider.md)'ın işi).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Persistence/EfCore/Auth/EfRefreshTokenRepository` implemente eder; `TryRevokeAsync`
+EF Core `ExecuteUpdateAsync` ile tek bir koşullu `UPDATE ... WHERE Id = id AND RevokedAt IS NULL`
+çalıştırır (bu yüzden **EF InMemory sağlayıcısında çalışmaz** — testler gerçek Postgres
+(`PostgresCatalogFixture`) veya `InMemoryRefreshTokenRepository` test fake'i kullanmalıdır).
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+> 🐞 **`TryRevokeAsync` neden `RevokeAsync`'in yanında ayrıca var:** `RevokeAsync` oku-değiştir-yaz
+> döngüsüdür ve eşzamanlılığa karşı korumasızdır. Aynı refresh token'la eşzamanlı gelen iki
+> yenileme isteği ikisi de "hâlâ geçerli" okuyup ikisi de yeni bir token üretebilirdi; tek bir
+> çalıntı/paylaşılan token'dan iki geçerli oturum zinciri doğar ve yeniden kullanım tespiti
+> sessizce atlanırdı. `TryRevokeAsync` tek bir koşullu `UPDATE`'tir — yalnızca BİR çağıran
+> satırı gerçekten değiştirir; kaybeden `false` alır ve `TokenPortService` bu isteği reddeder.
+> Bu, projede tekrarlanan bir "koşullu sahiplenme" desenidir (bkz. HITL onay kararı claiming'i
+> ile aynı prensip).
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `Task CreateAsync(string id, string userId, string tokenHash, DateTime expiresAt, DateTime createdAt, CancellationToken ct = default)` | Yeni refresh token kaydı oluşturur. |
+| `Task<RefreshTokenInfo?> FindByHashAsync(string tokenHash, CancellationToken ct = default)` | Hash ile kaydı bulur. |
+| `Task RevokeAsync(string id, DateTime revokedAt, string? replacedByTokenHash, CancellationToken ct = default)` | Koşulsuz iptal — oku-değiştir-yaz. |
+| `Task<bool> TryRevokeAsync(string id, DateTime revokedAt, string? replacedByTokenHash, CancellationToken ct = default)` | **Koşullu** iptal: yalnızca kayıt HÂLÂ iptal edilmemişse iptal eder (tek UPDATE, race-safe). Kayıt zaten iptal edilmişse `false` döner. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.Auth.RefreshTokenInfo`'ya bağımlıdır.

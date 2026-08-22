@@ -1,42 +1,43 @@
-# ILlmCallPersistencePort
+# ILlmCallPersistencePort (+ LlmCallRecord)
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Observability/ILlmCallPersistencePort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Observability`
+**Kaynak:** `Ports/Outbound/Observability/ILlmCallPersistencePort.cs`
+**Implementasyon:** [`PostgresLlmCallUsageSink`](../../../../CustomerSupportBot.Adapters.Persistence/Postgres/PostgresLlmCallUsageSink.md) (prod); InMemory/test ortamında no-op
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ILlmCallPersistencePort`, <summary> LLM çağrı kayıtlarını kalıcı depolamaya yazan secondary port. Implementasyon: PostgresLlmCallUsageSink (prod) veya no-op (InMemory/test). </summary> <summary> Tek bir LLM çağrısını persist eder. Fire-and-forget çağrılabilir. Hata durumunda caller'a exception sızdırmaz. </summary> <summary>Persist edilen LLM çağrı kaydı.</summary>
+Her LLM çağrısının kalıcı (veritabanı) kaydını tutan secondary port. `LlmCallRecord` tek bir
+çağrının tam kaydını taşır (model, sağlayıcı, token sayıları, maliyet, süre, zaman damgası).
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`TelemetryChatClient` her LLM çağrısından sonra `RecordAsync` ile kalıcı log yazar — admin
+panelindeki geçmiş maliyet/kullanım raporları buradan beslenir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ILlmCallPersistencePort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Tek bir LLM çağrı kaydını fire-and-forget şekilde kalıcı depoya yazmak.
+- **Üstlenmediği:** Anlık toplam sayaçlar — o [`ICostUsageStorePort`](ICostUsageStorePort.md)'un işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Persistence/Postgres/PostgresLlmCallUsageSink` implemente eder; test/InMemory
+ortamında no-op bir implementasyon kullanılır (log kaydı test assertion'larını etkilemesin
+diye).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `LlmCallRecord`
-```csharp
-public sealed record LlmCallRecord(
-    string Model,
-    string Provider,
-    long InputTokens,
-    long OutputTokens,
-    decimal CostUsd,
-    double DurationMs,
-    DateTime CalledAt)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+> **"Hata durumunda caller'a exception sızdırmaz"** — telemetri/log yazımı asla ana iş akışını
+> (kullanıcıya cevap dönme) kesintiye uğratmamalıdır. Bir log satırının yazılamaması kullanıcı
+> deneyimini etkilememelidir; bu yüzden implementasyon içeride hataları yutar.
 
-## Bağımlılıklar
+## 6. Metotlar / Üyeler
 
-- `CustomerSupportBot.Domain`
+| Üye | Açıklama |
+|---|---|
+| `Task RecordAsync(LlmCallRecord record, CancellationToken ct = default)` | Tek bir LLM çağrısını persist eder. |
+
+**`LlmCallRecord(string Model, string Provider, long InputTokens, long OutputTokens, decimal CostUsd, double DurationMs, DateTime CalledAt)`** — persist edilen kaydın tüm alanları.
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü bağımlılıksızdır.

@@ -20,17 +20,19 @@ Backend `/auth` endpoint'leriyle iletişim kurarak login, logout ve token refres
 - **Backend karşılığı**: `CustomerSupportBot.Api` → `AuthEndpoints`.
 
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
-`AuthService` bilinçli olarak **ham `HttpClient`** kullanır (handler zinciri olmadan). Eğer `AuthorizedHttpClientHandler`'dan geçseydi, 401 → refresh → 401 → refresh sonsuz döngüsü oluşurdu. `_refreshTask` coalescing pattern'i, eşzamanlı birden fazla bileşenin aynı anda refresh tetiklemesini önler.
+`AuthService` bilinçli olarak **ham `HttpClient`** kullanır (handler zinciri olmadan). Eğer `AuthorizedHttpClientHandler`'dan geçseydi, 401 → refresh → 401 → refresh sonsuz döngüsü oluşurdu.
+
+İki ayrı kimlik alanı (staff ve customer, bkz. [AuthScope](AuthScope.md)) aynı tarayıcıda aynı anda aktif olabildiğinden, her metot bir `AuthScope` parametresi alır ve token'ı [AuthTokenStore](AuthTokenStore.md)'a o scope'un kendi anahtarıyla yazar/okur. `_refreshTasks` bir `Dictionary<AuthScope, Task?>` — coalescing pattern scope başına ayrı çalışır: staff sekmesinde eşzamanlı birden fazla bileşen refresh tetiklerse tek bir istek gider, ama customer scope'unun refresh'i bundan bağımsızdır (aynı anda ikisi de tetiklenebilir).
 
 ## Metotlar / Üyeler
 
 | Metot | Açıklama |
 |-------|----------|
-| `LoginAsync(username, password)` | Admin/Agent login. |
-| `CustomerLoginAsync(email, password)` | Müşteri login. |
-| `CustomerRegisterAsync(email, password, customerId)` | Müşteri kayıt. |
-| `LogoutAsync()` | Sunucuya logout bildirimi + token silme. |
-| `TryRefreshAsync()` | Mevcut refresh token ile yeni access token alma; paralel çağrıları birleştirir. |
+| `LoginAsync(username, password)` | Admin/Agent login (`/auth/login`); token'ı `AuthScope.Staff` altında saklar. |
+| `CustomerLoginAsync(email, password)` | Müşteri login (`/auth/customer/login`); token'ı `AuthScope.Customer` altında saklar. |
+| `CustomerRegisterAsync(email, password, customerId)` | Müşteri kayıt (`/auth/customer/register`); başarılıysa doğrudan giriş yapılmış olur (`AuthScope.Customer`). |
+| `LogoutAsync(AuthScope scope)` | İlgili scope'un token'ıyla sunucuya logout bildirimi gönderir, ardından o scope'un `localStorage` kaydını temizler. |
+| `TryRefreshAsync(AuthScope scope)` | İlgili scope'un mevcut refresh token'ıyla yeni access token alır; aynı scope için eşzamanlı çağrıları tek isteğe birleştirir (`_refreshTasks`). |
 
 ## Bağımlılıklar
 - `HttpClient` — Ham (handler zincirsiz).

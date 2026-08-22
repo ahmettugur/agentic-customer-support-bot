@@ -1,27 +1,47 @@
 # IAnalyticsPort
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/IAnalyticsPort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/IAnalyticsPort.cs`
+**Tür:** `interface`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`IAnalyticsPort`, <summary> Analitik verileri için primary port. </summary> <summary>Belirtilen sessionId için derecelendirme kaydeder.</summary> <summary>Tek bir session için derecelendirmeyi döner.</summary> <summary>Son N derecelendirmeyi döner.</summary> <summary>Tüm derecelendirmeler.</summary> <summary>Özet istatistikler (ortalama puan, toplam sayı vb.).</summary> <summary>Tüm dashboard istatistiklerini döner.</summary> <summary>Tek bir oturum için detaylı analytics döner.</summary>
+Admin panelinin analitik/derecelendirme (rating) verilerini okumak ve yazmak için kullandığı primary (driving) port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Api katmanındaki analytics endpoint'leri, kullanıcıların oturum sonunda verdiği yıldız derecelendirmelerini kaydetmek ve admin dashboard'un özet istatistiklerini/oturum bazlı analitikleri göstermek için bu portu çağırır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IAnalyticsPort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Derecelendirme CRUD'u, dashboard özeti, oturum bazlı analitik sorgulama sözleşmesini tanımlamak.
+- **Üstlenmediği:** Verinin nasıl saklandığı (bellek içi mi, Postgres mi) — bu implementasyonun (`Services/Chat` altındaki servis) işidir, port sadece sözleşmedir.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu Application/Services altında bulunur ve DI ile kaydedilir.
+- Api katmanındaki analytics/admin endpoint'leri bu arayüze bağımlıdır, somut sınıfa değil.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Hexagonal mimaride "primary/driving port" deseni: dış dünya (Api) Application katmanına bu arayüz üzerinden girer, somut implementasyonu bilmez. Bu, implementasyonun (ör. bellek-içi'den Postgres'e) değişmesi durumunda Api katmanının hiç etkilenmemesini sağlar.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `ConversationRating Rate(string sessionId, int stars, string? comment = null)` | Belirtilen oturum için derecelendirme kaydeder. |
+| `ConversationRating? GetRating(string sessionId)` | Tek bir oturumun derecelendirmesini döner. |
+| `IReadOnlyList<ConversationRating> GetRecentRatings(int count = 20)` | Son N derecelendirmeyi döner. |
+| `IReadOnlyList<ConversationRating> GetAllRatings()` | Tüm derecelendirmeleri döner. |
+| `Task<object> GetSummaryAsync(CancellationToken ct = default)` | Özet istatistikler (ortalama puan, toplam sayı vb.) döner. |
+| `Task<AnalyticsDashboard> GetDashboardAsync(CancellationToken ct = default)` | Tüm dashboard istatistiklerini döner. |
+| `Task<SessionAnalytics?> GetSessionAnalyticsAsync(string sessionId, CancellationToken ct = default)` | Tek bir oturum için detaylı analitik döner. |
+
+## 7. Bağımlılıklar
+
+`CustomerSupportBot.Domain.Model` (`ConversationRating`, `AnalyticsDashboard`, `SessionAnalytics`).
+
+## Bağlantılar
+
+- Implementasyon: Application/Services/Chat altındaki analytics servisi.

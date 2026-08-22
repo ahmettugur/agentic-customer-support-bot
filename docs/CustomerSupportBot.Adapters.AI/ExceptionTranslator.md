@@ -29,6 +29,10 @@ public static DomainException Translate(Exception ex, string? context = null)
   - `ClientResultException { Status: 429 }` ➔ `ExternalServiceException` (Rate limit mesajıyla).
   - `ClientResultException { Status: 401 or 403 }` ➔ `ExternalServiceException` (Yetkilendirme hatası).
   - `ClientResultException { Status: >= 500 }` ➔ `ExternalServiceException` (Geçici servis arızası).
+  - `ClientResultException { Status: 408 }` ➔ `ExternalServiceException` (İstek zaman aşımı).
+  - `HttpRequestException` ➔ `ExternalServiceException` (Bağlantı kurulamadı).
+  - `TaskCanceledException { InnerException: TimeoutException }` ➔ `ExternalServiceException` (Zaman aşımı).
+  - `OperationCanceledException` ➔ `ExternalServiceException` (İstek iptal edildi).
   - `Grpc.Core.RpcException rpc` ➔ `TranslateGrpc(rpc, context)`.
   - Diğer ➔ `ExternalServiceException`.
 

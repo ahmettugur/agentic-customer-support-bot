@@ -1,27 +1,56 @@
 # IA2ASubjectAuthorizer
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/A2A/IA2ASubjectAuthorizer.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.A2A`
+**Kaynak:** `Ports/Outbound/A2A/IA2ASubjectAuthorizer.cs`
+**Implementasyon:** [`ConfiguredA2ASubjectAuthorizer`](../../../Services/A2A/ConfiguredA2ASubjectAuthorizer.md) (Application katmanında — bu, dış bir sisteme çıkmayan, konfigürasyon-tabanlı bir karar olduğu için istisnai olarak Adapters değil Application'da implemente edilir)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IA2ASubjectAuthorizer`, Application/Ports/Outbound/A2A/IA2ASubjectAuthorizer.cs "Bu partner, bu müşteri adına işlem yapabilir mi?" kararının portu. <summary> A2A token değişiminde sorulan tek soru: <b>partner P, müşteri C adına hareket edebilir mi?</b>  <para> <b>Neden ayrı bir port:</b> bu bir teknik kural değil, <b>iş kuralıdır</b>. "Hangi partner hangi müşteriye erişebilir" sorusunun cevabı işletmeye göre değişir — partnerin kendi tanıttığı müşteriler, bir sözleşme kapsamı, bir bayi hiyerarşisi olabilir. Bu kararı token değişimi mantığının içine gömmek, ileride değiştirilemez hâle getirirdi. </para>  <para> ⚠️ <b>Bu kontrol atlanırsa ne olur:</b> partner token'ı ele geçiren biri, herhangi bir müşteri numarasını isteyerek O müşterinin sipariş geçmişine erişebilir. Yani bu port, A2A kanalındaki <b>tek müşteri-bazlı yetki sınırıdır</b>; tool katmanındaki sahiplik kontrolü ondan sonra gelir ve onun yerini tutmaz (o, "token'daki müşteriye ait mi" sorusunu sorar — token'ın doğru müşteriye ait olduğunu varsayar). </para> </summary> <summary> <paramref name="partnerId"/>'nin <paramref name="customerId"/> adına token alabilmesine izin var mı? Belirsizlik hâlinde <b>false</b> dönmelidir — bu kapı yanlış açıldığında bedeli başka bir müşterinin verisidir. </summary>
+A2A (Agent-to-Agent) token değişiminde sorulan tek soruyu yanıtlar: **partner P, müşteri C
+adına hareket edebilir mi?** `CanActForCustomerAsync(partnerId, customerId, ct)` bir `bool`
+döner; belirsizlik durumunda implementasyon `false` dönmelidir.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Bir partner sistemi (örn. bir mobil uygulama backend'i), kendi adına değil bir müşteri adına
+chat/tool çağrısı yapmak istediğinde A2A token değişimi sırasında çağrılır. Sonuç `false` ise
+token üretilmez, istek reddedilir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IA2ASubjectAuthorizer`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Yalnızca "bu partner + bu müşteri" ikilisinin yetkili olup olmadığına karar
+  vermek.
+- **Üstlenmediği:** Token üretimi/doğrulaması (bkz. [`IJwtAccessTokenProvider`](../Auth/IJwtAccessTokenProvider.md)),
+  tool seviyesinde sahiplik kontrolü (bkz. [`IOrderToolsService`](../IOrderToolsService.md)
+  içindeki `customerId` parametreleri) — bu port yalnızca A2A kanalındaki İLK yetki kapısıdır.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- A2A token değişim akışının neresinde çağrıldığını görmek için bkz.
+  [`../../../../CustomerSupportBot.Api/A2A.md`](../../../../CustomerSupportBot.Api/A2A.md).
+- Gerçek implementasyon `ConfiguredA2ASubjectAuthorizer` — konfigürasyon tabanlı statik bir
+  eşleme kullanır (örn. appsettings'te partner→izinli müşteri listesi), dış bir yetki
+  sunucusuna gitmez.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Bu bir teknik kural değil **iş kuralıdır** — "hangi partner hangi müşteriye erişebilir"
+sorusunun cevabı işletmeye göre değişir (partnerin kendi tanıttığı müşteriler, bir sözleşme
+kapsamı, bir bayi hiyerarşisi olabilir). Bu kararı token değişimi mantığının içine gömmek onu
+ileride değiştirilemez hâle getirirdi; bu yüzden ayrı bir port.
+
+> ⚠️ **Bu kontrol atlanırsa ne olur:** partner token'ı ele geçiren biri, herhangi bir müşteri
+> numarasını isteyerek o müşterinin sipariş geçmişine erişebilir. Bu port A2A kanalındaki
+> **tek müşteri-bazlı yetki sınırıdır**; tool katmanındaki sahiplik kontrolü ondan sonra gelir
+> ve onun yerini TUTMAZ — o yalnızca "token'daki müşteriye ait mi" sorusunu sorar, token'ın
+> doğru müşteriye ait olduğunu zaten varsayar.
+
+## 6. Metotlar
+
+| Metot | Açıklama |
+|---|---|
+| `Task<bool> CanActForCustomerAsync(string partnerId, string customerId, CancellationToken ct = default)` | Partner'ın müşteri adına hareket etme izni var mı? Belirsizlikte `false`. |
+
+## 7. Bağımlılıklar
+
+Port arayüzünün kendisi bağımlılıksızdır (yalnızca `System.Threading.Tasks`). İmplementasyonun
+bağımlılıkları için `ConfiguredA2ASubjectAuthorizer.md`'ye bakın.

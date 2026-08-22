@@ -64,7 +64,7 @@ public async Task<string?> GetContextAsync(
 ## Özellikler/Properties
 
 - `Name` (`string`): Sabit `"ConversationSummary"`.
-- `Order` (`int`): `5` (Müşteri bağlamından sonra, semantik bellekten önce).
+- `Order` (`int`): `5` — tüm provider'lar arasında en düşük `Order`, yani pipeline'daki diğer sağlayıcılardan (`CustomerProfileContextProvider`=6, `SemanticMemoryContextProvider`=7, `ProductRecommendationContextProvider`=8) önce yerleşir.
 
 ## Bağımlılıklar
 

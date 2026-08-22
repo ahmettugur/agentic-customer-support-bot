@@ -1,27 +1,43 @@
 # ITelemetryPort
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/ITelemetryPort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/ITelemetryPort.cs`
+**Tür:** `interface`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`ITelemetryPort`, <summary> Telemetry cost endpoint'lerinin kullandığı primary port. </summary>
+LLM kullanım maliyeti (cost) endpoint'lerinin kullandığı primary port — o ana kadarki token/maliyet birikimini okumak ve sıfırlamak.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Admin panelindeki "maliyet" sayfası, hangi modellerin ne kadar token tükettiğini ve toplam maliyeti göstermek için `GetCostSnapshot`'ı; sayaçları sıfırlamak için `ResetCostSnapshot`'ı çağırır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ITelemetryPort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Birikmiş maliyet verisini okuma/sıfırlama sözleşmesini sunmak.
+- **Üstlenmediği:** Maliyetin nasıl hesaplandığı/biriktirildiği — bu `CostCalculator`/`CostUsageStore` (Adapters.Telemetry) içindedir.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu Adapters.Telemetry katmanındaki `CostUsageStore`'u sarar.
+- Admin panelindeki telemetry/maliyet endpoint'i tüketicisidir.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Application katmanının Adapters.Telemetry'e (somut depoya) değil bu porta bağımlı olması, hexagonal mimarinin "iç katman dış katmana bağımlı olmaz" kuralına uyar — maliyet takibinin altyapısı (bellek içi, DB, harici servis) değişse bile bu port sabit kalır.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `CostUsageSnapshot GetCostSnapshot()` | O ana kadarki toplam kullanım/maliyet özetini döner. |
+| `IReadOnlyCollection<string> GetKnownModels()` | Takip edilen bilinen model adlarını döner. |
+| `void ResetCostSnapshot()` | Sayaçları sıfırlar. |
+
+## 7. Bağımlılıklar
+
+`CustomerSupportBot.Application.Ports.Outbound.Observability.CostUsageSnapshot`.
+
+## Bağlantılar
+
+- [CostUsageStore](../../Adapters.Telemetry/OpenTelemetry/CostUsageStore.md)

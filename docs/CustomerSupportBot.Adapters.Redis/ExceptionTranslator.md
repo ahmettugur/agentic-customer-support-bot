@@ -12,6 +12,21 @@
 
 Application ve Domain katmanlarının StackExchange.Redis altyapısına doğrudan bağımlı olmasını engellemek ve Redis hatalarını merkezi standart bir domain hatası olarak sunmak için kullanılır.
 
+## Sorumlulukları
+
+- **Üstlendiği:** Yalnızca bilinen `StackExchange.Redis` istisna tiplerini sınıflandırıp anlamlı Türkçe mesajlarla `ExternalServiceException`'a sarmak.
+- **Üstlenmediği:** Retry/tekrar deneme mantığı — bu sınıf sadece dönüştürür, hatayı yutmaz veya tekrar denemez; çağıran kod (`RedisDistributedLockAdapter`) `throw` ile yeniden fırlatır.
+
+## Diğer Katman ve Bileşenlerle İlişkileri
+
+- Yalnızca [`RedisDistributedLockAdapter`](Locking/RedisDistributedLockAdapter.md) tarafından çağrılır — `RedisMessageBusAdapter` hataları kendi içinde loglayıp yutar, domain istisnasına çevirmez (pub/sub'da tek bir yayın başarısız olursa turu durdurmaya değmez).
+- `CustomerSupportBot.Adapters.AI`, `Adapters.Agents`, `Adapters.Persistence` projelerinin her birinde aynı isimde ve aynı sorumlulukta kendi `internal ExceptionTranslator`'ı vardır — bu bilinçli bir tekrardır, bkz. aşağıdaki tasarım notu.
+
+## Kullanılma Nedeni ve Tasarım Yaklaşımı
+
+> 🐞 **Neden her adapter projesinde ayrı bir `ExceptionTranslator` var, paylaşılan bir tane değil:**
+> Her adapter kendi altyapı kütüphanesine özgü istisna tiplerini (`RedisException`, Qdrant HTTP hataları, Npgsql hataları vb.) bilir. Paylaşılan tek bir çevirici, ya tüm adapter projelerine bağımlı olurdu (bağımlılık yönü bozulur) ya da tip kontrolünü `is`/reflection ile genelleştirmek zorunda kalırdı. Küçük, projeye özel, `internal` bir sınıf olarak tutmak hem hexagonal sınırları korur hem de her adapter'ın kendi hata sözlüğünü bağımsız evrimleştirmesine izin verir.
+
 ## Metotlar ve İç Çalışma Mantıkları
 
 ### 1. `Translate`

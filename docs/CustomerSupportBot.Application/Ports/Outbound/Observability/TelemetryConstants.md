@@ -1,27 +1,39 @@
 # TelemetryConstants
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Observability/TelemetryConstants.cs`
-- **Tür:** `public static class`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Observability`
+**Kaynak:** `Ports/Outbound/Observability/TelemetryConstants.cs`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`TelemetryConstants`, <summary> OpenTelemetry ActivitySource ve Meter isimleri — tek kaynak noktası. Adapter'lar bu sabitlerden OTel kaynaklarını oluşturur. </summary>
+OpenTelemetry `ActivitySource` ve `Meter` isimlerini tek bir noktada sabitleyen statik sınıf.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+`Adapters.Telemetry` katmanındaki OTel kaynak kaydı (tracing/metrics kurulumu) ve
+`CustomerSupportTelemetry` gibi sınıflar `Activity`/`Meter` oluştururken bu sabitleri kullanır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`TelemetryConstants`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Yalnızca isim sabitlerini tutmak.
+- **Üstlenmediği:** OTel exporter/pipeline kurulumu — bu Adapters.Telemetry'nin işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Telemetry/OpenTelemetry/CustomerSupportTelemetry` ve OTel kurulum extension'ları bu
+sabitleri `new ActivitySource(TelemetryConstants.ActivitySourceName)` gibi kullanır.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Tek doğruluk kaynağı ilkesi: `ActivitySource`/`Meter` adı birden fazla yerde (OTel SDK kurulumu
++ kaynak oluşturma noktaları) aynı string olarak geçmek zorundadır — string'ler farklı
+yazılırsa metrikler/trace'ler sessizce toplanmaz. Sabitler bunu derleme zamanında garanti eder.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Değer | Açıklama |
+|---|---|---|
+| `const string ActivitySourceName` | `"CustomerSupportBot.Api"` | Tracing `ActivitySource` adı. |
+| `const string MeterName` | `"CustomerSupportBot.Api"` | Metrics `Meter` adı. |
+
+## 7. Bağımlılıklar
+
+Yok.

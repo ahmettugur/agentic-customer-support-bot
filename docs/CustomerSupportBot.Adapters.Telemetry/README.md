@@ -8,8 +8,9 @@ Bu klasör, hexagonal mimaride **Driven Adapter (Çıkış Adaptörü)** rolün�
 - [OpenTelemetry/CustomerSupportTelemetry](OpenTelemetry/CustomerSupportTelemetry.md) — Uygulama genelinde paylaşılan `ActivitySource`, `Meter`, counter ve histogram sayaçları (`ai.llm.calls`, `ai.tokens.input`, `ai.cost.usd` vb.).
 - [OpenTelemetry/CostCalculator](OpenTelemetry/CostCalculator.md) — [ICostCalculatorPort](../CustomerSupportBot.Application/Ports/Outbound/Observability/ICostCalculatorPort.md) portunu uygulayan; model bazlı USD/1K token fiyatlandırma motoru.
 - [OpenTelemetry/CostUsageStore](OpenTelemetry/CostUsageStore.md) — [ICostUsageStorePort](../CustomerSupportBot.Application/Ports/Outbound/Observability/ICostUsageStorePort.md) portunu uygulayan; model bazlı bellek içi anlık maliyet, gecikme ve kullanım ambarı.
-- [Options/TelemetryOptions](Options/TelemetryOptions.md) — `TelemetryOptions` strongly-typed yapılandırma modeli.
+- [Options/TelemetryOptions](Options/TelemetryOptions.md) — `TelemetryOptions` strongly-typed yapılandırma modeli (gerçekte kullanılan tek yapılandırma sınıfı).
 - [DependencyInjection/TelemetryAdapterServiceCollectionExtensions](DependencyInjection/TelemetryAdapterServiceCollectionExtensions.md) — `AddTelemetryAdapters` OpenTelemetry ve adaptör DI kayıt uzantısı.
+- [Models/TelemetryAdapterOptions](Models/TelemetryAdapterOptions.md) — ⚠️ **ölü kod**, hiçbir yerde kullanılmıyor; `TelemetryOptions`'ın kullanılmayan öncülü/kalıntısı.
 
 ## Mimari Rolü ve Yetenekleri
 

@@ -1,27 +1,46 @@
 # ChatRequest
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/ChatRequest.cs`
-- **Tür:** `public  record`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/ChatRequest.cs`
+**Tür:** `record`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`ChatRequest`, Ports/Driving/ChatRequest.cs IChatPort driving port'unun use case input DTO'su. <summary> Kullanıcının gönderdiği chat isteği — use case boundary input. </summary> <param name="CustomerId"> Login'li müşterinin doğrulanmış kimliği — API katmanı bunu JWT claim'inden doldurur, asla client body'sinden GÜVENİLİR olarak alınmaz (endpoint bu alanı isteğin geldiği body'den değil, kimlik doğrulanmış HttpContext.User'dan set eder). </param>
+`IChatPort`'un giriş DTO'su — kullanıcının bir chat turunda gönderdiği sorguyu, hangi oturuma ait olduğunu ve kimliği doğrulanmış müşteri kimliğini taşır.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Hem `IChatPort.HandleAsync` (non-streaming) hem `IChatPort.HandleStreamAsync` (SSE streaming) bu tipi parametre olarak alır. Api katmanındaki chat endpoint'i, HTTP request body'sinden `Query`/`SessionId`'yi, JWT claim'inden ise `CustomerId`'yi doldurup bu kaydı oluşturur.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ChatRequest`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Bir chat turunun üç girdisini (`Query`, `SessionId`, `CustomerId`) taşımak.
+- **Üstlenmediği:** Kimlik doğrulama — `CustomerId`'nin gerçekten doğru olduğunu garanti etmek bu tipin işi değil, onu dolduran Api katmanının sorumluluğudur.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- `IChatPort`'un implementasyonu olan `ChatPortService` (Application/Services/Chat) bu tipi tüketir.
+- Api katmanındaki chat endpoint'i bu tipi oluşturur.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`CustomerId` alanının varlığı ve XML yorumundaki uyarı önemlidir: **güvenlik açısından kritik bir tasarım kararını belgeler.**
+
+> 🔒 **Güvenlik notu:** `CustomerId`, LLM'in tool çağrısı parametresi olarak serbest metinden çıkardığı bir değer DEĞİLDİR — Api katmanı bu alanı, kimlik doğrulanmış `HttpContext.User`'ın JWT claim'inden doldurur, asla client'ın gönderdiği body'den güvenilir olarak almaz. Bu, "bir müşteri başka birinin müşteri numarasını söyleyip onun adına işlem yaptırabilir mi?" sorusuna karşı alınan önlemdir.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Tip | Açıklama |
+|---|---|---|
+| `Query` | `string` | Kullanıcının yazdığı/söylediği metin. |
+| `SessionId` | `string?` | Mevcut oturum kimliği; `null` ise yeni oturum açılır. |
+| `CustomerId` | `string?` | Login'li müşterinin JWT'den doğrulanmış kimliği. |
+
+## 7. Bağımlılıklar
+
+Yok — saf bir DTO.
+
+## Bağlantılar
+
+- [IChatPort](IChatPort.md) — bu DTO'yu kullanan port.
+- [ChatResponse](ChatResponse.md) — aynı use case'in çıktı DTO'su.

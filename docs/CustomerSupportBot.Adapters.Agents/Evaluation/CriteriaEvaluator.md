@@ -20,7 +20,7 @@
 
 - **Üstlendiği:**
   - Kriter türlerine göre `Checks` tablosundaki `EvalCheck` fabrikalarını çalıştırmak.
-  - `Evaluate` ve `EvaluateAll` metotları ile senaryo çıktılarını değerlendirip `CriterionResult` listesi üretmek.
+  - `Evaluate` metodu ile TEK bir kriteri değerlendirip `CriterionResult` üretmek — `EvaluationRunner.RunSingleAsync` senaryodaki her kriter için bu metodu kendi `foreach` döngüsünde ayrı ayrı çağırır (bu sınıfta çoklu-kriter değerlendiren bir "EvaluateAll" metodu YOKTUR).
   - ReDoS saldırılarına karşı güvenli regex (`RegexTimeout = 500ms`) denetimi sağlamak.
 
 ## Metotlar ve İç Çalışma Mantıkları
@@ -32,16 +32,7 @@ public static CriterionResult Evaluate(CriterionSpec spec, EvalItem item, Scenar
 - **Ne işe yarar?:** Tek bir başarı kriterini (`CriterionSpec`) çalıştırır.
 - **İç Mantığı:** `Checks` sözlüğünde `spec.Type` anahtarını arar. Bulunursa `factory(spec, ctx)(item)` çağrılarak `EvalCheckResult` üretilir ve `CriterionResult`'a dönüştürülür. Bilinmeyen türlerde veya `manual_review`'da `Skipped = "manual_review_needed"` olarak işaretlenir.
 
-### 2. `EvaluateAll`
-```csharp
-public static List<CriterionResult> EvaluateAll(
-    List<CriterionSpec> criteria,
-    EvalItem item,
-    ScenarioRunContext ctx)
-```
-- **Ne işe yarar?:** Senaryodaki tüm kriterleri sırayla değerlendirip liste olarak döner.
-
-### 3. Desteklenen Kriter Türleri (`Checks` Sözlüğü)
+### 2. Desteklenen Kriter Türleri (`Checks` Sözlüğü)
 
 | Kriter Tipi | Değerlendirme Mantığı |
 |---|---|
@@ -56,6 +47,8 @@ public static List<CriterionResult> EvaluateAll(
 | `complaint_id_returned` | Yanıtta en az 4 haneli şikayet numarasının bulunması. |
 | `order_id_returned` | Yanıtta en az 4 haneli sipariş numarasının bulunması. |
 | `customer_id_used` | `SpecialistReasoning` içinde `customer_id` parametresinin araca iletildiğinin doğrulanması. |
+| `order_status_contains` | Yanıt metninin "durum", "teslim", "işleniyor" veya "kargo" kelimelerinden birini içermesi. |
+| `manual_review` | Otomatik değerlendirilemez; her zaman `Passed=false` + `Skipped="manual_review_needed"` ile işaretlenir (insan incelemesi gerekir). |
 
 ## Bağımlılıklar
 

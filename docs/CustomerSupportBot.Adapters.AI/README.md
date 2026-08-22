@@ -13,8 +13,8 @@ Bu klasör, hexagonal mimaride **Driven Adapter (Çıkış Adaptörü)** rolün�
   - [RealtimeFunctionTools](Realtime/RealtimeFunctionTools.md) — Realtime ses oturumu için tanımlanan araç şemaları.
 - [Qdrant/](Qdrant/QdrantVectorMemoryAdapter.md) — [IVectorMemoryPort](../CustomerSupportBot.Application/Ports/Outbound/AI/IVectorMemoryPort.md) uygulayıcısı; Qdrant gRPC istemcisiyle koleksiyon yönetimi, payload filtreleme ve cosine similarity vektör araması.
 - [OpenAi/](OpenAi/OpenAiEmbeddingAdapter.md) — [IEmbeddingPort](../CustomerSupportBot.Application/Ports/Outbound/AI/IEmbeddingPort.md) uygulayıcısı; metinleri vektörleştiren adaptör.
-- [Options/](Options/AiProviderOptions.md) — `AiOptions`, `OpenAiOptions`, `AzureOpenAiOptions`, `OllamaOptions` ve `QdrantOptions` yapılandırma modelleri.
-- [DependencyInjection/](DependencyInjection/AiAdapterServiceCollectionExtensions.md) — `AddAiAdapter` DI kayıt uzantısı.
+- [Options/](Options/AiProviderOptions.md) — `AiProvider`, `AiOptions`, `RealtimeOptions`, `OpenAiOptions`, `AzureOpenAiOptions` yapılandırma modelleri.
+- [DependencyInjection/](DependencyInjection/AiAdapterServiceCollectionExtensions.md) — `AddAiAdapters` DI kayıt uzantısı.
 - [ExceptionTranslator](ExceptionTranslator.md) — OpenAI, Azure ve Qdrant altyapı istisnalarını DomainException'a çevirici.
 
 ## Mimari Rolü ve Yetenekleri

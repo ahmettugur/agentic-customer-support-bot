@@ -1,40 +1,47 @@
-# IHitlEventSubscription
+# IHitlEventPort ve IHitlEventSubscription
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/IHitlEventPort.cs`
-- **Tür:** `public  interface : IDisposable;
+**Dosya:** `Ports/Inbound/IHitlEventPort.cs`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-/// <summary>
-/// Chat streaming adapter'ının session bazlı approval/escalation event'lerini
-/// dinlemek için kullandığı primary port.
-/// </summary>
-public interface IHitlEventPort`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+## 1. Ne işe yarar?
 
-## Ne işe yarar?
+Chat streaming adaptörünün (SSE/WebSocket) bir oturuma özel HITL (onay/eskalasyon) ve genel chat event'lerini dinlemek için kullandığı primary port.
 
-`IHitlEventSubscription`, <summary> Chat streaming adapter'ının session bazlı approval/escalation event'lerini dinlemek için kullandığı primary port. </summary>
+## 2. Hangi amaçla kullanılır?
 
-## Hangi amaçla kullanılır?
+`/chat/stream` gibi SSE bağlantıları ve kalıcı `/chat/events/{sessionId}` bağlantısı, bu porttan bir abonelik alıp gelen event'leri (`Func<string, object, Task> onEvent` callback'i ile) doğrudan istemciye iletir.
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+## 3. Sorumlulukları
 
-## Sorumlulukları
+- **Üstlendiği:** Oturum bazlı event aboneliği açmak ve `IDisposable` ile temiz kapatılmasını sağlamak.
+- **Üstlenmediği:** Event'lerin nasıl üretildiği (`IApprovalPort`, `IEscalationPort` gibi diğer portların event'lerinden türetilir) — bu port sadece dinleme arayüzüdür.
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IHitlEventSubscription`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-## Constructor ve Başlatma Mantığı
+- Implementasyonu `HitlEventPortService` (Application/Services/Escalation).
+- Api katmanındaki chat SSE endpoint'leri tüketicisidir.
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-## Bağımlılıklar
+İki ayrı `Subscribe` metodu vardır çünkü iki farklı bağlantı türü farklı event kümelerine ilgi duyar: `Subscribe` geçici `/chat/stream` bağlantısı için (approval/escalation event'leri), `SubscribeToChatEvents` ise kalıcı `/chat/events/{sessionId}` bağlantısı için (daha geniş bir event kümesi, ör. `approval_resolved`). `IHitlEventSubscription : IDisposable` deseni, abonelik sonlandığında (bağlantı kapandığında) event handler'ın registry'den düzgün çıkarılmasını garanti eder — sızıntı önler.
 
-- `CustomerSupportBot.Domain`
-- `IDisposable;
+## 6. Metotlar / Üyeler
 
-/// <summary>
-/// Chat streaming adapter'ının session bazlı approval/escalation event'lerini
-/// dinlemek için kullandığı primary port.
-/// </summary>
-public interface IHitlEventPort`
+### `IHitlEventSubscription : IDisposable`
+Markır arayüz — bir aboneliği temsil eder, `Dispose()` çağrıldığında abonelik iptal edilir.
+
+### `IHitlEventPort`
+
+| Metot | Açıklama |
+|---|---|
+| `IHitlEventSubscription Subscribe(string sessionId, Func<string, object, Task> onEvent)` | Geçici stream bağlantısı için approval/escalation event'lerine abone olur. |
+| `IHitlEventSubscription SubscribeToChatEvents(string sessionId, Func<string, object, Task> onEvent)` | Kalıcı chat-events bağlantısı için daha geniş event kümesine abone olur. |
+
+## 7. Bağımlılıklar
+
+Yok (arayüz düzeyinde) — implementasyon `IApprovalPort`/`IEscalationPort` event'lerine bağımlıdır.
+
+## Bağlantılar
+
+- [IApprovalPort](IApprovalPort.md), [IEscalationPort](IEscalationPort.md) — event kaynakları.
+- [IChatSessionPort](IChatSessionPort.md) — `SubscribeToAdminAsync`/`SubscribeToUserAsync` ile benzer amaçlı, farklı bir kanal.

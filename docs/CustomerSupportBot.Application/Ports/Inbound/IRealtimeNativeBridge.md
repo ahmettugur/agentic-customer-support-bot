@@ -1,27 +1,45 @@
 # IRealtimeNativeBridge
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/IRealtimeNativeBridge.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/IRealtimeNativeBridge.cs`
+**Tür:** `interface`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+## 1. Ne işe yarar?
 
-`IRealtimeNativeBridge`, <summary> Native mod — gpt-realtime-2 kendisi konuşur, okuma-only tool'ları çağırır. </summary> <param name="authenticatedCustomerId"> Login'li müşterinin JWT claim'inden gelen kimliği. Oturuma bir kez bağlanır ve sipariş tool'ları bunu kullanır — bu değer olmadan her sipariş sorgusu sahiplik kontrolüne takılıp "bulunamadı" döner. </param>
+Sesli sohbetin "native mod"u için primary port: `gpt-realtime` gibi bir model doğrudan kendisi konuşur (STT/TTS ayrı adım değildir) ve yalnızca okuma-amaçlı (read-only) tool'ları çağırabilir.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi amaçla kullanılır?
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+WebSocket üzerinden gelen bir sesli oturumu, köprü moduna göre daha düşük gecikmeli ama daha kısıtlı (yalnızca okuma tool'ları) bir deneyimle işlemek için kullanılır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IRealtimeNativeBridge`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Modelin kendi native ses üretimini ve sınırlı tool-çağırma yeteneğini yönetmek.
+- **Üstlenmediği:** Yazma/yan-etkili işlemler (sipariş verme, iade vb.) — native modda model yalnızca okuma tool'larına erişir; onay gerektiren aksiyonlar bu modda tetiklenmez.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu `OpenAiRealtimeClientAdapter` (Adapters.AI/Realtime) üzerinden çalışır.
+- `IBrowserChannel` (Outbound port) üzerinden tarayıcıyla WebSocket iletişimi kurar.
 
-## Bağımlılıklar
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`authenticatedCustomerId` parametresi burada da aynı güvenlik gerekçesiyle zorunludur (bkz. [IRealtimeBridge](IRealtimeBridge.md)). Native modun bilinen bir kısıtı vardır:
+
+> 🐞 **Bilinen kısıt (finding-12, bilinçli olarak ertelendi):** `OpenAiRealtimeClientAdapter.ConfigureNativeSessionAsync` içinde `create_response=true` ayarı, modelin `IInputGuard.Inspect` tamamlanmadan ses/tool çıktısı üretmeye başlamasına izin verebilir. Doğru çözüm `create_response=false` + manuel `response.create` tetiklemesi gerektirir ama bu native ses modunun gecikme karakteristiğini değiştireceğinden bilinçli olarak kullanıcı kararına bırakılmıştır, henüz düzeltilmedi.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `Task RunAsync(IBrowserChannel channel, string sessionId, string? authenticatedCustomerId, CancellationToken ct)` | Native modda ses oturumunu, bağlantı kapanana kadar işler. |
+
+## 7. Bağımlılıklar
+
+`CustomerSupportBot.Application.Ports.Outbound.IBrowserChannel`.
+
+## Bağlantılar
+
+- [IRealtimeBridge](IRealtimeBridge.md) — köprü mod karşılığı.
+- [OpenAiRealtimeClientAdapter](../../Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md)
+- [IInputGuard](IInputGuard.md)

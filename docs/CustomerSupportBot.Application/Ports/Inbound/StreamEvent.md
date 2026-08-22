@@ -1,49 +1,72 @@
-# StreamEvent
+# StreamEvent Ailesi
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Inbound/StreamEvent.cs`
-- **Tür:** `public  record`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
+**Dosya:** `Ports/Inbound/StreamEvent.cs`
+**Namespace:** `CustomerSupportBot.Application.Ports.Inbound`
 
-## Ne işe yarar?
+Bu dosyada `IChatPort.HandleStreamAsync`'in kullandığı streaming event modeli (`StreamEvent`), üç tipli payload kaydı (`SessionEventPayload`, `TextDeltaPayload`, `ResponseCompletePayload`) ve tüm event tip adlarının toplandığı `StreamEventTypes` sabit sınıfı birlikte tanımlıdır.
 
-`StreamEvent`, Ports/Driving/StreamEvent.cs IChatPort streaming use case output DTO'su ve event tipleri. <summary> Streaming event modeli — use case boundary output. Type: event adı, Data: JSON olarak serileştirilebilir veri. </summary> <summary> Session event payload — SessionId contract'ını typed tutar. ChatPortService ve ChatEndpoints bu tipi kullanarak sessiz failure riskini ortadan kaldırır. </summary> <summary> <see cref="StreamEventTypes.ResponseDelta"/> ve <see cref="StreamEventTypes.ReasoningDelta"/> event'lerinin payload'ı. Önceden anonim <c>new { text = ... }</c> nesneleri kullanılıyordu ve aggregator'lar (ChatPortService, RealtimeBridgeService, WorkflowResponseExtractor) bunu JSON round-trip veya reflection ile okumak zorunda kalıyordu — rename'de sessizce boş string dönerlerdi. Bu record aynı JSON şekli (camelCase → "text") üretir, tipli okumaya izin verir. </summary> <summary> <see cref="StreamEventTypes.ResponseComplete"/> payload'ı — turun <b>kanonik</b> yanıt metni.
+## 1. Ne işe yarar?
 
-## Hangi amaçla kullanılır?
+SSE (Server-Sent Events) ile istemciye akan bir chat turunun her adımını (reasoning başladı, delta geldi, tool onay bekliyor, insan devraldı vb.) tek tip bir zarf (`StreamEvent`) içinde taşır.
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+## 2. Hangi amaçla kullanılır?
 
-## Sorumlulukları
+`IChatPort.HandleStreamAsync`, `ChatPortService`, `WorkflowResponseExtractor`, `RealtimeBridgeService` gibi bileşenler bu event'leri üretir; Api katmanındaki SSE endpoint'i bunları JSON'a çevirip istemciye yollar; frontend (`chat-bridge.js`) `Type` alanına göre event'i işler.
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`StreamEvent`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+## 3. Sorumlulukları
 
-## Constructor ve Başlatma Mantığı
+- **Üstlendiği:** Tüm streaming event tiplerini tek bir zarfta (`Type` + `Data`) standardize etmek; bilinen event tip adlarını merkezi bir yerde (`StreamEventTypes`) sabitlemek.
+- **Üstlenmediği:** Event'lerin ne zaman/nasıl üretileceği — bu iş event'i üreten servislerdedir.
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+## 4. Diğer katman/bileşenlerle ilişkileri
 
-## Metotlar ve İç Çalışma Mantıkları
+- `ChatPortService`, `WorkflowResponseExtractor`, `RealtimeBridgeService` (Application/Adapters.Agents) event üretir.
+- Api katmanındaki SSE endpoint'i tüketip JSON'a serileştirir.
+- `chat-bridge.js` (Web katmanı) `Type` alanına göre dallanır.
 
-### `SessionEventPayload`
-```csharp
-public sealed record SessionEventPayload(string SessionId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
-### `TextDeltaPayload`
-```csharp
-public sealed record TextDeltaPayload(string Text)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`TextDeltaPayload` ve `ResponseCompletePayload`'ın tipli kayıtlar olarak var olması, geçmişte gerçek bir hatayı kapatmak için eklenmiştir:
 
-### `ResponseCompletePayload`
-```csharp
-public sealed record ResponseCompletePayload(
-    string Text,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+> 🐞 **Geçmiş hata:** Bu payload'lar eskiden anonim `new { text = ... }` nesneleriydi. `ResponseCompletePayload` için sunucu tarafında **hiçbir tipli tüketicisi yoktu** — okunamadığı için kimse okumaya çalışmamıştı. Sonuç: `ChatPortService` konuşma geçmişini, `RealtimeBridgeService` ise TTS'e okutulacak metni, event'i okumak yerine delta'ları birleştirerek üretiyordu. Ajan adı sızıntısı olan bir turda ekranda temiz metin görünürken **veritabanına ham metin yazılıyor** ve **sesli kanalda müşteri "OrderAgent size yardımcı olacak" gibi bir cümleyi duyuyordu** — yani `RewriteRoutingMessageAsync` savunması yalnızca yazılı sohbet ekranı için çalışıyor, kalıcılığı ve sesi baypas ediyordu. Artık tüketiciler bu metni kanonik kaynak olarak kullanır; event hiç gelmezse (hata/iptal) delta birleşimine geri düşülür.
 
-## Bağımlılıklar
+## 6. Tipler ve Üyeler
 
-- `CustomerSupportBot.Domain`
+### `StreamEvent(string Type, object? Data)`
+Ana zarf — `Type` event adı (`StreamEventTypes` sabitlerinden biri), `Data` JSON'a serileştirilebilir herhangi bir nesne.
+
+### `SessionEventPayload(string SessionId)`
+`"session"` event'inin payload'ı — `SessionId` alanının adının sabit/typed olmasını garanti eder (rename'de sessiz hata riskini önler).
+
+### `TextDeltaPayload(string Text)`
+`response_delta`/`reasoning_delta` event'lerinin payload'ı.
+
+### `ResponseCompletePayload(string Text, string? TerminationReason, bool? Revised, bool? Decomposed, int? SubTaskCount)`
+`response_complete` event'inin payload'ı — turun **kanonik** (delta'lardan farklı, temizlenmiş) nihai metnini taşır. `[JsonIgnore(WhenWritingNull)]` ile null alanlar JSON çıktısından düşürülür (gereksiz gürültü olmasın diye).
+
+### `StreamEventTypes` — Bilinen Event Tipleri
+
+| Sabit | Değer | Ne zaman yayınlanır |
+|---|---|---|
+| `Session` | `"session"` | Oturum kimliği belirlendiğinde. |
+| `ReasoningStart`/`ReasoningDelta`/`ReasoningComplete` | — | Reasoning aşamasının başlangıcı/artımı/bitişi. |
+| `Agent` | `"agent"` | Hangi uzman ajanın devrede olduğu bildirilir. |
+| `ResponseStart`/`ResponseDelta`/`ResponseComplete` | — | Yanıt üretiminin başlangıcı/artımı/bitişi. |
+| `Error`/`Done` | — | Hata/turun bittiği sinyali. |
+| `ApprovalRequired` | `"approval_required"` | Bir tool çağrısı admin onayı bekliyor; payload `ApprovalRequest`. |
+| `ApprovalResolved` | `"approval_resolved"` | Onay kararı verildi; payload `{ id, status, reason? }`. |
+| `EscalationCreated` | `"escalation_created"` | Yeni eskalasyon kaydı oluştu; payload `EscalationRequest`. |
+| `HumanJoined`/`HumanMessage`/`HumanLeft` | — | Canlı devralma (takeover) yaşam döngüsü. |
+| `HandoffPending`/`HandoffCleared` | — | Kullanıcıya "temsilci bağlanıyor" bildirimi ve iptali. |
+| `BridgeMessage` | `"bridge_message"` | Admin SSE — bridge üzerinden user mesajı admin paneline iletilir. |
+| `BotTyping` | `"bot_typing"` | Bot arka planda otomatik yanıt hazırlıyor (ör. admin replan sonrası); payload `{ on: bool }`. |
+| `SentimentUpdate`/`SentimentAlert` | — | Tur bazlı duygu güncellemesi / kritik eşik altına düşme. |
+| `UiHint` | `"ui_hint"` | Tool çıktısına bağlı frontend UI bileşeni sinyali (ör. `kind="category_picker"`). |
+
+## 7. Bağımlılıklar
+
+`System.Text.Json.Serialization` (`JsonIgnore`).
+
+## Bağlantılar
+
+- [IChatPort](IChatPort.md), [IHitlEventPort](IHitlEventPort.md)

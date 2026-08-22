@@ -1,41 +1,65 @@
 # A2ASubjectIdentity
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/A2A/A2ASubjectIdentity.cs`
-- **Tür:** `public static class`
-- **Namespace:** `CustomerSupportBot.Application.Services.A2A`
+**Dosya:** `Services/A2A/A2ASubjectIdentity.cs`
+**Tür:** `public static class` (saf, durumsuz yardımcı sınıf)
+**Namespace:** `CustomerSupportBot.Application.Services.A2A`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`A2ASubjectIdentity`, Application/Services/A2A/A2ASubjectIdentity.cs Özne token'ının kimlik biçimi — TEK tanım yeri. <summary> Değişimle üretilen özne token'ının kimlik (<c>sub</c>) biçimini kuran ve çözen tek yer.  <para> <b>Neden tek yerde:</b> bu biçim iki yerde kullanılıyor — token üretilirken (<see cref="A2ATokenExchangeService"/>) ve rate limit bölümlemesinde partner çıkarılırken. İki yerde ayrı ayrı elle yazılsaydı, biri değiştiğinde rate limit sessizce yanlış anahtara bölümler ve <b>partner başına sınır fiilen ortadan kalkardı</b> — hata görünür bir arıza değil, sessizce kaybolan bir koruma olurdu. </para> </summary> <summary>Özne token'ının kimliği: <c>a2a:{partnerId}:{customerId}</c>.</summary> <summary> Kimlikten partner'ı çıkarır. Biçim beklenenden farklıysa <c>null</c> döner — çağıran bunu "bilinmeyen partner" olarak ele almalı, tahmin etmemelidir. </summary>
+A2A (Agent-to-Agent) kanalında üretilen **özne token'ının** (`sub` claim) kimlik biçimini
+kuran (`BuildId`) ve çözen (`TryGetPartnerId`) **tek yer**. Biçim sabit: `a2a:{partnerId}:{customerId}`.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Bu biçim iki farklı yerde tüketilir:
 
-## Sorumlulukları
+1. **Token üretimi** — [`A2ATokenExchangeService`](A2ATokenExchangeService.md), bir partner
+   belirli bir müşteri adına hareket etme yetkisi aldığında `BuildId` ile bu kimliği üretip
+   JWT'nin `sub` claim'ine yazar.
+2. **Rate limit bölümlemesi** — partner başına istek sınırlaması uygulanırken, gelen token'ın
+   `sub` alanından `TryGetPartnerId` ile partner kimliği geri çıkarılır ve rate limiter bu
+   partnere özel bir "bucket" kullanır.
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`A2ASubjectIdentity`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+## 3. Sorumlulukları
 
-## Constructor ve Başlatma Mantığı
+- **Üstlendiği:** Biçimi kurmak/çözmek — sadece string birleştirme/ayrıştırma.
+- **Üstlenmediği:** Yetkilendirme kararı vermek (bu [`ConfiguredA2ASubjectAuthorizer`](ConfiguredA2ASubjectAuthorizer.md)'da),
+  token imzalamak/doğrulamak (bu `IJwtAccessTokenProvider`'da).
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-## Metotlar ve İç Çalışma Mantıkları
+- [`A2ATokenExchangeService`](A2ATokenExchangeService.md) tarafından token üretilirken çağrılır.
+- Partner bazlı rate-limit partition key'i türetilirken (Api katmanında, A2A endpoint'lerinin
+  rate limiter yapılandırmasında) çağrılır.
 
-### `BuildId`
-```csharp
-public static string BuildId(string partnerId, string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `TryGetPartnerId`
-```csharp
-public static string? TryGetPartnerId(string? subjectId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+> 🐞 **Neden tek yerde toplandı:** Bu biçim ("a2a:partnerId:customerId") iki bağımsız yerde
+> kullanılıyor. Biri token *üretirken*, diğeri rate limiter partner'ı token'dan *geri çıkarırken*.
+> İki taraf ayrı ayrı elle string birleştirseydi/ayrıştırsaydı, biri (örn. ayraç karakteri veya
+> alan sırası) değişince diğeri fark etmeden bozulurdu — rate limiter partner'ı yanlış (veya hiç)
+> çıkaramaz, tüm partnerler tek bir "bilinmeyen" anahtarına düşer ve **partner başına sınır
+> sessizce ortadan kalkar**. Bu, görünür bir hata (exception, 500) değil, sessizce kaybolan bir
+> güvenlik kontrolü olurdu — bu yüzden biçim TEK sınıfta, iki taraf da aynı sınıfı çağırıyor.
 
-## Bağımlılıklar
+`TryGetPartnerId`, biçim beklenenden farklıysa (`null`/boş girdi, `"a2a:"` prefix'i yok, parça
+sayısı 3'ten az) **exception fırlatmak yerine `null` döner** — çağıran taraf bunu "bilinmeyen
+partner" olarak ele almalı, asla tahmin etmemelidir (örn. ilk parçayı partner sanmak gibi).
 
-- `CustomerSupportBot.Domain`
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `BuildId(string partnerId, string customerId): string` | `"a2a:{partnerId}:{customerId}"` biçiminde kimlik üretir. |
+| `TryGetPartnerId(string? subjectId): string?` | Kimlikten partner'ı çıkarır; biçim/prefix uymuyorsa veya partner alanı boşsa `null` döner. |
+
+Sabitler: `Prefix = "a2a"`, `Separator = ':'` — biçim değişecekse tek değişiklik noktası buradadır.
+
+## 7. Bağımlılıklar
+
+Yok — saf, durumsuz statik yardımcı sınıf. Hiçbir servis inject etmez/edilmez.
+
+## Bağlantılar
+
+- [A2ATokenExchangeService.md](A2ATokenExchangeService.md) — bu kimliği üreten taraf
+- [ConfiguredA2ASubjectAuthorizer.md](ConfiguredA2ASubjectAuthorizer.md) — yetki kararını veren taraf

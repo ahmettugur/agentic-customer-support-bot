@@ -20,6 +20,19 @@
   - `AcquireAsync` ile kilidi zorunlu almak (zaman aşımı veya Redis hatasında [ExceptionTranslator](../ExceptionTranslator.md) ile hata fırlatmak).
   - `IAsyncDisposable` sarmalayıcısı (`LockHandle`) ile kilit serbest bırakma mekanizması sunmak.
 
+## Diğer Katman ve Bileşenlerle İlişkileri
+
+- [`IAppDistributedLock`](../../CustomerSupportBot.Application/Ports/Outbound/Locking/IAppDistributedLock.md) portunu uygular; Application katmanındaki tüketiciler (ör. session güncelleme, onay karar akışı) somut Redis implementasyonunu bilmez, sadece bu portu enjekte eder.
+- Hata durumunda [`ExceptionTranslator`](../ExceptionTranslator.md)'a delege eder.
+- `IConnectionMultiplexer` singleton'ını [`RedisAdapterServiceCollectionExtensions`](../DependencyInjection/RedisAdapterServiceCollectionExtensions.md) tarafından DI'a kaydedilen örnekten alır.
+
+## Kullanılma Nedeni ve Tasarım Yaklaşımı
+
+RedLock algoritması, tek bir Redis düğümünün geçici olarak kilitlenip sonra çökmesi durumunda bile kilidin **kendiliğinden süresi dolarak** (lease) serbest kalmasını garanti eder — bu, uygulamanın çökmesi/restart olması halinde kalıcı kilitlenmeyi (deadlock) önler. `TryAcquireAsync`/`AcquireAsync` ayrımı bilinçlidir: bazı çağıranlar (ör. "zaten biri işliyorsa sessizce vazgeç") `null` dönüşünü bekler, bazıları ise ("kilit şart, yoksa hata ver") kesin başarı ister — tek bir metotla iki farklı semantiği zorlamak yerine iki ayrı metot sunulmuştur.
+
+> 🐞 **Dikkat — `RedisOptions` içindeki `DefaultLockTimeoutSeconds`/`LockExpirySeconds` bu sınıfta KULLANILMIYOR:**
+> `RedisOptions.cs` dosyasında bu iki alan tanımlı olsa da, bu adapter `DefaultTimeout` değerini kodda sabit `TimeSpan.FromSeconds(5)` olarak tutar ve lease süresini `Medallion.Threading.Redis.RedisDistributedLock`'ın kendi varsayılanına bırakır — `RedisOptions`'taki değerler hiçbir yerden okunmaz (bkz. [RedisOptions.md](../Options/RedisOptions.md)). appsettings.json'da bu alanları değiştirmek şu an davranışı etkilemez; bu, henüz bağlanmamış "ölü" konfigürasyondur.
+
 ## Constructor ve Başlatma Mantığı
 
 ```csharp
