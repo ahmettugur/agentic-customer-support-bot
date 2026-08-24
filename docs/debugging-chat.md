@@ -30,7 +30,7 @@ Bu doküman bir kullanıcı mesajının baştan sona nasıl işlendiğini **kod 
        │
        ▼
 [ReasoningService.AnalyzeAsync]
-  • IdExtractor.Extract → ExtractedIds
+  • EntityVerifier.Verify → VerifiedEntities (yalnız AuthenticatedCustomerId)
   • Prompt build (system + history + hint)
   • IReasoningChatClient.StreamAsync → JSON parse
   • ReasoningResultParser → ReasoningResult
@@ -102,7 +102,6 @@ public async Task HandleStreamAsync(string sessionId, string message, ...)
 ```
 
 **İzlenecek değişkenler:**
-- `session.State.CollectedInfo` — `customer_id`, `order_id` çıkarıldı mı?
 - `session.State.CurrentIntent` — keyword tablosu intent tespit etti mi?
 - `session.State.ConsecutiveNegativeTurns` — auto-escalation eşiğinde mi?
 
@@ -113,8 +112,8 @@ public async Task HandleStreamAsync(string sessionId, string message, ...)
 ```csharp
 public async Task<ReasoningResult> AnalyzeAsync(...)
 {
-    var ids = IdExtractor.Extract(userQuery);    // ← BP — regex extraction
-    var hint = IdExtractor.BuildHintMessage(ids);
+    var verified = _entityVerifier.Verify(userQuery, session, history);    // ← BP — yalnız AuthenticatedCustomerId
+    var hint = EntityVerifier.BuildPromptBlock(verified);
 
     var prompt = _messageBuilder.Build(userQuery, history, hint);    // ← BP
 
@@ -297,10 +296,9 @@ await _sse.WriteAsync("done", new { sessionId }, ct);
 **Belirti:** Kullanıcı 1 verdi ama bot hala "sipariş numaranız nedir?" diyor.
 
 **İzlenecek yol:**
-1. `SessionStateExtractor.ExtractAndApply` → `session.State.CollectedInfo` doluyor mu?
-2. `IdExtractor.Extract` → 1 yakalıyor mu? (regex match)
-3. `ReasoningResult.RequiredInfo` — gereksiz tekrar mı? (SanityIssues'da `redundant_required_info` arar)
-4. PreToolCheck → `CollectedParams`'a ekleniyor mu?
+1. Reasoning trace'te specialist'e giden tool çağrısının parametrelerine bak — LLM order_id'yi mesajdan doğru okuyup geçirmiş mi?
+2. `ReasoningResult.RequiredInfo` — gereksiz tekrar mı? (SanityIssues'da `redundant_required_info` arar)
+3. PreToolCheck → `CollectedParams`'a ekleniyor mu?
 
 **Yaygın neden:** `Prompt/services/reasoning-system.md`'de session.state nasıl okunacak açıklamasının eksikliği.
 

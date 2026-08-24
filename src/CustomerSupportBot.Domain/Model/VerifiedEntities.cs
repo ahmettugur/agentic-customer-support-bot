@@ -1,15 +1,15 @@
 // Models/VerifiedEntities.cs
-// Entity resolution / ReAct-lite.
-// IdExtractor sadece regex formatını doğrular ("1030" mi?).
-// EntityVerifier query + history + authenticated session kaynaklarını birleştirir; sipariş ve
-// şikayetin gerçekliği/sahipliği specialist tool'larda doğrulanır. Amaç, kullanıcıdan zaten
-// sağladığı kimliği tekrar istemeden factual veriyi yalnız yetkili tool sonucundan üretmektir.
+// Entity resolution.
+// EntityVerifier, session.State.AuthenticatedCustomerId'yi (JWT'den) VerifiedEntities.CustomerId
+// olarak taşır. Sipariş/şikayet ID'si artık burada üretilmez (bkz. IdExtractor'ın kaldırılması) —
+// order_id/complaint_id çözümü tamamen LLM'e bırakılmıştır; OrderId/ComplaintId alanları
+// SubTaskOrchestrator gibi başka kaynaklardan (yapılandırılmış alt-görev entity'leri) doldurulabilir.
 
 namespace CustomerSupportBot.Domain.Model;
 
 /// <summary>
-/// Mevcut turda (query + history + session state) çözümlenmiş entity'lerin yapılandırılmış
-/// özeti. ReasoningService prompt'una enjekte edilir.
+/// Mevcut turda (session state, alt-görev entity'leri vb.) çözümlenmiş entity'lerin
+/// yapılandırılmış özeti. ReasoningService prompt'una enjekte edilir.
 /// </summary>
 public class VerifiedEntities
 {
@@ -72,7 +72,7 @@ public enum EntitySource
     Query,
     /// <summary>Önceki konuşma turundan.</summary>
     History,
-    /// <summary>Oturum durumundan (SessionState.CustomerId vb.).</summary>
+    /// <summary>Oturum durumundan (SessionState.AuthenticatedCustomerId — JWT'den).</summary>
     SessionState,
     /// <summary>Başka bir entity'den türetilmiş (ör. customer_id'den last_order).</summary>
     Derived

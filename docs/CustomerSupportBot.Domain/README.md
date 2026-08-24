@@ -13,8 +13,7 @@ Bu klasör, Onion / Hexagonal Mimarinin en iç çekirdeğini (**Core Domain**) o
 - [ComplaintInfo](Model/ComplaintInfo.md) — Şikayet kaydı modeli.
 - [ConfidenceLevel](Model/ConfidenceLevel.md), [ConversationPhase](Model/ConversationPhase.md), [ConversationRating](Model/ConversationRating.md), [ConversationMessage](Model/ConversationMessage.md) — Konuşma akışı modelleri.
 - [EscalationAction](Model/EscalationAction.md), [EscalationRequest](Model/EscalationRequest.md) — İnsan temsilciye devir modelleri.
-- [ExtractedIds](Model/ExtractedIds.md), [VerifiedEntities](Model/VerifiedEntities.md) — Metin,
-  geçmiş ve authenticated session'dan çözümlenen kimlikler.
+- [VerifiedEntities](Model/VerifiedEntities.md) — Authenticated session'dan çözümlenen müşteri kimliği.
 - [HumanAgent](Model/HumanAgent.md) — İnsan temsilci modeli.
 - [OrderInfo](Model/OrderInfo.md), [OrderLineRequest](Model/OrderLineRequest.md), [OrderPlacementResult](Model/OrderPlacementResult.md), [StockDeductionResult](Model/StockDeductionResult.md) — Sipariş oluşturma zinciri: LLM talebi → stok düşümü → nihai sonuç.
 - [PlanningResult](Model/PlanningResult.md), [SubTask](Model/SubTask.md) — Orkestrasyon planı modelleri.
@@ -40,7 +39,6 @@ Bu klasör, Onion / Hexagonal Mimarinin en iç çekirdeğini (**Core Domain**) o
 
 ### Services/ — Saf C# domain servisleri ve deterministik ayrıştırıcılar
 
-- [IdExtractor](Services/IdExtractor.md) — Türkçe bağlam kelimeleriyle metinden deterministik olarak `order_id`, `customer_id`, `complaint_id` çıkaran servis.
 - [TokenEstimator](Services/TokenEstimator.md) — Metin uzunluğu ve kelime bazlı yaklaşık token hesaplayıcı.
 - [ReasoningResultParser](Services/ReasoningResultParser.md), [PlanningResultParser](Services/PlanningResultParser.md), [SpecialistReasoningParser](Services/SpecialistReasoningParser.md), [SelfCritiqueParser](Services/SelfCritiqueParser.md) — LLM çıktısı JSON bloklarını hata toleranslı ayrıştıran servisler.
 - [SessionStateExtractor](Services/SessionStateExtractor.md) — Oturum durumu güncelleyici (duygu tespiti dahil).

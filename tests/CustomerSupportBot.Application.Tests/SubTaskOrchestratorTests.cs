@@ -100,9 +100,9 @@ public class SubTaskOrchestratorTests
         SubTaskOrchestrator.CreateSubTaskReasoning(parent, sub).NextAction.Should().Be("salt iş");
     }
 
-    // ─── VerifiedEntities propagation — bkz. WorkflowRunner.ResolveExtractedIds ile aynı bug sınıfı:
-    // FormatSubTaskQuery'nin "açıklama (order_id=1042)" biçimindeki sentetik metni IdExtractor'ın
-    // Türkçe bağlam-kelimesi regex'iyle uyumlu değil; subTask.Entities zaten doğru veriyi taşıyor,
+    // ─── VerifiedEntities propagation ───────────────────────────────────────────
+    // FormatSubTaskQuery'nin "açıklama (order_id=1042)" biçimindeki sentetik metnini yeniden
+    // yorumlamaya çalışmak yerine subTask.Entities zaten doğru veriyi taşıyor;
     // CreateSubTaskReasoning bunu VerifiedEntities'e geri çevirmezse kaybolur.
 
     [Fact]

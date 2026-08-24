@@ -292,7 +292,7 @@ onay geldiğinde işi çalıştıran yer burasıdır. Bu adım atlanırsa talep 
 - **`ToolResult` zarfı zorunlu**: Doğrudan `string`/`object` dönmeyin. Factory'ler: `Ok`, `ValidationError`, `NotFound`, `Conflict`, `SystemError`.
 - **`[Description]` attribute'ları** LLM'in gördüğü schema'yı belirler — açık, hatalara neden olmayacak şekilde yazın.
 - **Yan etkili tool'larda** `lock` kullanın (`_stockLock` gibi) — concurrent request'lerde race condition olur.
-- **ID formatı konsistansı**: Yeni ID türleri eklerseniz `IdExtractor`'a regex ekleyin ki entity extraction hint'i devreye girebilsin.
+- **ID formatı konsistansı**: Yeni ID türleri için prompt'a token tanıma kuralı ve tool parametresi ekleyin — metinden ID çıkarımı tamamen LLM'e bırakılmıştır (bkz. "Yeni entity tipi ekleme").
 - **Error code naming**: `SNAKE_UPPER` (ör. `REFUND_ALREADY_OPEN`). Category: `validation | not_found | conflict | business_rule | system`.
 
 ---
@@ -676,7 +676,13 @@ Detay → [CustomerSupportBot.Domain/Model/ReasoningResult.md](CustomerSupportBo
 
 ---
 
-## Yeni entity tipi ekleme (EntityVerifier)
+## Yeni entity tipi ekleme
+
+> 🐞 **Bu bölüm değişti:** Eskiden yeni bir ID türü (ör. kampanya kimliği) eklemek `IdExtractor`'a
+> regex eklemeyi gerektiriyordu — metinden deterministik regex ile çıkarılıp `VerifiedEntities`'e
+> `FormatOnly` olarak taşınıyordu. `IdExtractor` tamamen kaldırıldı: order_id/complaint_id
+> çözümü de dahil, metinden ID çıkarımı artık **tamamen LLM'e bırakılıyor**. Yeni bir ID türü
+> eklerken regex yazmanıza gerek yok — aşağıdaki adımları izleyin.
 
 ### Senaryo
 
@@ -684,82 +690,41 @@ Detay → [CustomerSupportBot.Domain/Model/ReasoningResult.md](CustomerSupportBo
 
 ### Adımlar
 
-**1. `IdExtractor.cs`'e regex ekle**:
+**1. Prompt'a token tanıma kuralı ekleyin** — LLM'in mesajdan bu ID'yi kendi okumasını sağlayın
+(`planning-agent.md`'deki "Token tanıma" bölümüne örnek):
 
-```csharp
-// CustomerSupportBot.Domain/Services/IdExtractor.cs
-private static readonly Regex CampaignIdPattern =
-    new(@"\bCMPG[-_\s]?(\d+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-public static ExtractedIds Extract(string text)
-{
-    // mevcut order/customer/complaint çıkarımı
-    var campaignMatch = CampaignIdPattern.Match(text);
-    var campaignId = campaignMatch.Success ? $"CMPG-{campaignMatch.Groups[1].Value}" : null;
-    // ...
-}
+```markdown
+- Kullanıcı "kampanya CMPG-123" gibi bir ifade kullandıysa → `campaign_id` olarak not al.
 ```
 
-**2. `VerifiedEntities` model'ine alan ekle**:
+**2. İlgili tool'un parametresine ekleyin** — specialist agent'ın bu ID'yi doğrudan tool
+çağrısına geçirebilmesi için (bkz. "Yeni tool ekleme" bölümü):
 
 ```csharp
-// CustomerSupportBot.Domain/Model/VerifiedEntities.cs
-public class VerifiedEntities
-{
-    public VerifiedEntity? OrderId { get; set; }
-    public VerifiedEntity? CustomerId { get; set; }
-    public VerifiedEntity? ComplaintId { get; set; }
-    public VerifiedEntity? CampaignId { get; set; }   // ← yeni
-    // ...
-}
+[Description("Kampanya kimliği, ör. CMPG-123")] string campaignId
 ```
 
-**3. `EntityVerifier.Verify` içinde DB'siz resolution**:
-
-```csharp
-// CustomerSupportBot.Application/Services/EntityVerifier.cs
-if (!string.IsNullOrWhiteSpace(ids.CampaignId))
-{
-    verified.CampaignId = new VerifiedEntity
-    {
-        Value = ids.CampaignId,
-        Source = EntitySource.Query,
-        Verification = EntityVerification.FormatOnly
-    };
-}
-```
-
-Bu aşamada repository çağırmayın ve kampanyayı varmış gibi işaretlemeyin. Entity resolution,
-factual validation değildir.
-
-**4. Specialist tool ile factual validation ekle**:
+**3. Specialist tool ile factual validation yapın**:
 
 - Kampanya repository'sine yalnız tool uygulamasından erişin.
 - Authenticated customer/tenant kapsamını tool içinde uygulayın.
 - Bulunamayan ve erişilemeyen kayıtlar için kullanıcıya aynı güvenli `NOT_FOUND` metnini verin.
 - Modelin indirim/tarih gibi alanları yalnız başarılı tool sonucundan kullanmasını prompt'ta zorunlu kılın.
 
-**5. `BuildPromptBlock` — prompt enjeksiyonuna ekle**:
-
-```csharp
-// EntityVerifier.BuildPromptBlock yardımcısı
-if (verified.CampaignId != null)
-{
-    sb.AppendLine($"- campaign_id = \"{verified.CampaignId.Value}\" [FORMAT_ONLY]");
-}
-```
-
-**6. (Opsiyonel) Yeni sanity kuralı** — resolved kampanya ID'sinin tekrar istenmesi gibi
+**4. (Opsiyonel) Yeni sanity kuralı** — resolved kampanya ID'sinin tekrar istenmesi gibi
 durumlar için `ReasoningSanityChecker` kuralı eklenebilir. Kampanyanın bulunup bulunmadığı tool
 sonucunun sorumluluğudur.
 
+> Not: `VerifiedEntities`/`EntityVerifier`'ı yalnızca müşteri kimliği (`AuthenticatedCustomerId`
+> — JWT'den) taşır; yeni bir ID türü için bu modele alan eklemeniz **gerekmez**. `OrderId`/
+> `ComplaintId` alanları hâlâ modelde duruyor ama artık yalnızca `SubTaskOrchestrator` gibi
+> yapılandırılmış-veri kaynaklarından doldurulabilir, `EntityVerifier`'dan değil.
+
 ### Checklist
 
-- [ ] `IdExtractor` regex eklendi
-- [ ] `VerifiedEntities` modelı güncellendi
-- [ ] `EntityVerifier.Verify` ID'yi `FormatOnly` çözümlüyor; DB lookup yapmıyor
+- [ ] Prompt'a token tanıma kuralı eklendi (LLM ID'yi mesajdan okuyabiliyor)
+- [ ] İlgili tool'un parametresine eklendi
 - [ ] Specialist tool gerçeklik + sahiplik doğrulamasını yapıyor
-- [ ] `BuildPromptBlock` prompt'a enjekte ediyor
 - [ ] `reasoning-system.md` yeni entity tipi hakkında not ekleniyor (opsiyonel ama önerilir)
 - [ ] Evaluation senaryosu yazıldı
 
@@ -857,7 +822,7 @@ Detay → [CustomerSupportBot.Domain/Model/ReasoningResult.md](CustomerSupportBo
 ### "Ajan aynı soruyu tekrar tekrar soruyor (ping-pong)"
 
 **Olası sebepler**:
-1. Entity extraction çalışmıyor — `IdExtractor` log'una bak
+1. LLM mesajdan ID'yi doğru okuyup tool'a geçirmiyor — reasoning trace'te tool parametrelerine bak
 2. PlanningAgent prompt'u "çoklu eksik bilgi tek mesajda" kuralını tutmuyor
 3. Specialist `handoffSuggestion` loop yapıyor
 

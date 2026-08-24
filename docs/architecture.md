@@ -56,7 +56,6 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
 │  PostgreSQL (sessions/traces/approvals/escalations/ratings/auth) │
 │  Qdrant (cs_knowledge / cs_episodic / cs_lessons collections)    │
 │  Redis (pub/sub + dağıtık lock — Program.cs'te her zaman kayıtlı)│
-│  IdExtractor (regex — deterministic ID extraction)              │
 │  JWT Bearer Auth (access + refresh token)                        │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -97,7 +96,6 @@ CustomerSupport.slnx
 │   │   ├── Improvement/                 # Lesson
 │   │   └── Memory/                      # CustomerProfile, MemoryDocument
 │   └── Services/                        # Deterministik domain servisleri (LLM çağrısı yok)
-│       ├── IdExtractor.cs               # Regex ile entity ID çıkarımı
 │       ├── PlanningResultParser.cs      # PlanningAgent JSON çıktısını parse eder
 │       ├── ReasoningResultParser.cs     # Reasoning LLM çıktısını parse eder
 │       ├── SessionStateExtractor.cs     # Mesajlardan intent/sentiment/phase çıkarır
@@ -475,7 +473,6 @@ CLIENT                ChatEndpoints           ReasoningService         CustomerS
   │                        │                        │                         │
   │                        │                        │                         │ (tek akış için:)
   │                        │                        │                         │ ContextPipeline.Build
-  │                        │                        │                         │   + IdExtractor.Extract
   │                        │                        │                         │   + reasoning hint (+subTasks)
   │                        │                        │                         │
   │                        │                        │                         │ Workflow execution:

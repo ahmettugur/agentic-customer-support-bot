@@ -6,10 +6,13 @@
 
 ## 1. Ne İşe Yarar
 
-`EntityVerifier`ın query + history + authenticated session kaynaklarını birleştirerek ürettiği
-**çözümlenmiş entity sonucu**dur. Reasoning prompt'una enjekte edilerek LLM'in kullanıcıdan zaten
-sağladığı ID'yi tekrar istemesini önler. Sipariş/şikayet gerçekliği ve sahipliği bu modelde değil,
-specialist tool sonucunda doğrulanır.
+`EntityVerifier`'ın authenticated session'dan (`AuthenticatedCustomerId` — JWT'den) ürettiği
+**çözümlenmiş müşteri kimliği sonucu**dur. Reasoning prompt'una enjekte edilir. `OrderId`/
+`ComplaintId` alanları `EntityVerifier` tarafından artık doldurulmaz (bkz. `IdExtractor`'ın
+kaldırılması — order_id/complaint_id çözümü tamamen LLM'e bırakıldı); bu iki alan yalnızca
+başka bir kaynaktan (ör. `SubTaskOrchestrator`'ın alt-görev decompose sırasında ürettiği
+yapılandırılmış entity'lerden) doldurulabilir. Sipariş/şikayet gerçekliği ve sahipliği bu
+modelde değil, specialist tool sonucunda doğrulanır.
 
 ## 2. Hangi Amaçla Kullanılır
 
@@ -27,9 +30,9 @@ factual iş verisinin doğruluk kaynağı ilgili tool sonucudur.
 
 | Üye | Tip | Açıklama |
 | ----- | ----- | ---------- |
-| `OrderId` | `VerifiedEntity?` | Çözümlenmiş sipariş adayı; tool'da doğrulanır |
-| `CustomerId` | `VerifiedEntity?` | Authenticated session müşteri kimliği |
-| `ComplaintId` | `VerifiedEntity?` | Çözümlenmiş şikayet adayı; tool'da doğrulanır |
+| `OrderId` | `VerifiedEntity?` | `EntityVerifier` doldurmaz; yalnızca `SubTaskOrchestrator` gibi başka kaynaklardan gelebilir |
+| `CustomerId` | `VerifiedEntity?` | Authenticated session müşteri kimliği (`EntityVerifier`'ın tek ürettiği alan) |
+| `ComplaintId` | `VerifiedEntity?` | `EntityVerifier` doldurmaz; yalnızca `SubTaskOrchestrator` gibi başka kaynaklardan gelebilir |
 | `DerivedLastOrderId` | `string?` | Geriye dönük uyumluluk; resolver artık üretmez |
 | `DerivedOrderCount` | `int?` | Geriye dönük uyumluluk; resolver artık üretmez |
 | `HasAny` | `bool` | **Computed** — çözümlenmiş entity var mı? |
@@ -48,10 +51,10 @@ factual iş verisinin doğruluk kaynağı ilgili tool sonucudur.
 
 | Değer | Açıklama |
 | ------- | ---------- |
-| `Query` | Güncel kullanıcı mesajından |
-| `History` | Önceki konuşma turundan |
-| `SessionState` | Oturum durumundan (AuthenticatedCustomerId) |
-| `Derived` | Başka entity'den türetilmiş |
+| `Query` | Güncel kullanıcı mesajından — `EntityVerifier` artık üretmez, geriye dönük uyumluluk için tanımlı kalır |
+| `History` | Önceki konuşma turundan — `EntityVerifier` artık üretmez, geriye dönük uyumluluk için tanımlı kalır |
+| `SessionState` | Oturum durumundan (AuthenticatedCustomerId) — `EntityVerifier`'ın tek kullandığı değer |
+| `Derived` | Başka entity'den türetilmiş (ör. `SubTaskOrchestrator`'ın alt-görev entity'lerinden) |
 
 ### EntityVerification Enum
 
@@ -63,6 +66,5 @@ factual iş verisinin doğruluk kaynağı ilgili tool sonucudur.
 
 ## Bağlantılar
 
-- [ExtractedIds.md](ExtractedIds.md) — Ham çıkarım (doğrulama öncesi)
 - [ReasoningResult.md](ReasoningResult.md) — Bu modeli taşıyan reasoning çıktısı
-- [../../CustomerSupportBot.Application/ReasoningPipeline.md](../../CustomerSupportBot.Application/Services/Reasoning/ReasoningService.md) — EntityVerifier pipeline katmanı
+- [../../../CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.md](../../../CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.md) — Bu modeli üreten servis

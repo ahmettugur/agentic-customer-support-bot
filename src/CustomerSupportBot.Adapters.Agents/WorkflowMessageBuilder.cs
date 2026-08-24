@@ -49,13 +49,23 @@ internal sealed class WorkflowMessageBuilder
     }
 
     /// <summary>
-    /// Burada üretilen sistem mesajlarının (bağlam, reasoning özeti, entity hint, replan notu)
-    /// içeriği ve sırası, `CustomerSupportBot.Api/Prompts/agents/*.md` altındaki specialist
-    /// prompt'larıyla BELGESİZ (kod dışında yazılı olmayan) bir sözleşme oluşturur — ör. entity
-    /// hint'in metni (<see cref="IdExtractor.BuildHintMessage"/>) "order_id MEVCUT" gibi belirli
-    /// ifadeler kullanır ve prompt'lar bu ifadeleri örnek/talimat olarak referans alır. Bu metni
-    /// veya mesaj sırasını değiştirirken ilgili prompt dosyalarının da gözden geçirilmesi gerekir;
-    /// derleyici/test bu bağlantıyı doğrulamaz.
+    /// Burada üretilen sistem mesajlarının (bağlam, reasoning özeti, replan notu) içeriği ve
+    /// sırası, `CustomerSupportBot.Api/Prompts/agents/*.md` altındaki specialist prompt'larıyla
+    /// BELGESİZ (kod dışında yazılı olmayan) bir sözleşme oluşturur. Bu metni veya mesaj sırasını
+    /// değiştirirken ilgili prompt dosyalarının da gözden geçirilmesi gerekir; derleyici/test bu
+    /// bağlantıyı doğrulamaz.
+    ///
+    /// <para>
+    /// Not: Eskiden burada ayrıca deterministik bir "entity hint" (order_id/customer_id/
+    /// complaint_id'nin metinden regex ile çıkarılıp "order_id MEVCUT: 1041" gibi bir sistem
+    /// mesajı olarak enjekte edilmesi, <c>IdExtractor</c> üzerinden) vardı. Bu mekanizma
+    /// kaldırıldı — order_id/complaint_id çözümü artık tamamen LLM'e bırakılıyor: specialist
+    /// agent'lar kullanıcı mesajını doğrudan okuyup ilgili tool'a parametre olarak geçiriyor;
+    /// hiç geçmezse <c>get_last_order_tool</c> gibi parametresiz tool'lar devreye giriyor
+    /// (bkz. <c>planning-agent.md</c>). Prompt dosyaları "ENTITY EXTRACTION'dan veya mesajdan"
+    /// diye ikili bir kaynak tarif eder — ilk kaynak artık hiç dolmaz, ikincisi (mesajdan)
+    /// değişmeden çalışmaya devam eder.
+    /// </para>
     /// </summary>
     public async Task<WorkflowPrompt> BuildWorkflowMessagesAsync(
         string query,
@@ -91,13 +101,6 @@ internal sealed class WorkflowMessageBuilder
             {
                 messages.Add(new ChatMessage(ChatRole.System, hint));
             }
-        }
-
-        var extractedIds = ResolveExtractedIds(query, reasoning);
-        var entityHint = IdExtractor.BuildHintMessage(extractedIds);
-        if (!string.IsNullOrWhiteSpace(entityHint))
-        {
-            messages.Add(new ChatMessage(ChatRole.System, entityHint));
         }
 
         foreach (var m in SelectHistoryToSend(conversationHistory, session, contextResult))
@@ -162,33 +165,6 @@ internal sealed class WorkflowMessageBuilder
             return conversationHistory;
 
         return conversationHistory.Skip(summarized);
-    }
-
-    /// <summary>
-    /// Workflow'a gidecek ENTITY EXTRACTION hint'i için ID kaynağını çözer.
-    /// <c>reasoning.VerifiedEntities</c> mevcutsa (ReasoningService zaten <see cref="EntityVerifier"/>
-    /// ile query+geçmiş+authenticated session'ı güvenli biçimde birleştirmiş) o kullanılır —
-    /// <c>IdExtractor.Extract(query)</c>
-    /// yalnızca GÜNCEL mesaja bakar, önceki turdaki bağlamı (ör. "peki 1043" gibi bağlam kelimesiz
-    /// bir takip mesajını) tamamen kaçırır. Bu yüzden bu iki yol tutarsız çalışıyordu: reasoning
-    /// aşaması "1043"ü doğru bağlamda çözebilirken, workflow'un kendi (query-only) çıkarımı aynı
-    /// sayıyı bağlamsız görüp "kısa mesaj → customer_id" varsayılanına düşüyor, specialist'e yanlış
-    /// tool'u (get_last_order_tool yerine order_status_tool gerekirken) önerip yanlış-negatif
-    /// "sipariş bulunamadı" yanıtı ürettiriyordu. <c>reasoning</c> null ise (ör. bazı çağıranlar
-    /// reasoning'i atlıyor) eski (query-only) davranışa düşülür.
-    /// </summary>
-    internal static ExtractedIds ResolveExtractedIds(string query, ReasoningResult? reasoning)
-    {
-        var verified = reasoning?.VerifiedEntities;
-        if (verified is null || !verified.HasAny)
-            return IdExtractor.Extract(query);
-
-        return new ExtractedIds
-        {
-            OrderId = verified.OrderId?.Value,
-            CustomerId = verified.CustomerId?.Value,
-            ComplaintId = verified.ComplaintId?.Value
-        };
     }
 
     /// <summary>

@@ -64,12 +64,10 @@ public class SubTaskOrchestrator
             SubTasks = new List<SubTask>(), // ← Recursive loop önleyici
             ConstrainedTargetAgent = subTask.TargetAgent,
             // subTask.Entities yürütme başlamadan önce ValidateExecutionPlan tarafından kaynak
-            // sorgu/parent verified entity ile bağlanmıştır. Burada VerifiedEntities'e çevrilmezse
-            // WorkflowRunner.ResolveExtractedIds
-            // fallback'e düşüp FormatSubTaskQuery'nin "açıklama (order_id=1042)" biçimindeki
-            // sentetik metnini IdExtractor.Extract ile regex'ten geçirmeye çalışır — bu metinde
-            // "sipariş"/"müşteri" gibi Türkçe bağlam kelimeleri YOK, dolayısıyla o regex çoğu
-            // zaman hiçbir şey bulamaz veya yanlış sınıflandırır.
+            // sorgu/parent verified entity ile bağlanmıştır. Burada açıkça VerifiedEntities'e
+            // çevriliyor ki alt görev, sentetik sorgu metnini (FormatSubTaskQuery'nin
+            // "açıklama (order_id=1042)" biçimi) yeniden yorumlamak zorunda kalmasın — bu metin
+            // zaten yapılandırılmış (Entities sözlüğü) olarak elde, regex'e ihtiyaç yok.
             VerifiedEntities = BuildVerifiedEntities(subTask.Entities)
         };
     }
@@ -174,9 +172,7 @@ public class SubTaskOrchestrator
     /// <summary>
     /// SubTask.Entities (düz "order_id"/"customer_id"/"complaint_id" → değer sözlüğü) üzerinden
     /// bir VerifiedEntities kurar. Orijinal DB-doğrulama durumu decompose sırasında sözlüğe
-    /// düzleştirilirken kaybolduğu için <see cref="EntityVerification.FormatOnly"/> kullanılır —
-    /// WorkflowRunner.ResolveExtractedIds yalnızca HasAny/değer bakar, verification seviyesine
-    /// duyarlı değil.
+    /// düzleştirilirken kaybolduğu için <see cref="EntityVerification.FormatOnly"/> kullanılır.
     /// </summary>
     private static VerifiedEntities? BuildVerifiedEntities(Dictionary<string, string> entities)
     {

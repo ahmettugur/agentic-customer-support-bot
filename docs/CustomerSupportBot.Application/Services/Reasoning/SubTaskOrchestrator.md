@@ -72,13 +72,13 @@ eşleşebilirdi.
 
 `SubTask.Entities` (düz sözlük) decompose sırasında orijinal DB-doğrulama seviyesini kaybeder.
 
-> 🐞 **Bu çevrilmezse ne olurdu:** `WorkflowRunner.ResolveExtractedIds` fallback'e düşüp
-> `FormatSubTaskQuery`'nin `"açıklama (order_id=1042)"` biçimindeki sentetik metnini
-> `IdExtractor.Extract` ile regex'ten geçirmeye çalışırdı — bu metinde "sipariş"/"müşteri" gibi
-> Türkçe bağlam kelimeleri YOK, dolayısıyla regex çoğu zaman hiçbir şey bulamaz veya yanlış
-> sınıflandırırdı. `FormatOnly` seviyesinde de olsa doğrudan `VerifiedEntities`'e çevirmek bu
-> riski ortadan kaldırır — `WorkflowRunner.ResolveExtractedIds` yalnızca `HasAny`/değere bakar,
-> verification seviyesine duyarlı değildir.
+> 🐞 **Neden gerekli:** `subTask.Entities` yapılandırılmış (`Dictionary<string,string>`) veri
+> olarak zaten elde — bunu `FormatSubTaskQuery`'nin `"açıklama (order_id=1042)"` biçimindeki
+> sentetik metnine çevirip sonra tekrar ayrıştırmaya çalışmak (eskiden `IdExtractor` ile regex
+> üzerinden yapılıyordu — o sınıf tamamen kaldırıldı) gereksiz bir round-trip olurdu; sentetik
+> metinde "sipariş"/"müşteri" gibi Türkçe bağlam kelimeleri de olmadığından böyle bir regex
+> çoğu zaman hiçbir şey bulamaz veya yanlış sınıflandırırdı. Doğrudan `VerifiedEntities`'e
+> çevirmek bu riski baştan ortadan kaldırır.
 
 ### `SubTasks = []` (boş liste) `CreateSubTaskReasoning`'de neden zorunlu
 

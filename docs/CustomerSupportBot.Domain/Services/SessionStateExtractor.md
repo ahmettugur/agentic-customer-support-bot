@@ -10,7 +10,6 @@ Bir kullanıcı + bot mesaj çiftinden **session state**'i türetir. Hem `InMemo
 ## Niye gerekli?
 
 Session state şu alanları içerir:
-- `CustomerId` — kullanıcının kendi mesajından/bot yanıtından çıkarılan (LLM'in serbest metinden türettiği, **poisonable**) kimlik — gerçek yetkili kimlik için bkz. `AuthenticatedCustomerId` (JWT'den gelir, bu sınıfın işi değildir)
 - `CurrentIntent` — şu anki niyet (`sipariş_sorgulama`, `şikayet`, vb.)
 - `TurnCount` — turn sayısı
 - `Phase` — Greeting / Inquiry / Action / Resolution
@@ -37,26 +36,25 @@ State'i **in-place** günceller. `PostgresSessionManager`/`InMemorySessionManage
 
 ### Yapılan iş
 
-1. **ID çıkarımı** (`IdExtractor` çağrısı)
-   - `customer_id` → `state.CustomerId` (kullanıcı mesajında yoksa bot yanıtından, yalnızca hâlâ `null` ise)
-   - `order_id` → `CollectedInfo["LastMentionedOrderId"]`
-   - `priorHistory` bağlamsız (context'siz) bir sayı çıkarımını (ör. önceki turda *"sipariş numaram 1030"* dendikten sonra bu turda sadece *"1030"* yazılması) önceki turun gerçek bağlamına göre yeniden sınıflandırır.
+> 🐞 **Geçmişte farklıydı:** Bu metot eskiden ayrıca `IdExtractor` ile kullanıcı mesajından/bot
+> yanıtından `customer_id` çıkarıp `state.CustomerId`'ye, `order_id`'yi de
+> `CollectedInfo["LastMentionedOrderId"]`'ye yazıyordu; `priorHistory` bu çıkarımın bağlam
+> sürekliliği içindi. `IdExtractor` tamamen kaldırıldı — bu metot artık metinden hiçbir ID
+> çıkarmaz. `state.CustomerId` alanı hâlâ modelde duruyor ama kalıcı olarak `null` kalır; zaten
+> `EntityVerifier` ve factual tool'lar müşteri kimliği için bu alanı hiç kullanmıyordu — yalnız
+> `AuthenticatedCustomerId` (JWT) güvenlik sınırıdır. `priorHistory` parametresi imza geriye
+> dönük uyumluluk için korunur, artık kullanılmaz.
 
-   > ⚠️ **Buradaki yanlış sınıflandırma kalıcı state'i kirletir.** Ancak `EntityVerifier` ve
-   > factual tool'lar müşteri kimliği için `state.CustomerId` kullanmaz; yalnız
-   > `AuthenticatedCustomerId` güvenlik sınırıdır. Kök neden ve düzeltme:
-   > [`IdExtractor` — `numaram` sahiplenmesi](IdExtractor.md). Regresyon koruması
-   > `SessionStateExtractorTests`.
-2. **Intent tespiti** — `state.CurrentIntent = llm?.Intent ?? DetectUserIntent(userMessage)`
+1. **Intent tespiti** — `state.CurrentIntent = llm?.Intent ?? DetectUserIntent(userMessage)`
    - LLM (reasoning) bir intent ürettiyse **o kazanır**; üretmediyse `WellKnown.IntentKeywords` tablosuna düşülür.
    - Kural tabanlı tabloda özel bir kural da var: `"sipariş"` + (`"durum"` veya `"takip"` veya `"nerede"`) → `sipariş_sorgulama`.
-3. **Phase belirleme**
+2. **Phase belirleme**
    - Turn 1 → `Greeting`
    - Bot mesajında `WellKnown.ResponseKeywords.SuccessMarker` (`"başarıyla"`) varsa → `Resolution`
    - Bot mesajında `MissingInfoMarker` (`"EKSİK_BİLGİ"`) varsa → `Inquiry`
    - Aksi halde `Action`
-4. **Sentiment** — aynı öncelik: `llm` hem etiket hem skor içeriyorsa o kullanılır, yoksa `WellKnown.SentimentKeywords` tablosundan match aranır (yoksa `"neutral"` / `0.5`).
-5. **Consecutive negative tracking** — az önce (4)'te belirlenen **tek** sentiment sonucuna göre: skor `< 0.35` (NegativeThreshold) ise counter artar, değilse sıfırlanır. Counter `≥ 3` (`AutoEscalationConsecutiveNegative`) olduğunda yukarı katmanda (`SessionStateService.CheckSentimentAlert`) otomatik eskalasyon tetiklenir.
+3. **Sentiment** — aynı öncelik: `llm` hem etiket hem skor içeriyorsa o kullanılır, yoksa `WellKnown.SentimentKeywords` tablosundan match aranır (yoksa `"neutral"` / `0.5`).
+4. **Consecutive negative tracking** — az önce (3)'te belirlenen **tek** sentiment sonucuna göre: skor `< 0.35` (NegativeThreshold) ise counter artar, değilse sıfırlanır. Counter `≥ 3` (`AutoEscalationConsecutiveNegative`) olduğunda yukarı katmanda (`SessionStateService.CheckSentimentAlert`) otomatik eskalasyon tetiklenir.
 
 ---
 
@@ -82,7 +80,6 @@ Artık `ExtractAndApply`, turun türetilmiş alanlarının **tek yazarıdır**. 
 ```
 Turn 3 başlıyor:
   state.TurnCount = 2
-  state.CustomerId = "12345"
   state.CurrentIntent = "şikayet"
   state.Phase = "Inquiry"
   state.ConsecutiveNegativeTurns = 1

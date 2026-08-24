@@ -22,11 +22,11 @@ Bu dokümanda sistemde uygulanan **agentic design pattern'leri** haritalanır. H
 | 9 | **Guardrails / Circuit Breaker** | `WorkflowGuardOptions` + `DetectRepeatedToolCall` | ⭐⭐⭐ |
 | 10 | **Context Pipeline / Dynamic RAG** | `ContextPipeline` + `IContextProvider`'lar | ⭐⭐ |
 | 11 | **Conversation Summarization** | `ConversationSummaryProvider` | ⭐⭐ |
-| 12 | **Deterministic Preprocessing (Regex Entity Extraction)** | `IdExtractor` | ⭐⭐ |
+| 12 | ~~Deterministic Preprocessing (Regex Entity Extraction)~~ | **Kaldırıldı** — `IdExtractor` tamamen silindi, ID çözümü LLM'e bırakıldı (bkz. bölüm 12) | — |
 | 13 | **Reasoning Trace / Observability** | `IReasoningTraceStore` | ⭐⭐ |
 | 14 | **Prompt Externalization (Markdown Templates)** | `PromptService` + `Prompts/*.md` | ⭐⭐ |
 | 15 | **Scenario-Based Evaluation** | `EvaluationRunner` + `docs/evaluation-scenarios.yaml` | ⭐ |
-| 16 | **Grounded Reasoning (ReAct-lite Entity Resolution)** | `EntityVerifier` + `VerifiedEntities` | ⭐⭐⭐ |
+| 16 | **Grounded Reasoning (Authenticated Identity Resolution)** | `EntityVerifier` + `VerifiedEntities` | ⭐⭐⭐ |
 | 17 | **Deterministic Sanity Checking (Rule-Based Post-Validation)** | `ReasoningSanityChecker` + `IReasoningSanityRule` (8 sınıf) | ⭐⭐⭐ |
 | 18 | **Task Decomposition (Compound Query)** | `ReasoningService.SubTasks` | ⭐⭐ |
 | 19 | **Task Orchestration (Sequential Sub-Workflow Runs)** | `CustomerSupportTeam.RunDecomposedAsync` | ⭐⭐ |
@@ -315,33 +315,26 @@ session.State.ConversationSummary = summary;
 
 ---
 
-## 12. Deterministic Preprocessing (Regex Entity Extraction)
+## 12. Deterministic Preprocessing (Regex Entity Extraction) — KALDIRILDI
 
-**Tanım**: LLM'e bırakmak riskli olan structured veri çıkarımını (ID'ler, tarihler, miktarlar) kodda deterministik olarak yapmak.
-
-**Gerçekleme**: `IdExtractor`:
-
-```csharp
-CustomerSupportBot.Domain/Services/IdExtractor.cs
-OrderIdPattern = \bORD[-_\s]?(\d+)\b               // 1, ORD_1
-ComplaintIdPattern = \bCMP[-_\s]?(\d+)\b           // 1
-CustomerIdPrefixPattern = \bCUST[-_\s]?(\d+)\b     // 001
-NumericOnlyPattern = (?<![\w-])(\d{3,5})(?![\w-])  // 1990" (fallback)
-```
-
-Çıkan ID'ler hint olarak prompt'a enjekte edilir + sipariş sorgusu için tool seçim önceliği de ipucunda yer alır:
-
-```
-[ENTITY EXTRACTION — deterministik regex ile çıkarıldı]
-- order_id = "1"
-- customer_id = "1990"
-
-SİPARİŞ SORGUSU ÖNCELİK KURALI:
-  - order_id MEVCUT → 'order_status_tool' kullan
-  - customer_id TEKRAR SORMA; order_id tek başına yeterlidir.
-```
-
-**Neden?** "1" ile "1990" yan yana geldiğinde LLM bazen customer_id'yi order_id sanabiliyor. Regex ile eşleştirme deterministik; sonra LLM'e dikte edilir.
+> 🐞 **Bu pattern artık uygulanmıyor.** Eskiden `IdExtractor` isimli statik bir sınıf, sorgu ve
+> konuşma geçmişinden regex + Türkçe bağlam-kelimesi eşleştirmesiyle `order_id`/`customer_id`/
+> `complaint_id` çıkarıp bunları `[ENTITY EXTRACTION]` bloğu olarak prompt'a enjekte ediyordu.
+> Bu sınıf tamamen kaldırıldı. Gerekçe:
+>
+> - Müşteri kimliği (`customer_id`) zaten hiçbir zaman bu regex'ten değil, yalnızca
+>   `SessionState.AuthenticatedCustomerId` (JWT'den) üzerinden alınıyordu — bkz.
+>   [Grounded Reasoning](#16-grounded-reasoning-react-lite-entity-resolution) bölümündeki
+>   güvenlik notu. Bu yüzden regex'in müşteri-kimliği tarafı zaten hiç kullanılmıyordu.
+> - `order_id`/`complaint_id` çözümü artık tamamen LLM'e bırakılıyor: specialist agent'lar
+>   kullanıcı mesajını doğrudan okuyup ilgili tool'a parametre olarak geçiriyor; hiç geçmezse
+>   `get_last_order_tool` gibi parametresiz tool'lar devreye giriyor (bkz.
+>   `Prompts/agents/planning-agent.md`).
+>
+> Bu, mimarideki "riskli structured veri çıkarımını LLM'e bırakma" ilkesinin (madde tanımının)
+> bilinçli bir istisnası — burada risk (yanlış ID okuma) LLM'in metin-okuma yeteneğine
+> bırakılmaya değer bulundu, deterministik regex katmanının bakım/senkronizasyon maliyetine
+> (prompt ↔ kod arasındaki belgesiz sözleşme, bkz. `PromptContractTests`) değmedi.
 
 ---
 
@@ -422,22 +415,26 @@ public string Render(string key, IDictionary<string, string?>? vars);
 
 ---
 
-## 16. Grounded Reasoning (ReAct-lite Entity Resolution)
+## 16. Grounded Reasoning (Authenticated Identity Resolution)
 
-**Tanım**: Reasoning modeli karar vermeden önce entity ID'leri deterministik kodla query ve
-history'den çözümlenir; müşteri kimliği yalnız authenticated session'dan alınır. Sipariş/şikayet
-gerçekliği ve sahipliği reasoning aşamasında değil, ilgili specialist tool'da doğrulanır.
+**Tanım**: Reasoning modeli karar vermeden önce müşteri kimliği deterministik kodla
+authenticated session'dan (JWT) çözümlenir. Sipariş/şikayet ID çözümü ve gerçekliği/sahipliği
+reasoning aşamasında değil, tamamen LLM'in metin-okuma yeteneğine ve ilgili specialist tool'a
+bırakılmıştır.
+
+> 🐞 **Bu pattern daraldı:** Eskiden `EntityVerifier` ayrıca `IdExtractor` ile query+history'den
+> `order_id`/`complaint_id` de deterministik olarak çözümlüyordu (bkz. bölüm 12 —
+> "Deterministic Preprocessing", kaldırıldı). Artık `EntityVerifier`'ın tek işi
+> `AuthenticatedCustomerId`'yi taşımaktır.
 
 **Gerçekleme**: `EntityVerifier`:
 
 ```csharp
-CustomerSupportBot.Application/Services/EntityVerifier.cs
-public VerifiedEntities Verify(string query, AgentSession? session, IList<ChatMessage>? history)
+CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.cs
+public VerifiedEntities Verify(string query, AgentSession session, List<ConversationMessage>? history)
 {
-    var ids = IdExtractor.Extract(query);        // regex
-    // history ile context continuity uygula
-    // customer_id yalnız AuthenticatedCustomerId'den gelir
-    // order_id / complaint_id → FormatOnly; factual doğrulama specialist tool'da
+    // customer_id yalnız session.State.AuthenticatedCustomerId'den (JWT) gelir
+    // order_id / complaint_id burada üretilmez — LLM'e bırakılmıştır
     return resolved;
 }
 ```
@@ -445,25 +442,24 @@ public VerifiedEntities Verify(string query, AgentSession? session, IList<ChatMe
 **Reasoning prompt'una enjeksiyon** (`Prompts/services/reasoning-system.md` üzerinden):
 
 ```
-[RESOLVED ENTITIES — query/history/authenticated session üzerinden çözümlendi]
+[RESOLVED ENTITIES]
 Aşağıdaki kimlik değerleri ZATEN sağlandı. requiredInfo'ya EKLEMEYİN.
-FORMAT_ONLY değerlerin gerçekliğini ve sahipliğini ilgili specialist tool ile doğrulayın.
-- order_id = "1030" [FORMAT_ONLY, source=Query]
 - customer_id = "1027" [VERIFIED, source=SessionState]
 ```
 
 **Dosya**:
 
 - `CustomerSupportBot.Domain/Model/VerifiedEntities.cs`
-- `CustomerSupportBot.Application/Services/EntityVerifier.cs`
+- `CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.cs`
 
 **Literatürdeki yeri**: Klasik [ReAct](https://arxiv.org/abs/2210.03629)'ta action/observe
-adımı tool çağrısıyla yapılır. Burada entity resolution LLM'den önce deterministik yapılır;
-factual observe adımı ise sahiplik kontrollü tool'da kalır. Böylece resolution için ekstra LLM
-maliyeti oluşmaz, iş verisi için iki ayrı DB okuması yapılmaz.
+adımı tool çağrısıyla yapılır. Burada yalnız kimlik çözümlemesi LLM'den önce deterministik
+yapılır; factual observe adımı sahiplik kontrollü tool'da kalır.
 
-**Neden?** `order_id=9999` çözümlenmiş olsa bile tool sonucu gelmeden kayıt varmış gibi
-konuşulamaz. Bu ayrım yanlış veri gösterimini ve başka müşteriye ait attribute sızıntısını önler.
+**Neden?** Müşteri kimliği için serbest metne asla güvenilmez — yalnızca JWT'den gelen
+`AuthenticatedCustomerId` kabul edilir. Bu, kullanıcının "ben 1008 numaralı müşteriyim" diyerek
+başkasının verisini sorgulamasını engelleyen güvenlik sınırıdır (bkz.
+[EntityVerifier.md](CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.md)).
 
 ---
 
@@ -897,15 +893,10 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
 
 ```
  ┌─────────────────────────────────────────┐
- │ Deterministic Preprocessing             │◀─── Entity extraction (regex)
- └────────────────────┬────────────────────┘
-                      │ hint
-                      ▼
- ┌─────────────────────────────────────────┐
- │ Grounded Reasoning (Entity Verify) │◄─── Repository port lookup
+ │ Grounded Reasoning (Identity Resolve)   │◀─── AuthenticatedCustomerId (JWT)
  │                              — Katman 0 │
  └────────────────────┬────────────────────┘
-                      │ verified entities
+                      │ verified customer identity
                       ▼
  ┌─────────────────────────────────────────┐
  │ Context Pipeline + Summarization (RAG)  │◀─── Session state
@@ -970,11 +961,11 @@ Bazı pattern'leri **bilinçli olarak uygulamadık**. Bunları listelemek, hangi
 | Tool Use + Validation | `CustomerSupportBot.Application/Services/CustomerSupportToolsService.cs`, `CustomerSupportBot.Domain/Model/ToolResult.cs` |
 | Dynamic Handoff | `CustomerSupportBot.Adapters.Agents/CustomerSupportChatManager.cs SelectNextAgentAsync` (L108-153) |
 | Context Pipeline + Summarization | `CustomerSupportBot.Application/Services/ContextPipeline.cs`, `CustomerSupportBot.Application/Services/Providers/*.cs` |
-| Deterministic Preprocessing | `CustomerSupportBot.Domain/Services/IdExtractor.cs` |
+| ~~Deterministic Preprocessing~~ | Kaldırıldı — `IdExtractor` silindi |
 | Observability | `CustomerSupportBot.Domain/Model/ReasoningTrace.cs`, `CustomerSupportBot.Adapters.Persistence/InMemory/InMemoryReasoningTraceStore.cs`, `CustomerSupportBot.Api/Endpoints/TraceEndpoints.cs` |
 | Prompt Externalization | `CustomerSupportBot.Adapters.Persistence/FileSystem/FileSystemPromptRepository.cs`, `CustomerSupportBot.Api/Prompts/**/*.md` |
 | Evaluation | `CustomerSupportBot.Api.Tests/Evaluation/*.cs`, `docs/evaluation-scenarios.yaml` |
-| **Grounded Reasoning** | `CustomerSupportBot.Application/Services/EntityVerifier.cs`, `CustomerSupportBot.Domain/Model/VerifiedEntities.cs`, `CustomerSupportBot.Api/Prompts/services/reasoning-system.md` |
+| **Grounded Reasoning** | `CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.cs`, `CustomerSupportBot.Domain/Model/VerifiedEntities.cs`, `CustomerSupportBot.Api/Prompts/services/reasoning-system.md` |
 | **Sanity Checking** | `CustomerSupportBot.Application/Services/ReasoningSanityChecker.cs`, `CustomerSupportBot.Domain/Model/ReasoningIssue.cs` |
 | **Task Decomposition** | `CustomerSupportBot.Domain/Model/SubTask.cs`, `CustomerSupportBot.Application/Services/ReasoningService.cs` (ParseSubTasks), `CustomerSupportBot.Api/Prompts/services/reasoning-system.md` |
 | **Task Orchestration** | `CustomerSupportBot.Adapters.Agents/DecomposedRunner.cs` (`RunDecomposedAsync`), `WorkflowRunner.cs`, `SubTaskOrchestrator.cs` |

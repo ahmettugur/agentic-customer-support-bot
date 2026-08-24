@@ -9,7 +9,7 @@ Bu doküman botun **"akıl yürütme"** stratejisini anlatır: hangi reasoning p
 ## TL;DR — Reasoning katmanları
 
 ```
-1. Deterministic Pre-Processing   (LLM'siz — IdExtractor, SessionStateExtractor)
+1. Deterministic Pre-Processing   (LLM'siz — SessionStateExtractor)
         ↓
 2. Reasoning Agent                (Chain-of-Thought + Self-Reflection)
         ↓
@@ -28,7 +28,7 @@ Her katman **farklı bir reasoning ihtiyacına** karşılık gelir — biri olma
 
 | Pattern | Nerede | Niçin |
 |---|---|---|
-| **Deterministic + LLM hybrid** | `IdExtractor`, `SessionStateExtractor` | Ucuz ve %100 doğru olabilen işleri LLM'e bırakma |
+| **Deterministic + LLM hybrid** | `SessionStateExtractor`, `EntityVerifier` (yalnız kimlik) | Ucuz ve %100 doğru olabilen işleri LLM'e bırakma |
 | **Chain-of-Thought (CoT)** | `ReasoningAgent` → `ReasoningResult.Steps[]` | Görünür akıl yürütme, debug + audit |
 | **Self-Reflection / Sanity Check** | `ReasoningAgent` → `SanityIssues[]` | LLM kendi tutarsızlığını fark etsin |
 | **Confidence-Aware Routing** | `PlanningAgent` → `needsClarification` kararı | Belirsiz durumda specialist çağırma, soru sor |
@@ -46,31 +46,24 @@ Her katman **farklı bir reasoning ihtiyacına** karşılık gelir — biri olma
 
 **Problem:** LLM her şeye iyi değil. Regex'in çok daha iyi yapacağı işleri LLM'e bırakmak hem **pahalı** hem **halüsinasyon riski**.
 
-### Çözüm: LLM öncesi deterministic preprocessing
+### Bugünkü kapsam: yalnızca kimlik ve session-state
 
-```
-Kullanıcı: "5 nerede"
-   ↓
-IdExtractor.Extract(query)                          ← Regex (mikrosaniye)
-   → ExtractedIds { OrderId = "5" }
-   ↓
-IdExtractor.BuildHintMessage(ids)                   ← Prompt'a inject
-   → "[ID İPUCU]
-       - order_id: 5
-       [TOOL ÖNCELİĞİ]
-       order_id mevcutsa order_status_tool kullan..."
-   ↓
-ReasoningAgent prompt'una eklenir                   ← LLM bu hint'i görür
-```
+> 🐞 **Bu bölüm daraldı:** Eskiden `IdExtractor` isimli statik bir sınıf regex + Türkçe bağlam
+> kelimesi eşleştirmesiyle sorgudan `order_id`/`customer_id`/`complaint_id` çıkarıp bunu
+> `[ENTITY EXTRACTION]` bloğu olarak prompt'a enjekte ediyordu. Bu sınıf **tamamen kaldırıldı**:
+> müşteri kimliği zaten hiçbir zaman bu regex'ten değil, yalnızca `SessionState.
+> AuthenticatedCustomerId` (JWT'den) üzerinden alınıyordu — regex'in customer_id tarafı hiç
+> kullanılmıyordu. `order_id`/`complaint_id` çözümü ise artık tamamen LLM'e bırakılıyor:
+> specialist agent'lar kullanıcı mesajını doğrudan okuyup ilgili tool'a parametre olarak
+> geçiriyor; hiç geçmezse `get_last_order_tool` gibi parametresiz tool'lar devreye giriyor.
 
-**Sonuç:**
-- LLM ID'leri tekrar çıkarmaya çalışmaz (halüsinasyon yok)
-- Cost ↓ (daha kısa LLM yanıtı)
-- Doğruluk ↑ (regex deterministic)
+Bugün "deterministic pre-processing" kapsamında kalan tek şey `SessionStateExtractor`'daki
+turn count, intent keyword match, sentiment keyword match işleridir — hepsi LLM'siz. Müşteri
+kimliği de `EntityVerifier` ile deterministik olarak (ama regex değil, doğrudan JWT claim
+okuyarak) `VerifiedEntities.CustomerId`'ye taşınır — bkz.
+[EntityVerifier.md](CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.md).
 
-Aynı pattern `SessionStateExtractor`'da: turn count, intent keyword match, sentiment keyword match — hepsi LLM'siz.
-
-📁 Kod: [`CustomerSupportBot.Domain/Services/IdExtractor.md`](CustomerSupportBot.Domain/Services/IdExtractor.md), [`CustomerSupportBot.Domain/Services/SessionStateExtractor.md`](CustomerSupportBot.Domain/Services/SessionStateExtractor.md)
+📁 Kod: [`CustomerSupportBot.Domain/Services/SessionStateExtractor.md`](CustomerSupportBot.Domain/Services/SessionStateExtractor.md)
 
 ---
 
@@ -333,7 +326,7 @@ Yan-etkisiz query: "1 ve 2 durumu"
 
 | Grounding | Anlamı | Güven |
 |---|---|---|
-| `regex` | IdExtractor match | ⭐⭐⭐⭐⭐ |
+| `regex` | Kodun ürettiği deterministik bir eşleşme (LLM'in kendi raporladığı serbest metin etiketi — `ReasoningStep.Grounding`'de tanımlı kalır, ama `IdExtractor` kaldırıldığından artık nadiren üretilir) | ⭐⭐⭐⭐⭐ |
 | `DB` | Veritabanı sorgusu | ⭐⭐⭐⭐⭐ |
 | `session_state` | Session.CollectedInfo'dan | ⭐⭐⭐⭐ |
 | `history` | Önceki mesajlardan | ⭐⭐⭐ |
@@ -478,14 +471,15 @@ Kullanıcı: **"5 ve 7 durumu nedir?"**
 
 ```
 [1] Deterministic preprocessing
-    IdExtractor → { OrderId: "5" } (ilki)
     SessionStateExtractor → turnCount++, intent keyword: "durum" → OrderInquiry
+    (order_id'ler ("5" ve "7") burada çıkarılmaz — LLM sorguyu doğrudan okuyup
+     aşağıdaki adımlarda kendisi kullanır)
 
 [2] ReasoningAgent (CoT + decomposition)
     Output:
       analysis: "Kullanıcı 2 farklı siparişin durumunu soruyor"
       steps: [
-        { action: "extract", grounding: "regex", confidence: 0.95 },
+        { action: "extract", grounding: "history", confidence: 0.9 },
         { action: "route", grounding: "session_state", confidence: 0.9 }
       ]
       subTasks: [
@@ -565,9 +559,9 @@ Aşağıdaki trace, S05 senaryosu (`"001 1 için hasarlı ürün şikayeti açma
   "terminationReason": "completed",
 
   // ─── 1. Deterministic preprocessing (LLM'siz) ───
-  // IdExtractor + SessionStateExtractor → reasoning öncesi
+  // SessionStateExtractor → reasoning öncesi (yalnızca intent/sentiment/faz; ID'ler
+  // artık burada çıkarılmaz — order_id/customer_id LLM'in mesajı okumasıyla belirlenir)
   // Bu adım trace'e ayrı yazılmaz ama session.state'e yansır:
-  //   collectedInfo: { customer_id: "001", order_id: "1" }
   //   currentIntent: "Complaint"    (keyword: "şikayet")
   //   phase: "Action"
 
@@ -755,7 +749,6 @@ Tek konuşma turn'ü < yarım sentin altında. Bu deterministic preprocessing + 
   - [`CustomerSupportBot.Domain/Model/ReasoningResult.md`](CustomerSupportBot.Domain/Model/ReasoningResult.md) — ReasoningResult, ReasoningStep, SubTask, ReasoningIssue
   - [`CustomerSupportBot.Domain/Model/SpecialistReasoning.md`](CustomerSupportBot.Domain/Model/SpecialistReasoning.md) — PreToolCheck, PostToolReflection
   - [`CustomerSupportBot.Domain/Services/ReasoningResultParser.md`](CustomerSupportBot.Domain/Services/ReasoningResultParser.md) — LLM JSON parse mantığı
-  - [`CustomerSupportBot.Domain/Services/IdExtractor.md`](CustomerSupportBot.Domain/Services/IdExtractor.md) — Regex ID çıkarımı
   - [`CustomerSupportBot.Domain/Services/SessionStateExtractor.md`](CustomerSupportBot.Domain/Services/SessionStateExtractor.md) — Deterministic state
   - [`CustomerSupportBot.Application/README.md`](CustomerSupportBot.Application/README.md), [`CustomerSupportBot.Application/Services/Reasoning/ReplanService.md`](CustomerSupportBot.Application/Services/Reasoning/ReplanService.md)
   - [`CustomerSupportBot.Adapters.AI/Chat/GeneralChatClientAdapter.md`](CustomerSupportBot.Adapters.AI/Chat/GeneralChatClientAdapter.md) — ReasoningChatClient

@@ -58,7 +58,6 @@ Compound query (bileşik sorgu) orkestratörü. `ReasoningResult.SubTasks` liste
 Workflow öncesinde MAF agent'larına gönderilecek system/user mesaj listesini hazırlar:
 
 - `ContextPipeline` ile müşteri bağlamı, konuşma özeti, RAG context birleştirilir.
-- `IdExtractor` hint mesajı eklenir.
 - Reasoning hint (intent, requiredInfo, subTasks) enjekte edilir.
 - Replan flag aktifse `ReplanPlanningHint` + admin notu prepend edilir.
 
@@ -111,14 +110,11 @@ Reasoning pipeline'ın ana beyni. Workflow **öncesinde** çalışır. O-series 
 
 ### `EntityVerifier` — `Services/EntityVerifier.cs`
 
-**Katman 0**. Deterministik (LLM'siz) entity resolution:
+**Katman 0**. Deterministik (LLM'siz) müşteri kimliği çözümü:
 
 - **`Verify(query, session?, history?)` → `VerifiedEntities`** —
-  1. `IdExtractor.Extract(query)` ile regex tabanlı çıkarım
-  2. History ve session state'ten eksik ID'leri tamamla (5 turluk geriye tarama)
-  3. Müşteri kimliğini yalnız `AuthenticatedCustomerId` üzerinden alır
-  4. Order/complaint ID'lerini `FormatOnly` aday olarak taşır; varlık ve sahiplik tool'da doğrulanır
-  5. DB attribute'u, son sipariş veya sipariş sayısı türetmez
+  1. Müşteri kimliğini yalnız `AuthenticatedCustomerId` (JWT) üzerinden alır; sorgu/geçmiş metninden hiçbir ID çıkarmaz (eskiden `IdExtractor` ile çıkarıyordu — o sınıf tamamen kaldırıldı, order_id/complaint_id çözümü artık tamamen LLM'e bırakıldı).
+  2. DB attribute'u, son sipariş veya sipariş sayısı türetmez.
 - **`BuildPromptBlock(verified)` → string** — reasoning prompt'una enjekte edilecek `[RESOLVED ENTITIES]` bloğunu oluşturur.
 
 ---
@@ -166,19 +162,13 @@ README/NOTES adlı .md dosyaları atlanır (insanlara yönelik dokümantasyon ol
 
 ---
 
-### `IdExtractor` — `Services/IdExtractor.cs`
-
-Statik sınıf. **Deterministik** (LLM'siz) regex tabanlı entity extraction:
-
-- **Pattern** — `\b(\d{4,})\b` (4+ haneli sayı). Prefix (`ORD-`, `CMP-`) yoktur.
-- **Bağlam belirleme** — sayıdan ±60 karakter penceredeki Türkçe anahtar kelime (sipariş → `order_id`, şikayet → `complaint_id`, müşteri/numaram → `customer_id`). Bağlam yoksa mesaj ≤5 token ise `customer_id` varsayılır.
-- **`Extract(text)` → `ExtractedIds`** — `OrderId`, `CustomerId`, `ComplaintId` string alanları (`null` gelilebilir).
-- **`BuildHintMessage(ids)` → string?** — planning prompt'una eklenen `[ENTITY EXTRACTION]` bloğu + sipariş sorgu öncelik kuralı:
-  - `order_id VAR` → `order_status_tool` kullan (customer_id tekrar sorma)
-  - `customer_id VAR` → `get_last_order_tool` kullan (order_id tekrar sorma)
-  - Hiç ID yoksa `null` döner.
-
-`EntityVerifier` bu servisi ilk adım olarak kullanır.
+> **`IdExtractor` kaldırıldı.** Sorgu/geçmiş metninden regex ile `order_id`/`customer_id`/
+> `complaint_id` çıkaran statik sınıftı. Müşteri kimliği zaten yalnızca `AuthenticatedCustomerId`
+> (JWT) üzerinden alınıyordu — metinden çıkarılan `customer_id` hiçbir zaman kimlik olarak
+> kullanılmıyordu. `order_id`/`complaint_id` çıkarımı ise tamamen LLM'e bırakıldı: specialist
+> agent'lar kullanıcı mesajını doğrudan okuyup ilgili tool'a parametre olarak geçiriyor; hiç
+> geçmezse `get_last_order_tool` gibi parametresiz tool'lar devreye giriyor. Bkz.
+> [EntityVerifier.md](CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.md).
 
 ---
 

@@ -25,11 +25,9 @@ public static class SessionStateExtractor
     /// </para>
     /// </summary>
     /// <param name="priorHistory">
-    /// Bu turdan ÖNCEKİ konuşma turları (eski → yeni sıralı, opsiyonel). Verilirse,
-    /// <paramref name="userMessage"/> bağlamsız (varsayımla) bir customer_id çıkarırsa
-    /// (ör. "sipariş numaram 1030" turundan sonra sadece "1030" yazılması) önceki turun
-    /// gerçek bağlamına göre yeniden sınıflandırılır — aksi halde sipariş numarası
-    /// state.CustomerId'ye kalıcı olarak yazılıp sonraki turları da zehirler.
+    /// Bu turdan ÖNCEKİ konuşma turları (eski → yeni sıralı, opsiyonel). Şu an bu metotta
+    /// kullanılmıyor — imza geriye dönük uyumluluk için korunuyor (bkz. IdExtractor'ın
+    /// kaldırılması: metinden ID çıkarımı ve bağlam-sürekliliği mantığı tamamen kalktı).
     /// </param>
     /// <param name="llm">
     /// LLM reasoning'inin bu tur için ürettiği sinyaller (opsiyonel). Dolu olan her alan
@@ -42,24 +40,6 @@ public static class SessionStateExtractor
         TurnSignals? llm = null)
     {
         state.TurnCount++;
-
-        // ID çıkarma — IdExtractor üzerinden (Türkçe bağlam + 4+ haneli rakam)
-        var extracted = IdExtractor.Extract(userMessage);
-        IdExtractor.ApplyContextContinuity(
-            extracted,
-            priorHistory is null ? null : Enumerable.Reverse(priorHistory).Select(m => m.Text));
-
-        if (!string.IsNullOrEmpty(extracted.CustomerId))
-            state.CustomerId = extracted.CustomerId;
-        else if (state.CustomerId is null)
-        {
-            var fromBot = IdExtractor.Extract(botResponse);
-            if (!string.IsNullOrEmpty(fromBot.CustomerId))
-                state.CustomerId = fromBot.CustomerId;
-        }
-
-        if (!string.IsNullOrEmpty(extracted.OrderId))
-            state.CollectedInfo["LastMentionedOrderId"] = extracted.OrderId;
 
         // Niyet tespiti — LLM bir karar ürettiyse o kazanır, yoksa kural tabanlı tabloya düş.
         state.CurrentIntent = llm?.Intent ?? DetectUserIntent(userMessage);

@@ -64,48 +64,6 @@ public class InMemorySessionManagerTests
     }
 
     [Fact]
-    public async Task ExtractAndUpdateState_CapturesCustomerId()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await _mgr.AddExchangeAsync("s1", "müşteri numaram 1027", "merhaba", ct: ct);
-        var s = await _mgr.GetAsync("s1", ct);
-        s!.State.CustomerId.Should().Be("1027");
-    }
-
-    [Fact]
-    public async Task ExtractAndUpdateState_CapturesOrderId()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await _mgr.AddExchangeAsync("s1", "sipariş 1030 nerede?", "siparişiniz yolda", ct: ct);
-        var s = await _mgr.GetAsync("s1", ct);
-        s!.State.CollectedInfo.Should().ContainKey("LastMentionedOrderId");
-    }
-
-    [Fact]
-    public async Task AddExchange_AmbiguousFollowUp_AfterOrderContext_DoesNotPoisonCustomerId()
-    {
-        // Uçtan uca kanıt: AddExchange, ExtractAndUpdateState/ExtractAndUpdateStateCore
-        // zincirinde geçmişi gerçekten SessionStateExtractor'a taşıyor mu?
-        // Canlıda gözlemlenen senaryo: "sipariş numaram 1030" turundan sonra kullanıcı
-        // sadece "1030" yazarsa, sipariş numarası state.CustomerId'ye zehirlenmemeli.
-        // İkinci turun bot yanıtı BİLİNÇLİ olarak nötr ("sipariş"/"müşteri"/"şikayet"
-        // kelimesi içermez) — SessionStateExtractor'da AYRI bir mekanizma (bot yanıtından
-        // customer_id türetme, bkz. ExtractAndApply_CustomerIdFromBotResponse_OnlyWhenUserHasNone)
-        // ve SessionState'in "yalnızca en son set edilen alan gözlemlenebilir" doğası, bu
-        // testin tam olarak snapshot ZAMANLAMASINI (ekleme öncesi/sonrası) izole eden bir
-        // mutasyon-öldürücü olmasını engelliyor — o ince ayrıntı EntityVerifier'daki
-        // (zaten mutasyonla doğrulanmış) aynı desenle ve kod incelemesiyle güvence altında.
-        // Bu test asıl regresyon sınıfını kanıtlıyor: priorHistory gerçekten iletiliyor mu.
-        var ct = TestContext.Current.CancellationToken;
-        await _mgr.AddExchangeAsync("s1", "sipariş numaram 1030", "1030 numaralı siparişinizi kontrol ettim.", ct: ct);
-        await _mgr.AddExchangeAsync("s1", "1030", "Bir saniye, kontrol ediyorum.", ct: ct);
-
-        var s = await _mgr.GetAsync("s1", ct);
-        s!.State.CustomerId.Should().BeNull("1030 sipariş bağlamında yorumlanmalı");
-        s.State.CollectedInfo["LastMentionedOrderId"].Should().Be("1030");
-    }
-
-    [Fact]
     public async Task AddExchange_IncrementsTurnCount()
     {
         var ct = TestContext.Current.CancellationToken;
