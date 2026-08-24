@@ -3,6 +3,7 @@
 // Routes: POST /chat/ (non-streaming), POST /chat/stream (SSE), GET /chat/events/{id} (persistent SSE)
 
 using CustomerSupportBot.Api.Infrastructure;
+using CustomerSupportBot.Api.Models;
 using CustomerSupportBot.Api.Services;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
@@ -27,7 +28,7 @@ public static class ChatEndpoints
     /// Non-streaming chat: reasoning + workflow in sequence, returns single JSON.
     /// </summary>
     private static async Task<IResult> HandleChatAsync(
-        ChatRequest request,
+        ChatRequestBody request,
         HttpContext httpContext,
         IChatPort chatPort,
         IInputGuard inputGuard,
@@ -63,11 +64,10 @@ public static class ChatEndpoints
                 request.SessionId, string.Join(",", guardResult.Flags));
         }
 
-        var safeRequest = request with
-        {
-            Query = guardResult.SanitizedInput,
-            CustomerId = ResolveAuthenticatedCustomerId(httpContext)
-        };
+        var safeRequest = new ChatRequest(
+            guardResult.SanitizedInput,
+            request.SessionId,
+            CustomerId: ResolveAuthenticatedCustomerId(httpContext));
         // İstemci bağlantıyı keserse reasoning/workflow zinciri de iptal edilir —
         // aksi halde LLM çağrısı WorkflowGuards:TimeoutSeconds süresince boşa çalışır.
         var response = await chatPort.HandleAsync(safeRequest, httpContext.RequestAborted);
@@ -80,7 +80,7 @@ public static class ChatEndpoints
     /// HITL (approval/escalation) events are bridged via HitlStreamSubscription.
     /// </summary>
     private static async Task HandleChatStreamAsync(
-        ChatRequest request,
+        ChatRequestBody request,
         HttpResponse response,
         HttpContext httpContext,
         IChatPort chatPort,
@@ -131,11 +131,10 @@ public static class ChatEndpoints
                 request.SessionId, string.Join(",", guardResult.Flags));
         }
 
-        var safeRequest = request with
-        {
-            Query = guardResult.SanitizedInput,
-            CustomerId = ResolveAuthenticatedCustomerId(httpContext)
-        };
+        var safeRequest = new ChatRequest(
+            guardResult.SanitizedInput,
+            request.SessionId,
+            CustomerId: ResolveAuthenticatedCustomerId(httpContext));
 
         using var sse = new SseForwarder(response, httpContext.RequestAborted);
 
