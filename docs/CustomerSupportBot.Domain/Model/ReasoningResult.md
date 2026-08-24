@@ -63,6 +63,7 @@ Her kullanıcı mesajında `ReasoningService` bir `ReasoningResult` üretir. Bu 
 | `SentimentScore` | `double` | Duygu skoru (0.0-1.0) |
 | `VerifiedEntities` | `VerifiedEntities?` | EntityVerifier'ın güvenli kaynaklardan çözümlediği entity'ler; factual doğrulama tool'da |
 | `ConfidenceLevel` | `ConfidenceLevel` | ConfidenceScore'un type-safe enum karşılığı (computed) |
+| `IsFallback` | `bool` | 🐞 Bu sonuç gerçek bir LLM çıktısı mı yoksa timeout/hata sonrası üretilmiş bir yer tutucu mu (`ReasoningService`'in `catch` bloklarında set edilir, varsayılan `false`). `[JsonIgnore]` DEĞİLDİR — `ReasoningComplete` SSE event'iyle istemciye ulaşır. Eskiden tüketiciler bunu yalnızca düşük `ConfidenceScore`'dan dolaylı çıkarabiliyordu; ama düşük skor gerçek bir LLM sonucunda da oluşabildiği için "reasoning hiç çalışmadı" ile "çalıştı ama emin değildi" ayırt edilemiyordu. |
 
 ### Statik Metotlar
 

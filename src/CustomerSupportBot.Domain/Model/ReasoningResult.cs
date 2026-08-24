@@ -98,6 +98,24 @@ public class ReasoningResult
     [JsonIgnore]
     public string? ConstrainedTargetAgent { get; set; }
 
+    /// <summary>
+    /// Bu sonuç, gerçek bir LLM reasoning çıktısı DEĞİL — timeout veya hata sonrası üretilmiş
+    /// bir yer tutucu (bkz. <see cref="Services.Reasoning.ReasoningService"/>'in <c>catch</c>
+    /// bloklarında oluşturduğu <c>Confidence=Low, ConfidenceScore=0.3, Steps=[]</c> sonuçlar).
+    ///
+    /// <para>
+    /// 🐞 <b>Neden eklendi:</b> Tüketiciler (SSE ile <c>ReasoningComplete</c> event'ini dinleyen
+    /// istemciler dahil) fallback durumunu daha önce yalnızca <c>ConfidenceScore</c>'un düşük
+    /// olmasından DOLAYLI olarak çıkarabiliyordu — ama düşük skor gerçek bir LLM sonucunda da
+    /// (model gerçekten emin değilse) oluşabilir. Bu, "reasoning hiç çalışmadı" ile "reasoning
+    /// çalıştı ama düşük güvenle sonuçlandı" durumlarını ayırt edilemez kılıyordu; bir tüketici
+    /// düşük kaliteli/eksik bir reasoning'i yüksek güvenmiş gibi değerlendirebilirdi. Bu alan,
+    /// <c>[JsonIgnore]</c> DEĞİLDİR — <c>ConstrainedTargetAgent</c>'ın aksine, istemciye
+    /// (SSE payload'ı) ulaşması GEREKİR.
+    /// </para>
+    /// </summary>
+    public bool IsFallback { get; set; }
+
     // ─── DUYGU ANALİZİ ───
 
     /// <summary>

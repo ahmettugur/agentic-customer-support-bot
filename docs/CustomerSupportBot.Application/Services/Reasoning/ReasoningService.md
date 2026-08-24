@@ -78,8 +78,10 @@ Emit'ler `minInterval=20ms`'den sık olmaz, arada gelen chunk'lar `pendingChunks
 
 | Üye | Açıklama |
 |---|---|
-| `ReasonAsync(query, session, history?, ct)` | Non-streaming: verify → prompt → LLM çağrısı (kendi timeout'uyla) → parse → sanity check → `VerifiedEntities` ekle. `catch` bloğunda `Confidence=Low`, `ConfidenceScore=0.3` ile fallback `ReasoningResult` döner — turu asla düşürmez. Çağıranın kendi iptali (`ct.IsCancellationRequested`) ayrı yakalanıp yukarı fırlatılır. |
-| `ReasonStreamingAsync(query, session, history?, ct)` | Streaming: `ReasoningStart` event'i → verify/prompt → `IReasoningChatClient.StreamAsync`'i `EnumerateSafely` ile güvenli tüketir → throttle'lı `ReasoningDelta` event'leri yayınlar → timeout/hata/boş metin durumunda fallback sonuç, aksi halde `ReasoningResultParser.Parse` → `ReasoningComplete` event'i ile nihai `ReasoningResult`'ı yayınlar. |
+| `ReasonAsync(query, session, history?, ct)` | Non-streaming: verify → prompt → LLM çağrısı (kendi timeout'uyla) → parse → sanity check → `VerifiedEntities` ekle. `catch` bloğunda `Confidence=Low`, `ConfidenceScore=0.3`, **`IsFallback=true`** ile fallback `ReasoningResult` döner — turu asla düşürmez. Çağıranın kendi iptali (`ct.IsCancellationRequested`) ayrı yakalanıp yukarı fırlatılır. |
+| `ReasonStreamingAsync(query, session, history?, ct)` | Streaming: `ReasoningStart` event'i → verify/prompt → `IReasoningChatClient.StreamAsync`'i `EnumerateSafely` ile güvenli tüketir → throttle'lı `ReasoningDelta` event'leri yayınlar → timeout/hata/boş metin durumunda `IsFallback=true` işaretli fallback sonuç, aksi halde `ReasoningResultParser.Parse` (bu yolda `IsFallback` varsayılan `false` kalır) → `ReasoningComplete` event'i ile nihai `ReasoningResult`'ı yayınlar. |
+
+> 🐞 **`IsFallback` alanı (bkz. [ReasoningResult.md](../../../CustomerSupportBot.Domain/Model/ReasoningResult.md)):** Her iki fallback yolunda da (`ReasonAsync`'in `catch`'i, `ReasonStreamingAsync`'in timeout/hata dalı) açıkça `true` set edilir. Eskiden tüketiciler (SSE ile `ReasoningComplete`'i dinleyenler dahil) bunu yalnızca düşük `ConfidenceScore`'dan dolaylı çıkarabiliyordu — ama düşük skor gerçek bir LLM sonucunda da (model gerçekten emin değilse) oluşabilir. Artık ayrım açık.
 | `EnumerateSafely(stream, ct, callerCt)` *(private static)* | Stream'i tüketirken hataları `(chunk, error)` tuple'ına çevirir; `callerCt` iptaliyle biten `OperationCanceledException`'ı tekrar fırlatır, diğer tüm hataları veri olarak döner. |
 
 ## 7. Bağımlılıklar

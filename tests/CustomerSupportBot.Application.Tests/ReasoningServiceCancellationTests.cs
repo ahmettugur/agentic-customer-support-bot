@@ -106,7 +106,53 @@ public class ReasoningServiceCancellationTests
             "asılı model çağrısı bütçeyle kesilmeli; aksi hâlde tur süresiz bekler");
 
         var complete = events.Last(e => e.Type == StreamEventTypes.ReasoningComplete);
-        complete.Data.Should().BeOfType<ReasoningResult>()
-            .Which.Confidence.Should().Be(WellKnown.Confidence.Low, "timeout fallback'e düşmeli");
+        var result = complete.Data.Should().BeOfType<ReasoningResult>().Subject;
+        result.Confidence.Should().Be(WellKnown.Confidence.Low, "timeout fallback'e düşmeli");
+
+        // Bulgu 2.5: tüketici IsFallback'e BAKMADAN, yalnızca düşük Confidence'a bakarak
+        // "reasoning gerçekten çalıştı ama emin değildi" ile "reasoning hiç çalışmadı"
+        // durumlarını ayırt edemiyordu.
+        result.IsFallback.Should().BeTrue(
+            "timeout sonucu üretilen ReasoningResult açıkça fallback olarak işaretlenmeli");
+    }
+
+    /// <summary>
+    /// Bulgu 2.5'in non-streaming (ReasonAsync) karşılığı — aynı ayrım burada da geçerli.
+    /// </summary>
+    private sealed class ThrowingReasoningClient : IReasoningChatClient
+    {
+        public string ModelName => "test";
+        public string ReasoningEffort => "low";
+
+        public Task<string> CompleteAsync(
+            IReadOnlyList<ConversationMessage> messages,
+            CancellationToken ct = default) => throw new InvalidOperationException("simulated LLM failure");
+
+        public IAsyncEnumerable<string> StreamAsync(
+            IReadOnlyList<ConversationMessage> messages,
+            CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    [Fact]
+    public async Task ReasonAsync_WhenClientThrows_ReturnsResultMarkedAsFallback()
+    {
+        var prompts = Substitute.For<IPromptRepository>();
+        prompts.Render(Arg.Any<string>(), Arg.Any<IDictionary<string, string?>?>())
+            .Returns("system prompt");
+        prompts.Get(Arg.Any<string>()).Returns("");
+
+        var sut = new ReasoningService(
+            new ThrowingReasoningClient(),
+            NullLogger<ReasoningService>.Instance,
+            prompts,
+            new EntityVerifier(NullLogger<EntityVerifier>.Instance),
+            new ReasoningSanityChecker(NullLogger<ReasoningSanityChecker>.Instance),
+            Options.Create(new WorkflowGuardOptions { ReasoningTimeoutSeconds = 45 }));
+
+        var result = await sut.ReasonAsync("soru", new AgentSession { SessionId = "s1" });
+
+        result.Confidence.Should().Be(WellKnown.Confidence.Low);
+        result.IsFallback.Should().BeTrue(
+            "istisna sonucu üretilen ReasoningResult açıkça fallback olarak işaretlenmeli");
     }
 }

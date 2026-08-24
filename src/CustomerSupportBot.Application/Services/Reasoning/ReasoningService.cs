@@ -83,7 +83,8 @@ public class ReasoningService : IReasoningPort
                 Confidence = WellKnown.Confidence.Low,
                 ConfidenceScore = 0.3,
                 NextAction = "workflow'a düşük güvenle devam et",
-                VerifiedEntities = verified
+                VerifiedEntities = verified,
+                IsFallback = true
             };
         }
     }
@@ -183,7 +184,8 @@ public class ReasoningService : IReasoningPort
                 ConfidenceScore = 0.3,
                 Intent = session.State.CurrentIntent ?? WellKnown.Intents.Unknown,
                 RequiredInfo = new List<string>(),
-                Confidence = WellKnown.Confidence.Low
+                Confidence = WellKnown.Confidence.Low,
+                IsFallback = true
             };
         }
         else
