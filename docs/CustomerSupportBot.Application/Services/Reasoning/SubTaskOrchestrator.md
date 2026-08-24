@@ -53,6 +53,25 @@ birleştirme** kısımlarını sağlar — asıl yürütme `DecomposedRunner`'da
 workflow run zaten sırayla halledebilir. Decompose'un maliyeti (birden fazla workflow run,
 birleştirme mantığı) yalnızca gerçekten farklı uzmanlık gerektiren işler için haklıdır.
 
+> 🐞 **Aynı ajana 2+ görev durumunda downstream'de ne oluyor?** (kod incelemesi, bulgu 3.5)
+> Bu, `IsCompoundQuery`'nin `false` döndüğü ve tek-runner (`WorkflowRunner`) yoluna düştüğü
+> senaryodur — örn. reasoning "sipariş 1030'u ve 1042'yi iptal et" için iki `SubTask` (ikisi de
+> `TargetAgent="OrderAgent"`) üretmiş olsun. `IsCompoundQuery_TwoSubTasksSameAgent_False`
+> testinin doğruladığı gibi bu KASITLI bir tasarım kararıdır, bir eksiklik değil. Ancak tek-runner
+> yoluna düştüğünde `SubTasks` listesi PlanningAgent'a hiç aktarılmaz — `WorkflowMessageBuilder.
+> BuildReasoningSummaryHint`, `r.Analysis`/`r.Intent`/`r.Steps`/`r.RequiredInfo`/`r.NextAction`'dan
+> inşa edilir, `r.SubTasks`'tan DEĞİL (eskiden bu alanı da kullanan bir "sırayla yönlendir" bloğu
+> vardı, PlanningAgent'ın strict JSON şemasıyla uyumsuz olduğu için kaldırıldı — bkz.
+> `WorkflowMessageBuilder.md`). Yani OrderAgent, kullanıcının ORİJİNAL sorgu metnini ("1030'u ve
+> 1042'yi iptal et") alır ve iki ayrı iptali **LLM'in kendi native çoklu-tool-çağrısı**
+> yeteneğiyle (aynı turda `order_cancel_tool`'u iki kez çağırarak) işlemesi BEKLENİR — bu,
+> MAF/OpenAI function-calling'in desteklediği bir yetenektir, ama bu spesifik senaryo için ne
+> otomatik test edilmiş ne de `order-agent.md` prompt'unda açıkça talimatlandırılmıştır. Gerçek
+> MAF workflow'u gerektiren uçtan uca bir testin maliyeti bu kod tabanında zaten bilinen bir
+> sorun (bkz. `WorkflowRunner.cs`'teki `isSubTaskRun` "TEST BOŞLUĞU" notu — bir deneme turu
+> ~13.900 model çağrısına yol açmıştı); bu yüzden bu senaryo için ayrı bir test eklenmedi, yalnızca
+> davranış beklentisi burada belgelendi.
+
 ### `ValidateExecutionPlan` neden bu kadar sıkı (fail-closed)
 
 LLM'in ürettiği bir plan yürütmeye başlamadan önce **tamamen** doğrulanır: sıra numaraları
