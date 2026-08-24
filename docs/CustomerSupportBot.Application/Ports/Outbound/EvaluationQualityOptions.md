@@ -1,31 +1,43 @@
 # EvaluationQualityOptions
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/EvaluationQualityOptions.cs`
-- **Tür:** `public  class`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/EvaluationQualityOptions.cs`
+**Ayar bölümü:** `appsettings.json` → `"EvaluationQuality"`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`EvaluationQualityOptions`, Application/Ports/Outbound/EvaluationQualityOptions.cs MEAI (Microsoft.Extensions.AI.Evaluation.Quality) LLM-judge kalite kontrollerinin (relevance/coherence) global açma/kapama anahtarı. <summary> Evaluation senaryolarındaki <c>quality_checks</c> (relevance/coherence — MEAI LLM-judge evaluator'ları) için global kapı. Varsayılan <c>false</c>: her koşum gerçek bir ek LLM çağrısı (judge modeli) gerektirdiği için maliyetli — senaryo bunları istese bile bu <c>false</c> olduğu sürece atlanır (<c>Skipped="quality_checks_disabled"</c>). CI'da ayrı, isteğe bağlı bir job'da <c>true</c> yapılması önerilir. </summary>
+MEAI (`Microsoft.Extensions.AI.Evaluation.Quality`) LLM-judge kalite kontrollerinin
+(relevance/coherence) global açma/kapama anahtarı.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Evaluation senaryolarındaki `quality_checks` çalıştırılırken evaluation servisi bu bayrağı
+kontrol eder.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`EvaluationQualityOptions`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Yalnızca global bir açık/kapalı anahtarı taşımak.
+- **Üstlenmediği:** Kalite değerlendirmesinin kendisi — bu, evaluation servisindeki MEAI
+  entegrasyonunun işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`IEvaluationPort` implementasyonları (Application/Ports/Inbound tarafında tanımlı) bu options'ı
+okur; senaryo bunları istese bile `Enabled=false` olduğu sürece atlanır
+(`Skipped="quality_checks_disabled"`).
 
-## Özellikler/Properties
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `Enabled` (`bool`): İlgili veriyi temsil eden özellik.
+Varsayılan `false`: her koşum gerçek bir ek LLM çağrısı (judge modeli) gerektirdiği için
+maliyetlidir. CI'da ayrı, isteğe bağlı bir job'da `true` yapılması önerilir — böylece her PR'da
+gereksiz LLM maliyeti oluşmaz, yalnızca kalite regresyonuna özel bakılmak istendiğinde açılır.
 
-## Bağımlılıklar
+## 6. Metotlar / Üyeler
 
-- `CustomerSupportBot.Domain`
+| Üye | Varsayılan | Açıklama |
+|---|---|---|
+| `const string SectionName` | `"EvaluationQuality"` | appsettings bölüm adı. |
+| `bool Enabled` | `false` | LLM-judge kalite kontrolleri açık mı. |
+
+## 7. Bağımlılıklar
+
+Yok — saf options sınıfı.

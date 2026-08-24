@@ -38,6 +38,28 @@ public static string? BuildHintMessage(ExtractedIds ids)
 ```
 - **Ne işe yarar?:** Çıkarılan ID'leri ajanların göreceği sistem istemi formatına çevirir (Örn: `"KULLANICI MESAJINDAN ÇIKARILAN ID'LER:\n- order_id MEVCUT: 1041\nBu ID'leri tool çağrılarında doğrudan kullanın."`).
 
+### 3. `ApplyContextContinuity`
+```csharp
+public static void ApplyContextContinuity(ExtractedIds ids, IEnumerable<string>? priorTexts)
+```
+- **Ne işe yarar?:** `ids.IsCustomerIdAssumed=true` ise (yani sayı hiçbir bağlam kelimesi olmadan "kısa mesaj → müşteri ID'si" varsayımıyla atandıysa) bu ZAYIF bir tahmindir. `FindLastUnambiguousKind` ile konuşmanın son gerçek bağlamına bakılır; önceki turda "sipariş numaram 1042" gibi net bir bağlam varsa, kullanıcının aynı bağlamı sürdürdüğü varsayılır ve `CustomerId` alanı gerçek türüne (`OrderId`/`ComplaintId`) taşınır. `ids` parametresi yerinde (in-place) değiştirilir.
+- **Neden gerekli?:** Sipariş/müşteri/şikayet ID'leri aynı sayı aralığını paylaşabildiği için, DB'ye "bu sayı hangi tabloda var" diye sormaktan daha ucuz ve daha güvenilir bir sezgi.
+
+### 4. `FindLastUnambiguousKind`
+```csharp
+public static ExtractedKind? FindLastUnambiguousKind(IEnumerable<string>? priorTexts)
+```
+- **Ne işe yarar?:** Geçmiş kullanıcı mesajlarını (en yeniden en eskiye) tarayarak son "belirsiz olmayan" varlık türünü (sipariş/şikayet/müşteri) bulur — `CustomerId` yalnızca `IsCustomerIdAssumed=false` iken (yani gerçekten bağlam kelimesiyle eşleşmişse, varsayılan atama değilse) sayılır.
+- **Kullanan yer:** Yalnızca `ApplyContextContinuity` içinden çağrılır (private değil, `internal`/`public` erişilebilirliği test edilebilirlik için).
+
+### `ExtractedKind` (enum, aynı dosyada)
+
+| Değer | Anlamı |
+| ----- | ------ |
+| `Order` | Son belirsiz olmayan referans bir sipariş ID'siydi. |
+| `Complaint` | Son belirsiz olmayan referans bir şikayet ID'siydi. |
+| `Customer` | Son belirsiz olmayan referans bir müşteri ID'siydi (varsayılan/tahmin edilmiş değil). |
+
 ## Bağımlılıklar
 
 - [ExtractedIds](../Model/ExtractedIds.md)

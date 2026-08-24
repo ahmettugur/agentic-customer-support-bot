@@ -1,52 +1,50 @@
 # EfRefreshTokenRepository
 
-- **Kaynak:** `CustomerSupportBot.Adapters.Persistence/EfCore/Auth/EfRefreshTokenRepository.cs`
-- **Tür:** `public sealed class : IRefreshTokenRepository`
-- **Namespace:** `CustomerSupportBot.Adapters.Persistence.EfCore.Auth`
+**Dosya:** `EfCore/Auth/EfRefreshTokenRepository.cs`
+**Namespace:** `CustomerSupportBot.Adapters.Persistence.EfCore.Auth`
+**Port:** [`IRefreshTokenRepository`](../../../CustomerSupportBot.Application/Ports/Outbound/Auth/IRefreshTokenRepository.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`EfRefreshTokenRepository`, Application katmanındaki [IRefreshTokenRepository](../../../CustomerSupportBot.Application/Ports/Outbound/Auth/IRefreshTokenRepository.md) portunu uygulayan; JWT yenileme token'larının (Refresh Token) kaydedilmesini (`SaveAsync`), doğrulanmasını (`FindByTokenHashAsync`), iptal edilmesini (`RevokeAsync`, `RevokeAllForUserAsync`) ve süresi dolmuş token'ların temizlenmesini (`DeleteExpiredAsync`) yöneten adaptördür.
+JWT yenileme (refresh) token'larının veritabanı karşılığı: oluşturma, hash ile arama, ve **iptal etme** — ikinci bir atomik/koşullu iptal metodu ile birlikte.
 
-## Hangi amaçla kullanılır`?
+## 2. Hangi Amaçla Kullanılır
 
-- Güvenli JWT oturum tazeleme (Token Rotation) mekanizmasını desteklemek.
-- Token'ın kendisini değil, SHA-256 hash'ini (`TokenHash`) saklayarak veri tabanı sızıntılarına karşı güvenlik sağlamak.
+`TokenPortService.RefreshAsync`, bir refresh token kullanıldığında (rotasyon) eskisini iptal edip yenisini oluşturur; `CreateAsync`/`FindByHashAsync`/`TryRevokeAsync` bu akışın veri katmanıdır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:**
-  - `IRefreshTokenRepository` sözleşmesini karşılamak.
-  - `RefreshTokenEntity` ile [RefreshTokenInfo](../../../CustomerSupportBot.Domain/Model/Auth/RefreshTokenInfo.md) arasında çift yönlü dönüşüm sağlamak.
+- Üstlendiği: token CRUD'u (yaratma, hash ile arama, iptal), rotasyonun ÇİFT KULLANIMA karşı atomik korunması.
+- Üstlenmediği: token hash'inin üretimi (SHA-256, çağıran katmanın işi), token'ın kendisinin JWT olarak imzalanması (bkz. `JwtAccessTokenProvider`).
 
-## Constructor ve Başlatma Mantığı
+## 4. İlişkiler
 
-```csharp
-public EfRefreshTokenRepository(IDbContextFactory<CustomerSupportDbContext> dbFactory)
-```
+- `IRefreshTokenRepository` portunu implemente eder.
+- `IDbContextFactory<CustomerSupportDbContext>` enjekte edilir.
+- `TokenPortService` (Application katmanı) tarafından çağrılır.
 
-### Constructor İçerisinde Yapılan İşler:
-- `_dbFactory` (`IDbContextFactory<CustomerSupportDbContext>`): Asenkron kısa ömürlü DbContext üreticisi atanır.
+## 5. Tasarım Yaklaşımı
 
-## Metotlar ve İç Çalışma Mantıkları
+> 🐞 **`TryRevokeAsync` neden `RevokeAsync`'ten AYRI, koşullu bir metot olarak eklendi:** `RevokeAsync` klasik oku-değiştir-kaydet yapar (`FirstAsync` + alan ata + `SaveChangesAsync`) — iki eşzamanlı `/auth/refresh` isteği AYNI eski token'ı kullanmaya çalışırsa (örn. çift-tıklama, ağ retry'ı), her ikisi de token'ı "hâlâ geçerli" olarak okuyup ikisi de yeni bir refresh token üretebilir; bu, aynı eski token'ın İKİ KEZ "başarıyla" kullanılmasına (rotasyonun çift kullanım koruması delinmesine) yol açardı. `TryRevokeAsync`, tek bir `WHERE Id=@id AND RevokedAt IS NULL` koşullu `ExecuteUpdateAsync` ile bunu önler: yalnızca token GERÇEKTEN hâlâ aktifse (`RevokedAt == null`) iptal edilir ve `affected > 0` (yani `true`) döner; ikinci eşzamanlı çağrı `false` alır ve `TokenPortService.RefreshAsync` bu durumda yeni token ÜRETMEZ — projede approval kuyruğu ve stok düşümünde de kullanılan aynı "koşullu atomik sahiplenme" deseni (bkz. [PostgresApprovalQueue](../../Postgres/PostgresApprovalQueue.md), [StockDeduction](../../Postgres/StockDeduction.md)).
 
-### 1. `FindByTokenHashAsync`
-```csharp
-public async Task<RefreshTokenInfo?> FindByTokenHashAsync(string tokenHash, CancellationToken ct = default)
-```
-- **Ne işe yarar?:** Token hash'ine göre aktif yenileme token'ını arar.
+`RevokeAsync` (koşulsuz versiyon) hâlâ kodda duruyor — örn. bir kullanıcının TÜM token'larını kesin olarak iptal etmek gereken (şifre değişikliği, hesap kilitleme) senaryolarda, çift-kullanım riski olmayan tekil bir işlemde kullanılabilir.
 
-### 2. `SaveAsync`
-```csharp
-public async Task SaveAsync(RefreshTokenInfo tokenInfo, CancellationToken ct = default)
-```
-- **Ne işe yarar?:** Yeni bir yenileme token'ı kaydeder.
+## 6. Metotlar / Üyeler
 
-### 3. `RevokeAsync` & `RevokeAllForUserAsync`
-- **Ne işe yarar?:** Token'ın `RevokedAt` ve `ReplacedByTokenHash` alanlarını doldurarak iptal eder.
+| Üye | Açıklama |
+|---|---|
+| `Task CreateAsync(string id, string userId, string tokenHash, DateTime expiresAt, DateTime createdAt, CancellationToken ct)` | Yeni refresh token kaydı ekler. |
+| `Task<RefreshTokenInfo?> FindByHashAsync(string tokenHash, CancellationToken ct)` | Hash'e göre arar (token'ın kendisi DEĞİL, hash'i saklanır/aranır — DB sızıntısına karşı). |
+| `Task RevokeAsync(string id, DateTime revokedAt, string? replacedByTokenHash, CancellationToken ct)` | Koşulsuz iptal — oku-değiştir-kaydet. |
+| `Task<bool> TryRevokeAsync(string id, DateTime revokedAt, string? replacedByTokenHash, CancellationToken ct)` | Koşullu atomik iptal (`RevokedAt IS NULL` iken); rotasyonun çift-kullanım koruması budur. |
+| `private static RefreshTokenInfo Map(RefreshTokenEntity e)` | Entity → Domain modeli. |
 
-## Bağımlılıklar
+## 7. Bağımlılıklar
+
+- `IDbContextFactory<CustomerSupportDbContext>`
+
+## Bağlantılar
 
 - [IRefreshTokenRepository](../../../CustomerSupportBot.Application/Ports/Outbound/Auth/IRefreshTokenRepository.md)
 - [CustomerSupportDbContext](../CustomerSupportDbContext.md)
-- [RefreshTokenInfo](../../../CustomerSupportBot.Domain/Model/Auth/RefreshTokenInfo.md)
+- [PostgresApprovalQueue](../../Postgres/PostgresApprovalQueue.md) — aynı koşullu-atomik desen

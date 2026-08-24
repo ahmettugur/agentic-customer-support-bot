@@ -9,9 +9,13 @@ Kullanıcı mesajından regex ile çıkarılmış **ham entity ID'lerini** tutar
 
 ## 2. Hangi Amaçla Kullanılır
 
-`IdExtractor.Extract()` bu modeli üretir. `EntityVerifier` bu ham ID'leri alıp DB'de doğrulayarak `VerifiedEntities`'e dönüştürür.
+`IdExtractor.Extract()` bu modeli üretir. `EntityVerifier` ham ID'leri query/history/authenticated
+session önceliğiyle `VerifiedEntities` modeline dönüştürür; order/complaint gerçekliği ve sahipliği
+specialist tool'da doğrulanır.
 
-> 💡 **Analiz notu:** `ExtractedIds` = "1030 yazılmış ama gerçekten sipariş mi bilmiyoruz" (ham çıkarım). `VerifiedEntities` = "1030 DB'de var, Dell XPS 15 siparişi, kargolanmış" (doğrulanmış sonuç). İkisi arasındaki fark güvenilirlik farkıdır.
+> `ExtractedIds`, tek mesajdaki ham regex sonucudur. `VerifiedEntities`, geçmiş bağlamı ve
+> authenticated identity'yi de içeren güvenli resolution sonucudur. Siparişin varlığı/durumu
+> ancak tool sonucu ile bilinir.
 
 ## 3. Metotlar / Üyeler
 
@@ -27,5 +31,5 @@ Kullanıcı mesajından regex ile çıkarılmış **ham entity ID'lerini** tutar
 
 ## Bağlantılar
 
-- [VerifiedEntities.md](VerifiedEntities.md) — Doğrulanmış sonuç
+- [VerifiedEntities.md](VerifiedEntities.md) — Güvenli entity resolution sonucu
 - [../Services/IdExtractor.md](../Services/IdExtractor.md) — Bu modeli üreten servis

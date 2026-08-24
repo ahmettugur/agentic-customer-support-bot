@@ -6,15 +6,15 @@ Bu klasör, PostgreSQL veya Redis gibi harici altyapı bağımlılıkları olmad
 
 | Sınıf | Uyguladığı Port | Postgres Karşılığı |
 |---|---|---|
-| [InMemorySessionManager](InMemorySessionManager.md) | `ISessionManager` | [PostgresSessionManager](../Postgres/HitlAndChat.md) |
-| [InMemoryApprovalQueue](InMemoryApprovalQueue.md) | `IApprovalQueue` | [PostgresApprovalQueue](../Postgres/HitlAndChat.md) |
-| [InMemoryChatBridge](InMemoryChatBridge.md) | `IChatBridge` | [PostgresChatBridge](../Postgres/HitlAndChat.md) |
-| [InMemoryChatModeRegistry](InMemoryChatModeRegistry.md) | `IChatModeRegistry` | [PostgresChatModeRegistry](../Postgres/HitlAndChat.md) |
-| [InMemoryEscalationSink](InMemoryEscalationSink.md) | `IEscalationSink` | [PostgresEscalationSink](../Postgres/HitlAndChat.md) |
-| [InMemoryHumanAgentRegistry](InMemoryHumanAgentRegistry.md) | `IHumanAgentRegistry` | [PostgresHumanAgentRegistry](../Postgres/HitlAndChat.md) |
-| [InMemoryCustomerProfileStore](InMemoryCustomerProfileStore.md) | `ICustomerProfileStore` | [PostgresCustomerProfileStore](../Postgres/StoresAndSinks.md) |
-| [InMemoryLessonStore](InMemoryLessonStore.md) | `ILessonStore` | [PostgresLessonStore](../Postgres/StoresAndSinks.md) |
-| [InMemoryRatingStore](InMemoryRatingStore.md) | `IRatingStore` | [PostgresRatingStore](../Postgres/StoresAndSinks.md) |
-| [InMemoryReasoningTraceStore](InMemoryReasoningTraceStore.md) | `IReasoningTraceStore` | [PostgresReasoningTraceStore](../Postgres/StoresAndSinks.md) |
-| [InMemorySlaEventSink](InMemorySlaEventSink.md) | `ISlaEventSink` | [PostgresSlaEventSink](../Postgres/StoresAndSinks.md) |
+| [InMemorySessionManager](InMemorySessionManager.md) | `ISessionManager` | [PostgresSessionManager](../Postgres/PostgresSessionManager.md) |
+| [InMemoryApprovalQueue](InMemoryApprovalQueue.md) | `IApprovalQueue` | [PostgresApprovalQueue](../Postgres/PostgresApprovalQueue.md) |
+| [InMemoryChatBridge](InMemoryChatBridge.md) | `IChatBridge` | [PostgresChatBridge](../Postgres/PostgresChatBridge.md) |
+| [InMemoryChatModeRegistry](InMemoryChatModeRegistry.md) | `IChatModeRegistry` | [PostgresChatModeRegistry](../Postgres/PostgresChatModeRegistry.md) |
+| [InMemoryEscalationSink](InMemoryEscalationSink.md) | `IEscalationSink` | [PostgresEscalationSink](../Postgres/PostgresEscalationSink.md) |
+| [InMemoryHumanAgentRegistry](InMemoryHumanAgentRegistry.md) | `IHumanAgentRegistry` | [PostgresHumanAgentRegistry](../Postgres/PostgresHumanAgentRegistry.md) |
+| [InMemoryCustomerProfileStore](InMemoryCustomerProfileStore.md) | `ICustomerProfileStore` | [PostgresCustomerProfileStore](../Postgres/PostgresCustomerProfileStore.md) |
+| [InMemoryLessonStore](InMemoryLessonStore.md) | `ILessonStore` | [PostgresLessonStore](../Postgres/PostgresLessonStore.md) |
+| [InMemoryRatingStore](InMemoryRatingStore.md) | `IRatingStore` | [PostgresRatingStore](../Postgres/PostgresRatingStore.md) |
+| [InMemoryReasoningTraceStore](InMemoryReasoningTraceStore.md) | `IReasoningTraceStore` | [PostgresReasoningTraceStore](../Postgres/PostgresReasoningTraceStore.md) |
+| [InMemorySlaEventSink](InMemorySlaEventSink.md) | `ISlaEventSink` | [PostgresSlaEventSink](../Postgres/PostgresSlaEventSink.md) |
 | [InMemoryMessageBusAdapter](InMemoryMessageBusAdapter.md) | `IMessageBusPort` | [RedisMessageBusAdapter](../../CustomerSupportBot.Adapters.Redis/) |

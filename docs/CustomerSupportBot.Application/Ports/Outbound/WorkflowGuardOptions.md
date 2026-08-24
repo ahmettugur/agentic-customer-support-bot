@@ -1,36 +1,57 @@
 # WorkflowGuardOptions
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/WorkflowGuardOptions.cs`
-- **Tür:** `public  class`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/WorkflowGuardOptions.cs`
+**Ayar bölümü:** `appsettings.json` → `"WorkflowGuards"`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`WorkflowGuardOptions`, Application/Services/Workflow/WorkflowGuardOptions.cs Workflow seviyesi guard ayarları. appsettings.json'dan bind edilir. <summary> Workflow için guard parametreleri. appsettings.json "WorkflowGuards" bölümü. </summary> <summary> Tüm workflow için saniye cinsinden timeout. Bu süre aşılırsa CancellationToken tetiklenir. </summary> <summary> Aynı tool + aynı parametre combo'sunun maksimum tekrar sayısı. Bu eşik aşılırsa workflow sonlandırılır. </summary> <summary> Reasoning çağrısına gönderilecek EN FAZLA geçmiş mesaj sayısı (en yeniler).  <para> Workflow tarafında geçmiş özetlenip kırpılıyordu ama reasoning aynı korumadan yararlanmıyor, oturumun TAMAMINI modele gönderiyordu. Uzun oturumlarda bu üç şeyi birden büyütür: token maliyeti, gecikme ve modelin bağlam sınırını aşma riski — sınır aşılırsa reasoning fallback'e düşer ve tur sessizce kalitesizleşir.
+Workflow seviyesindeki tüm koruma (guard) parametrelerini taşır: genel timeout, tekrarlı
+tool-çağrı limiti, reasoning'e giden geçmiş boyutu/timeout'u, maksimum iterasyon ve handoff
+sayısı.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+`WorkflowRunner` (Adapters.Agents) bu ayarları okuyarak workflow'un sonsuza kadar dönmesini,
+aynı tool'u tekrar tekrar çağırmasını veya reasoning'in aşırı büyük bir bağlamla çalışmasını
+engeller.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`WorkflowGuardOptions`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Yalnızca yapılandırma değerlerini taşımak.
+- **Üstlenmediği:** Guard mantığının uygulanması — bu `WorkflowRunner`'ın işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`WorkflowRunner`, `TrimmingDeltaStreamer`, `TurnFinalizer` gibi Adapters.Agents sınıfları bu
+options'ı kullanır.
 
-## Özellikler/Properties
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `TimeoutSeconds` (`int`): İlgili veriyi temsil eden özellik.
-- `MaxDuplicateToolCalls` (`int`): İlgili veriyi temsil eden özellik.
-- `ReasoningHistoryMessages` (`int`): İlgili veriyi temsil eden özellik.
-- `ReasoningTimeoutSeconds` (`int`): İlgili veriyi temsil eden özellik.
-- `MaxIterations` (`int`): İlgili veriyi temsil eden özellik.
-- `MaxHandoffsPerAgent` (`int`): İlgili veriyi temsil eden özellik.
+> 🐞 **`ReasoningHistoryMessages` neden var:** Workflow tarafında geçmiş özetlenip
+> kırpılıyordu ama reasoning aynı korumadan yararlanmıyor, oturumun TAMAMINI modele
+> gönderiyordu. Uzun oturumlarda bu üç şeyi birden büyütür: token maliyeti, gecikme ve
+> modelin bağlam sınırını aşma riski — sınır aşılırsa reasoning fallback'e düşer ve tur
+> sessizce kalitesizleşir. Reasoning'in işi niyet çıkarımı ve varlık takibidir; her ikisi de
+> konuşmanın YAKIN geçmişine dayanır — uzak turların özeti zaten workflow bağlamında taşınır.
+>
+> `ReasoningTimeoutSeconds` ayrı bir alan çünkü `TimeoutSeconds` yalnızca workflow'u kapsar ve
+> reasoning ondan ÖNCE çalışır — bu ayar olmadan asılı kalan bir reasoning çağrısı hiçbir
+> bütçeye tabi değildi.
 
-## Bağımlılıklar
+`MaxDuplicateToolCalls` ve `MaxHandoffsPerAgent`, LLM'in bir döngüye girip (aynı tool'u/aynı
+ajana handoff'u tekrar tekrar çağırması) kaynak tüketmesini önleyen sonlu-durum korumalarıdır.
 
-- `CustomerSupportBot.Domain`
+## 6. Metotlar / Üyeler
+
+| Üye | Varsayılan | Açıklama |
+|---|---|---|
+| `int TimeoutSeconds` | `60` | Tüm workflow için saniye cinsinden timeout. |
+| `int MaxDuplicateToolCalls` | `3` | Aynı tool + aynı parametre kombinasyonunun maksimum tekrarı. |
+| `int ReasoningHistoryMessages` | `12` | Reasoning çağrısına gönderilecek en fazla geçmiş mesaj sayısı. |
+| `int ReasoningTimeoutSeconds` | `45` | Reasoning çağrısı için ayrı timeout. |
+| `int MaxIterations` | `20` | Maksimum workflow iterasyonu (MAF superstep). |
+| `int MaxHandoffsPerAgent` | `2` | Aynı specialist agent'a yapılabilecek maksimum dinamik handoff. |
+
+## 7. Bağımlılıklar
+
+Yok — saf options sınıfı.

@@ -1,77 +1,115 @@
 # LessonMiner
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Improvement/LessonMiner.cs`
-- **Tür:** `public sealed class`
-- **Namespace:** `CustomerSupportBot.Application.Services.Improvement`
+**Dosya:** `Services/Improvement/LessonMiner.cs`
+**Tür:** `public sealed class` (+ yardımcı DTO `MiningRunReport`)
+**Namespace:** `CustomerSupportBot.Application.Services.Improvement`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`LessonMiner`, Application/Services/Improvement/LessonMiner.cs Düşük puanlı veya hatalı trace'leri toplayıp LLM'e analiz ettirir; "Lesson" önerileri üretir. İdempotent değildir — çağıran admin onayı gerek.  Heuristic seçim: - rating ≤ MinRatingForLesson olan oturumların son trace'i - termination_reason in {"error", "timeout"} olan trace'ler - sanity issue varsa critical/error severity - ResponseAgent'ın öz-eleştirisi (SelfCritique.IsConcerning) sorun işaret ediyorsa — diğer sinyaller kullanıcı şikayetine veya sistem hatasına bağlıyken bu, sessizce kötü kalan yanıtları da yakalar  Çıktı JSON şeması: { "lessons": [ { "title", "lesson", "observation", "suggestedAgent" } ] }
+"Self-improvement" (kendi kendine iyileşme) döngüsünün kalbi: düşük puanlı/hatalı/sorunlu
+konuşma trace'lerini tarar, bunları bir LLM'e analiz ettirip **somut, admin onayı bekleyen
+"Ders" (`Lesson`) önerileri** üretir. Onaylanan dersler vektör belleğe yazılır ve gelecekteki
+konuşmalarda bağlam olarak devreye girer.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Periyodik olarak (veya admin panelinden manuel tetiklenerek) `MineAsync` çağrılır. Üretilen
+öneriler admin panelinde listelenir; admin `ApproveAsync`/`Reject` ile karar verir.
+[`ImprovementsPortService`](ImprovementsPortService.md) bu sınıfı sarmalayan driving port'tur.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`LessonMiner`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Aday trace seçimi (heuristic), LLM'e analiz prompt'u hazırlamak, LLM
+  cevabını JSON olarak ayrıştırmak, mükerrer ders önerilerini elemek, onaylanan dersi vektör
+  belleğe yazmak.
+- **Üstlenmediği:** Dersin ADMIN tarafından incelenmesi/onayı (bu bir insan kararıdır — bu
+  sınıf sadece ADAY üretir), onaylanan dersin konuşmalarda gerçekten nasıl kullanılacağı (bu
+  `ContextPipeline`/ilgili semantic memory provider'ın işidir — `MemoryKind.Lesson` etiketiyle
+  yazılan belge, normal bir bellek belgesi gibi aranır).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-```csharp
-public LessonMiner(IReasoningTraceStore traceStore,
-        IRatingStore ratingStore,
-        ILessonStore lessonStore,
-        IGeneralChatClient chatClient,
-        IOptions<SelfImprovementOptions> options,
-        ILogger<LessonMiner> logger,
-        SemanticMemoryService? memory = null)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- **Inject eder:** `IReasoningTraceStore`, `IRatingStore`, `ILessonStore`, `IGeneralChatClient`
+  (LLM çağrısı), `IOptions<SelfImprovementOptions>`, `ILogger`, `SemanticMemoryService?`
+  (opsiyonel — bellek kapalıysa onay adımı vektör yazmadan geçer).
+- **Kimin tarafından çağrılır:** [`ImprovementsPortService`](ImprovementsPortService.md)
+  (`MineAsync`/`ApproveAsync`/`Reject`'i doğrudan delege eder).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `MineAsync`
-```csharp
-public async Task<MiningRunReport> MineAsync(CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**Neden idempotent DEĞİL, admin onayı zorunlu:** LLM'in ürettiği "ders" önerileri **doğrudan**
+sisteme uygulanmaz — yanlış/genellenemez bir ders (ör. tek bir kötü örnekten aşırı genelleme)
+gelecekteki TÜM konuşmaları olumsuz etkileyebilir. Bu yüzden `MineAsync` sadece `Proposed`
+statüsünde aday üretir; vektör belleğe yazılma (ve dolayısıyla gerçek etki) ancak
+`ApproveAsync` ile, bir insan kararından SONRA gerçekleşir.
 
-### `ApproveAsync`
-```csharp
-public async Task<bool> ApproveAsync(string lessonId, string decidedBy, string? reason, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**Aday seçim heuristic'i (dört bağımsız sinyal, herhangi biri yeterli):**
+1. Kullanıcının düşük puan verdiği (`Stars <= MinRatingForLesson`) oturumların trace'i.
+2. `TerminationReason` "error"/"timeout" olan trace'ler (sistem hatası).
+3. `SanityIssues` içinde `Error` seviyesinde bir sorun olan trace'ler.
+4. `ResponseAgent`'ın kendi öz-eleştirisi (`SelfCritique.IsConcerning`) sorunlu bulduğu
+   trace'ler.
 
-### `Reject`
-```csharp
-public bool Reject(string lessonId, string decidedBy, string? reason)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+> 🐞 **4. sinyal neden ayrıca eklendi:** İlk üç sinyal ancak kullanıcı ŞİKAYET ettiğinde veya
+> sistem AÇIKÇA hata verdiğinde devreye girer. Ama bir yanıt teknik olarak "başarılı" dönüp
+> içerik olarak kötü olabilir (robotik ton, eksik cevap, halüsinasyon riski) — kullanıcı hiç
+> puan vermemiş veya fark etmemiş olabilir. `SelfCritique.IsConcerning`, `ResponseAgent`'ın
+> kendi çıktısını değerlendirdiği ayrı bir sinyaldir ve bu **sessizce kötü kalan** yanıtları da
+> yakalamak için eklendi.
 
-### `NormalizeAgent`
-```csharp
-internal static string? NormalizeAgent(string? raw)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Adaylar en yeniden eskiye sıralanıp **en fazla 8 tanesi** işlenir — token bütçesi sınırı;
+LLM'e tek seferde onlarca trace göndermek maliyeti ve gecikmeyi orantısız artırır.
 
-## Özellikler/Properties
+**Prompt tasarımı — iki spesifik düzeltme:**
+- `suggestedAgent` alanı için şemada TEK bir örnek yerine **geçerli değerlerin tamamı**
+  listelenir (`WellKnown.AgentNames.All`). Eskiden şemada yalnızca `"ProductAgent|null"`
+  yazıyordu ve model bu tek örneğe demirlenip (anchoring), alakasız dersleri de sürekli
+  `ProductAgent`'a atıyordu.
+- `traces` alanı GUID trace ID'leri yerine **1-tabanlı numaralar** (`[1]`, `[2]`...) kullanır —
+  LLM'e uzun GUID'leri harfiyen tekrarlatmak hem israf (token) hem hataya açıktır (bir karakter
+  yanlış yazılırsa eşleşme kaybolur). Sayılar, `ResolveSourceTraces` ile kod tarafında gerçek
+  ID'lere çevrilir.
 
-- `Lessons` (`List<LessonRecord>?`): İlgili veriyi temsil eden özellik.
-- `Title` (`string?`): İlgili veriyi temsil eden özellik.
-- `Lesson` (`string?`): İlgili veriyi temsil eden özellik.
-- `Observation` (`string?`): İlgili veriyi temsil eden özellik.
-- `SuggestedAgent` (`string?`): İlgili veriyi temsil eden özellik.
-- `Traces` (`List<int>?`): İlgili veriyi temsil eden özellik.
-- `Skipped` (`bool`): İlgili veriyi temsil eden özellik.
-- `SkipReason` (`string?`): İlgili veriyi temsil eden özellik.
-- `Candidates` (`int`): İlgili veriyi temsil eden özellik.
-- `ProposedLessons` (`int`): İlgili veriyi temsil eden özellik.
-- `LessonIds` (`List<string>`): İlgili veriyi temsil eden özellik.
-- `Error` (`string?`): İlgili veriyi temsil eden özellik.
+**Mükerrer koruması:** Aynı trace kümesi üzerinde tarama tekrar çalıştırıldığında (ör. periyodik
+job) model neredeyse aynı dersleri yeniden üretebilir. `Proposed`/`Approved` statüsündeki
+mevcut başlıklarla eşleşen yeni öneriler **atlanır**. `Rejected` dersler bilinçli olarak HARİÇ
+tutulur — admin bir dersi reddetmişse, aynı sorun tekrar gözlemlendiğinde yeniden önerilebilmesi
+gerekir (belki ilk seferki değerlendirme yanlıştı, ya da sorun kalıcı hale geldi).
 
-## Bağımlılıklar
+> 🐞 **`ApproveAsync`'teki `isRetry` dalı — yarım kalmış vektör yazımını kurtarma.** Bir ders
+> onaylandığında hem DB'de `Approved` statüsüne geçer hem vektör belleğe yazılır. Bu iki adım
+> atomik DEĞİLDİR: vektör yazımı başarısız olursa (`catch` bloğu), ders DB'de "onaylı" görünür
+> ama hiçbir konuşmaya bağlam olarak GİRMEZ — pratikte etkisiz bir onaydır. `isRetry` kontrolü
+> (`Status == Approved && VectorMemoryId boş`) bu durumu tespit eder ve `ApproveAsync` TEKRAR
+> çağrıldığında (ör. admin panelinde "tekrar dene" ile) yalnızca vektör yazımını yeniden dener —
+> `DecisionReason`'ı ezmeden.
 
-- `CustomerSupportBot.Domain`
+`NormalizeAgent`, LLM'in verdiği ajan adını `WellKnown.AgentNames.All`'a karşı doğrular;
+tanınmayan bir ad **`null`'a çevrilir, olduğu gibi bırakılmaz** — yanlış bir ajan etiketi (admin
+panelinde rozet olarak gösterilir) boş bırakmaktan daha yanıltıcıdır, çünkü "bu dersin X ajanını
+ilgilendirdiği" yanlış izlenimini verir.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `MineAsync(CancellationToken ct = default): Task<MiningRunReport>` | Aday trace'leri tarar, LLM'e analiz ettirir, mükerrer olmayan önerileri `ILessonStore`'a ekler. |
+| `ApproveAsync(string lessonId, string decidedBy, string? reason, CancellationToken ct = default): Task<bool>` | Dersi onaylar, vektör belleğe yazar (retry-güvenli). |
+| `Reject(string lessonId, string decidedBy, string? reason): bool` | Dersi reddeder (yalnızca `Proposed` durumundaysa). |
+| `NormalizeAgent(string? raw): string?` *(internal static)* | LLM'in ajan adını kanonik listeye karşı doğrular. |
+| `MiningRunReport` (DTO) | `Skipped`, `SkipReason`, `Candidates`, `ProposedLessons`, `LessonIds`, `Error`. |
+
+## 7. Bağımlılıklar (Constructor Injection)
+
+- `IReasoningTraceStore` — son trace'leri okur.
+- `IRatingStore` — düşük puanlı oturumları bulur.
+- `ILessonStore` — ders önerilerinin kalıcılığı.
+- `IGeneralChatClient` — analiz LLM çağrısı.
+- `IOptions<SelfImprovementOptions>` — `Enabled`, `RecentTracesToScan`, `MinRatingForLesson`.
+- `ILogger<LessonMiner>` — tarama/parse/vektör yazım hatalarını loglar.
+- `SemanticMemoryService?` *(opsiyonel)* — onaylanan dersi vektör belleğe yazar.
+
+## Bağlantılar
+
+- [ImprovementsPortService.md](ImprovementsPortService.md) — bu sınıfı saran driving port
+- [../Memory/SemanticMemoryService.md](../Memory/SemanticMemoryService.md) — onaylanan dersin yazıldığı vektör bellek

@@ -1,114 +1,70 @@
 # CustomerSupportToolsService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Tools/CustomerSupportToolsService.cs`
+- **Kaynak:** `Services/Tools/CustomerSupportToolsService.cs`
 - **Tür:** `public sealed class : ICustomerSupportToolsService`
 - **Namespace:** `CustomerSupportBot.Application.Services.Tools`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`CustomerSupportToolsService`, Application/Services/Tools/CustomerSupportToolsService.cs ICustomerSupportToolsService facade'ı — sub-service'lere delegate eder. <summary> ICustomerSupportToolsService facade implementasyonu. Tüm çağrıları ProductToolsService, OrderToolsService ve ComplaintToolsService'e iletir. </summary> ─── IProductToolsService ───
+`ICustomerSupportToolsService` için bir **facade** — tüm çağrıları
+[`ProductToolsService`](ProductToolsService.md), [`OrderToolsService`](OrderToolsService.md) ve
+[`ComplaintToolsService`](ComplaintToolsService.md)'e olduğu gibi iletir. Kendi iş mantığı
+yoktur (tek istisna: statik `HumanHandoffTool`).
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Tüm müşteri destek tool'larına **tek bir arayüzden** erişmek isteyen tüketiciler (ör. bazı
+test senaryoları, ya da tüm tool setini tek bağımlılıkla almak isteyen bir specialist ajan)
+için, üç ayrı servisin (`Product`/`Order`/`Complaint`) her birine ayrı ayrı bağımlı olmak
+yerine tek bir `ICustomerSupportToolsService`'e bağımlı olunabilmesini sağlamak.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`CustomerSupportToolsService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+**Üstlendiği:** Çağrıları doğru alt servise yönlendirmek; bağımlılıksız tek istisna olan
+`HumanHandoffTool`'u barındırmak.
 
-## Constructor ve Başlatma Mantığı
+**Üstlenmediği:** Hiçbir gerçek iş mantığı — tüm doğrulama/iş kuralları alt servislerdedir
+([OrderToolsService.md](OrderToolsService.md), [ComplaintToolsService.md](ComplaintToolsService.md),
+[ProductToolsService.md](ProductToolsService.md)).
 
-```csharp
-public CustomerSupportToolsService(IProductToolsService product,
-        IOrderToolsService order,
-        IComplaintToolsService complaint)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-## Metotlar ve İç Çalışma Mantıkları
+- `IProductToolsService`, `IOrderToolsService`, `IComplaintToolsService` — delegasyon hedefleri.
+- `ApprovalGateService` (Adapters.Agents) de dahil çoğu tüketici, aslında bu facade yerine
+  doğrudan alt servislere (`OrderToolsService` vb.) bağımlıdır — facade, tüm set'e tek seferde
+  ihtiyaç duyan (ör. genel amaçlı bir "tüm tool'lar" ajanı) senaryolar için vardır.
 
-### `ProductInquiryTool`
-```csharp
-public ToolResult ProductInquiryTool(string productName)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `ProductListTool`
-```csharp
-public ToolResult ProductListTool(string? category = null)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**Facade pattern:** Üç ayrı specialist tool servisi olması (Single Responsibility — her biri
+kendi domain'inde), tüketicilerin hepsine ayrı ayrı bağımlı olmak zorunda kalması anlamına
+gelmemeli. Bu sınıf, "hepsi bir arada" ihtiyacı olan tüketiciler için ince bir birleştirme
+katmanıdır.
 
-### `OrderPlacementTool`
-```csharp
-public ToolResult OrderPlacementTool(IReadOnlyList<OrderLineRequest> lines, string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+### `HumanHandoffTool` neden burada ve neden `static`
 
-### `ValidateOrderActionable`
-```csharp
-public ToolResult? ValidateOrderActionable(string orderId, string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Diğer tüm tool'lardan farklı olarak **hiçbir bağımlılığı yoktur** — yalnızca `reason`
+alanını doğrulayıp formalize eden, yan etkisiz bir tool. Bu yüzden statik olarak tanımlanmış
+ve doğal biçimde bu facade'e yerleştirilmiştir (kendi başına ayrı bir servis/dosya açmaya
+değecek karmaşıklıkta değil).
 
-### `OrderStatusTool`
-```csharp
-public ToolResult OrderStatusTool(string orderId, string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-### `GetLastOrderTool`
-```csharp
-public ToolResult GetLastOrderTool(string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Tüm metotlar ilgili alt servise **birebir** delege eder — imzalar ve davranış için bkz.
+[ProductToolsService.md](ProductToolsService.md) (`ProductInquiryTool`, `ProductListTool`),
+[OrderToolsService.md](OrderToolsService.md) (`OrderPlacementTool`, `ValidateOrderActionable`,
+`OrderStatusTool`, `GetLastOrderTool`, `GetAllOrdersTool`, `OrderCancelTool`,
+`ReturnRequestTool`), [ComplaintToolsService.md](ComplaintToolsService.md)
+(`ComplaintStatusTool`, `GetAllComplaintsTool`, `ComplaintRegistrationTool`).
 
-### `GetAllOrdersTool`
-```csharp
-public ToolResult GetAllOrdersTool(string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+| Üye | Açıklama |
+|---|---|
+| `HumanHandoffTool(reason)` *(static)* | Tek özgün mantık: `reason` boşsa `ValidationError`; aksi halde temsilci yönlendirme talebini formalize eden bir `ToolResult.Ok` döner (`confidence=1.0`, hiçbir DB yazımı yok — yalnızca niyeti kaydeder). |
 
-### `OrderCancelTool`
-```csharp
-public ToolResult OrderCancelTool(string orderId, string reason, string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 7. Bağımlılıklar
 
-### `ReturnRequestTool`
-```csharp
-public ToolResult ReturnRequestTool(string orderId, string reason, string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Constructor injection ile: `IProductToolsService`, `IOrderToolsService`, `IComplaintToolsService`.
 
-### `ComplaintStatusTool`
-```csharp
-public ToolResult ComplaintStatusTool(string complaintId, string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## Bağlantılar
 
-### `GetAllComplaintsTool`
-```csharp
-public ToolResult GetAllComplaintsTool(string customerId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-### `ComplaintRegistrationTool`
-```csharp
-public ToolResult ComplaintRegistrationTool(string orderId, string complaintText, string? customerId = null)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-### `HumanHandoffTool`
-```csharp
-public static ToolResult HumanHandoffTool(
-        [Description("Kullanıcının temsilciyle görüşme isteme sebebi (1-2 cümle)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-## Bağımlılıklar
-
-- `CustomerSupportBot.Domain`
-- `ICustomerSupportToolsService`
+- [OrderToolsService.md](OrderToolsService.md), [ComplaintToolsService.md](ComplaintToolsService.md), [ProductToolsService.md](ProductToolsService.md) — gerçek iş mantığının bulunduğu yerler

@@ -1,41 +1,52 @@
-# BrowserMessageKind
+# IBrowserChannel (+ BrowserMessage, BrowserMessageKind)
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/IBrowserChannel.cs`
-- **Tür:** `public  enum`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/IBrowserChannel.cs`
+**Implementasyon:** [`WebSocketBrowserChannel`](../../../CustomerSupportBot.Api/Infrastructure/WebSocketBrowserChannel.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`BrowserMessageKind`, <summary> Tarayıcı ile çift yönlü mesajlaşma kanalı için secondary (driven) port. WebSocket framing, JSON serileştirme ve bağlantı durum yönetimi bu port'un arkasında gizlenir. </summary>
+Tarayıcı ile çift yönlü mesajlaşma kanalı için secondary port. WebSocket framing, JSON
+serileştirme ve bağlantı durum yönetimi bu port'un arkasında gizlenir.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Sesli (realtime) chat WebSocket bağlantısı bu port üzerinden tarayıcıya ses/metin/JSON
+gönderir ve tarayıcıdan gelen mesajları (ses chunk'ları, kontrol komutları) okur.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`BrowserMessageKind`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Mesaj gönderme (JSON/binary), mesaj alma (akış olarak), bağlantı durumu ve
+  kapatma.
+- **Üstlenmediği:** WebSocket protokolünün ASP.NET Core seviyesindeki detayları (`HttpContext`,
+  middleware) — bunlar `Api` katmanındaki implementasyonda kalır.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Api/Infrastructure/WebSocketBrowserChannel` implemente eder — `System.Net.WebSockets.WebSocket`'i
+sarar; `MaxMessageBytes` (4 MB) sınırını aşan mesajlarda bağlantıyı
+`WebSocketCloseStatus.MessageTooBig` ile kapatır (DoS koruması).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `BrowserMessage`
-```csharp
-public sealed record BrowserMessage(BrowserMessageKind Kind, byte[]? Data)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Application/realtime servisleri ham `WebSocket` API'sinin (frame biriktirme,
+`EndOfMessage` döngüsü, close handshake) karmaşıklığıyla uğraşmasın diye bu port var — Api
+katmanındaki adaptör bu karmaşıklığı bir kez çözer.
 
-### `AsText`
-```csharp
-public string AsText()
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-## Bağımlılıklar
+| Üye | Açıklama |
+|---|---|
+| `bool IsOpen { get; }` | Bağlantı açık mı. |
+| `IAsyncEnumerable<BrowserMessage> ReceiveMessagesAsync(CancellationToken ct)` | Gelen mesajları akış olarak okur. |
+| `Task SendJsonAsync(object payload, CancellationToken ct)` | JSON payload gönderir. |
+| `Task SendBinaryAsync(byte[] data, CancellationToken ct)` | Ham binary veri (ses) gönderir. |
+| `Task CloseAsync(string reason, CancellationToken ct)` | Bağlantıyı kapatır. |
 
-- `CustomerSupportBot.Domain`
+**`BrowserMessage(BrowserMessageKind Kind, byte[]? Data)`** — `AsText()` yardımcı metodu,
+`Kind == Text` ise veriyi UTF-8 string'e çevirir.
+
+**`BrowserMessageKind`** enum: `Text`, `Binary`, `Closed`.
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü ve veri tipleri bağımlılıksızdır.

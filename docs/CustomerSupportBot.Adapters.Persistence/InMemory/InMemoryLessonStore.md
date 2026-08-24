@@ -21,7 +21,7 @@ Self-improving loop'un ürettiği, admin onayına sunulan "öğrenilmiş ders" (
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresLessonStore` (`../Postgres/StoresAndSinks.md`) ile aynı arayüzü uygular.
+- `PostgresLessonStore` (`../Postgres/PostgresLessonStore.md`) ile aynı arayüzü uygular.
 - `Lesson` modeli Domain katmanındadır.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı

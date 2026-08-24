@@ -167,7 +167,8 @@ internal sealed class WorkflowMessageBuilder
     /// <summary>
     /// Workflow'a gidecek ENTITY EXTRACTION hint'i için ID kaynağını çözer.
     /// <c>reasoning.VerifiedEntities</c> mevcutsa (ReasoningService zaten <see cref="EntityVerifier"/>
-    /// ile query+geçmiş+session+DB'yi birleştirip doğrulamış) o kullanılır — <c>IdExtractor.Extract(query)</c>
+    /// ile query+geçmiş+authenticated session'ı güvenli biçimde birleştirmiş) o kullanılır —
+    /// <c>IdExtractor.Extract(query)</c>
     /// yalnızca GÜNCEL mesaja bakar, önceki turdaki bağlamı (ör. "peki 1043" gibi bağlam kelimesiz
     /// bir takip mesajını) tamamen kaçırır. Bu yüzden bu iki yol tutarsız çalışıyordu: reasoning
     /// aşaması "1043"ü doğru bağlamda çözebilirken, workflow'un kendi (query-only) çıkarımı aynı

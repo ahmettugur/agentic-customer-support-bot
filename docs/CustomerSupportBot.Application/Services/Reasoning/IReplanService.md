@@ -1,27 +1,51 @@
 # IReplanService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Reasoning/IReplanService.cs`
-- **Tür:** `public  interface`
+- **Kaynak:** `Services/Reasoning/IReplanService.cs`
+- **Tür:** `public interface`
 - **Namespace:** `CustomerSupportBot.Application.Services.Reasoning`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IReplanService`, Application/Services/IReplanService.cs Application-internal strateji arayüzü — bir session için bot'un yeniden planlama yapması ve müşteriye yanıt yayınlaması use case'ini tanımlar. <summary> Replan use case: session'daki son kullanıcı mesajını yeniden değerlendirir, bot yanıtı üretir ve bridge aracılığıyla müşteriye iletir. </summary> <summary> Arka planda son müşteri mesajı için reasoning + workflow koşturur. Bot yanıtını ChatBridge üzerinden bot mesajı olarak yayınlar. </summary>
+Application katmanı içi (dış porta çıkmayan) bir strateji arayüzü — bir oturum için "yeniden
+planlama" (replan) use case'ini tanımlar: son kullanıcı mesajını (veya admin notunu) yeniden
+değerlendirmek, yeni bir bot yanıtı üretmek ve bunu canlı olarak müşteriye yayınlamak.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Admin panelinden bir oturum için "Yeniden Planla" tetiklendiğinde (`ForceReplanNextTurn`
+bayrağı set edildiğinde), arka planda bu use case'i çalıştırmak — kullanıcı hiçbir şey
+yazmadan, admin müdahalesiyle botun yeni bir yanıt üretmesini sağlamak.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IReplanService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+Tek metotlu bir arayüz: `ExecuteAsync`. Somut iş mantığı (`ReasonAsync`/`RunAsync` çağrıları,
+`ChatBridge` yayını) implementasyonun ([`ReplanService`](ReplanService.md)) işidir — bu
+arayüz yalnızca sözleşmeyi tanımlar.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Tek implementasyonu: [`ReplanService`](ReplanService.md).
+- Muhtemel tüketicisi: admin "Yeniden Planla" endpoint'i veya bunu tetikleyen bir arka plan
+  işi (Api katmanı).
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Ayrı bir arayüz olmasının sebebi test edilebilirlik ve gevşek bağlılık — çağıran taraf
+(Api endpoint'i) `ReplanService`'in somut bağımlılıklarına (`ISessionManager`, `IChatBridge`,
+`IAgentTeamPort`, `IReasoningPort`) değil, tek bir `ExecuteAsync` sözleşmesine bağımlı olur.
+"Application-internal" olması (dış Ports/Inbound klasöründe değil, Services/Reasoning'de
+tanımlanmış olması) bilinçli: bu bir dış port değil, iç bir strateji soyutlamasıdır.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `ExecuteAsync(sessionId, ct)` | Arka planda son müşteri mesajı (veya admin notu) için reasoning + workflow koşturur; bot yanıtını `ChatBridge` üzerinden bot mesajı olarak yayınlar. |
+
+## 7. Bağımlılıklar
+
+Arayüz olduğu için kendi bağımlılığı yok.
+
+## Bağlantılar
+
+- [ReplanService.md](ReplanService.md) — tek implementasyon

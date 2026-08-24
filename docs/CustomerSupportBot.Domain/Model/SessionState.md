@@ -27,7 +27,7 @@ Her konuşma turunda `SessionStateExtractor` bu nesneyi günceller. Ajanlar aras
 - **Kim günceller:** `SessionStateExtractor.ExtractAndApply()` — her turda
 - **Kim okur:**
   - `ReasoningMessageBuilder` — reasoning prompt'una state bilgisi ekler
-  - `EntityVerifier` — `AuthenticatedCustomerId`'yi fallback kaynak olarak kullanır
+  - `EntityVerifier` — müşteri kimliği için yalnız `AuthenticatedCustomerId`'yi kullanır
   - `WorkflowMessageBuilder` — ajan workflow bağlamına intent/phase ekler
   - `EscalationPolicyService` — `ConsecutiveNegativeTurns` eşik kontrolü
   - `IReplanService` — `ForceReplanNextTurn` flag'ini okur

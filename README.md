@@ -107,7 +107,7 @@ Temel yetenekler:
     │
     │  ┌─────────────────────────────────────────────────────────┐
     └─▶│         Deterministic Reasoning Helpers                 │
-       │   EntityVerifier        (ID extract + DB verify)        │
+       │   EntityVerifier        (güvenli ID resolution)         │
        │   ReasoningSanityChecker(8-rule post-validation)        │
        └─────────────────────────────────────────────────────────┘
                                   │
@@ -128,7 +128,7 @@ Temel yetenekler:
 | **PlanningAgent** | Niyet tespiti ve yönlendirme | — | `PlanningResult` |
 | **ProductAgent** | Ürün sorgusu + katalog listeleme (salt-okunur) | `product_inquiry_tool`, `product_list_tool` | `SpecialistReasoning` |
 | **OrderAgent** | Sipariş oluşturma, sorgulama, iptal ve iade (HITL) | `order_placement_tool`, `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`, `order_cancel_tool`, `return_request_tool` | `SpecialistReasoning` |
-| **ComplaintAgent** | Şikayet kaydı | `complaint_registration_tool` | `SpecialistReasoning` |
+| **ComplaintAgent** | Şikayet kaydı ve sorgulama | `complaint_registration_tool`, `complaint_status_tool`, `get_all_complaints_tool` | `SpecialistReasoning` |
 | **HumanHandoffAgent** | İnsan temsilciye aktarım | `human_handoff_tool` | `SpecialistReasoning` |
 | **ResponseAgent** | Nihai yanıt + self-critique | — | `ResponseCritique` |
 

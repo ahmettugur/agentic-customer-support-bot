@@ -1,36 +1,54 @@
-# IApprovalContextAccessor
+# IApprovalContextAccessor (+ ApprovalContext)
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/IApprovalContextAccessor.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/IApprovalContextAccessor.cs`
+**Implementasyon:** [`ApprovalContextAccessor`](../../Services/Approval/ApprovalContextAccessor.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IApprovalContextAccessor`, <summary> Approval akışı boyunca taşınan ambient bağlama erişim için secondary (driven) port. Application servisleri bağlamı set eder; HITL adaptörü (ApprovalGateService) okur. </summary> <summary> Mevcut ambient bağlamda şu an fiilen çalışan uzman ajanın adını günceller (ör. "ProductAgent"). Tool çağrıları (ör. IUiHintEmitter.Emit) bu değeri okuyarak ürettikleri event'i doğru ajana etiketler — stream event zamanlamasına/sırasına bağlı kalmadan. </summary> <summary> Workflow trace oluşturulduktan sonra mevcut ambient scope'a trace kimliğini bağlar. Onay kayıtları bu değeri audit korelasyonu için kullanır. </summary>
+Bir turun akışı boyunca taşınan "ambient" (dolaylı, parametre olarak geçirilmeyen) bağlama
+erişim için secondary port: hangi oturum, hangi trace, hangi kullanıcı sorgusu, hangi
+müşteri kimliği, şu an hangi uzman ajan çalışıyor.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Application servisleri turun başında `SetScope` ile bağlamı kurar; HITL adaptörü
+(`ApprovalGateService`) ve tool fonksiyonları (örn.
+[`IUiHintEmitter`](IUiHintEmitter.md)) bu bağlamı **parametre almadan** okuyabilmek için
+`Context`'i kullanır — LLM'in tool çağrısına `sessionId`/`customerId` eklemesini beklemek
+yerine, bunlar zaten güvenilir bir kaynaktan (login/JWT) ambient bağlama yazılmış olur.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IApprovalContextAccessor`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Bağlamı set etme (`SetScope`), okuma (`Context`), turun ortasında güncelleme
+  (`SetCurrentAgent`, `SetTraceId`).
+- **Üstlenmediği:** Bağlamın NASIL saklandığı (AsyncLocal, ConcurrentDictionary vb.) — bu
+  implementasyon detayıdır; port yalnızca sözleşmeyi tanımlar.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Agents/ApprovalGateService`'in **tüm 4 onay-gerektiren tool'unun** `customerId`
+parametresini artık LLM'den değil `Context.CustomerId`'den aldığı, güvenlik açısından kritik
+bir port'tur (bkz. [`IOrderToolsService`](IOrderToolsService.md) içindeki "customerId LLM
+parametresi DEĞİL" notları).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `ApprovalContext`
-```csharp
-public sealed record ApprovalContext(
-    string? SessionId, string? TraceId, string? UserQuery, string? AgentName = null, string? CustomerId = null)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`SetCurrentAgent`'in var olma nedeni: tool çağrılarının (ör. `IUiHintEmitter.Emit`)
+ürettikleri event'i doğru ajana etiketlemesi gerekir, ama bunu stream event zamanlamasına/
+sırasına bağlı kalarak çıkarsamak kırılgan olurdu — bu yüzden mevcut ambient bağlamda
+fiilen çalışan ajanın adı açıkça güncellenir.
 
-## Bağımlılıklar
+## 6. Metotlar / Üyeler
 
-- `CustomerSupportBot.Domain`
+| Üye | Açıklama |
+|---|---|
+| `ApprovalContext? Context { get; }` | Mevcut ambient bağlam (yoksa `null`). |
+| `IDisposable SetScope(string? sessionId, string? traceId, string? userQuery, string? customerId = null)` | Yeni bir kapsam açar; dispose edildiğinde önceki kapsama döner. |
+| `void SetCurrentAgent(string? agentName)` | Şu an çalışan uzman ajanın adını günceller. |
+| `void SetTraceId(string? traceId)` | Trace kimliğini bağlar (trace oluşturulduktan sonra). |
+
+**`ApprovalContext(string? SessionId, string? TraceId, string? UserQuery, string? AgentName = null, string? CustomerId = null)`**
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü bağımlılıksızdır.

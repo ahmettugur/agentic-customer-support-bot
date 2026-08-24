@@ -1,6 +1,6 @@
 // Adapters.Agents/Team/ComplaintAgent.cs
-// Müşteri şikayetlerini kaydeder. Tek tool'u yan etkilidir ve HITL approval
-// gate'inden geçer (admin onayı beklenir).
+// Müşteri şikayetlerini kaydeder veya mevcut şikayetleri sorgular. Kayıt tool'u yan
+// etkilidir ve HITL approval gate'inden geçer; sorgu tool'ları salt-okunurdur.
 
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Agents.AI;
@@ -31,7 +31,12 @@ internal sealed class ComplaintAgent : SupportAgentBase
                 ChatOptions = new ChatOptions
                 {
                     Instructions = prompts.Get("agents/complaint-agent"),
-                    Tools = [approvalGate.BuildComplaintRegistrationTool()],
+                    Tools =
+                    [
+                        approvalGate.BuildComplaintRegistrationTool(),
+                        approvalGate.BuildComplaintStatusTool(),
+                        approvalGate.BuildGetAllComplaintsTool()
+                    ],
                     ResponseFormat = ChatResponseFormat.ForJsonSchema<SpecialistReasoningSchema>(
                         SpecialistReasoningSchemaOptions.CamelCase)
                 }

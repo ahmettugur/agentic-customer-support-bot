@@ -1,27 +1,43 @@
 # IRatingStore
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Persistence/IRatingStore.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Persistence`
+**Kaynak:** `Ports/Outbound/Persistence/IRatingStore.cs`
+**İmplementasyonlar:** [`InMemoryRatingStore`](../../../../CustomerSupportBot.Adapters.Persistence/InMemory/InMemoryRatingStore.md), [`PostgresRatingStore`](../../../../CustomerSupportBot.Adapters.Persistence/Postgres/PostgresRatingStore.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IRatingStore`, <summary> Müşteri geri bildirimi (1-5 yıldız + yorum) için secondary port. </summary> <summary>Yeni bir değerlendirme kaydeder. Session başına tek rating.</summary> <summary>Belirtilen oturumun rating'ini döndürür. Yoksa null.</summary> <summary>Tüm rating'leri döndürür (analytics için).</summary> <summary>Son N rating'i döndürür.</summary>
+Müşteri geri bildirimi (1-5 yıldız + serbest metin yorum) için secondary port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Chat arayüzündeki değerlendirme bileşeni bir oturum kapanırken/bittikten sonra `Submit`
+çağırır; admin analytics paneli `GetAll`/`GetRecent` ile ortalama puan/trend gösterir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IRatingStore`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Rating kaydı ve sorgulanması.
+- **Üstlenmediği:** Puanın konuşma kalitesiyle ilişkilendirilmesi/analiz edilmesi — bu Self-
+  Improving Loop'un ([SelfImprovementOptions](../AI/SelfImprovementOptions.md)) işidir; o da bu
+  puanı `MinRatingForLesson` eşiğiyle karşılaştırarak ders adayı seçer.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`InMemoryRatingStore` (test) ve `PostgresRatingStore` (prod) implemente eder.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+"Session başına tek rating" kısıtı `Submit`'in XML doc yorumunda açıkça belirtilir — bir
+oturum için birden fazla değerlendirme kabul edilmez, bu tekrar oy kullanmayı/puan
+manipülasyonunu önler.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `ConversationRating Submit(string sessionId, int stars, string? feedback)` | Yeni değerlendirme kaydeder. |
+| `ConversationRating? GetBySession(string sessionId)` | Oturumun rating'i, yoksa `null`. |
+| `IReadOnlyList<ConversationRating> GetAll()` | Tüm rating'ler (analytics). |
+| `IReadOnlyList<ConversationRating> GetRecent(int count = 20)` | Son N rating. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.ConversationRating`'e bağımlıdır.

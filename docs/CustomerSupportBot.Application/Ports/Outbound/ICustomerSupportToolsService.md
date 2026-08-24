@@ -1,28 +1,43 @@
 # ICustomerSupportToolsService
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/ICustomerSupportToolsService.cs`
-- **Tür:** `public  interface : IProductToolsService, IOrderToolsService, IComplaintToolsService`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/ICustomerSupportToolsService.cs`
+**Implementasyon:** [`CustomerSupportToolsService`](../../Services/Tools/CustomerSupportToolsService.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ICustomerSupportToolsService`, <summary> Müşteri destek AI araçlarının tamamını kapsayan facade port. Adapter'lar (CustomerSupportTeam, ApprovalGateService) bu arayüz üzerinden tüm tool fonksiyonlarına erişir. </summary>
+`IProductToolsService`, `IOrderToolsService`, `IComplaintToolsService`'i tek bir arayüzde
+birleştiren **facade port**. Kendi metodu yoktur — yalnızca üç arayüzü miras alır.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`ApprovalGateService` ve `CustomerSupportTeam` (Adapters.Agents) tüm tool fonksiyonlarına tek
+bir bağımlılık üzerinden erişmek için bu facade'i inject eder — üç ayrı port'u ayrı ayrı
+inject etmek yerine.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ICustomerSupportToolsService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Üç alt port'u tek bir sözleşmede toplamak.
+- **Üstlenmediği:** Hiçbir iş mantığı — tamamen bir birleştirme (composition) arayüzüdür.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Application/Services/Tools/CustomerSupportToolsService` implemente eder; DI container'da tek
+bir kayıt (`AddScoped<ICustomerSupportToolsService, CustomerSupportToolsService>` benzeri) ile
+tüm üç alt port da otomatik olarak çözülür.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
-- `IProductToolsService, IOrderToolsService, IComplaintToolsService`
+Interface Segregation Principle ile Facade Pattern'in birlikte kullanımı: her alt port
+(`IProductToolsService` vb.) tek başına küçük ve odaklıdır (ör. unit testte yalnızca ürün
+tool'larını mock'lamak isteyen bir test yalnızca `IProductToolsService`'i mock'layabilir), ama
+gerçek tüketiciler (ajan takımı, onay servisi) genelde HEPSİNE ihtiyaç duyar — facade bu
+ikisini uzlaştırır.
+
+## 6. Metotlar / Üyeler
+
+Doğrudan üye yok. Bkz. [`IProductToolsService`](IProductToolsService.md),
+[`IOrderToolsService`](IOrderToolsService.md), [`IComplaintToolsService`](IComplaintToolsService.md).
+
+## 7. Bağımlılıklar
+
+Üç alt port arayüzüne bağımlıdır (yukarıda listelenen).

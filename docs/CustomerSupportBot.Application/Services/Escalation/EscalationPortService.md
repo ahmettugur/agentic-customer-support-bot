@@ -1,71 +1,76 @@
 # EscalationPortService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Escalation/EscalationPortService.cs`
-- **Tür:** `public sealed class : IEscalationPort`
-- **Namespace:** `CustomerSupportBot.Application.Services.Escalation`
+**Dosya:** `Services/Escalation/EscalationPortService.cs`
+**Port:** `IEscalationPort` (driving/inbound port)
+**Namespace:** `CustomerSupportBot.Application.Services.Escalation`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`EscalationPortService`, Application/Services/EscalationPortService.cs DRIVING PORT IMPL — IEscalationPort → Eskalasyon yönetimi orkestrasyonu. <summary> Eskalasyon yönetimi driving port implementasyonu. Admin panel (AdminEndpoints) bu sınıfı IEscalationPort olarak kullanır. </summary> Driven port event'lerini driving port'a bridge et
+Admin panelinin eskalasyon (insan devri talebi) kayıtlarıyla konuştuğu kapı: oluşturma,
+listeleme (açık/son/temsilciye özel), tekil getirme, karar uygulama (`onayla`/`reddet`/`kapat`).
+Ayrıca `IEscalationSink`'in (driven port) olaylarını `IEscalationPort`'un (driving port)
+olaylarına **köprüler**.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Api katmanındaki `AdminEndpoints`, eskalasyon listesini göstermek ve admin kararlarını
+uygulamak için bu servisi kullanır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`EscalationPortService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** `IEscalationSink` çağrılarını loglayarak `IEscalationPort` sözleşmesine
+  bağlamak; `RequestCreated`/`RequestDecided` olaylarını driven'dan driving'e köprülemek.
+- **Üstlenmediği:** Eskalasyon adaylığı/dedup/routing kararı (bu [`EscalationPolicyService`](EscalationPolicyService.md)'te),
+  kaydın kalıcılığı (`IEscalationSink` implementasyonu).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-```csharp
-public EscalationPortService(IEscalationSink escalations,
-        ILogger<EscalationPortService> logger)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- `IEscalationPort` port'unu implemente eder.
+- **Inject eder:** `IEscalationSink`, `ILogger`.
+- **Kimin tarafından çağrılır:** Api katmanındaki `AdminEndpoints`.
+- Yayınladığı `RequestCreated`/`RequestDecided` olayları [`HitlEventPortService`](HitlEventPortService.md)
+  tarafından DEĞİL, doğrudan `IEscalationSink`'in olaylarına abone olunarak dinlenir (bkz. §5).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `Create`
-```csharp
-public EscalationRequest Create(EscalationRequest request)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**Neden bir "event bridge" (driven → driving)?** Hexagonal mimaride driven port'lar
+(`IEscalationSink`) altyapıya, driving port'lar (`IEscalationPort`) use case'e bakar. Bu servis
+constructor'ında `_escalations.RequestCreated += (_, req) => RequestCreated?.Invoke(this, req);`
+gibi bir köprü kurar — böylece `IEscalationPort`'u dinleyen taraflar (ör. SignalR/SSE
+adaptörleri), altyapı katmanının somut olay mekanizmasına DEĞİL, use-case seviyesindeki soyut
+olaya bağımlı olur. Bu, Adapters katmanının Application katmanına sızmasını önler.
 
-### `GetOpen`
-```csharp
-public IReadOnlyList<EscalationRequest> GetOpen()
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+> Not: [`HitlEventPortService`](HitlEventPortService.md), sohbet akışına canlı olay yayınlarken
+> **doğrudan** `IApprovalQueue`/`IEscalationSink`'in olaylarına abone olur — bu sınıfın
+> köprülediği `IEscalationPort.RequestCreated/RequestDecided` olaylarını KULLANMAZ. İkisi paralel
+> ama bağımsız iki tüketicidir: biri admin panelinin genel listeleme/CRUD ihtiyacı, diğeri belirli
+> bir oturuma özel canlı akış.
 
-### `GetRecent`
-```csharp
-public IReadOnlyList<EscalationRequest> GetRecent(int count = 50)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`GetRecentForAgentAsync` filtrelemeyi **kendisi yapmaz**, doğrudan adaptöre (`IEscalationSink`)
+devreder — yorumda açıkça belirtilir: cache üzerinde (bellekte) elemek, cache'in kendisi zaten
+"son N kayıt" penceresi olduğu için sınırı gerçek anlamda uygulamak yerine sadece ötelemek
+olurdu; asıl filtreleme veritabanı sorgusunda yapılmalıdır.
 
-### `GetRecentForAgentAsync`
-```csharp
-public Task<IReadOnlyList<EscalationRequest>> GetRecentForAgentAsync(
-        string agentId, int count = 50, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-### `Get`
-```csharp
-public EscalationRequest? Get(string id)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+| Üye | Açıklama |
+|---|---|
+| `RequestCreated` (`event EventHandler<EscalationRequest>?`) | Yeni eskalasyon oluşturulduğunda tetiklenir. |
+| `RequestDecided` (`event EventHandler<EscalationRequest>?`) | Bir eskalasyona karar verildiğinde tetiklenir. |
+| `Create(EscalationRequest request): EscalationRequest` | Yeni eskalasyon kaydı oluşturur, loglar. |
+| `GetOpen(): IReadOnlyList<EscalationRequest>` | Açık (bekleyen) eskalasyonları döner. |
+| `GetRecent(int count = 50): IReadOnlyList<EscalationRequest>` | Son `count` eskalasyonu döner. |
+| `GetRecentForAgentAsync(string agentId, int count = 50, CancellationToken ct = default): Task<IReadOnlyList<EscalationRequest>>` | Belirli bir temsilciye ait son eskalasyonları döner; filtreleme adaptörde yapılır. |
+| `Get(string id): EscalationRequest?` | Tekil kayıt getirir. |
+| `Decide(string id, string action, string? assignedTo = null, string? resolution = null): bool` | Admin kararını uygular; kayıt yoksa `false`. |
 
-### `Decide`
-```csharp
-public bool Decide(string id, string action, string? assignedTo = null, string? resolution = null)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 7. Bağımlılıklar (Constructor Injection)
 
-## Bağımlılıklar
+- `IEscalationSink` — kalıcı eskalasyon kayıtları ve olayları.
+- `ILogger<EscalationPortService>` — oluşturma/karar loglaması.
 
-- `CustomerSupportBot.Domain`
-- `IEscalationPort`
+## Bağlantılar
+
+- [EscalationPolicyService.md](EscalationPolicyService.md) — eskalasyon oluşturma politikası
+- [HitlEventPortService.md](HitlEventPortService.md) — sohbet akışına canlı olay yayını
+- [HumanAgentPortService.md](HumanAgentPortService.md) — temsilci yönetimi ve yeniden atama

@@ -1,17 +1,14 @@
-using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Services;
 // Application/Services/EntityVerifier.cs
-// ReAct-lite entity grounding.
+// Deterministik entity resolution.
 // IdExtractor regex ile formatı doğrular. EntityVerifier aşağıdakileri yapar:
 //   1) Query'den extract et (IdExtractor)
 //   2) History'den eksik olanları tamamla (önceki turlardaki entity'leri hatırla)
 //   3) SessionState'ten tamamla (session.State.AuthenticatedCustomerId — JWT'den, poisonable değil)
-//   4) DB ile varlık doğrulaması yap (IOrderRepository / IComplaintRepository üzerinden)
-//   5) Türetilmiş alanları hesapla (ör. customer_id'den last_order_id)
 //
-// Çıktı VerifiedEntities olarak reasoning prompt'una enjekte edilir.
-// Böylece reasoning modeli "zaten bilinen bilgi için clarification isteme" kararını
-// Tahmin üzerinden değil, grounded doğrulama üzerinden verir.
+// Sipariş/şikayet varlığı ve sahipliği burada DB'den okunmaz. Bu bilgiler yalnızca
+// authenticated customer kimliğini kullanan specialist tool'lar tarafından doğrulanır.
+// Böylece her turdaki eager sorgular ve reasoning prompt'una iş verisi sızması önlenir.
 
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
@@ -19,28 +16,23 @@ using Microsoft.Extensions.Logging;
 namespace CustomerSupportBot.Application.Services.Reasoning;
 
 /// <summary>
-/// Query + history + session state üzerinde deterministic entity çıkarımı yapar
-/// Ve repository port'ları ile doğrulayarak yapılandırılmış bir sonuç döner.
+/// Query + history + session state üzerinde deterministic entity çözümlemesi yapar.
+/// Müşteri kimliği authenticated session'dan gelir; diğer entity'lerin gerçekliği ve
+/// sahipliği tool katmanında doğrulanmak üzere <see cref="EntityVerification.FormatOnly"/>
+/// olarak taşınır.
 /// Hiçbir LLM çağrısı yapmaz — tamamen deterministik.
 /// </summary>
 public class EntityVerifier
 {
     private readonly ILogger<EntityVerifier> _logger;
-    private readonly IOrderRepository _orders;
-    private readonly IComplaintRepository _complaints;
 
-    public EntityVerifier(
-        IOrderRepository orders,
-        IComplaintRepository complaints,
-        ILogger<EntityVerifier> logger)
+    public EntityVerifier(ILogger<EntityVerifier> logger)
     {
-        _orders = orders;
-        _complaints = complaints;
         _logger = logger;
     }
 
     /// <summary>
-    /// Verilen bağlamda entity'leri çıkarır, doğrular ve türetilmiş alanları hesaplar.
+    /// Verilen bağlamda entity'leri çıkarır ve güvenli kaynak önceliğiyle çözümler.
     /// </summary>
     /// <param name="query">Güncel kullanıcı sorgusu.</param>
     /// <param name="session">Oturum (State.AuthenticatedCustomerId vb. için).</param>
@@ -95,50 +87,36 @@ public class EntityVerifier
                 claimedCustomerId, authenticatedCustomerId ?? "(yok)");
         }
 
-        // 4) Her entity için kaynak + doğrulama
+        // 4) Entity'leri kaynaklarıyla birlikte taşı. Order/complaint için burada DB lookup
+        // yapılmaz: gerçeklik + sahiplik specialist tool'da, authenticated customer kimliğiyle
+        // aynı anda doğrulanır. Resolver yalnızca kullanıcı tarafından sağlanan değeri korur.
         if (!string.IsNullOrWhiteSpace(orderIdValue))
         {
             var source = queryIds.OrderId != null ? EntitySource.Query : EntitySource.History;
-            result.OrderId = VerifyOrder(orderIdValue, source, authenticatedCustomerId);
+            result.OrderId = CreateCandidate(orderIdValue, source);
         }
 
         if (!string.IsNullOrWhiteSpace(customerIdValue))
         {
-            // Kaynak her zaman SessionState: kimlik yalnızca JWT'den gelebilir.
-            result.CustomerId = VerifyCustomer(customerIdValue, EntitySource.SessionState);
+            // AuthenticatedCustomerId DB iş verisinden tekrar doğrulanmaz. Bu değer JWT/session
+            // binding güvenlik sınırından geçtiği için kullanıcıdan gelen FormatOnly adaylardan
+            // farklı olarak güvenilirdir.
+            result.CustomerId = new VerifiedEntity
+            {
+                Value = customerIdValue,
+                Source = EntitySource.SessionState,
+                Verification = EntityVerification.Verified
+            };
         }
 
         if (!string.IsNullOrWhiteSpace(complaintIdValue))
         {
             var source = queryIds.ComplaintId != null ? EntitySource.Query : EntitySource.History;
-            result.ComplaintId = VerifyComplaint(complaintIdValue, source, authenticatedCustomerId);
-        }
-
-        // Aynı numara hem sipariş hem şikayet olarak yorumlanmışsa ve sipariş tarafı DB'de
-        // doğrulandıysa, şikayet yorumunu düşür — yoksa sahte "DB'de bulunamadı" uyarısı çıkıyor.
-        if (result.ComplaintId is { Verification: EntityVerification.NotFoundInDb }
-            && result.OrderId is { Verification: EntityVerification.Verified }
-            && result.ComplaintId.Value == result.OrderId.Value)
-        {
-            _logger.LogDebug(
-                "EntityVerifier: {Id} şikayet olarak bulunamadı ama sipariş olarak doğrulandı — şikayet yorumu düşürüldü.",
-                result.ComplaintId.Value);
-            result.ComplaintId = null;
-        }
-
-        // 5) Türetilmiş alanlar — sadece verified customer varsa
-        if (result.CustomerId?.Verification == EntityVerification.Verified)
-        {
-            var lastOrder = _orders.GetLast(customerIdValue!);
-            if (lastOrder.HasValue)
-            {
-                result.DerivedLastOrderId = lastOrder.Value.OrderId;
-            }
-            result.DerivedOrderCount = _orders.GetByCustomer(customerIdValue!).Count;
+            result.ComplaintId = CreateCandidate(complaintIdValue, source);
         }
 
         _logger.LogDebug(
-            "EntityVerifier: order={OrderId} ({OrderV}), customer={CustomerId} ({CustomerV}), complaint={ComplaintId} ({ComplaintV})",
+            "EntityResolver: order={OrderId} ({OrderV}), customer={CustomerId} ({CustomerV}), complaint={ComplaintId} ({ComplaintV})",
             result.OrderId?.Value, result.OrderId?.Verification,
             result.CustomerId?.Value, result.CustomerId?.Verification,
             result.ComplaintId?.Value, result.ComplaintId?.Verification);
@@ -156,8 +134,9 @@ public class EntityVerifier
 
         var lines = new List<string>
         {
-            "[VERIFIED ENTITIES — session/DB ile doğrulandı]",
-            "Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN, kullanıcıdan tekrar İSTEMEYİN."
+            "[RESOLVED ENTITIES — query/history/authenticated session üzerinden çözümlendi]",
+            "Aşağıdaki kimlik değerleri ZATEN sağlandı. requiredInfo'ya EKLEMEYİN ve kullanıcıdan tekrar İSTEMEYİN.",
+            "FORMAT_ONLY değerlerin varlığını, sahipliğini veya özelliklerini varsaymayın; ilgili specialist tool ile doğrulayın."
         };
 
         if (verified.OrderId != null)
@@ -173,7 +152,8 @@ public class EntityVerifier
             lines.Add(FormatEntityLine("complaint_id", verified.ComplaintId));
         }
 
-        // Türetilmiş alanlar
+        // Geriye dönük sözleşme: başka bir çağıran türetilmiş alan sağlarsa render edilir.
+        // EntityVerifier artık bu alanlar için DB sorgusu yapmaz ve onları kendisi üretmez.
         if (!string.IsNullOrEmpty(verified.DerivedLastOrderId))
         {
             lines.Add($"- last_order_id = \"{verified.DerivedLastOrderId}\" " +
@@ -185,7 +165,7 @@ public class EntityVerifier
                       $"[derived: müşterinin toplam siparişi]");
         }
 
-        // Doğrulanmamış entity'ler için özel uyarı
+        // Geriye dönük sözleşme: başka bir doğrulayıcı NotFoundInDb sağlarsa uyarı korunur.
         var notFoundEntities = new List<string>();
         if (verified.OrderId?.Verification == EntityVerification.NotFoundInDb)
             notFoundEntities.Add($"order_id={verified.OrderId.Value}");
@@ -226,133 +206,12 @@ public class EntityVerifier
         return line;
     }
 
-    /// <summary>
-    /// Siparişi doğrular — <b>yalnızca giriş yapmış müşteriye aitse</b>.
-    ///
-    /// <para>
-    /// Sahiplik kontrolü olmadan bu metot bir IDOR'du: "sipariş 1030 nerede?" diye soran
-    /// herhangi bir kullanıcı, siparişin durumunu, içeriğini (ürün/adet) ve <b>sahibinin
-    /// müşteri numarasını</b> attribute olarak alıyordu; bu veriler reasoning prompt'una ve
-    /// oradan istemciye gidiyordu (ölçüldü).
-    /// </para>
-    ///
-    /// <para>
-    /// Başkasına ait sipariş <see cref="EntityVerification.NotFoundInDb"/> döner —
-    /// "senin değil" DEĞİL. Ayrım dışarıdan görülseydi numara taranarak hangi siparişlerin var
-    /// olduğu öğrenilebilirdi; tool katmanı da aynı sebeple aynı yanıtı verir.
-    /// </para>
-    /// </summary>
-    private VerifiedEntity VerifyOrder(string orderId, EntitySource source, string? authenticatedCustomerId)
+    private static VerifiedEntity CreateCandidate(string value, EntitySource source) => new()
     {
-        var entity = new VerifiedEntity { Value = orderId, Source = source };
-
-        // Kimlik yoksa hiçbir şey doğrulanmaz. NotFoundInDb DEĞİL FormatOnly: kayıt gerçekten
-        // yok demek yanlış bilgi olurdu ve kullanıcıya "numaranızı kontrol edin" dedirtirdi.
-        if (string.IsNullOrWhiteSpace(authenticatedCustomerId))
-        {
-            entity.Verification = EntityVerification.FormatOnly;
-            return entity;
-        }
-
-        var order = _orders.Get(orderId);
-        if (order != null && !string.Equals(order.CustomerId, authenticatedCustomerId, StringComparison.Ordinal))
-        {
-            _logger.LogWarning(
-                "EntityVerifier: order={OrderId} başka müşteriye ait; doğrulanmadı sayıldı.", orderId);
-            order = null;
-        }
-
-        if (order != null)
-        {
-            entity.Verification = EntityVerification.Verified;
-            entity.Attributes = new Dictionary<string, string>
-            {
-                ["status"] = order.Status,
-                // Çok satırlı sipariş tek bir özet dizeye indirilir ("Kahve x2, Çay x1").
-                // Attribute sözlüğü düz string→string olduğu için yapı taşınamaz; buradaki
-                // amaç zaten downstream prompt'a "hangi sipariş neyi içeriyor" bilgisini
-                // vermek — makine okuması gereken taraf tool sonucundaki `lines` alanını kullanır.
-                ["product"] = order.LinesSummary(),
-                ["quantity"] = order.TotalQuantity().ToString(),
-                ["customerId"] = order.CustomerId
-            };
-        }
-        else
-        {
-            entity.Verification = EntityVerification.NotFoundInDb;
-        }
-
-        return entity;
-    }
-
-    private VerifiedEntity VerifyCustomer(string customerId, EntitySource source)
-    {
-        var entity = new VerifiedEntity { Value = customerId, Source = source };
-
-        // Customer için explicit DB yok — en az bir sipariş veya şikayet varsa verified sayarız.
-        var hasOrder = _orders.GetByCustomer(customerId).Count > 0;
-        var hasComplaint = _complaints.GetByCustomer(customerId).Count > 0;
-
-        if (hasOrder || hasComplaint)
-        {
-            entity.Verification = EntityVerification.Verified;
-            entity.Attributes = new Dictionary<string, string>
-            {
-                ["has_orders"] = hasOrder ? "true" : "false",
-                ["has_complaints"] = hasComplaint ? "true" : "false"
-            };
-        }
-        else
-        {
-            // Customer için format doğruluğu yeterli — tool seviyesinde yine başarısız olabilir
-            // Ama reasoning aşamasında "tamamen yanlış ID" demeyi tercih etmiyoruz.
-            entity.Verification = EntityVerification.FormatOnly;
-        }
-
-        return entity;
-    }
-
-    /// <summary>
-    /// Şikayeti doğrular — sipariş ile <b>aynı sahiplik kuralına</b> tabidir; şikayet kaydı da
-    /// durum, ilişkili sipariş ve müşteri numarası taşır.
-    /// </summary>
-    private VerifiedEntity VerifyComplaint(string complaintId, EntitySource source, string? authenticatedCustomerId)
-    {
-        var entity = new VerifiedEntity { Value = complaintId, Source = source };
-
-        if (string.IsNullOrWhiteSpace(authenticatedCustomerId))
-        {
-            entity.Verification = EntityVerification.FormatOnly;
-            return entity;
-        }
-
-        var complaint = _complaints.Get(complaintId);
-        if (complaint != null
-            && !string.Equals(complaint.CustomerId, authenticatedCustomerId, StringComparison.Ordinal))
-        {
-            _logger.LogWarning(
-                "EntityVerifier: complaint={ComplaintId} başka müşteriye ait; doğrulanmadı sayıldı.",
-                complaintId);
-            complaint = null;
-        }
-
-        if (complaint != null)
-        {
-            entity.Verification = EntityVerification.Verified;
-            entity.Attributes = new Dictionary<string, string>
-            {
-                ["status"] = complaint.Status,
-                ["orderId"] = complaint.OrderId,
-                ["customerId"] = complaint.CustomerId
-            };
-        }
-        else
-        {
-            entity.Verification = EntityVerification.NotFoundInDb;
-        }
-
-        return entity;
-    }
+        Value = value,
+        Source = source,
+        Verification = EntityVerification.FormatOnly
+    };
 
     /// <summary>
     /// Konuşma geçmişindeki (tüm turlar) mesajları tarayarak ID'leri çıkarır.

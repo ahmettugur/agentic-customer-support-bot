@@ -52,7 +52,7 @@ public class ReasoningSanityChecker
     }
 
     /// <summary>
-    /// Verilen reasoning sonucunu + doğrulanmış entity bağlamını kontrol eder.
+1    /// Verilen reasoning sonucunu + çözümlenmiş entity bağlamını kontrol eder.
     /// Tüm kuralları uygular ve bulunan issue'ları liste olarak döner.
     /// </summary>
     public List<ReasoningIssue> Check(ReasoningResult result, VerifiedEntities verified)
@@ -128,7 +128,10 @@ public sealed class OverconfidentClarificationRule : IReasoningSanityRule
     }
 }
 
-/// <summary>RequiredInfo'da DB-verified bir entity istemek (ping-pong tehlikesi).</summary>
+/// <summary>
+/// RequiredInfo'da kullanıcı/session tarafından zaten sağlanmış bir entity'yi tekrar istemek
+/// (ping-pong tehlikesi). Entity'nin DB'de var olup olmadığı bu aşamada değil, tool'da doğrulanır.
+/// </summary>
 public sealed class RedundantRequiredInfoRule : IReasoningSanityRule
 {
     public string Code => "redundant_required_info";
@@ -137,28 +140,28 @@ public sealed class RedundantRequiredInfoRule : IReasoningSanityRule
     {
         if (r.RequiredInfo.Count == 0) return;
 
-        var orderIdVerified = verified.OrderId?.Verification == EntityVerification.Verified;
-        var customerIdVerified = verified.CustomerId?.Verification == EntityVerification.Verified;
-        var complaintIdVerified = verified.ComplaintId?.Verification == EntityVerification.Verified;
+        var orderIdAvailable = IsAvailable(verified.OrderId);
+        var customerIdAvailable = IsAvailable(verified.CustomerId);
+        var complaintIdAvailable = IsAvailable(verified.ComplaintId);
 
         foreach (var (req, idx) in r.RequiredInfo.Select((x, i) => (x, i)))
         {
             var lower = req.ToLowerInvariant();
             string? which = null;
 
-            if (orderIdVerified && (lower.Contains("sipariş") && lower.Contains("no") ||
+            if (orderIdAvailable && (lower.Contains("sipariş") && lower.Contains("no") ||
                                      lower.Contains("sipariş_numara") ||
                                      lower.Contains("order_id") || lower.Contains("order id")))
             {
                 which = WellKnown.ToolParameterNames.OrderId;
             }
-            else if (customerIdVerified && (lower.Contains("müşteri") && lower.Contains("kim") ||
+            else if (customerIdAvailable && (lower.Contains("müşteri") && lower.Contains("kim") ||
                                             lower.Contains("customer_id") || lower.Contains("customer id") ||
                                             lower.Contains("müşteri_kimli")))
             {
                 which = WellKnown.ToolParameterNames.CustomerId;
             }
-            else if (complaintIdVerified && (lower.Contains("şikayet") && lower.Contains("no") ||
+            else if (complaintIdAvailable && (lower.Contains("şikayet") && lower.Contains("no") ||
                                              lower.Contains("complaint_id")))
             {
                 which = "complaint_id";
@@ -170,14 +173,17 @@ public sealed class RedundantRequiredInfoRule : IReasoningSanityRule
                 {
                     Code = Code,
                     Severity = IssueSeverity.Error,
-                    Message = $"requiredInfo[{idx}]='{req}' ama {which} zaten VERIFIED — " +
+                    Message = $"requiredInfo[{idx}]='{req}' ama {which} zaten sağlandı — " +
                               "bu alan sorulursa ping-pong olur.",
                     Field = $"requiredInfo[{idx}]",
-                    SuggestedFix = $"requiredInfo'dan '{req}' kaldır; {which} zaten elinde."
+                    SuggestedFix = $"requiredInfo'dan '{req}' kaldır; {which} ile ilgili gerçekleri tool'da doğrula."
                 });
             }
         }
     }
+
+    private static bool IsAvailable(VerifiedEntity? entity) =>
+        entity is not null && entity.Verification != EntityVerification.NotFoundInDb;
 }
 
 /// <summary>Intent ile seçilen agent çelişiyor.</summary>

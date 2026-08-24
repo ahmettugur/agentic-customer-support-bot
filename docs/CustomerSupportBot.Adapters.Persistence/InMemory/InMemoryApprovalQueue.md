@@ -26,7 +26,7 @@ HITL (human-in-the-loop) onay kuyruğunun tamamen bellek içi implementasyonudur
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresApprovalQueue` (`../Postgres/HitlAndChat.md`) ile aynı `IApprovalQueue` arayüzünü uygular.
+- `PostgresApprovalQueue` (`../Postgres/PostgresApprovalQueue.md`) ile aynı `IApprovalQueue` arayüzünü uygular.
 - `IApprovalExecutionRouter`'ı constructor injection ile alır — onaylanan işlemi gerçekten yürüten dispatcher (`ApprovalExecutionRouter`, Application katmanı).
 - `ApprovalOptions` (zaman aşımı, otomatik-onay davranışı) `IOptions<ApprovalOptions>` ile enjekte edilir.
 - `RequestCreated`/`RequestDecided` event'leri SSE/chat-event katmanı tarafından dinlenir (bkz. `HitlEventPortService`, Application katmanı).

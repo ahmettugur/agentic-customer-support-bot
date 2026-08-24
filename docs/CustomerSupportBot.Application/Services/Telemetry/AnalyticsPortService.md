@@ -1,79 +1,80 @@
 # AnalyticsPortService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Telemetry/AnalyticsPortService.cs`
+- **Kaynak:** `Services/Telemetry/AnalyticsPortService.cs`
 - **Tür:** `public sealed class : IAnalyticsPort`
 - **Namespace:** `CustomerSupportBot.Application.Services.Telemetry`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`AnalyticsPortService`, Application/Services/AnalyticsPortService.cs DRIVING PORT IMPL — IAnalyticsPort → Analitik veri orkestrasyonu. <summary> Analitik verileri driving port implementasyonu. AnalyticsEndpoints bu sınıfı IAnalyticsPort olarak kullanır. </summary>
+`IAnalyticsPort` (Inbound port) implementasyonu — admin panelinin analitik/dashboard
+görünümünü besleyen agregasyon servisi: oturum sayıları, puanlamalar, onay/eskalasyon
+istatistikleri, niyet/faz/sentiment dağılımları ve tek bir oturuma özel derinlemesine analiz.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+`AnalyticsEndpoints` (Api katmanı) bu servisi `IAnalyticsPort` olarak kullanır — birden fazla
+veri kaynağını (rating store, session manager, approval queue, escalation sink) tek bir
+çağrıda birleştirip admin paneline hazır DTO'lar üretmek.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`AnalyticsPortService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+**Üstlendiği:**
+- `Rate`/`GetRating`/`GetRecentRatings`/`GetAllRatings` — müşteri memnuniyet puanlarının
+  okuma/yazma arayüzü.
+- `GetSummaryAsync` — hafif, anonim bir özet nesnesi (dinamik `object`).
+- `GetDashboardAsync` — admin panelinin ana dashboard'u için **tüm oturumları tek tek gezip**
+  (`GetAsync` her biri için) niyet/faz/sentiment dağılımlarını hesaplayan, daha ağır bir
+  agregasyon.
+- `GetSessionAnalyticsAsync` — tek bir oturumun derinlemesine analizi (sentiment zaman
+  çizelgesi, onay/eskalasyon detayları, toplanan bilgiler).
 
-## Constructor ve Başlatma Mantığı
+**Üstlenmediği:** Ham verinin saklanması (her bağımlılık portunun kendi işi); bu servis
+yalnızca **birleştirir ve şekillendirir**.
 
-```csharp
-public AnalyticsPortService(IRatingStore ratings,
-        ISessionManager sessions,
-        IApprovalQueue approvals,
-        IEscalationSink escalations,
-        ILogger<AnalyticsPortService> logger)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-## Metotlar ve İç Çalışma Mantıkları
+- `IRatingStore` — puanlama CRUD.
+- `ISessionManager` — oturum/geçmiş verisi.
+- `IApprovalQueue`, `IEscalationSink` — onay/eskalasyon istatistikleri.
 
-### `Rate`
-```csharp
-public ConversationRating Rate(string sessionId, int stars, string? comment = null)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `GetRating`
-```csharp
-public ConversationRating? GetRating(string sessionId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+### `GetSummaryAsync` (dinamik `object`) ile `GetDashboardAsync` (`AnalyticsDashboard`) neden ayrı
 
-### `GetRecentRatings`
-```csharp
-public IReadOnlyList<ConversationRating> GetRecentRatings(int count = 20)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`GetSummaryAsync` daha eski/hafif bir uç nokta gibi görünüyor — anonim tip döner, alan seti
+sabit değil. `GetDashboardAsync` ise güçlü tipli `AnalyticsDashboard` DTO'suna yazar ve
+**ekstra olarak** tüm oturumları tek tek gezip sentiment/niyet/faz dağılımlarını hesaplar —
+bu, `GetSummaryAsync`'in yapmadığı, daha maliyetli bir iş. İki metodun bir arada durması,
+zamanla dashboard'un daha zengin bir görünüme evrildiğini ama eski özet uç noktasının geriye
+dönük uyumluluk için (veya farklı bir tüketici için) korunduğunu düşündürür.
 
-### `GetAllRatings`
-```csharp
-public IReadOnlyList<ConversationRating> GetAllRatings()
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+### `GetDashboardAsync`'te oturumların tek tek gezilmesi
 
-### `GetSummaryAsync`
-```csharp
-public async Task<object> GetSummaryAsync(CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`allSessions.Select(s => _sessions.GetAsync(s.SessionId, ct))` — niyet/faz/sentiment
+dağılımları `SessionInfo` özetinde yok, yalnızca tam `AgentSession.State`'te var; bu yüzden
+her oturum için ayrı bir `GetAsync` çağrısı zorunlu. Oturum sayısı büyüdükçe bu metodun
+maliyeti doğrusal artar — admin panelinin dashboard'u sık çağrılan bir uç nokta değildir,
+bu kabul edilebilir bir trade-off'tur.
 
-### `GetDashboardAsync`
-```csharp
-public async Task<AnalyticsDashboard> GetDashboardAsync(CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+### Sentiment alarmı eşiği neden `WellKnown`'dan okunur
 
-### `GetSessionAnalyticsAsync`
-```csharp
-public async Task<SessionAnalytics?> GetSessionAnalyticsAsync(string sessionId, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`ConsecutiveNegativeTurns >= WellKnown.SentimentThresholds.AutoEscalationConsecutiveNegative`
+— bu, otomatik eskalasyonu tetikleyen **aynı** eşiktir (bkz. Domain/Model/WellKnown). Dashboard
+burada "kaç oturum otomatik eskalasyon sınırına yakın/ulaşmış" bilgisini ayrı bir sabit
+tanımlamadan, tek doğruluk kaynağından okuyarak gösterir.
 
-## Bağımlılıklar
+## 6. Metotlar / Üyeler
 
-- `CustomerSupportBot.Domain`
-- `IAnalyticsPort`
+| Üye | Açıklama |
+|---|---|
+| `Rate(sessionId, stars, comment?)` | `stars` `[1,5]` dışındaysa `ArgumentOutOfRangeException`; aksi halde `IRatingStore.Submit` + log. |
+| `GetRating(sessionId)` | Bir oturumun puanını döner (yoksa `null`). |
+| `GetRecentRatings(count = 20)`, `GetAllRatings()` | Puanlama listeleri. |
+| `GetSummaryAsync(ct)` | Oturum/mesaj/puan/onay/eskalasyon/niyet sayılarını tek bir anonim nesnede toplar. |
+| `GetDashboardAsync(ct)` | `GetSummaryAsync`'e ek olarak tüm oturumları gezip niyet/faz/sentiment dağılımı, ortalama sentiment skoru, negatif oturum sayısı ve sentiment-alarm sayısını hesaplar; güçlü tipli `AnalyticsDashboard` döner. |
+| `GetSessionAnalyticsAsync(sessionId, ct)` | Tek oturum için: temel bilgiler + sentiment zaman çizelgesi (`SentimentHistory`) + puan + o oturuma ait onay/eskalasyon detayları (`ApprovalDetails`/`EscalationDetails`) + `CollectedInfo`. Oturum yoksa `null`. |
+
+## 7. Bağımlılıklar
+
+Constructor injection ile: `IRatingStore`, `ISessionManager`, `IApprovalQueue`,
+`IEscalationSink`, `ILogger<AnalyticsPortService>`.

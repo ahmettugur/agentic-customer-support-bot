@@ -111,15 +111,15 @@ Reasoning pipeline'ın ana beyni. Workflow **öncesinde** çalışır. O-series 
 
 ### `EntityVerifier` — `Services/EntityVerifier.cs`
 
-**Katman 0**. Deterministik (LLM'siz) entity grounding:
+**Katman 0**. Deterministik (LLM'siz) entity resolution:
 
 - **`Verify(query, session?, history?)` → `VerifiedEntities`** —
   1. `IdExtractor.Extract(query)` ile regex tabanlı çıkarım
   2. History ve session state'ten eksik ID'leri tamamla (5 turluk geriye tarama)
-  3. Her entity için repository port'ları üzerinden lookup (`IOrderRepository`, `IProductCatalogRepository`, `IComplaintRepository`)
-  4. Sonuç: `Verified` | `NotFoundInDb` | `FormatOnly`
-  5. `customer_id Verified` ise `DerivedLastOrderId` ve `DerivedOrderCount` türetir
-- **`BuildPromptBlock(verified)` → string** — reasoning prompt'una enjekte edilecek `[VERIFIED ENTITIES]` bloğunu oluşturur.
+  3. Müşteri kimliğini yalnız `AuthenticatedCustomerId` üzerinden alır
+  4. Order/complaint ID'lerini `FormatOnly` aday olarak taşır; varlık ve sahiplik tool'da doğrulanır
+  5. DB attribute'u, son sipariş veya sipariş sayısı türetmez
+- **`BuildPromptBlock(verified)` → string** — reasoning prompt'una enjekte edilecek `[RESOLVED ENTITIES]` bloğunu oluşturur.
 
 ---
 
@@ -482,7 +482,9 @@ Frontend bu yapıyı severity badge'i ile render eder.
 
 EntityVerifier çıktısı:
 
-**`VerifiedEntities`** — `OrderId?`, `CustomerId?`, `ComplaintId?` + türetilmiş `DerivedLastOrderId`, `DerivedOrderCount`. `HasAny`/`HasAnyVerified` bayrakları.
+**`VerifiedEntities`** — `OrderId?`, `CustomerId?`, `ComplaintId?` ve geriye dönük uyumluluk için
+korunan fakat resolver tarafından artık üretilmeyen `DerivedLastOrderId`/`DerivedOrderCount`.
+`HasAny`/`HasAnyVerified` bayrakları.
 
 **`VerifiedEntity`** — `Value`, `Source`, `Verification`, `Attributes?` (DB'den çekilmiş metadata).
 

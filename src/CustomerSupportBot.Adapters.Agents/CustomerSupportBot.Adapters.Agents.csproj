@@ -19,9 +19,9 @@
 
   <ItemGroup>
     <!-- Microsoft Agents Framework — grup sohbet workflow'u için -->
-    <PackageReference Include="Microsoft.Agents.AI" Version="1.18.0" />
-    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.18.0" />
-    <PackageReference Include="Microsoft.Agents.AI.Abstractions" Version="1.18.0" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.19.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.19.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Abstractions" Version="1.19.0" />
     <!-- LLM-as-judge kalite evaluator'ları (Relevance/Coherence) — MEAI 10.6.0 treniyle uyumlu (MAF 1.15.0'ın bağımlı olduğu sürüm) -->
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Quality" Version="10.9.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.11" />

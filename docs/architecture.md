@@ -43,7 +43,7 @@ Bu dokümanda `CustomerSupportBot`'un yüksek seviye mimarisi, bileşen haritas�
     │
     │  ┌─────────────────────────────────────────────────────────────┐
     │  │ Deterministic Reasoning Helpers                             │
-    └─▶│   EntityVerifier        (Katman 0: ID extract + DB verify)  │
+    └─▶│   EntityVerifier        (Katman 0: güvenli ID resolution)   │
        │   ReasoningSanityChecker(Katman 1.5: IReasoningSanityRule × 8)│
        └─────────────────────────────────────────────────────────────┘
                                   │
@@ -162,7 +162,7 @@ CustomerSupport.slnx
 │   └── Services/                        # Use case implementasyonları
 │       ├── Reasoning/                   # ReasoningService, EntityVerifier, ReasoningSanityChecker
 │       │   ├── ReasoningService.cs      # Reasoning pipeline (Katman 1 + 1.5)
-│       │   ├── EntityVerifier.cs        # Katman 0 — entity extract + port lookup
+│       │   ├── EntityVerifier.cs        # Katman 0 — DB'siz güvenli entity resolution
 │       │   ├── ReasoningSanityChecker.cs # Katman 1.5 — sanity rule'lar
 │       │   ├── SubTaskOrchestrator.cs   # Compound query decomposition
 │       │   └── ReplanService.cs         # Admin override replan mekanizması
@@ -411,7 +411,7 @@ IUserService / ITokenService       ─┘
                                     │  IChatSessionPort, IHitlEventPort, ITelemetryPort, ITracePort,
                                     │  IHumanAgentPort, IImprovementsPort, IPersonalizationPort,
                                     │  ISlaPort, IAnalyticsPort
-EntityVerifier        (singleton)  ─┤  deterministic (port'lar üzerinden)
+EntityVerifier        (singleton)  ─┤  deterministic (query/history/authenticated session)
 ReasoningSanityChecker(singleton)  ─┤
 ReasoningService      (singleton)  ─┤
 EvaluationRunner      (singleton)  ─┤  IEvaluationPort implementasyonu

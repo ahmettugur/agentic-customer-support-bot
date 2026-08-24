@@ -1,35 +1,50 @@
-# IApprovalExecutionRouter
+# IApprovalExecutionRouter (+ ApprovalExecutionOutcome)
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/IApprovalExecutionRouter.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/IApprovalExecutionRouter.cs`
+**Implementasyon:** [`ApprovalExecutionRouter`](../../Services/Approval/ApprovalExecutionRouter.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IApprovalExecutionRouter`, Ports/Outbound/IApprovalExecutionRouter.cs Admin bir onay talebini ONAYLADIĞINDA gerçek işi (sipariş iptali, iade vb.) tetikleyen dispatcher. IApprovalQueue.DecideAsync tarafından çağrılır — tool çağrısının kendisi artık bu kararı beklemediği için (bkz. ApprovalGateService) gerçek yürütme burada, karar anında gerçekleşir.
+Admin bir onay talebini ONAYLADIĞINDA gerçek işi (sipariş iptali, iade, sipariş verme, şikayet
+kaydı) tetikleyen dispatcher.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+[`IApprovalQueue.DecideAsync`](Persistence/IApprovalQueue.md) tarafından çağrılır — tool
+çağrısının kendisi artık admin kararını beklemediği için (bkz. `ApprovalGateService`, HITL
+bloklamayan model), gerçek yürütme burada, karar anında gerçekleşir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IApprovalExecutionRouter`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** `ApprovalRequest.ToolName`'e bakıp doğru `ICustomerSupportToolsService`
+  metoduna (`OrderPlacementTool`/`ComplaintRegistrationTool`/`OrderCancelTool`/
+  `ReturnRequestTool`) parametreleri deserialize edip yönlendirmek.
+- **Üstlenmediği:** Onay kararının kendisi ([`IApprovalQueue.DecideAsync`](Persistence/IApprovalQueue.md)'in
+  işi) veya kaydın müşteri bildirimi durumu — bu port yalnızca "onaylandıysa gerçek işi yap"
+  adımını üstlenir.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Application/Services/Approval/ApprovalExecutionRouter` implemente eder — küçük bir dispatcher
+(4 case, reflection kullanmaz); [`ICustomerSupportToolsService`](ICustomerSupportToolsService.md)'i
+inject eder.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `ApprovalExecutionOutcome`
-```csharp
-public sealed record ApprovalExecutionOutcome(bool Success, string Message)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Bloklamayan HITL modelinin merkezi parçasıdır: eskiden tool çağrısı admin kararını senkron
+bekliyordu (`ApprovalRequiredAIFunction`/`RequestInfoEvent`, 60sn timeout); artık tool hemen
+"onaya gönderildi" diyip döner ve gerçek iş, admin karar verdiği ANDA bu router üzerinden
+tetiklenir — kullanıcı chat'e devam edebilir, sonuç bir bildirim olarak gelir.
 
-## Bağımlılıklar
+## 6. Metotlar / Üyeler
 
-- `CustomerSupportBot.Domain`
+| Metot | Açıklama |
+|---|---|
+| `Task<ApprovalExecutionOutcome> ExecuteAsync(ApprovalRequest request, CancellationToken ct = default)` | Onaylanan talebin gerçek işini yürütür. |
+
+**`ApprovalExecutionOutcome(bool Success, string Message)`** — yürütmenin başarı durumu ve
+kullanıcıya/loga gösterilecek mesaj.
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.ApprovalRequest`'e bağımlıdır.

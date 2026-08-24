@@ -1,111 +1,103 @@
 # SemanticMemoryService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Memory/SemanticMemoryService.cs`
-- **Tür:** `public sealed class : ISemanticMemoryIngestor, ISemanticMemoryWriter`
-- **Namespace:** `CustomerSupportBot.Application.Services.Memory`
+**Dosya:** `Services/Memory/SemanticMemoryService.cs`
+**Portlar:** `ISemanticMemoryIngestor`, `ISemanticMemoryWriter`
+**Namespace:** `CustomerSupportBot.Application.Services.Memory`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`SemanticMemoryService`, Application/Services/Memory/SemanticMemoryService.cs Üst seviye memory facade'ı. Görevleri: - Üç collection'ı (Episodic / Lessons / Knowledge) ensure-edip yönetmek - WriteEpisodic / WriteLesson / SearchKnowledge gibi domain operasyonları sunmak - Tek-noktadan embedding + upsert + search akışı
+Semantik (vektör) belleğin **üst seviye facade'ı** — üç koleksiyonu (Episodic/konuşma geçmişi,
+Lessons/onaylı dersler, Knowledge/bilgi bankası) yönetir, embedding + upsert + arama akışını
+tek noktadan sunar. Uygulamadaki HER YERİN vektör belleğe erişim şeklidir.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+- [`ContextPipeline`](../Chat/ContextPipeline.md)'daki semantik bellek provider'ları arama
+  (`SearchAsync`/`SearchByVectorAsync`) için kullanır.
+- Bir tur bittiğinde `WriteEpisodeAsync` ile o turun episodik özeti yazılır.
+- [`KnowledgeArticleService`](KnowledgeArticleService.md)/[`KnowledgeBaseIngestionService`](KnowledgeBaseIngestionService.md)/`LessonMiner`
+  toplu yazım (`UpsertManyAsync`) için kullanır.
+- [`MemoryPortService`](MemoryPortService.md) (driving port implementasyonu) bu sınıfı sarar.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`SemanticMemoryService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Koleksiyon yönetimi, embedding çağrısını tetikleme, yazma-zamanı temizlik
+  (sanitization), arama parametrelerinin (topK/minScore) varsayılanlarla doldurulması.
+- **Üstlenmediği:** Somut vektör veritabanı bağlantısı (`IVectorMemoryPort`, Adapters.AI),
+  somut embedding modeli çağrısı (`IEmbeddingPort`, Adapters.AI), okuma-zamanı fence sarma
+  (bu `IContextSanitizer.WrapRetrieved`'ı çağıran context provider'ların işi — bu servis
+  yalnızca YAZMA tarafında `Sanitize` çağırır).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-```csharp
-public SemanticMemoryService(IVectorMemoryPort store,
-        IEmbeddingPort embedder,
-        IContextSanitizer sanitizer,
-        IOptions<SemanticMemoryOptions> options,
-        ILogger<SemanticMemoryService> logger)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- İki port'u AYNI ANDA implemente eder: `ISemanticMemoryIngestor` (toplu yazma/silme, KB
+  ingest tarafından kullanılır) ve `ISemanticMemoryWriter` (episodik yazma, chat akışı tarafından).
+- **Inject eder:** `IVectorMemoryPort`, `IEmbeddingPort`, [`IContextSanitizer`](ContextSanitizer.md),
+  `IOptions<SemanticMemoryOptions>`, `ILogger`.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `EnsureCollectionsAsync`
-```csharp
-public async Task EnsureCollectionsAsync(CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**Neden tek bir "facade" sınıfı, üç ayrı servis değil:** Üç koleksiyon (Episodic/Lessons/Knowledge)
+AYNI temel operasyonları (embed → upsert, embed → search) paylaşır; farklılık sadece HANGİ
+koleksiyona yazıldığı/aranıldığıdır (`CollectionFor(MemoryKind)`). Üç ayrı sınıf, bu ortak
+mantığı üç kez tekrarlardı. Tek facade, `MemoryKind` parametresiyle davranışı parametrize eder.
 
-### `CollectionFor`
-```csharp
-public string CollectionFor(MemoryKind kind)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+> 🐞 **`SearchByVectorAsync` — neden `SearchAsync`'ten ayrı bir metot.** `SearchAsync` her
+> çağrıda sorgu metnini YENİDEN embed eder. Ama `SemanticMemoryContextProvider` (context
+> pipeline'da) HER TURDA aynı kullanıcı mesajını hem Knowledge hem Lesson koleksiyonunda
+> ayrı ayrı arıyordu — yani tur başına AYNI metin İKİ KEZ embed ediliyordu (embedder'da cache
+> yok, her çağrı gerçek bir API isteğidir). `SearchByVectorAsync`, hazır bir vektör alıp
+> embedding adımını ATLAR; çağıran taraf `EmbedQueryAsync`'i BİR KEZ çağırıp sonucu iki arama
+> için paylaşabilir — embedding maliyetini yarıya indirir.
 
-### `UpsertAsync`
-```csharp
-public async Task UpsertAsync(MemoryDocument doc, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**Write-time sanitization + read-time fence = çift katman savunma:** `WriteEpisodeAsync`,
+episodik belleğe yazılan kullanıcı sorgusunu/yanıtı `IContextSanitizer.Sanitize` ile temizler
+(HTML yorumu, kontrol karakteri). Bu, veri YAZILIRKEN yapılan bir temizliktir. Ayrıca, bu veri
+daha sonra bir context provider tarafından OKUNUP prompt'a eklenirken `WrapRetrieved` ile
+fence'lenir (READ tarafı, bu sınıfın dışında). İki katmanın amacı farklıdır: yazma-zamanı
+temizlik kalıcı depoyu temiz tutar, okuma-zamanı fence modelin retrieval içeriğini talimat
+sanmamasını garanti eder — biri diğerinin yerini tutmaz.
 
-### `UpsertManyAsync`
-```csharp
-public async Task UpsertManyAsync(MemoryKind kind, IReadOnlyList<MemoryDocument> docs, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**`WriteEpisodeAsync`'te `customerId` neden ayrıca bir ETİKET olarak yazılır:** Bir episodik
+kaydın normal erişim yolu `SessionId`'dir (aynı oturumdaki geçmiş). Ama bir müşteri FARKLI bir
+oturumda (ör. yeni bir sekme, yeniden login) tekrar konuştuğunda, önceki oturumlardaki
+geçmişinin de bulunabilmesi gerekebilir — bu yüzden `customerId` (varsa, JWT-doğrulanmış) ayrı
+bir etiket olarak eklenir ve retrieval bu etikete göre de arama yapabilir. Anonim/kimliksiz
+turlarda bu alan boş kalır, kayıt yalnızca `SessionId` ile bulunabilir kalmaya devam eder.
 
-### `DeleteStaleAsync`
-```csharp
-public async Task DeleteStaleAsync(
-        MemoryKind kind, string tagKey, string tagValue, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`Enabled`/`docs.Count == 0`/`queryVector.Length == 0` gibi erken çıkışlar her metotta
+tekrarlanır — bellek kapalıyken veya boş girdiyle çağrıldığında (ör. bir turda hiç kullanıcı
+sorgusu yoksa) gereksiz bir API çağrısı (embedding, vektör deposu) YAPILMAMASI için.
 
-### `DeleteAsync`
-```csharp
-public async Task DeleteAsync(MemoryKind kind, string documentId, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-### `SearchAsync`
-```csharp
-public async Task<IReadOnlyList<MemorySearchHit>> SearchAsync(
-        MemoryKind kind, string query, int? topK = null, float? minScore = null,
-        CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+| Üye | Açıklama |
+|---|---|
+| `Enabled` (`bool`) | `SemanticMemoryOptions.Enabled`. |
+| `IsConfigured` (`bool`) | Embedding client yapılandırılmış mı. |
+| `Options` (`SemanticMemoryOptions`) | Ayarlara doğrudan erişim (ör. [`MemoryPortService`](MemoryPortService.md) `Config` üretirken kullanır). |
+| `EnsureCollectionsAsync(CancellationToken ct = default): Task` | Üç koleksiyonu idempotent olarak yaratır (startup'ta çağrılır). |
+| `CollectionFor(MemoryKind kind): string` | `MemoryKind` → gerçek koleksiyon adı eşlemesi. |
+| `UpsertAsync(MemoryDocument doc, CancellationToken ct = default): Task` | Tek doküman embed eder ve yazar. |
+| `UpsertManyAsync(MemoryKind kind, IReadOnlyList<MemoryDocument> docs, CancellationToken ct = default): Task` | Toplu embed + yazım (KB ingest gibi). |
+| `DeleteStaleAsync(MemoryKind kind, string tagKey, string tagValue, CancellationToken ct = default): Task` | Belirtilen etiketi taşımayan belgeleri siler. |
+| `DeleteAsync(MemoryKind kind, string documentId, CancellationToken ct = default): Task` | Tekil belge siler. |
+| `SearchAsync(MemoryKind kind, string query, int? topK = null, float? minScore = null, CancellationToken ct = default): Task<IReadOnlyList<MemorySearchHit>>` | Sorguyu embed edip arar. |
+| `SearchByVectorAsync(MemoryKind kind, float[] queryVector, int? topK = null, float? minScore = null, IReadOnlyDictionary<string,string>? tagFilter = null, CancellationToken ct = default): Task<IReadOnlyList<MemorySearchHit>>` | Hazır vektörle arar — embedding adımını atlar. |
+| `EmbedQueryAsync(string query, CancellationToken ct = default): Task<float[]>` | Sorguyu vektöre çevirir; çok koleksiyonlu aramada bir kez kullanılır. |
+| `WriteEpisodeAsync(...)` | Bir turun episodik özetini (sanitize edilmiş) yazar. |
+| `CountAsync(MemoryKind kind, CancellationToken ct = default): Task<long>` | Koleksiyondaki kayıt sayısı. |
 
-### `SearchByVectorAsync`
-```csharp
-public async Task<IReadOnlyList<MemorySearchHit>> SearchByVectorAsync(
-        MemoryKind kind, float[] queryVector, int? topK = null, float? minScore = null,
-        IReadOnlyDictionary<string, string>? tagFilter = null,
-        CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 7. Bağımlılıklar (Constructor Injection)
 
-### `EmbedQueryAsync`
-```csharp
-public Task<float[]> EmbedQueryAsync(string query, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+- `IVectorMemoryPort` — somut vektör veritabanı (Adapters.AI, Qdrant).
+- `IEmbeddingPort` — somut embedding modeli çağrısı.
+- `IContextSanitizer` — yazma-zamanı temizlik.
+- `IOptions<SemanticMemoryOptions>` — koleksiyon adları, chunk/retrieval ayarları.
+- `ILogger<SemanticMemoryService>` — toplu yazım loglaması.
 
-### `WriteEpisodeAsync`
-```csharp
-public Task WriteEpisodeAsync(string sessionId, string traceId, string userQuery,
-        string finalResponse, string? intent, int? rating, string? customerId = null,
-        CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## Bağlantılar
 
-### `CountAsync`
-```csharp
-public async Task<long> CountAsync(MemoryKind kind, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
-
-## Bağımlılıklar
-
-- `CustomerSupportBot.Domain`
-- `ISemanticMemoryIngestor, ISemanticMemoryWriter`
+- [ContextSanitizer.md](ContextSanitizer.md) — yazma-zamanı temizlik
+- [MemoryPortService.md](MemoryPortService.md) — bu servisi saran driving port
+- [KnowledgeArticleService.md](KnowledgeArticleService.md) / [KnowledgeBaseIngestionService.md](KnowledgeBaseIngestionService.md) — toplu yazım tüketicileri

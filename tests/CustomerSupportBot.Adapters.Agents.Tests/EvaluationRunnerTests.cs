@@ -64,10 +64,7 @@ public class EvaluationRunnerTests
             new CustomerIdentityHintBuilder(Substitute.For<ICustomerRepository>()));
 
         var reasoningClient = new ReasoningChatClient(chatClient, "gpt-test", "low");
-        var entityVerifier = new EntityVerifier(
-            _fixture.OrderRepo,
-            _fixture.ComplaintRepo,
-            NullLogger<EntityVerifier>.Instance);
+        var entityVerifier = new EntityVerifier(NullLogger<EntityVerifier>.Instance);
         var sanityChecker = new ReasoningSanityChecker(NullLogger<ReasoningSanityChecker>.Instance);
         var reasoningService = new ReasoningService(
             reasoningClient,

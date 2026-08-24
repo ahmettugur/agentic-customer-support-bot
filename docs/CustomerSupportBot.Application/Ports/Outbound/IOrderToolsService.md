@@ -1,27 +1,59 @@
 # IOrderToolsService
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/IOrderToolsService.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/IOrderToolsService.cs`
+**Implementasyon:** [`OrderToolsService`](../../Services/Tools/OrderToolsService.md) (bkz. [`ICustomerSupportToolsService`](ICustomerSupportToolsService.md) facade'i)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IOrderToolsService`, <summary> Sipariş yönetimi araçları için secondary port. </summary> <summary> Tek bir siparişte <b>bir veya daha fazla</b> ürün satırı oluşturur.  <para> <paramref name="lines"/> LLM'in ürettiği ham taleptir: ürün adları doğrulanmamıştır, aynı ürün birden fazla kez geçebilir, adetler geçersiz olabilir. Doğrulama, katalog çözümlemesi ve tekilleştirme bu metodun içinde yapılır. </para> </summary> <summary> Salt-okunur ön kontrol: sipariş var mı ve login'li müşteriye ait mi? Engel varsa kullanıcıya dönecek <see cref="ToolResult"/>, yoksa <c>null</c>.  <para> HITL onaylı tool'larda (iptal/iade/şikayet) gerçek iş admin kararından SONRA çalışır; sahiplik ihlali orada yakalanırsa talep önce admin kuyruğuna düşer, admin onaylar ve işlem sessizce başarısız olur. Bu metot aynı kontrolü onay kaydı OLUŞTURULMADAN önce yapıp kullanıcıya anında geri bildirim verir ve kuyruğu kirletmez. Yürütme anındaki kontrolün YERİNE geçmez — durum iki an arasında değişebilir, ikisi birlikte çalışır.
+Sipariş yönetimi tool'ları için secondary port: sipariş oluşturma, ön-doğrulama, durum sorgu,
+iptal, iade — hepsi LLM'e açık fonksiyonlar olarak.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`ApprovalGateService` bu tool'ları MAF fonksiyonu olarak sarıp `OrderAgent`'a sunar.
+`OrderPlacementTool`/`OrderCancelTool`/`ReturnRequestTool` onay akışına girer; diğerleri
+salt-okunurdur.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IOrderToolsService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Sipariş satırlarının doğrulanması/katalog çözümlemesi/tekilleştirmesi,
+  sahiplik kontrollü sorgu ve yazma tool'ları.
+- **Üstlenmediği:** Kalıcılık — [`IOrderRepository`](Persistence/IOrderRepository.md)/
+  [`IProductCatalogRepository`](Persistence/IProductCatalogRepository.md)'nin işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Application/Services/Tools/OrderToolsService` implemente eder.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+> **`customerId` LLM parametresi DEĞİLDİR** — `OrderStatusTool`, `OrderCancelTool`,
+> `ReturnRequestTool` metotlarındaki `customerId`, çağıran taraf (`ApprovalGateService`)
+> tarafından HER ZAMAN login'li kullanıcının doğrulanmış kimliğinden ([`IApprovalContextAccessor`](IApprovalContextAccessor.md))
+> geçirilir; LLM'in serbest metinden ürettiği bir değer değildir. Sipariş başka bir müşteriye
+> aitse `WellKnown.ToolErrorCodes.CustomerIdMismatch` ile reddedilir. Bu, "biri başkasının
+> müşteri numarasını söyleyip onun adına işlem yapabiliyor" güvenlik açığının kapatılma
+> biçimidir.
+>
+> `ValidateOrderActionable` ayrı bir metot olarak var çünkü HITL onaylı tool'larda gerçek iş
+> admin kararından SONRA çalışır; sahiplik ihlali orada yakalanırsa talep önce admin kuyruğuna
+> düşer, admin onaylar ve işlem sessizce başarısız olur. Bu metot aynı kontrolü onay kaydı
+> OLUŞTURULMADAN önce yapıp kullanıcıya anında geri bildirim verir ve kuyruğu kirletmez —
+> yürütme anındaki kontrolün YERİNE geçmez, durum iki an arasında değişebilir, ikisi birlikte
+> çalışır.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `ToolResult OrderPlacementTool(IReadOnlyList<OrderLineRequest> lines, string customerId)` | Bir/daha fazla satırdan sipariş oluşturur (onay gerektirir); LLM'in ham talebini doğrular/çözümler. |
+| `ToolResult? ValidateOrderActionable(string orderId, string customerId)` | Salt-okunur ön kontrol: sipariş var mı, login'li müşteriye ait mi? Engel varsa `ToolResult`, yoksa `null`. |
+| `ToolResult OrderStatusTool(string orderId, string customerId)` | Sipariş durumu (sahiplik kontrollü). |
+| `ToolResult GetLastOrderTool(string customerId)` | Müşterinin en son siparişi. |
+| `ToolResult GetAllOrdersTool(string customerId)` | Müşterinin tüm siparişleri. |
+| `ToolResult OrderCancelTool(string orderId, string reason, string customerId)` | Sipariş iptali (onay gerektirir, sahiplik kontrollü). |
+| `ToolResult ReturnRequestTool(string orderId, string reason, string customerId)` | İade talebi (onay gerektirir, sahiplik kontrollü). |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.OrderLineRequest`/`ToolResult`'a bağımlıdır.

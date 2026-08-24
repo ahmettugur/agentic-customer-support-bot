@@ -2,7 +2,7 @@
 
 **Dosya:** `Model/ReasoningTrace.cs`  
 **Tür:** `class` (mutable)  
-**İlişkili:** `AgentVisit`, `ToolInvocation` class'ları (aynı dosyada)
+**İlişkili:** `AgentVisit`, `ToolInvocation`, `ContextPartUsage` class'ları (aynı dosyada)
 
 ## 1. Ne İşe Yarar
 
@@ -37,6 +37,21 @@ Her kullanıcı mesajı işlendiğinde `WorkflowTraceEventProcessor` bir `Reason
 | `IterationCount` | `int` | MAF superstep sayısı |
 | `Error` | `string?` | Hata mesajı |
 | `EstimatedTokens` | `long` | Tahmini token kullanımı |
+| `ContextParts` | `List<ContextPartUsage>` | Bu turda prompt'a giren bağlam sağlayıcılarının dökümü |
+
+### ContextPartUsage
+
+> 🐞 **Neden eklendi:** Bir yanıt yanlış olduğunda asıl sebep çoğu zaman eksik bağlamdır —
+> `ContextPipeline`'daki bir provider hata verdi, zaman aşımına uğradı veya karakter bütçesine
+> takıldı. Bu bilgi daha önce yalnızca `Debug` seviyesinde loglandığı için trace'ten
+> görünmüyordu; "model bu turda neyi biliyordu?" sorusuna admin panelinden cevap vermek için
+> `ReasoningTrace`'e taşındı. Bkz. [ContextPipeline.md](../../CustomerSupportBot.Application/Chat/ContextPipeline.md#34-raporlama-contextresult).
+
+| Üye | Tip | Açıklama |
+| ----- | ----- | ---------- |
+| `ProviderName` | `string` | Bağlam sağlayıcısının adı (`IContextProvider.Name`) |
+| `Status` | `string` | `included` \| `empty` \| `failed` \| `timedOut` \| `dropped` |
+| `Length` | `int` | Prompt'a giren karakter sayısı (girmemişse 0) |
 
 ### AgentVisit
 

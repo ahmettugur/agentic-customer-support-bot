@@ -1,40 +1,86 @@
-# SlaOptions
+# SlaOptions (+ ApprovalSlaOptions, EscalationSlaOptions, SlaBreachAction)
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Sla/SlaOptions.cs`
-- **Tür:** `public  class`
+- **Kaynak:** `Services/Sla/SlaOptions.cs`
 - **Namespace:** `CustomerSupportBot.Application.Services.Sla`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`SlaOptions`, Application/Services/Sla/SlaOptions.cs SLA / Response Time Guardian config. HITL onay kuyruğunda veya açık eskalasyonlarda uzun süre bekleyen kayıtlar için uyarı + ihlal eşikleri. Guardian periyodik tarayıp aksiyon alır. <summary> Bekleyen onay/eskalasyon kayıtları için SLA politikası. </summary> <summary>SLA Guardian aktif mi?</summary> <summary>Tarama frekansı (saniye).</summary> <summary>Bu süreyi aşan onaylar için "warn" eventi yayınlanır — admin panelinde bir uyarı rozeti.</summary> <summary>
+SLA / "Response Time Guardian" konfigürasyonu — HITL onay kuyruğunda veya açık
+eskalasyonlarda uzun süre bekleyen kayıtlar için uyarı ve ihlal eşiklerini tanımlar.
+[`SlaPortService`](SlaPortService.md) bu eşikleri periyodik taramada kullanır.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Bekleyen onay/eskalasyon kayıtlarının ne kadar süre "normal" sayılacağını, ne zaman admin
+paneline uyarı rozeti düşeceğini ve ihlal (`breach`) sonrası ne yapılacağını
+(`SlaBreachAction`) appsettings üzerinden ayarlanabilir kılmak.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`SlaOptions`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+Yalnızca veri taşır — tarama/karar mantığı [`SlaPolicyEvaluator`](SlaPolicyEvaluator.md)'da,
+tarama orkestrasyonu [`SlaPortService`](SlaPortService.md)'de.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- `IOptionsMonitor<SlaOptions>` olarak [`SlaPortService`](SlaPortService.md)'e enjekte edilir
+  (`IOptionsMonitor` kullanılması, appsettings'in **yeniden başlatmadan** güncellenebilmesini
+  sağlar).
+- [`SlaPolicyEvaluator`](SlaPolicyEvaluator.md) — `ApprovalSlaOptions`/`EscalationSlaOptions`'ı
+  girdi olarak alır.
 
-## Özellikler/Properties
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `Enabled` (`bool`): İlgili veriyi temsil eden özellik.
-- `PollIntervalSeconds` (`int`): İlgili veriyi temsil eden özellik.
-- `Approvals` (`ApprovalSlaOptions`): İlgili veriyi temsil eden özellik.
-- `Escalations` (`EscalationSlaOptions`): İlgili veriyi temsil eden özellik.
-- `WarnAfterSeconds` (`int`): İlgili veriyi temsil eden özellik.
-- `BreachAfterSeconds` (`int`): İlgili veriyi temsil eden özellik.
-- `OnBreach` (`SlaBreachAction`): İlgili veriyi temsil eden özellik.
-- `WarnAfterSeconds` (`int`): İlgili veriyi temsil eden özellik.
-- `BreachAfterSeconds` (`int`): İlgili veriyi temsil eden özellik.
-- `BoostPriorityOnBreach` (`bool`): İlgili veriyi temsil eden özellik.
+### `ApprovalSlaOptions.OnBreach` neden varsayılan `None`, `AutoReject` değil
 
-## Bağımlılıklar
+> 🐞 **Geçmiş tasarım hatası:** HITL bloklamayan modele taşınmadan önce (eski tasarımda) bu
+> değer `AutoReject` idi ve o dönem `ApprovalOptions.TimeoutSeconds` (o zamanki tool
+> çağrısını `AwaitDecisionAsync` ile bekleten, 60sn) ile aynı tutulması gereken, ikinci/yedek
+> bir uygulama katmanıydı. Tool çağrıları artık admin kararını beklemiyor (bkz.
+> `ApprovalGateService.ExecuteWithApprovalGateAsync`) — kayıt, admin karar verene ya da
+> `ApprovalOptions.StalePendingHours` (varsayılan 72 saat) aşılana kadar kuyrukta kalmalı.
+> Tasarım değişirken bu alan güncellenmeyi unutulmuştu: `BreachAfterSeconds=60` +
+> `OnBreach=AutoReject` kombinasyonu, her bekleyen onayı admin bakmasa bile 60. saniyede
+> **sessizce reddediyordu** — bloklamayan modelin "admin ne zaman bakarsa baksın" amacını
+> fiilen geçersiz kılıyordu. `AutoReject`/`AutoApprove` hâlâ bir seçenek olarak duruyor (ör.
+> çok agresif bir operasyon politikası isteniyorsa) ama artık varsayılan değil ve kasıtlı bir
+> operatör kararı gerektirir.
 
-- `CustomerSupportBot.Domain`
+## 6. Metotlar / Üyeler
+
+### `SlaOptions`
+
+| Üye | Tip | Varsayılan | Açıklama |
+|---|---|---|---|
+| `SectionName` | `const string` | `"Sla"` | appsettings.json'daki bölüm adı. |
+| `Enabled` | `bool` | `true` | SLA Guardian aktif mi? |
+| `PollIntervalSeconds` | `int` | `5` | Tarama frekansı. |
+| `Approvals` | `ApprovalSlaOptions` | `new()` | Onay kuyruğu eşikleri. |
+| `Escalations` | `EscalationSlaOptions` | `new()` | Eskalasyon eşikleri. |
+
+### `ApprovalSlaOptions`
+
+| Üye | Tip | Varsayılan | Açıklama |
+|---|---|---|---|
+| `WarnAfterSeconds` | `int` | `20` | Bu süreyi aşan onaylar için `warn` event'i yayınlanır. |
+| `BreachAfterSeconds` | `int` | `60` | Bu süreyi aşan onaylar SLA ihlali sayılır. |
+| `OnBreach` | `SlaBreachAction` | `None` | Breach sonrası aksiyon — bkz. madde 5. |
+
+### `EscalationSlaOptions`
+
+| Üye | Tip | Varsayılan | Açıklama |
+|---|---|---|---|
+| `WarnAfterSeconds` | `int` | `60` | Bu süreyi aşan açık eskalasyonlar için `warn` event'i yayınlanır. |
+| `BreachAfterSeconds` | `int` | `180` | Bu süreyi aşan eskalasyonlar SLA ihlali sayılır. |
+| `BoostPriorityOnBreach` | `bool` | `true` | Breach sonrası önceliği bir kademe yükseltir (Low→Normal→High→Critical, Critical'da sabit kalır). |
+
+### `SlaBreachAction` *(enum)*
+
+`None` (yalnızca event yayınla), `AutoReject`, `AutoApprove`.
+
+## 7. Bağımlılıklar
+
+Yalnızca kendi iç tipleri arasında bağımlılık taşır; dış bir bağımlılığı yoktur.
+
+## Bağlantılar
+
+- [SlaPolicyEvaluator.md](SlaPolicyEvaluator.md), [SlaPortService.md](SlaPortService.md)

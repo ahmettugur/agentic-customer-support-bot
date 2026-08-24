@@ -1,27 +1,46 @@
 # ISlaEventSink
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Persistence/ISlaEventSink.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Persistence`
+**Kaynak:** `Ports/Outbound/Persistence/ISlaEventSink.cs`
+**İmplementasyonlar:** [`InMemorySlaEventSink`](../../../../CustomerSupportBot.Adapters.Persistence/InMemory/InMemorySlaEventSink.md), [`PostgresSlaEventSink`](../../../../CustomerSupportBot.Adapters.Persistence/Postgres/PostgresSlaEventSink.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ISlaEventSink`, <summary> SLA Guardian'ın ürettiği warn/breach olayları için secondary port. </summary> <summary>Yeni bir SLA olayı kaydeder ve event yayar.</summary> <summary>En son N olay (default 100).</summary> <summary> Belirli bir target+severity için en son ne zaman event yayınlandığını döner. Bu sayede her tarama döngüsünde tekrar tekrar event üretilmez. </summary> <summary>Yeni event eklendiğinde fire eder (UI canlı bildirim için).</summary>
+SLA Guardian'ın ürettiği uyarı (`warn`) ve ihlal (`breach`) olaylarının kaydı için secondary
+port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`SlaGuardianService` (Api katmanı, periyodik worker) bekleyen eskalasyon/onay kayıtlarını
+tarar; bir eşik aşıldığında `Record` ile event yazar. Admin dashboard `GetRecent` ile bu
+olayları listeler, `EventRecorded` event'i canlı bildirim için dinlenir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ISlaEventSink`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** SLA event kaydı, tekrar-yayın önleme sorgusu (`LastEmittedAt`).
+- **Üstlenmediği:** SLA eşiklerinin hesaplanması — bu `SlaGuardianService`'in işi; bu port
+  yalnızca sonucu saklar.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`InMemorySlaEventSink` (test) ve `PostgresSlaEventSink` (prod) implemente eder.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`LastEmittedAt(kind, targetId, severity)` var olma nedeni: `SlaGuardianService` periyodik
+çalışır (örn. her 30 saniyede bir tarar) ve aynı ihlal her tarama turunda yeniden tespit
+edilebilir — bu metot olmadan her tarama turunda aynı ihlal için tekrar tekrar event
+üretilir, admin bildirim listesi aynı uyarıyla dolar. Bu sorgu "bu hedef+önem derecesi için
+en son ne zaman uyardık" bilgisini vererek tekrar-yayını önler.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `void Record(SlaEvent evt)` | Yeni SLA olayı kaydeder ve event yayar. |
+| `IReadOnlyList<SlaEvent> GetRecent(int count = 100)` | Son N olay. |
+| `DateTime? LastEmittedAt(string kind, string targetId, string severity)` | Belirli hedef+önem derecesi için en son ne zaman event yayınlandı. |
+| `event EventHandler<SlaEvent>? EventRecorded` | Yeni event eklendiğinde fırlar (UI canlı bildirim). |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.SlaEvent`'e bağımlıdır.

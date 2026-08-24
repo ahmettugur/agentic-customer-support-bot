@@ -43,4 +43,4 @@ public async Task StartAsync(CancellationToken cancellationToken)
 ## Bağımlılıklar
 
 - `Microsoft.Extensions.Hosting.IHostedService`
-- [PostgresReasoningTraceStore](../Postgres/StoresAndSinks.md)
+- [PostgresReasoningTraceStore](../Postgres/PostgresReasoningTraceStore.md)

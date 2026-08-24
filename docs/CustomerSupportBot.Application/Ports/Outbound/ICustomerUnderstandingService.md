@@ -1,27 +1,44 @@
 # ICustomerUnderstandingService
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/ICustomerUnderstandingService.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/ICustomerUnderstandingService.cs`
+**Implementasyon:** [`CustomerUnderstandingService`](../../Services/Personalization/CustomerUnderstandingService.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ICustomerUnderstandingService`, <summary> Memory'nin üç kaynağını (yapısal olgular, profil, çıkarımlar) tek bir <see cref="CustomerUnderstanding"/> nesnesinde sentezler.  <para> Tek doğruluk kaynağı olması bilinçli: sentez mantığı (null-kontrolleri, "tur sıfırsa gösterme" kuralı, sıralama) burada bir kez yazılır; hem bugünkü tüketici (<c>CustomerProfileContextProvider</c>) hem de ileride eklenecek bir öneri motoru aynı kuralları iki kez uygulamak zorunda kalmaz. </para> </summary> <summary> Oturumun doğrulanmış müşteri kimliği yoksa, profili yoksa veya profil hiç etkileşim görmemişse (<c>TotalTurns == 0</c>) <c>null</c> döner — "gösterilecek bir şey yok" ile "bilgi var ama boş" ayrımını çağırana bırakmaz. </summary>
+Memory'nin üç kaynağını (yapısal olgular, profil, LLM-türetilmiş çıkarımlar) tek bir
+`CustomerUnderstanding` nesnesinde sentezleyen port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`CustomerProfileContextProvider` (bkz. [ContextProviders.md](../../Providers/ContextProviders.md))
+bir turun bağlamını kurarken `Build(session)`'ı çağırır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ICustomerUnderstandingService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Üç kaynağı birleştirme mantığını (null-kontrolleri, "tur sıfırsa gösterme"
+  kuralı, sıralama) tek bir yerde uygulamak.
+- **Üstlenmediği:** Verinin kendisinin depolanması — o
+  [`ICustomerProfileStore`](Persistence/ICustomerProfileStore.md)'un işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Application/Services/Personalization/CustomerUnderstandingService` implemente eder.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Tek doğruluk kaynağı olması bilinçli: sentez mantığı burada bir kez yazılır; hem bugünkü
+tüketici (`CustomerProfileContextProvider`) hem de ileride eklenecek bir öneri motoru aynı
+kuralları iki kez uygulamak zorunda kalmaz. `Build`'in oturumun doğrulanmış müşteri kimliği
+yoksa, profili yoksa veya profil hiç etkileşim görmemişse (`TotalTurns == 0`) `null` dönmesi
+kasıtlıdır — "gösterilecek bir şey yok" ile "bilgi var ama boş" ayrımını çağırana bırakmaz.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `CustomerUnderstanding? Build(AgentSession session)` | Oturumdan sentezlenmiş anlayışı üretir; koşullar sağlanmazsa `null`. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.AgentSession` ve
+`CustomerSupportBot.Domain.Model.Memory.CustomerUnderstanding`'e bağımlıdır.

@@ -1,27 +1,48 @@
 # IRecommendationService
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/IRecommendationService.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/IRecommendationService.cs`
+**Implementasyon:** [`RecommendationService`](../../Services/Personalization/RecommendationService.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IRecommendationService`, <summary> <see cref="CustomerUnderstanding"/>'den ürün önerisi üretir. Kural tabanlıdır — LLM çağırmaz; maliyet sınıfı <c>RecordInteractionAsync</c> ile aynıdır.  <para> <b>Susma, konuşmak kadar önemli bir sonuçtur.</b> Bu bir destek botu, satış asistanı değil: müşteri şikayet ederken veya yeni bir müşteriyken öneri sunmak agresif satış izlenimi verir. Susma kuralları (duygu, veri yeterliliği) burada — çağıranın her tüketimde tekrar uygulaması gereken bir kontrol değil, servisin garantisi. </para> </summary> <summary> Hiçbir zaman <c>null</c> dönmez ve hiçbir zaman istisna fırlatmaz — susma kuralları devreye girdiğinde boş liste döner. Çağıran (context provider) bunu ayrıca kontrol etmek zorunda değildir. </summary>
+`CustomerUnderstanding`'den kural tabanlı ürün önerisi üretir — LLM çağırmaz.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Bir context provider (bkz. [ContextProviders.md](../../Providers/ContextProviders.md)) veya
+ilgili bir servis, uygun olduğunda önerileri prompt'a/UI'a eklemek için `Recommend`'i çağırır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IRecommendationService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Susma kurallarını (duygu durumu, veri yeterliliği) uygulayarak öneri üretmek
+  veya bilinçli olarak susmak.
+- **Üstlenmediği:** `CustomerUnderstanding`'in sentezlenmesi — o
+  [`ICustomerUnderstandingService`](ICustomerUnderstandingService.md)'in işi; bu servis onu
+  girdi olarak alır.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Application/Services/Personalization/RecommendationService` implemente eder.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+> **Susma, konuşmak kadar önemli bir sonuçtur.** Bu bir destek botu, satış asistanı değil:
+> müşteri şikayet ederken veya yeni bir müşteriyken öneri sunmak agresif satış izlenimi
+> verir. Susma kuralları burada — çağıranın her tüketimde tekrar uygulaması gereken bir
+> kontrol değil, servisin garantisi. `Recommend` hiçbir zaman `null` dönmez ve hiçbir zaman
+> istisna fırlatmaz; susma kuralları devreye girdiğinde boş liste döner — çağıran (context
+> provider) bunu ayrıca kontrol etmek zorunda değildir.
+
+Kural tabanlı olması (LLM çağırmaması) bilinçlidir: maliyet sınıfı
+`RecordInteractionAsync` ile aynı tutulur — her turda ek bir LLM çağrısı yapmaz.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `IReadOnlyList<ProductRecommendation> Recommend(AgentSession session, int maxResults = 2)` | Kural tabanlı öneri üretir; susma kuralları geçerliyse boş liste. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.AgentSession` ve
+`CustomerSupportBot.Domain.Model.Memory.ProductRecommendation`'a bağımlıdır.

@@ -22,7 +22,7 @@ Bir sohbet oturumunun `Bot` mu yoksa `Human` (admin devraldı) modunda mı oldu�
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresChatModeRegistry` (`../Postgres/HitlAndChat.md`) ile aynı `IChatModeRegistry` arayüzünü uygular.
+- `PostgresChatModeRegistry` (`../Postgres/PostgresChatModeRegistry.md`) ile aynı `IChatModeRegistry` arayüzünü uygular.
 - `InMemoryChatBridge` ile birlikte kullanılır — bridge mesajı hangi yöne göndereceğine bu registry'nin döndüğü moda bakarak karar vermez (bu karar tüketici tarafında, ör. `ChatPortService`'te), registry sadece durumu tutar.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı

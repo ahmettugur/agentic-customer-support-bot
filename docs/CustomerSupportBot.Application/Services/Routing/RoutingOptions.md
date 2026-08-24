@@ -1,35 +1,51 @@
 # RoutingOptions
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Routing/RoutingOptions.cs`
-- **Tür:** `public  class`
+- **Kaynak:** `Services/Routing/RoutingOptions.cs`
+- **Tür:** `public class`
 - **Namespace:** `CustomerSupportBot.Application.Services.Routing`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`RoutingOptions`, Application/Services/Routing/RoutingOptions.cs Smart Routing & Skills-Based Escalation — appsettings.json "Routing" section üzerinden okunan konfigürasyon. Intent → skill tag mapping ve routing davranışı. <summary>SkillsBasedRouter için konfigürasyon.</summary> <summary>Smart routing açık mı? Kapalıysa router no-op döner.</summary> <summary> Intent → required skill tags mapping. Reasoning trace'inde tespit edilen intent'e göre eklenecek skill etiketleri. </summary> <summary> Müşteri profili anahtar kelimeleri → skill tag mapping. Örn: "VIP" → "vip" (admin notu içeriyorsa). </summary> <summary> LoadBalancing açıksa: aynı match skoruna sahip temsilciler arasında CurrentLoad düşük olan tercih edilir. </summary>
+[`SkillsBasedRouter`](SkillsBasedRouter.md)'ın davranışını `appsettings.json`'daki `"Routing"`
+bölümünden okunan bir ayar nesnesi. Intent→skill eşlemesi, dil ağırlığı, minimum eşleşme skoru
+ve başlangıç (seed) temsilci listesini taşır.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Eskalasyon anında hangi skill etiketlerinin gerekli sayılacağını ve temsilci seçim skorunun
+nasıl ağırlıklandırılacağını kod değiştirmeden (yalnızca appsettings ile) ayarlanabilir kılmak.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`RoutingOptions`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+Yalnızca veri taşır — hiçbir hesaplama/karar mantığı içermez (o [`SkillsBasedRouter`](SkillsBasedRouter.md)'da).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- `IOptions<RoutingOptions>` olarak [`SkillsBasedRouter`](SkillsBasedRouter.md)'a enjekte edilir.
+- `SeedAgents` — uygulama ilk açıldığında `InMemoryHumanAgentRegistry`'ye eklenen başlangıç temsilcileri.
 
-## Özellikler/Properties
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `Enabled` (`bool`): İlgili veriyi temsil eden özellik.
-- `LoadBalancingEnabled` (`bool`): İlgili veriyi temsil eden özellik.
-- `LanguageWeight` (`double`): İlgili veriyi temsil eden özellik.
-- `MinMatchScore` (`double`): İlgili veriyi temsil eden özellik.
-- `SeedAgents` (`List<HumanAgent>`): İlgili veriyi temsil eden özellik.
+`IntentSkillMap`/`ProfileKeywordSkillMap`'in `StringComparer.OrdinalIgnoreCase` ile
+oluşturulması bilinçli: appsettings'te yazılan intent/anahtar kelime metinleriyle kod
+tarafındaki değerlerin büyük/küçük harf farkından dolayı eşleşmemesi riskini ortadan kaldırır.
 
-## Bağımlılıklar
+## 6. Metotlar / Üyeler
 
-- `CustomerSupportBot.Domain`
+| Üye | Tip | Varsayılan | Açıklama |
+|---|---|---|---|
+| `Enabled` | `bool` | `true` | Smart routing açık mı? Kapalıysa `SkillsBasedRouter.Decide` no-op döner (`Note` ile birlikte boş `RoutingDecision`). |
+| `IntentSkillMap` | `Dictionary<string, List<string>>` | boş | Reasoning trace'inde tespit edilen `Intent`'e göre eklenecek skill etiketleri eşlemesi. |
+| `ProfileKeywordSkillMap` | `Dictionary<string, string>` | boş | Müşteri profilinin admin notunda geçen anahtar kelime → skill tag eşlemesi (ör. `"VIP"` → `"vip"`). |
+| `LoadBalancingEnabled` | `bool` | `true` | Açıksa, aynı skor aralığındaki temsilciler arasında `CurrentLoad`'u düşük olan hafif bir avantaj kazanır. |
+| `LanguageWeight` | `double` | `0.2` | Skor formülünde dil eşleşmesinin ağırlığı (0..1) — bkz. [SkillsBasedRouter.md](SkillsBasedRouter.md). |
+| `MinMatchScore` | `double` | `0.1` | Bu değerin altındaki en iyi skor "match yok" sayılır; eskalasyon yine kaydedilir ama `SuggestedAgentId` boş kalır. |
+| `SeedAgents` | `List<HumanAgent>` | boş | Uygulama ilk başlatıldığında `InMemoryHumanAgentRegistry`'ye eklenen başlangıç temsilci listesi. |
+
+## 7. Bağımlılıklar
+
+Yalnızca `HumanAgent` (Domain modeli) tipine bağımlıdır.
+
+## Bağlantılar
+
+- [SkillsBasedRouter.md](SkillsBasedRouter.md) — bu ayarları kullanan servis

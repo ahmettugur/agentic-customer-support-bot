@@ -1,27 +1,46 @@
 # ISemanticMemoryWriter
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/ISemanticMemoryWriter.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/ISemanticMemoryWriter.cs`
+**Implementasyon:** [`SemanticMemoryService`](../../Services/Memory/SemanticMemoryService.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ISemanticMemoryWriter`, <summary> Semantic memory yazma port'u — adapter'ların episodik bellek yazması için. </summary> <param name="customerId"> Doğrulanmış müşteri kimliği (varsa). Tag olarak yazılır ve retrieval'ın <b>müşteri bazında</b> filtrelenebilmesini sağlar — sessionId'ye göre filtrelemek yetmez, aynı müşterinin farklı oturumlardaki (dolayısıyla farklı sessionId'lerdeki) geçmişini birbirine bağlayamaz. Anonim turlarda <c>null</c>; o episode yalnızca sessionId ile bulunabilir kalır. </param>
+Semantic memory yazma port'u — adapter'ların episodik bellek (bir turun özeti) yazması için.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Bir tur bittiğinde `WorkflowRunner`/`ChatPortService` bu port'u `WriteEpisodeAsync` ile
+çağırarak turun bir vektör-aranabilir "anı" olarak kaydedilmesini sağlar.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ISemanticMemoryWriter`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Bir turu episode olarak yazma kararının orkestrasyonu (embedding üretimi +
+  vektör deposuna yazma).
+- **Üstlenmediği:** Vektör üretimi ([`IEmbeddingPort`](AI/IEmbeddingPort.md)'un işi) ve
+  depolama ([`IVectorMemoryPort`](AI/IVectorMemoryPort.md)'un işi) — bu servis ikisini
+  koordine eder.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Application/Services/Memory/SemanticMemoryService` implemente eder;
+[`SemanticMemoryOptions`](AI/SemanticMemoryOptions.md)'tan `Enabled` bayrağını okur.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`customerId` parametresinin dokümantasyonu şunu vurgular: doğrulanmış müşteri kimliği tag
+olarak yazılır ve retrieval'ın **müşteri bazında** filtrelenebilmesini sağlar — sessionId'ye
+göre filtrelemek yetmez, aynı müşterinin farklı oturumlardaki (dolayısıyla farklı
+sessionId'lerdeki) geçmişini birbirine bağlayamaz. Anonim turlarda `null`; o episode yalnızca
+sessionId ile bulunabilir kalır — bu, login olmayan kullanıcıların verisinin başka bir
+müşterinin geçmişine sızmamasını garanti eder.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `bool Enabled { get; }` | Semantic memory açık mı (appsettings'ten). |
+| `Task WriteEpisodeAsync(string sessionId, string traceId, string userQuery, string finalResponse, string? intent, int? rating, string? customerId = null, CancellationToken ct = default)` | Bir turu episodik bellek olarak yazar. |
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü bağımlılıksızdır (yalnızca ilkel tipler).

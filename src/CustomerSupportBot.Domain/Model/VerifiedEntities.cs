@@ -1,45 +1,43 @@
 // Models/VerifiedEntities.cs
-// Entity grounding / ReAct-lite.
+// Entity resolution / ReAct-lite.
 // IdExtractor sadece regex formatını doğrular ("1030" mi?).
-// EntityVerifier ise bunun DB'de var olduğunu da doğrular ("1030" gerçekten bir sipariş mi?)
-// Ve reasoning modeline verilen prompt'a "doğrulanmış bağlam" olarak enjekte eder.
-// Amaç: hallucination'ı düşürmek ve requiredInfo'nun zaten bilinen alanları istememesini
-// Garanti altına almak.
+// EntityVerifier query + history + authenticated session kaynaklarını birleştirir; sipariş ve
+// şikayetin gerçekliği/sahipliği specialist tool'larda doğrulanır. Amaç, kullanıcıdan zaten
+// sağladığı kimliği tekrar istemeden factual veriyi yalnız yetkili tool sonucundan üretmektir.
 
 namespace CustomerSupportBot.Domain.Model;
 
 /// <summary>
-/// Mevcut turda (query + history + session state) tespit edilmiş ve doğrulanmış
-/// Entity'lerin yapılandırılmış özeti. ReasoningService prompt'una enjekte edilir.
+/// Mevcut turda (query + history + session state) çözümlenmiş entity'lerin yapılandırılmış
+/// özeti. ReasoningService prompt'una enjekte edilir.
 /// </summary>
 public class VerifiedEntities
 {
-    /// <summary>Doğrulanmış sipariş ID'si (ör. 1030).</summary>
+    /// <summary>Çözümlenmiş sipariş ID'si (ör. 1030); varlık/sahiplik tool'da doğrulanır.</summary>
     public VerifiedEntity? OrderId { get; set; }
 
-    /// <summary>Doğrulanmış müşteri ID'si (ör. 1027" veya 1001).</summary>
+    /// <summary>Authenticated session'dan alınan müşteri ID'si (ör. 1027).</summary>
     public VerifiedEntity? CustomerId { get; set; }
 
-    /// <summary>Doğrulanmış şikayet ID'si (ör. 1001).</summary>
+    /// <summary>Çözümlenmiş şikayet ID'si (ör. 1001); varlık/sahiplik tool'da doğrulanır.</summary>
     public VerifiedEntity? ComplaintId { get; set; }
 
     /// <summary>
-    /// Türetilmiş alan: customer_id doğrulanmışsa müşterinin en son sipariş ID'si.
-    /// Plan yapan modelin "get_last_order_tool çağırayım" kararını önceden
-    /// Grounded bilgiyle verebilmesi için.
+    /// Geriye dönük uyumluluk alanı. EntityVerifier artık eager DB sorgusu yapmadığı için
+    /// bu alanı üretmez; son sipariş specialist tool ile okunur.
     /// </summary>
     public string? DerivedLastOrderId { get; set; }
 
     /// <summary>
-    /// Türetilmiş alan: customer_id doğrulanmışsa toplam sipariş sayısı.
+    /// Geriye dönük uyumluluk alanı. EntityVerifier artık bu alanı üretmez.
     /// </summary>
     public int? DerivedOrderCount { get; set; }
 
-    /// <summary>En az bir doğrulanmış entity var mı?</summary>
+    /// <summary>En az bir çözümlenmiş entity var mı?</summary>
     public bool HasAny =>
         OrderId != null || CustomerId != null || ComplaintId != null;
 
-    /// <summary>En az bir DB-verified entity var mı (sadece format değil)?</summary>
+    /// <summary>En az bir güvenilir sistem kaynağıyla doğrulanmış entity var mı?</summary>
     public bool HasAnyVerified =>
         (OrderId?.Verification == EntityVerification.Verified) ||
         (CustomerId?.Verification == EntityVerification.Verified) ||
@@ -57,11 +55,11 @@ public class VerifiedEntity
     /// <summary>Bu değer nereden elde edildi?</summary>
     public EntitySource Source { get; set; }
 
-    /// <summary>DB ile doğrulama durumu.</summary>
+    /// <summary>Çözümleme/doğrulama seviyesi.</summary>
     public EntityVerification Verification { get; set; }
 
     /// <summary>
-    /// Verified ise entity'nin DB'den çekilmiş kısa özet attribute'ları.
+    /// Harici bir doğrulayıcı Verified sonucu sağladıysa kısa özet attribute'ları.
     /// Ör. order için { "status": "Kargolandı", "product": "Dell XPS 15", "customerId": "1027" }.
     /// </summary>
     public Dictionary<string, string>? Attributes { get; set; }
@@ -83,11 +81,10 @@ public enum EntitySource
 /// <summary>Doğrulama seviyesi.</summary>
 public enum EntityVerification
 {
-    /// <summary>Format doğru + DB'de mevcut.</summary>
+    /// <summary>Güvenilir sistem kaynağıyla doğrulanmış (ör. authenticated session).</summary>
     Verified,
     /// <summary>Format doğru ama DB'de bulunamadı (kullanıcı yanlış numara vermiş olabilir).</summary>
     NotFoundInDb,
-    /// <summary>Format doğrulandı, DB verification uygulanmadı (ör. customer_id için opsiyonel).</summary>
+    /// <summary>Format/bağlam çözümlendi; gerçeklik ve sahiplik specialist tool'a ertelendi.</summary>
     FormatOnly
 }
-

@@ -1,33 +1,47 @@
 # ContextPipelineOptions
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/ContextPipelineOptions.cs`
-- **Tür:** `public  class`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/ContextPipelineOptions.cs`
+**Ayar bölümü:** `appsettings.json` → `"ContextPipeline"`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ContextPipelineOptions`, <summary> Bağlam kurulumunun sınırları. Bağlam bir <b>iyileştirmedir, zorunluluk değildir</b>: üretimi turu süresiz bekletmemeli ve prompt'u sınırsız şişirmemelidir. </summary> <summary> Tek bir provider'a tanınan süre. Aşılırsa o provider atlanır, tur devam eder.  <para> Neden gerekli: pipeline içinde ağ ve LLM çağrıları var (<c>SemanticMemoryContextProvider</c> embedding + vektör araması, <c>ConversationSummaryProvider</c> doğrudan bir <c>IChatClient.CompleteAsync</c>). Bağlam kurulumu workflow'dan ÖNCE çalıştığı için <c>WorkflowGuardOptions.TimeoutSeconds</c> koruması burada henüz devrede değildir — bu ayar olmadan yavaş bir provider turu belirsiz süre bloklar. </para> </summary> <summary>Tek bir provider'ın katkısı için üst sınır (karakter).</summary> <summary> Tüm bağlamın toplam üst sınırı (karakter). Tavana ulaşıldığında <b>düşük öncelikli</b> (yüksek <c>Order</c>) provider'lar dışarıda bırakılır — kritik olanlar önce yerleşir. </summary>
+[`IContextPipeline`](IContextPipeline.md)'ın sınırlarını (provider timeout'u, karakter
+bütçeleri) taşır.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+`ContextPipeline` (Application/Services/Chat) her turda bu ayarları okuyarak provider'ları
+zaman/karakter sınırı içinde çalıştırır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ContextPipelineOptions`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Yalnızca yapılandırma değerlerini taşımak.
+- **Üstlenmediği:** Sınırların uygulanması — bu `ContextPipeline`'ın işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+Ayrıntılı davranış için bkz. [ContextPipeline.md](../../Chat/ContextPipeline.md) — bu options
+sınıfı orada anlatılan dört mekanizmadan ikisinin (timeout, bütçe) sayısal parametrelerini
+sağlar.
 
-## Özellikler/Properties
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `ProviderTimeoutSeconds` (`int`): İlgili veriyi temsil eden özellik.
-- `MaxProviderChars` (`int`): İlgili veriyi temsil eden özellik.
-- `MaxTotalChars` (`int`): İlgili veriyi temsil eden özellik.
+Temel ilke: **"Bağlam bir iyileştirmedir, zorunluluk değildir."** Üretimi turu süresiz
+bekletmemeli ve prompt'u sınırsız şişirmemelidir. `ProviderTimeoutSeconds` olmadan, pipeline
+içindeki ağ/LLM çağrıları (embedding araması, özet üretimi) yavaş bir provider'ı süresiz
+bekletebilirdi — bağlam kurulumu workflow'dan ÖNCE çalıştığı için `WorkflowGuardOptions`
+koruması henüz devrede değildir.
 
-## Bağımlılıklar
+## 6. Metotlar / Üyeler
 
-- `CustomerSupportBot.Domain`
+| Üye | Varsayılan | Açıklama |
+|---|---|---|
+| `int ProviderTimeoutSeconds` | `5` | Tek bir provider'a tanınan süre; aşılırsa atlanır. |
+| `int MaxProviderChars` | `4000` | Tek bir provider'ın katkısı için üst sınır. |
+| `int MaxTotalChars` | `12000` | Toplam bağlamın üst sınırı; düşük öncelikliler dışarıda bırakılır. |
+
+`MaxTotalChars < MaxProviderChars` ise uygulama `ValidateOnStart` ile başlamayı reddeder.
+
+## 7. Bağımlılıklar
+
+Yok — saf options sınıfı.

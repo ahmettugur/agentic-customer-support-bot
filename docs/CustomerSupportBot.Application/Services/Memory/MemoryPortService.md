@@ -1,69 +1,79 @@
 # MemoryPortService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Memory/MemoryPortService.cs`
-- **Tür:** `public sealed class : IMemoryPort`
-- **Namespace:** `CustomerSupportBot.Application.Services.Memory`
+**Dosya:** `Services/Memory/MemoryPortService.cs`
+**Port:** `IMemoryPort` (driving/inbound port) — + yardımcı `DisabledMemoryPort` (Null Object)
+**Namespace:** `CustomerSupportBot.Application.Services.Memory`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`MemoryPortService`, Application/Services/MemoryPortService.cs DRIVING PORT IMPL — IMemoryPort → SemanticMemoryService + IKnowledgeBaseIngestor.
+[`SemanticMemoryService`](SemanticMemoryService.md) (sayım/arama) ile
+[`IKnowledgeBaseIngestor`](IKnowledgeBaseIngestor.md) (indeksleme tetikleme)'i `IMemoryPort`
+sözleşmesine bağlayan ince bir orkestrasyon katmanı — admin panelinin/tanılama uçlarının bellek
+durumunu görüntülemek ve manuel indeksleme tetiklemek için kullandığı kapı.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Api katmanındaki admin panel/tanılama endpoint'leri: bellek yapılandırmasını görüntülemek
+(`Config`), koleksiyon boyutlarını görmek (`CountAsync`), manuel arama yapmak (`SearchAsync`,
+tanılama amaçlı), manuel indeksleme tetiklemek (`IngestAsync`).
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`MemoryPortService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** `SemanticMemoryService`/`IKnowledgeBaseIngestor` çağrılarını `IMemoryPort`
+  arayüzüne yönlendirmek, ayarlardan (`SemanticMemoryOptions`) bir `MemoryConfig` DTO'su üretmek.
+- **Üstlenmediği:** Belleğin gerçek iş mantığı (tamamı `SemanticMemoryService`'te).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-```csharp
-public MemoryPortService(SemanticMemoryService memory, IKnowledgeBaseIngestor ingestor)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- `IMemoryPort` port'unu implemente eder.
+- **Inject eder:** [`SemanticMemoryService`](SemanticMemoryService.md), [`IKnowledgeBaseIngestor`](IKnowledgeBaseIngestor.md).
+- **Kimin tarafından çağrılır:** Api katmanındaki admin panel/tanılama endpoint'leri.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `CountAsync`
-```csharp
-public Task<long> CountAsync(MemoryKind kind, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**`DisabledMemoryPort` — neden aynı dosyada, `SemanticMemoryService`'inkine paralel bir Null
+Object daha var:** Semantik bellek TAMAMEN devre dışı bırakıldığında (`SemanticMemoryOptions.Enabled
+= false`), DI `IMemoryPort` için bu sınıfı kaydedebilir — böylece admin panelinin bellek
+ekranını render eden kod, `MemoryPortService` mi yoksa "kapalı" durumu mu olduğunu bilmeden
+her zaman güvenle çağrı yapabilir (boş liste, `0` sayım, no-op ingest döner). Bu, ["`DisabledSemanticMemoryIngestor`"](DisabledSemanticMemoryIngestor.md)
+ile AYNI Null Object prensibinin, bir katman yukarıda (driving port seviyesinde) tekrarıdır —
+iki seviyede de "kapalı" durumun ayrı bir implementasyon olarak modellenmesi, çağıran kodun
+hiçbir yerde `if (bellek açık mı?)` yazmasına gerek bırakmaz.
 
-### `SearchAsync`
-```csharp
-public Task<IReadOnlyList<MemorySearchHit>> SearchAsync(MemoryKind kind, string query, int? topK = null, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`Config` property'si, `SemanticMemoryOptions`'ın İÇ yapısını (embedding model/boyut,
+retrieval top-K/min-score) dışarıya sade bir `MemoryConfig` DTO'su olarak sunar — Api katmanı
+`SemanticMemoryOptions`'ın tam şeklini bilmek zorunda kalmaz, sadece görüntülemek istediği
+alanları alır.
 
-### `IngestAsync`
-```csharp
-public Task IngestAsync(CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-### `CountAsync`
-```csharp
-public Task<long> CountAsync(MemoryKind kind, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+### `MemoryPortService`
 
-### `SearchAsync`
-```csharp
-public Task<IReadOnlyList<MemorySearchHit>> SearchAsync(MemoryKind kind, string query, int? topK = null, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+| Üye | Açıklama |
+|---|---|
+| `Enabled` (`bool`) | `SemanticMemoryService.Enabled`'a delege eder. |
+| `Config` (`MemoryConfig`) | Embedding model/boyut, retrieval topK/minScore'dan oluşan DTO. |
+| `CountAsync(MemoryKind kind, CancellationToken ct = default): Task<long>` | Koleksiyon boyutu. |
+| `SearchAsync(MemoryKind kind, string query, int? topK = null, CancellationToken ct = default): Task<IReadOnlyList<MemorySearchHit>>` | Tanılama amaçlı manuel arama. |
+| `IngestAsync(CancellationToken ct = default): Task` | `IKnowledgeBaseIngestor.IngestAsync`'e delege eder. |
 
-### `IngestAsync`
-```csharp
-public Task IngestAsync(CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+### `DisabledMemoryPort` (Null Object)
 
-## Bağımlılıklar
+| Üye | Açıklama |
+|---|---|
+| `Enabled` | Her zaman `false`. |
+| `Config` | Boş/sıfır değerli `MemoryConfig`. |
+| `CountAsync` | Her zaman `0`. |
+| `SearchAsync` | Her zaman boş liste. |
+| `IngestAsync` | No-op. |
 
-- `CustomerSupportBot.Domain`
-- `IMemoryPort`
+## 7. Bağımlılıklar (Constructor Injection — yalnızca `MemoryPortService`)
+
+- `SemanticMemoryService` — sayım/arama.
+- `IKnowledgeBaseIngestor` — indeksleme tetikleme.
+
+## Bağlantılar
+
+- [SemanticMemoryService.md](SemanticMemoryService.md) — asıl iş mantığı
+- [IKnowledgeBaseIngestor.md](IKnowledgeBaseIngestor.md) — indeksleme tetikleme sözleşmesi
+- [DisabledSemanticMemoryIngestor.md](DisabledSemanticMemoryIngestor.md) — bir katman aşağıdaki paralel Null Object

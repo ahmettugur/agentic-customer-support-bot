@@ -5,6 +5,9 @@ Bu klasör, Entity Framework Core 10 ve Npgsql tabanlı PostgreSQL veritabanı b
 ## Dosyalar
 
 - [CustomerSupportDbContext](CustomerSupportDbContext.md) — EF Core 10 DbContext; tüm `DbSet` tanımlarını ve `ApplyConfigurationsFromAssembly` yapılandırmasını içerir.
+- [PersistenceServiceCollectionExtensions](PersistenceServiceCollectionExtensions.md) — `AddCustomerSupportPersistence`: DbContext + `IDbContextFactory` DI kaydı.
+- [DesignTimeDbContextFactory](DesignTimeDbContextFactory.md) — `dotnet ef` CLI komutları için design-time fabrikası.
+- [PersistenceOptions](PersistenceOptions.md) — `Persistence:Provider` konfigürasyonu (`PersistenceProvider` enum dahil).
 - [Schemas](Schemas.md) — Veritabanı şema adları sabitleri (`chat`, `hitl`, `catalog`, `observability`, `knowledge`, `auth` vb.).
 - [PersistenceHydrator](PersistenceHydrator.md) — Uygulama başlangıcında yarım kalmış in-flight trace'leri toparlayan `IHostedService`.
 - [StaleApprovalSweepService](StaleApprovalSweepService.md) — Süresi dolan (`StalePendingHours`) bekleyen HITL onaylarını otomatik reddeden `BackgroundService`.

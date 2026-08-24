@@ -1,42 +1,49 @@
 # ParallelExecutionOptions
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/ParallelExecutionOptions.cs`
-- **Tür:** `public  class`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/ParallelExecutionOptions.cs`
+**Ayar bölümü:** `appsettings.json` → `"ParallelExecution"`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ParallelExecutionOptions`, Application/Services/ParallelExecutionOptions.cs Compound query alt görevleri için paralel çalıştırma ayarları.  Paralel çalıştırma yalnızca bütün tool'ları salt-okunur olan ajanlara açılır. LLM'in ürettiği intent, karma bir ajanın hangi tool'u gerçekten çağıracağını garanti etmez; OrderAgent gibi hem okuma hem yazma tool'u taşıyan ajanlar bu nedenle her zaman sıralı çalışır. <summary> Bileşik (compound) sorgudaki alt görevlerin paralel yürütme politikası. </summary> <summary>Paralel sub-task çalıştırma aktif mi?</summary> <summary> Aynı anda en fazla kaç yan-etkisiz alt görev çalıştırılabilir. </summary> <summary>Tek bir compound sorguda kabul edilen en yüksek alt görev sayısı.</summary> <summary>Tüm alt görevlerin paylaştığı uçtan uca zaman bütçesi.</summary>
+Bileşik (compound) bir sorgudaki alt görevlerin (`SubTask`) paralel yürütme politikasını
+taşır; ayrıca bir alt görevin paralel çalıştırılıp çalıştırılamayacağına karar veren
+`IsReadOnly` yardımcı metodunu içerir.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Planlama sonucu birden fazla alt göreve bölündüğünde (örn. "siparişimi ve şikayetimi sorgula"),
+workflow orkestrasyonu bu options'ı okuyarak hangi alt görevlerin eşzamanlı çalıştırılabileceğine
+karar verir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ParallelExecutionOptions`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Paralellik parametrelerini taşımak VE bir `SubTask`'ın salt-okunur olup
+  olmadığını (`IsReadOnly`) belirlemek.
+- **Üstlenmediği:** Paralel yürütmenin kendisi (thread/task koordinasyonu) — bu workflow
+  orkestrasyon kodunun işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`IsReadOnly`, `WellKnown.AgentNames.ReadOnly` sabit listesine bakar (Domain katmanı).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `IsReadOnly`
-```csharp
-public bool IsReadOnly(SubTask sub)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Paralel çalıştırma yalnızca **bütün tool'ları salt-okunur olan ajanlara** açılır. LLM'in
+ürettiği intent, karma bir ajanın hangi tool'u gerçekten çağıracağını garanti etmez —
+`OrderAgent` gibi hem okuma hem yazma tool'u taşıyan ajanlar bu nedenle HER ZAMAN sıralı
+çalışır. Bu, olası bir yazma yan etkisinin (sipariş iptali gibi) yanlışlıkla başka bir paralel
+alt görevle çakışmasını (örn. aynı anda okunan/yazılan veri) önler.
 
-## Özellikler/Properties
+## 6. Metotlar / Üyeler
 
-- `Enabled` (`bool`): İlgili veriyi temsil eden özellik.
-- `MaxDegreeOfParallelism` (`int`): İlgili veriyi temsil eden özellik.
-- `MaxSubTasks` (`int`): İlgili veriyi temsil eden özellik.
-- `TimeoutSeconds` (`int`): İlgili veriyi temsil eden özellik.
+| Üye | Varsayılan | Açıklama |
+|---|---|---|
+| `bool Enabled` | `true` | Paralel sub-task çalıştırma açık mı. |
+| `int MaxDegreeOfParallelism` | `4` | Aynı anda en fazla kaç yan-etkisiz alt görev. |
+| `int MaxSubTasks` | `6` | Tek bir compound sorguda kabul edilen en yüksek alt görev sayısı. |
+| `int TimeoutSeconds` | `180` | Tüm alt görevlerin paylaştığı uçtan uca zaman bütçesi. |
+| `bool IsReadOnly(SubTask sub)` | — | Alt görevin hedef ajanı `WellKnown.AgentNames.ReadOnly` listesindeyse `true`. |
 
-## Bağımlılıklar
+## 7. Bağımlılıklar
 
-- `CustomerSupportBot.Domain`
+Port `CustomerSupportBot.Domain.Model.SubTask`/`WellKnown`'a bağımlıdır.

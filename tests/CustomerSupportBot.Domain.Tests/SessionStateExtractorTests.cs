@@ -1,9 +1,9 @@
 // Tests/Services/SessionStateExtractorTests.cs
 //
 // SessionStateExtractor, IdExtractor'ın sonucunu KALICI oturum durumuna yazar — bu yüzden
-// buradaki bir yanlış sınıflandırma tek turluk bir hint hatası değil, oturumu zehirleyen
-// kalıcı bir hatadır: state.CustomerId sonraki her turda EntityVerifier'a bir "kaynak" olarak
-// ve sipariş/şikayet sorgu tool'larına (get_all_orders vb.) girdi olur.
+// buradaki bir yanlış sınıflandırma tek turluk bir hint hatası değil, kalıcı analitik state
+// kirliliğidir. EntityVerifier ve tool güvenlik sınırı yalnız AuthenticatedCustomerId kullanır;
+// yine de intent/entity analitiğinin doğruluğu ayrıca korunmalıdır.
 //
 // Canlıda gözlemlenen hata: kullanıcı "Sipariş numaram 1041." dediğinde sipariş numarası
 // state.CustomerId'ye yazılıyor, LastMentionedOrderId ise hiç set edilmiyordu.

@@ -23,7 +23,7 @@ Postgres/Redis altyapısı olmadan çalışması gereken senaryolarda (birim tes
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresSessionManager` (`../Postgres/HitlAndChat.md`) ile **aynı arayüzü** uygular; production'da onun yerini alan doğrudan karşılığıdır.
+- `PostgresSessionManager` (`../Postgres/PostgresSessionManager.md`) ile **aynı arayüzü** uygular; production'da onun yerini alan doğrudan karşılığıdır.
 - `IAppDistributedLock`'u constructor injection ile alır — tek process'te bile `MutateStateAsync` sırasında race'i önlemek için kullanılır (gerçek dağıtık kilit gerekmese de arayüz aynı kalsın diye).
 - `SessionStateExtractor` (Domain katmanı, saf C#) ile birlikte çalışır — state çıkarma mantığı Domain'de, saklama burada.
 

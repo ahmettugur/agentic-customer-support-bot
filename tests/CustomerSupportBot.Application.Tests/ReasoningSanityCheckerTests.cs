@@ -63,6 +63,52 @@ public class ReasoningSanityCheckerTests
     }
 
     [Fact]
+    public void RedundantRequiredInfo_FormatOnlyOrderInRequired_ErrorsWithoutClaimingExistence()
+    {
+        var rule = new RedundantRequiredInfoRule();
+        var issues = new List<ReasoningIssue>();
+        var resolved = new VerifiedEntities
+        {
+            OrderId = new VerifiedEntity
+            {
+                Value = "9999",
+                Verification = EntityVerification.FormatOnly
+            }
+        };
+
+        rule.Apply(new ReasoningResult
+        {
+            RequiredInfo = new() { "order_id" }
+        }, resolved, issues);
+
+        issues.Should().ContainSingle();
+        issues[0].Message.Should().Contain("zaten sağlandı");
+        issues[0].SuggestedFix.Should().Contain("tool'da doğrula");
+    }
+
+    [Fact]
+    public void RedundantRequiredInfo_NotFoundOrder_CanAskForCorrection()
+    {
+        var rule = new RedundantRequiredInfoRule();
+        var issues = new List<ReasoningIssue>();
+        var verified = new VerifiedEntities
+        {
+            OrderId = new VerifiedEntity
+            {
+                Value = "9999",
+                Verification = EntityVerification.NotFoundInDb
+            }
+        };
+
+        rule.Apply(new ReasoningResult
+        {
+            RequiredInfo = new() { "order_id" }
+        }, verified, issues);
+
+        issues.Should().BeEmpty();
+    }
+
+    [Fact]
     public void RedundantRequiredInfo_NoVerified_NoIssue()
     {
         var rule = new RedundantRequiredInfoRule();

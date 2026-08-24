@@ -6,13 +6,20 @@
 
 ## 1. Ne İşe Yarar
 
-`EntityVerifier`'ın query + history + session state + DB birleştirerek ürettiği **doğrulanmış entity sonucu**dur. Reasoning prompt'una enjekte edilerek LLM'in "zaten bilinen bilgi için tekrar soru sormasını" önler.
+`EntityVerifier`ın query + history + authenticated session kaynaklarını birleştirerek ürettiği
+**çözümlenmiş entity sonucu**dur. Reasoning prompt'una enjekte edilerek LLM'in kullanıcıdan zaten
+sağladığı ID'yi tekrar istemesini önler. Sipariş/şikayet gerçekliği ve sahipliği bu modelde değil,
+specialist tool sonucunda doğrulanır.
 
 ## 2. Hangi Amaçla Kullanılır
 
-`ReasoningResult.VerifiedEntities` olarak taşınır. `BuildPromptBlock()` metodu ile LLM'in okuyacağı "[VERIFIED ENTITIES]" bloğuna dönüştürülür. Workflow'da tek doğruluk kaynağıdır.
+`ReasoningResult.VerifiedEntities` olarak taşınır. `BuildPromptBlock()` ile LLM'in okuyacağı
+`[RESOLVED ENTITIES]` bloğuna dönüştürülür. Entity türü/değeri için tek resolution kaynağıdır;
+factual iş verisinin doğruluk kaynağı ilgili tool sonucudur.
 
-> 💡 **Analiz notu:** Hastane kayıt sistemi gibi düşün — "TC 12345 → DB'de var, Ahmet Yılmaz, son vizite: 3 gün önce." LLM'e bu bilgi verildiğinde "TC numaranız nedir?" diye tekrar sormaz. Hallucination riskini düşürür.
+> `order_id=1030 [FORMAT_ONLY]`, kullanıcının bu numarayı sağladığı anlamına gelir; siparişin
+> var olduğu veya kullanıcıya ait olduğu anlamına gelmez. Tool sonucu gelmeden durum/ürün
+> bilgisi üretilemez.
 
 ## 3. Metotlar / Üyeler
 
@@ -20,13 +27,13 @@
 
 | Üye | Tip | Açıklama |
 | ----- | ----- | ---------- |
-| `OrderId` | `VerifiedEntity?` | Doğrulanmış sipariş |
-| `CustomerId` | `VerifiedEntity?` | Doğrulanmış müşteri |
-| `ComplaintId` | `VerifiedEntity?` | Doğrulanmış şikayet |
-| `DerivedLastOrderId` | `string?` | Müşterinin en son siparişi (türetilmiş) |
-| `DerivedOrderCount` | `int?` | Müşterinin toplam sipariş sayısı (türetilmiş) |
-| `HasAny` | `bool` | **Computed** — doğrulanmış entity var mı? |
-| `HasAnyVerified` | `bool` | **Computed** — DB-verified entity var mı? |
+| `OrderId` | `VerifiedEntity?` | Çözümlenmiş sipariş adayı; tool'da doğrulanır |
+| `CustomerId` | `VerifiedEntity?` | Authenticated session müşteri kimliği |
+| `ComplaintId` | `VerifiedEntity?` | Çözümlenmiş şikayet adayı; tool'da doğrulanır |
+| `DerivedLastOrderId` | `string?` | Geriye dönük uyumluluk; resolver artık üretmez |
+| `DerivedOrderCount` | `int?` | Geriye dönük uyumluluk; resolver artık üretmez |
+| `HasAny` | `bool` | **Computed** — çözümlenmiş entity var mı? |
+| `HasAnyVerified` | `bool` | **Computed** — güvenilir sistem kaynağıyla doğrulanmış entity var mı? |
 
 ### VerifiedEntity
 
@@ -35,7 +42,7 @@
 | `Value` | `string` | Entity değeri (ör. "1030") |
 | `Source` | `EntitySource` | Nereden çıkarıldı |
 | `Verification` | `EntityVerification` | Doğrulama seviyesi |
-| `Attributes` | `Dictionary<string, string>?` | DB'den gelen özet bilgiler |
+| `Attributes` | `Dictionary<string, string>?` | Uyumluluk alanı; resolver doldurmaz |
 
 ### EntitySource Enum
 
@@ -50,9 +57,9 @@
 
 | Değer | Açıklama |
 | ------- | ---------- |
-| `Verified` | Format doğru + DB'de mevcut |
-| `NotFoundInDb` | Format doğru ama DB'de yok (kullanıcı yanlış numara vermiş olabilir) |
-| `FormatOnly` | Sadece format doğrulanmış, DB kontrolü yapılmamış |
+| `Verified` | Güvenilir sistem kaynağı (bugün authenticated customer identity) |
+| `NotFoundInDb` | Geriye dönük/harici doğrulayıcı sonucu; resolver üretmez |
+| `FormatOnly` | ID çözümlendi; gerçeklik ve sahiplik tool'a ertelendi |
 
 ## Bağlantılar
 

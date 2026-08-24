@@ -37,14 +37,20 @@ public async Task<UserInfo?> FindActiveByUsernameAsync(string username, Cancella
 - **Ne işe yarar?:** Aktif kullanıcıyı kullanıcı adına göre getirir.
 - **İç Mantığı:** `ctx.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Username == username && u.IsActive)` sorgusunu işletir ve `Map` ile döner.
 
-### 2. `CreateAsync`
+### 2. `FindByIdAsync`
+```csharp
+public async Task<UserInfo?> FindByIdAsync(string id, CancellationToken ct = default)
+```
+- **Ne işe yarar?:** Kullanıcıyı Id'ye göre getirir (JWT claim'inden gelen kimliği doğrulamak/tazelemek için).
+
+### 3. `CreateAsync`
 ```csharp
 public async Task<UserInfo?> CreateAsync(
     string username, string passwordHash, string role, string? linkedCustomerId, CancellationToken ct = default)
 ```
 - **Ne işe yarar?:** Yeni bir kullanıcı kaydı açar; kullanıcı adı zaten varsa `null` döner.
 
-### 3. `UpdateLastLoginAsync`
+### 4. `UpdateLastLoginAsync`
 - **Ne işe yarar?:** Başarılı girişte `LastLoginAt` alanını günceller.
 
 ## Bağımlılıklar

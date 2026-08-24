@@ -56,4 +56,4 @@ kanonik ad (`"İçecekler"`) yan yana dönüyordu — tek payload'da iki farklı
 
 - [ProductInfo.md](ProductInfo.md) — Liste elemanı
 - [../../CustomerSupportBot.Application/Services/Tools/ProductToolsService.md](../../CustomerSupportBot.Application/Services/Tools/ProductToolsService.md) — Tek tüketici
-- [../../CustomerSupportBot.Adapters.Persistence/Postgres/Repositories.md](../../CustomerSupportBot.Adapters.Persistence/Postgres/Repositories.md) — Üreten repo
+- [../../CustomerSupportBot.Adapters.Persistence/Postgres/ProductCatalogRepository.md](../../CustomerSupportBot.Adapters.Persistence/Postgres/ProductCatalogRepository.md) — Üreten repo

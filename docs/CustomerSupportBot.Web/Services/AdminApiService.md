@@ -52,6 +52,16 @@ Role-aware prefix (`PrefixAsync()`) sayesinde aynı servis hem Admin hem Agent r
 | `ApproveLessonAsync(id, reason)` | Bir lesson teklifini onaylar. |
 | `RejectLessonAsync(id, reason)` | Bir lesson teklifini reddeder. |
 
+## Yardımcı Tip: `ChatSentiment`
+
+Bu dosyada (`AdminApiService.cs`) tanımlı, `AdminModels.cs`'e dahil edilmemiş küçük bir record:
+
+```csharp
+public sealed record ChatSentiment(string? Sentiment, double Score);
+```
+
+`GetSentimentAsync`'in dönüş tipidir — `/chat-sessions/{sessionId}/sentiment` endpoint'inin yanıtını taşır (`Sentiment`: etiket, ör. "positive"/"negative"/"neutral"; `Score`: sayısal skor). `AdminModels.cs`'teki diğer DTO'lardan ayrı tutulmasının nedeni yok gibi görünüyor — muhtemelen bu metot sonradan eklendiği için buraya kondu; işlevsel bir fark yok, ikisi de aynı şekilde deserialize edilen düz DTO'lar.
+
 ## Bağımlılıklar
 - `HttpClient` — `AuthorizedHttpClientHandler` zincirli.
 - [AppAuthStateProvider](AppAuthStateProvider.md) — Rol tespiti için.

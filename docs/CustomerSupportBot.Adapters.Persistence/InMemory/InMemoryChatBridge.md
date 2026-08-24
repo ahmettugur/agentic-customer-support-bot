@@ -22,7 +22,7 @@ HITL "Live Takeover" (admin devralması) sırasında müşteri ↔ admin arasın
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresChatBridge` (`../Postgres/HitlAndChat.md`) ile birebir aynı `IChatBridge` arayüzünü uygular ve **aynı `Unregister` mantığını** paylaşır (kaynak kod içi yorum bu paralelliğe açıkça atıf yapar).
+- `PostgresChatBridge` (`../Postgres/PostgresChatBridge.md`) ile birebir aynı `IChatBridge` arayüzünü uygular ve **aynı `Unregister` mantığını** paylaşır (kaynak kod içi yorum bu paralelliğe açıkça atıf yapar).
 - `IChatModeRegistry`'nin (`InMemoryChatModeRegistry`) yönettiği bot/human mod bilgisiyle birlikte çalışır — hangi mesajın hangi yöne broadcast edileceğine karar veren mod, ayrı bir bileşendedir.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı

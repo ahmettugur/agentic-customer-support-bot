@@ -21,7 +21,7 @@ Her sohbet turunun akıl yürütme izini (`ReasoningTrace` — hangi ajan, hangi
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresReasoningTraceStore` (`../Postgres/StoresAndSinks.md`) ile aynı arayüzü uygular.
+- `PostgresReasoningTraceStore` (`../Postgres/PostgresReasoningTraceStore.md`) ile aynı arayüzü uygular.
 - `ReasoningTrace`, `WorkflowRunner`/`WorkflowTraceEventProcessor` (Adapters.Agents katmanı) tarafından doldurulur; bu sınıf sadece saklar.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı

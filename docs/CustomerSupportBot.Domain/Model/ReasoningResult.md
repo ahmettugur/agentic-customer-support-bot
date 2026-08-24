@@ -61,7 +61,7 @@ Her kullanıcı mesajında `ReasoningService` bir `ReasoningResult` üretir. Bu 
 | `SubTasks` | `List<SubTask>` | Compound query alt görevleri — bkz. [SubTask.md](SubTask.md) |
 | `Sentiment` | `string` | LLM'in algıladığı duygu etiketi |
 | `SentimentScore` | `double` | Duygu skoru (0.0-1.0) |
-| `VerifiedEntities` | `VerifiedEntities?` | EntityVerifier'ın doğruladığı entity'ler |
+| `VerifiedEntities` | `VerifiedEntities?` | EntityVerifier'ın güvenli kaynaklardan çözümlediği entity'ler; factual doğrulama tool'da |
 | `ConfidenceLevel` | `ConfidenceLevel` | ConfidenceScore'un type-safe enum karşılığı (computed) |
 
 ### Statik Metotlar
@@ -82,5 +82,5 @@ Yok — saf veri sınıfı, tüm property'ler varsayılan değerle başlatılır
 - [SubTask.md](SubTask.md) — Compound query alt görevleri
 - [ConfidenceLevel.md](ConfidenceLevel.md) — Güven seviyesi enum
 - [TurnSignals.md](TurnSignals.md) — Session state'e sinyal aktarımı
-- [VerifiedEntities.md](VerifiedEntities.md) — Entity doğrulama sonucu
+- [VerifiedEntities.md](VerifiedEntities.md) — Entity resolution sonucu
 - [../../CustomerSupportBot.Application/ReasoningPipeline.md](../../CustomerSupportBot.Application/Services/Reasoning/ReasoningService.md) — Bu modeli üreten pipeline

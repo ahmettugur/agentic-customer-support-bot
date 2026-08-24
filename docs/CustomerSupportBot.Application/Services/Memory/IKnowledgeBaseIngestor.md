@@ -1,27 +1,51 @@
 # IKnowledgeBaseIngestor
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Memory/IKnowledgeBaseIngestor.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Services.Memory`
+**Dosya:** `Services/Memory/IKnowledgeBaseIngestor.cs`
+**Tür:** `public interface` (Application-internal servis arayüzü — bir hexagonal "port" değil)
+**Namespace:** `CustomerSupportBot.Application.Services.Memory`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IKnowledgeBaseIngestor`, <summary> KnowledgeBase ingest use case'i için Application-internal servis arayüzü. </summary>
+Bilgi bankası (Knowledge Base) dosyalarını okuyup vektör belleğe indeksleme ("ingest") use
+case'ini soyutlayan tek metotlu bir arayüz.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`KnowledgeBaseIngestionService` bu arayüzü implemente eder; Api katmanındaki
+`KnowledgeBaseIngestor` (arka plan worker, `Workers/`) uygulama başlangıcında ve periyodik
+olarak `IngestAsync`'i çağırır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IKnowledgeBaseIngestor`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Yalnızca "KB'yi indeksle" eylemini soyutlamak.
+- **Üstlenmediği:** İndeksleme mantığının kendisi (implementasyonda —
+  [`KnowledgeBaseIngestionService`](KnowledgeBaseIngestionService.md)).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- Implementasyonu: [`KnowledgeBaseIngestionService`](KnowledgeBaseIngestionService.md).
+- **Kimin tarafından çağrılır:** Api katmanındaki arka plan worker (`Workers/KnowledgeBaseIngestor.cs`).
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+**Neden "Application-internal servis arayüzü", `Ports/` klasöründe değil:** Bu proje
+hexagonal mimaride `Ports/Inbound`/`Ports/Outbound` klasörlerini **dış dünyaya (Api, Adapters)
+açık sözleşmeler** için kullanır. `IKnowledgeBaseIngestor` ise yalnızca Application katmanı
+İÇİNDE bir soyutlama sağlar — somut `KnowledgeBaseIngestionService` sınıfını Api katmanının
+arka plan worker'ından ayırmak (test edilebilirlik, DI esnekliği) için var olur, ama bir
+hexagonal port'un taşıdığı "bu sınırın ötesinde bir adaptör değişebilir" anlamını taşımaz.
+Bu yüzden bilinçli olarak `Services/` altında, `Ports/` altında değil.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `IngestAsync(CancellationToken ct = default): Task` | KB kaynağını okuyup vektör belleğe indeksler. |
+
+## 7. Bağımlılıklar
+
+Yok (arayüz).
+
+## Bağlantılar
+
+- [KnowledgeBaseIngestionService.md](KnowledgeBaseIngestionService.md) — implementasyon

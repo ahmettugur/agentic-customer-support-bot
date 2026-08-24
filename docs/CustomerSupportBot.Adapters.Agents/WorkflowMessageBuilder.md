@@ -78,7 +78,10 @@ internal static IEnumerable<ConversationMessage> SelectHistoryToSend(
 internal static ExtractedIds ResolveExtractedIds(string query, ReasoningResult? reasoning)
 ```
 - **Ne işe yarar?:** Workflow'a giden entity-extraction ipucu için hangi ID kaynağının kullanılacağına karar verir.
-- **İç Mantığı:** `reasoning.VerifiedEntities` doluysa (ReasoningService zaten `EntityVerifier` ile query+geçmiş+session+DB'yi birleştirip doğrulamıştır) o kullanılır. `reasoning` yoksa veya doğrulanmış varlık yoksa `IdExtractor.Extract(query)` ile YALNIZCA güncel mesaja bakan eski (query-only) davranışa düşülür — bu ikinci yol önceki turdaki bağlamı (ör. "peki 1043" gibi takip mesajını) kaçırabilir.
+- **İç Mantığı:** `reasoning.VerifiedEntities` doluysa (ReasoningService zaten `EntityVerifier`
+  ile query+geçmiş+authenticated session'ı güvenli biçimde birleştirmiştir) o kullanılır.
+  `reasoning` yoksa veya çözümlenmiş varlık yoksa `IdExtractor.Extract(query)` ile yalnız güncel
+  mesaja bakan fallback'e düşülür; bu yol önceki tur bağlamını kaçırabilir.
 
 ### 4. `ConsumeForceReplanHint` (Private Static)
 ```csharp

@@ -174,6 +174,43 @@ public class PromptContractTests
     }
 
     [Fact]
+    public void EntityVerifier_RemainsPersistenceFree()
+    {
+        var source = SourceOf(
+            "src/CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.cs");
+
+        source.Should().NotContain("IOrderRepository",
+            "entity resolution her turda eager sipariş sorgusu yapmamalı");
+        source.Should().NotContain("IComplaintRepository",
+            "şikayet gerçekliği authenticated specialist tool'da doğrulanmalı");
+        source.Should().Contain("EntityVerification.FormatOnly",
+            "order/complaint adayları tool sonucu gelmeden gerçek kabul edilmemeli");
+    }
+
+    [Fact]
+    public void ComplaintReadOnlyTools_AreWiredInCodeAndPrompt()
+    {
+        var source = SourceOf(
+            "src/CustomerSupportBot.Adapters.Agents/Team/ComplaintAgent.cs");
+        var prompt = Prompt("agents/complaint-agent");
+        var planningPrompt = Prompt("agents/planning-agent");
+        var reasoningPrompt = Prompt("services/reasoning-system");
+
+        source.Should().Contain("BuildComplaintStatusTool");
+        source.Should().Contain("BuildGetAllComplaintsTool");
+        prompt.Should().Contain(WellKnown.ToolNames.ComplaintStatus);
+        prompt.Should().Contain(WellKnown.ToolNames.GetAllComplaints);
+        planningPrompt.Should().Contain(WellKnown.ToolNames.ComplaintStatus,
+            "şikayet durum sorgusu kayıt akışının zorunlu alanlarını istememeli");
+        planningPrompt.Should().Contain(WellKnown.ToolNames.GetAllComplaints,
+            "complaint_id olmadan da login'li müşterinin şikayetleri listelenebilmeli");
+        reasoningPrompt.Should().Contain(WellKnown.ToolNames.ComplaintStatus);
+        reasoningPrompt.Should().Contain(WellKnown.ToolNames.GetAllComplaints);
+        prompt.Should().Contain("FORMAT_ONLY",
+            "resolved complaint ID tool sonucu olmadan gerçek kabul edilmemeli");
+    }
+
+    [Fact]
     public void PendingApprovalStatus_IsSharedBetweenCodeAndPrompts()
     {
         // status="pending_approval" sabiti parser (NormalizeStatus) ile promptlar arasında

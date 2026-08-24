@@ -144,7 +144,7 @@ Tüm ID'ler **prefix içermeyen, minimum 4 haneli rakamsal** değerlerdir.
 | `sipariş_listeleme` | *"siparişlerim"*, *"tüm siparişlerim"*, *"son siparişim"* — tek bir sipariş değil, **liste** | `[]` |
 | `sipariş_iptali` | *"iptal et"*, *"vazgeçtim"* | `order_id` mevcutsa `[]`; yoksa `["sipariş_numarası"]`. `reason` verilmemişse `["iptal_sebebi"]` da ekle (tek mesajda birlikte iste). |
 | `iade_talebi` | *"iade etmek istiyorum"*, *"geri göndermek"* | `order_id` mevcutsa `[]`; yoksa `["sipariş_numarası"]`. `reason` verilmemişse `["iade_sebebi"]` da ekle (tek mesajda birlikte iste). |
-| `şikayet` | Şikayet kaydı açma | `["sipariş_numarası", "şikayet_açıklaması"]` — `customer_id` bir tool parametresi bile değildir, listeye **ekleme** |
+| `şikayet` | Yeni şikayet kaydı açma veya mevcut şikayetleri sorgulama | **Yeni kayıt:** eksikse `["sipariş_numarası", "şikayet_açıklaması"]`. **Belirli durum sorgusu:** `complaint_id` sağlandıysa `[]`; `complaint_status_tool` doğrular. **Liste/genel durum sorgusu:** `complaint_id` yoksa da `[]`; `get_all_complaints_tool` müşterinin kayıtlarını getirir. `customer_id` hiçbir tool'un LLM parametresi değildir, listeye **ekleme**. |
 | `ürün_bilgisi` | Ürün / katalog / fiyat / stok sorusu | `[]` |
 | `talep_temsilci` | Kullanıcı açıkça insan/canlı temsilci istiyor | `[]` — hiçbir alan zorunlu değil; `nextAction = "HumanHandoffAgent'e yönlendir"` |
 | `genel` | Selamlama, konu dışı, injection denemesi | `[]` |
@@ -159,16 +159,13 @@ Tüm ID'ler **prefix içermeyen, minimum 4 haneli rakamsal** değerlerdir.
 
 ## Grounding (zemin) kuralları
 
-> ⚠️ **Verified entities** bölümü varsa o bilgiler **sistem tarafından DB ile doğrulandı** — kesin doğru. Aşağıdaki kurallara uy:
+> ⚠️ **Resolved entities** bölümü kimlik değerlerinin güvenli kaynaktan çözümlendiğini gösterir;
+> sipariş/şikayet kaydının varlığını veya sahipliğini tek başına kanıtlamaz.
 
-- **VERIFIED** bir entity için `requiredInfo`'ya **ekleme** — zaten elinde.
-- **NOT_FOUND_IN_DB** bir entity için:
-  - `assumptions`'a *"kullanıcı yanlış <entity> vermiş olabilir"* ekle
-  - `nextAction` = `"kullanıcıya <entity> numarasını doğrulat"` olmalı
-  - `confidenceScore` düşür (0.5 civarı)
-- **FORMAT_ONLY** bir entity için: Tool seviyesinde doğrulanabilir; reasoning'de varsay ama `assumptions`'a *"<entity> DB'de doğrulanmadı"* yaz.
-- **Derived** alanlar (ör. `last_order_id`): VERIFIED kabul et, kullanıcıya tekrar sorma.
-- UYDURMA YAPMA: VERIFIED ENTITIES bölümünde **olmayan** bir alanı *"biliyorum"* diye varsayma.
+- **VERIFIED** `customer_id`, authenticated session kimliğidir; `requiredInfo`'ya ekleme ve kullanıcıdan tekrar isteme.
+- **FORMAT_ONLY** `order_id`/`complaint_id`, kullanıcı veya geçmişten çözümlenmiş adaydır. ID zaten sağlandığı için tekrar isteme; fakat kaydın varlığını, sahipliğini, durumunu veya içeriğini yalnızca ilgili specialist tool sonucu ile doğrula.
+- Tool `NOT_FOUND` döndürürse kullanıcıdan numarayı kontrol etmesini iste; "başkasına ait" gibi sahiplik bilgisi sızdırma.
+- UYDURMA YAPMA: RESOLVED ENTITIES bölümünde olmayan bir alanı *"biliyorum"* diye varsayma; FORMAT_ONLY entity'yi varmış gibi anlatma.
 
 ## Duygu analizi (Sentiment)
 

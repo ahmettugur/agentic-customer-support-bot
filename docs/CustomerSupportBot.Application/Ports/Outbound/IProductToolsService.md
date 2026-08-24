@@ -1,27 +1,39 @@
 # IProductToolsService
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/IProductToolsService.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/IProductToolsService.cs`
+**Implementasyon:** [`ProductToolsService`](../../Services/Tools/ProductToolsService.md) (bkz. [`ICustomerSupportToolsService`](ICustomerSupportToolsService.md) facade'i)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IProductToolsService`, <summary> Ürün sorgulama araçları için secondary port. </summary>
+Ürün sorgulama tool'ları için secondary port: ürün bilgisi ve kategori bazlı ürün listesi —
+her ikisi de salt-okunur, onay gerektirmez.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`ApprovalGateService`, `ProductAgent`'a bu tool'ları sunar; kullanıcı "X ürünü var mı" veya
+"Y kategorisinde ne var" dediğinde çağrılır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IProductToolsService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Ürün arama ve listeleme sorgularının iş mantığı.
+- **Üstlenmediği:** Kalıcılık — [`IProductCatalogRepository`](Persistence/IProductCatalogRepository.md)'nin işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Application/Services/Tools/ProductToolsService` implemente eder.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Sahiplik kontrolü GEREKTİRMEYEN tek tool grubu — ürün kataloğu müşteriye özel değildir, bu
+yüzden metot imzalarında `customerId` yoktur (diğer tool port'larından ayıran temel fark).
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `ToolResult ProductInquiryTool(string productName)` | Belirli bir ürün hakkında bilgi. |
+| `ToolResult ProductListTool(string? category = null)` | Kategoriye göre (veya tümü) ürün listesi. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.ToolResult`'a bağımlıdır.

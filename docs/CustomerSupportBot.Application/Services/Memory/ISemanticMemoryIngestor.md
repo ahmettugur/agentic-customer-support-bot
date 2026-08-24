@@ -1,27 +1,76 @@
 # ISemanticMemoryIngestor
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Memory/ISemanticMemoryIngestor.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Services.Memory`
+**Dosya:** `Services/Memory/ISemanticMemoryIngestor.cs`
+**Tür:** `public interface` (Application-internal servis arayüzü)
+**Namespace:** `CustomerSupportBot.Application.Services.Memory`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ISemanticMemoryIngestor`, Application/Services/Memory/ISemanticMemoryIngestor.cs Application-internal servis arayüzü — vector store'a toplu doküman yazma kapasitesini soyutlar. <summary>Tek dokümanı indeksten siler. Kayıt yoksa sessizce geçer (idempotent).</summary> <summary> Verilen etiketi taşımayan (ya da farklı değer taşıyan) tüm belgeleri siler. Yeniden indekslemeden sonra ARTIK ÜRETİLMEYEN belgeleri temizlemek için — bkz. <see cref="Ports.Outbound.AI.IVectorMemoryPort.DeleteWhereTagNotAsync"/>. </summary> <summary> Koleksiyondaki kayıt sayısı. Ingestion'ın "kaynak değişmedi" kısayolu, koleksiyonun gerçekten dolu olduğunu da doğrulamak zorundadır — koleksiyon dışarıdan yeniden oluşturulduğunda kaynak hash'i aynı kalır ve re-ingest sessizce atlanırdı. </summary>
+Vektör depoya (Qdrant) toplu doküman yazma/silme kapasitesini soyutlayan arayüz. Somut vektör
+veritabanı detaylarını (Adapters.AI katmanındaki Qdrant implementasyonu) Application
+katmanından gizler.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+[`SemanticMemoryService`](SemanticMemoryService.md), [`KnowledgeBaseIngestionService`](KnowledgeBaseIngestionService.md)
+ve [`LessonMiner`](../Improvement/LessonMiner.md) bu arayüz üzerinden vektör belleğe
+yazar/siler — hangi somut vektör veritabanının kullanıldığını bilmeden.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ISemanticMemoryIngestor`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Toplu upsert, tekil silme, "stale" (artık üretilmeyen) belge temizliği,
+  koleksiyon varlığını garanti etme, sayım.
+- **Üstlenmediği:** Vektör aramanın kendisi (bu ayrı bir port/servis zincirinde — embedding +
+  arama), somut vektör veritabanı bağlantısı (Adapters.AI'de).
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- İki implementasyonu vardır: gerçek Qdrant tabanlı (Adapters.AI katmanı) ve
+  [`DisabledSemanticMemoryIngestor`](DisabledSemanticMemoryIngestor.md) (Null Object, bellek
+  kapalıyken).
+- **Kimin tarafından kullanılır:** [`SemanticMemoryService`](SemanticMemoryService.md),
+  [`KnowledgeBaseIngestionService`](KnowledgeBaseIngestionService.md), `LessonMiner`.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+**`DeleteStaleAsync` — neden var, sadece `UpsertManyAsync` yeterli değil mi:** Bir KB kaynağı
+yeniden indekslendiğinde (ör. bir makale silindi/birleştirildi), yeni indeksleme sadece
+GEÇERLİ belgeleri yazar — ama vektör deposunda ESKİ, artık kaynakta olmayan belgeler kalmaya
+devam eder (upsert var olanı günceller, fazlalığı silmez). `DeleteStaleAsync`, belirli bir
+etiket değerini (ör. `"source" = "kb-v3"`) TAŞIMAYAN tüm belgeleri siler — yeniden
+indeksleme sonrası "artık üretilmeyen" belgelerin temizlenmesini sağlar.
+
+> 🐞 **`CountAsync` neden var — "kaynak değişmedi" kısayolunun gizli bağımlılığı.**
+> İndeksleme mantığı (bkz. [`KnowledgeBaseIngestionService`](KnowledgeBaseIngestionService.md))
+> kaynak dosyanın hash'i değişmediyse yeniden indekslemeyi ATLAR (performans optimizasyonu).
+> Ama bu kısayol TEK BAŞINA yanlış olabilir: koleksiyon dışarıdan (ör. Qdrant'ı manuel
+> sıfırlama, konteyner yeniden oluşturma) BOŞALTILMIŞ olabilir — kaynak hash'i hâlâ aynıdır ama
+> koleksiyon artık boştur. `CountAsync` bu durumu yakalamak için eklendi: "kaynak değişmedi"
+> kısayolu artık YALNIZCA hash aynı VE koleksiyon dolu ise geçerli sayılır; aksi halde
+> re-ingest yine de tetiklenir.
+
+`DeleteAsync`, kayıt yoksa **sessizce geçer (idempotent)** — silme işleminin "zaten yok"
+durumunu bir hata olarak ele almaması, çağıran tarafların ayrıca "önce var mı diye kontrol et"
+yazmasını gereksiz kılar.
+
+## 6. Metotlar / Üyeler
+
+| Üye | Açıklama |
+|---|---|
+| `Enabled` (`bool`) | Semantik bellek özelliği açık mı. |
+| `IsConfigured` (`bool`) | Vektör deposu bağlantısı yapılandırılmış mı. |
+| `EnsureCollectionsAsync(CancellationToken ct = default): Task` | Gerekli koleksiyonların var olduğunu garanti eder. |
+| `UpsertManyAsync(MemoryKind kind, IReadOnlyList<MemoryDocument> docs, CancellationToken ct = default): Task` | Toplu belge yazar/günceller. |
+| `DeleteAsync(MemoryKind kind, string documentId, CancellationToken ct = default): Task` | Tekil belge siler; kayıt yoksa sessizce geçer. |
+| `DeleteStaleAsync(MemoryKind kind, string tagKey, string tagValue, CancellationToken ct = default): Task` | Belirtilen etiket değerini taşımayan tüm belgeleri siler. |
+| `CountAsync(MemoryKind kind, CancellationToken ct = default): Task<long>` | Koleksiyondaki kayıt sayısı — "kaynak değişmedi" kısayolunu doğrulamak için kritik. |
+
+## 7. Bağımlılıklar
+
+Yok (arayüz).
+
+## Bağlantılar
+
+- [DisabledSemanticMemoryIngestor.md](DisabledSemanticMemoryIngestor.md) — Null Object implementasyonu
+- [SemanticMemoryService.md](SemanticMemoryService.md) — ana tüketici
+- [KnowledgeBaseIngestionService.md](KnowledgeBaseIngestionService.md) — `CountAsync`'i "kaynak değişmedi" kısayolunda kullanan taraf

@@ -1,27 +1,50 @@
 # IUiHintEmitter
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/IUiHintEmitter.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/IUiHintEmitter.cs`
+**Implementasyon:** [`UiHintEmitter`](../../Services/UiHint/UiHintEmitter.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IUiHintEmitter`, <summary> Tool fonksiyonlarından streaming pipeline'a UI ipuçları gönderir. Session ID tabanlı ConcurrentDictionary kullanır; AsyncLocal yerine IApprovalContextAccessor üzerinden session ID okur — SDK uyumlu, güvenilir. </summary> <summary> Bir UI ipucunu mevcut session'ın kuyruğuna ekler. Session ID'yi IApprovalContextAccessor'dan otomatik alır.  <para> <b>Dönüş değeri</b>: ipucu kuyruğa girdiyse <c>true</c>, ambient bağlamda session olmadığı için düştüyse <c>false</c>. Bu ayrım kozmetik değil — ipucu düştüğünde ekranda hiçbir şey belirmez, dolayısıyla çağıran tool LLM'e "kullanıcıya gösterildi" diyemez. Sesli (native realtime) kanalda ambient bağlam hiç kurulmadığı için bu yol gerçekten yürünüyor; bkz. <c>ProductToolsService.ProductListTool</c>. </para> </summary> <summary> Verilen session'a ait bekleyen tüm ipuçlarını okuyup kuyruğu temizler. </summary>
+Tool fonksiyonlarından streaming pipeline'a UI ipuçları (`StreamEvent`) gönderen port —
+örneğin bir ürün listesi tool'u, sonucun yanında "bunu bir kart listesi olarak göster" gibi bir
+ipucu ekleyebilir.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`ProductToolsService.ProductListTool` gibi tool'lar, çalıştıkları sırada `Emit` çağırarak
+frontend'e ek bir UI ipucu gönderir; bu ipuçları `DrainPending` ile turun sonunda toplanıp
+stream'e eklenir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IUiHintEmitter`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Session bazlı ipucu kuyruklama ve boşaltma.
+- **Üstlenmediği:** Session kimliğinin nasıl bilineceği —
+  [`IApprovalContextAccessor`](IApprovalContextAccessor.md)'dan otomatik okunur, çağıranın
+  session id geçirmesi gerekmez.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Application/Services/UiHint/UiHintEmitter` implemente eder; `Session ID` tabanlı
+`ConcurrentDictionary` kullanır — `AsyncLocal` YERİNE `IApprovalContextAccessor` üzerinden
+session ID okur, çünkü MAF'ın SDK'sı (Semantic Kernel tabanlı workflow) `AsyncLocal`
+akışını her zaman güvenilir şekilde korumaz; ambient context erişimi bu yüzden port üzerinden
+yapılır.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+`Emit`'in dönüş değeri (`bool`) kozmetik değildir: ipucu kuyruğa girdiyse `true`, ambient
+bağlamda session olmadığı için düştüyse `false`. Bu ayrım önemlidir çünkü ipucu düştüğünde
+ekranda hiçbir şey belirmez, dolayısıyla çağıran tool LLM'e "kullanıcıya gösterildi" diyemez.
+Sesli (native realtime) kanalda ambient bağlam hiç kurulmadığı için bu yol gerçekten yürünür —
+bkz. `ProductToolsService.ProductListTool`, dönüş değerine göre farklı bir metin üretir.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `bool Emit(StreamEvent evt)` | Mevcut session'ın kuyruğuna bir ipucu ekler; ambient session yoksa `false`. |
+| `IReadOnlyList<StreamEvent> DrainPending(string sessionId)` | Bekleyen tüm ipuçlarını okuyup kuyruğu temizler. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Application.Ports.Inbound.StreamEvent`'e bağımlıdır.

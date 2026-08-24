@@ -1,51 +1,43 @@
 # TelemetryPortService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Telemetry/TelemetryPortService.cs`
+- **Kaynak:** `Services/Telemetry/TelemetryPortService.cs`
 - **Tür:** `public sealed class : ITelemetryPort`
 - **Namespace:** `CustomerSupportBot.Application.Services.Telemetry`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`TelemetryPortService`, Application/Services/TelemetryPortService.cs DRIVING PORT IMPL — ITelemetryPort → telemetry maliyet görünümü.
+`ITelemetryPort` (Inbound port) implementasyonu — LLM kullanım maliyeti görünümünü admin
+paneline sunan çok ince bir delegasyon katmanı.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Admin panelinin "maliyet" sekmesinin, `ICostUsageStorePort`/`ICostCalculatorPort` gibi
+Adapters.Telemetry katmanı detaylarına değil, tek bir port sözleşmesine bağımlı olmasını
+sağlamak.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`TelemetryPortService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+Üç metodu doğrudan alt bileşenlere delege etmek — kendi iş mantığı yok.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-```csharp
-public TelemetryPortService(ICostUsageStorePort usageStore, ICostCalculatorPort calculator)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- `ICostUsageStorePort` — biriken kullanım/maliyet anlık görüntüsü (Adapters.Telemetry'de
+  implemente edilir, bkz. [CostUsageStore.md](../../../../CustomerSupportBot.Adapters.Telemetry/OpenTelemetry/CostUsageStore.md)).
+- `ICostCalculatorPort` — bilinen model listesi (Adapters.Telemetry'de implemente edilir).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `GetCostSnapshot`
-```csharp
-public CostUsageSnapshot GetCostSnapshot()
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Hexagonal mimaride Api katmanının doğrudan Adapters.Telemetry'ye değil, Application
+katmanındaki porta bağımlı olması gerekir — bu sınıf o ayrımı sağlayan ince adaptördür.
 
-### `GetKnownModels`
-```csharp
-public IReadOnlyCollection<string> GetKnownModels()
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-### `ResetCostSnapshot`
-```csharp
-public void ResetCostSnapshot()
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+| Üye | Açıklama |
+|---|---|
+| `GetCostSnapshot()` | `ICostUsageStorePort.GetUsageSnapshot()`'a delege eder. |
+| `GetKnownModels()` | `ICostCalculatorPort.KnownModels`'a delege eder. |
+| `ResetCostSnapshot()` | `ICostUsageStorePort.ResetUsage()`'a delege eder — admin panelinden sayaçları sıfırlama. |
 
-## Bağımlılıklar
+## 7. Bağımlılıklar
 
-- `CustomerSupportBot.Domain`
-- `ITelemetryPort`
+Constructor injection ile: `ICostUsageStorePort`, `ICostCalculatorPort`.

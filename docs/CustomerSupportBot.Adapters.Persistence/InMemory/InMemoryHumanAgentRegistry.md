@@ -21,7 +21,7 @@
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresHumanAgentRegistry` (`../Postgres/HitlAndChat.md`) ile aynı arayüzü uygular.
+- `PostgresHumanAgentRegistry` (`../Postgres/PostgresHumanAgentRegistry.md`) ile aynı arayüzü uygular.
 - `RoutingOptions` (Application katmanı) üzerinden `IOptions<RoutingOptions>` ile tohum verisini alır.
 - `GetLinkedUsersAsync` — Postgres karşıtının aksine burada her zaman **boş liste** döner (`Task.FromResult(new List<HumanAgent>())`); bu, "kullanıcı hesabına bağlı temsilci" ilişkisinin veritabanı (auth tabloları) gerektirmesinden, bellek-içi implementasyonda anlamsız olmasından kaynaklanır.
 

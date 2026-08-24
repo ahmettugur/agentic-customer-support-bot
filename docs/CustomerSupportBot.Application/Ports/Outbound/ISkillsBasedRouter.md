@@ -1,27 +1,43 @@
 # ISkillsBasedRouter
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/ISkillsBasedRouter.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/ISkillsBasedRouter.cs`
+**Implementasyon:** [`SkillsBasedRouter`](../../Services/Routing/SkillsBasedRouter.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ISkillsBasedRouter`, <summary> Eskalasyon için en uygun insan müşteri temsilcisini öneren router. Reasoning trace + opsiyonel müşteri profili üzerinden skill gereksinimlerini çıkarır, registry'deki adaylar arasında skor hesaplar ve en iyi match'i döner. </summary> <summary> Hiç temsilci yoksa veya skor eşik altında kalırsa SuggestedAgentId null döner (eskalasyon yine kaydedilir, admin manuel atayabilir). </summary>
+Eskalasyon için en uygun insan müşteri temsilcisini öneren router. Reasoning trace + opsiyonel
+müşteri profili üzerinden skill gereksinimlerini çıkarır, [`IHumanAgentRegistry`](Persistence/IHumanAgentRegistry.md)'deki
+adaylar arasında skor hesaplar ve en iyi eşleşmeyi döner.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Bir konuşma insan müdahalesi gerektirdiğinde (eskalasyon), eskalasyon kaydı oluşturulmadan
+önce/sonra `Decide` çağrılarak hangi temsilciye önerileceği belirlenir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ISkillsBasedRouter`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Skill eşleştirme mantığı ve skorlama.
+- **Üstlenmediği:** Eskalasyon kaydının kendisi — o [`IEscalationSink`](Persistence/IEscalationSink.md)'in işi; bu router yalnızca öneri üretir, atamayı zorlamaz.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Application/Services/Routing/SkillsBasedRouter` implemente eder;
+[`IHumanAgentRegistry.GetActive()`](Persistence/IHumanAgentRegistry.md)'i okur.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Hiç temsilci yoksa veya skor eşik altında kalırsa `SuggestedAgentId` `null` döner — eskalasyon
+yine de kaydedilir, admin manuel atayabilir. Bu tasarım, router'ın "kesin bir eşleşme yoksa
+sessizce hiçbir öneri sunmama" ilkesini yansıtır; zayıf bir eşleşmeyi dayatmak yanlış
+temsilciye yük bindirebilir.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `RoutingDecision Decide(ReasoningTrace trace, string? agentName, CustomerProfile? customerProfile)` | En uygun temsilciyi önerir; eşleşme yoksa `SuggestedAgentId = null`. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.ReasoningTrace` ve
+`CustomerSupportBot.Domain.Model.Memory.CustomerProfile`'a bağımlıdır.

@@ -1,27 +1,42 @@
 # IContextPipeline
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/IContextPipeline.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/IContextPipeline.cs`
+**Implementasyon:** [`ContextPipeline`](../../Chat/ContextPipeline.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IContextPipeline`, <summary> Context pipeline port'u — kayıtlı IContextProvider'ları çalıştırıp birleştirilen bağlam metnini döner. Adapter'lar bu port üzerinden bağlam alır. </summary> <summary> Bağlamı kurar. Yalnızca birleşik metni değil, <b>hangi provider'ın katkı yaptığını</b> da döner — çağıranın buna göre karar vermesi gerekebiliyor (bkz. <see cref="ContextResult"/>). </summary>
+Kayıtlı tüm `IContextProvider`'ları çalıştırıp birleştirilmiş bağlam metnini döndüren port'un
+sözleşmesi. Tek metot: `BuildContextAsync`.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Adapter katmanı (`WorkflowRunner`/`ChatPortService`) bir tur başlamadan önce bu port üzerinden
+bağlamı (müşteri profili, semantik hafıza, konuşma özeti vb.) kurar ve workflow prompt'una
+ekler.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IContextPipeline`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Bağlam kurulumunun tek giriş noktası olmak.
+- **Üstlenmediği:** Provider'ların iç detayları (paralellik, timeout, bütçe) — bunlar
+  implementasyonun (`ContextPipeline`) sorumluluğu, port yalnızca sözleşmeyi tanımlar.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+Tam davranış detayı için bkz. [ContextPipeline.md](../../Chat/ContextPipeline.md) ve
+[ContextProviders.md](../../Providers/ContextProviders.md).
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Dönüş tipi düz `string` değil [`ContextResult`](ContextResult.md)'tır — çağıranın hangi
+provider'ın katkı yaptığını bilmesi gerekebiliyor (bkz. `ContextResult` dokümanı).
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `Task<ContextResult> BuildContextAsync(AgentSession session, string currentQuery, CancellationToken ct = default)` | Bağlamı kurar; birleşik metin + provider bazlı rapor döner. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.AgentSession`'a ve aynı klasördeki
+`ContextResult`'a bağımlıdır.

@@ -1,8 +1,8 @@
 // Tests/Agents/WorkflowRunnerEntityResolutionTests.cs
 // Regresyon: "sipariş numaram 1042" → "peki 1043" gibi bağlam kelimesiz bir takip mesajında,
 // WorkflowRunner'ın ENTITY EXTRACTION hint'i query-only IdExtractor.Extract'e düşüp 1043'ü
-// customer_id sanmamalı — ReasoningService zaten EntityVerifier ile (query+history+session+DB)
-// doğru şekilde order_id olarak çözmüşse (reasoning.VerifiedEntities), WorkflowRunner bunu
+// customer_id sanmamalı — ReasoningService zaten EntityVerifier ile (query+history+authenticated
+// session) doğru şekilde order_id olarak çözmüşse (reasoning.VerifiedEntities), WorkflowRunner bunu
 // yeniden hesaplamak yerine AYNEN kullanmalı. Canlıda gözlemlenen bug: bu senkronizasyon
 // olmadığı için specialist'e "customer_id MEVCUT → get_last_order_tool kullan" hint'i gidiyor,
 // gerçek order_status_tool hiç çağrılmıyor, sipariş DB'de olmasına rağmen "bulunamadı" deniyordu.

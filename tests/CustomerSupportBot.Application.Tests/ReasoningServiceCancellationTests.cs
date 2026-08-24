@@ -1,7 +1,6 @@
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
-using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Reasoning;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -40,10 +39,7 @@ public class ReasoningServiceCancellationTests
             new CancellingReasoningClient(),
             NullLogger<ReasoningService>.Instance,
             prompts,
-            new EntityVerifier(
-                Substitute.For<IOrderRepository>(),
-                Substitute.For<IComplaintRepository>(),
-                NullLogger<EntityVerifier>.Instance),
+            new EntityVerifier(NullLogger<EntityVerifier>.Instance),
             new ReasoningSanityChecker(NullLogger<ReasoningSanityChecker>.Instance),
             Options.Create(new WorkflowGuardOptions { ReasoningTimeoutSeconds = timeoutSeconds }));
     }

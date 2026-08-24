@@ -1,27 +1,44 @@
 # IPromptRepository
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/IPromptRepository.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/IPromptRepository.cs`
+**Implementasyon:** [`FileSystemPromptRepository`](../../../CustomerSupportBot.Adapters.Persistence/FileSystem/FileSystemPromptRepository.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IPromptRepository`, <summary> Prompt şablonlarına erişim için secondary port. </summary> <summary>Verilen anahtara karşılık gelen prompt'u döner.</summary> <summary>Prompt'u yükler ve {{PLACEHOLDER}} değişkenlerini ikame eder.</summary> <summary>Kayıtlı tüm prompt anahtarları.</summary>
+Prompt şablonlarına (`src/CustomerSupportBot.Api/Prompts/**/*.md`) erişim için secondary port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Her ajan/servis kendi sistem promptunu bu port üzerinden ister; `{{PLACEHOLDER}}` değişkenleri
+(örn. bugünün tarihi, müşteri adı) `Render` ile ikame edilir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IPromptRepository`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Prompt dosyalarının okunması ve placeholder ikamesi.
+- **Üstlenmediği:** Prompt İÇERİĞİNİN ne söylediği — o `.md` dosyalarının kendisi, bu port
+  yalnızca bir erişim/render katmanıdır.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Persistence/FileSystem/FileSystemPromptRepository` implemente eder — dosya sistemine
+gider, uygulama başlangıcında tüm prompt dosyalarını önbelleğe alır.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Prompt'ların kod içinde string literal olarak DEĞİL, ayrı `.md` dosyalarında tutulması bilinçli
+bir tasarım: prompt mühendisliği (ajan davranışını ayarlama) bir kod değişikliği/deploy
+gerektirmeden yapılabilir hale gelir; `.md` uzantısı prompt'ların kendi başına okunabilir/
+diff'lenebilir olmasını sağlar. Bu port sayesinde Application katmanı prompt'ların dosya
+sisteminde mi, veritabanında mı, uzak bir yapılandırma servisinde mi tutulduğunu bilmez.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `string Get(string key)` | Verilen anahtara karşılık gelen ham prompt metnini döner. |
+| `string Render(string key, IDictionary<string, string?>? variables = null)` | Prompt'u yükler ve `{{PLACEHOLDER}}` değişkenlerini ikame eder. |
+| `IReadOnlyCollection<string> Keys { get; }` | Kayıtlı tüm prompt anahtarları. |
+
+## 7. Bağımlılıklar
+
+Yok — port arayüzü bağımlılıksızdır.

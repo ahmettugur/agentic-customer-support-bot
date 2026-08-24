@@ -19,7 +19,7 @@ Konuşma sonu değerlendirme (1-5 yıldız + opsiyonel yorum) kayıtlarını `Co
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresRatingStore` (`../Postgres/StoresAndSinks.md`) ile aynı arayüzü uygular.
+- `PostgresRatingStore` (`../Postgres/PostgresRatingStore.md`) ile aynı arayüzü uygular.
 - `ConversationRating` modeli Domain katmanındadır.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı

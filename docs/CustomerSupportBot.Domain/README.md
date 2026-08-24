@@ -13,7 +13,8 @@ Bu klasör, Onion / Hexagonal Mimarinin en iç çekirdeğini (**Core Domain**) o
 - [ComplaintInfo](Model/ComplaintInfo.md) — Şikayet kaydı modeli.
 - [ConfidenceLevel](Model/ConfidenceLevel.md), [ConversationPhase](Model/ConversationPhase.md), [ConversationRating](Model/ConversationRating.md), [ConversationMessage](Model/ConversationMessage.md) — Konuşma akışı modelleri.
 - [EscalationAction](Model/EscalationAction.md), [EscalationRequest](Model/EscalationRequest.md) — İnsan temsilciye devir modelleri.
-- [ExtractedIds](Model/ExtractedIds.md), [VerifiedEntities](Model/VerifiedEntities.md) — Metinden çıkarılan/doğrulanan kimlikler.
+- [ExtractedIds](Model/ExtractedIds.md), [VerifiedEntities](Model/VerifiedEntities.md) — Metin,
+  geçmiş ve authenticated session'dan çözümlenen kimlikler.
 - [HumanAgent](Model/HumanAgent.md) — İnsan temsilci modeli.
 - [OrderInfo](Model/OrderInfo.md), [OrderLineRequest](Model/OrderLineRequest.md), [OrderPlacementResult](Model/OrderPlacementResult.md), [StockDeductionResult](Model/StockDeductionResult.md) — Sipariş oluşturma zinciri: LLM talebi → stok düşümü → nihai sonuç.
 - [PlanningResult](Model/PlanningResult.md), [SubTask](Model/SubTask.md) — Orkestrasyon planı modelleri.

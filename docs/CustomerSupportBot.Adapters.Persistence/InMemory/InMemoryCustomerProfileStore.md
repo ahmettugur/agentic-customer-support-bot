@@ -20,7 +20,7 @@ Müşteri bazlı, uzun ömürlü kişiselleştirme profilini (`CustomerProfile`)
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresCustomerProfileStore` (`../Postgres/StoresAndSinks.md`) ile aynı arayüzü uygular.
+- `PostgresCustomerProfileStore` (`../Postgres/PostgresCustomerProfileStore.md`) ile aynı arayüzü uygular.
 - `CustomerProfile` modeli Domain katmanındadır (`../../CustomerSupportBot.Domain/Model/Memory/CustomerProfile.md`).
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı

@@ -1,35 +1,53 @@
 # CustomerSupportBot.Adapters.Persistence.EfCore.Entities
 
-Bu klasör, PostgreSQL veritabanındaki tabloları temsil eden tüm EF Core varlık (Entity) modellerini bounded context'lere göre gruplanmış olarak barındırır.
+Bu klasör, PostgreSQL veritabanındaki tabloları temsil eden tüm EF Core varlık (Entity)
+modellerini bounded context'lere (şemalara) göre gruplanmış olarak barındırır. Her entity'nin
+kendi `.md` dosyası vardır; her birinin veritabanı eşlemesi (kolon adı, kısıt, index) ise
+`../Configurations/` altındaki karşılık gelen dosyada anlatılır.
 
 ## Şema Bazlı Varlık Grupları
 
 ### 1. `Catalog` (Şema: `catalog`)
-- `CategoryEntity` — Ürün kategorileri (`id`, `category_name`, `description`).
-- `ProductEntity` — Ürün kataloğu (`id`, `product_name`, `unit_price`, `units_in_stock`, `category_id`).
-- `CustomerEntity` — Müşteri hesapları (`id`, `company_name`, `contact_name`, `phone`, `email`).
-- `OrderEntity` — Sipariş başlıkları (`id`, `customer_id`, `order_date`, `status`, `shipping_address`).
-- `OrderDetailEntity` — Sipariş kalemleri (`order_id`, `product_id`, `unit_price`, `quantity`, `discount`).
-- `ComplaintEntity` — Şikayet kayıtları (`id`, `customer_id`, `order_id`, `complaint_text`, `status`, `created_at`).
+- [CategoryEntity](Catalog/CategoryEntity.md) — Ürün kategorileri.
+- [ProductEntity](Catalog/ProductEntity.md) — Ürün kataloğu (isim benzersiz, kategoriye FK).
+- [CustomerEntity](Catalog/CustomerEntity.md) — Müşteri kayıtları (katalog tarafı).
+- [OrderEntity](Catalog/OrderEntity.md) — Sipariş başlıkları (durum, iptal/iade meta verisi).
+- [OrderDetailEntity](Catalog/OrderDetailEntity.md) — Sipariş kalemleri (sipariş+ürün composite key).
+- [ComplaintEntity](Catalog/ComplaintEntity.md) — Şikayet kayıtları.
 
 ### 2. `Chat` (Şema: `chat`)
-- `SessionEntity` — Sohbet oturumları (`session_id`, `authenticated_customer_id`, `state_json`, `created_at`).
-- `MessageEntity` — Mesaj geçmişi (`id`, `session_id`, `role`, `text`, `timestamp`).
-- `ChatSessionModeEntity` — Oturum modu (`session_id`, `mode`, `updated_at`).
-- `ChatBridgeMessageEntity` — Köprü mesajları (`id`, `session_id`, `sender`, `text`, `timestamp`).
+- [SessionEntity](Chat/SessionEntity.md) — Sohbet oturumları (`SessionState` JSONB).
+- [MessageEntity](Chat/MessageEntity.md) — Sıralı user/assistant mesaj geçmişi.
+- [ChatSessionModeEntity](Chat/ChatSessionModeEntity.md) — Live Takeover kip kaydı (Bot/Human).
+- [ChatBridgeMessageEntity](Chat/ChatBridgeMessageEntity.md) — Live Takeover mesaj geçmişi.
 
 ### 3. `Hitl` (Şema: `hitl`)
-- `ApprovalRequestEntity` — HITL onay talepleri (`id`, `session_id`, `tool_name`, `parameters_json`, `status`, `execution_status`, `requested_at`, `decided_at`).
-- `EscalationEntity` — İnsan temsilciye eskalasyonlar (`id`, `session_id`, `customer_id`, `reason`, `assigned_agent_id`, `status`).
-- `HumanAgentEntity` — Temsilci havuzu (`id`, `name`, `email`, `is_online`, `active_chats_count`).
+- [ApprovalRequestEntity](Hitl/ApprovalRequestEntity.md) — HITL onay talebi (talep→karar→yürütme→bildirim yaşam döngüsü).
+- [EscalationEntity](Hitl/EscalationEntity.md) — İnsan temsilciye eskalasyon kaydı.
+- [HumanAgentEntity](Hitl/HumanAgentEntity.md) — Skills-based routing için temsilci havuzu.
 
 ### 4. `Observability` (Şema: `observability`)
-- `ReasoningTraceEntity` — Akıl yürütme trace'leri (`trace_id`, `session_id`, `query`, `reasoning_json`, `planning_json`, `final_response`, `created_at`, `completed_at`).
-- `LlmCallUsageEntity` — LLM çağrı token kullanım kayıtları (`id`, `trace_id`, `model`, `provider`, `input_tokens`, `output_tokens`, `cost_usd`, `duration_ms`).
+- [ReasoningTraceEntity](Observability/ReasoningTraceEntity.md) — Bir turun tüm akıl yürütme kaydı.
+- [LlmCallUsageEntity](Observability/LlmCallUsageEntity.md) — Her LLM çağrısının maliyet/performans kaydı.
 
-### 5. `Personalization`, `Improvement`, `Knowledge`, `Analytics`, `Auth`
-- `CustomerProfileEntity` (Şema: `personalization`) — Müşteri etkileşim profili.
-- `LessonEntity` (Şema: `improvement`) — Sistem iyileştirme dersi.
-- `KnowledgeArticleEntity` (Şema: `knowledge`) — Bilgi bankası makalesi.
-- `RatingEntity` & `SlaEventEntity` (Şema: `analytics`) — Puanlama ve SLA olayları.
-- `UserEntity` & `RefreshTokenEntity` (Şema: `auth`) — Kullanıcı ve yenileme token'ı.
+### 5. `Personalization` (Şema: `personalization`)
+- [CustomerProfileEntity](Personalization/CustomerProfileEntity.md) — Müşteri kişiselleştirme profili.
+
+### 6. `Improvement` (Şema: `improvement`)
+- [LessonEntity](Improvement/LessonEntity.md) — Self-improving loop'un ürettiği, admin onaylı ders.
+
+### 7. `Knowledge` (Şema: `knowledge`)
+- [KnowledgeArticleEntity](Knowledge/KnowledgeArticleEntity.md) — Bilgi bankası makalesi.
+
+### 8. `Analytics` (Şema: `analytics`)
+- [RatingEntity](Analytics/RatingEntity.md) — Oturum başına konuşma değerlendirmesi.
+- [SlaEventEntity](Analytics/SlaEventEntity.md) — SLA Guardian'ın ürettiği warn/breach olayları.
+
+### 9. `Auth` (Şema: `auth`)
+- [UserEntity](Auth/UserEntity.md) — Giriş yapabilen hesap (Admin/Agent/Customer, tek tablo).
+- [RefreshTokenEntity](Auth/RefreshTokenEntity.md) — JWT refresh token kaydı (hash'lenmiş, rotasyonlu).
+
+## Bağlantılar
+
+- [../Configurations/README.md](../Configurations/README.md) — Her entity'nin veritabanı eşleme detayları
+- [../README.md](../README.md) — EfCore klasörü genel indeksi

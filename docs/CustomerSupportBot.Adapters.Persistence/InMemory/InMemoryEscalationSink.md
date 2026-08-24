@@ -21,7 +21,7 @@
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresEscalationSink` (`../Postgres/HitlAndChat.md`) ile aynı arayüzü uygular.
+- `PostgresEscalationSink` (`../Postgres/PostgresEscalationSink.md`) ile aynı arayüzü uygular.
 - Durum geçiş mantığı için Domain katmanındaki `EscalationStateFactory`/`EscalationStates`'e (State Pattern) delege eder — bu adaptör sadece depolama ve event fırlatma yapar, iş kuralı burada YOK.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı

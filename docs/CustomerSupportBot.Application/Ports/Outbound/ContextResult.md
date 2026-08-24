@@ -1,41 +1,51 @@
-# ContextPart
+# ContextResult (+ ContextPart, ContextPartStatus)
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/ContextResult.cs`
-- **Tür:** `public sealed record`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/ContextResult.cs`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ContextPart`, <summary>Bir provider'ın bu turdaki sonucu — ne oldu, ne kadar yer kapladı.</summary> <summary>Bağlam üretildi ve prompt'a kondu.</summary> <summary>Provider çalıştı ama söyleyecek bir şeyi yoktu (normal durum).</summary> <summary>Hata verdi.</summary> <summary>Süresi doldu.</summary> <summary>Bütçe dolduğu için dışarıda bırakıldı.</summary> <summary> <see cref="IContextPipeline.BuildContextAsync"/> sonucu.  <para> Neden düz <c>string</c> değil: çağıranın <b>hangi provider'ın katkı yaptığını</b> bilmesi gerekiyor. Somut sebep, <c>WorkflowMessageBuilder</c>'ın konuşma geçmişini kırpma kararı — özetlenen turlar yalnızca özet BU TURDA gerçekten prompt'a girdiyse atlanabilir. Karar
+[`IContextPipeline.BuildContextAsync`](IContextPipeline.md)'ın dönüş tipi. Yalnızca birleşik
+bağlam metnini değil, **hangi provider'ın ne yaptığını** da taşır.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+`WorkflowMessageBuilder` (Adapters.Agents) geçmiş kırpma kararını `ContextResult.Included(...)`
+ile verir; `ReasoningTrace.ContextParts` gözlemlenebilirlik için bu parçaları saklar.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ContextPart`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Birleşik metni + provider bazlı durum/boyut raporunu taşımak.
+- **Üstlenmediği:** Provider'ların çalıştırılması — bu `ContextPipeline`'ın işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+Detaylı akış için bkz. [ContextPipeline.md](../../Chat/ContextPipeline.md) §3.4 (Raporlama).
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `ContextResult`
-```csharp
-public sealed record ContextResult(string Text, IReadOnlyList<ContextPart> Parts)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Düz `string` değil bir sonuç nesnesi olmasının nedeni: çağıranın **hangi provider'ın katkı
+yaptığını** bilmesi gerekir. Somut sebep `WorkflowMessageBuilder`'ın geçmiş kırpma kararı —
+özetlenen turlar yalnızca özet BU TURDA gerçekten prompt'a girdiyse atlanabilir. Karar oturum
+durumuna bakarak verilseydi, özetleyici hata verdiği turda özet de geçmiş de prompt'ta olmaz
+ve o turlar tamamen kaybolurdu. İkinci fayda gözlemlenebilirlik: parçalar trace'e yazılınca
+"model neyi biliyordu?" sorusu yanıtlanabilir hale gelir.
 
-### `Included`
-```csharp
-public bool Included(string providerName)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-## Bağımlılıklar
+**`ContextPart(string ProviderName, int Order, ContextPartStatus Status, int Length)`** — bir
+provider'ın bu turdaki sonucu.
 
-- `CustomerSupportBot.Domain`
+**`ContextPartStatus`** enum: `Included` (prompt'a kondu), `Empty` (normal, söyleyecek bir şey
+yoktu), `Failed` (hata verdi), `TimedOut` (süresi doldu), `Dropped` (bütçe dolduğu için
+dışarıda bırakıldı).
+
+**`ContextResult(string Text, IReadOnlyList<ContextPart> Parts)`**
+
+| Üye | Açıklama |
+|---|---|
+| `static readonly ContextResult Empty` | Boş bağlam sabiti. |
+| `bool Included(string providerName)` | Adı verilen provider bu turda prompt'a gerçekten katkı yaptı mı? |
+
+## 7. Bağımlılıklar
+
+Yok — saf veri modeli.

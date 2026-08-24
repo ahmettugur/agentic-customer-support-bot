@@ -26,7 +26,7 @@ Bu dokümanda sistemde uygulanan **agentic design pattern'leri** haritalanır. H
 | 13 | **Reasoning Trace / Observability** | `IReasoningTraceStore` | ⭐⭐ |
 | 14 | **Prompt Externalization (Markdown Templates)** | `PromptService` + `Prompts/*.md` | ⭐⭐ |
 | 15 | **Scenario-Based Evaluation** | `EvaluationRunner` + `docs/evaluation-scenarios.yaml` | ⭐ |
-| 16 | **Grounded Reasoning (ReAct-lite Entity Verification)** | `EntityVerifier` + `VerifiedEntities` | ⭐⭐⭐ |
+| 16 | **Grounded Reasoning (ReAct-lite Entity Resolution)** | `EntityVerifier` + `VerifiedEntities` | ⭐⭐⭐ |
 | 17 | **Deterministic Sanity Checking (Rule-Based Post-Validation)** | `ReasoningSanityChecker` + `IReasoningSanityRule` (8 sınıf) | ⭐⭐⭐ |
 | 18 | **Task Decomposition (Compound Query)** | `ReasoningService.SubTasks` | ⭐⭐ |
 | 19 | **Task Orchestration (Sequential Sub-Workflow Runs)** | `CustomerSupportTeam.RunDecomposedAsync` | ⭐⭐ |
@@ -422,9 +422,11 @@ public string Render(string key, IDictionary<string, string?>? vars);
 
 ---
 
-## 16. Grounded Reasoning (ReAct-lite Entity Verification)
+## 16. Grounded Reasoning (ReAct-lite Entity Resolution)
 
-**Tanım**: Reasoning modeli karar vermeden **önce** kritik entity'ler deterministik kodla extract edilir ve external kaynak (DB) ile doğrulanır. Model "bu ID var mı var olmadı mı?" tahmininde bulunmaz — gerçekleği dayatırız.
+**Tanım**: Reasoning modeli karar vermeden önce entity ID'leri deterministik kodla query ve
+history'den çözümlenir; müşteri kimliği yalnız authenticated session'dan alınır. Sipariş/şikayet
+gerçekliği ve sahipliği reasoning aşamasında değil, ilgili specialist tool'da doğrulanır.
 
 **Gerçekleme**: `EntityVerifier`:
 
@@ -433,22 +435,21 @@ CustomerSupportBot.Application/Services/EntityVerifier.cs
 public VerifiedEntities Verify(string query, AgentSession? session, IList<ChatMessage>? history)
 {
     var ids = IdExtractor.Extract(query);        // regex
-    // history + session state'ten eksikleri doldur
-    // Her entity için repository port'ları (IOrderRepository.Get / IProductCatalogRepository.FindProduct / IComplaintRepository.Get)
-    //   → Verified / NotFoundInDb / FormatOnly
-    // customer_id Verified ise DerivedLastOrderId hesaplanır
-    return verified;
+    // history ile context continuity uygula
+    // customer_id yalnız AuthenticatedCustomerId'den gelir
+    // order_id / complaint_id → FormatOnly; factual doğrulama specialist tool'da
+    return resolved;
 }
 ```
 
 **Reasoning prompt'una enjeksiyon** (`Prompts/services/reasoning-system.md` üzerinden):
 
 ```
-[VERIFIED ENTITIES — session/DB ile doğrulandı]
-Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN.
-- order_id = "1" [VERIFIED, status=Kargolandı, product=Dell XPS 15]
-- customer_id = "1990" [VERIFIED, has_orders=true]
-- last_order_id = "1" [derived]
+[RESOLVED ENTITIES — query/history/authenticated session üzerinden çözümlendi]
+Aşağıdaki kimlik değerleri ZATEN sağlandı. requiredInfo'ya EKLEMEYİN.
+FORMAT_ONLY değerlerin gerçekliğini ve sahipliğini ilgili specialist tool ile doğrulayın.
+- order_id = "1030" [FORMAT_ONLY, source=Query]
+- customer_id = "1027" [VERIFIED, source=SessionState]
 ```
 
 **Dosya**:
@@ -456,9 +457,13 @@ Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN.
 - `CustomerSupportBot.Domain/Model/VerifiedEntities.cs`
 - `CustomerSupportBot.Application/Services/EntityVerifier.cs`
 
-**Literatürdeki yeri**: Klasik [ReAct](https://arxiv.org/abs/2210.03629)'ın "Observe" adımı normalde model tarafından tool çağrısıyla yapılır. Biz bu adımı **LLM'den önce, kodda deterministik** yapıyoruz — sıfır latency + sıfır LLM maliyeti. Bu yaklaşım *grounded prompting* veya *entity grounding* olarak da anılır.
+**Literatürdeki yeri**: Klasik [ReAct](https://arxiv.org/abs/2210.03629)'ta action/observe
+adımı tool çağrısıyla yapılır. Burada entity resolution LLM'den önce deterministik yapılır;
+factual observe adımı ise sahiplik kontrollü tool'da kalır. Böylece resolution için ekstra LLM
+maliyeti oluşmaz, iş verisi için iki ayrı DB okuması yapılmaz.
 
-**Neden?** Model *"9999 bulunabilir"* diye halusine ederse kullanıcı *"siparişiniz kargoda"* gibi yanlış yanıt alabilir. Verified bir entity → güvenli karar zemini.
+**Neden?** `order_id=9999` çözümlenmiş olsa bile tool sonucu gelmeden kayıt varmış gibi
+konuşulamaz. Bu ayrım yanlış veri gösterimini ve başka müşteriye ait attribute sızıntısını önler.
 
 ---
 
@@ -471,7 +476,7 @@ Aşağıdaki bilgiler ZATEN elinizde. requiredInfo'ya EKLEMEYİN.
 | # | Kural sınıfı | `Code` | Severity | Tetiklenme |
 |---|---|---|---|---|
 | 1 | `OverconfidentClarificationRule` | `overconfident_clarification` | warn | `confidenceScore >= 0.7` AMA nextAction clarification istiyor |
-| 2 | `RedundantRequiredInfoRule` | `redundant_required_info` | **error** | `requiredInfo`'da VERIFIED entity var (ping-pong riski) |
+| 2 | `RedundantRequiredInfoRule` | `redundant_required_info` | **error** | `requiredInfo`'da zaten sağlanmış/resolved entity var (ping-pong riski) |
 | 3 | `IntentActionMismatchRule` | `intent_action_mismatch` | warn | Intent ile seçilen agent çelişiyor |
 | 4 | `LowConfidenceNoMissingRule` | `low_confidence_no_missing` | info | `confidenceScore < 0.5` ama requiredInfo boş |
 | 5 | `AssumptionHeavyStepsRule` | `assumption_based_step` | info | Bir step'te `grounding=assumption` |

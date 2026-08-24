@@ -20,9 +20,9 @@
          tablolari, ic ice listeleri ve kod bloklarini dogru cozemez; kendi ayristiricimizi
          yazmak bu ornegin konusu degil. -->
     <PackageReference Include="Markdig" Version="1.3.2" />
-    <PackageReference Include="Microsoft.Agents.AI" Version="1.18.0" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.19.0" />
     <PackageReference Include="Microsoft.Agents.AI.A2A" Version="1.18.0-preview.260818.1" />
-    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.18.0" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.19.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.9.0" />
 

@@ -1,27 +1,51 @@
 # IAgentTeamPort
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/IAgentTeamPort.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/IAgentTeamPort.cs`
+**Implementasyon:** [`CustomerSupportTeam`](../../../CustomerSupportBot.Adapters.Agents/CustomerSupportTeam.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IAgentTeamPort`, <summary> Müşteri destek ajan takımı için secondary (driven) port. </summary> <summary> Kullanıcı sorgusunu workflow'da koşturur ve nihai yanıtı döndürür (non-streaming). </summary> <summary> Workflow'u SSE stream event'leri olarak koşturur. </summary>
+Müşteri destek ajan takımının (MAF workflow'unun) tamamını Application katmanına tek bir
+sözleşme olarak sunan secondary port: non-streaming çalıştırma, streaming çalıştırma, workflow
+diyagramı.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`ChatPortService` bir kullanıcı sorgusu geldiğinde `RunAsync` (bekleyen tam cevap) veya
+`RunStreamingAsync` (SSE ile parça parça) çağırır. Admin/debug panelindeki workflow görselleştirme
+`GetWorkflowDiagram`'ı kullanır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IAgentTeamPort`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Ajan takımının çalıştırılmasının Application katmanına sunulan tek giriş
+  noktası olmak.
+- **Üstlenmediği:** MAF workflow'unun iç işleyişi (ajanlar arası handoff, tool çağrıları,
+  reasoning) — bunlar `Adapters.Agents` katmanında kalır, Application bunları bilmez.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Agents/CustomerSupportTeam` implemente eder — 6 uzman ajan + `GroupChatHost`'u
+içeren gerçek MAF `Workflow`'unu sarar.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Bu port, hexagonal mimarideki en önemli sınırlardan biridir: Application katmanı MAF'a
+(Microsoft Agent Framework) DOĞRUDAN bağımlı değildir, yalnızca bu ince arayüze bağımlıdır —
+ajan orkestrasyon teknolojisi değiştirilebilir olur.
+
+`GetWorkflowDiagram` argüman almaz çünkü graph topolojisi tur/oturumdan bağımsız sabittir
+(aynı 6 ajan + `GroupChatHost`); MAF'ın `Workflow.ToMermaidString()` extension'ını sarar,
+dokümantasyon ve debug amaçlıdır.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `Task<string> RunAsync(string query, List<ConversationMessage>? conversationHistory = null, AgentSession? session = null, ReasoningResult? reasoning = null, CancellationToken ct = default)` | Sorguyu workflow'da koşturur, nihai yanıtı döner (non-streaming). |
+| `IAsyncEnumerable<StreamEvent> RunStreamingAsync(...)` | Workflow'u SSE stream event'leri olarak koşturur (aynı parametreler). |
+| `string GetWorkflowDiagram()` | Ajan takımı workflow graph'ının Mermaid.js diyagramını döner. |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model` tiplerine (`ConversationMessage`, `AgentSession`,
+`ReasoningResult`) ve `CustomerSupportBot.Application.Ports.Inbound.StreamEvent`'e bağımlıdır.

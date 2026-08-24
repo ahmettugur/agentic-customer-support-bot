@@ -1,63 +1,70 @@
 # TracePortService
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Telemetry/TracePortService.cs`
+- **Kaynak:** `Services/Telemetry/TracePortService.cs`
 - **Tür:** `public sealed class : ITracePort`
 - **Namespace:** `CustomerSupportBot.Application.Services.Telemetry`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`TracePortService`, Application/Services/TracePortService.cs DRIVING PORT IMPL — ITracePort → IReasoningTraceStore + ISessionManager.
+`ITracePort` (Inbound port) implementasyonu — admin panelinin "reasoning trace" görünümünü
+besler: hangi oturumda hangi turlarda ne kadar sürede, kaç iterasyonla, hangi sonlanma
+sebebiyle reasoning çalıştığını gösterir.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+Geliştiricinin/admin'in "bu turda model neden böyle davrandı" sorusuna, `ReasoningTrace`
+kayıtları üzerinden cevap bulabilmesi için. `GetSessionsSummaryAsync` ve `GetStats`, ham
+trace listesinden panele hazır özet üretir.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`TracePortService`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+**Üstlendiği:**
+- Ham trace sorguları (`GetRecentTraces`, `GetTrace`, `GetTracesBySession`) — doğrudan
+  `IReasoningTraceStore`'a delege.
+- `GetSessionsSummaryAsync` — trace'leri `SessionId`'ye göre gruplayıp her oturum için bir
+  özet satırı (başlık, trace sayısı, son trace zamanı) üretmek; gerçek mesaj sayısını almak
+  için `ISessionManager.GetHistoryAsync`'i de çağırmak.
+- `GetStats` — son 500 trace üzerinden toplam/tamamlanan/hatalı sayıları, ortalama süre,
+  ortalama iterasyon sayısı ve sonlanma sebebi dağılımını hesaplamak.
 
-## Constructor ve Başlatma Mantığı
+**Üstlenmediği:** Trace'lerin yazılması (workflow çalışırken `IReasoningTraceStore`'a
+doğrudan yazılır — bu servis yalnızca **okuma** tarafıdır).
 
-```csharp
-public TracePortService(IReasoningTraceStore traces, ISessionManager sessions)
-```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-## Metotlar ve İç Çalışma Mantıkları
+- `IReasoningTraceStore` — trace kayıtlarının kaynağı.
+- `ISessionManager` — oturum başına gerçek mesaj sayısı (`GetSessionsSummaryAsync` içinde).
 
-### `GetRecentTraces`
-```csharp
-public IReadOnlyList<ReasoningTrace> GetRecentTraces(int count = 20)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `GetTrace`
-```csharp
-public ReasoningTrace? GetTrace(string traceId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+### `GetSessionsSummaryAsync`'te başlık nasıl üretiliyor
 
-### `GetTracesBySession`
-```csharp
-public IReadOnlyList<ReasoningTrace> GetTracesBySession(string sessionId)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+Bir oturumun **en eski** trace'inin `UserQuery`'si (`traces.LastOrDefault()` — trace'ler
+`StartedAt`'a göre azalan sıralı olduğundan liste sonu en eski) başlık olarak kullanılır, 60
+karakterde kırpılır. Böylece admin paneli "bu oturum neyle başladı" sorusuna liste görünümünde
+bile cevap verebilir.
 
-### `GetSessionsSummaryAsync`
-```csharp
-public async Task<IReadOnlyList<TracedSessionSummary>> GetSessionsSummaryAsync(CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+### İstatistikler neden yalnızca "son 500 trace" üzerinden
 
-### `GetStats`
-```csharp
-public TraceStatsSummary GetStats()
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`GetStats` ve `GetSessionsSummaryAsync`, tüm trace geçmişini değil `GetRecent(500)`'ü kullanır
+— sınırsız bir agregasyon, trace sayısı büyüdükçe admin panelinin yanıt süresini öngörülemez
+hale getirirdi; 500 son trace, "yakın zamanda ne oluyor" sorusuna cevap için yeterli bir
+pencere.
 
-## Bağımlılıklar
+## 6. Metotlar / Üyeler
 
-- `CustomerSupportBot.Domain`
-- `ITracePort`
+| Üye | Açıklama |
+|---|---|
+| `GetRecentTraces(count = 20)` | `IReasoningTraceStore.GetRecent`'e delege eder. |
+| `GetTrace(traceId)` | Tek bir trace'i ID ile döner (`IReasoningTraceStore.Get`). |
+| `GetTracesBySession(sessionId)` | Bir oturumun tüm trace'lerini döner. |
+| `GetSessionsSummaryAsync(ct)` | Son 500 trace'i `SessionId`'ye göre gruplar; her grup için başlık (en eski sorgunun kırpılmışı), trace sayısı, son trace zamanı ve gerçek mesaj sayısını (`ISessionManager.GetHistoryAsync`) içeren `TracedSessionSummary` üretir; sonucu en son aktiviteye göre sıralar. |
+| `GetStats()` | Son 500 trace üzerinden toplam/tamamlanan/hatalı sayı, ortalama süre (`DurationMs`), ortalama iterasyon sayısı ve `TerminationReason` dağılımını içeren `TraceStatsSummary` üretir; hiç trace yoksa sıfırlanmış bir özet döner. |
+
+## 7. Bağımlılıklar
+
+Constructor injection ile: `IReasoningTraceStore`, `ISessionManager`.
+
+## Bağlantılar
+
+- [../Reasoning/ReasoningService.md](../Reasoning/ReasoningService.md) — trace'lerin kaynağı olan reasoning akışı

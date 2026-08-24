@@ -1,25 +1,15 @@
 // Tests/Services/EntityVerifierTests.cs
 
 using CustomerSupportBot.Domain.Model;
-using CustomerSupportBot.Tests.Shared;
 using Microsoft.Extensions.Logging.Abstractions;
 using SessionState = CustomerSupportBot.Domain.Model.SessionState;
 using CustomerSupportBot.Application.Services.Reasoning;
 
 namespace CustomerSupportBot.Application.Tests;
 
-[Collection("PostgresCatalog")]
 public class EntityVerifierTests
 {
-    private readonly EntityVerifier _verifier;
-
-    public EntityVerifierTests(PostgresCatalogFixture fixture)
-    {
-        _verifier = new EntityVerifier(
-            fixture.OrderRepo,
-            fixture.ComplaintRepo,
-            NullLogger<EntityVerifier>.Instance);
-    }
+    private readonly EntityVerifier _verifier = new(NullLogger<EntityVerifier>.Instance);
 
     private static AgentSession EmptySession() => new()
     {
@@ -28,8 +18,8 @@ public class EntityVerifierTests
     };
 
     /// <summary>
-    /// Giriş yapmış müşteri oturumu. Sipariş/şikayet doğrulaması artık SAHİPLİK gerektiriyor;
-    /// kimliksiz oturumda hiçbir kayıt doğrulanmaz (bkz. sahiplik testleri).
+    /// Giriş yapmış müşteri oturumu. Sipariş/şikayet gerçekliği ve sahipliği resolver'da
+    /// değil, authenticated customer kimliğini kullanan specialist tool'da doğrulanır.
     /// </summary>
     private static AgentSession SessionOf(string customerId) => new()
     {
@@ -45,32 +35,33 @@ public class EntityVerifierTests
     }
 
     [Fact]
-    public void Verify_KnownOrderId_VerifiedFromDb()
+    public void Verify_OrderId_IsResolvedWithoutClaimingDbExistence()
     {
         var result = _verifier.Verify("sipariş 1030 nerede?", SessionOf("1027"));
         result.OrderId.Should().NotBeNull();
-        result.OrderId!.Verification.Should().Be(EntityVerification.Verified);
+        result.OrderId!.Verification.Should().Be(EntityVerification.FormatOnly);
         result.OrderId.Source.Should().Be(EntitySource.Query);
+        result.OrderId.Attributes.Should().BeNullOrEmpty();
     }
 
     [Fact]
-    public void Verify_UnknownOrderId_NotFoundInDb()
+    public void Verify_UnknownOrderId_IsAlsoDeferredToOwnedTool()
     {
         var result = _verifier.Verify("sipariş 9999 nerede?", SessionOf("1027"));
         result.OrderId.Should().NotBeNull();
-        result.OrderId!.Verification.Should().Be(EntityVerification.NotFoundInDb);
+        result.OrderId!.Verification.Should().Be(EntityVerification.FormatOnly);
+        result.OrderId.Attributes.Should().BeNullOrEmpty();
     }
 
     [Fact]
-    public void Verify_KnownCustomerWithVerified_DerivesLastOrder()
+    public void Verify_AuthenticatedCustomer_IsTrustedWithoutDerivedBusinessData()
     {
-        // Kimlik JWT'den gelir; sorgudaki numara değil. Türetilmiş alanlar yalnızca
-        // doğrulanmış kimlik için hesaplanır.
+        // Kimlik JWT'den gelir; sipariş bilgisi ise ihtiyaç olduğunda tool'dan okunur.
         var result = _verifier.Verify("son siparişim?", SessionOf("1008"));
         result.CustomerId.Should().NotBeNull();
         result.CustomerId!.Verification.Should().Be(EntityVerification.Verified);
-        result.DerivedLastOrderId.Should().NotBeNullOrEmpty();
-        result.DerivedOrderCount.Should().BeGreaterThan(0);
+        result.DerivedLastOrderId.Should().BeNull();
+        result.DerivedOrderCount.Should().BeNull();
     }
 
     [Fact]
@@ -187,7 +178,7 @@ public class EntityVerifierTests
 
         result.OrderId.Should().NotBeNull();
         result.OrderId!.Value.Should().Be("1030");
-        result.OrderId.Verification.Should().Be(EntityVerification.Verified);
+        result.OrderId.Verification.Should().Be(EntityVerification.FormatOnly);
         result.OrderId.Source.Should().Be(EntitySource.Query);
         result.CustomerId!.Value.Should().Be("1027",
             "sorgudaki 1030 sipariş olarak yorumlandı; kimlik ise her hâlükârda JWT'den gelir");
@@ -259,18 +250,20 @@ public class EntityVerifierTests
     }
 
     // ─── Aynı numaranın hem sipariş hem şikayet olarak yorumlanması ─────────────────
-    // Aynı sayı iki numara olarak metinde geçip biri sipariş biri şikayet bağlamında
-    // yorumlanırsa ve sipariş tarafı DB'de doğrulanmışsa, şikayet yorumu (ki DB'de
-    // bulunamayacaktır) sahte bir "bulunamadı" uyarısına yol açmasın diye düşürülür.
+    // Aynı sayı iki ayrı bağlamda geçerse resolver DB'ye bakıp adaylardan birini gerçek ilan
+    // etmez. İki aday da tool katmanına kadar doğrulanmamış olarak korunur.
 
     [Fact]
-    public void Verify_SameNumberAsOrderAndComplaint_OrderVerified_DropsComplaintInterpretation()
+    public void Verify_SameNumberAsOrderAndComplaint_KeepsBothAsUnverifiedCandidates()
     {
         var result = _verifier.Verify("sipariş 1030 ile ilgili şikayet 1030", SessionOf("1027"));
 
         result.OrderId.Should().NotBeNull();
-        result.OrderId!.Verification.Should().Be(EntityVerification.Verified);
-        result.ComplaintId.Should().BeNull("1030 gerçek bir şikayet kaydı değil, sahte uyarı üretmemeli");
+        result.OrderId!.Verification.Should().Be(EntityVerification.FormatOnly);
+        result.ComplaintId.Should().NotBeNull();
+        result.ComplaintId!.Verification.Should().Be(EntityVerification.FormatOnly);
+        result.OrderId.Attributes.Should().BeNullOrEmpty();
+        result.ComplaintId.Attributes.Should().BeNullOrEmpty();
     }
 
     // ═══ Sahiplik — müşteriler arası veri sızıntısı ═══
@@ -298,13 +291,8 @@ public class EntityVerifierTests
     }
 
     /// <summary>
-    /// Başkasına ait sipariş doğrulanmaz ve <b>hiçbir attribute sızdırmaz</b>.
-    ///
-    /// <para>
-    /// Düzeltmeden önce bu çağrı status, ürün/adet ve siparişin gerçek sahibinin müşteri
-    /// numarasını döndürüyordu (ölçüldü: <c>status=Teslim Edildi, product=Bira x100,
-    /// quantity=100, customerId=1027</c>).
-    /// </para>
+    /// Resolver siparişe hiç bakmadığı için başka müşterinin kaydından attribute sızdıramaz.
+    /// Aynı ID, gerçekliği ve sahipliği tool'da doğrulanmak üzere FormatOnly kalır.
     /// </summary>
     [Fact]
     public void Verify_ForeignOrderId_IsNotVerified_AndLeaksNoAttributes()
@@ -314,29 +302,29 @@ public class EntityVerifierTests
 
         var result = _verifier.Verify("sipariş 1030 nerede?", session);
 
-        result.OrderId!.Verification.Should().NotBe(EntityVerification.Verified);
+        result.OrderId!.Verification.Should().Be(EntityVerification.FormatOnly);
         result.OrderId.Attributes.Should().BeNullOrEmpty("başka müşterinin sipariş içeriği sızmamalı");
     }
 
     /// <summary>
-    /// Kendi siparişi sorulduğunda akış bozulmamalı — düzeltme, olağan kullanımı kapatmamalı.
+    /// Kendi siparişi de resolver'da gerçek ilan edilmez; ID specialist'e taşınır ve tool doğrular.
     /// </summary>
     [Fact]
-    public void Verify_OwnOrderId_IsStillVerified()
+    public void Verify_OwnOrderId_IsPassedToToolWithoutAttributes()
     {
         var session = EmptySession();
         session.State.AuthenticatedCustomerId = "1027";
 
         var result = _verifier.Verify("sipariş 1030 nerede?", session);
 
-        result.OrderId!.Verification.Should().Be(EntityVerification.Verified);
-        result.OrderId.Attributes.Should().ContainKey("status");
+        result.OrderId!.Verification.Should().Be(EntityVerification.FormatOnly);
+        result.OrderId.Value.Should().Be("1030");
+        result.OrderId.Attributes.Should().BeNullOrEmpty();
     }
 
     /// <summary>
-    /// Kimlik yokken (A2A/realtime gibi akışlar) hiçbir sipariş doğrulanmaz. NotFoundInDb
-    /// DEĞİL FormatOnly: kayıt gerçekten yok demek yanlış bilgi olur ve kullanıcıya boş yere
-    /// "numaranızı kontrol edin" dedirtirdi.
+    /// Kimlik yokken hiçbir sipariş doğrulanmaz. FormatOnly kalır; kayıt gerçekten yokmuş gibi
+    /// konuşulmaz ve tool da authenticated müşteri olmadan iş verisi döndürmez.
     /// </summary>
     [Fact]
     public void Verify_WithoutAuthenticatedIdentity_VerifiesNothing()

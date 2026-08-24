@@ -6,16 +6,16 @@
 
 ## Ne işe yarar?
 
-`ComplaintAgent`, müşteri şikayetlerini ve memnuniyetsizliklerini karşılayan; şikayet kaydını (`complaint_registration_tool`) [ApprovalGateService](../ApprovalGateService.md) üzerinden HITL onay kapısıyla oluşturan uzman ajandır.
+`ComplaintAgent`, müşteri şikayetlerini ve memnuniyetsizliklerini karşılayan uzman ajandır. Yeni şikayet kaydını (`complaint_registration_tool`) [ApprovalGateService](../ApprovalGateService.md) üzerinden HITL onay kapısıyla oluşturur; mevcut şikayetlerin durumunu (`complaint_status_tool`) ve müşteriye ait şikayet listesini (`get_all_complaints_tool`) salt okunur araçlarla sorgular.
 
 ## Hangi amaçla kullanılır`?
 
-Müşterinin siparişle ilgili şikayetini almak (`orderId`, `complaintText`), siparişin geçerliliğini doğrulamak, onay kuyruğuna yazıp kullanıcıya pending bildirim dönmek ve gerektiğinde eskalasyon önerisi (`handoffSuggestion: "HumanHandoffAgent"`) sunmak için kullanılır.
+Müşterinin siparişle ilgili şikayetini almak (`orderId`, `complaintText`), kayıt talebini onay kuyruğuna yazıp kullanıcıya pending bildirim dönmek, mevcut şikayetleri sahiplik kontrollü araç sonuçlarından yanıtlamak ve gerektiğinde eskalasyon önerisi (`handoffSuggestion: "HumanHandoffAgent"`) sunmak için kullanılır. Prompt içindeki `FORMAT_ONLY` kimlikler yalnızca adaydır; şikayetin varlığı, müşteriye ait olduğu ve güncel durumu yalnızca araç sonucu ile doğrulanır.
 
 ## Sorumlulukları
 
 - **Üstlendiği:**
-  - `agents/complaint-agent` sistem prompt'unu ve şikayet aracını bağlamak.
+  - `agents/complaint-agent` sistem prompt'unu; HITL kayıt aracı ile salt okunur durum/liste araçlarını bağlamak.
   - [SpecialistReasoningSchema](SpecialistReasoningSchema.md) ile ReAct çıktısı üretmek.
   - Breakpoint noktalarında (`OnBeforeRun`, `OnAfterRun`) şikayet araç çağrılarını izlemek.
 
@@ -30,7 +30,7 @@ public ComplaintAgent(
 ```
 
 ### Constructor İçerisinde Yapılan İşler:
-- `BuildInner` statik metodunu çağırarak `ApprovalGateService` üzerinden şikayet kayıt aracını bağlar ve `SupportAgentBase` temel sınıfına aktarır.
+- `BuildInner` statik metodunu çağırarak `ApprovalGateService` üzerinden şikayet kayıt, durum ve liste araçlarını bağlar ve `SupportAgentBase` temel sınıfına aktarır.
 
 ## Metotlar ve İç Çalışma Mantıkları
 
@@ -45,7 +45,7 @@ private static ChatClientAgent BuildInner(
 - **İç Mantığı:**
   1. `Name`: `WellKnown.AgentNames.Complaint` ("ComplaintAgent") atanır.
   2. `Instructions`: `prompts.Get("agents/complaint-agent")` ile yüklenir.
-  3. `Tools`: `approvalGate.BuildComplaintRegistrationTool()` bağlanır.
+  3. `Tools`: `approvalGate.BuildComplaintRegistrationTool()`, `BuildComplaintStatusTool()` ve `BuildGetAllComplaintsTool()` bağlanır. Yalnızca kayıt aracı yan etkilidir ve HITL onayı gerektirir.
   4. `ResponseFormat`: `SpecialistReasoningSchema` camelCase JSON şeması atanır.
 
 ### 2. `OnBeforeRun` (Protected Override)
@@ -58,7 +58,7 @@ protected override void OnBeforeRun(IReadOnlyList<ChatMessage> messages)
 ```csharp
 protected override void OnAfterRun(AgentResponse response)
 ```
-- **Ne işe yarar?:** Çağrılan araçları (`ToolCalls`) ve dönen onay/pending sonuçlarını (`ToolResults`) inceler (Breakpoint noktası).
+- **Ne işe yarar?:** Çağrılan araçları (`ToolCalls`) ve kayıt için onay/pending, sorgular için sahiplik kontrollü veri veya not-found sonuçlarını (`ToolResults`) inceler (Breakpoint noktası).
 
 ## Bağımlılıklar
 

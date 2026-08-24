@@ -6,26 +6,34 @@
 
 ## Ne işe yarar?
 
-`EntityVerifier`, Application/Services/EntityVerifier.cs ReAct-lite entity grounding. IdExtractor regex ile formatı doğrular. EntityVerifier aşağıdakileri yapar: 1) Query'den extract et (IdExtractor) 2) History'den eksik olanları tamamla (önceki turlardaki entity'leri hatırla) 3) SessionState'ten tamamla (session.State.AuthenticatedCustomerId — JWT'den, poisonable değil) 4) DB ile varlık doğrulaması yap (IOrderRepository / IComplaintRepository üzerinden) 5) Türetilmiş alanları hesapla (ör. customer_id'den last_order_id)  Çıktı VerifiedEntities olarak reasoning prompt'una enjekte edilir. Böylece reasoning modeli "zaten bilinen bilgi için clarification isteme" kararını Tahmin üzerinden değil, grounded doğrulama üzerinden verir. <summary> Query + history + session state üzerinde deterministic entity çıkarımı yapar Ve repository port'ları ile doğrulayarak yapılandırılmış bir sonuç döner. Hiçbir LLM çağrısı yapmaz — tamamen deterministik. </summary>
+`EntityVerifier`, query + history + authenticated session kaynaklarını birleştiren deterministik
+entity resolver'dır. `IdExtractor` ile ID adaylarını çıkarır, bağlamsız takip mesajlarını önceki
+konuşma bağlamına göre sınıflandırır ve müşteri kimliğini yalnızca
+`SessionState.AuthenticatedCustomerId` üzerinden alır.
+
+Sipariş/şikayet kaydının varlığı, sahipliği, durumu ve içeriği burada DB'den okunmaz. Bu
+gerçekler yalnızca authenticated customer kimliğini kullanan specialist tool tarafından
+doğrulanır. Böylece her turda eager repository sorgusu yapılmaz ve reasoning prompt'una yanlış
+veya başka müşteriye ait iş verisi taşınamaz.
 
 ## Hangi amaçla kullanılır?
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+- Kullanıcının sağladığı ID'yi tekrar istemeden reasoning/workflow'a taşımak.
+- Kısa takip mesajlarında query + history bağlam sürekliliğini korumak.
+- Kullanıcının metinde yazdığı customer ID'nin authenticated kimliği ezmesini engellemek.
+- Factual doğrulamayı sahiplik kontrollü tool katmanına ertelemek.
 
 ## Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`EntityVerifier`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Entity extraction, context continuity, kaynak önceliği ve güvenli prompt bloğu.
+- **Üstlenmediği:** Sipariş/şikayet DB lookup'ı, sahiplik kontrolü veya iş verisi üretmek.
 
 ## Constructor ve Başlatma Mantığı
 
 ```csharp
-public EntityVerifier(IOrderRepository orders,
-        IComplaintRepository complaints,
-        ILogger<EntityVerifier> logger)
+public EntityVerifier(ILogger<EntityVerifier> logger)
 ```
-- **Parametreler ve Başlatma:** Alınan servis bağımlılıkları (`readonly` alanlara) atanır ve gerekli başlatma kontrolleri yapılır.
+- Repository bağımlılığı yoktur; singleton olarak güvenle kullanılabilir.
 
 ## Metotlar ve İç Çalışma Mantıkları
 
@@ -36,13 +44,18 @@ public VerifiedEntities Verify(
         AgentSession session,
         List<ConversationMessage>? history = null)
 ```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+- `order_id` ve `complaint_id` değerlerini `FormatOnly` olarak döndürür. Bu değerlerin varlığı ve
+  sahipliği specialist tool'da doğrulanır.
+- `customer_id` yalnız authenticated session'dan gelir ve güvenilir sistem kaynağı olarak
+  `Verified` işaretlenir.
+- `DerivedLastOrderId`, `DerivedOrderCount` ve DB attribute'ları üretilmez.
 
 ### `BuildPromptBlock`
 ```csharp
 public static string? BuildPromptBlock(VerifiedEntities verified)
 ```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+- `[RESOLVED ENTITIES]` bloğunu üretir. `FormatOnly` değerlerin tool ile doğrulanmadan gerçek
+  kabul edilmemesi gerektiğini prompt'a açıkça yazar.
 
 ## Bağımlılıklar
 

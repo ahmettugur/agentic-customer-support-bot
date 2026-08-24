@@ -1,27 +1,47 @@
 # IKnowledgeArticleStore
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Persistence/IKnowledgeArticleStore.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Persistence`
+**Kaynak:** `Ports/Outbound/Persistence/IKnowledgeArticleStore.cs`
+**Implementasyon:** [`PostgresKnowledgeArticleStore`](../../../../CustomerSupportBot.Adapters.Persistence/Postgres/PostgresKnowledgeArticleStore.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IKnowledgeArticleStore`, <summary> Panelden yönetilen bilgi tabanı makalelerinin kalıcılığı için secondary port. Vector store türetilmiş indekstir; kayıt otoritesi burasıdır. </summary> <summary>Yalnızca yayında olanlar — ingest ve indeksleme bunu kullanır.</summary> <summary>Kayıt yoksa false döner (çağıran 404 üretebilsin diye).</summary>
+Panelden yönetilen bilgi tabanı (knowledge base) makalelerinin kalıcılığı için secondary port.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+Admin panelindeki KB editörü `GetAllAsync`/`UpsertAsync`/`DeleteAsync` ile makaleleri yönetir;
+[`KnowledgeBaseIngestor`](../../../../CustomerSupportBot.Api/Workers/KnowledgeBaseIngestor.md)
+yalnızca `GetPublishedAsync` ile yayındaki makaleleri okuyup vektör indeksine yazar.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IKnowledgeArticleStore`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Makale CRUD'u ve yayın durumu ayrımı.
+- **Üstlenmediği:** Vektör indeksleme — vector store (Qdrant) bu makalelerden **türetilmiş bir
+  indekstir**; kayıt otoritesi (source of truth) burasıdır, Qdrant değil.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Persistence/Postgres/PostgresKnowledgeArticleStore` implemente eder.
+`GetPublishedAsync`'in döndürdüğü liste `KnowledgeBaseIngestor` tarafından
+[`IEmbeddingPort`](../AI/IEmbeddingPort.md) + [`IVectorMemoryPort`](../AI/IVectorMemoryPort.md)
+ile işlenip Qdrant'a yazılır.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Yayında olmayan (taslak) makalelerin ingest'e dahil edilmemesi için `GetPublishedAsync` ayrı
+bir metot — admin bir makaleyi düzenlerken/tamamlamadan kaydederken bunun yanlışlıkla canlı
+bilgi tabanına sızmaması gerekir.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `Task<IReadOnlyList<KnowledgeArticle>> GetAllAsync(CancellationToken ct = default)` | Tüm makaleler (taslak dahil, admin UI). |
+| `Task<IReadOnlyList<KnowledgeArticle>> GetPublishedAsync(CancellationToken ct = default)` | Yalnızca yayında olanlar — ingest bunu kullanır. |
+| `Task<KnowledgeArticle?> GetAsync(string id, CancellationToken ct = default)` | Tekil sorgu. |
+| `Task UpsertAsync(KnowledgeArticle article, CancellationToken ct = default)` | Oluştur/güncelle. |
+| `Task<bool> DeleteAsync(string id, CancellationToken ct = default)` | Siler; kayıt yoksa `false` (çağıran 404 üretebilsin diye). |
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.Memory.KnowledgeArticle`'a bağımlıdır.

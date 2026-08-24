@@ -51,7 +51,11 @@ Blazor WASM projesinde backend model DLL'lerine referans verilmez (izolasyon). B
 | `EscalationStats` | Total, Resolved, Dismissed |
 | `RecentRating` | SessionId, Stars, Feedback, RatedAt |
 | `SessionSummary` | SessionId, LastActivity, MessageCount, Title |
-| `SessionAnalyticsModel` | 20+ alan — sentiment timeline, approval/escalation detayları dahil |
+| `SessionAnalyticsModel` | 20+ alan — tek bir oturumun tam analitik görünümü: temel sayaçlar (mesaj/tur sayısı, mevcut niyet/faz), `SentimentTimeline` (`List<SentimentTimelineItem>`), `Rating` (`SessionRatingItem?`), onay özeti sayaçları + `ApprovalDetails` (`List<ApprovalSummaryItem>`), eskalasyon sayaçları + `EscalationDetails` (`List<EscalationSummaryItem>`), `CollectedInfo` (toplanan serbest alanlar). |
+| `SentimentTimelineItem` | Turn, Label, Score, Timestamp — `SessionAnalyticsModel.SentimentTimeline`'ın tek satırı; bir turun duygu skoru. |
+| `SessionRatingItem` | Stars, Feedback, RatedAt — oturuma verilen yıldız değerlendirmesi (varsa). |
+| `ApprovalSummaryItem` | Id, ToolName, Status, RequestedAt, DecidedAt, DecidedBy — `ApprovalRequest`'in oturum-analitiği görünümünde kullanılan küçültülmüş özeti (tam `Parameters`/`Justification` gibi alanları taşımaz). |
+| `EscalationSummaryItem` | Id, AgentName, Reason, Status, CreatedAt, Resolution — `EscalationRequest`'in oturum-analitiği görünümünde kullanılan küçültülmüş özeti. |
 
 ### Agents & SLA
 | Record | Alanlar |

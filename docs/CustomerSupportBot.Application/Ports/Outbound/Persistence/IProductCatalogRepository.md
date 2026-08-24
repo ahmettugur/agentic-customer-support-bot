@@ -1,27 +1,61 @@
 # IProductCatalogRepository
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/Persistence/IProductCatalogRepository.cs`
-- **Tür:** `public  interface`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound.Persistence`
+**Kaynak:** `Ports/Outbound/Persistence/IProductCatalogRepository.cs`
+**Implementasyon:** [`ProductCatalogRepository`](../../../../CustomerSupportBot.Adapters.Persistence/Postgres/ProductCatalogRepository.md)
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`IProductCatalogRepository`, <summary> Ürün kataloğu için secondary port. </summary> <summary>Tam eşleşme veya fuzzy match ile ürün bulur. Bulunamazsa null döner.</summary> <summary> Bir siparişin <b>tüm</b> satırlarının stoğunu tek seferde düşer.  <para> Ya hep ya hiç: satırlardan biri bile yetmezse hiçbiri düşülmez ve <see cref="StockDeductionResult.Shortages"/> yetersiz kalan satırları taşır. Çağıran taraf tek tek düşüp elle telafi etmek zorunda kalmasın diye atomiklik adapter'ın sorumluluğundadır (Postgres tarafında tek transaction). </para>  <para> <paramref name="lines"/> içindeki ürün adları <b>kanonik</b> olmalıdır (<see cref="FindProduct"/> ile çözülmüş) ve aynı ürün birden fazla satırda tekrarlanmamalıdır — tekrar, aynı satırın iki kez düşülmesi demektir. </para> </summary> <summary>Tüm ürün listesi.</summary>
+Ürün kataloğu ve stok yönetimi için secondary port: ürün arama, kategori listeleme, toplu stok
+düşümü.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- Hexagonal mimaride bağımlılıkların soyutlanması ve gevşek bağlı (loosely coupled) entegrasyon sağlamak.
-- İlgili use case veya port çağrılarının tip güvenli ve test edilebilir şekilde yürütülmesini sağlamak.
+`ProductToolsService` (`ProductInquiryTool`, `ProductListTool`) `FindProduct`/`GetAll`/
+`GetByCategory`'yi çağırır; sipariş verme akışında [`IOrderRepository.PlaceOrder`](IOrderRepository.md)
+bu repository'nin stok düşürme mantığıyla birlikte çalışır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`IProductCatalogRepository`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Ürün arama (tam/fuzzy eşleşme), kategori sorgulama, çok-satırlı **atomik**
+  stok düşümü.
+- **Üstlenmediği:** Sipariş kaydının kendisi — o [`IOrderRepository`](IOrderRepository.md)'nin işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`Adapters.Persistence/Postgres/ProductCatalogRepository` implemente eder; stok düşümü Postgres
+tarafında tek transaction içinde yapılır.
 
-## Bağımlılıklar
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `CustomerSupportBot.Domain`
+Toplu stok düşümü **ya hep ya hiç**tir: satırlardan biri bile yetmezse hiçbiri düşülmez ve
+sonuç (`StockDeductionResult.Shortages`) yetersiz kalan satırları taşır — çağıran taraf tek tek
+düşüp elle telafi etmek zorunda kalmaz, atomiklik adaptörün sorumluluğundadır.
+
+`GetSelectableCategories` bilinçli olarak **boş kategorileri dışarıda bırakır**: bu liste
+kategori seçim ekranını besler; içi boş bir kategoriyi seçenek olarak göstermek kullanıcıyı
+tıkladığında "ürün bulunmamaktadır" ile karşılaşacağı bir çıkmaz sokağa sokar.
+`GetByCategory` ise kategorinin hiç bulunamamasıyla bulunup boş olmasını `CategoryProducts`
+üzerinden ayırt eder.
+
+## 6. Metotlar / Üyeler
+
+| Metot | Açıklama |
+|---|---|
+| `ProductInfo? FindProduct(string productName)` | Tam eşleşme veya fuzzy match ile ürün bulur. |
+| `IReadOnlyList<ProductInfo> GetAll()` | Tüm ürün listesi. |
+| `CategoryProducts GetByCategory(string category)` | Belirli kategorideki ürünler (kategori-yok ile kategori-boş ayrımını korur). |
+| `IReadOnlyList<string> GetSelectableCategories()` | En az bir ürünü olan kategori adları. |
+
+> 🐞 **Kaynak koddaki yetim (orphaned) XML doc yorumu:** `IProductCatalogRepository.cs`
+> içinde `GetAll()`'dan hemen önce, hiçbir metoda bağlı olmayan bir `<summary>` bloğu var —
+> "ya hep ya hiç" toplu stok düşümünü anlatıyor ("Bir siparişin tüm satırlarının stoğunu tek
+> seferde düşer... `StockDeductionResult.Shortages`..."). Muhtemelen arayüzden kaldırılmış bir
+> `DeductStock`/`TryDeductStock` metodunun yorumu silinirken unutulmuş kalıntısı. Bugün stok
+> düşümü [`IOrderRepository.PlaceOrder`](IOrderRepository.md) üzerinden tek transaction'da
+> yapılıyor; bu arayüzde ayrı bir stok-düşürme metodu YOK. Kaynak dosyadaki yetim yorumun
+> temizlenmesi önerilir — burada yalnızca dokümantasyon amacıyla not düşüldü, kod
+> değiştirilmedi.
+
+## 7. Bağımlılıklar
+
+Port arayüzü `CustomerSupportBot.Domain.Model.ProductInfo`/`CategoryProducts`'a bağımlıdır.

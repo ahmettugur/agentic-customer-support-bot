@@ -1,37 +1,56 @@
 # ApprovalOptions
 
-- **Kaynak:** `CustomerSupportBot.Application/Ports/Outbound/ApprovalOptions.cs`
-- **Tür:** `public  class`
-- **Namespace:** `CustomerSupportBot.Application.Ports.Outbound`
+**Kaynak:** `Ports/Outbound/ApprovalOptions.cs`
+**Ayar bölümü:** `appsettings.json` → `"HumanInTheLoop"`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`ApprovalOptions`, Application/Services/ApprovalOptions.cs HITL config — appsettings.json > "HumanInTheLoop" bölümünden bind edilir. Hangi tool'ların onay gerektirdiği ve timeout değeri burada tanımlıdır. <summary> HITL ayarları. Approval gate feature'ı Enabled=false ise bypass edilir — Eski davranış korunur (tool direkt çalışır). </summary> <summary>HITL aktif mi? Kapatıldığında tool'lar direkt çalışır.</summary> <summary> Onay isteyen tool adlarının listesi (snake_case). Default: yan etkili iki tool. </summary> <summary>Admin karar vermezse kaç saniye sonra auto-reject.</summary>
+HITL (human-in-the-loop) onay mekanizmasının tüm konfigürasyonunu taşır: hangi tool'ların onay
+gerektirdiği, süpürme (sweep) eşikleri, escalation feature flag'i.
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+`ApprovalGateService` (Adapters.Agents) hangi tool çağrılarının onay akışına gireceğine
+`ToolsRequiringApproval`'a bakarak karar verir; `StaleApprovalSweepService` gibi periyodik
+servisler `StalePendingHours`/`StuckExecutionAfterMinutes` eşiklerini kullanır.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`ApprovalOptions`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** Yalnızca yapılandırma değerlerini taşımak.
+- **Üstlenmediği:** Onay kararının yürütülmesi — o [`IApprovalExecutionRouter`](IApprovalExecutionRouter.md)'ın işi.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+`ApprovalGateService`, [`IApprovalQueue`](Persistence/IApprovalQueue.md) ve periyodik süpürme
+servisi bu options'ı `IOptions<ApprovalOptions>` ile inject eder.
 
-## Özellikler/Properties
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-- `Enabled` (`bool`): İlgili veriyi temsil eden özellik.
-- `ToolsRequiringApproval` (`List<string>`): İlgili veriyi temsil eden özellik.
-- `TimeoutSeconds` (`int`): İlgili veriyi temsil eden özellik.
-- `AutoApproveOnTimeout` (`bool`): İlgili veriyi temsil eden özellik.
-- `StalePendingHours` (`int`): İlgili veriyi temsil eden özellik.
-- `StuckExecutionAfterMinutes` (`int`): İlgili veriyi temsil eden özellik.
-- `EscalationEnabled` (`bool`): İlgili veriyi temsil eden özellik.
+> 🐞 **`TimeoutSeconds`/`AutoApproveOnTimeout` artık bloklamayan modelde anlamsızlaşmıştır:**
+> tool artık admin kararını **beklemiyor** (bkz. `ApprovalGateService`) — `CreateAsync` ile
+> kayıt açılıp hemen dönülüyor. Bunun yerine `StalePendingHours` (varsayılan 72 saat) kadar
+> yanıtsız kalan `Pending` kayıtlar periyodik bir sweep servisiyle otomatik reddedilir.
+>
+> `StuckExecutionAfterMinutes` (varsayılan 15) olmadan HÂLÂ ÇALIŞAN normal bir işlem de askıda
+> görünürdü — panel sık yenilendiği için uzun süren her yürütme "deploy/crash oldu, elle
+> doğrulayın" uyarısıyla listelenirdi; yanlış alarm uyarının kendisini değersizleştirir.
 
-## Bağımlılıklar
+`Enabled=false` ile tüm HITL akışı bypass edilebilir — tool'lar doğrudan çalışır (eski
+davranış), geliştirme/test ortamlarında hızlı iterasyon için kullanışlıdır.
 
-- `CustomerSupportBot.Domain`
+## 6. Metotlar / Üyeler
+
+| Üye | Varsayılan | Açıklama |
+|---|---|---|
+| `bool Enabled` | `true` | HITL aktif mi. `false` ise tool'lar direkt çalışır. |
+| `List<string> ToolsRequiringApproval` | `[OrderPlacement, ComplaintRegistration]` | Onay isteyen tool adları (snake_case). |
+| `int TimeoutSeconds` | `60` | (Bloklayan eski modelde) admin karar vermezse otomatik red süresi. |
+| `bool AutoApproveOnTimeout` | `false` | Timeout sonrası varsayılan karar. |
+| `int StalePendingHours` | `72` | Bu kadar saat yanıtsız kalan `Pending` kayıtlar sweep ile otomatik reddedilir. |
+| `int StuckExecutionAfterMinutes` | `15` | Onaylanmış ama yürütmesi bu kadar dakikadır süren iş "askıda" sayılır. |
+| `bool EscalationEnabled` | `true` | Escalation sink feature flag'i. |
+
+## 7. Bağımlılıklar
+
+Port `CustomerSupportBot.Domain.Model.WellKnown.ToolNames` sabitlerine bağımlıdır (varsayılan
+liste için).

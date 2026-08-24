@@ -376,7 +376,7 @@ _workflow = AgentWorkflowBuilder
 MEVCUT AJANLAR:
   - ProductAgent : Ürün soruları
   - OrderAgent          : Sipariş oluşturma + durum/geçmişi
-  - ComplaintAgent      : Şikayet kaydı
+  - ComplaintAgent      : Şikayet kaydı + durum/liste sorgulama
   - BillingAgent        : Fatura sorguları ← yeni
   - ResponseAgent       : Kullanıcıya final yanıt
 ```
@@ -650,7 +650,8 @@ const severityIcon = {
 ### Kural tasarım prensipleri
 
 - **Deterministic olmalı** — LLM çağırma. Amacımız sıfır ek maliyet.
-- **`VerifiedEntities`'i kullanmaktan kork ma** — entity grounding sonucu sağlıklı veri.
+- **`VerifiedEntities` değerlerini resolution için kullan** — `FormatOnly` order/complaint
+  değerlerini factual veri sayma; gerçeklik ve sahiplik için tool sonucunu bekle.
 - **Severity seçimi**:
   - `Error` → gerçek hallucination veya ping-pong riski (ileride otomatik re-prompt tetikleyebilir).
   - `Warn` → şüpheli durum, tasarlanmamış davranış (loglanır, UI'da görünür).
@@ -713,58 +714,51 @@ public class VerifiedEntities
 }
 ```
 
-**3. `EntityVerifier.Verify` içinde port lookup**:
+**3. `EntityVerifier.Verify` içinde DB'siz resolution**:
 
 ```csharp
 // CustomerSupportBot.Application/Services/EntityVerifier.cs
-// Önce IProductCatalogRepository / IOrderRepository gibi uygun bir port'u enjekte edin
 if (!string.IsNullOrWhiteSpace(ids.CampaignId))
 {
-    var campaign = _campaignRepository?.FindCampaign(ids.CampaignId);
-    if (campaign != null)
+    verified.CampaignId = new VerifiedEntity
     {
-        verified.CampaignId = new VerifiedEntity
-        {
-            Value = ids.CampaignId,
-            Source = EntitySource.Query,
-            Verification = EntityVerification.Verified,
-            Metadata = new Dictionary<string, string>
-            {
-                ["discount"] = $"{campaign.DiscountPercent}%",
-                ["valid_until"] = campaign.ValidUntil.ToString("yyyy-MM-dd")
-            }
-        };
-    }
-    else
-    {
-        verified.CampaignId = new VerifiedEntity
-        {
-            Value = ids.CampaignId,
-            Source = EntitySource.Query,
-            Verification = EntityVerification.NotFoundInDb
-        };
-    }
+        Value = ids.CampaignId,
+        Source = EntitySource.Query,
+        Verification = EntityVerification.FormatOnly
+    };
 }
 ```
 
-**4. `BuildPromptBlock` — prompt enjeksiyonuna ekle**:
+Bu aşamada repository çağırmayın ve kampanyayı varmış gibi işaretlemeyin. Entity resolution,
+factual validation değildir.
+
+**4. Specialist tool ile factual validation ekle**:
+
+- Kampanya repository'sine yalnız tool uygulamasından erişin.
+- Authenticated customer/tenant kapsamını tool içinde uygulayın.
+- Bulunamayan ve erişilemeyen kayıtlar için kullanıcıya aynı güvenli `NOT_FOUND` metnini verin.
+- Modelin indirim/tarih gibi alanları yalnız başarılı tool sonucundan kullanmasını prompt'ta zorunlu kılın.
+
+**5. `BuildPromptBlock` — prompt enjeksiyonuna ekle**:
 
 ```csharp
 // EntityVerifier.BuildPromptBlock yardımcısı
-if (verified.CampaignId?.Verification == EntityVerification.Verified)
+if (verified.CampaignId != null)
 {
-    var meta = string.Join(", ", verified.CampaignId.Metadata.Select(kv => $"{kv.Key}={kv.Value}"));
-    sb.AppendLine($"- campaign_id = \"{verified.CampaignId.Value}\" [VERIFIED, {meta}]");
+    sb.AppendLine($"- campaign_id = \"{verified.CampaignId.Value}\" [FORMAT_ONLY]");
 }
 ```
 
-**5. (Opsiyonel) Yeni sanity kuralı** — kampanya bulunamadığı halde indirim vaat edilmesi gibi durumlar için yeni `ReasoningSanityChecker` kuralı eklenebilir.
+**6. (Opsiyonel) Yeni sanity kuralı** — resolved kampanya ID'sinin tekrar istenmesi gibi
+durumlar için `ReasoningSanityChecker` kuralı eklenebilir. Kampanyanın bulunup bulunmadığı tool
+sonucunun sorumluluğudur.
 
 ### Checklist
 
 - [ ] `IdExtractor` regex eklendi
 - [ ] `VerifiedEntities` modelı güncellendi
-- [ ] `EntityVerifier.Verify` DB lookup yapıyor
+- [ ] `EntityVerifier.Verify` ID'yi `FormatOnly` çözümlüyor; DB lookup yapmıyor
+- [ ] Specialist tool gerçeklik + sahiplik doğrulamasını yapıyor
 - [ ] `BuildPromptBlock` prompt'a enjekte ediyor
 - [ ] `reasoning-system.md` yeni entity tipi hakkında not ekleniyor (opsiyonel ama önerilir)
 - [ ] Evaluation senaryosu yazıldı
@@ -926,9 +920,11 @@ curl -s http://localhost:5021/traces/recent?count=1 \
 
 **Kontrol**: `/traces/{id}.reasoning`'da:
 - `sanityIssues[?code=='redundant_required_info']` var mı?
-- Reasoning'in system prompt'una bakarak `[VERIFIED ENTITIES]` bloğu gerçekten enjekte edilmiş mi?
+- Reasoning'in system prompt'una bakarak `[RESOLVED ENTITIES]` bloğu gerçekten enjekte edilmiş mi?
 
-**Çözüm**: `EntityVerifier.BuildPromptBlock` çıktısını log'la (veya trace'e ekle); prompt'a gerçekten varıp varmadığını teyit et. `reasoning-system.md`'deki "VERIFIED entity'yi requiredInfo'ya EKLEMEYİN" kuralını daha belirgin yaz.
+**Çözüm**: `EntityVerifier.BuildPromptBlock` çıktısını log'la (veya trace'e ekle); prompt'a
+gerçekten varıp varmadığını teyit et. `reasoning-system.md` içinde resolved ID'nin tekrar
+istenmemesi ile `FormatOnly` kaydın tool sonucu olmadan gerçek kabul edilmemesi kurallarını koru.
 
 ---
 

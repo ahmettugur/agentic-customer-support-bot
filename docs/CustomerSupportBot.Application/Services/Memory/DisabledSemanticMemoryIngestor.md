@@ -1,60 +1,68 @@
 # DisabledSemanticMemoryIngestor
 
-- **Kaynak:** `CustomerSupportBot.Application/Services/Memory/DisabledSemanticMemoryIngestor.cs`
-- **Tür:** `public sealed class : ISemanticMemoryIngestor`
-- **Namespace:** `CustomerSupportBot.Application.Services.Memory`
+**Dosya:** `Services/Memory/DisabledSemanticMemoryIngestor.cs`
+**Tür:** `public sealed class : ISemanticMemoryIngestor`
+**Namespace:** `CustomerSupportBot.Application.Services.Memory`
 
-## Ne işe yarar?
+## 1. Ne İşe Yarar
 
-`DisabledSemanticMemoryIngestor`, Application/Services/Memory/DisabledSemanticMemoryIngestor.cs Null Object pattern — SemanticMemory devre dışıyken kullanılır. Service locator anti-pattern'ı yerine açık null-object kaydı kullanır. <summary> Semantic memory devre dışı olduğunda DI'a kaydedilen no-op implementasyonu. </summary>
+`ISemanticMemoryIngestor`'ın **Null Object** implementasyonu — semantik bellek (vektör depo)
+yapılandırma ile devre dışı bırakıldığında DI konteynerine kaydedilir. Her metodu no-op'tur
+(hiçbir şey yapmaz, boş/varsayılan sonuç döner).
 
-## Hangi amaçla kullanılır?
+## 2. Hangi Amaçla Kullanılır
 
-- İlgili use case gereksinimlerini karşılamak ve domain modelleri üzerinde gerekli işlemleri yürütmek.
-- Hata durumlarında uygun domain istisnalarını fırlatmak ve loglama yapmak.
+`SemanticMemoryOptions.Enabled = false` (veya Qdrant yapılandırılmamış) olduğunda, DI
+`ISemanticMemoryIngestor` için gerçek implementasyon (Qdrant tabanlı) yerine bu sınıfı kaydeder.
+Bu sayede semantik belleği kullanan tüm kod (`SemanticMemoryService`,
+`KnowledgeBaseIngestionService`) **hiçbir `if (bellek açık mı?)` kontrolü yazmadan** normal
+akışını sürdürür.
 
-## Sorumlulukları
+## 3. Sorumlulukları
 
-- **Üstlendiği:** İlgili domain sözleşmesini (`DisabledSemanticMemoryIngestor`) eksiksiz yerine getirmek.
-- **Üstlenmediği:** Dış altyapı detaylarına (SQL, HTTP, gRPC) doğrudan bağımlı olmak.
+- **Üstlendiği:** `ISemanticMemoryIngestor` sözleşmesini zararsız biçimde yerine getirmek.
+- **Üstlenmediği:** Herhangi bir gerçek iş — bilinçli olarak hiçbir şey yapmaz.
 
-## Constructor ve Başlatma Mantığı
+## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Varsayılan parametresiz yapılandırıcı veya DI konteyneri üzerinden başlatılır.
+- `ISemanticMemoryIngestor` port'unu implemente eder.
+- **Alternatifi:** Adapters.AI katmanındaki gerçek Qdrant tabanlı implementasyon
+  (`QdrantVectorMemoryAdapter` üzerine kurulu gerçek ingestor).
+- **Kimin tarafından kullanılır:** Bu sınıfı doğrudan çağıran yoktur — her şey
+  `ISemanticMemoryIngestor` arayüzü üzerinden, hangi implementasyonun kayıtlı olduğunu bilmeden çalışır.
 
-## Metotlar ve İç Çalışma Mantıkları
+## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-### `EnsureCollectionsAsync`
-```csharp
-public Task EnsureCollectionsAsync(CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+**Neden Null Object Pattern, "service locator" veya dağınık `if (enabled)` kontrolleri değil:**
+Kod içi yorumda açıkça belirtilir: bu, **service locator anti-pattern'ı yerine açık bir
+null-object kaydı** kullanma tercihidir. Alternatif yaklaşım — her çağıran noktada
+`if (_options.Enabled) { ... } else { /* no-op */ }` yazmak — hem tekrarlıdır hem de bir
+noktanın bu kontrolü unutması durumunda `NullReferenceException`'a (veya yapılandırılmamış bir
+Qdrant bağlantısına bağlanmaya çalışma hatasına) yol açabilirdi. Null Object deseni, "kapalı"
+durumu bizzat bir implementasyon haline getirerek bu riski DI kayıt seviyesinde, TEK bir yerde
+çözer — geri kalan tüm kod her zaman "gerçek bir ingestor var" varsayımıyla yazılabilir.
 
-### `UpsertManyAsync`
-```csharp
-public Task UpsertManyAsync(MemoryKind kind, IReadOnlyList<MemoryDocument> docs, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+`Enabled => false` ve `IsConfigured => false` döndürmesi, çağıran tarafların (isterlerse) bu
+durumu ayırt edip farklı davranabilmesini de mümkün kılar — ama zorunlu değildir, metotlar
+zaten güvenle çağrılabilir.
 
-### `DeleteAsync`
-```csharp
-public Task DeleteAsync(MemoryKind kind, string documentId, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 6. Metotlar / Üyeler
 
-### `DeleteStaleAsync`
-```csharp
-public Task DeleteStaleAsync(MemoryKind kind, string tagKey, string tagValue, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+| Üye | Açıklama |
+|---|---|
+| `Enabled` (`bool`) | Her zaman `false`. |
+| `IsConfigured` (`bool`) | Her zaman `false`. |
+| `EnsureCollectionsAsync(...)` | No-op, `Task.CompletedTask`. |
+| `UpsertManyAsync(...)` | No-op. |
+| `DeleteAsync(...)` | No-op. |
+| `DeleteStaleAsync(...)` | No-op. |
+| `CountAsync(...): Task<long>` | Her zaman `0`. |
 
-### `CountAsync`
-```csharp
-public Task<long> CountAsync(MemoryKind kind, CancellationToken ct = default)
-```
-- **İç Mantığı:** İlgili iş mantığını işletir, gerekli doğrulamaları yapar ve beklenen sonucu döner.
+## 7. Bağımlılıklar
 
-## Bağımlılıklar
+Yok.
 
-- `CustomerSupportBot.Domain`
-- `ISemanticMemoryIngestor`
+## Bağlantılar
+
+- [ISemanticMemoryIngestor.md](ISemanticMemoryIngestor.md) — implemente ettiği arayüz
+- [SemanticMemoryService.md](SemanticMemoryService.md) — bu arayüzü kullanan ana tüketici

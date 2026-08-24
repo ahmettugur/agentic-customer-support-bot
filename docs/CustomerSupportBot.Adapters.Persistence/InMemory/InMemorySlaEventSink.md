@@ -20,7 +20,7 @@ SLA (hizmet seviyesi anlaşması) ihlali/uyarı olaylarını (`SlaEvent`) `Concu
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-- `PostgresSlaEventSink` (`../Postgres/StoresAndSinks.md`) ile aynı arayüzü uygular.
+- `PostgresSlaEventSink` (`../Postgres/PostgresSlaEventSink.md`) ile aynı arayüzü uygular.
 - `SlaEvent` modeli Domain katmanındadır.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
