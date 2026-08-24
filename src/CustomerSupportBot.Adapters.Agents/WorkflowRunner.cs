@@ -96,32 +96,46 @@ internal sealed class WorkflowRunner : IWorkflowRunner
 
         var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent);
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
-        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        var started = await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         Exception? workflowError = null;
 
-        await foreach (var (evt, evtError) in EnumerateWorkflowEventsSafely(run, effectiveCt))
+        if (!started)
         {
-            if (evtError != null)
+            // Eskiden bu dönüş değeri hiç kontrol edilmiyordu (bkz. bulgu 2.2). false dönerse
+            // workflow HİÇ başlamaz; event döngüsü boş biter, st.Result "" kalır ve finalizer
+            // boş bir yanıtı kalıcılaştırırdı — kullanıcı sessizce boş bir response_complete
+            // alırdı. Artık bu durum, olay döngüsüne hiç girmeden diğer hata yollarıyla AYNI
+            // (FinalizeAbnormalTerminationAsync → trace kapatma → ExceptionTranslator) yoldan
+            // ele alınır.
+            workflowError = new InvalidOperationException(
+                "Workflow turu başlatılamadı — TrySendMessageAsync false döndü.");
+        }
+        else
+        {
+            await foreach (var (evt, evtError) in EnumerateWorkflowEventsSafely(run, effectiveCt))
             {
-                workflowError = evtError;
-                break;
-            }
-            if (evt == null) continue;
+                if (evtError != null)
+                {
+                    workflowError = evtError;
+                    break;
+                }
+                if (evt == null) continue;
 
-            if (evt is RequestInfoEvent requestInfo)
-            {
-                await HandleRequestInfoEventAsync(run, requestInfo, st, effectiveCt);
-                continue;
-            }
+                if (evt is RequestInfoEvent requestInfo)
+                {
+                    await HandleRequestInfoEventAsync(run, requestInfo, st, effectiveCt);
+                    continue;
+                }
 
-            if (evt is WorkflowErrorEvent errorEvt)
-            {
-                workflowError = errorEvt.Exception ?? new InvalidOperationException("workflow error");
-                break;
-            }
+                if (evt is WorkflowErrorEvent errorEvt)
+                {
+                    workflowError = errorEvt.Exception ?? new InvalidOperationException("workflow error");
+                    break;
+                }
 
-            _traceProcessor.ApplyTraceEvent(st, evt);
+                _traceProcessor.ApplyTraceEvent(st, evt);
+            }
         }
 
         var outcome = await FinalizeAbnormalTerminationAsync(run, st, query, timeoutCts, ct, workflowError);
@@ -219,39 +233,49 @@ internal sealed class WorkflowRunner : IWorkflowRunner
 
         var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent);
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
-        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        var started = await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         Exception? workflowError = null;
 
-        await foreach (var (evt, evtError) in EnumerateWorkflowEventsSafely(run, effectiveCt))
+        if (!started)
         {
-            if (evtError != null)
+            // Bkz. RunAsync'teki aynı düzeltme (bulgu 2.2) — dönüş değeri eskiden kontrol
+            // edilmiyordu, workflow hiç başlamadan sessizce boş bir yanıt üretilebiliyordu.
+            workflowError = new InvalidOperationException(
+                "Workflow turu başlatılamadı — TrySendMessageAsync false döndü.");
+        }
+        else
+        {
+            await foreach (var (evt, evtError) in EnumerateWorkflowEventsSafely(run, effectiveCt))
             {
-                workflowError = evtError;
-                break;
+                if (evtError != null)
+                {
+                    workflowError = evtError;
+                    break;
+                }
+                if (evt == null) continue;
+
+                if (evt is RequestInfoEvent requestInfo)
+                {
+                    await HandleRequestInfoEventAsync(run, requestInfo, st, effectiveCt);
+                    continue;
+                }
+
+                if (evt is WorkflowErrorEvent errorEvt)
+                {
+                    workflowError = errorEvt.Exception ?? new InvalidOperationException("workflow error");
+                    break;
+                }
+
+                // Yalnızca gözlemlenebilir bir değişiklik varsa (ajan durumu, gerçek zamanlı
+                // yanıt delta'sı) stream event yayınlanır.
+                foreach (var surfaced in _traceProcessor.ApplyTraceEvent(st, evt))
+                    yield return surfaced;
+
+                // Tool çağrıları sırasında biriken UI ipuçlarını (ör. category_picker) hemen yayınla
+                foreach (var hint in _uiHint.DrainPending(sessionId))
+                    yield return hint;
             }
-            if (evt == null) continue;
-
-            if (evt is RequestInfoEvent requestInfo)
-            {
-                await HandleRequestInfoEventAsync(run, requestInfo, st, effectiveCt);
-                continue;
-            }
-
-            if (evt is WorkflowErrorEvent errorEvt)
-            {
-                workflowError = errorEvt.Exception ?? new InvalidOperationException("workflow error");
-                break;
-            }
-
-            // Yalnızca gözlemlenebilir bir değişiklik varsa (ajan durumu, gerçek zamanlı
-            // yanıt delta'sı) stream event yayınlanır.
-            foreach (var surfaced in _traceProcessor.ApplyTraceEvent(st, evt))
-                yield return surfaced;
-
-            // Tool çağrıları sırasında biriken UI ipuçlarını (ör. category_picker) hemen yayınla
-            foreach (var hint in _uiHint.DrainPending(sessionId))
-                yield return hint;
         }
 
         var outcome = await FinalizeAbnormalTerminationAsync(run, st, query, timeoutCts, ct, workflowError);
