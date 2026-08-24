@@ -49,6 +49,8 @@ public WorkflowTraceEventProcessor(
 
 ### 2. `ResponseStreamFilter`
 - `ResponseAgent`'tan akan ham token'ları `TERMINATE` işaretçisine karşı tamponlar. Parça sınırlarında bölünen kelimeleri (`TER` + `MINATE`) yakalar ve yalnızca güvenli metin parçalarını yayınlar.
+- **`Feed(chunk)`:** Yeni bir token parçasını tamponlar; marker'a kesin ait olmadığı bilinen kısmı hemen döner, marker uzunluğu kadar (8 karakter) güvenlik payını tamponda tutar.
+- **`Flush()`:** 🐞 Akış `TERMINATE` marker'ı hiç görülmeden bittiğinde (ör. guard/tekrar-tespiti sonlandırması — `CustomerSupportChatManager.ShouldTerminateAsync`'in `DetectRepeatedToolCall` dalı) `Feed`'in tamponda biriktirdiği son ≤8 karakter, bu metot çağrılmazsa hiçbir zaman canlı akışa (delta/TTS) yansımıyordu — `WorkflowRunner.RunStreamingAsync` artık akış bittiğinde bunu çağırıp kalan metni son bir `ResponseDelta` olarak yayınlıyor. `TERMINATE` zaten görülmüşse (`_cutoff == true`) tampon zaten boştur, `Flush()` no-op'tur (boş string döner) — çift yayına yol açmaz. Kayıp yalnızca CANLI akıştaydı; turun kanonik metni (`ResponseComplete` payload'ı) bu düzeltmeden önce de zaten tamdı.
 
 ## Metotlar ve İç Çalışma Mantıkları
 

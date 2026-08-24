@@ -67,6 +67,52 @@ public class WorkflowRunnerPureLogicTests
         afterCutoff.Should().BeEmpty();
     }
 
+    // Flush — bulgu 1.4: akış TERMINATE görülmeden bittiğinde (guard/tekrar-tespiti
+    // sonlandırması) tamponda kalan son ≤8 karakter, Flush çağrılmazsa hiçbir zaman
+    // canlı akışa yansımıyordu.
+
+    [Fact]
+    public void Flush_TerminateNeverSeen_ReturnsBufferedTail()
+    {
+        var filter = NewFilter();
+        // "kargoda" (7 char) < Marker.Length-1 (8) → hiçbiri Feed'de hemen yayınlanmaz,
+        // tamamı tamponda kalır.
+        var emitted = Feed(filter, "Siparişiniz kargoda");
+
+        var flushed = filter.Flush();
+
+        (emitted + flushed).Should().Be("Siparişiniz kargoda",
+            "guard sonlandırmasında akış TERMINATE görmeden bitse bile son karakterler kaybolmamalı");
+    }
+
+    [Fact]
+    public void Flush_AfterTerminateAlreadySeen_ReturnsEmpty_NoDoubleEmission()
+    {
+        var filter = NewFilter();
+        Feed(filter, "Cevap. TERMINATE: reason=completed");
+
+        filter.Flush().Should().BeEmpty(
+            "TERMINATE zaten görüldüyse tampon zaten boştur — Flush çift yayına yol açmamalı");
+    }
+
+    [Fact]
+    public void Flush_NothingFed_ReturnsEmpty()
+    {
+        var filter = NewFilter();
+
+        filter.Flush().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Flush_CalledTwice_SecondCallReturnsEmpty()
+    {
+        var filter = NewFilter();
+        Feed(filter, "kısa");
+
+        filter.Flush();
+        filter.Flush().Should().BeEmpty("tampon ilk Flush'ta zaten temizlenmeli");
+    }
+
     // EnsureHumanHandoffEscalation — human_handoff_tool çağrıldığında eskalasyonun LLM'in
     // postToolReflection'ı doğru üretmesine bakılmaksızın garanti altına alındığını test eder
     // (Bulgu C). internal static; InternalsVisibleTo ile doğrudan çağrılıyor.

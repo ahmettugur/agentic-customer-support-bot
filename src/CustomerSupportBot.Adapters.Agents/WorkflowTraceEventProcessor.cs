@@ -84,6 +84,36 @@ internal sealed class WorkflowTraceEventProcessor
             _pending.Remove(0, emitLen);
             return toEmit;
         }
+
+        /// <summary>
+        /// Akış <c>TERMINATE</c> hiç görülmeden bittiğinde (ör. guard/tekrar-tespiti
+        /// sonlandırması — <c>CustomerSupportChatManager.ShouldTerminateAsync</c>'in
+        /// <c>DetectRepeatedToolCall</c> dalı) tamponda kalan son
+        /// <c>Marker.Length - 1</c> (8) karaktere kadarını döner ve tamponu temizler.
+        ///
+        /// <para>
+        /// 🐞 <b>Neden gerekli:</b> <see cref="Feed"/> marker bölünmesine karşı her zaman bu
+        /// kadar bir güvenlik payı tampanda tutuyordu (bkz. sınıf dokümanı), ama akışın sonunda
+        /// bu tamponu boşaltan bir mekanizma yoktu. TERMINATE marker'ı hiç görünmeden akış
+        /// biterse (guard sonlandırması) bu son karakterler <b>hiçbir zaman</b> yayınlanmıyordu
+        /// — <c>ResponseStreamStarted == true</c> olduğu için canlı akış tamamlanmış sayılıyor,
+        /// tam-metin fallback'i (<c>SplitIntoDeltaChunks</c>) da devreye girmiyordu. Kayıp yalnızca
+        /// CANLI akışta (delta/TTS) oluşuyordu — turun KANONİK metni (<c>ResponseComplete</c>
+        /// payload'ı, <c>BuildFinalResultAsync</c>'ten gelir) zaten tamdı.
+        /// </para>
+        ///
+        /// <para>
+        /// TERMINATE zaten görülmüşse (<c>_cutoff == true</c>) tampon zaten boştur — bu metot
+        /// boş string döner, çift yayına yol açmaz.
+        /// </para>
+        /// </summary>
+        public string Flush()
+        {
+            if (_cutoff || _pending.Length == 0) return "";
+            var remaining = _pending.ToString();
+            _pending.Clear();
+            return remaining;
+        }
     }
 
     public TraceState StartTraceState(AgentSession? session, string query, ReasoningResult? reasoning)

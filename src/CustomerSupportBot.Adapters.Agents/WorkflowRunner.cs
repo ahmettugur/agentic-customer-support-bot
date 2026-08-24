@@ -357,6 +357,18 @@ internal sealed class WorkflowRunner : IWorkflowRunner
                 yield return new StreamEvent(StreamEventTypes.ResponseDelta, new TextDeltaPayload(chunk));
             }
         }
+        else
+        {
+            // Bulgu 1.4: TERMINATE marker'ı hiç görülmeden akış bittiyse (ör. guard/tekrar-tespiti
+            // sonlandırması) ResponseStreamFilter'ın tamponunda kalan son ≤8 karakter, bu Flush
+            // olmadan hiçbir zaman canlı akışa (delta/TTS) yansımıyordu — bkz. ResponseStreamFilter
+            // XML dokümanı. TERMINATE zaten görülmüşse Flush() no-op'tur (boş string döner).
+            var trailing = st.ResponseFilter.Flush();
+            if (!string.IsNullOrEmpty(trailing))
+            {
+                yield return new StreamEvent(StreamEventTypes.ResponseDelta, new TextDeltaPayload(trailing));
+            }
+        }
 
         // Tipli payload: bu metin turun KANONİK yanıtıdır ve delta akışından farklı olabilir
         // (delta'lar ham, bu metin temizlenmiş/yeniden yazılmış). ChatPortService ve
