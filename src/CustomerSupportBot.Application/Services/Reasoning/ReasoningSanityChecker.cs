@@ -52,7 +52,7 @@ public class ReasoningSanityChecker
     }
 
     /// <summary>
-1    /// Verilen reasoning sonucunu + çözümlenmiş entity bağlamını kontrol eder.
+    /// Verilen reasoning sonucunu + çözümlenmiş entity bağlamını kontrol eder.
     /// Tüm kuralları uygular ve bulunan issue'ları liste olarak döner.
     /// </summary>
     public List<ReasoningIssue> Check(ReasoningResult result, VerifiedEntities verified)
