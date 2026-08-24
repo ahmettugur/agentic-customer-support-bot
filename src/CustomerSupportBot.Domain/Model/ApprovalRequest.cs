@@ -90,6 +90,27 @@ public class ApprovalRequest
     /// <summary>Parametreler — admin'in kararı verirken göreceği veri.</summary>
     public Dictionary<string, object?> Parameters { get; set; } = new();
 
+    /// <summary>
+    /// Aynı session+tool+parametre kombinasyonu için mükerrer talep oluşumunu DB seviyesinde
+    /// engelleyen kanonik imza (bkz. <c>ApprovalGateService.BuildParamSignature</c>).
+    ///
+    /// <para>
+    /// Eskiden mükerrer kontrolü yalnızca <c>IApprovalQueue.GetPending()</c>'in (süreç-içi
+    /// cache) taranmasıyla yapılıyordu — kontrol ile yazma arasında (TOCTOU) ve çok-pod'lu
+    /// kurulumda (cache eksik olabilir) bir yarış vardı: aynı tool çağrısı için iki ayrı onay
+    /// kaydı oluşabiliyor, admin ikisini de onaylarsa gerçek iş (sipariş iptali/iadesi vb.)
+    /// İKİ KEZ yürütülüyordu. Bu alan + DB'deki kısmi unique index (yalnızca
+    /// <c>Status='Pending'</c> satırlarda), yaratmayı gerçekten atomik hale getirir: ikinci
+    /// INSERT veritabanı tarafından reddedilir, çağıran kazanan kaydı geri alır.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>SessionId</c> yoksa (kimliksiz akış — A2A/realtime) dedup uygulanmaz, bu alan
+    /// <c>null</c> kalır.
+    /// </para>
+    /// </summary>
+    public string? ParamSignature { get; set; }
+
     /// <summary>Kullanıcı sorusu (bağlam için).</summary>
     public string? UserQuery { get; set; }
 

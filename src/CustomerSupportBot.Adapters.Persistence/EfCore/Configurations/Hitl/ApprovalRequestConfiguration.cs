@@ -47,6 +47,10 @@ internal sealed class ApprovalRequestConfiguration : IEntityTypeConfiguration<Ap
             .HasColumnType("jsonb")
             .IsRequired();
 
+        builder.Property(a => a.ParamSignature)
+            .HasColumnName("param_signature")
+            .HasMaxLength(1000);
+
         builder.Property(a => a.UserQuery)
             .HasColumnName("user_query");
 
@@ -108,5 +112,14 @@ internal sealed class ApprovalRequestConfiguration : IEntityTypeConfiguration<Ap
         // dikkat çekmesi gereken kayıtlar bunlar.
         builder.HasIndex(a => new { a.Status, a.ExecutionStatus })
             .HasDatabaseName("ix_approvals_status_execution_status");
+
+        // Mükerrer onay talebi oluşumunu DB seviyesinde İMKANSIZ kılar (bkz.
+        // ApprovalRequest.ParamSignature XML dokümanı) — yalnızca bekleyen (Pending) satırlar
+        // üzerinde kısmi (partial) bir unique index: karara bağlanmış eski kayıtlar veya
+        // ParamSignature'ı null olan (SessionId'siz/kimliksiz akış) satırlar kısıta girmez.
+        builder.HasIndex(a => new { a.SessionId, a.ToolName, a.ParamSignature })
+            .HasDatabaseName("ux_approvals_pending_dedup")
+            .IsUnique()
+            .HasFilter("status = 'Pending' AND param_signature IS NOT NULL");
     }
 }

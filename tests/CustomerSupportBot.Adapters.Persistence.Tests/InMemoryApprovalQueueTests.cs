@@ -115,4 +115,102 @@ public class InMemoryApprovalQueueTests
         var result = await q.AwaitDecisionAsync("a1", TestContext.Current.CancellationToken);
         result.Status.Should().Be(ApprovalStatus.Approved);
     }
+
+    // ─── Bulgu 1.1: mükerrer talep engelleme atomik olmalı ──────────────────────
+
+    [Fact]
+    public async Task CreateAsync_SameSessionToolAndSignature_ReturnsExistingPendingInstead()
+    {
+        var q = NewQueue();
+        var first = await q.CreateAsync(new ApprovalRequest
+        {
+            Id = "a1",
+            SessionId = "s1",
+            ToolName = "order_cancel_tool",
+            ParamSignature = "{\"orderId\":1030}"
+        }, TestContext.Current.CancellationToken);
+
+        var second = await q.CreateAsync(new ApprovalRequest
+        {
+            Id = "a2",
+            SessionId = "s1",
+            ToolName = "order_cancel_tool",
+            ParamSignature = "{\"orderId\":1030}"
+        }, TestContext.Current.CancellationToken);
+
+        second.Id.Should().Be(first.Id,
+            "aynı session+tool+parametre için ikinci çağrı yeni kayıt YARATMAMALI, mevcudu döndürmeli");
+    }
+
+    [Fact]
+    public async Task CreateAsync_ConcurrentDuplicates_OnlyOneEntrySurvives()
+    {
+        var q = NewQueue();
+        const string sessionId = "s-concurrent";
+        const string sig = "{\"orderId\":1030}";
+
+        var barrier = new Barrier(10);
+        var tasks = Enumerable.Range(0, 10).Select(i => Task.Run(async () =>
+        {
+            barrier.SignalAndWait(TimeSpan.FromSeconds(5));
+            return await q.CreateAsync(new ApprovalRequest
+            {
+                Id = $"race-{i}",
+                SessionId = sessionId,
+                ToolName = "order_cancel_tool",
+                ParamSignature = sig
+            }, TestContext.Current.CancellationToken);
+        })).ToArray();
+
+        var results = await Task.WhenAll(tasks);
+
+        results.Select(r => r.Id).Distinct().Should().ContainSingle(
+            "10 eşzamanlı istekten yalnızca biri gerçek bir kayıt yaratmalı, diğer 9'u onu geri almalı");
+    }
+
+    [Fact]
+    public async Task CreateAsync_DifferentSignature_CreatesSeparateEntry()
+    {
+        var q = NewQueue();
+        var first = await q.CreateAsync(new ApprovalRequest
+        {
+            Id = "a1",
+            SessionId = "s1",
+            ToolName = "order_cancel_tool",
+            ParamSignature = "{\"orderId\":1030}"
+        }, TestContext.Current.CancellationToken);
+
+        var second = await q.CreateAsync(new ApprovalRequest
+        {
+            Id = "a2",
+            SessionId = "s1",
+            ToolName = "order_cancel_tool",
+            ParamSignature = "{\"orderId\":1042}"
+        }, TestContext.Current.CancellationToken);
+
+        second.Id.Should().Be("a2", "farklı sipariş numarası farklı işlemdir, dedup'a takılmamalı");
+    }
+
+    [Fact]
+    public async Task CreateAsync_NullParamSignature_NeverDedupes()
+    {
+        var q = NewQueue();
+        var first = await q.CreateAsync(new ApprovalRequest
+        {
+            Id = "a1",
+            SessionId = null,
+            ToolName = "order_cancel_tool",
+            ParamSignature = null
+        }, TestContext.Current.CancellationToken);
+
+        var second = await q.CreateAsync(new ApprovalRequest
+        {
+            Id = "a2",
+            SessionId = null,
+            ToolName = "order_cancel_tool",
+            ParamSignature = null
+        }, TestContext.Current.CancellationToken);
+
+        second.Id.Should().Be("a2");
+    }
 }

@@ -35,6 +35,7 @@ using CustomerSupportBot.Domain.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
@@ -85,6 +86,37 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         _entries[request.Id] = entry;
 
         try { await InsertAsync(request, ct).ConfigureAwait(false); }
+        catch (Exception ex) when (IsPendingDedupViolation(ex))
+        {
+            // Bu pod kaybetti — başka bir pod (ya da aynı pod'daki eşzamanlı bir çağrı) aynı
+            // session+tool+parametre kombinasyonu için AYNI ANDA bir kayıt oluşturdu ve DB'deki
+            // kısmi unique index (ux_approvals_pending_dedup) ikinci INSERT'i reddetti. Yarışı
+            // kazanan kaydı bulup onu döneriz — çağıran (ApprovalGateService) hangi pod'un
+            // kazandığından habersiz, her zaman geçerli bir ApprovalRequest alır.
+            _entries.TryRemove(request.Id, out _);
+
+            var existing = await FindPendingDuplicateAsync(
+                request.SessionId!, request.ToolName, request.ParamSignature!, ct).ConfigureAwait(false);
+
+            if (existing != null)
+            {
+                // TryAdd — indeksleyici DEĞİL (bkz. HydrateAsync XML dokümanı): Redis
+                // "csbot:approval:created" mesajı bu satırı zaten cache'e eklemiş olabilir.
+                _entries.TryAdd(existing.Id, new QueueEntry(existing, tcs: null));
+                _logger.LogInformation(
+                    "[HITL] Mükerrer onay talebi DB kısıtınca engellendi — mevcut kayıt kullanılıyor. "
+                  + "session={Session} tool={Tool} existingId={ExistingId}",
+                    request.SessionId, request.ToolName, existing.Id);
+                return existing;
+            }
+
+            // Kısıt ihlal edildi ama satır artık bulunamıyor — muhtemelen tam bu sırada karara
+            // bağlandı (Pending'den çıktı). Son derece dar bir pencere; olağan hata yolu yeterli.
+            _logger.LogWarning(ex,
+                "[HITL] Approval INSERT DB kısıtına takıldı ama eşleşen bekleyen kayıt bulunamadı. Id={Id}",
+                request.Id);
+            throw ExceptionTranslator.Translate(ex, $"Approval oluşturulamadı: {request.Id}");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[HITL] Approval INSERT başarısız. Id={Id}", request.Id);
@@ -467,6 +499,36 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         await ctx.SaveChangesAsync(ct);
     }
 
+    private const string PendingDedupIndexName = "ux_approvals_pending_dedup";
+
+    /// <summary>
+    /// <c>ux_approvals_pending_dedup</c> kısmi unique index'inin ihlal edildiğini tespit eder.
+    /// Constraint adına göre daraltılır ki başka bir unique ihlali (ör. Id çakışması,
+    /// pratikte imkânsıza yakın) yanlışlıkla "mükerrer talep" sanılıp yutulmasın.
+    /// </summary>
+    private static bool IsPendingDedupViolation(Exception ex) =>
+        ex is DbUpdateException { InnerException: PostgresException { SqlState: "23505" } pg }
+            && string.Equals(pg.ConstraintName, PendingDedupIndexName, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Aynı session+tool+parametre imzasıyla hâlâ bekleyen (Pending) kaydı DB'den okur —
+    /// <see cref="CreateAsync"/>'in kısıt ihlali sonrası yarışı kazanan kaydı bulması için.
+    /// </summary>
+    private async Task<ApprovalRequest?> FindPendingDuplicateAsync(
+        string sessionId, string toolName, string paramSignature, CancellationToken ct)
+    {
+        var pending = nameof(ApprovalStatus.Pending);
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        var entity = await ctx.Approvals
+            .Where(a => a.SessionId == sessionId
+                     && a.ToolName == toolName
+                     && a.ParamSignature == paramSignature
+                     && a.Status == pending)
+            .OrderBy(a => a.RequestedAt)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : ToDomain(entity);
+    }
+
     /// <summary>
     /// Kararı DB'de KOŞULLU olarak yazar: yalnızca satır hâlâ Pending ise. Etkilenen satır
     /// sayısını döner (1 = bu pod kararı sahiplendi, 0 = başkası önce davrandı).
@@ -569,6 +631,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         ToolName = req.ToolName,
         AgentName = req.AgentName,
         ParametersJson = System.Text.Json.JsonSerializer.Serialize(req.Parameters),
+        ParamSignature = req.ParamSignature,
         UserQuery = req.UserQuery,
         Justification = req.Justification,
         RequestedAt = req.RequestedAt,
@@ -602,6 +665,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
             ToolName = e.ToolName,
             AgentName = e.AgentName,
             Parameters = parameters,
+            ParamSignature = e.ParamSignature,
             UserQuery = e.UserQuery,
             Justification = e.Justification,
             RequestedAt = e.RequestedAt,

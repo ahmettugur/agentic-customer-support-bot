@@ -17,6 +17,9 @@ public sealed class ApprovalRequestEntity
     /// <summary>Tool parametreleri (Dictionary) JSONB.</summary>
     public string ParametersJson { get; set; } = "{}";
 
+    /// <summary>Mükerrer talep engelleme için kanonik parametre imzası (bkz. ApprovalRequest.ParamSignature).</summary>
+    public string? ParamSignature { get; set; }
+
     public string? UserQuery { get; set; }
     public string? Justification { get; set; }
     public DateTime RequestedAt { get; set; }

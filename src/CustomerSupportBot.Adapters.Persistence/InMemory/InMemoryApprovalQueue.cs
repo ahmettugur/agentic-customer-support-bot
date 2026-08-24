@@ -23,6 +23,12 @@ public class InMemoryApprovalQueue : IApprovalQueue
     private readonly ILogger<InMemoryApprovalQueue> _logger;
     private const int HistoryCapacity = 200;
 
+    // CreateAsync'in "aynı session+tool+parametre için bekleyen kayıt var mı?" kontrolü ile
+    // yeni kaydı eklemesi TEK bir atomik adım olmalı (bkz. Postgres implementasyonundaki DB
+    // unique index'in aynı amacı). Bu tek-process store'da bunu sağlamanın en basit yolu bu
+    // kilit — çapraz-pod bir yarış yok, yalnızca aynı process içindeki eşzamanlı çağrılar var.
+    private readonly object _createLock = new();
+
     public event EventHandler<ApprovalRequest>? RequestCreated;
     public event EventHandler<ApprovalRequest>? RequestDecided;
 
@@ -39,12 +45,29 @@ public class InMemoryApprovalQueue : IApprovalQueue
     public Task<ApprovalRequest> CreateAsync(ApprovalRequest request, CancellationToken ct = default)
     {
         request.TimeoutSeconds = _options.TimeoutSeconds;
-        var tcs = new TaskCompletionSource<ApprovalRequest>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var entry = new QueueEntry(request, tcs);
-        _entries[request.Id] = entry;
-        _order.Enqueue(request.Id);
+        ApprovalRequest? duplicate;
+        lock (_createLock)
+        {
+            duplicate = FindPendingDuplicate(request);
+            if (duplicate is null)
+            {
+                var tcs = new TaskCompletionSource<ApprovalRequest>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                _entries[request.Id] = new QueueEntry(request, tcs);
+                _order.Enqueue(request.Id);
+            }
+        }
+
+        if (duplicate != null)
+        {
+            _logger.LogInformation(
+                "[HITL] Mükerrer onay talebi engellendi — mevcut kayıt kullanılıyor. "
+              + "session={Session} tool={Tool} existingId={ExistingId}",
+                request.SessionId, request.ToolName, duplicate.Id);
+            return Task.FromResult(duplicate);
+        }
+
         TrimHistory();
 
         _logger.LogInformation(
@@ -56,6 +79,30 @@ public class InMemoryApprovalQueue : IApprovalQueue
         catch (Exception ex) { _logger.LogWarning(ex, "RequestCreated handler failed"); }
 
         return Task.FromResult(request);
+    }
+
+    /// <summary>
+    /// Aynı session+tool+parametre imzasıyla hâlâ bekleyen (Pending) bir kayıt var mı?
+    /// SessionId veya ParamSignature yoksa (kimliksiz akış) dedup uygulanmaz — <c>null</c> döner.
+    /// Yalnızca <see cref="_createLock"/> içinden çağrılmalıdır.
+    /// </summary>
+    private ApprovalRequest? FindPendingDuplicate(ApprovalRequest request)
+    {
+        if (string.IsNullOrEmpty(request.SessionId) || string.IsNullOrEmpty(request.ParamSignature))
+            return null;
+
+        foreach (var entry in _entries.Values)
+        {
+            var r = entry.Request;
+            if (r.Status == ApprovalStatus.Pending
+                && string.Equals(r.SessionId, request.SessionId, StringComparison.Ordinal)
+                && string.Equals(r.ToolName, request.ToolName, StringComparison.Ordinal)
+                && string.Equals(r.ParamSignature, request.ParamSignature, StringComparison.Ordinal))
+            {
+                return r;
+            }
+        }
+        return null;
     }
 
     public async Task<ApprovalRequest> AwaitDecisionAsync(string id, CancellationToken ct = default)

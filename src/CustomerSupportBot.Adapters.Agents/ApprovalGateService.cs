@@ -231,18 +231,16 @@ public class ApprovalGateService
         var ctx = _contextAccessor.Context;
         var agentName = ResolveAgentName(toolName);
 
-        // Aynı session'da aynı imzalı bekleyen bir talep varsa (ör. LLM tool çağrısını
-        // tekrarladı) yenisini oluşturmak yerine mevcut kaydı döneriz — onaylandığında
-        // gerçek iş bir kez tetiklensin diye.
-        var paramSig = BuildParamSignature(parameters);
-        var existing = ctx?.SessionId is { Length: > 0 } sid
-            ? _approvalQueue.GetPending().FirstOrDefault(p =>
-                  string.Equals(p.SessionId, sid, StringComparison.Ordinal)
-               && string.Equals(p.ToolName, toolName, StringComparison.Ordinal)
-               && string.Equals(BuildParamSignature(p.Parameters), paramSig, StringComparison.Ordinal))
-            : null;
-
-        var req = existing ?? new ApprovalRequest
+        // Mükerrer talep engellemesi (ör. LLM tool çağrısını tekrarladıysa) artık burada
+        // "önce oku sonra yaz" ile YAPILMAZ — bu, kontrol ile yazma arasında (TOCTOU) ve
+        // çok-pod'lu kurulumda (GetPending() süreç-içi cache, başka pod'daki kayıt
+        // görülmeyebilir) bir yarış açıyordu: aynı işlem için iki ayrı onay kaydı oluşup
+        // admin ikisini de onayladığında gerçek iş İKİ KEZ yürütülebiliyordu. Bunun yerine
+        // her zaman CreateAsync çağrılır; dedup DB'deki kısmi unique index'te (ya da
+        // in-memory implementasyonda tek bir kilit altında) ATOMİK olarak yapılır — zaten
+        // bekleyen bir kayıt varsa CreateAsync onu geri döner, yeni kayıt oluşturmaz
+        // (bkz. ApprovalRequest.ParamSignature, PostgresApprovalQueue.CreateAsync).
+        var req = new ApprovalRequest
         {
             SessionId = ctx?.SessionId,
             CustomerId = ctx?.CustomerId,
@@ -251,11 +249,11 @@ public class ApprovalGateService
             ToolName = toolName,
             AgentName = agentName,
             Parameters = parameters,
+            ParamSignature = BuildParamSignature(parameters),
             Justification = string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName),
             TimeoutSeconds = _approvalOptions.TimeoutSeconds
         };
-        if (existing is null)
-            await _approvalQueue.CreateAsync(req);
+        req = await _approvalQueue.CreateAsync(req);
 
         return ToolResult.Pending(string.Format(WellKnown.FallbackMessages.ApprovalPending, req.Id));
     }
@@ -295,37 +293,24 @@ public class ApprovalGateService
 
         var ctx = _contextAccessor.Context;
 
-        var paramSig = BuildParamSignature(paramsDict);
-        var existing = ctx?.SessionId is { Length: > 0 } sid
-            ? _approvalQueue.GetPending().FirstOrDefault(p =>
-                  string.Equals(p.SessionId, sid, StringComparison.Ordinal)
-               && string.Equals(p.ToolName, toolName, StringComparison.Ordinal)
-               && string.Equals(BuildParamSignature(p.Parameters), paramSig, StringComparison.Ordinal))
-            : null;
-
-        ApprovalRequest req;
-        if (existing != null)
+        // Dedup artık CreateAsync içinde atomik yapılır — bkz. ExecuteWithApprovalGateAsync'teki
+        // aynı gerekçe.
+        var req = new ApprovalRequest
         {
-            req = existing;
-        }
-        else
-        {
-            req = new ApprovalRequest
-            {
-                SessionId = ctx?.SessionId,
-                TraceId = ctx?.TraceId,
-                UserQuery = ctx?.UserQuery,
-                ToolName = toolName,
-                AgentName = agentName,
-                Parameters = paramsDict,
-                // Çağıran taraf (WorkflowRunner) o an trace'te bulunan gerçek gerekçeyi
-                // (PlanningAgent rationale'ı) geçer; yoksa jenerik şablona düşülür.
-                Justification = string.IsNullOrWhiteSpace(justification)
-                    ? string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName)
-                    : justification
-            };
-            await _approvalQueue.CreateAsync(req, ct);
-        }
+            SessionId = ctx?.SessionId,
+            TraceId = ctx?.TraceId,
+            UserQuery = ctx?.UserQuery,
+            ToolName = toolName,
+            AgentName = agentName,
+            Parameters = paramsDict,
+            ParamSignature = BuildParamSignature(paramsDict),
+            // Çağıran taraf (WorkflowRunner) o an trace'te bulunan gerçek gerekçeyi
+            // (PlanningAgent rationale'ı) geçer; yoksa jenerik şablona düşülür.
+            Justification = string.IsNullOrWhiteSpace(justification)
+                ? string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName)
+                : justification
+        };
+        req = await _approvalQueue.CreateAsync(req, ct);
 
         try
         {
@@ -376,6 +361,12 @@ public class ApprovalGateService
     /// karşılığı aynı metni üretir.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// DB'deki <c>param_signature</c> kolonunun sınırı (bkz. ApprovalRequestConfiguration) —
+    /// bunu aşan bir imza dedup için kullanılamaz, aşağıda benzersiz bir imzaya düşülür.
+    /// </summary>
+    private const int MaxParamSignatureLength = 1000;
+
     private static string BuildParamSignature(IReadOnlyDictionary<string, object?> parameters)
     {
         if (parameters.Count == 0) return string.Empty;
@@ -384,7 +375,8 @@ public class ApprovalGateService
         var ordered = new SortedDictionary<string, object?>(StringComparer.Ordinal);
         foreach (var kv in parameters) ordered[kv.Key] = kv.Value;
 
-        try { return JsonSerializer.Serialize(ordered); }
+        string signature;
+        try { signature = JsonSerializer.Serialize(ordered); }
         catch (NotSupportedException)
         {
             // Serileştirilemeyen bir değer (ör. beklenmeyen bir CLR tipi) imza üretimini
@@ -393,6 +385,13 @@ public class ApprovalGateService
             // "mükerrer" sayılıp yanlışlıkla bastırılmaz, yalnızca kendi kaydını alır.
             return Guid.NewGuid().ToString("N");
         }
+
+        // Aynı gerekçeyle: alışılmadık derecede büyük bir parametre kümesi (ör. çok satırlı
+        // sipariş) DB kolon sınırını aşarsa dedup'tan tamamen çıkarılır, yoksa iki FARKLI
+        // büyük talep aynı (kesilmiş) imzaya sahipmiş gibi yanlışlıkla birleştirilebilirdi.
+        return signature.Length <= MaxParamSignatureLength
+            ? signature
+            : Guid.NewGuid().ToString("N");
     }
 
 }
