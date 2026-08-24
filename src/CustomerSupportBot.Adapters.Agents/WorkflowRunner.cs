@@ -154,6 +154,23 @@ internal sealed class WorkflowRunner : IWorkflowRunner
                 new TimeoutException($"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı."),
                 "RunAsync workflow finalization timeout.");
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Eskiden burada yalnızca timeout kaynaklı OperationCanceledException yakalanıyordu.
+            // BuildFinalResultAsync'ten (TurnFinalizer.FinalizeAsync, RewriteRoutingMessageAsync
+            // vb.) gelen başka bir hata (ör. DB yazma hatası) ham olarak dışarı sızıyordu VE
+            // trace hiç kapatılmıyordu — StartTraceState ile açılan kayıt "başlatılmış ama
+            // kapatılmamış" kalıyordu (bkz. bulgu 1.2). RunStreamingAsync'in eşdeğer
+            // finalizationError bloğuyla aynı davranışa hizalandı: trace kapatılır, çağırana
+            // ExceptionTranslator'dan geçmiş güvenli bir mesaj fırlatılır. Çağıranın kendi
+            // iptali (ct.IsCancellationRequested, yukarıdaki timeout dalına girmeyen) bu dala
+            // hiç girmez — streaming'deki simetrik davranışla tutarlı olarak ham
+            // OperationCanceledException olarak yukarı yayılmaya devam eder.
+            _traceStore.Complete(st.Trace.TraceId,
+                terminationReason: WellKnown.Termination.ReasonError,
+                error: ex.Message);
+            throw ExceptionTranslator.Translate(ex, "RunAsync workflow finalizasyon hatası.");
+        }
     }
 
     public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(

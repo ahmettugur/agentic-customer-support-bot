@@ -58,7 +58,7 @@ public async Task<string> RunAsync(
 - **Ne işe yarar?:** Tekil bir sorguyu MAF iş akışında koşturur ve nihai yanıt metnini döndürür.
 - **İç Mantığı:**
   1. `_guards.TimeoutSeconds` süresiyle zaman aşımı `CancellationTokenSource`'u oluşturulur ve `ct` ile bağlanır (`effectiveCt`).
-  2. `_messageBuilder.BuildWorkflowMessagesAsync` çağrılarak sistem, kullanıcı, ID ipucu ve reasoning mesajları derlenir.
+  2. `_messageBuilder.BuildWorkflowMessagesAsync` çağrılarak sistem, kullanıcı ve reasoning mesajları derlenir. Bu adım için `catch` artık yalnızca timeout'a değil (eski davranış), genel bir hataya da karşı korumalıdır — `ExceptionTranslator.Translate` ile çevrilip fırlatılır (bkz. `ExceptionTranslator.md`'deki 🐞 notu).
   3. `_traceProcessor.StartTraceState` ile yeni bir `TraceState` başlatılır; tahmini token sayısı ve bağlam parçaları trace'e yazılır.
   4. `_factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent)` ile taze iş akışı oluşturulur.
   5. `InProcessExecution.RunStreamingAsync` başlatılır ve ilk tur tetikleme belirteci (`TurnToken(emitEvents: true)`) gönderilir.
@@ -72,7 +72,7 @@ public async Task<string> RunAsync(
      > bir güvenlik ağı. Güncel bloklamayan akış için bkz.
      > [ApprovalGateService.md](ApprovalGateService.md#6-executewithapprovalgateasync-private).
   7. Döngü bittiğinde `FinalizeAbnormalTerminationAsync` ile anormal sonlanma (Timeout, Cancelled, Error) denetlenir.
-  8. `BuildFinalResultAsync` çağrılarak sonuç metni oluşturulur ve `_finalizer.FinalizeTurnAsync` ile tur kapatılır.
+  8. `BuildFinalResultAsync` çağrılarak sonuç metni oluşturulur ve (o metodun içinde) `_finalizer.FinalizeAsync` ile tur kapatılır. Bu çağrının çevresindeki `catch` de (7. adımdakiyle aynı sebeple) yalnızca timeout'a değil genel hataya karşı da korumalıdır — eskiden başka bir hata (ör. `TurnFinalizer.FinalizeAsync`'ten gelen bir DB yazma hatası) hem trace'i hiç kapatmadan (`StartTraceState` ile açılan kayıt "başlatılmış ama kapatılmamış" kalıyordu) hem de `ExceptionTranslator`'a hiç uğramadan ham olarak dışarı sızıyordu (bkz. bulgu 1.2). Artık `RunStreamingAsync`'in eşdeğer `finalizationError` bloğuyla aynı davranışa hizalı: trace kapatılır, çağırana çevrilmiş güvenli bir mesaj fırlatılır.
 
 ### 2. `RunStreamingAsync`
 ```csharp
