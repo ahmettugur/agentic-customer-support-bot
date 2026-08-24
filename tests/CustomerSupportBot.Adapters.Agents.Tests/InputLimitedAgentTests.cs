@@ -112,6 +112,42 @@ public class InputLimitedAgentTests
         string.Concat(updates.Select(u => u.Text)).Should().Contain("çok uzun");
     }
 
+    // ─── Bulgu 2.3: DataContent karakter bütçesine katılmalı ────────────────────
+
+    [Fact]
+    public async Task Run_WithOversizedDataContent_DoesNotReachTheInnerAgent()
+    {
+        // Eskiden yalnızca TextContent sayılıyordu — büyük bir base64 yükü (DataContent)
+        // MaxMessageChars'ı tamamen baypas edip LLM'e ulaşabiliyordu.
+        var (agent, llm) = Build(maxChars: 100);
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        var bigPayload = new byte[500]; // data: URI'ye çevrilince kesinlikle >100 karakter eder
+        var message = new ChatMessage(ChatRole.User, [new DataContent(bigPayload, "application/octet-stream")]);
+
+        var response = await agent.RunAsync(
+            [message], session, cancellationToken: TestContext.Current.CancellationToken);
+
+        llm.Calls.Should().Be(0,
+            "büyük bir DataContent, karakter bütçesini TextContent kadar aşabilmeli");
+        response.Text.Should().Contain("çok uzun");
+    }
+
+    [Fact]
+    public async Task Run_WithSmallDataContent_PassesThrough()
+    {
+        var (agent, llm) = Build(maxChars: 10_000);
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        var smallPayload = new byte[8];
+        var message = new ChatMessage(ChatRole.User, [new DataContent(smallPayload, "image/png")]);
+
+        var response = await agent.RunAsync(
+            [message], session, cancellationToken: TestContext.Current.CancellationToken);
+
+        llm.Calls.Should().Be(1, "küçük bir ek meşru kullanımı engellememeli");
+    }
+
     [Fact]
     public async Task Run_WithNormalInput_PassesThrough()
     {

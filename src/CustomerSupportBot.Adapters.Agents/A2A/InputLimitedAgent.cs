@@ -84,7 +84,7 @@ public sealed class InputLimitedAgent(AIAgent inner, A2AOptions options) : Deleg
             foreach (var content in message.Contents)
             {
                 parts++;
-                if (content is TextContent text) chars += text.Text?.Length ?? 0;
+                chars += ContentCharWeight(content);
             }
 
             // Contents boş ama Text dolu olabilen taşıyıcılar için emniyet.
@@ -105,4 +105,28 @@ public sealed class InputLimitedAgent(AIAgent inner, A2AOptions options) : Deleg
 
         return null;
     }
+
+    /// <summary>
+    /// Bir içerik parçasının karakter bütçesine katkısını ölçer.
+    ///
+    /// <para>
+    /// 🐞 <b>Eskiden yalnızca <see cref="TextContent"/> sayılıyordu</b> — <see cref="DataContent"/>
+    /// (base64 kodlu resim/dosya eki) yalnızca <c>parts</c> sayacına giriyor, <c>chars</c>'a hiç
+    /// katkı yapmıyordu. Sonuç: metin bütçesi (<c>MaxMessageChars</c>, varsayılan 4000) tamamen
+    /// baypas edilip, çok daha büyük bir base64 yükü LLM'e gidiyordu — parça sayısı sınırı
+    /// (<c>MaxParts</c>) tek başına bunu engellemez, çünkü tek bir büyük <c>DataContent</c> tek
+    /// bir parçadır. <see cref="DataContent.Uri"/> her zaman geçerli bir data URI string'idir
+    /// (ham bayt dizisinden oluşturulmuş olsa bile) — bu yüzden uzunluğu, gerçek yükün metin
+    /// eşdeğeri bir yaklaşık ölçüsü olarak kullanılabilir. Kestrel gövde sınırı
+    /// (<c>A2AOptions.MaxRequestBytes</c>, varsayılan 64 KB) zaten ayrı bir savunma katmanıdır —
+    /// bu ikisi birbirinin YERİNE geçmez, tamamlar (bkz. sınıf XML dokümanı).
+    /// </para>
+    /// </summary>
+    private static int ContentCharWeight(AIContent content) => content switch
+    {
+        TextContent text => text.Text?.Length ?? 0,
+        DataContent data => data.Uri.Length,
+        UriContent uri => uri.Uri.ToString().Length,
+        _ => 0
+    };
 }
