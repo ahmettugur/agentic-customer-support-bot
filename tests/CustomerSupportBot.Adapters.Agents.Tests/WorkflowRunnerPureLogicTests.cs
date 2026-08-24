@@ -57,6 +57,31 @@ public class WorkflowRunnerPureLogicTests
         emitted.Should().NotContain("TERM");
     }
 
+    // Bulgu 4.4: eşleşme artık case-sensitive (Ordinal) — CustomerSupportChatManager.
+    // ShouldTerminateAsync'in kendisiyle ve response-agent.md'nin "her zaman büyük harf"
+    // sözleşmesiyle tutarlı.
+
+    [Fact]
+    public void ResponseStreamFilter_LowercaseTerminateInNaturalText_IsNotTreatedAsMarker()
+    {
+        var filter = NewFilter();
+        // Meşru bir yanıt metninde küçük harfli "terminate" geçse bile (ör. teknik bir
+        // terim) bu marker sanılmamalı — gerçek marker her zaman büyük harfle üretilir.
+        var emitted = Feed(filter, "Aboneliğinizi terminate etmek için müşteri hizmetlerini arayın.");
+
+        emitted.Should().Contain("terminate",
+            "küçük harfli kullanım artık marker sayılmamalı, metin olduğu gibi akmalı");
+    }
+
+    [Fact]
+    public void ResponseStreamFilter_UppercaseMarker_StillCutsOff()
+    {
+        var filter = NewFilter();
+        var emitted = Feed(filter, "Cevabınız burada. TERMINATE: reason=completed");
+
+        emitted.Should().Be("Cevabınız burada. ");
+    }
+
     [Fact]
     public void ResponseStreamFilter_AfterCutoff_SuppressesFurtherChunks()
     {

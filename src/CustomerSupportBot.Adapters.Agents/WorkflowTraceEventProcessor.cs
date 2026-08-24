@@ -57,7 +57,11 @@ internal sealed class WorkflowTraceEventProcessor
     /// </summary>
     internal sealed class ResponseStreamFilter
     {
-        private const string Marker = "TERMINATE";
+        // WellKnown.Termination.Marker'ın kopyası DEĞİL — doğrudan ona referans. Aynı sabitin
+        // iki ayrı yerde elle tutulması, biri değişip diğeri değişmediğinde sessizce
+        // senkronsuz kalırdı (bu proje genelinde tekrarlanan bir tema — bkz. WellKnown.cs'in
+        // kendi "tek doğruluk kaynağı" ilkesi).
+        private const string Marker = WellKnown.Termination.Marker;
         private readonly StringBuilder _pending = new();
         private bool _cutoff;
 
@@ -68,7 +72,17 @@ internal sealed class WorkflowTraceEventProcessor
             _pending.Append(chunk);
             var text = _pending.ToString();
 
-            var idx = text.IndexOf(Marker, StringComparison.OrdinalIgnoreCase);
+            // Bulgu 4.4: eskiden OrdinalIgnoreCase kullanılıyordu. response-agent.md prompt
+            // sözleşmesi marker'ı HER ZAMAN büyük harfle ürettirir ("TERMINATE: reason=...")
+            // ve CustomerSupportChatManager.ShouldTerminateAsync (gerçek tur sonlandırma kararı)
+            // zaten Ordinal (büyük/küçük harf duyarlı) karşılaştırma kullanıyor — ikisi
+            // senkronsuzdu. Case-insensitive eşleşme, modelin yanıt metninde doğal biçimde
+            // geçen küçük harfli "terminate" (ör. bir İngilizce alıntı kelime) gibi bir kelimeyi
+            // yanlışlıkla marker sanıp CANLI akışı (delta/TTS) o noktada kalıcı olarak
+            // kesebiliyordu — turun kendisi (ShouldTerminateAsync case-sensitive olduğu için)
+            // normal devam ederken. Artık ikisi de Ordinal; tek doğruluk kaynağı aynı zamanda
+            // tek karşılaştırma kuralı da olmuş oldu.
+            var idx = text.IndexOf(Marker, StringComparison.Ordinal);
             if (idx >= 0)
             {
                 _cutoff = true;
@@ -128,14 +142,21 @@ internal sealed class WorkflowTraceEventProcessor
         return new TraceState { Trace = trace };
     }
 
-    private static readonly List<StreamEvent> NoEvents = new();
+    // Bulgu 3.6: eskiden `List<StreamEvent>` idi — paylaşılan (tek örnek, tüm çağrılar arası
+    // ortak) mutable bir liste. ApplyTraceEvent'in dönüş tipi de List<StreamEvent> olduğu için
+    // hiçbir şey bir çağıranın (bugün yok, ama derleyici bunu ENGELLEMİYORDU) döndürülen
+    // NoEvents üzerinde .Add(...) çağırmasını durdurmuyordu — öyle bir çağrı olsaydı, bu
+    // singleton'ı process ömrü boyunca (tüm turlar, tüm session'lar için) kalıcı olarak
+    // bozardı. Array.Empty<StreamEvent>() + IReadOnlyList<StreamEvent> dönüş tipiyle bu
+    // yapısal olarak imkânsız hale getirildi.
+    private static readonly IReadOnlyList<StreamEvent> NoEvents = Array.Empty<StreamEvent>();
 
     /// <summary>
     /// Bir workflow event'inin trace yan etkilerini uygular ve varsa bu event'ten
     /// kaynaklanan (boş olabilir) stream event listesini döner. Çağıran taraf streaming
     /// değilse (RunAsync) dönüş değerini yok sayabilir.
     /// </summary>
-    public List<StreamEvent> ApplyTraceEvent(TraceState st, WorkflowEvent evt)
+    public IReadOnlyList<StreamEvent> ApplyTraceEvent(TraceState st, WorkflowEvent evt)
     {
         switch (evt)
         {

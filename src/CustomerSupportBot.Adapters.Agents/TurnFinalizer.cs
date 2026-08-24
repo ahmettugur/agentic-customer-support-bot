@@ -114,7 +114,8 @@ internal sealed class TurnFinalizer
         await UpdateCustomerProfileAsync(session, intent, query, aggregateResult, ct);
     }
 
-    private static void PopulateAgentVisitOutputs(ReasoningTrace trace, string finalResult)
+    /// <summary>internal — bkz. WorkflowRunnerPureLogicTests deseni: saf mantık, doğrudan testlenebilir.</summary>
+    internal static void PopulateAgentVisitOutputs(ReasoningTrace trace, string finalResult)
     {
         const int MaxLen = 1500;
         static string Truncate(string s) => s.Length <= MaxLen ? s : s[..MaxLen] + "…";
@@ -124,23 +125,36 @@ internal sealed class TurnFinalizer
             if (!string.IsNullOrWhiteSpace(visit.Output)) continue;
 
             var name = visit.AgentName ?? "";
-            var baseName = name.Split('_', 2)[0];
 
             string? output = null;
 
-            if (baseName.StartsWith("Planning", StringComparison.OrdinalIgnoreCase) && trace.Planning != null)
+            // Bulgu 4.5: eskiden `name.Split('_', 2)[0]` ile bir "temel ad" çıkarılıp bu
+            // sabit "Planning"/"Response" string literalleriyle ve altta specialist eşleşmesinde
+            // TERS yönde (s.AgentName.StartsWith(baseName, ...)) karşılaştırılıyordu. Codebase'in
+            // kendi kurulu deseni (bkz. WorkflowResponseExtractor.ExtractSpecialistReasonings)
+            // TERSİNE yönlü çalışır: (muhtemelen suffix'li) ham değerin TEMİZ
+            // WellKnown.AgentNames sabitiyle mi BAŞLADIĞINA bakılır, temiz sabit asla split
+            // edilmez. Aynı desene hizalandı — hem string literal (WellKnown.AgentNames.Planning/
+            // .Response) hem karşılaştırma yönü. Not: bu, K3 analizinin işaret ettiği "gelecekte
+            // ajan adı '_' içerirse kırılır" riskine karşı bir SAĞLAMLAŞTIRMA — bugün gerçek
+            // ajan adı kümesinde ('_' içermeyen WellKnown.AgentNames sabitleri) davranışı
+            // değiştirmez, mutasyon testinde de bu yüzden gözlemlenebilir bir fark çıkmadı
+            // (kurulabilecek her makul senaryoda eski/yeni kod aynı sonucu üretiyor).
+            if (name.StartsWith(WellKnown.AgentNames.Planning, StringComparison.OrdinalIgnoreCase) && trace.Planning != null)
             {
                 output = JsonSerializer.Serialize(trace.Planning, PrettyJson);
             }
-            else if (baseName.StartsWith("Response", StringComparison.OrdinalIgnoreCase))
+            else if (name.StartsWith(WellKnown.AgentNames.Response, StringComparison.OrdinalIgnoreCase))
             {
                 output = finalResult;
             }
             else if (trace.SpecialistReasonings.Count > 0)
             {
+                // s.AgentName her zaman TEMİZ bir WellKnown.AgentNames değeridir (bkz.
+                // ExtractSpecialistReasonings — SpecialistReasoningParser.TryParse'a çağıran
+                // tarafından çözülmüş 'matchedName' geçirilir, ham executor id değil).
                 var matching = trace.SpecialistReasonings
-                    .Where(s => string.Equals(s.AgentName, baseName, StringComparison.OrdinalIgnoreCase)
-                             || s.AgentName.StartsWith(baseName, StringComparison.OrdinalIgnoreCase))
+                    .Where(s => name.StartsWith(s.AgentName, StringComparison.OrdinalIgnoreCase))
                     .ToList();
                 if (matching.Count > 0)
                 {

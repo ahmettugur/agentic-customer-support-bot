@@ -72,8 +72,9 @@ public async Task FinalizeAggregateTurnAsync(
 - **Ne işe yarar?:** Compound bir sorgunun tüm alt görevleri bittiğinde tur bazlı yan etkileri bir kez yazar.
 - **İç Mantığı:** Kullanıcının orijinal sorusunu (`query`) ve birleşik yanıtını (`aggregateResult`) alarak tek bir episodik bellek kaydı oluşturur ve müşteri profilini 1 tur ilerletir.
 
-### 3. `PopulateAgentVisitOutputs` (Private Static)
+### 3. `PopulateAgentVisitOutputs` (Internal Static)
 - **Ne işe yarar?:** `ReasoningTrace.AgentVisits` koleksiyonundaki her bir ziyaret kaydını inceler; Planning için `trace.Planning` JSON'unu, uzmanlar için `trace.SpecialistReasonings` JSON'unu, ResponseAgent için ise nihai metni ziyaret çıktısı olarak yazar (uzun metinler 1500 karakterle kırpılır).
+- 🐞 **Eşleşme mantığı değişti (bulgu 4.5).** Eskiden `visit.AgentName.Split('_', 2)[0]` ile bir "temel ad" çıkarılıp sabit `"Planning"`/`"Response"` string literalleriyle ve specialist eşleşmesinde TERS yönde (`s.AgentName.StartsWith(baseName, ...)`) karşılaştırılıyordu — bu, gelecekte bir ajan adı `_` içerirse kırılabilirdi. `WorkflowResponseExtractor.ExtractSpecialistReasonings`'in kurulu deseniyle hizalandı: split YOK, doğrudan tam `visit.AgentName` üzerinden `WellKnown.AgentNames.Planning`/`.Response` sabitleriyle ve specialist eşleşmesinde `name.StartsWith(s.AgentName, ...)` yönünde karşılaştırma (çünkü `s.AgentName` her zaman temiz bir `WellKnown.AgentNames` değeridir, ham executor id değil). Test edilebilirlik için `private` yerine `internal` yapıldı — bkz. `TurnFinalizerPureLogicTests`.
 
 ## Bağımlılıklar
 
