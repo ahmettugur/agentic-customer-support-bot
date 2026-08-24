@@ -97,7 +97,9 @@ public string GetWorkflowDiagram()
 - **Ne işe yarar?:** `_factory.CreateWorkflow().ToMermaidString()` çağrısıyla iş akışının Mermaid diyagramını üretir.
 
 ### 4. `EnumerateWorkflowEventsSafely` (Private)
-- **Ne işe yarar?:** MAF olay akışını dinlerken fırlatılabilecek bağlantı veya zaman aşımı istisnalarını güvenli şekilde yakalar ve döngüyü kontrollü şekilde sonlandırır.
+- **Ne işe yarar?:** MAF olay akışını dinlerken fırlatılabilecek bağlantı veya zaman aşımı istisnalarını güvenli şekilde yakalar ve döngüyü kontrollü şekilde sonlandırır. Yakalanan **gerçek `Exception` nesnesini** döner (`(WorkflowEvent? evt, Exception? error)`) — eskiden yalnızca `ex.Message` taşınıyordu, bu yüzden çağıranlar bunu hiçbir zaman [ExceptionTranslator](ExceptionTranslator.md)'dan geçiremiyordu ve `RunStreamingAsync` bu ham metni doğrudan istemciye gönderiyordu (bkz. `ExceptionTranslator.md`'deki 🐞 notu).
+
+  `RunAsync`/`RunStreamingAsync`'teki `workflowError` değişkeni ve `FinalizeAbnormalTerminationAsync`'in döndürdüğü `RunOutcome.Error` de aynı sebeple `string?` yerine `Exception?` taşır. Hata yolunda: **trace'e** (`_traceStore.Complete(..., error: ...)`) ham `exception.Message` yazılır (admin/debug için); **istemciye** (`RunAsync`'te `throw`, `RunStreamingAsync`'te `yield return StreamEvent.Error`) her zaman `ExceptionTranslator.Translate(ex, sabitContext).Message` gönderilir.
 
 ### 5. `BuildFinalResultAsync` (Private)
 - **Ne işe yarar?:** İş akışının çıktısını [WorkflowResponseExtractor](WorkflowResponseExtractor.md) ile analiz eder, uzman JSON'larını ayıklar ve kullanıcıya gösterilecek temiz metni derler.

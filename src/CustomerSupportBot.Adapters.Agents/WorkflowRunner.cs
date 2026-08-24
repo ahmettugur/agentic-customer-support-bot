@@ -79,6 +79,15 @@ internal sealed class WorkflowRunner : IWorkflowRunner
                 new TimeoutException($"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı."),
                 "RunAsync workflow mesaj hazırlığı timeout.");
         }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Eskiden burada genel bir catch yoktu — yalnızca timeout kaynaklı
+            // OperationCanceledException yakalanıyordu. BuildWorkflowMessagesAsync'ten gelen
+            // başka bir hata (ör. beklenmeyen bir null-ref) bu metottan ham olarak sızıyordu;
+            // ExceptionTranslator hiç devreye girmiyordu (bkz. RunStreamingAsync'teki simetrik
+            // düzeltme, bulgu 1.3).
+            throw ExceptionTranslator.Translate(ex, "RunAsync workflow mesaj hazırlığı hatası.");
+        }
         var messages = prompt.Messages;
 
         var st = _traceProcessor.StartTraceState(session, query, reasoning);
@@ -89,7 +98,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
-        string? workflowError = null;
+        Exception? workflowError = null;
 
         await foreach (var (evt, evtError) in EnumerateWorkflowEventsSafely(run, effectiveCt))
         {
@@ -108,7 +117,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
 
             if (evt is WorkflowErrorEvent errorEvt)
             {
-                workflowError = errorEvt.Exception?.Message ?? "workflow error";
+                workflowError = errorEvt.Exception ?? new InvalidOperationException("workflow error");
                 break;
             }
 
@@ -127,7 +136,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
                 break;
             case RunOutcomeKind.Error:
                 throw ExceptionTranslator.Translate(
-                    new InvalidOperationException(outcome.ErrorMessage),
+                    outcome.Error ?? new InvalidOperationException("workflow error"),
                     "RunAsync workflow hatası.");
         }
 
@@ -176,9 +185,11 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         if (promptError != null)
         {
             if (ct.IsCancellationRequested) yield break;
+            // İstemciye ham promptError.Message DEĞİL, ExceptionTranslator'dan geçmiş güvenli
+            // metin gönderilir — framework/HTTP iç detayları sızmasın diye (bkz. bulgu 1.3).
             var message = timeoutCts.IsCancellationRequested
                 ? $"İşlem {_guards.TimeoutSeconds} saniyede tamamlanamadı."
-                : promptError.Message;
+                : ExceptionTranslator.Translate(promptError, "RunStreamingAsync mesaj hazırlığı hatası.").Message;
             yield return new StreamEvent(StreamEventTypes.Error, new { message });
             yield break;
         }
@@ -193,7 +204,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
-        string? workflowError = null;
+        Exception? workflowError = null;
 
         await foreach (var (evt, evtError) in EnumerateWorkflowEventsSafely(run, effectiveCt))
         {
@@ -212,7 +223,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
 
             if (evt is WorkflowErrorEvent errorEvt)
             {
-                workflowError = errorEvt.Exception?.Message ?? "workflow error";
+                workflowError = errorEvt.Exception ?? new InvalidOperationException("workflow error");
                 break;
             }
 
@@ -239,8 +250,13 @@ internal sealed class WorkflowRunner : IWorkflowRunner
                 // adımları (RewriteRoutingMessageAsync, TurnFinalizer) atlanır.
                 yield break;
             case RunOutcomeKind.Error:
+                // Ham outcome.Error.Message DEĞİL — ExceptionTranslator'dan geçmiş güvenli
+                // metin (bkz. bulgu 1.3). Ham detay zaten trace'e yazıldı
+                // (FinalizeAbnormalTerminationAsync), admin panelinden görülebilir.
                 yield return new StreamEvent(StreamEventTypes.Error,
-                    new { message = outcome.ErrorMessage });
+                    new { message = ExceptionTranslator.Translate(
+                        outcome.Error ?? new InvalidOperationException("workflow error"),
+                        "RunStreamingAsync workflow hatası.").Message });
                 yield break;
         }
 
@@ -259,15 +275,21 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         {
             if (ct.IsCancellationRequested) yield break;
             var timedOut = timeoutCts.IsCancellationRequested;
-            var message = timedOut
+            // Trace'e ham detay yazılır (admin/debug), istemciye sanitize edilmiş metin
+            // gönderilir — bkz. bulgu 1.3.
+            var traceMessage = timedOut
                 ? $"İşlem {_guards.TimeoutSeconds} saniyede tamamlanamadı."
                 : finalizationError.Message;
+            var clientMessage = timedOut
+                ? traceMessage
+                : ExceptionTranslator.Translate(
+                    finalizationError, "RunStreamingAsync finalizasyon hatası.").Message;
             _traceStore.Complete(st.Trace.TraceId,
                 terminationReason: timedOut
                     ? WellKnown.Termination.ReasonTimeout
                     : WellKnown.Termination.ReasonError,
-                error: message);
-            yield return new StreamEvent(StreamEventTypes.Error, new { message });
+                error: traceMessage);
+            yield return new StreamEvent(StreamEventTypes.Error, new { message = clientMessage });
             yield break;
         }
 
@@ -395,7 +417,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
 
     private enum RunOutcomeKind { Completed, TimedOut, Cancelled, Error }
 
-    private readonly record struct RunOutcome(RunOutcomeKind Kind, string? ErrorMessage);
+    private readonly record struct RunOutcome(RunOutcomeKind Kind, Exception? Error);
 
     /// <summary>
     /// Event döngüsü bittikten sonra anormal sonlanma durumlarını (timeout/iptal/hata) tek yerde
@@ -414,7 +436,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         string query,
         CancellationTokenSource timeoutCts,
         CancellationToken originalCt,
-        string? workflowError)
+        Exception? workflowError)
     {
         st.Trace.IterationCount = st.IterationCount;
 
@@ -441,7 +463,10 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         if (workflowError != null)
         {
             await _approvalGate.ProcessPendingEscalationsAsync(st.Trace, query, "");
-            _traceStore.Complete(st.Trace.TraceId, terminationReason: "error", error: workflowError);
+            // Trace'e (admin/debug amaçlı) HAM hata metni yazılır — istemciye giden metin
+            // ayrı, sanitize edilmiş bir yoldan gelir (bkz. RunAsync/RunStreamingAsync'te
+            // ExceptionTranslator.Translate çağrıları).
+            _traceStore.Complete(st.Trace.TraceId, terminationReason: "error", error: workflowError.Message);
             return new RunOutcome(RunOutcomeKind.Error, workflowError);
         }
 
@@ -548,7 +573,23 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         await run.SendResponseAsync(externalResponse);
     }
 
-    private static async IAsyncEnumerable<(WorkflowEvent? evt, string? error)>
+    /// <summary>
+    /// MAF workflow olaylarını güvenle numaralandırır — <c>MoveNextAsync</c>'ten sızabilecek
+    /// bir exception akışı kesip çağırana anlamlı bir sonuç olarak taşır.
+    ///
+    /// <para>
+    /// 🐞 <b>Eskiden yalnızca <c>ex.Message</c> taşınıyordu</b>, gerçek exception nesnesi değil.
+    /// Bu iki soruna yol açıyordu: (1) çağıran hiçbir zaman <c>ExceptionTranslator</c>'ın tür
+    /// bazlı ayrımını (bugün kaldırıldı, bkz. <see cref="ExceptionTranslator"/>) kullanamıyordu,
+    /// (2) daha önemlisi, streaming yolu bu ham mesajı hiçbir sanitizasyondan geçirmeden
+    /// doğrudan istemciye <c>StreamEvent(Error, ...)</c> olarak gönderiyordu — framework/HTTP
+    /// iç detayları (ör. bağlantı adresleri, stack içerikleri message'a sızmışsa) kullanıcıya
+    /// görünür oluyordu. Artık gerçek <see cref="Exception"/> taşınır; çağıranlar onu
+    /// <see cref="ExceptionTranslator.Translate"/> ile sanitize edip kullanıcıya güvenli bir
+    /// metin, trace'e ise (admin/debug amaçlı) ham detayı yazar.
+    /// </para>
+    /// </summary>
+    private static async IAsyncEnumerable<(WorkflowEvent? evt, Exception? error)>
         EnumerateWorkflowEventsSafely(
             StreamingRun run,
             [EnumeratorCancellation] CancellationToken ct)
@@ -559,7 +600,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
             while (true)
             {
                 WorkflowEvent? current = null;
-                string? error = null;
+                Exception? error = null;
                 try
                 {
                     if (!await enumerator.MoveNextAsync()) yield break;
@@ -571,7 +612,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
                 }
                 catch (Exception ex)
                 {
-                    error = ex.Message;
+                    error = ex;
                 }
 
                 yield return (current, error);

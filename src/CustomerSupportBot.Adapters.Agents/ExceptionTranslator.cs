@@ -10,28 +10,21 @@ namespace CustomerSupportBot.Adapters.Agents;
 /// </summary>
 internal static class ExceptionTranslator
 {
-    public static DomainException Translate(Exception ex, string? context = null)
-    {
-        return ex switch
-        {
-            InvalidOperationException { Message: var m } when m.Contains("Workflow") =>
-                new ExternalServiceException("AgentWorkflow",
-                    context ?? $"Ajan workflow hatası: {m}", ex),
-
-            TaskCanceledException { InnerException: TimeoutException } =>
-                new ExternalServiceException("AgentWorkflow",
-                    context ?? "Ajan workflow zaman aşımına uğradı.", ex),
-
-            OperationCanceledException =>
-                new ExternalServiceException("AgentWorkflow",
-                    context ?? "Ajan workflow isteği iptal edildi.", ex),
-
-            HttpRequestException =>
-                new ExternalServiceException("AgentWorkflow",
-                    context ?? "Ajan workflow'u sırasında bağlantı hatası.", ex),
-
-            _ => new ExternalServiceException("AgentWorkflow",
-                    context ?? $"Ajan workflow hatası: {ex.Message}", ex)
-        };
-    }
+    /// <summary>
+    /// Verilen exception'ı, kullanıcıya/istemciye güvenle gösterilebilecek <paramref name="context"/>
+    /// metniyle bir <see cref="ExternalServiceException"/>'a sarar.
+    ///
+    /// <para>
+    /// 🐞 <b>Eskiden burada exception türüne göre dallanan bir switch vardı</b>
+    /// (<c>InvalidOperationException</c>, <c>TaskCanceledException{InnerException:TimeoutException}</c>,
+    /// <c>OperationCanceledException</c>, <c>HttpRequestException</c>). Ölçüldü: her dal AYNI
+    /// <see cref="ExternalServiceException"/> tipini döndürüyordu — yalnızca <paramref name="context"/>
+    /// <c>null</c> olduğunda kullanılan FALLBACK mesaj metni farklıydı. Repo genelindeki tüm çağrı
+    /// yerleri her zaman bir context geçiyordu (<c>context ?? ...</c> deseninde context her zaman
+    /// kazanıyordu), yani switch'in hiçbir dalı pratikte hiçbir zaman gözlemlenebilir bir fark
+    /// yaratmıyordu — "tür bazlı çeviri" görünümü altında ölü koddu. Sadeleştirildi.
+    /// </para>
+    /// </summary>
+    public static DomainException Translate(Exception ex, string? context = null) =>
+        new ExternalServiceException("AgentWorkflow", context ?? $"Ajan workflow hatası: {ex.Message}", ex);
 }
