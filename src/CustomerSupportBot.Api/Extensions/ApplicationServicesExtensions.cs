@@ -31,6 +31,7 @@ public static class ApplicationServicesExtensions
                     p.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader();
                 else
                     p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+                p.WithExposedHeaders("Retry-After");
             }));
 
         // Enum'ları camelCase string olarak serialize et (ör. IssueSeverity.Warn → "warn")
@@ -43,6 +44,14 @@ public static class ApplicationServicesExtensions
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.OnRejected = (context, _) =>
+            {
+                if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                    context.HttpContext.Response.Headers.RetryAfter =
+                        Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds))
+                            .ToString(System.Globalization.CultureInfo.InvariantCulture);
+                return ValueTask.CompletedTask;
+            };
 
             // /auth/* öncesinde SINIRSIZDI: login, customer/login, customer/register, refresh
             // hiçbirinde sınır yoktu. Kimlik bilgisi tahmin etme (credential stuffing/brute

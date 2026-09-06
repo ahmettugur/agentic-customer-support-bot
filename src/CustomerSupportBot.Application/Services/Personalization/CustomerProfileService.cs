@@ -181,16 +181,16 @@ public sealed partial class CustomerProfileService : ICustomerProfileService
             }
 
             using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("summary", out var s))
-                profile.Summary = s.GetString();
-            if (doc.RootElement.TryGetProperty("preferredTone", out var t))
-                profile.PreferredTone = t.GetString() ?? profile.PreferredTone;
-            profile.Traits = ParseTraits(doc.RootElement, customerId, profile.TotalTurns);
+            var summary = doc.RootElement.TryGetProperty("summary", out var s) && s.ValueKind == JsonValueKind.String
+                ? s.GetString() : null;
+            var tone = doc.RootElement.TryGetProperty("preferredTone", out var t) && t.ValueKind == JsonValueKind.String
+                ? t.GetString() : null;
+            var traits = ParseTraits(doc.RootElement, customerId, profile.TotalTurns);
 
-            profile.LastConsolidatedAt = DateTime.UtcNow;
-            _store.Upsert(profile);
-            return profile;
+            await using var handle = await _distributedLock.AcquireAsync($"profile:{customerId}", ct: ct);
+            return await _store.UpdateConsolidationAsync(customerId, summary, tone, traits, ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Profil consolidate başarısız oldu (customerId={Id})", customerId);

@@ -1,11 +1,24 @@
 // Tests/Services/ReasoningResultParserTests.cs
 
 using CustomerSupportBot.Domain.Services;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Domain.Tests;
 
 public class ReasoningResultParserTests
 {
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("42")]
+    [InlineData("true")]
+    public void NonObjectJson_ProducesExplicitFallback(string json)
+    {
+        var result = ReasoningResultParser.Parse(json);
+        result.IsFallback.Should().BeTrue();
+        result.Intent.Should().Be(WellKnown.Intents.Unknown);
+    }
+
     [Fact]
     public void Parse_PlainText_FallsBackToAnalysis()
     {

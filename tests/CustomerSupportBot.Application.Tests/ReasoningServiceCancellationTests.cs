@@ -28,7 +28,7 @@ public class ReasoningServiceCancellationTests
         }
     }
 
-    private static ReasoningService Build(int timeoutSeconds = 45)
+    private static ReasoningService Build(int timeoutSeconds = 45, IReasoningChatClient? client = null)
     {
         var prompts = Substitute.For<IPromptRepository>();
         prompts.Render(Arg.Any<string>(), Arg.Any<IDictionary<string, string?>?>())
@@ -36,12 +36,32 @@ public class ReasoningServiceCancellationTests
         prompts.Get(Arg.Any<string>()).Returns("");
 
         return new ReasoningService(
-            new CancellingReasoningClient(),
+            client ?? new CancellingReasoningClient(),
             NullLogger<ReasoningService>.Instance,
             prompts,
             new EntityVerifier(NullLogger<EntityVerifier>.Instance),
             new ReasoningSanityChecker(NullLogger<ReasoningSanityChecker>.Instance),
             Options.Create(new WorkflowGuardOptions { ReasoningTimeoutSeconds = timeoutSeconds }));
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("42")]
+    public async Task NonObjectModelOutput_StillCompletesReasoningWithFallback(string json)
+    {
+        static async IAsyncEnumerable<string> Output(string text)
+        {
+            await Task.Yield();
+            yield return text;
+        }
+        var client = Substitute.For<IReasoningChatClient>();
+        client.StreamAsync(Arg.Any<IReadOnlyList<ConversationMessage>>(), Arg.Any<CancellationToken>()).Returns(Output(json));
+        var events = new List<StreamEvent>();
+        await foreach (var evt in Build(client: client).ReasonStreamingAsync("query", new AgentSession(),
+            ct: TestContext.Current.CancellationToken)) events.Add(evt);
+        events.Last().Type.Should().Be(StreamEventTypes.ReasoningComplete);
+        events.Last().Data.Should().BeOfType<ReasoningResult>().Which.IsFallback.Should().BeTrue();
     }
 
     [Fact]

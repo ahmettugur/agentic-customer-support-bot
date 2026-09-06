@@ -110,6 +110,12 @@ public sealed class ChatPortService : IChatPort
 
         await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
 
+        if (_modeRepo.GetMode(sessionId) == ChatMode.Human)
+        {
+            await ForwardHumanMessageAsync(sessionId, query, ct);
+            return new ChatResponse("Mesajınız müşteri temsilcisine iletildi.", sessionId);
+        }
+
         var history = await _sessions.GetHistoryAsync(sessionId, ct);
 
         var reasoningResult = await _reasoning.ReasonAsync(query, session, history, ct);
@@ -146,6 +152,13 @@ public sealed class ChatPortService : IChatPort
     {
         if (!await SessionIdentityBinder.TryBindAsync(session, customerId, _sessions, ct))
             throw new UnauthorizedSessionAccessException(session.SessionId);
+    }
+
+    private async Task ForwardHumanMessageAsync(string sessionId, string query, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return;
+        await _sessions.AppendUserMessageAsync(sessionId, query, ct);
+        _chatBridge.PublishUserMessage(sessionId, query);
     }
 
     /// <inheritdoc/>
@@ -185,8 +198,7 @@ public sealed class ChatPortService : IChatPort
                 // mesajı da bırakıyordu: insan modunda bota ait bir yanıt yoktur, temsilcinin
                 // cevabı geldiğinde ayrıca yazılır. Boş placeholder geçmişte doldurulmadan
                 // kalıyor ve bot oturumu geri devraldığında bağlamı bozuyordu.
-                await _sessions.AppendUserMessageAsync(sessionId, query, ct);
-                _chatBridge.PublishUserMessage(sessionId, query);
+                await ForwardHumanMessageAsync(sessionId, query, ct);
             }
             yield break;
         }

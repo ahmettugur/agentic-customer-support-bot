@@ -19,6 +19,23 @@ namespace CustomerSupportBot.Adapters.Agents.Tests;
 
 public class WorkflowRunnerPureLogicTests
 {
+    [Theory]
+    [InlineData("You can terminate your subscription after checking the refund terms.")]
+    [InlineData("TERMINATE is a technical word.")]
+    [InlineData("An inline TERMINATE: reason=completed is quoted here.")]
+    [InlineData("interminate is not a control signal.")]
+    public void ProtocolFiltering_AllChunkBoundaries_PreservesNaturalText(string answer)
+    {
+        var raw = answer + "\n  TERMINATE: reason=completed\n{\"selfCritique\":{}}";
+        for (var split = 0; split <= raw.Length; split++)
+        {
+            var filter = NewFilter();
+            var actual = filter.Feed(raw[..split]) + filter.Feed(raw[split..]) + filter.Flush();
+            actual.TrimEnd().Should().Be(answer);
+            WorkflowResponseExtractor.RemoveTerminationMarkers(raw).Should().Be(answer);
+        }
+    }
+
     // ResponseStreamFilter — ResponseAgent gerçek token akışından "TERMINATE: reason=..."
     // işaretini (ve ardından gelen self-critique JSON'unu) kullanıcıya sızdırmamalı.
     // WorkflowRunner içindeki internal nested class; InternalsVisibleTo sayesinde doğrudan
@@ -41,8 +58,8 @@ public class WorkflowRunnerPureLogicTests
     public void ResponseStreamFilter_MarkerInSingleChunk_CutsOffAtMarker()
     {
         var filter = NewFilter();
-        var emitted = Feed(filter, "Cevabınız burada. TERMINATE: reason=completed");
-        emitted.Should().Be("Cevabınız burada. ");
+        var emitted = Feed(filter, "Cevabınız burada.\nTERMINATE: reason=completed");
+        emitted.Should().Be("Cevabınız burada.\n");
         emitted.Should().NotContain("TERMINATE");
     }
 
@@ -50,10 +67,10 @@ public class WorkflowRunnerPureLogicTests
     public void ResponseStreamFilter_MarkerSplitAcrossChunks_NeverLeaksPartialMarker()
     {
         var filter = NewFilter();
-        var emitted = Feed(filter, "Tamamdır. TERM");
+        var emitted = Feed(filter, "Tamamdır.\nTERM");
         emitted += Feed(filter, "INATE: reason=completed");
 
-        emitted.Should().Be("Tamamdır. ");
+        emitted.Should().Be("Tamamdır.\n");
         emitted.Should().NotContain("TERM");
     }
 
@@ -77,16 +94,16 @@ public class WorkflowRunnerPureLogicTests
     public void ResponseStreamFilter_UppercaseMarker_StillCutsOff()
     {
         var filter = NewFilter();
-        var emitted = Feed(filter, "Cevabınız burada. TERMINATE: reason=completed");
+        var emitted = Feed(filter, "Cevabınız burada.\nTERMINATE: reason=completed");
 
-        emitted.Should().Be("Cevabınız burada. ");
+        emitted.Should().Be("Cevabınız burada.\n");
     }
 
     [Fact]
     public void ResponseStreamFilter_AfterCutoff_SuppressesFurtherChunks()
     {
         var filter = NewFilter();
-        Feed(filter, "Cevap. TERMINATE: reason=completed");
+        Feed(filter, "Cevap.\nTERMINATE: reason=completed");
         var afterCutoff = Feed(filter, "\n```json\n{\"selfCritique\":\"...\"}\n```");
 
         afterCutoff.Should().BeEmpty();
@@ -114,7 +131,7 @@ public class WorkflowRunnerPureLogicTests
     public void Flush_AfterTerminateAlreadySeen_ReturnsEmpty_NoDoubleEmission()
     {
         var filter = NewFilter();
-        Feed(filter, "Cevap. TERMINATE: reason=completed");
+        Feed(filter, "Cevap.\nTERMINATE: reason=completed");
 
         filter.Flush().Should().BeEmpty(
             "TERMINATE zaten görüldüyse tampon zaten boştur — Flush çift yayına yol açmamalı");

@@ -21,7 +21,14 @@ Reasoning trace oturumlarını ve detaylarını backend'den çeken HTTP istemci 
 - **Model bağımlılığı**: [TraceDetailModels](../Models/TraceDetailModels.md), [AdminModels](../Models/AdminModels.md).
 
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
-Tüm okuma yollarında hata yutma deseni. `GetApprovalsBySessionAsync` ve `GetEscalationsBySessionAsync` sunucu tarafında filtreleme endpoint'i olmadığı için tüm son kayıtları çekip client-side LINQ ile filtreler.
+`GetSessionsAsync` hatayı sayfaya iletir; böylece başarısız yenileme boş liste sanılmaz ve
+son başarılı liste korunur. Diğer metotların mevcut boş liste/null fallback davranışı devam eder.
+`GetApprovalsBySessionAsync` ve `GetEscalationsBySessionAsync` sunucu tarafında filtreleme endpoint'i olmadığı için tüm son kayıtları çekip client-side LINQ ile filtreler.
+
+Tüm HTTP okumaları aynı servis örneğinde sıralanır. HTTP 429 alındığında `Retry-After`
+başlığındaki saniye veya tarih değerine kadar yeni Trace isteği gönderilmez; başlık yoksa
+60 saniye beklenir. Bu süre dolunca bir sonraki okuma normal çalışır. Servis arka planda
+kendiliğinden tekrar deneme yapmaz ve sunucudaki hız sınırını değiştirmez.
 
 ## Metotlar / Üyeler
 

@@ -27,6 +27,20 @@ namespace CustomerSupportBot.Adapters.Persistence.Tests;
 [Collection("PostgresCatalog")]
 public class PostgresApprovalQueuePendingVisibilityTests
 {
+    [Fact]
+    public async Task DecisionOnPodMissingCreatedEvent_LoadsDurableRequest_AndClaimsOnlyOnce()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var podA = NewQueue(new InMemoryMessageBusHub().CreateNode());
+        var podB = NewQueue(new InMemoryMessageBusHub().CreateNode());
+        _ = podB.GetPending();
+        var created = await podA.CreateAsync(NewRequest(Guid.NewGuid().ToString()), ct);
+        podB.Get(created.Id).Should().BeNull();
+        (await podB.DecideAsync(created.Id, true, "admin", ct: ct)).Should().BeTrue();
+        (await podA.DecideAsync(created.Id, true, "admin", ct: ct)).Should().BeFalse();
+        (await podA.GetAsync(created.Id, ct))!.ExecutionStatus.Should().Be(ApprovalExecutionStatus.Succeeded);
+    }
+
     private readonly PostgresCatalogFixture _fixture;
 
     public PostgresApprovalQueuePendingVisibilityTests(PostgresCatalogFixture fixture)
@@ -39,12 +53,12 @@ public class PostgresApprovalQueuePendingVisibilityTests
             => Task.FromResult(new ApprovalExecutionOutcome(true, "ok"));
     }
 
-    private PostgresApprovalQueue NewQueue(IMessageBusPort bus) => new(
+    private PostgresApprovalQueue NewQueue(IMessageBusPort bus, IApprovalExecutionRouter? router = null) => new(
         _fixture.DbFactory,
         Options.Create(new ApprovalOptions { StalePendingHours = 72 }),
         bus,
         new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 5 })),
-        new NoopRouter(),
+        router ?? new NoopRouter(),
         NullLogger<PostgresApprovalQueue>.Instance);
 
     private static ApprovalRequest NewRequest(string sessionId) => new()
@@ -55,6 +69,34 @@ public class PostgresApprovalQueuePendingVisibilityTests
         AgentName = "OrderAgent",
         Parameters = new Dictionary<string, object?> { ["orderId"] = 1030 }
     };
+
+    [Fact]
+    public async Task RunningDecision_CannotBeMarkedSeen_BeforeDurableOutcome()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var outcome = new TaskCompletionSource<ApprovalExecutionOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var router = Substitute.For<IApprovalExecutionRouter>();
+        router.ExecuteAsync(Arg.Any<ApprovalRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ => { started.SetResult(); return outcome.Task; });
+        var queue = NewQueue(new InMemoryMessageBusHub().CreateNode(), router);
+        var sessionId = Guid.NewGuid().ToString();
+        var request = await queue.CreateAsync(NewRequest(sessionId), ct);
+        var decision = queue.DecideAsync(request.Id, true, "admin", ct: ct);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
+        try
+        {
+            (await queue.GetUnseenForSessionAsync(sessionId, "1001", ct)).Should().BeEmpty();
+            (await queue.MarkSeenAsync(request.Id, ct)).Should().BeFalse();
+            (await queue.GetAsync(request.Id, ct))!.CustomerSeenAt.Should().BeNull();
+        }
+        finally { outcome.TrySetResult(new ApprovalExecutionOutcome(false, "failed after approval")); }
+        await decision;
+        (await queue.GetUnseenForSessionAsync(sessionId, "1001", ct)).Should().ContainSingle()
+            .Which.ExecutionStatus.Should().Be(ApprovalExecutionStatus.Failed);
+        (await queue.MarkSeenAsync(request.Id, ct)).Should().BeTrue();
+        (await queue.GetUnseenForSessionAsync(sessionId, "1001", ct)).Should().BeEmpty();
+    }
 
     /// <summary>
     /// Asıl bulgu: A pod'unda oluşan talep, yayın kaybolduğunda B pod'unun cache'inde hiç

@@ -33,6 +33,7 @@ internal sealed class AgentTeamFactory
 
     private readonly WorkflowGuardOptions _guards;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IApprovalContextAccessor _approvalContext;
 
     public AgentTeamFactory(
         IChatClient chatClient,
@@ -40,10 +41,12 @@ internal sealed class AgentTeamFactory
         ApprovalGateService approvalGate,
         ICustomerSupportToolsService tools,
         WorkflowGuardOptions guards,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IApprovalContextAccessor approvalContext)
     {
         _guards = guards;
         _loggerFactory = loggerFactory;
+        _approvalContext = approvalContext;
 
         var sourceName = TelemetryConstants.ActivitySourceName;
 
@@ -55,8 +58,17 @@ internal sealed class AgentTeamFactory
         ResponseAgent     = WrapWithTelemetry(new ResponseAgent(chatClient, prompts), sourceName);
     }
 
-    private static AIAgent WrapWithTelemetry(AIAgent agent, string sourceName)
-        => agent.AsBuilder().UseOpenTelemetry(sourceName).Build();
+    private AIAgent WrapWithTelemetry(AIAgent agent, string sourceName)
+        => agent.AsBuilder().Use(InvokeToolAsync).UseOpenTelemetry(sourceName).Build();
+
+    private async ValueTask<object?> InvokeToolAsync(AIAgent agent, FunctionInvocationContext invocation,
+        Func<FunctionInvocationContext, CancellationToken, ValueTask<object?>> next, CancellationToken ct)
+    {
+        var context = _approvalContext.Context;
+        using var scope = _approvalContext.SetScope(context?.SessionId, context?.TraceId, context?.UserQuery, context?.CustomerId);
+        _approvalContext.SetCurrentAgent(agent.Name);
+        return await next(invocation, ct).ConfigureAwait(false);
+    }
 
     public Workflow CreateWorkflow(string? constrainedSpecialistName = null)
     {

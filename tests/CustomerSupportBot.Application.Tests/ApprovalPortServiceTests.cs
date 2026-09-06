@@ -14,6 +14,17 @@ namespace CustomerSupportBot.Application.Tests;
 
 public class ApprovalPortServiceTests
 {
+    [Fact]
+    public async Task Decision_UsesDurableRequestWhenLocalCacheMisses()
+    {
+        var (service, queue, _) = Build();
+        var request = Request("id", "1001");
+        queue.GetAsync("id", Arg.Any<CancellationToken>()).Returns(request);
+        queue.DecideAsync("id", true, "admin", null, Arg.Any<CancellationToken>()).Returns(true);
+        (await service.DecideAsync("id", true, "admin", ct: TestContext.Current.CancellationToken)).Should().BeTrue();
+        queue.DidNotReceive().Get(Arg.Any<string>());
+    }
+
     private static ApprovalRequest Request(string id, string? customerId) => new()
     {
         Id = id,

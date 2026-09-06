@@ -340,6 +340,10 @@
       font-size: .92em
     }
 
+    code {
+      overflow-wrap: anywhere
+    }
+
     td code {
       background: var(--ground);
       border: 1px solid var(--rule);
@@ -793,13 +797,16 @@
           <li><b>Oturum çözümleme</b> — <code>GetOrCreate(sessionId)</code> ve konuşma geçmişi yüklenir. Streaming yolda
             istemciye önce bir <code>session</code> event'i gönderilir.</li>
           <li><b>Canlı devralma kontrolü</b> — oturum <em>Human</em> modundaysa (admin sohbeti devralmış) bot <b>hiç
-              çalışmaz</b>: mesaj geçmişe yazılır, admin paneline iletilir ve akış burada biter.</li>
+              çalışmaz</b>: hem normal HTTP hem streaming yolunda yalnızca kullanıcı mesajı geçmişe yazılır
+            ve admin paneline iletilir. Normal HTTP bir iletim teyidi döner; bot yanıtı geçmişe eklenmez.</li>
           <li><b>InputGuard</b> — uzunluk, görünmez/RTL karakter, enjeksiyon kalıpları, HTML/script, ID enumeration.
             Reddedilirse istek LLM'e hiç ulaşmaz. Dört giriş noktasının (chat, chat/stream, realtime bridge, realtime
             native) hepsinde çalışır.</li>
           <li><b>ReasoningService</b> — niyet, güven skoru, adımlar ve alt görevler üretir. İçinde
             <code>EntityVerifier</code> sorgu + geçmiş + oturum durumu + DB'yi birleştirip
             <code>VerifiedEntities</code>'i kurar; <code>ReasoningSanityChecker</code> tutarsızlıkları işaretler.
+            JSON kökü nesne değilse kontrollü <code>IsFallback=true</code> sonucu üretilir;
+            streaming akışı da reasoning tamamlanma olayını alır.
           </li>
           <li><b>ApprovalContext scope</b> — <code>sessionId</code>/<code>traceId</code>/sorgu/<code>customerId</code>
             ambient bir kapsama yazılır. HITL onay kaydının hangi oturuma, konuşmaya ve <b>kimliği doğrulanmış
@@ -916,7 +923,8 @@
             <header>
               <h4>ResponseAgent</h4><span class="chip chip-none">tool yok</span>
             </header>
-            <p>Uzman çıktılarını kullanıcıya yönelik nihai yanıta çevirir, <code>TERMINATE: reason=…</code> ekler ve
+            <p>Uzman çıktılarını kullanıcıya yönelik nihai yanıta çevirir, ayrı bir satırda
+              <code>TERMINATE: reason=…</code> ekler ve
               self-critique JSON'u üretir. Yalnızca bunun token'ları kullanıcıya akıtılır.</p>
           </article>
         </div>
@@ -1082,7 +1090,8 @@
               <tr>
                 <td class="num">5</td>
                 <td><code>ConversationSummary</code></td>
-                <td>Geçmiş 8 mesajı aşınca LLM ile özetlenir (token tasarrufu)</td>
+                <td>Geçmiş 8 mesajı aşınca LLM ile özetlenir (token tasarrufu). Boş LLM sonucu
+                  özeti veya <code>SummarizedMessageCount</code>'u ilerletmez; eski boş özetler ham geçmişten yeniden kurulur.</td>
               </tr>
               <tr>
                 <td class="num">6</td>
@@ -1226,10 +1235,16 @@
 
         <h3>Turun bitişi</h3>
         <ul class="plain">
-          <li>Son mesajda <code>TERMINATE</code> işareti varsa, veya</li>
+          <li>Son mesaj <b>ResponseAgent</b>'ın assistant çıktısıysa ve ayrı bir satırda
+            <code>TERMINATE: reason=...</code> öneki içeriyorsa, veya</li>
           <li>Son 10 mesajda aynı tool tekrar tekrar çağrıldıysa (<code>MaxDuplicateToolCalls</code>), veya</li>
-          <li><code>MaximumIterationCount</code> aşıldıysa.</li>
+          <li><code>MaxIterations</code>'tan atanan <code>MaximumIterationCount</code> sınırına ulaşıldıysa.
+            Bu kontrol MAF taban metodu üzerinden uygulanır; normal sonlandırma yoksa sonuç
+            <code>max_messages_reached</code> olur ve teknik plan metni yerine güvenli bir yanıt verilir.</li>
         </ul>
+        <p>Protokol büyük/küçük harfe duyarlıdır; satır başındaki boşluk ve sekmeler kabul edilir.
+          Kullanıcı mesajındaki veya normal metin içindeki <code>TERMINATE</code> turu bitirmez.
+          Canlı token filtresi ve nihai yanıt temizliği aynı <code>TerminationProtocol</code> önekini kullanır.</p>
       </section>
 
       <!-- 04 -->
@@ -1251,7 +1266,9 @@
             <tbody>
               <tr>
                 <td><code>CustomerSupportTeam</code></td>
-                <td>Kompozisyon kökü. <code>IsCompoundQuery</code> ile ayrımı yapar, başka iş yapmaz.</td>
+                <td>Singleton kompozisyon kökü. <code>IsCompoundQuery</code> ile koşucuyu seçer;
+                  streaming turunun UI ipucu kapsamını açar ve tur sonunda kapatır.
+                  Her workflow koşusu ayrı graph ve chat manager kullanır.</td>
               </tr>
               <tr>
                 <td><code>SubTaskOrchestrator</code></td>
@@ -1260,7 +1277,9 @@
               </tr>
               <tr>
                 <td><code>DecomposedRunner</code></td>
-                <td>Grupları yürütür; her alt görev için <code>WorkflowRunner</code>'ı yeniden çağırır.</td>
+                <td>Grupları yürütür; her alt görev için <code>WorkflowRunner</code>'ı yeniden çağırır.
+                  Profil ve epizodik bellek finalizasyonu alt görev başına değil, birleşik tur için bir kez yapılır.
+                  Batch ve streaming finalizasyonu da ortak compound timeout bütçesine dahildir.</td>
               </tr>
               <tr>
                 <td><code>WorkflowRunner</code></td>
@@ -1276,6 +1295,15 @@
           Yalnızca <b>salt okunur</b> alt görevler aynı anda çalıştırılır. Yan etkili olanlar sıraya
           alınır — sipariş oluşturma ile iptalin yarışması engellenir. Sıralama <code>Order</code>
           alanına göre korunur, yani <em>oku &rarr; yaz &rarr; oku</em> deseni bozulmaz.
+        </div>
+        <div class="note">
+          <span class="tag">UI ipuçlarının yaşam döngüsü</span>
+          <code>UiHintEmitter.BeginTurn</code> yalnızca streaming turu için bir tampon açar;
+          <code>Activate</code> her async iterator adımında aynı tamponu etkinleştirir.
+          Tur kapanınca kalan ipuçları temizlenir, geç kalan üreticiler kapalı tampona yazamaz.
+          Batch ve native realtime bu kapsamı açmaz; kategori seçenekleri metin olarak döner.
+          Agent etiketi event dinleyicisinde değil, <code>AgentTeamFactory</code>'nin
+          function-invocation middleware'inde gerçek tool çağrısı sırasında atanır.
         </div>
       </section>
 
@@ -1385,10 +1413,18 @@
             görünür. Ayrıca <code>GET /customer/approvals/history</code> ile bekleyen/onaylanan/reddedilen
             farketmeksizin müşterinin TÜM geçmişi kalıcı olarak sorgulanabilir — "görüldü" işaretlenmesi
             bu listeden hiçbir şeyi düşürmez.</li>
+          <li><b>Onay ile sonuç ayrı</b> — admin onay verdiğinde kayıt <code>Approved + Running</code> olur;
+            bu, işlemin başarıyla bittiği anlamına gelmez. Yürütme sonucu ayrıca
+            <code>Succeeded</code> veya <code>Failed</code> olarak kaydedilir.
+            <code>Pending</code> ve <code>Running</code> kayıtları okunmamış nihai bildirim listesine
+            girmez ve görüldü işaretlenemez. Müşteri daha sonra giriş yaptığında tamamlanan sonucu görebilir.</li>
+          <li><b>Farklı pod'da karar</b> — admin karar uçları kaydı kalıcı depodan okur.
+            Redis oluşturma mesajını kaçıran pod, belleğinde olmayan onayı veritabanından yükleyerek işleyebilir.</li>
           <li><b>Çift yürütme koruması</b> — aynı session'da aynı tool + aynı parametrelerle bekleyen bir
-            talep varsa (LLM tool çağrısını tekrarlarsa) yeni kayıt açılmaz, mevcut olan döner; kararın
-            kendisi (Pending→Approved/Rejected geçişi) kısa bir kilit altında yapılır, gerçek iş bu kilidin
-            <em>dışında</em> yürütülür.</li>
+            talep varsa (LLM tool çağrısını tekrarlarsa) yeni kayıt açılmaz, mevcut olan döner.
+            Karar yolu dağıtık kilit kullanır; gerçek yürütmeden önce DB'de
+            <code>WHERE Status = 'Pending'</code> koşuluyla sahiplenme yapılır.
+            Başka pod kararı zaten sahiplenmişse yürütme tekrarlanmaz.</li>
         </ul>
       </section>
 
@@ -1749,6 +1785,10 @@
           Her müşteri için kalıcı profil tutulur: sık niyetler, ilgilendiği ürünler, dil/ton
           tercihi, son memnuniyet puanları. Profil bağlam hattı üzerinden ajanlara verilir ve
           eskalasyon yönlendirmesinde dil eşleşmesi için de kullanılır.
+          LLM ile consolidate sonrasında <code>UpdateConsolidationAsync</code> yalnızca
+          <code>Summary</code>, <code>PreferredTone</code>, <code>Traits</code> ve
+          <code>LastConsolidatedAt</code> alanlarını günceller. Bekleme sırasında değişen sayaçlar
+          ve admin notları eski snapshot ile ezilmez; silinmiş profil yeniden oluşturulmaz.
         </p>
       </section>
 

@@ -223,6 +223,7 @@ public class InMemoryApprovalQueue : IApprovalQueue
                 string.Equals(r.SessionId, sessionId, StringComparison.Ordinal)
                 && string.Equals(r.CustomerId, customerId, StringComparison.Ordinal)
                 && r.Status != ApprovalStatus.Pending
+                && r.ExecutionStatus != ApprovalExecutionStatus.Running
                 && r.CustomerSeenAt is null)
             .OrderBy(r => r.DecidedAt)
             .ToList());
@@ -244,8 +245,11 @@ public class InMemoryApprovalQueue : IApprovalQueue
 
     public Task<bool> MarkSeenAsync(string id, CancellationToken ct = default)
     {
-        if (_entries.TryGetValue(id, out var entry))
-            entry.Request.CustomerSeenAt = DateTime.UtcNow;
+        if (!_entries.TryGetValue(id, out var entry)
+            || entry.Request.Status == ApprovalStatus.Pending
+            || entry.Request.ExecutionStatus == ApprovalExecutionStatus.Running)
+            return Task.FromResult(false);
+        entry.Request.CustomerSeenAt ??= DateTime.UtcNow;
         return Task.FromResult(true);
     }
 
@@ -291,4 +295,3 @@ public class InMemoryApprovalQueue : IApprovalQueue
         }
     }
 }
-

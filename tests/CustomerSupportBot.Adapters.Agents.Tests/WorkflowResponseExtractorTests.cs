@@ -24,18 +24,18 @@ public class WorkflowResponseExtractorTests
     }
 
     [Fact]
-    public void RemoveTerminationMarkers_ParenForm_StripsTail()
+    public void RemoveTerminationMarkers_InlineParenForm_IsOrdinaryText()
     {
         var input = "Tamamlandı. TERMINATE (success)";
         WorkflowResponseExtractor.RemoveTerminationMarkers(input)
-            .Should().Be("Tamamlandı.");
+            .Should().Be(input);
     }
 
     [Fact]
-    public void RemoveTerminationMarkers_BareTerminate_StripsTail()
+    public void RemoveTerminationMarkers_BareTerminate_IsOrdinaryText()
     {
         WorkflowResponseExtractor.RemoveTerminationMarkers("Bitti TERMINATE her şey iyi")
-            .Should().Be("Bitti");
+            .Should().Be("Bitti TERMINATE her şey iyi");
     }
 
     [Fact]
@@ -90,10 +90,10 @@ public class WorkflowResponseExtractorTests
     }
 
     [Fact]
-    public void ParseTerminationReasonFromResult_ParenForm_Returns()
+    public void ParseTerminationReasonFromResult_ParenForm_IsNotProtocol()
     {
         WorkflowResponseExtractor.ParseTerminationReasonFromResult(
-            "TERMINATE (awaiting_user_input)").Should().Be("awaiting_user_input");
+            "TERMINATE (awaiting_user_input)").Should().BeNull();
     }
 
     [Fact]

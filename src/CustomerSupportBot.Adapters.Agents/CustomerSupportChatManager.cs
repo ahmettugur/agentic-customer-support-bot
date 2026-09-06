@@ -45,6 +45,7 @@ public class CustomerSupportChatManager : GroupChatManager
     {
         _guards = guards;
         _logger = logger;
+        MaximumIterationCount = guards.MaxIterations;
 
         var agentsByName = agents
             .Where(a => !string.IsNullOrEmpty(a.Name))
@@ -133,22 +134,26 @@ public class CustomerSupportChatManager : GroupChatManager
         _handoffCounts[selected.Name] = count + 1;
     }
 
-    protected override ValueTask<bool> ShouldTerminateAsync(
+    protected override async ValueTask<bool> ShouldTerminateAsync(
         IReadOnlyList<ChatMessage> history,
         CancellationToken cancellationToken = default)
     {
-        var lastText = history.LastOrDefault()?.Text ?? "";
+        if (await base.ShouldTerminateAsync(history, cancellationToken).ConfigureAwait(false))
+            return true;
 
-        if (lastText.Contains(WellKnown.Termination.Marker, StringComparison.Ordinal))
-            return ValueTask.FromResult(true);
+        var last = history.LastOrDefault();
+        if (last?.Role == ChatRole.Assistant
+            && string.Equals(last.AuthorName, WellKnown.AgentNames.Response, StringComparison.Ordinal)
+            && TerminationProtocol.FindStart(last.Text ?? "") >= 0)
+            return true;
 
         if (DetectRepeatedToolCall(history))
         {
             _logger.LogWarning("Terminating due to repeated tool call");
-            return ValueTask.FromResult(true);
+            return true;
         }
 
-        return ValueTask.FromResult(false);
+        return false;
     }
 
     private bool DetectRepeatedToolCall(IReadOnlyList<ChatMessage> history)

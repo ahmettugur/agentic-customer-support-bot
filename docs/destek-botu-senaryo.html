@@ -123,8 +123,6 @@
         "ops"
         "ctrl";
     }
-    .rail-agents { flex-direction: row; overflow-x: auto; }
-    .rail-agents .chip { flex: 0 0 auto; }
   }
 
   /* ---------- Header ---------- */
@@ -205,6 +203,11 @@
     letter-spacing: 0.08em;
     color: var(--ink-dim);
     margin: 0 0 4px 2px;
+  }
+
+  @media (max-width: 860px) {
+    .rail-agents { flex-direction: row; align-items: center; min-height: 80px; overflow-x: auto; }
+    .rail-agents .chip, .rail-title { flex: 0 0 auto; }
   }
 
   .chip {
@@ -478,7 +481,7 @@
     animation: rise var(--dur) var(--ease) both;
     transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
   }
-  .approval-card[data-status="approved"] {
+  .approval-card[data-execution="succeeded"] {
     border-left-color: var(--ok);
     background: var(--ok-soft);
   }
@@ -487,6 +490,7 @@
     justify-content: space-between;
     align-items: baseline;
     gap: 6px;
+    flex-wrap: wrap;
   }
   .approval-card .a-order { font-weight: 700; font-size: 13px; }
   .approval-card .a-status {
@@ -496,7 +500,7 @@
     font-weight: 700;
     color: var(--warn);
   }
-  .approval-card[data-status="approved"] .a-status { color: var(--ok); }
+  .approval-card[data-execution="succeeded"] .a-status { color: var(--ok); }
   .approval-card .a-field { font-size: 12px; color: var(--ink-dim); margin-top: 5px; }
   .approval-card .a-field b { color: var(--ink); font-weight: 600; }
 
@@ -678,12 +682,23 @@
     { phase: "onay", agent: "response",
       message: { from: "bot", tag: "Ürün Ajanı", text: "X100 kulaklık 2 yıl resmi garanti kapsamındadır." } },
     { phase: "onay",
-      approval: { status: "approved", order: "#10248", reason: "Yanlış ürün seçimi", decidedBy: "Ahmet · Yönetici", decidedNote: "Politikaya uygun, 14 gün içinde talep edilmiş", when: "2 saat sonra" },
+      connection: { state: "offline", label: "Müşteri çevrimdışı" },
+      message: { from: "system", text: "Müşteri sayfayı kapattı. Onay talebi beklemeye devam ediyor." } },
+    { phase: "onay",
+      approval: { status: "approved", execution: "running", order: "#10248", reason: "Yanlış ürün seçimi", decidedBy: "Ahmet · Yönetici", decidedNote: "Politikaya uygun, 14 gün içinde talep edilmiş", when: "1 gün sonra" },
+      message: { from: "system", tone: "info", text: "Yönetici onayladı; iptal işlemi çalışıyor. Henüz nihai sonuç yok ve kayıt görüldü sayılamaz." },
+      badge: 0 },
+    { phase: "onay",
+      approval: { status: "approved", execution: "succeeded", order: "#10248", reason: "Yanlış ürün seçimi", decidedBy: "Ahmet · Yönetici", decidedNote: "Politikaya uygun, 14 gün içinde talep edilmiş", when: "1 gün sonra" },
+      message: { from: "system", text: "İptal başarıyla tamamlandı ve sonuç kaydedildi. Müşteri çevrimdışı olduğu için anlık bildirim ulaşmadı." } },
+    { phase: "onay",
+      connection: { state: "bot", label: "Müşteri tekrar bağlandı" },
+      message: { from: "system", tone: "ok", text: "Müşteri tekrar giriş yaptı. #10248 iptal sonucu kalıcı depodan okunmamış bildirim olarak yüklendi." },
+      history: "#10248 iptali <b>başarıyla tamamlandı</b> · Yönetici onayı: 1 gün sonra.",
       badge: 1 },
     { phase: "onay",
-      message: { from: "system", tone: "ok", text: "✅ #10248 siparişiniz iptal edildi ve tutar iade sürecine alındı." },
-      badge: 0,
-      history: "#10248 iptali <b>onaylandı</b> — 2 saat sonra, iade süreci başladı." },
+      message: { from: "system", tone: "ok", text: "Müşteri sonucu görüntüledi; bildirim görüldü işaretlendi. İşlem kaydı geçmişte kalmaya devam ediyor." },
+      badge: 0 },
 
     { phase: "devir", agent: "complaint",
       message: { from: "customer", text: "Bu üçüncü kez oluyor, gerçekten sinirlerim bozuldu. Biriyle konuşmam lazım." },
@@ -801,13 +816,15 @@
     if (state.approval) {
       const a = state.approval;
       const approved = a.status === "approved";
+      const executionLabel = a.execution === "succeeded" ? "Başarıyla tamamlandı" : "İşlem çalışıyor";
       els.approvalSlot.innerHTML =
-        '<div class="approval-card" data-status="' + a.status + '">' +
+        '<div class="approval-card" data-status="' + a.status + '" data-execution="' + (a.execution || "none") + '">' +
           '<div class="a-top"><span class="a-order">Sipariş İptali · ' + a.order + '</span>' +
           '<span class="a-status">' + (approved ? "Onaylandı" : "Bekliyor") + '</span></div>' +
           '<div class="a-field"><b>Gerekçe:</b> ' + a.reason + '</div>' +
           (approved
-            ? '<div class="a-field"><b>Karar veren:</b> ' + a.decidedBy + '</div>' +
+            ? '<div class="a-field"><b>İşlem sonucu:</b> ' + executionLabel + '</div>' +
+              '<div class="a-field"><b>Karar veren:</b> ' + a.decidedBy + '</div>' +
               '<div class="a-field"><b>Not:</b> ' + a.decidedNote + '</div>' +
               '<div class="a-field">' + a.when + '</div>'
             : '<div class="a-field">Yönetici onayı bekleniyor · ' + a.when + '</div>') +
@@ -869,9 +886,9 @@
     return '<div class="summary-card">' +
       '<h3 class="display">Bu senaryonun gösterdiği üç garanti</h3>' +
       '<ul>' +
-        '<li><strong>Bloklamayan onay</strong> — sipariş iptali onaya gönderildiği an sohbet devam etti; sonuç saatler sonra bile olsa bildirim + kalıcı geçmiş olarak ulaştı.</li>' +
+        '<li><strong>Bloklamayan onay ve kalıcı sonuç</strong> — sohbet devam etti, yönetici bir gün sonra onayladı. Çalışan işlem tamamlanmış sayılmadı; müşteri tekrar girişte sonucu gördü. Görüldü işareti geçmiş kaydını silmedi.</li>' +
         '<li><strong>Kimliği doğrulanmış müşteri</strong> — customerId sohbetten değil, girişteki JWT\'den geldi; onay kaydı hep doğru hesaba bağlı kaldı.</li>' +
-        '<li><strong>Sorunsuz insan devri</strong> — olumsuz duygu tespit edilince oturum "Human" moduna geçti, bot devre dışı kaldı, temsilci aynı geçmişle devam etti.</li>' +
+        '<li><strong>İnsan devri</strong> — eskalasyonun ardından temsilci sohbeti devralınca oturum "Human" moduna geçti. Bot hem normal HTTP hem streaming yolunda durdu; temsilci aynı geçmişle devam etti.</li>' +
       '</ul>' +
     '</div>';
   }

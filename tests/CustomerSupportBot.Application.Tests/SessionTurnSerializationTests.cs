@@ -19,6 +19,32 @@ namespace CustomerSupportBot.Application.Tests;
 
 public class SessionTurnSerializationTests
 {
+    [Fact]
+    public async Task BatchHumanMode_ForwardsOnlyUserMessage_WithoutInvokingBot()
+    {
+        var session = new AgentSession { SessionId = "human", State = new SessionState { AuthenticatedCustomerId = "1001" } };
+        var sessions = Substitute.For<ISessionManager>();
+        sessions.GetOrCreateAsync("human", Arg.Any<CancellationToken>()).Returns(session);
+        sessions.ReloadAsync("human", Arg.Any<CancellationToken>()).Returns(session);
+        var mode = Substitute.For<IChatModeRegistry>();
+        mode.GetMode("human").Returns(ChatMode.Human);
+        var team = Substitute.For<IAgentTeamPort>();
+        var reasoning = Substitute.For<IReasoningPort>();
+        var bridge = Substitute.For<IChatBridge>();
+        var service = new ChatPortService(team, reasoning, sessions, mode, bridge,
+            new SessionStateService(sessions, NullLogger<SessionStateService>.Instance),
+            Substitute.For<IApprovalContextAccessor>(), new InMemoryDistributedLock(Options.Create(new RedisOptions())),
+            NullLogger<ChatPortService>.Instance);
+
+        await service.HandleAsync(new ChatRequest("hello", "human") { CustomerId = "1001" }, TestContext.Current.CancellationToken);
+
+        await sessions.Received(1).AppendUserMessageAsync("human", "hello", Arg.Any<CancellationToken>());
+        bridge.Received(1).PublishUserMessage("human", "hello");
+        team.ReceivedCalls().Should().BeEmpty();
+        reasoning.ReceivedCalls().Should().BeEmpty();
+        sessions.ReceivedCalls().Should().NotContain(c => c.GetMethodInfo().Name == "AddExchangeAsync");
+    }
+
     /// <summary>Turun içinde ölçülebilir bir süre geçiren takım — örtüşme burada görünür.</summary>
     private sealed class OverlapDetectingTeam : IAgentTeamPort
     {

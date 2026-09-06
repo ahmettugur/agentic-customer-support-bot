@@ -107,6 +107,28 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
         return removed;
     }
 
+    public async Task<CustomerProfile?> UpdateConsolidationAsync(string customerId, string? summary, string? preferredTone,
+        IReadOnlyList<InferredTrait> traits, CancellationToken ct = default)
+    {
+        var traitsJson = JsonSerializer.Serialize(traits, _json);
+        var consolidatedAt = DateTime.UtcNow;
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        var affected = await ctx.CustomerProfiles.Where(p => p.CustomerId == customerId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(p => p.Summary, p => summary ?? p.Summary)
+                .SetProperty(p => p.PreferredTone, p => preferredTone ?? p.PreferredTone)
+                .SetProperty(p => p.TraitsJson, traitsJson)
+                .SetProperty(p => p.LastConsolidatedAt, consolidatedAt), ct);
+        if (affected == 0) return null;
+
+        var row = await ctx.CustomerProfiles.AsNoTracking().SingleOrDefaultAsync(p => p.CustomerId == customerId, ct);
+        if (row is null) return null;
+        var profile = ToDomain(row);
+        _cache[customerId] = profile;
+        PublishUpserted(profile);
+        return profile;
+    }
+
     public IReadOnlyList<CustomerProfile> List(int take = 100)
     {
         EnsureHydrated();
@@ -289,4 +311,3 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
         }
     }
 }
-

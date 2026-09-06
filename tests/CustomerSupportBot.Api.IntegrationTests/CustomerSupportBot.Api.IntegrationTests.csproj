@@ -49,6 +49,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Exercise the production HTTP client without loading the browser-only WASM host. -->
+    <Compile Include="../../src/CustomerSupportBot.Web/Services/TracesApiService.cs" Link="Web/TracesApiService.cs" />
+    <Compile Include="../../src/CustomerSupportBot.Web/Models/TraceDetailModels.cs" Link="Web/TraceDetailModels.cs" />
+    <Compile Include="../../src/CustomerSupportBot.Web/Models/AdminModels.cs" Link="Web/AdminModels.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\..\src\CustomerSupportBot.Api\Prompts\**\*.md" Link="Prompts\%(RecursiveDir)%(FileName)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

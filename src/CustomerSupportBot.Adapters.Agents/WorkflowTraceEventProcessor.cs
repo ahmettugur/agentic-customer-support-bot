@@ -51,81 +51,59 @@ internal sealed class WorkflowTraceEventProcessor
     /// <summary>
     /// ResponseAgent'ın ham token akışını kullanıcıya göndermeden önce "TERMINATE: reason=..."
     /// işaretinden (ve ondan sonra gelen self-critique JSON bloğundan, bkz. response-agent.md)
-    /// arındırır. Chunk sınırları marker'ı bölebileceği için (ör. "...cevap TERM" + "INATE...")
-    /// marker uzunluğu kadar güvenlik payı tutulur; yalnızca kesinlikle marker'a ait olmadığı
-    /// bilinen kısım hemen yayınlanır.
+    /// arındırır. Yalnızca satır başındaki olası protokol öneki tamponlanır;
+    /// normal metin geciktirilmeden aktarılır.
     /// </summary>
     internal sealed class ResponseStreamFilter
     {
-        // WellKnown.Termination.Marker'ın kopyası DEĞİL — doğrudan ona referans. Aynı sabitin
-        // iki ayrı yerde elle tutulması, biri değişip diğeri değişmediğinde sessizce
-        // senkronsuz kalırdı (bu proje genelinde tekrarlanan bir tema — bkz. WellKnown.cs'in
-        // kendi "tek doğruluk kaynağı" ilkesi).
-        private const string Marker = WellKnown.Termination.Marker;
         private readonly StringBuilder _pending = new();
         private bool _cutoff;
+        private bool _atLineStart = true;
+        private int _prefixLength;
 
         public string Feed(string chunk)
         {
             if (_cutoff || string.IsNullOrEmpty(chunk)) return "";
 
-            _pending.Append(chunk);
-            var text = _pending.ToString();
-
-            // Bulgu 4.4: eskiden OrdinalIgnoreCase kullanılıyordu. response-agent.md prompt
-            // sözleşmesi marker'ı HER ZAMAN büyük harfle ürettirir ("TERMINATE: reason=...")
-            // ve CustomerSupportChatManager.ShouldTerminateAsync (gerçek tur sonlandırma kararı)
-            // zaten Ordinal (büyük/küçük harf duyarlı) karşılaştırma kullanıyor — ikisi
-            // senkronsuzdu. Case-insensitive eşleşme, modelin yanıt metninde doğal biçimde
-            // geçen küçük harfli "terminate" (ör. bir İngilizce alıntı kelime) gibi bir kelimeyi
-            // yanlışlıkla marker sanıp CANLI akışı (delta/TTS) o noktada kalıcı olarak
-            // kesebiliyordu — turun kendisi (ShouldTerminateAsync case-sensitive olduğu için)
-            // normal devam ederken. Artık ikisi de Ordinal; tek doğruluk kaynağı aynı zamanda
-            // tek karşılaştırma kuralı da olmuş oldu.
-            var idx = text.IndexOf(Marker, StringComparison.Ordinal);
-            if (idx >= 0)
+            var output = new StringBuilder();
+            foreach (var ch in chunk)
             {
-                _cutoff = true;
-                var safe = text[..idx];
+                // Buffer only a possible protocol prefix at the beginning of a line.
+                if (_atLineStart && _prefixLength == 0 && ch is ' ' or '\t')
+                {
+                    _pending.Append(ch);
+                    continue;
+                }
+                if (_atLineStart && ch == TerminationProtocol.Prefix[_prefixLength])
+                {
+                    _pending.Append(ch);
+                    if (++_prefixLength == TerminationProtocol.Prefix.Length)
+                    {
+                        _pending.Clear();
+                        _cutoff = true;
+                        break;
+                    }
+                    continue;
+                }
+                output.Append(_pending).Append(ch);
                 _pending.Clear();
-                return safe;
+                _prefixLength = 0;
+                _atLineStart = ch == '\n';
             }
-
-            var emitLen = Math.Max(0, text.Length - (Marker.Length - 1));
-            if (emitLen == 0) return "";
-
-            var toEmit = text[..emitLen];
-            _pending.Remove(0, emitLen);
-            return toEmit;
+            return output.ToString();
         }
 
         /// <summary>
-        /// Akış <c>TERMINATE</c> hiç görülmeden bittiğinde (ör. guard/tekrar-tespiti
-        /// sonlandırması — <c>CustomerSupportChatManager.ShouldTerminateAsync</c>'in
-        /// <c>DetectRepeatedToolCall</c> dalı) tamponda kalan son
-        /// <c>Marker.Length - 1</c> (8) karaktere kadarını döner ve tamponu temizler.
-        ///
-        /// <para>
-        /// 🐞 <b>Neden gerekli:</b> <see cref="Feed"/> marker bölünmesine karşı her zaman bu
-        /// kadar bir güvenlik payı tampanda tutuyordu (bkz. sınıf dokümanı), ama akışın sonunda
-        /// bu tamponu boşaltan bir mekanizma yoktu. TERMINATE marker'ı hiç görünmeden akış
-        /// biterse (guard sonlandırması) bu son karakterler <b>hiçbir zaman</b> yayınlanmıyordu
-        /// — <c>ResponseStreamStarted == true</c> olduğu için canlı akış tamamlanmış sayılıyor,
-        /// tam-metin fallback'i (<c>SplitIntoDeltaChunks</c>) da devreye girmiyordu. Kayıp yalnızca
-        /// CANLI akışta (delta/TTS) oluşuyordu — turun KANONİK metni (<c>ResponseComplete</c>
-        /// payload'ı, <c>BuildFinalResultAsync</c>'ten gelir) zaten tamdı.
-        /// </para>
-        ///
-        /// <para>
-        /// TERMINATE zaten görülmüşse (<c>_cutoff == true</c>) tampon zaten boştur — bu metot
-        /// boş string döner, çift yayına yol açmaz.
-        /// </para>
+        /// Akış sonunda tamamlanmamış protokol adayını normal metin olarak döndürür.
+        /// Geçerli marker görülmüşse tampon boştur; ikinci yayına yol açmaz.
         /// </summary>
         public string Flush()
         {
             if (_cutoff || _pending.Length == 0) return "";
             var remaining = _pending.ToString();
             _pending.Clear();
+            _prefixLength = 0;
+            if (remaining.Length > 0) _atLineStart = false;
             return remaining;
         }
     }
@@ -179,10 +157,6 @@ internal sealed class WorkflowTraceEventProcessor
                 var sig = $"{executorId}:running";
                 if (sig == st.LastAgentSignature) return NoEvents;
                 st.LastAgentSignature = sig;
-
-                // Tool çağrıları (ör. UI hint emisyonu) bu ajan adına etiketlensin —
-                // hangi ajanın hint ürettiğini stream event sırasına bağlı kalmadan bilelim.
-                _approvalContext.SetCurrentAgent(executorId);
 
                 // Visit'i sadece ActiveVisits'e kaydet; trace listesine CompletedEvent'te
                 // ekleyeceğiz.

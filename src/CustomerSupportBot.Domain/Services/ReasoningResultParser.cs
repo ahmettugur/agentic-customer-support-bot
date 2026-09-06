@@ -26,6 +26,8 @@ public static class ReasoningResultParser
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new JsonException("Reasoning output must be a JSON object.");
 
             double confidenceScore;
             if (root.TryGetProperty("confidenceScore", out var scoreEl) &&
@@ -78,7 +80,8 @@ public static class ReasoningResultParser
                 Intent = WellKnown.Intents.Unknown,
                 RequiredInfo = new List<string>(),
                 Confidence = WellKnown.Confidence.Low,
-                ConfidenceScore = 0.3
+                ConfidenceScore = 0.3,
+                IsFallback = true
             };
         }
     }

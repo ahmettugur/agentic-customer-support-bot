@@ -18,6 +18,30 @@ namespace CustomerSupportBot.Application.Tests;
 
 public class ConversationSummaryProviderTests
 {
+    [Theory]
+    [InlineData(null, 0)]
+    [InlineData("", 4)]
+    [InlineData("previous summary", 2)]
+    public async Task EmptyFold_PreservesState_AndNextFoldIncludesUncoveredMessages(string? previous, int count)
+    {
+        var (provider, chat, sessions) = Build(History(8));
+        var session = Session(previous, count);
+        chat.CompleteAsync(Arg.Any<IReadOnlyList<ConversationMessage>>(), Arg.Any<CancellationToken>())
+            .Returns(" ", "valid summary");
+
+        (await provider.GetContextAsync(session, "query")).Should().BeNull();
+        session.State.ConversationSummary.Should().Be(previous);
+        session.State.SummarizedMessageCount.Should().Be(count);
+        await sessions.DidNotReceive().UpdateAsync(Arg.Any<AgentSession>(), Arg.Any<CancellationToken>());
+
+        sessions.GetHistoryAsync("s1", Arg.Any<CancellationToken>()).Returns(History(10));
+        await provider.GetContextAsync(session, "next query");
+        var firstUncovered = string.IsNullOrWhiteSpace(previous) ? 1 : count + 1;
+        await chat.Received().CompleteAsync(Arg.Is<IReadOnlyList<ConversationMessage>>(m =>
+            m[1].Text.Contains($"mesaj-{firstUncovered}") && m[1].Text.Contains("mesaj-6")), Arg.Any<CancellationToken>());
+        session.State.SummarizedMessageCount.Should().Be(6);
+    }
+
     private static List<ConversationMessage> History(int count) =>
         Enumerable.Range(1, count)
             .Select(i => new ConversationMessage(

@@ -44,6 +44,21 @@ public sealed class InMemoryCustomerProfileStore : ICustomerProfileStore
         return _byId.TryRemove(customerId, out _);
     }
 
+    public Task<CustomerProfile?> UpdateConsolidationAsync(string customerId, string? summary, string? preferredTone,
+        IReadOnlyList<InferredTrait> traits, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        if (!_byId.TryGetValue(customerId, out var current)) return Task.FromResult<CustomerProfile?>(null);
+        lock (current)
+        {
+            current.Summary = summary ?? current.Summary;
+            current.PreferredTone = preferredTone ?? current.PreferredTone;
+            current.Traits = traits.ToList();
+            current.LastConsolidatedAt = DateTime.UtcNow;
+        }
+        return Task.FromResult<CustomerProfile?>(current);
+    }
+
     public IReadOnlyList<CustomerProfile> List(int take = 100)
     {
         if (take <= 0) take = 100;
@@ -55,4 +70,3 @@ public sealed class InMemoryCustomerProfileStore : ICustomerProfileStore
 
     public int Count => _byId.Count;
 }
-

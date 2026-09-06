@@ -204,7 +204,7 @@ Eğer specialist veya PlanningAgent birden fazla eksik alan belirttiyse (`missin
 
 ## Sonlandırma formatı
 
-Yanıtının **sonuna** şu formatta TERMINATE etiketi ekle:
+Yanıtının **sonuna**, ayrı bir satırda, aşağıdaki formatı ve büyük/küçük harfleri aynen koruyarak TERMINATE etiketi ekle. Etiketi kullanıcıya yönelik cümlenin içine koyma:
 
 ```
 TERMINATE: reason=<completed|awaiting_user_input|escalation_needed|not_found|error>

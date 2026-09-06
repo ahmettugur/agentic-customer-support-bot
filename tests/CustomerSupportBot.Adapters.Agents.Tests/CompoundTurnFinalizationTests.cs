@@ -36,13 +36,15 @@ public class CompoundTurnFinalizationTests
     private sealed class CountingProfile : ICustomerProfileService
     {
         public int Interactions { get; private set; }
+        public int DelayMilliseconds { get; init; }
 
-        public Task<CustomerProfile?> RecordInteractionAsync(
+        public async Task<CustomerProfile?> RecordInteractionAsync(
             string? customerId, string userQuery, string botResponse, string? intent,
             int? rating = null, bool isNewSession = false, CancellationToken ct = default)
         {
             Interactions++;
-            return Task.FromResult<CustomerProfile?>(null);
+            if (DelayMilliseconds > 0) await Task.Delay(DelayMilliseconds, ct);
+            return null;
         }
     }
 
@@ -66,6 +68,29 @@ public class CompoundTurnFinalizationTests
         SessionId = "s1",
         State = new SessionState { AuthenticatedCustomerId = "1027" }
     };
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AggregateFinalization_UsesCompoundTimeout(bool streaming)
+    {
+        var runner = new DecomposedRunner(new EchoRunner(), new ParallelExecutionOptions { TimeoutSeconds = 1 },
+            Substitute.For<IUiHintEmitter>(), Substitute.For<IApprovalContextAccessor>(),
+            Build(new RecordingMemory(), new CountingProfile { DelayMilliseconds = 2000 }));
+        if (streaming)
+        {
+            var events = new List<StreamEvent>();
+            await foreach (var evt in runner.RunDecomposedStreamingAsync("query", null, Session(), CompoundReasoning(),
+                TestContext.Current.CancellationToken)) events.Add(evt);
+            events.Last().Type.Should().Be(StreamEventTypes.Error);
+            events.Should().NotContain(e => e.Type == StreamEventTypes.ResponseComplete);
+        }
+        else
+        {
+            var act = () => runner.RunDecomposedAsync("query", null, Session(), CompoundReasoning(), TestContext.Current.CancellationToken);
+            await act.Should().ThrowAsync<TimeoutException>();
+        }
+    }
 
     /// <summary>
     /// Alt görev koşusu tur bazlı yan etki YAZMAZ. Sinyal, decompose sırasında doldurulan

@@ -47,7 +47,7 @@ public class WorkflowResponseExtractorOutputTests
         {
             Msg(ChatRole.User, "soru"),
             Msg(ChatRole.Assistant, "ara yanıt", WellKnown.AgentNames.Planning),
-            Msg(ChatRole.Assistant, "son cevap TERMINATE", WellKnown.AgentNames.Response),
+            Msg(ChatRole.Assistant, "son cevap\nTERMINATE: reason=completed", WellKnown.AgentNames.Response),
             Msg(ChatRole.Assistant, "sonradan eklenen", WellKnown.AgentNames.Response),
         };
         WorkflowResponseExtractor.ExtractResultFromOutput(Out(messages))

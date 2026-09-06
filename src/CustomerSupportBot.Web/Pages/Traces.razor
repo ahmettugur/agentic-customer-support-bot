@@ -20,12 +20,16 @@
             <div class="traces-header-info">
                 <h1>Reasoning Trace Dashboard</h1>
                 <p class="muted">Session bazlı düşünme zinciri takibi</p>
+                @if (_refreshError is not null)
+                {
+                    <p role="status">@_refreshError</p>
+                }
             </div>
         </div>
         <div class="traces-header-right">
-            <label class="auto-refresh-toggle" title="Aktif iken liste 5 saniyede bir yenilenir">
+            <label class="auto-refresh-toggle" title="Otomatik yenileme">
                 <input type="checkbox" @bind="_autoRefresh" @bind:after="OnAutoRefreshChanged" />
-                <span>Auto-refresh (5sn)</span>
+                <span>Auto-refresh (15sn)</span>
             </label>
             <button class="btn-secondary" @onclick="RefreshAsync" title="Yenile">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -140,6 +144,9 @@
     private bool               _loading       = true;
     private bool               _loadingTraces;
     private bool               _pageVisible   = true;
+    private bool               _refreshing;
+    private bool               _disposed;
+    private string?            _refreshError;
     private Timer?             _refreshTimer;
     private DotNetObjectReference<Traces>? _dotNetRef;
 
@@ -162,14 +169,29 @@
 
     private async Task LoadSessionsAsync()
     {
+        if (_refreshing || _disposed) return;
+        _refreshing = true;
         _loading  = true;
-        _sessions = await TracesApi.GetSessionsAsync();
-        _loading  = false;
+        try
+        {
+            _sessions = await TracesApi.GetSessionsAsync();
+            _refreshError = null;
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+        {
+            _refreshError = "İstek sınırına ulaşıldı. Son alınan liste gösteriliyor; yenileme için bekleniyor.";
+        }
+        catch (Exception)
+        {
+            _refreshError = "Oturumlar yenilenemedi. Son alınan liste gösteriliyor.";
+        }
+        finally { _loading = false; _refreshing = false; }
     }
 
     private async Task RefreshAsync()
     {
         await LoadSessionsAsync();
+        if (_refreshError is not null) return;
         if (_viewMode == "session" && _selectedSessionId is not null)
             await LoadTracesForSessionAsync(_selectedSessionId);
         else if (_viewMode == "all")
@@ -223,7 +245,7 @@
         _refreshTimer?.Dispose();
         _refreshTimer = new Timer(async _ =>
         {
-            if (!_pageVisible) return;
+            if (!_pageVisible || _disposed) return;
             try
             {
                 await InvokeAsync(async () =>
@@ -234,7 +256,7 @@
             }
             catch (ObjectDisposedException) { }
             catch (TaskCanceledException) { }
-        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
     }
 
     private void OnAutoRefreshChanged()
@@ -245,6 +267,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
         _dotNetRef?.Dispose();
         if (_refreshTimer is not null) await _refreshTimer.DisposeAsync();
     }

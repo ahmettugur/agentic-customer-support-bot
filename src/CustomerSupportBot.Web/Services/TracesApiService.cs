@@ -24,26 +24,47 @@ public sealed record BridgeChatMessage(
 /// Trace dashboard API servisi.
 /// traces.js'teki window.Auth.fetch('/traces/sessions') çağrısının karşılığı.
 /// </summary>
-public sealed class TracesApiService(HttpClient http)
+public sealed class TracesApiService(HttpClient http, TimeProvider? timeProvider = null)
 {
-    public async Task<List<TraceSession>> GetSessionsAsync()
+    private readonly TimeProvider _clock = timeProvider ?? TimeProvider.System;
+    private readonly SemaphoreSlim _readGate = new(1, 1);
+    private DateTimeOffset _retryAt;
+
+    private async Task<T?> ReadAsync<T>(string path)
     {
+        // Serialize trace reads so queued detail requests also respect a newly received 429.
+        await _readGate.WaitAsync();
         try
         {
-            var result = await http.GetFromJsonAsync<List<TraceSession>>("/traces/sessions");
-            return result ?? [];
+            if (_clock.GetUtcNow() < _retryAt)
+                throw new HttpRequestException("Trace request cooldown is active.", null,
+                    System.Net.HttpStatusCode.TooManyRequests);
+
+            using var response = await http.GetAsync(path);
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            {
+                var now = _clock.GetUtcNow();
+                var retry = response.Headers.RetryAfter;
+                var delay = retry?.Delta ?? (retry?.Date - now) ?? TimeSpan.FromMinutes(1);
+                _retryAt = now + (delay > TimeSpan.Zero ? delay : TimeSpan.FromSeconds(1));
+            }
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<T>();
         }
-        catch
-        {
-            return [];
-        }
+        finally { _readGate.Release(); }
+    }
+
+    public async Task<List<TraceSession>> GetSessionsAsync()
+    {
+        // Let the page retain its last successful list when a refresh fails.
+        return await ReadAsync<List<TraceSession>>("/traces/sessions") ?? [];
     }
 
     public async Task<TraceDetail?> GetTraceAsync(string traceId)
     {
         try
         {
-            return await http.GetFromJsonAsync<TraceDetail>($"/traces/{Uri.EscapeDataString(traceId)}");
+            return await ReadAsync<TraceDetail>($"/traces/{Uri.EscapeDataString(traceId)}");
         }
         catch { return null; }
     }
@@ -52,7 +73,7 @@ public sealed class TracesApiService(HttpClient http)
     {
         try
         {
-            var result = await http.GetFromJsonAsync<List<TraceDetail>>($"/traces/by-session/{Uri.EscapeDataString(sessionId)}");
+            var result = await ReadAsync<List<TraceDetail>>($"/traces/by-session/{Uri.EscapeDataString(sessionId)}");
             return result ?? [];
         }
         catch { return []; }
@@ -62,7 +83,7 @@ public sealed class TracesApiService(HttpClient http)
     {
         try
         {
-            var result = await http.GetFromJsonAsync<List<TraceDetail>>($"/traces/recent?count={count}");
+            var result = await ReadAsync<List<TraceDetail>>($"/traces/recent?count={count}");
             return result ?? [];
         }
         catch { return []; }
@@ -72,7 +93,7 @@ public sealed class TracesApiService(HttpClient http)
     {
         try
         {
-            var result = await http.GetFromJsonAsync<List<BridgeChatMessage>>(
+            var result = await ReadAsync<List<BridgeChatMessage>>(
                 $"/chat-sessions/{Uri.EscapeDataString(sessionId)}/history?take={take}");
             return result ?? [];
         }
@@ -83,7 +104,7 @@ public sealed class TracesApiService(HttpClient http)
     {
         try
         {
-            var all = await http.GetFromJsonAsync<List<ApprovalRequest>>("/approvals/recent?count=200");
+            var all = await ReadAsync<List<ApprovalRequest>>("/approvals/recent?count=200");
             return all?.Where(a => a.SessionId == sessionId).ToList() ?? [];
         }
         catch { return []; }
@@ -93,7 +114,7 @@ public sealed class TracesApiService(HttpClient http)
     {
         try
         {
-            var all = await http.GetFromJsonAsync<List<EscalationRequest>>("/escalations/recent?count=200");
+            var all = await ReadAsync<List<EscalationRequest>>("/escalations/recent?count=200");
             return all?.Where(e => e.SessionId == sessionId).ToList() ?? [];
         }
         catch { return []; }

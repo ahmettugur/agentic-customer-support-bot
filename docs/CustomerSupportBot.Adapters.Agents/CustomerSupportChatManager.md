@@ -82,9 +82,10 @@ protected override ValueTask<bool> ShouldTerminateAsync(
 ```
 - **Ne işe yarar?:** Çoklu ajan grup sohbetinin tamamlanıp tamamlanmadığını belirler.
 - **İç Mantığı:**
-  1. Son mesajın metninde `WellKnown.Termination.Marker` ("TERMINATE") varsa akış hemen sonlandırılır (`true`).
-  2. `DetectRepeatedToolCall(history)` kontrol edilir; aynı araç aynı argümanlarla limitin üzerinde çağrılmışsa döngü kırılarak akış sonlandırılır (`true`).
-  3. Aksi halde akış devam eder (`false`).
+  1. `base.ShouldTerminateAsync` ile MAF iterasyon sınırı korunur. Limit `WorkflowGuards.MaxIterations` değeridir.
+  2. Son mesaj `ResponseAgent` tarafından üretilmiş bir assistant mesajıysa, ayrı satırdaki `TERMINATE: reason=` öneki sonlandırma kabul edilir. Kullanıcı metni ve doğal dildeki `terminate` kelimesi kontrol sinyali değildir.
+  3. `DetectRepeatedToolCall(history)` kontrol edilir; tekrar sınırında akış sonlandırılır.
+  4. Aksi halde akış devam eder. `TerminationProtocol`, canlı filtre ve nihai yanıt temizleyicisinin ortak protokolüdür.
 
 ### 4. `DetectRepeatedToolCall` (Private)
 ```csharp

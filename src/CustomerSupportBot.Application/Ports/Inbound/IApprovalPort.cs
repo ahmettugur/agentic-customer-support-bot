@@ -28,6 +28,9 @@ public interface IApprovalPort
     /// <summary>Tek istek.</summary>
     ApprovalRequest? Get(string id);
 
+    /// <summary>Reads the durable request for decision and authorization checks.</summary>
+    Task<ApprovalRequest?> GetAsync(string id, CancellationToken ct = default);
+
     /// <summary>
     /// Admin kararını uygular (approve / reject).
     /// Request Pending değilse false döner (idempotent).

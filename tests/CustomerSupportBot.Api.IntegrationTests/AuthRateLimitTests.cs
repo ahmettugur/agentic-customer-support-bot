@@ -36,6 +36,7 @@ public class AuthRateLimitTests
         var ct = TestContext.Current.CancellationToken;
         using var factory = new LowLimitFactory();
         var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("Origin", "http://localhost:5288");
 
         var statuses = new List<HttpStatusCode>();
         for (var i = 0; i < 15; i++)
@@ -43,6 +44,12 @@ public class AuthRateLimitTests
             var resp = await client.PostAsJsonAsync(
                 "/auth/login", new { Username = "saldirgan", Password = $"tahmin-{i}" }, ct);
             statuses.Add(resp.StatusCode);
+            if (resp.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                resp.Headers.RetryAfter.Should().NotBeNull();
+                resp.Headers.RetryAfter!.Delta.Should().BeGreaterThan(TimeSpan.Zero);
+                resp.Headers.GetValues("Access-Control-Expose-Headers").Should().Contain("Retry-After");
+            }
         }
 
         statuses.Should().Contain(HttpStatusCode.Unauthorized,

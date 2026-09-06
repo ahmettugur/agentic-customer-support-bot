@@ -4,6 +4,29 @@ Bu doküman uygulamanı **kuran**, **çalıştıran**, **gözlemleyen** ve **kon
 
 > ⚠️ **Bu dokümanın aşağıki bölümlerinde geçen `InMemory*` sınıf isimleri** (`InMemorySessionManager`, `InMemoryApprovalQueue` vb.) koda mevcuttur ve **yalnızca test projelerinden elle örneklenir**. `PersistenceOptions.Provider` enum'unun tek üyesi `Postgres`'tur; `AddPersistenceAdapters` hiçbir koşula bağlı kalmadan sadece Postgres implementasyonlarını kaydeder — runtime'da config ile seçilebilen bir "InMemory modu" yoktur. Aşağıdaki "InMemory modunda" ibareli tablolar, gerçekte **yalnızca test/InMemory sınıflarının davranışını** açıklar; production ortamı her zaman Postgres tablosundaki satırları kullanır.
 
+## Agent Çalışma Güvenceleri
+
+Trace panelinde HTTP 429: admin/agent uçları IP başına ortak `general` kotasını
+(60 istek/dakika) kullanır. Trace listesi görünür sekmede 15 saniyede bir yenilenir;
+429 sonrasında Trace istemcisi `Retry-After` süresini, başlık yoksa 60 saniyeyi bekler.
+Sunucu bu başlığı limiter metadata'sından üretir ve CORS üzerinden okunabilir kılar.
+Başarısız liste yenilemesinde son başarılı liste bir durum mesajıyla korunur.
+Çok sayıda açık panel/istemci aynı kotayı paylaşmaya devam eder; bu düzeltme limiti kaldırmaz.
+
+- `CustomerSupportTeam` singleton kalır; her koşu kendi workflow ve chat manager nesnesini oluşturur. Gerçek MAF ile eşzamanlı oturum testleri kimlik ve history ayrımını korur.
+- `MaxIterations` taban MAF kontrolüyle uygulanır. Limit nedeniyle tamamlanamayan tur `max_messages_reached` olarak kaydedilir; teknik plan metni başarı yanıtı gibi sunulmaz.
+- Sonlandırma yalnızca `ResponseAgent` çıktısındaki ayrı `TERMINATE: reason=...` satırından okunur. Canlı delta ve nihai metin aynı öneki kullanır.
+- `/chat/` ve `/chat/stream`, insan temsilcinin devraldığı oturumlarda botu çalıştırmaz; yalnızca kullanıcı mesajını kaydeder ve temsilciye iletir.
+- UI ipuçları session genelinde tutulmaz: `BeginTurn` bir streaming turuna ait tampon açar; `Activate` her async iterator adımında aynı tamponu etkinleştirir. Tur kapanınca kalan ipuçları atılır. Batch ve native realtime bu kapsamı açmaz; kategoriler metin olarak sunulur.
+- Tool'un agent etiketi, `AgentTeamFactory` içindeki MAF function-invocation middleware'inde atanır; event dinleyicisinin async bağlamına bağlı değildir.
+- Boş konuşma özeti, özeti veya `SummarizedMessageCount` değerini değiştirmez. Özeti boş kalmış eski state'ler ham geçmişten yeniden özetlenir.
+- Reasoning çıktısının JSON kökü nesne değilse batch/stream kontrollü `IsFallback=true` sonucu alır. Compound finalizasyon da turun timeout token'ını kullanır.
+- Profil consolidate yalnızca `Summary`, `PreferredTone`, `Traits`, `LastConsolidatedAt` alanlarını kalıcı depoda günceller. Yeni sayaçlar ve admin notları eski LLM snapshot'ıyla değiştirilmez; silinmiş profil yeniden oluşturulmaz.
+- Gecikmeli admin onayı korunur. `Running` işlemler görülmemiş nihai bildirim sayılmaz ve görüldü işaretlenemez. Tamamlanan sonuçlar sonraki girişte kalıcı depodan okunur; tüm işlem geçmişi ayrıca erişilebilir kalır.
+- Admin karar uçları kalıcı kayıt okur. Redis `created` mesajını kaçıran pod, karar sırasında eksik kaydı veritabanından yükler; koşullu DB claim mükerrer yürütmeyi engellemeye devam eder.
+
+Regresyon kapsamı: `AgentWorkflowRegressionTests`, `UiHintEmitterTests`, `ProfileConsolidationConcurrencyTests`, `ProfileConsolidationPersistenceTests`, `ApprovalNotificationLifecycleTests`, `ApprovalDurableDecisionEndpointTests` ve mevcut history/reasoning/compound/cross-pod testleri.
+
 **Bölümler**:
 
 - [1. Hızlı başlangıç](#1-hızlı-başlangıç)

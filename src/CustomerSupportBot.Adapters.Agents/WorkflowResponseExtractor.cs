@@ -24,7 +24,8 @@ public static class WorkflowResponseExtractor
             var terminateMsg = chatMessages
                 .LastOrDefault(m => m.Role == ChatRole.Assistant
                                     && m.Text != null
-                                    && m.Text.Contains(WellKnown.Termination.Marker, StringComparison.Ordinal));
+                                    && m.AuthorName == WellKnown.AgentNames.Response
+                                    && TerminationProtocol.FindStart(m.Text) >= 0);
             if (terminateMsg != null) return terminateMsg.Text!;
 
             var lastAssistantMsg = chatMessages
@@ -112,20 +113,8 @@ public static class WorkflowResponseExtractor
     public static string RemoveTerminationMarkers(string result)
     {
         if (string.IsNullOrEmpty(result)) return result;
-        try
-        {
-            var cleaned = Regex.Replace(
-                result,
-                @"TERMINATE(\s*[:\s]+reason\s*=\s*[a-zA-Z_]+|\s*\([^)]+\))?[\s\S]*$",
-                "",
-                RegexOptions.IgnoreCase,
-                RegexTimeout);
-            return cleaned.Trim();
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            return result.Trim();
-        }
+        var start = TerminationProtocol.FindStart(result);
+        return (start >= 0 ? result[..start] : result).Trim();
     }
 
     public static string RemoveTechnicalJsonBlocks(string result)
@@ -183,19 +172,17 @@ public static class WorkflowResponseExtractor
     public static string? ParseTerminationReasonFromResult(string text, ILogger? logger = null)
     {
         if (string.IsNullOrEmpty(text)) return null;
+        var start = TerminationProtocol.FindStart(text);
+        if (start < 0) return null;
+        text = text[start..].TrimStart(' ', '\t');
 
         try
         {
             string? raw = null;
-            var match = Regex.Match(text, @"TERMINATE[:\s]+reason\s*=\s*([a-zA-Z_]+)", RegexOptions.IgnoreCase, RegexTimeout);
+            var match = Regex.Match(text, @"\ATERMINATE: reason=([a-zA-Z_]+)", RegexOptions.None, RegexTimeout);
             if (match.Success)
             {
                 raw = match.Groups[1].Value.ToLowerInvariant();
-            }
-            else
-            {
-                match = Regex.Match(text, @"TERMINATE\s*\(([^)]+)\)", RegexOptions.IgnoreCase, RegexTimeout);
-                if (match.Success) raw = match.Groups[1].Value.Trim().ToLowerInvariant();
             }
 
             if (raw == null) return null;

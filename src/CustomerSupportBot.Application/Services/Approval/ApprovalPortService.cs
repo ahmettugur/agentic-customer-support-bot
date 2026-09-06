@@ -107,7 +107,7 @@ public sealed class ApprovalPortService : IApprovalPort
 
     public async Task<bool> DecideAsync(string id, bool approved, string? decidedBy = null, string? reason = null, CancellationToken ct = default)
     {
-        var request = _approvalQueue.Get(id);
+        var request = await _approvalQueue.GetAsync(id, ct);
         if (request is null)
         {
             _logger.LogWarning("Approval request not found: {Id}", id);
@@ -131,4 +131,7 @@ public sealed class ApprovalPortService : IApprovalPort
 
         return result;
     }
+
+    public Task<ApprovalRequest?> GetAsync(string id, CancellationToken ct = default) =>
+        _approvalQueue.GetAsync(id, ct);
 }

@@ -162,7 +162,7 @@ public class CustomerSupportChatManagerTests
         var mgr = BuildManager();
         var history = new List<ChatMessage>
         {
-            new(ChatRole.Assistant, "yanıt hazır TERMINATE")
+            new(ChatRole.Assistant, "yanıt hazır\nTERMINATE: reason=completed") { AuthorName = WellKnown.AgentNames.Response }
         };
         (await InvokeShouldTerminate(mgr, history)).Should().BeTrue();
     }

@@ -13,27 +13,23 @@ ipucu ekleyebilir.
 
 `ProductToolsService.ProductListTool` gibi tool'lar, çalıştıkları sırada `Emit` çağırarak
 frontend'e ek bir UI ipucu gönderir; bu ipuçları `DrainPending` ile turun sonunda toplanıp
-stream'e eklenir.
+stream'e eklenir. `CustomerSupportTeam.RunStreamingAsync`, `BeginTurn` ile tur kapsamını açar; her iterator adımında `IUiHintTurn.Activate()` çağırır ve çıkışta tamponu kapatır.
 
 ## 3. Sorumlulukları
 
-- **Üstlendiği:** Session bazlı ipucu kuyruklama ve boşaltma.
+- **Üstlendiği:** Streaming turu bazlı ipucu kuyruklama, boşaltma ve kapanışta temizleme.
 - **Üstlenmediği:** Session kimliğinin nasıl bilineceği —
   [`IApprovalContextAccessor`](IApprovalContextAccessor.md)'dan otomatik okunur, çağıranın
   session id geçirmesi gerekmez.
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-`Application/Services/UiHint/UiHintEmitter` implemente eder; `Session ID` tabanlı
-`ConcurrentDictionary` kullanır — `AsyncLocal` YERİNE `IApprovalContextAccessor` üzerinden
-session ID okur, çünkü MAF'ın SDK'sı (Semantic Kernel tabanlı workflow) `AsyncLocal`
-akışını her zaman güvenilir şekilde korumaz; ambient context erişimi bu yüzden port üzerinden
-yapılır.
+`Application/Services/UiHint/UiHintEmitter` implemente eder. Tampon referansı `AsyncLocal` ile taşınır ve her async iterator adımında yeniden etkinleştirilir; session kimliği `IApprovalContextAccessor` üzerinden doğrulanır. Agent etiketi gerçek tool invocation middleware'inde atanır.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
 `Emit`'in dönüş değeri (`bool`) kozmetik değildir: ipucu kuyruğa girdiyse `true`, ambient
-bağlamda session olmadığı için düştüyse `false`. Bu ayrım önemlidir çünkü ipucu düştüğünde
+bağlamda session veya açık streaming kapsamı olmadığı için düştüyse `false`. Bu ayrım önemlidir çünkü ipucu düştüğünde
 ekranda hiçbir şey belirmez, dolayısıyla çağıran tool LLM'e "kullanıcıya gösterildi" diyemez.
 Sesli (native realtime) kanalda ambient bağlam hiç kurulmadığı için bu yol gerçekten yürünür —
 bkz. `ProductToolsService.ProductListTool`, dönüş değerine göre farklı bir metin üretir.
@@ -42,7 +38,8 @@ bkz. `ProductToolsService.ProductListTool`, dönüş değerine göre farklı bir
 
 | Metot | Açıklama |
 |---|---|
-| `bool Emit(StreamEvent evt)` | Mevcut session'ın kuyruğuna bir ipucu ekler; ambient session yoksa `false`. |
+| `IUiHintTurn BeginTurn(string? sessionId)` | Streaming tamponunu açar; dispose kapanışı garanti eder. |
+| `bool Emit(StreamEvent evt)` | Aktif turun kuyruğuna ekler; kimlik veya streaming kapsamı yoksa `false`. |
 | `IReadOnlyList<StreamEvent> DrainPending(string sessionId)` | Bekleyen tüm ipuçlarını okuyup kuyruğu temizler. |
 
 ## 7. Bağımlılıklar

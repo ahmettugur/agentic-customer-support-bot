@@ -48,10 +48,9 @@ public WorkflowTraceEventProcessor(
   - `ResponseStreamStarted` (`bool`): Yanıt akışının başlayıp başlamadığı.
 
 ### 2. `ResponseStreamFilter`
-- `ResponseAgent`'tan akan ham token'ları `TERMINATE` işaretçisine karşı tamponlar. Parça sınırlarında bölünen kelimeleri (`TER` + `MINATE`) yakalar ve yalnızca güvenli metin parçalarını yayınlar.
-- 🐞 **Eşleşme `Ordinal` (büyük/küçük harf duyarlı)** — eskiden `OrdinalIgnoreCase` idi. `response-agent.md` prompt sözleşmesi marker'ı HER ZAMAN büyük harfle ürettirir (`TERMINATE: reason=...`) ve `CustomerSupportChatManager.ShouldTerminateAsync` (gerçek tur sonlandırma kararı) zaten `Ordinal` kullanıyordu — case-insensitive eşleşme, yanıt metninde doğal biçimde geçen küçük harfli "terminate" gibi bir kelimeyi yanlışlıkla marker sanıp canlı akışı (delta/TTS) o noktada kalıcı olarak kesebiliyordu, turun kendisi normal devam ederken. Ayrıca marker sabiti artık `WellKnown.Termination.Marker`'a doğrudan referans — yerel bir kopyası tutulmuyor.
-- **`Feed(chunk)`:** Yeni bir token parçasını tamponlar; marker'a kesin ait olmadığı bilinen kısmı hemen döner, marker uzunluğu kadar (8 karakter) güvenlik payını tamponda tutar.
-- **`Flush()`:** 🐞 Akış `TERMINATE` marker'ı hiç görülmeden bittiğinde (ör. guard/tekrar-tespiti sonlandırması — `CustomerSupportChatManager.ShouldTerminateAsync`'in `DetectRepeatedToolCall` dalı) `Feed`'in tamponda biriktirdiği son ≤8 karakter, bu metot çağrılmazsa hiçbir zaman canlı akışa (delta/TTS) yansımıyordu — `WorkflowRunner.RunStreamingAsync` artık akış bittiğinde bunu çağırıp kalan metni son bir `ResponseDelta` olarak yayınlıyor. `TERMINATE` zaten görülmüşse (`_cutoff == true`) tampon zaten boştur, `Flush()` no-op'tur (boş string döner) — çift yayına yol açmaz. Kayıp yalnızca CANLI akıştaydı; turun kanonik metni (`ResponseComplete` payload'ı) bu düzeltmeden önce de zaten tamdı.
+- `ResponseAgent` token akışında ortak `TerminationProtocol.Prefix` (`TERMINATE: reason=`) sözleşmesini uygular. Eşleşme büyük/küçük harfe duyarlıdır ve yalnızca satır başında, isteğe bağlı boşluk veya sekmeden sonra geçerlidir. Metin içinde geçen `TERMINATE` normal yanıt metni olarak korunur.
+- **`Feed(chunk)`:** Yalnızca satır başındaki olası protokol önekini tamponlar; parça sınırlarında bölünen önekleri de tanır. Eşleşmeyen metni hemen yayınlar, tam önek bulunduğunda protokol satırını ve devamını bastırır.
+- **`Flush()`:** Akış sonunda tamamlanmamış bir önek varsa bunu normal metin olarak yayınlar. Tam sonlandırma öneki zaten görülmüşse boş döner; çift yayına yol açmaz.
 
 ## Metotlar ve İç Çalışma Mantıkları
 

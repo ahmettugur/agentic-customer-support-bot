@@ -109,7 +109,7 @@ public class CustomerSupportTeamTests
     private AgentTeamFactory BuildAgentTeamFactory(IChatClient? chatClient = null)
     {
         var d = BuildDeps(chatClient);
-        return new AgentTeamFactory(d.ChatClient, d.Prompts, d.ApprovalGate, d.Tools, d.Guards, d.LoggerFactory);
+        return new AgentTeamFactory(d.ChatClient, d.Prompts, d.ApprovalGate, d.Tools, d.Guards, d.LoggerFactory, d.ApprovalContext);
     }
 
     private WorkflowMessageBuilder BuildMessageBuilder(IChatClient? chatClient = null, IContextPipeline? pipeline = null)

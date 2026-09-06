@@ -214,7 +214,7 @@ public static class AgentPanelEndpoints
             var agentId = GetLinkedAgentId(ctx);
             var decidedBy = agentId ?? ctx.User.FindFirstValue(ClaimTypes.Name) ?? "agent";
 
-            var req = approvals.Get(id);
+            var req = await approvals.GetAsync(id, ct);
             if (req == null)
                 return Results.NotFound(new { error = "Request bulunamadı." });
 

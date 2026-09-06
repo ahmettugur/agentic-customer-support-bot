@@ -6,10 +6,10 @@
 
 ## 1. Ne İşe Yarar
 
-Oturum (session) ID bazlı, bellek içi bir UI-ipucu kuyruğu: bir tool (ör.
+Streaming turu bazlı, bellek içi bir UI-ipucu kuyruğu: bir tool (ör.
 [`ProductToolsService.ShowCategoryPicker`](../Tools/ProductToolsService.md)) çalışırken
 "kullanıcıya şu görsel bileşeni göster" isteği bırakır (`Emit`), sohbet katmanı bu ipucuları
-turun sonunda toplu olarak alıp (`DrainPending`) frontend'e event olarak gönderir.
+akış sırasında alıp (`DrainPending`) frontend'e event olarak gönderir.
 
 ## 2. Hangi Amaçla Kullanılır
 
@@ -22,8 +22,9 @@ köprüdür.
 
 **Üstlendiği:**
 - `Emit` — ambient bağlamdaki (`IApprovalContextAccessor`) oturum kimliğini okuyup event'i o
-  oturumun kuyruğuna eklemek; event'i **üretildiği anda** çalışan ajanın adıyla etiketlemek.
-- `DrainPending` — bir oturumun kuyruğundaki tüm bekleyen ipuçlarını atomik biçimde boşaltmak.
+  aktif turun kuyruğuna eklemek; event'i **üretildiği anda** çalışan ajanın adıyla etiketlemek.
+- `BeginTurn` / `IUiHintTurn.Activate` — aynı tamponu her async iterator adımında etkinleştirmek.
+- `DrainPending` — aktif turun kuyruğundaki bekleyen ipuçlarını kilit altında boşaltmak.
 
 **Üstlenmediği:** İpucunun gerçekten frontend'e iletilmesi (o, `DrainPending`'i çağıran sohbet
 katmanının/SSE altyapısının işi) — bu sınıf yalnızca bellek içi bir kuyruktur.
@@ -49,7 +50,7 @@ emitter aynı mekanizmayı yeniden kullanır.
 ### `Emit`'in `bool` dönmesi neden önemli
 
 Dönüş değeri, ipucunun **gerçekten** kuyruğa eklenip eklenmediğini (yani bir oturum
-bağlamının mevcut olup olmadığını) bildirir. Bu, [`ProductToolsService.ShowCategoryPicker`](../Tools/ProductToolsService.md)'ın
+bağlamının ve açık streaming kapsamının mevcut olup olmadığını) bildirir. Bu, [`ProductToolsService.ShowCategoryPicker`](../Tools/ProductToolsService.md)'ın
 "ekran gösterildi mi, gösterilemedi mi" ayrımını yapıp LLM'e buna göre farklı bir talimat
 vermesini sağlayan **kritik** bir sinyaldir — sesli (native realtime) kanalda ambient session
 bağlamı kurulmadığından `Emit` `false` döner ve model, kategorileri kendisi sesli olarak okur.
@@ -59,21 +60,21 @@ bağlamı kurulmadığından `Emit` `false` döner ve model, kategorileri kendis
 `TagAgent`, event'i ürettiği anda ambient bağlamdaki "şu an çalışan ajan" bilgisiyle
 etiketler. Böylece frontend, hint'in hangi ajana ait olduğunu drain zamanlamasına/sırasına
 (ör. o an ekranda görünen son "agent" event'ine) güvenerek **tahmin etmek zorunda kalmaz** —
-bilgi doğrudan payload'ın içinde taşınır.
+bilgi doğrudan payload'ın içinde taşınır. Agent adı MAF function-invocation middleware'inde atanır; event tüketicisinde `AsyncLocal` değiştirmek tool'un bağlamını değiştirmez.
 
-### `DrainPending` neden kuyruğu tüketirken oturumu da temizler
+### Tur kapanışı ve async iterator sınırı
 
-Kuyruk boşaldıktan sonra `_store`'dan da kaldırılır (`TryRemove`) — aksi halde uzun süredir
-aktif olmayan binlerce oturum için boş `ConcurrentQueue` nesneleri bellekte sonsuza kadar
-birikirdi.
+Session genelinde dictionary tutulmaz. `BeginTurn` bir tampon oluşturur; `CustomerSupportTeam` her `MoveNextAsync` çağrısında `Activate` ile bu tamponu yeniden etkinleştirir. Iterator `yield` sınırlarında `AsyncLocal` atamaları korunmadığı için bu gereklidir. Kapsam dispose edildiğinde tampon kapatılır ve kalan event'ler silinir; eski async üreticiler daha sonra `Emit` çağırsa da `false` alır. Batch çağrısı kapsam açmaz.
 
 ## 6. Metotlar / Üyeler
 
 | Üye | Açıklama |
 |---|---|
-| `Emit(evt)` | Ambient context'ten `sessionId` okur; yoksa `false` döner (ipucu düşürülür). Varsa event'i `TagAgent` ile etiketleyip o oturumun kuyruğuna ekler, `true` döner. |
+| `BeginTurn(sessionId)` | Streaming turunun tamponunu ve dispose edilebilir sahibi `IUiHintTurn` nesnesini oluşturur. |
+| `IUiHintTurn.Activate()` | Bir async akış adımı boyunca aynı tamponu ambient bağlama taşır. |
+| `Emit(evt)` | Kimlik eşleşen açık streaming tamponuna ekler; aksi halde `false` döner. |
 | `TagAgent(evt, agentName)` *(private static)* | Event verisini JSON nesnesine çevirip `"agent"` alanını ekler; veri yoksa veya ajan adı boşsa event'i olduğu gibi bırakır. |
-| `DrainPending(sessionId)` | Kuyruktaki tüm event'leri sırayla çıkarır, listeye ekler; kuyruk boşalınca oturumu store'dan tamamen kaldırır. Kuyruk yoksa/boşsa boş liste döner. |
+| `DrainPending(sessionId)` | Aktif tamponu kilit altında boşaltır; yanlış session veya kapalı kapsamdan veri taşımaz. |
 
 ## 7. Bağımlılıklar
 

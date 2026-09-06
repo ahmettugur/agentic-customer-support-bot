@@ -359,10 +359,8 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         }
         else
         {
-            // Bulgu 1.4: TERMINATE marker'ı hiç görülmeden akış bittiyse (ör. guard/tekrar-tespiti
-            // sonlandırması) ResponseStreamFilter'ın tamponunda kalan son ≤8 karakter, bu Flush
-            // olmadan hiçbir zaman canlı akışa (delta/TTS) yansımıyordu — bkz. ResponseStreamFilter
-            // XML dokümanı. TERMINATE zaten görülmüşse Flush() no-op'tur (boş string döner).
+            // Emit an incomplete protocol prefix as ordinary text when the stream ends.
+            // Flush is a no-op if a complete termination prefix was already consumed.
             var trailing = st.ResponseFilter.Flush();
             if (!string.IsNullOrEmpty(trailing))
             {
@@ -403,6 +401,12 @@ internal sealed class WorkflowRunner : IWorkflowRunner
                 st.Result, _loggerFactory.CreateLogger<WorkflowRunner>())
             ?? WellKnown.Termination.ReasonCompleted;
 
+        if (st.IterationCount >= _guards.MaxIterations && TerminationProtocol.FindStart(st.Result) < 0)
+        {
+            terminationReason = WellKnown.Termination.ReasonMaxMessages;
+            st.Result = "İşlemi bu turda güvenilir biçimde tamamlayamadım. Lütfen talebinizi netleştirin.";
+        }
+
         // selfCritique HAM çıktıdan okunur — RemoveTechnicalJsonBlocks bloğu birazdan silecek.
         st.Trace.SelfCritique = SelfCritiqueParser.TryParse(st.Result);
 
@@ -432,21 +436,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         // elimizde; ayrı bir bayrak taşımaya gerek yok. Alt koşularda tur bazlı yan etkiler
         // (episodic bellek, profil sayacı) atlanır; birleşik tur için bir kez yazılır.
         //
-        // ⚠️ TEST BOŞLUĞU: bu SATIRIN kendisi test altında değil. Zincirin iki ucu test
-        // ediliyor — CreateSubTaskReasoning alanı dolduruyor (SubTaskOrchestratorTests) ve
-        // TurnFinalizer bayrağa uyuyor (CompoundTurnFinalizationTests) — ama ikisini bağlayan
-        // burası açıkta. Ölçüldü: bu satır `false` yapıldığında hiçbir test düşmüyor.
-        //
-        // Kapatma DENENDİ ve maliyeti ölçüldü: gerçek MAF workflow'unu sahte bir IChatClient
-        // ile koşturmak, sahte modelin TÜM ajan sözleşmelerini birden taklit etmesini
-        // gerektiriyor (planning JSON, specialist JSON, response metni + TERMINATE, ve doğru
-        // routing kararları). Şema uyumlu JSON'larla bile grup sohbeti sonlanmadı: tek turda
-        // ~13.900 model çağrısı yapılıp guard timeout'una düşüldü. Böyle bir test, koruduğu tek
-        // satırdan çok daha kırılgan olurdu — prompt'lardaki her değişiklik onu bozardı.
-        //
-        // Gerçek kapatma yolu: workflow'a enjekte edilebilir bir "senaryo ajanı" (ChatClientAgent
-        // yerine deterministik AIAgent) desteği. Bu, üretim kodunda test için bir kanca demek
-        // ve ayrı bir tasarım kararı.
+        // AgentWorkflowRegressionTests exercises this wiring with a real compound MAF run.
         var isSubTaskRun = st.Trace.Reasoning?.ConstrainedTargetAgent != null;
 
         await _finalizer.FinalizeAsync(

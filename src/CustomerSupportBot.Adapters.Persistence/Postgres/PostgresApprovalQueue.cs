@@ -206,7 +206,12 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         string id, bool approved, string? decidedBy = null, string? reason = null, CancellationToken ct = default)
     {
         EnsureHydrated();
-        if (!_entries.TryGetValue(id, out var entry)) return false;
+        if (!_entries.TryGetValue(id, out var entry))
+        {
+            var durable = await GetAsync(id, ct).ConfigureAwait(false);
+            if (durable is null) return false;
+            entry = _entries.GetOrAdd(id, _ => new QueueEntry(durable, tcs: null));
+        }
 
         // Distributed lock: farklı pod'lardan eş zamanlı DecideAsync() çağrılarını serialize eder.
         // TryAcquireAsync null dönerse (başka pod lock tutuyor) kararı reddet — double-decision önlemi.
@@ -403,10 +408,11 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         var pending = nameof(ApprovalStatus.Pending);
 
         await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        var running = nameof(ApprovalExecutionStatus.Running);
         var rows = await ctx.Approvals.AsNoTracking()
             .Where(a => a.SessionId == sessionId
                      && a.CustomerId == customerId
-                     && a.Status != pending && a.CustomerSeenAt == null)
+                     && a.Status != pending && a.ExecutionStatus != running && a.CustomerSeenAt == null)
             .OrderBy(a => a.DecidedAt)
             .ToListAsync(ct);
 
@@ -456,13 +462,20 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         EnsureHydrated();
 
         var seenAt = DateTime.UtcNow;
+        var pending = nameof(ApprovalStatus.Pending);
+        var running = nameof(ApprovalExecutionStatus.Running);
+        int updated;
         try
         {
             await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
-            await ctx.Approvals
-                .Where(a => a.Id == id && a.CustomerSeenAt == null)
+            updated = await ctx.Approvals
+                .Where(a => a.Id == id && a.CustomerSeenAt == null
+                    && a.Status != pending && a.ExecutionStatus != running)
                 .ExecuteUpdateAsync(setters => setters.SetProperty(a => a.CustomerSeenAt, seenAt), ct)
                 .ConfigureAwait(false);
+            if (updated == 0)
+                return await ctx.Approvals.AnyAsync(a => a.Id == id && a.CustomerSeenAt != null
+                    && a.Status != pending && a.ExecutionStatus != running, ct);
         }
         catch (Exception ex)
         {
@@ -869,4 +882,3 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
         }
     }
 }
-

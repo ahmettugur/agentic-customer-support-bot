@@ -68,7 +68,7 @@ public class ConversationSummaryProvider : IContextProvider
             return null;
 
         // Hızlı yol (kilitsiz): mevcut özet zaten bu sınırı kapsıyorsa iş yok.
-        if (session.State.ConversationSummary != null && boundary <= session.State.SummarizedMessageCount)
+        if (!string.IsNullOrWhiteSpace(session.State.ConversationSummary) && boundary <= session.State.SummarizedMessageCount)
             return FormatSummaryContext(session.State.ConversationSummary);
 
         try
@@ -84,10 +84,11 @@ public class ConversationSummaryProvider : IContextProvider
             // Kilit beklerken aynı süreçte başka bir çağrı zaten katlamış olabilir
             // (PostgresSessionManager aynı sessionId için hep aynı AgentSession referansını
             // döndürür) — tekrar kontrol ederek gereksiz LLM çağrısından kaçınılır.
-            if (session.State.ConversationSummary != null && boundary <= session.State.SummarizedMessageCount)
+            if (!string.IsNullOrWhiteSpace(session.State.ConversationSummary) && boundary <= session.State.SummarizedMessageCount)
                 return FormatSummaryContext(session.State.ConversationSummary);
 
-            var priorCount = Math.Min(session.State.SummarizedMessageCount, boundary);
+            var priorCount = string.IsNullOrWhiteSpace(session.State.ConversationSummary)
+                ? 0 : Math.Clamp(session.State.SummarizedMessageCount, 0, boundary);
             var newMessages = history.Skip(priorCount).Take(boundary - priorCount).ToList();
             if (newMessages.Count == 0)
             {
@@ -97,6 +98,11 @@ public class ConversationSummaryProvider : IContextProvider
             }
 
             var summary = await FoldAsync(session.State.ConversationSummary, newMessages, ct);
+            if (string.IsNullOrWhiteSpace(summary))
+            {
+                _logger.LogWarning("Conversation summary was empty; preserving history boundary.");
+                return null;
+            }
             session.State.ConversationSummary = summary;
             // Prompt kurulurken geçmişin ilk bu kadar mesajı atlanacak — özet onların yerine
             // geçer. Bu sayı yazılmazsa özet tasarruf değil ek yük olur (bkz. SessionState).

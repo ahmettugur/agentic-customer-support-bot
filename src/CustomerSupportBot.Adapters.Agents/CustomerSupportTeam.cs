@@ -24,6 +24,7 @@ public class CustomerSupportTeam : IAgentTeamPort
 {
     private readonly WorkflowRunner _runner;
     private readonly DecomposedRunner _decomposed;
+    private readonly IUiHintEmitter _uiHint;
 
     public CustomerSupportTeam(
         IChatClient chatClient,
@@ -42,8 +43,9 @@ public class CustomerSupportTeam : IAgentTeamPort
         ICustomerProfileService? profileService = null)
     {
         var guards = guardOptions.Value;
+        _uiHint = uiHint;
 
-        var factory = new AgentTeamFactory(chatClient, prompts, approvalGate, tools, guards, loggerFactory);
+        var factory = new AgentTeamFactory(chatClient, prompts, approvalGate, tools, guards, loggerFactory, approvalContext);
         var finalizer = new TurnFinalizer(traceStore, approvalGate, loggerFactory, semanticMemory, profileService);
         var traceProcessor = new WorkflowTraceEventProcessor(traceStore, approvalContext);
         var messageBuilder = new WorkflowMessageBuilder(contextPipeline, prompts, chatClient, loggerFactory, identityHint);
@@ -67,16 +69,26 @@ public class CustomerSupportTeam : IAgentTeamPort
             : _runner.RunAsync(query, conversationHistory, session, reasoning, ct);
     }
 
-    public IAsyncEnumerable<StreamEvent> RunStreamingAsync(
+    public async IAsyncEnumerable<StreamEvent> RunStreamingAsync(
         string query,
         List<ConversationMessage>? conversationHistory = null,
         AgentSession? session = null,
         ReasoningResult? reasoning = null,
-        CancellationToken ct = default)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
-        return SubTaskOrchestrator.IsCompoundQuery(reasoning)
+        using var hints = _uiHint.BeginTurn(session?.SessionId);
+        var events = SubTaskOrchestrator.IsCompoundQuery(reasoning)
             ? _decomposed.RunDecomposedStreamingAsync(query, conversationHistory, session, reasoning!, ct)
             : _runner.RunStreamingAsync(query, conversationHistory, session, reasoning, ct);
+        await using var enumerator = events.GetAsyncEnumerator(ct);
+        while (await MoveNextWithHintsAsync(enumerator, hints)) yield return enumerator.Current;
+    }
+
+    private static async ValueTask<bool> MoveNextWithHintsAsync(IAsyncEnumerator<StreamEvent> enumerator, IUiHintTurn hints)
+    {
+        // Async iterator yields do not retain AsyncLocal assignments across MoveNext calls.
+        using var activation = hints.Activate();
+        return await enumerator.MoveNextAsync();
     }
 
     public string GetWorkflowDiagram() => _runner.GetWorkflowDiagram();

@@ -11,8 +11,12 @@ Admin panelinde AI'ın reasoning süreçlerini incelemek, debug etmek ve oturum 
 - Seçilen oturumun trace'lerini sağ panelde göstermek.
 - Trace detay panelini açmak/kapatmak.
 - Replay sayfasına yönlendirme.
-- Auto-refresh açıkken 5sn'de bir oturum listesini yenilemek — yalnızca sekme görünürken
+- Auto-refresh açıkken 15sn'de bir oturum listesini yenilemek — yalnızca sekme görünürken
   (bkz. aşağıdaki not).
+- Aynı anda ikinci oturum yenilemesini başlatmamak. Yenileme başarısızsa son başarılı
+  oturum listesini korumak ve güncel olmadığını belirten bir durum mesajı göstermek.
+- HTTP 429 sonrasında `TracesApiService` bekleme süresine uymak; başarısız oturum
+  yenilemesinin ardından manuel yenilemede detay isteklerine devam etmemek.
 
 ## Erişim
 `[Authorize(Roles = "Admin")]` — bu uca dayanan `/traces/*` API'leri `Program.cs`'de

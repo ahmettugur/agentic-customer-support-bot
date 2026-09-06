@@ -48,16 +48,16 @@ public static class AdminEndpoints
         app.MapGet("/approvals/stuck", async (IApprovalPort approvals, CancellationToken ct) =>
             Results.Json(await approvals.GetStuckExecutionsAsync(ct)));
 
-        app.MapGet("/approvals/{id}", (string id, IApprovalPort approvals) =>
+        app.MapGet("/approvals/{id}", async (string id, IApprovalPort approvals, CancellationToken ct) =>
         {
-            var req = approvals.Get(id);
+            var req = await approvals.GetAsync(id, ct);
             return req == null ? Results.NotFound() : Results.Json(req);
         });
 
         app.MapPost("/approvals/{id}/approve",
             async (string id, ApprovalDecisionInput? body, IApprovalPort approvals, CancellationToken ct) =>
         {
-            var req = approvals.Get(id);
+            var req = await approvals.GetAsync(id, ct);
             if (req == null)
             {
                 return Results.NotFound(new { error = "Request bulunamadı." });
@@ -334,4 +334,3 @@ public static class AdminEndpoints
     }
 
 }
-

@@ -114,7 +114,14 @@ internal sealed class DecomposedRunner
         // Tur bazlı yan etkiler BURADA, bir kez. Alt koşular bunları atlar
         // (bkz. TurnFinalizer.FinalizeAsync → isSubTaskRun): aksi hâlde tek bir kullanıcı
         // mesajı profil sayacını N tur ilerletir ve N kopuk episode yazardı.
-        await _finalizer.FinalizeAggregateTurnAsync(session, query, aggregate, reasoning.Intent, ct);
+        try
+        {
+            await _finalizer.FinalizeAggregateTurnAsync(session, query, aggregate, reasoning.Intent, effectiveCt);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Compound workflow {_parallelOptions.TimeoutSeconds}s timeout'a takıldı.");
+        }
 
         return aggregate;
     }
@@ -423,7 +430,21 @@ internal sealed class DecomposedRunner
         // eklenmeden önce streaming compound turda profil/episodic kaydı N değil SIFIR
         // oluyordu — yani düzeltme bir sorunu (N kayıt) başkasıyla (hiç kayıt) değiştirmişti.
         // Asıl arayüz /chat/stream kullandığı için etkilenen yol da buydu.
-        await _finalizer.FinalizeAggregateTurnAsync(session, query, aggregated, reasoning.Intent, ct);
+        var finalizationTimedOut = false;
+        try
+        {
+            await _finalizer.FinalizeAggregateTurnAsync(session, query, aggregated, reasoning.Intent, effectiveCt);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            finalizationTimedOut = true;
+        }
+        if (finalizationTimedOut)
+        {
+            yield return new StreamEvent(StreamEventTypes.Error,
+                new { message = $"İşlem {_parallelOptions.TimeoutSeconds} saniyede tamamlanamadı." });
+            yield break;
+        }
 
         yield return new StreamEvent(StreamEventTypes.ResponseComplete,
             new ResponseCompletePayload(
