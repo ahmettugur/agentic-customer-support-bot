@@ -84,8 +84,8 @@ public class ChatEventStreamReauthorizationTests
         using var sse = new SseForwarder(response, CancellationToken.None);
         var run = orchestrator.ExecuteAsync("s-1", sse, stillAuthorized, CancellationToken.None);
 
-        await bridge.Writer.WriteAsync(AdminMessage("kurbanin ilk mesaji"));
-        await bridge.Writer.WriteAsync(AdminMessage("SIZMAMALI"));
+        await bridge.Writer.WriteAsync(AdminMessage("kurbanin ilk mesaji"), TestContext.Current.CancellationToken);
+        await bridge.Writer.WriteAsync(AdminMessage("SIZMAMALI"), TestContext.Current.CancellationToken);
         bridge.Writer.Complete();
 
         await run.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
@@ -109,7 +109,7 @@ public class ChatEventStreamReauthorizationTests
         var run = orchestrator.ExecuteAsync(
             "s-2", sse, _ => Task.FromResult(false), CancellationToken.None);
 
-        await bridge.Writer.WriteAsync(AdminMessage("SIZMAMALI"));
+        await bridge.Writer.WriteAsync(AdminMessage("SIZMAMALI"), TestContext.Current.CancellationToken);
         bridge.Writer.Complete();
 
         await run.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
@@ -132,7 +132,7 @@ public class ChatEventStreamReauthorizationTests
         var run = orchestrator.ExecuteAsync(
             "s-3", sse, _ => Task.FromResult(true), CancellationToken.None);
 
-        await bridge.Writer.WriteAsync(AdminMessage("merhaba-ulasmali"));
+        await bridge.Writer.WriteAsync(AdminMessage("merhaba-ulasmali"), TestContext.Current.CancellationToken);
         bridge.Writer.Complete();
 
         await run.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);

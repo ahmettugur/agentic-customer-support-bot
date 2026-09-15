@@ -22,7 +22,7 @@ public class ProductRecommendationContextProviderTests
         recommendations.Recommend(Arg.Any<AgentSession>(), Arg.Any<int>()).Returns([]);
 
         var provider = Build(recommendations);
-        var ctx = await provider.GetContextAsync(Session(), "test sorgusu");
+        var ctx = await provider.GetContextAsync(Session(), "test sorgusu", TestContext.Current.CancellationToken);
 
         ctx.Should().BeNull();
     }
@@ -35,7 +35,7 @@ public class ProductRecommendationContextProviderTests
             [new ProductRecommendation("Bira", "'Çay' ile aynı kategoride (İçecekler)", "İçecekler")]);
 
         var provider = Build(recommendations);
-        var ctx = await provider.GetContextAsync(Session(), "test sorgusu");
+        var ctx = await provider.GetContextAsync(Session(), "test sorgusu", TestContext.Current.CancellationToken);
 
         ctx.Should().NotBeNull();
         ctx.Should().Contain("Bira");

@@ -6,7 +6,6 @@
 // Kapı yanlış açılırsa bedeli başka bir müşterinin sipariş geçmişidir: partner token'ı ele
 // geçiren biri herhangi bir müşteri numarasını isteyip o müşterinin verisine erişebilir.
 
-using CustomerSupportBot.Application.Ports.Outbound.A2A;
 using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using CustomerSupportBot.Application.Services.A2A;
 using CustomerSupportBot.Domain.Model.Auth;
@@ -53,7 +52,7 @@ public class A2ATokenExchangeTests
     {
         var (svc, _, _) = Build(new A2AOptions());
 
-        (await svc.ExchangeAsync("acme", "1027")).Should().BeNull();
+        (await svc.ExchangeAsync("acme", "1027", TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     [Fact]
@@ -61,7 +60,7 @@ public class A2ATokenExchangeTests
     {
         var (svc, _, _) = Build(WithPartner("acme", "1027"));
 
-        (await svc.ExchangeAsync("saldirgan", "1027")).Should().BeNull();
+        (await svc.ExchangeAsync("saldirgan", "1027", TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     /// <summary>
@@ -73,7 +72,7 @@ public class A2ATokenExchangeTests
     {
         var (svc, _, _) = Build(WithPartner("acme", "1027"));
 
-        (await svc.ExchangeAsync("acme", "1001")).Should().BeNull("1001 bu partnere açılmadı");
+        (await svc.ExchangeAsync("acme", "1001", TestContext.Current.CancellationToken)).Should().BeNull("1001 bu partnere açılmadı");
     }
 
     [Theory]
@@ -84,7 +83,7 @@ public class A2ATokenExchangeTests
     {
         var (svc, _, _) = Build(WithPartner("acme", "1027"));
 
-        (await svc.ExchangeAsync(partnerId, customerId)).Should().BeNull();
+        (await svc.ExchangeAsync(partnerId, customerId, TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     // ═══ İzin verilen durum ═══
@@ -94,7 +93,7 @@ public class A2ATokenExchangeTests
     {
         var (svc, _, issued) = Build(WithPartner("acme", "1027"));
 
-        var result = await svc.ExchangeAsync("acme", "1027");
+        var result = await svc.ExchangeAsync("acme", "1027", TestContext.Current.CancellationToken);
 
         result.Should().NotBeNull();
         result!.CustomerId.Should().Be("1027");
@@ -112,7 +111,7 @@ public class A2ATokenExchangeTests
     {
         var (svc, _, issued) = Build(WithPartner("acme", "1027"));
 
-        await svc.ExchangeAsync("acme", "1027");
+        await svc.ExchangeAsync("acme", "1027", TestContext.Current.CancellationToken);
 
         issued.Single().LinkedCustomerId.Should().Be("1027");
     }
@@ -126,7 +125,7 @@ public class A2ATokenExchangeTests
     {
         var (svc, _, issued) = Build(WithPartner("acme", "1027"));
 
-        await svc.ExchangeAsync("acme", "1027");
+        await svc.ExchangeAsync("acme", "1027", TestContext.Current.CancellationToken);
 
         issued.Single().Role.Should().Be(A2ARoles.Subject);
         issued.Single().Role.Should().NotBe("Customer");
@@ -140,7 +139,7 @@ public class A2ATokenExchangeTests
         opts.SubjectTokenMinutes = 3;
         var (svc, tokens, _) = Build(opts);
 
-        await svc.ExchangeAsync("acme", "1027");
+        await svc.ExchangeAsync("acme", "1027", TestContext.Current.CancellationToken);
 
         tokens.Received(1).GenerateAccessToken(Arg.Any<UserInfo>(), Arg.Any<DateTime>(), 3);
     }
@@ -151,7 +150,7 @@ public class A2ATokenExchangeTests
     {
         var (svc, _, issued) = Build(WithPartner("acme", "1027"));
 
-        await svc.ExchangeAsync("acme", "1027");
+        await svc.ExchangeAsync("acme", "1027", TestContext.Current.CancellationToken);
 
         issued.Single().Id.Should().Contain("acme").And.Contain("1027");
     }
@@ -176,7 +175,7 @@ public class A2ATokenExchangeTests
     {
         var (svc, _, issued) = Build(WithPartner("acme", "1027"));
 
-        await svc.ExchangeAsync("acme", "1027");
+        await svc.ExchangeAsync("acme", "1027", TestContext.Current.CancellationToken);
 
         A2ASubjectIdentity.TryGetPartnerId(issued.Single().Id).Should().Be("acme");
     }
@@ -215,7 +214,7 @@ public class A2ATokenExchangeTests
     {
         var (svc, _, _) = Build(WithPartner("trusted", "*"));
 
-        (await svc.ExchangeAsync("trusted", "9999")).Should().NotBeNull();
+        (await svc.ExchangeAsync("trusted", "9999", TestContext.Current.CancellationToken)).Should().NotBeNull();
     }
 
     /// <summary>Wildcard yalnızca o partnere ait olmalı — başka partnere sızmamalı.</summary>
@@ -233,7 +232,7 @@ public class A2ATokenExchangeTests
         };
         var (svc, _, _) = Build(opts);
 
-        (await svc.ExchangeAsync("limited", "1001")).Should().BeNull();
-        (await svc.ExchangeAsync("trusted", "1001")).Should().NotBeNull();
+        (await svc.ExchangeAsync("limited", "1001", TestContext.Current.CancellationToken)).Should().BeNull();
+        (await svc.ExchangeAsync("trusted", "1001", TestContext.Current.CancellationToken)).Should().NotBeNull();
     }
 }

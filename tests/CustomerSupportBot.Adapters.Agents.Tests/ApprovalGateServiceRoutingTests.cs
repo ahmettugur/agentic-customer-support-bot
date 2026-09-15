@@ -2,7 +2,6 @@
 // Smart Routing entegrasyon testleri — ApprovalGateService ProcessPendingEscalations
 // çağrısı sonrası EscalationRequest'in routing alanlarının doğru doldurulduğunu doğrular.
 
-using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Tests.Shared;
@@ -96,8 +95,7 @@ public class ApprovalGateServiceRoutingTests
         var session = await sessions.GetOrCreateAsync("s1", TestContext.Current.CancellationToken);
         session.State.AuthenticatedCustomerId = "1001";
 
-        await svc.ProcessPendingEscalationsAsync(TraceFor("s1", "şikayet", WellKnown.AgentNames.Complaint),
-            "şikayetim var", "yanıt");
+        await svc.ProcessPendingEscalationsAsync(TraceFor("s1", "şikayet", WellKnown.AgentNames.Complaint), "şikayetim var", "yanıt", TestContext.Current.CancellationToken);
 
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
@@ -127,15 +125,14 @@ public class ApprovalGateServiceRoutingTests
         var session = await sessions.GetOrCreateAsync("s2", TestContext.Current.CancellationToken);
         session.State.AuthenticatedCustomerId = "9011";
 
-        profiles.Upsert(new CustomerSupportBot.Domain.Model.Memory.CustomerProfile
+        profiles.Upsert(new Domain.Model.Memory.CustomerProfile
         {
             CustomerId = "9011",
             PreferredLanguage = "tr",
             AdminNote = "VIP müşteri"
         });
 
-        await svc.ProcessPendingEscalationsAsync(TraceFor("s2", "şikayet", WellKnown.AgentNames.Complaint),
-            "şikayet", "yanıt");
+        await svc.ProcessPendingEscalationsAsync(TraceFor("s2", "şikayet", WellKnown.AgentNames.Complaint), "şikayet", "yanıt", TestContext.Current.CancellationToken);
 
         var open = _sink.GetOpen();
         open[0].SuggestedAgentId.Should().Be("vip-handler");
@@ -149,8 +146,7 @@ public class ApprovalGateServiceRoutingTests
         var (svc, _, _, sessions) = BuildWithRouting(routingOpts);
         (await sessions.GetOrCreateAsync("s3", TestContext.Current.CancellationToken)).State.AuthenticatedCustomerId = "C";
 
-        await svc.ProcessPendingEscalationsAsync(TraceFor("s3", "şikayet", WellKnown.AgentNames.Complaint),
-            "test", "yanıt");
+        await svc.ProcessPendingEscalationsAsync(TraceFor("s3", "şikayet", WellKnown.AgentNames.Complaint), "test", "yanıt", TestContext.Current.CancellationToken);
 
         var open = _sink.GetOpen();
         open.Should().ContainSingle();

@@ -30,7 +30,7 @@ public class ProfileConsolidationConcurrencyTests
             NullLogger<CustomerProfileService>.Instance);
 
         var pending = service.ConsolidateAsync("1001", TestContext.Current.CancellationToken);
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         if (delete) store.Delete("1001");
         else store.Upsert(new CustomerProfile { CustomerId = "1001", TotalTurns = 3, AdminNote = "new note" });
         release.SetResult("{\"summary\":\"new summary\",\"preferredTone\":\"formal\",\"traits\":[]}");

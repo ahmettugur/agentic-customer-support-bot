@@ -45,7 +45,7 @@ public class CustomerIdentityHintBuilderTests
     [Fact]
     public async Task AuthenticatedCustomer_IncludesNameAndDate()
     {
-        var hint = await Build(RepoWith(1027, "Ahmet Tügür")).BuildAsync(SessionWith("1027"));
+        var hint = await Build(RepoWith(1027, "Ahmet Tügür")).BuildAsync(SessionWith("1027"), TestContext.Current.CancellationToken);
 
         hint.Should().Contain("Ahmet Tügür");
         hint.Should().Contain("10 Ağustos 2026");
@@ -55,7 +55,7 @@ public class CustomerIdentityHintBuilderTests
     public async Task NoAuthenticatedCustomer_StillGivesDate()
     {
         // Tarih her zaman faydalı: "yarın", "bu ay" gibi göreli ifadeler bunun üzerinden yorumlanır.
-        var hint = await Build(Substitute.For<ICustomerRepository>()).BuildAsync(SessionWith(null));
+        var hint = await Build(Substitute.For<ICustomerRepository>()).BuildAsync(SessionWith(null), TestContext.Current.CancellationToken);
 
         hint.Should().Contain("10 Ağustos 2026");
         hint.Should().NotContain("kimliği doğrulanmış müşteri");
@@ -68,7 +68,7 @@ public class CustomerIdentityHintBuilderTests
         // Kimlik bundan çözülürse ajan BAŞKASININ adıyla hitap eder — repo hiç sorgulanmamalı.
         var repo = RepoWith(1008, "Başka Müşteri");
 
-        var hint = await Build(repo).BuildAsync(SessionWith(authenticatedId: null, llmExtractedId: "1008"));
+        var hint = await Build(repo).BuildAsync(SessionWith(authenticatedId: null, llmExtractedId: "1008"), TestContext.Current.CancellationToken);
 
         hint.Should().NotContain("Başka Müşteri");
         await repo.DidNotReceive().GetFullNameAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
@@ -81,7 +81,7 @@ public class CustomerIdentityHintBuilderTests
         repo.GetFullNameAsync(1027, Arg.Any<CancellationToken>()).Returns("Ahmet Tügür");
         repo.GetFullNameAsync(1008, Arg.Any<CancellationToken>()).Returns("Başka Müşteri");
 
-        var hint = await Build(repo).BuildAsync(SessionWith(authenticatedId: "1027", llmExtractedId: "1008"));
+        var hint = await Build(repo).BuildAsync(SessionWith(authenticatedId: "1027", llmExtractedId: "1008"), TestContext.Current.CancellationToken);
 
         hint.Should().Contain("Ahmet Tügür");
         hint.Should().NotContain("Başka Müşteri");
@@ -92,7 +92,7 @@ public class CustomerIdentityHintBuilderTests
     [InlineData("")]         // boş
     public async Task MalformedAuthenticatedId_FallsBackToDateOnly(string id)
     {
-        var hint = await Build(Substitute.For<ICustomerRepository>()).BuildAsync(SessionWith(id));
+        var hint = await Build(Substitute.For<ICustomerRepository>()).BuildAsync(SessionWith(id), TestContext.Current.CancellationToken);
 
         hint.Should().Contain("10 Ağustos 2026");
         hint.Should().NotContain("kimliği doğrulanmış müşteri");
@@ -101,7 +101,7 @@ public class CustomerIdentityHintBuilderTests
     [Fact]
     public async Task CustomerNotFoundInDb_FallsBackToDateOnly()
     {
-        var hint = await Build(RepoWith(9999, null)).BuildAsync(SessionWith("9999"));
+        var hint = await Build(RepoWith(9999, null)).BuildAsync(SessionWith("9999"), TestContext.Current.CancellationToken);
 
         hint.Should().NotContain("kimliği doğrulanmış müşteri");
         hint.Should().Contain("10 Ağustos 2026");
@@ -110,7 +110,7 @@ public class CustomerIdentityHintBuilderTests
     [Fact]
     public async Task NullSession_DoesNotThrow()
     {
-        var hint = await Build(Substitute.For<ICustomerRepository>()).BuildAsync(null);
+        var hint = await Build(Substitute.For<ICustomerRepository>()).BuildAsync(null, TestContext.Current.CancellationToken);
         hint.Should().NotBeNullOrWhiteSpace();
     }
 }

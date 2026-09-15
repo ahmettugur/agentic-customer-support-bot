@@ -86,7 +86,7 @@ public class TokenServiceFullNameTests(PostgresCatalogFixture fixture)
         var (tokens, customers, dbf) = Build();
         customers.GetFullNameAsync(1027, Arg.Any<CancellationToken>()).Returns("Ahmet Tügür");
 
-        var auth = await tokens.IssueAsync(SeedCustomer(dbf, "1027"));
+        var auth = await tokens.IssueAsync(SeedCustomer(dbf, "1027"), TestContext.Current.CancellationToken);
 
         auth.FullName.Should().Be("Ahmet Tügür");
         auth.Username.Should().Be("ahmet.tugur@example.com", "Username e-posta olarak kalmalı");
@@ -97,7 +97,7 @@ public class TokenServiceFullNameTests(PostgresCatalogFixture fixture)
     {
         var (tokens, customers, dbf) = Build();
 
-        var auth = await tokens.IssueAsync(SeedStaff(dbf));
+        var auth = await tokens.IssueAsync(SeedStaff(dbf), TestContext.Current.CancellationToken);
 
         auth.FullName.Should().BeNull();
         await customers.DidNotReceive().GetFullNameAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
@@ -110,7 +110,7 @@ public class TokenServiceFullNameTests(PostgresCatalogFixture fixture)
         var (tokens, customers, dbf) = Build();
         customers.GetFullNameAsync(Arg.Any<long>(), Arg.Any<CancellationToken>()).Returns((string?)null);
 
-        var auth = await tokens.IssueAsync(SeedCustomer(dbf, "9999"));
+        var auth = await tokens.IssueAsync(SeedCustomer(dbf, "9999"), TestContext.Current.CancellationToken);
 
         auth.AccessToken.Should().NotBeNullOrWhiteSpace();
         auth.FullName.Should().BeNull();
@@ -121,7 +121,7 @@ public class TokenServiceFullNameTests(PostgresCatalogFixture fixture)
     {
         var (tokens, customers, dbf) = Build();
 
-        var auth = await tokens.IssueAsync(SeedCustomer(dbf, "abc"));
+        var auth = await tokens.IssueAsync(SeedCustomer(dbf, "abc"), TestContext.Current.CancellationToken);
 
         auth.FullName.Should().BeNull();
         await customers.DidNotReceive().GetFullNameAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
@@ -137,8 +137,8 @@ public class TokenServiceFullNameTests(PostgresCatalogFixture fixture)
         customers.GetFullNameAsync(1027, Arg.Any<CancellationToken>()).Returns("Ahmet Tügür");
         var user = SeedCustomer(dbf, "1027", username: $"ahmet-{Guid.NewGuid():N}@example.com");
 
-        var issued = await tokens.IssueAsync(user);
-        var refreshed = await tokens.RefreshAsync(issued.RefreshToken);
+        var issued = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
+        var refreshed = await tokens.RefreshAsync(issued.RefreshToken, TestContext.Current.CancellationToken);
 
         refreshed.Should().NotBeNull();
         refreshed!.FullName.Should().Be("Ahmet Tügür");

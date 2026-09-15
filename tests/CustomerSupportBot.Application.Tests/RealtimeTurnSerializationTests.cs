@@ -76,7 +76,8 @@ public class RealtimeTurnSerializationTests
         public async IAsyncEnumerable<StreamEvent> ReasonStreamingAsync(
             string query, AgentSession? session = null, List<ConversationMessage>? history = null,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
-        { yield break; await Task.CompletedTask; }
+        { yield break;
+        }
     }
 
     /// <summary>

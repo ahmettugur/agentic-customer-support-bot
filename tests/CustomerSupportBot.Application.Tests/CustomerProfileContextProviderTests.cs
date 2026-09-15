@@ -22,7 +22,7 @@ public class CustomerProfileContextProviderTests
         var provider = Build(store);
 
         var session = new AgentSession { SessionId = "s", State = new SessionState() };
-        var ctx = await provider.GetContextAsync(session, "test sorgusu");
+        var ctx = await provider.GetContextAsync(session, "test sorgusu", TestContext.Current.CancellationToken);
         ctx.Should().BeNull();
     }
 
@@ -33,7 +33,7 @@ public class CustomerProfileContextProviderTests
         var provider = Build(store);
 
         var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1001" } };
-        var ctx = await provider.GetContextAsync(session, "test sorgusu");
+        var ctx = await provider.GetContextAsync(session, "test sorgusu", TestContext.Current.CancellationToken);
         ctx.Should().BeNull();
     }
 
@@ -45,7 +45,7 @@ public class CustomerProfileContextProviderTests
 
         var provider = Build(store);
         var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1001" } };
-        var ctx = await provider.GetContextAsync(session, "test sorgusu");
+        var ctx = await provider.GetContextAsync(session, "test sorgusu", TestContext.Current.CancellationToken);
         ctx.Should().BeNull();
     }
 
@@ -74,7 +74,7 @@ public class CustomerProfileContextProviderTests
 
         var provider = Build(store);
         var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1027" } };
-        var ctx = await provider.GetContextAsync(session, "test sorgusu");
+        var ctx = await provider.GetContextAsync(session, "test sorgusu", TestContext.Current.CancellationToken);
 
         ctx.Should().NotBeNull();
         ctx.Should().Contain("Profili")
@@ -101,7 +101,7 @@ public class CustomerProfileContextProviderTests
 
         var provider = Build(store);
         var session = new AgentSession { SessionId = "s", State = new SessionState { CustomerId = "1008" } };
-        var ctx = await provider.GetContextAsync(session, "profilimi göster");
+        var ctx = await provider.GetContextAsync(session, "profilimi göster", TestContext.Current.CancellationToken);
 
         ctx.Should().BeNull("LLM'in metinden çıkardığı kimlik profil erişimi için kullanılmamalı");
     }
@@ -127,7 +127,7 @@ public class CustomerProfileContextProviderTests
 
         var provider = Build(store);
         var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1027" } };
-        var ctx = await provider.GetContextAsync(session, "test sorgusu");
+        var ctx = await provider.GetContextAsync(session, "test sorgusu", TestContext.Current.CancellationToken);
 
         ctx.Should().NotBeNull();
         ctx.Should().Contain("Fiyat hassasiyeti yüksek").And.Contain("%80");
@@ -142,7 +142,7 @@ public class CustomerProfileContextProviderTests
 
         var provider = Build(store);
         var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1027" } };
-        var ctx = await provider.GetContextAsync(session, "test sorgusu");
+        var ctx = await provider.GetContextAsync(session, "test sorgusu", TestContext.Current.CancellationToken);
 
         ctx.Should().NotContain("Davranışsal gözlemler");
     }

@@ -76,7 +76,7 @@ public class SemanticMemoryRetrievalQueryTests
         // tabanından ve derslerden hiç yararlanamıyordu.
         var (provider, embedder) = Build();   // geçmiş yok
 
-        await provider.GetContextAsync(new AgentSession { SessionId = "s1" }, "iade süresi ne kadar?");
+        await provider.GetContextAsync(new AgentSession { SessionId = "s1" }, "iade süresi ne kadar?", TestContext.Current.CancellationToken);
 
         embedder.Embedded.Should().ContainSingle("ilk turda da arama yapılmalı");
         embedder.Embedded[0].Should().Be("iade süresi ne kadar?");
@@ -91,7 +91,7 @@ public class SemanticMemoryRetrievalQueryTests
             new ConversationMessage(ConversationRoles.User, "1041 numaralı siparişim nerede?"),
             new ConversationMessage(ConversationRoles.Assistant, "Kargoya verildi."));
 
-        await provider.GetContextAsync(new AgentSession { SessionId = "s1" }, "bu siparişi iptal edebilir miyim?");
+        await provider.GetContextAsync(new AgentSession { SessionId = "s1" }, "bu siparişi iptal edebilir miyim?", TestContext.Current.CancellationToken);
 
         embedder.Embedded.Should().ContainSingle("sorgu tur başına bir kez embed edilmeli");
         embedder.Embedded[0].Should().Be("bu siparişi iptal edebilir miyim?",
@@ -104,7 +104,7 @@ public class SemanticMemoryRetrievalQueryTests
         var (provider, embedder) = Build(
             new ConversationMessage(ConversationRoles.User, "eski soru"));
 
-        var ctx = await provider.GetContextAsync(new AgentSession { SessionId = "s1" }, "   ");
+        var ctx = await provider.GetContextAsync(new AgentSession { SessionId = "s1" }, "   ", TestContext.Current.CancellationToken);
 
         ctx.Should().BeNull();
         embedder.Embedded.Should().BeEmpty("boş sorgu için arama yapılmamalı");
@@ -117,7 +117,7 @@ public class SemanticMemoryRetrievalQueryTests
         // embed edilmemeli (embedder'da cache yok, her çağrı gerçek maliyet).
         var (provider, embedder) = Build();
 
-        await provider.GetContextAsync(new AgentSession { SessionId = "s1" }, "iade nasıl yapılır");
+        await provider.GetContextAsync(new AgentSession { SessionId = "s1" }, "iade nasıl yapılır", TestContext.Current.CancellationToken);
 
         embedder.Embedded.Count.Should().Be(1);
     }

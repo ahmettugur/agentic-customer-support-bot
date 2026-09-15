@@ -19,22 +19,22 @@ public class ApprovalNotificationLifecycleTests
         router.ExecuteAsync(Arg.Any<ApprovalRequest>(), Arg.Any<CancellationToken>())
             .Returns(_ => { started.SetResult(); return completion.Task; });
         var queue = new InMemoryApprovalQueue(Options.Create(new ApprovalOptions()), router, NullLogger<InMemoryApprovalQueue>.Instance);
-        var request = await queue.CreateAsync(new ApprovalRequest { SessionId = "s", CustomerId = "1001", ToolName = "test" });
-        var decision = queue.DecideAsync(request.Id, true);
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var request = await queue.CreateAsync(new ApprovalRequest { SessionId = "s", CustomerId = "1001", ToolName = "test" }, TestContext.Current.CancellationToken);
+        var decision = queue.DecideAsync(request.Id, true, ct: TestContext.Current.CancellationToken);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         try
         {
-            (await queue.GetUnseenForSessionAsync("s", "1001")).Should().BeEmpty();
-            (await queue.MarkSeenAsync(request.Id)).Should().BeFalse();
+            (await queue.GetUnseenForSessionAsync("s", "1001", TestContext.Current.CancellationToken)).Should().BeEmpty();
+            (await queue.MarkSeenAsync(request.Id, TestContext.Current.CancellationToken)).Should().BeFalse();
             request.CustomerSeenAt.Should().BeNull();
         }
         finally { completion.TrySetResult(new ApprovalExecutionOutcome(success, "terminal result")); }
         await decision;
-        var unseen = await queue.GetUnseenForSessionAsync("s", "1001");
+        var unseen = await queue.GetUnseenForSessionAsync("s", "1001", TestContext.Current.CancellationToken);
         unseen.Should().ContainSingle().Which.ExecutionStatus.Should().Be(success
             ? ApprovalExecutionStatus.Succeeded : ApprovalExecutionStatus.Failed);
-        (await queue.MarkSeenAsync(request.Id)).Should().BeTrue();
-        (await queue.GetUnseenForSessionAsync("s", "1001")).Should().BeEmpty();
-        (await queue.GetHistoryForCustomerAsync("1001")).Should().ContainSingle();
+        (await queue.MarkSeenAsync(request.Id, TestContext.Current.CancellationToken)).Should().BeTrue();
+        (await queue.GetUnseenForSessionAsync("s", "1001", TestContext.Current.CancellationToken)).Should().BeEmpty();
+        (await queue.GetHistoryForCustomerAsync("1001", ct: TestContext.Current.CancellationToken)).Should().ContainSingle();
     }
 }

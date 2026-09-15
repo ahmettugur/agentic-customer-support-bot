@@ -1,4 +1,3 @@
-using CustomerSupportBot.Adapters.Agents;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Tests.Shared;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -60,7 +59,7 @@ public class ApprovalGateServiceEscalationTests
             }
         };
 
-        await svc.ProcessPendingEscalationsAsync(trace, "soru", "yanıt");
+        await svc.ProcessPendingEscalationsAsync(trace, "soru", "yanıt", TestContext.Current.CancellationToken);
         _sink.GetOpen().Should().BeEmpty();
     }
 
@@ -80,7 +79,7 @@ public class ApprovalGateServiceEscalationTests
                 }
             }
         };
-        await svc.ProcessPendingEscalationsAsync(trace, "soru", "yanıt");
+        await svc.ProcessPendingEscalationsAsync(trace, "soru", "yanıt", TestContext.Current.CancellationToken);
         _sink.GetOpen().Should().BeEmpty();
     }
 
@@ -106,7 +105,7 @@ public class ApprovalGateServiceEscalationTests
             }
         };
 
-        await svc.ProcessPendingEscalationsAsync(trace, "soru", "yanıt");
+        await svc.ProcessPendingEscalationsAsync(trace, "soru", "yanıt", TestContext.Current.CancellationToken);
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
         open[0].Reason.Should().Be("manuel inceleme");
@@ -134,7 +133,7 @@ public class ApprovalGateServiceEscalationTests
             }
         };
 
-        await svc.ProcessPendingEscalationsAsync(trace, "q", "r");
+        await svc.ProcessPendingEscalationsAsync(trace, "q", "r", TestContext.Current.CancellationToken);
         // Aynı session + aynı ajan (Complaint) zaten açık eskalasyonu varken ikinci
         // çağrı skip edilmeli.
         var trace2 = new ReasoningTrace
@@ -153,7 +152,7 @@ public class ApprovalGateServiceEscalationTests
                 }
             }
         };
-        await svc.ProcessPendingEscalationsAsync(trace2, "q", "r");
+        await svc.ProcessPendingEscalationsAsync(trace2, "q", "r", TestContext.Current.CancellationToken);
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
         open[0].Reason.Should().Be("ilk");
@@ -181,7 +180,7 @@ public class ApprovalGateServiceEscalationTests
                 }
             }
         };
-        await svc.ProcessPendingEscalationsAsync(trace, "q", "r");
+        await svc.ProcessPendingEscalationsAsync(trace, "q", "r", TestContext.Current.CancellationToken);
 
         var trace2 = new ReasoningTrace
         {
@@ -199,7 +198,7 @@ public class ApprovalGateServiceEscalationTests
                 }
             }
         };
-        await svc.ProcessPendingEscalationsAsync(trace2, "q", "r");
+        await svc.ProcessPendingEscalationsAsync(trace2, "q", "r", TestContext.Current.CancellationToken);
 
         var open = _sink.GetOpen();
         open.Should().HaveCount(2);
@@ -229,7 +228,7 @@ public class ApprovalGateServiceEscalationTests
         };
 
         var longResponse = new string('x', 1000);
-        await svc.ProcessPendingEscalationsAsync(trace, "q", longResponse);
+        await svc.ProcessPendingEscalationsAsync(trace, "q", longResponse, TestContext.Current.CancellationToken);
         var esc = _sink.GetOpen()[0];
         esc.ResponseSummary!.Length.Should().BeLessThanOrEqualTo(501);
         esc.ResponseSummary.Should().EndWith("…");
@@ -265,7 +264,7 @@ public class ApprovalGateServiceEscalationTests
             }
         };
 
-        await svc.ProcessPendingEscalationsAsync(trace, "q", "r");
+        await svc.ProcessPendingEscalationsAsync(trace, "q", "r", TestContext.Current.CancellationToken);
         var open = _sink.GetOpen();
         open.Should().ContainSingle();
         open[0].Reason.Should().Be("son_neden");

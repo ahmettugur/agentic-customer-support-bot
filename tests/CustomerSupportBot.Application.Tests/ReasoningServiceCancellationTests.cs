@@ -169,7 +169,7 @@ public class ReasoningServiceCancellationTests
             new ReasoningSanityChecker(NullLogger<ReasoningSanityChecker>.Instance),
             Options.Create(new WorkflowGuardOptions { ReasoningTimeoutSeconds = 45 }));
 
-        var result = await sut.ReasonAsync("soru", new AgentSession { SessionId = "s1" });
+        var result = await sut.ReasonAsync("soru", new AgentSession { SessionId = "s1" }, ct: TestContext.Current.CancellationToken);
 
         result.Confidence.Should().Be(WellKnown.Confidence.Low);
         result.IsFallback.Should().BeTrue(

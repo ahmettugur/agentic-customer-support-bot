@@ -170,7 +170,7 @@ public class CustomerSupportTeamTests
     {
         var builder = BuildMessageBuilder();
 
-        var messages = (await builder.BuildWorkflowMessagesAsync("merhaba", null, null, null)).Messages;
+        var messages = (await builder.BuildWorkflowMessagesAsync("merhaba", null, null, null, TestContext.Current.CancellationToken)).Messages;
         messages.Should().NotBeNull();
         messages.Should().NotBeEmpty();
         messages.Last().Role.Should().Be(ChatRole.User);
@@ -187,7 +187,7 @@ public class CustomerSupportTeamTests
             new(ConversationRoles.User, "önceki mesaj"),
             new(ConversationRoles.Assistant, "önceki yanıt"),
         };
-        var messages = (await builder.BuildWorkflowMessagesAsync("şimdiki", history, null, null)).Messages;
+        var messages = (await builder.BuildWorkflowMessagesAsync("şimdiki", history, null, null, TestContext.Current.CancellationToken)).Messages;
 
         messages.Should().Contain(m => m.Text == "önceki mesaj");
         messages.Should().Contain(m => m.Text == "şimdiki");
@@ -223,7 +223,7 @@ public class CustomerSupportTeamTests
         var builder = BuildMessageBuilder(pipeline: pipeline);
 
         var session = new AgentSession { SessionId = "s1", State = new SessionState() };
-        await builder.BuildWorkflowMessagesAsync("iade süresi ne kadar?", null, session, null);
+        await builder.BuildWorkflowMessagesAsync("iade süresi ne kadar?", null, session, null, TestContext.Current.CancellationToken);
 
         capture.SeenQuery.Should().Be("iade süresi ne kadar?",
             "kullanıcının bu turdaki mesajı bağlam sağlayıcılarına geçirilmeli");
@@ -234,7 +234,7 @@ public class CustomerSupportTeamTests
     {
         var builder = BuildMessageBuilder();
 
-        var messages = (await builder.BuildWorkflowMessagesAsync("sipariş 1030 nerede?", null, null, null)).Messages;
+        var messages = (await builder.BuildWorkflowMessagesAsync("sipariş 1030 nerede?", null, null, null, TestContext.Current.CancellationToken)).Messages;
 
         // Entity hint genelde System rolünde eklenir
         messages.Should().Contain(m => m.Role == ChatRole.System);

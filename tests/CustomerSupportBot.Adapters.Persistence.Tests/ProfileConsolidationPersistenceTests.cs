@@ -23,7 +23,7 @@ public class ProfileConsolidationPersistenceTests(PostgresCatalogFixture fixture
         profile!.TotalTurns.Should().Be(3);
         profile.AdminNote.Should().Be("new note");
         profile.Summary.Should().Be("summary");
-        var saved = await db.CustomerProfiles.AsNoTracking().SingleAsync(p => p.CustomerId == id);
+        var saved = await db.CustomerProfiles.AsNoTracking().SingleAsync(p => p.CustomerId == id, cancellationToken: TestContext.Current.CancellationToken);
         saved.TotalTurns.Should().Be(3);
         saved.AdminNote.Should().Be("new note");
     }

@@ -54,7 +54,7 @@ public class ContextPipelineTests
             new FakeProvider("Fast", 2, "İKİNCİ")
         ]);
 
-        var result = await pipeline.BuildContextAsync(Session(), "q");
+        var result = await pipeline.BuildContextAsync(Session(), "q", TestContext.Current.CancellationToken);
 
         result.Text.IndexOf("BİRİNCİ", StringComparison.Ordinal)
             .Should().BeLessThan(result.Text.IndexOf("İKİNCİ", StringComparison.Ordinal));
@@ -65,7 +65,7 @@ public class ContextPipelineTests
     {
         var pipeline = Build([new FakeProvider("Bos", 1, null)]);
 
-        var result = await pipeline.BuildContextAsync(Session(), "q");
+        var result = await pipeline.BuildContextAsync(Session(), "q", TestContext.Current.CancellationToken);
 
         result.Text.Should().BeEmpty();
         result.Included("Bos").Should().BeFalse();
@@ -89,7 +89,7 @@ public class ContextPipelineTests
             ],
             new ContextPipelineOptions { ProviderTimeoutSeconds = 1 });
 
-        var result = await pipeline.BuildContextAsync(Session(), "q");
+        var result = await pipeline.BuildContextAsync(Session(), "q", TestContext.Current.CancellationToken);
 
         result.Parts.Single(p => p.ProviderName == "Yavas").Status
             .Should().Be(ContextPartStatus.TimedOut);
@@ -104,7 +104,7 @@ public class ContextPipelineTests
             new FakeProvider("Saglam", 2, "SAĞLAM")
         ]);
 
-        var result = await pipeline.BuildContextAsync(Session(), "q");
+        var result = await pipeline.BuildContextAsync(Session(), "q", TestContext.Current.CancellationToken);
 
         result.Parts.Single(p => p.ProviderName == "Patlayan").Status
             .Should().Be(ContextPartStatus.Failed);
@@ -123,7 +123,7 @@ public class ContextPipelineTests
             new FakeProvider("Semantik", 1, null, critical: false, throws: new Exception("boom"))
         ]);
 
-        var result = await pipeline.BuildContextAsync(Session(), "q");
+        var result = await pipeline.BuildContextAsync(Session(), "q", TestContext.Current.CancellationToken);
 
         result.Text.Should().BeEmpty("iyileştirici provider için sessiz atlama doğrudur");
     }
@@ -143,7 +143,7 @@ public class ContextPipelineTests
 
         var pipeline = Build([provider], new ContextPipelineOptions { ProviderTimeoutSeconds = 1 });
 
-        var result = await pipeline.BuildContextAsync(Session(), "q");
+        var result = await pipeline.BuildContextAsync(Session(), "q", TestContext.Current.CancellationToken);
 
         result.Text.Should().Contain("UYARI");
         result.Text.Should().Contain("MusteriBaglami");
@@ -159,7 +159,7 @@ public class ContextPipelineTests
             [new FakeProvider("Uzun", 1, new string('x', 5000))],
             new ContextPipelineOptions { MaxProviderChars = 100, MaxTotalChars = 1000 });
 
-        var result = await pipeline.BuildContextAsync(Session(), "q");
+        var result = await pipeline.BuildContextAsync(Session(), "q", TestContext.Current.CancellationToken);
 
         result.Text.Length.Should().BeLessThan(200);
         result.Text.Should().Contain("kırpıldı");
@@ -179,7 +179,7 @@ public class ContextPipelineTests
             ],
             new ContextPipelineOptions { MaxProviderChars = 500, MaxTotalChars = 500 });
 
-        var result = await pipeline.BuildContextAsync(Session(), "q");
+        var result = await pipeline.BuildContextAsync(Session(), "q", TestContext.Current.CancellationToken);
 
         result.Included("Onemli").Should().BeTrue();
         result.Parts.Single(p => p.ProviderName == "Ikincil").Status

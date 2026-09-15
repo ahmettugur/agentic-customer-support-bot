@@ -51,7 +51,7 @@ public class SemanticMemoryContextProviderTests
         var provider = Build(store, SessionWithUserQuery("iade koşulları"));
         var session = new AgentSession { SessionId = "s", State = new SessionState() };
 
-        var ctx = await provider.GetContextAsync(session, "iade koşulları");
+        var ctx = await provider.GetContextAsync(session, "iade koşulları", TestContext.Current.CancellationToken);
 
         ctx.Should().NotBeNull();
         ctx.Should().Contain("<retrieved_data source=\"knowledge\">İade süresi 14 gündür.</retrieved_data>");
@@ -75,7 +75,7 @@ public class SemanticMemoryContextProviderTests
         var provider = Build(store, SessionWithUserQuery("soru"));
         var session = new AgentSession { SessionId = "s", State = new SessionState() };
 
-        var ctx = await provider.GetContextAsync(session, "soru");
+        var ctx = await provider.GetContextAsync(session, "soru", TestContext.Current.CancellationToken);
 
         ctx.Should().NotBeNull();
         // Payload fence içinde kalıyor: gerçek kapanış etiketi sadece sondaki fence.
@@ -96,7 +96,7 @@ public class SemanticMemoryContextProviderTests
         var provider = Build(store, SessionWithUserQuery("soru"));
         var session = new AgentSession { SessionId = "s", State = new SessionState() };
 
-        var ctx = await provider.GetContextAsync(session, "soru");
+        var ctx = await provider.GetContextAsync(session, "soru", TestContext.Current.CancellationToken);
         ctx.Should().BeNull();
     }
 
@@ -133,7 +133,7 @@ public class SemanticMemoryContextProviderTests
             State = new SessionState { AuthenticatedCustomerId = "1027" }
         };
 
-        var ctx = await provider.GetContextAsync(session, "siparişim nerede");
+        var ctx = await provider.GetContextAsync(session, "siparişim nerede", TestContext.Current.CancellationToken);
 
         ctx.Should().NotBeNull();
         ctx.Should().Contain("Bu Müşteriyle Geçmiş Görüşmeler");
@@ -159,7 +159,7 @@ public class SemanticMemoryContextProviderTests
         var provider = Build(store, SessionWithUserQuery("soru"));
         var session = new AgentSession { SessionId = "s", State = new SessionState() };
 
-        await provider.GetContextAsync(session, "soru");
+        await provider.GetContextAsync(session, "soru", TestContext.Current.CancellationToken);
 
         store.ReceivedCalls()
             .Count(c => c.GetMethodInfo().Name == nameof(IVectorMemoryPort.SearchAsync)

@@ -37,7 +37,7 @@ public class SessionIdentityBinderTests
         var sessions = NewSessions();
         var session = await sessions.GetOrCreateAsync("s1", CancellationToken.None);
 
-        var ok = await SessionIdentityBinder.TryBindAsync(session, "1027", sessions);
+        var ok = await SessionIdentityBinder.TryBindAsync(session, "1027", sessions, TestContext.Current.CancellationToken);
 
         ok.Should().BeTrue();
         var reloaded = await sessions.GetAsync("s1", CancellationToken.None);
@@ -50,7 +50,7 @@ public class SessionIdentityBinderTests
         var sessions = await SessionsWithOwner("s1", "1027");
         var session = await sessions.GetOrCreateAsync("s1", CancellationToken.None);
 
-        var ok = await SessionIdentityBinder.TryBindAsync(session, "1027", sessions);
+        var ok = await SessionIdentityBinder.TryBindAsync(session, "1027", sessions, TestContext.Current.CancellationToken);
 
         ok.Should().BeTrue();
         session.State.AuthenticatedCustomerId.Should().Be("1027");
@@ -62,7 +62,7 @@ public class SessionIdentityBinderTests
         var sessions = await SessionsWithOwner("s1", "1027");
         var session = await sessions.GetOrCreateAsync("s1", CancellationToken.None);
 
-        var ok = await SessionIdentityBinder.TryBindAsync(session, "9999", sessions);
+        var ok = await SessionIdentityBinder.TryBindAsync(session, "9999", sessions, TestContext.Current.CancellationToken);
 
         ok.Should().BeFalse();
         var reloaded = await sessions.GetAsync("s1", CancellationToken.None);
@@ -77,7 +77,7 @@ public class SessionIdentityBinderTests
         var sessions = NewSessions();
         var session = await sessions.GetOrCreateAsync("s1", CancellationToken.None);
 
-        var ok = await SessionIdentityBinder.TryBindAsync(session, null, sessions);
+        var ok = await SessionIdentityBinder.TryBindAsync(session, null, sessions, TestContext.Current.CancellationToken);
 
         ok.Should().BeTrue();
         session.State.AuthenticatedCustomerId.Should().BeNull();
@@ -90,7 +90,7 @@ public class SessionIdentityBinderTests
     {
         var sessions = await SessionsWithOwner("s1", "1027");
 
-        (await SessionIdentityBinder.IsAccessibleAsync("s1", "9999", sessions)).Should().BeFalse();
+        (await SessionIdentityBinder.IsAccessibleAsync("s1", "9999", sessions, TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class SessionIdentityBinderTests
     {
         var sessions = await SessionsWithOwner("s1", "1027");
 
-        (await SessionIdentityBinder.IsAccessibleAsync("s1", "1027", sessions)).Should().BeTrue();
+        (await SessionIdentityBinder.IsAccessibleAsync("s1", "1027", sessions, TestContext.Current.CancellationToken)).Should().BeTrue();
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public class SessionIdentityBinderTests
         // sınırsız boş oturum yaratabilirdi.
         var sessions = NewSessions();
 
-        (await SessionIdentityBinder.IsAccessibleAsync("yok-boyle", "1027", sessions)).Should().BeTrue();
+        (await SessionIdentityBinder.IsAccessibleAsync("yok-boyle", "1027", sessions, TestContext.Current.CancellationToken)).Should().BeTrue();
         (await sessions.GetAsync("yok-boyle", CancellationToken.None)).Should().BeNull();
     }
 
@@ -118,13 +118,13 @@ public class SessionIdentityBinderTests
         // Henüz kimseye bağlı değil — ilk temas onu çağırana bağlayacak.
         var sessions = await SessionsWithOwner("s1", null);
 
-        (await SessionIdentityBinder.IsAccessibleAsync("s1", "1027", sessions)).Should().BeTrue();
+        (await SessionIdentityBinder.IsAccessibleAsync("s1", "1027", sessions, TestContext.Current.CancellationToken)).Should().BeTrue();
     }
 
     [Fact]
     public async Task IsAccessible_NoSessionId_IsTrue()
     {
         // Yeni sohbet: istemci henüz bir sessionId taşımıyor.
-        (await SessionIdentityBinder.IsAccessibleAsync(null, "1027", NewSessions())).Should().BeTrue();
+        (await SessionIdentityBinder.IsAccessibleAsync(null, "1027", NewSessions(), TestContext.Current.CancellationToken)).Should().BeTrue();
     }
 }
