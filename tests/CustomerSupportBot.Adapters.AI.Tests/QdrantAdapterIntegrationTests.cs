@@ -19,7 +19,7 @@ namespace CustomerSupportBot.Adapters.AI.Tests;
 
 public sealed class QdrantFixture : IAsyncLifetime
 {
-    private readonly QdrantContainer _container = new QdrantBuilder().Build();
+    private readonly QdrantContainer _container = new QdrantBuilder("qdrant/qdrant:v1.13.4").Build();
 
     public string Host { get; private set; } = "localhost";
     public int GrpcPort { get; private set; }
