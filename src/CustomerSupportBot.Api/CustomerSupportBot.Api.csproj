@@ -9,12 +9,12 @@
 
   <ItemGroup>
     <!-- Api katmanına özgü paketler -->
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.12" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <!-- contentfiles kasıtlı olarak DAHIL DEĞİL: bu paketin content item'ları (**/*.resx glob'u
          dahil) MSBuild tarafından consuming proje köküne göre çözülüyor. bin/obj derinleştikçe
          (nested publish/build çıktıları) bu glob kendi içine katlanıp MSB3552 ile patlıyordu. -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
       <IncludeAssets>runtime; build; native; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

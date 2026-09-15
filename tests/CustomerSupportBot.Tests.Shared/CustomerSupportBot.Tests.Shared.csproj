@@ -11,10 +11,10 @@
     <!-- Bu proje test projesi DEĞİL (IsTestProject yok) — IAsyncLifetime/ICollectionFixture
          gibi tipler için sadece extensibility paketine ihtiyaç var, çalıştırılabilir xunit.v3
          ana paketine değil. -->
-    <PackageReference Include="xunit.v3.extensibility.core" Version="4.0.0" />
+    <PackageReference Include="xunit.v3.extensibility.core" Version="4.0.1" />
     <PackageReference Include="NSubstitute" Version="6.2.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
-    <PackageReference Include="Testcontainers.PostgreSql" Version="4.14.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
   </ItemGroup>
 
   <ItemGroup>
