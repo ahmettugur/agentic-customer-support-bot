@@ -43,4 +43,4 @@ Otomatik üretilen "ders"lerin doğrudan uygulanmaması, admin onayından geçme
 
 ## Bağlantılar
 
-- [Lesson](../../Domain/Model/Improvement/Lesson.md)
+- [Lesson](../../../CustomerSupportBot.Domain/Model/Improvement/Lesson.md)

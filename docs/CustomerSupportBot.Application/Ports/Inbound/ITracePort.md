@@ -49,4 +49,4 @@ Genel trace istatistikleri — toplam/tamamlanan/hatalı trace sayısı, ortalam
 
 ## Bağlantılar
 
-- [WorkflowTraceEventProcessor](../../Adapters.Agents/WorkflowTraceEventProcessor.md) — trace'lerin üretildiği yer.
+- [WorkflowTraceEventProcessor](../../../CustomerSupportBot.Adapters.Agents/WorkflowTraceEventProcessor.md) — trace'lerin üretildiği yer.

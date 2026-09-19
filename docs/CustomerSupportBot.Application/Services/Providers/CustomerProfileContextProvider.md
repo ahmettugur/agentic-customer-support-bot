@@ -6,7 +6,7 @@
 
 ## Ne işe yarar?
 
-`CustomerProfileContextProvider`, doğrulanmış müşterinin ([SessionState.AuthenticatedCustomerId](../../../CustomerSupportBot.Domain/Model/AgentSessionState.md)) profili ve etkileşim sentezi (`CustomerUnderstanding`) varsa, bunu ajanların dikkate alması için `"## 👤 Müşteri Profili"` formatında dinamik sistem bağlamına enjekte eden sağlayıcıdır.
+`CustomerProfileContextProvider`, doğrulanmış müşterinin ([SessionState.AuthenticatedCustomerId](../../../CustomerSupportBot.Domain/Model/SessionState.md)) profili ve etkileşim sentezi (`CustomerUnderstanding`) varsa, bunu ajanların dikkate alması için `"## 👤 Müşteri Profili"` formatında dinamik sistem bağlamına enjekte eden sağlayıcıdır.
 
 ## Hangi amaçla kullanılır`?
 

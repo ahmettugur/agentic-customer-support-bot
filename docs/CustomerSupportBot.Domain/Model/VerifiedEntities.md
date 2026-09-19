@@ -67,4 +67,4 @@ factual iş verisinin doğruluk kaynağı ilgili tool sonucudur.
 ## Bağlantılar
 
 - [ReasoningResult.md](ReasoningResult.md) — Bu modeli taşıyan reasoning çıktısı
-- [../../../CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.md](../../../CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.md) — Bu modeli üreten servis
+- [../../CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.md](../../CustomerSupportBot.Application/Services/Reasoning/EntityVerifier.md) — Bu modeli üreten servis

@@ -19,7 +19,7 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 - **Sesli Konuşma Modu (Realtime) — çift kanal** — OpenAI Realtime API (`gpt-realtime-1.5`) üzerinden iki ayrı sesli mod:
   - **🎤 Sesli Asistan (köprü)** — model sadece STT/TTS köprüsü; **text chat ile aynı** 6-ajanlı MAF pipeline'ı (reasoning, HITL, tool routing) çalışır. Tüm tool'lar (sipariş aç, şikayet, vb.) destekli.
   - **⚡ Hızlı Sesli (native)** — model **kendisi** function calling yapar; sadece okuma-only tool'lar (ürün/sipariş sorgu) açıktır. ~3-5× daha hızlı, ~70% daha ucuz. Yan-etkili istek gelirse model kullanıcıyı yazılı sohbete yönlendirir (HITL korunur).
-  Detay → [`docs/adapters-ai/Realtime.md`](docs/adapters-ai/Realtime.md).
+  Detay → [`docs/CustomerSupportBot.Adapters.AI/Realtime/`](docs/CustomerSupportBot.Adapters.AI/Realtime/README.md).
 
 ---
 
@@ -44,7 +44,7 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 
 https://github.com/user-attachments/assets/9cf6ba41-7fa1-49da-ad9b-251ea4b3ae65
 
-> **Not:** Video GitHub'da görüntülenemiyorsa, dosyayı `docs/media/1767601282559.mp4` konumunda bulabilirsiniz.
+> **Not:** Video GitHub'da görüntülenemiyorsa, dosyayı `docs/CustomerSupportBot.Web/1767601282559.mp4` konumunda bulabilirsiniz.
 
 ---
 
@@ -252,7 +252,7 @@ curl -X POST http://localhost:5021/chat/ \
 | `/sla/status` | `GET` | SLA Guardian güncel durum: pending/open sayı, en eski yaş, ihlal sayısı (admin) |
 | `/sla/events` | `GET` | Son SLA warn/breach olayları (admin) |
 
-Tam API referansı için [`docs/api/`](docs/api/README.md) klasörüne bakın.
+Tam API referansı için [`docs/CustomerSupportBot.Api/`](docs/CustomerSupportBot.Api/README.md) klasörüne bakın.
 
 ---
 
@@ -393,15 +393,15 @@ Her proje için: README + her sınıf/dosya grubu için ayrı doküman.
 
 | Klasör | Kapsam |
 |---|---|
-| [`docs/domain/`](docs/domain/README.md) | Domain modeller, services (parser/state machine/extractor), WellKnown |
-| [`docs/application/`](docs/application/README.md) | Port servisleri, agent'lar, reasoning, HITL, routing, workflow executor |
-| [`docs/adapters-agents/`](docs/adapters-agents/README.md) | MAF agent ekibi, tool kayıtları, approval gate |
-| [`docs/adapters-ai/`](docs/adapters-ai/README.md) | OpenAI/Azure chat, embedding, Qdrant vector, Realtime voice |
-| [`docs/adapters-persistence/`](docs/adapters-persistence/README.md) | InMemory + Postgres adaptörleri, EF Core, hybrid cache pattern, auth |
-| [`docs/adapters-redis/`](docs/adapters-redis/README.md) | Distributed lock (RedLock), pub/sub message bus |
-| [`docs/adapters-telemetry/`](docs/adapters-telemetry/README.md) | OpenTelemetry pipeline, cost calculator, LLM intercept decorator |
-| [`docs/api/`](docs/api/README.md) | HTTP/SSE/WebSocket endpoint'ler, middleware, workers, JWT |
-| [`docs/web/`](docs/web/README.md) | Blazor WASM admin paneli + chat UI, JS interop, voice client |
+| [`docs/CustomerSupportBot.Domain/`](docs/CustomerSupportBot.Domain/README.md) | Domain modeller, services (parser/state machine/extractor), WellKnown |
+| [`docs/CustomerSupportBot.Application/`](docs/CustomerSupportBot.Application/README.md) | Port servisleri, agent'lar, reasoning, HITL, routing, workflow executor |
+| [`docs/CustomerSupportBot.Adapters.Agents/`](docs/CustomerSupportBot.Adapters.Agents/README.md) | MAF agent ekibi, tool kayıtları, approval gate |
+| [`docs/CustomerSupportBot.Adapters.AI/`](docs/CustomerSupportBot.Adapters.AI/README.md) | OpenAI/Azure chat, embedding, Qdrant vector, Realtime voice |
+| [`docs/CustomerSupportBot.Adapters.Persistence/`](docs/CustomerSupportBot.Adapters.Persistence/README.md) | InMemory + Postgres adaptörleri, EF Core, hybrid cache pattern, auth |
+| [`docs/CustomerSupportBot.Adapters.Redis/`](docs/CustomerSupportBot.Adapters.Redis/README.md) | Distributed lock (RedLock), pub/sub message bus |
+| [`docs/CustomerSupportBot.Adapters.Telemetry/`](docs/CustomerSupportBot.Adapters.Telemetry/README.md) | OpenTelemetry pipeline, cost calculator, LLM intercept decorator |
+| [`docs/CustomerSupportBot.Api/`](docs/CustomerSupportBot.Api/README.md) | HTTP/SSE/WebSocket endpoint'ler, middleware, workers, JWT |
+| [`docs/CustomerSupportBot.Web/`](docs/CustomerSupportBot.Web/README.md) | Blazor WASM admin paneli + chat UI, JS interop, voice client |
 
 ### Genel bakış / operasyonel rehberler
 
@@ -420,3 +420,7 @@ Her proje için: README + her sınıf/dosya grubu için ayrı doküman.
 | [`docs/evaluation.md`](docs/evaluation.md) | Senaryo tabanlı test sistemi, YAML format, CriteriaEvaluator |
 
 ---
+
+## Lisans
+
+MIT License — bkz. [`LICENSE`](LICENSE).

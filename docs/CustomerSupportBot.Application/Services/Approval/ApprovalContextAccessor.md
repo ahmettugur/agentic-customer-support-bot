@@ -17,7 +17,7 @@ mekanizması. ASP.NET Core'daki `HttpContext.Items` benzeri, ama HTTP isteğiyle
 Bir tool metodu (ör. `OrderCancelTool`) LLM tarafından çağrıldığında, tool'un "hangi müşteri
 adına çalıştığını" bilmesi gerekir. Bu bilgi LLM'e **parametre olarak sorulmaz** (LLM'in
 serbest metinden `customerId` uydurmasına izin vermek güvenlik açığıdır); bunun yerine
-[`ApprovalGateService`](../../../../CustomerSupportBot.Adapters.Agents/ApprovalGateService.md)
+[`ApprovalGateService`](../../../CustomerSupportBot.Adapters.Agents/ApprovalGateService.md)
 bir turun başında `SetScope(...)` ile context'i kurar, tool içindeki kod ise
 `IApprovalContextAccessor.Context.CustomerId`'yi okur.
 

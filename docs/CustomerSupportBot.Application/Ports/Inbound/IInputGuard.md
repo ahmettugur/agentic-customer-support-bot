@@ -44,4 +44,4 @@ Yok (arayüz düzeyinde) — saf bir denetim sözleşmesi.
 
 ## Bağlantılar
 
-- [OpenAiRealtimeClientAdapter](../../Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md) — `Inspect` tamamlanmadan `create_response=true` ile modelin cevap üretebilmesi bilinen bir kısıt olarak orada belgelenmiştir.
+- [OpenAiRealtimeClientAdapter](../../../CustomerSupportBot.Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md) — `Inspect` tamamlanmadan `create_response=true` ile modelin cevap üretebilmesi bilinen bir kısıt olarak orada belgelenmiştir.

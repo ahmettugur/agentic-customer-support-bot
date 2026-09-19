@@ -9,7 +9,7 @@
 
 ## 2. Hangi Amaçla Kullanılır
 
-Bir context provider (bkz. [ContextProviders.md](../../Providers/ContextProviders.md)) veya
+Bir context provider (bkz. [ContextProviders.md](../../Services/Providers/IContextProvider.md)) veya
 ilgili bir servis, uygun olduğunda önerileri prompt'a/UI'a eklemek için `Recommend`'i çağırır.
 
 ## 3. Sorumlulukları

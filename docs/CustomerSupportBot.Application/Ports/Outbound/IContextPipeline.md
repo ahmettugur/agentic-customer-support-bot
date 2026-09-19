@@ -1,7 +1,7 @@
 # IContextPipeline
 
 **Kaynak:** `Ports/Outbound/IContextPipeline.cs`
-**Implementasyon:** [`ContextPipeline`](../../Chat/ContextPipeline.md)
+**Implementasyon:** [`ContextPipeline`](../../Services/Chat/ContextPipeline.md)
 
 ## 1. Ne İşe Yarar
 
@@ -22,8 +22,8 @@ ekler.
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Tam davranış detayı için bkz. [ContextPipeline.md](../../Chat/ContextPipeline.md) ve
-[ContextProviders.md](../../Providers/ContextProviders.md).
+Tam davranış detayı için bkz. [ContextPipeline.md](../../Services/Chat/ContextPipeline.md) ve
+[IContextProvider.md](../../Services/Providers/IContextProvider.md).
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 

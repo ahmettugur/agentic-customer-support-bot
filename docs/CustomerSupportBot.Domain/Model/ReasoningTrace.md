@@ -45,7 +45,7 @@ Her kullanıcı mesajı işlendiğinde `WorkflowTraceEventProcessor` bir `Reason
 > `ContextPipeline`'daki bir provider hata verdi, zaman aşımına uğradı veya karakter bütçesine
 > takıldı. Bu bilgi daha önce yalnızca `Debug` seviyesinde loglandığı için trace'ten
 > görünmüyordu; "model bu turda neyi biliyordu?" sorusuna admin panelinden cevap vermek için
-> `ReasoningTrace`'e taşındı. Bkz. [ContextPipeline.md](../../CustomerSupportBot.Application/Chat/ContextPipeline.md#34-raporlama-contextresult).
+> `ReasoningTrace`'e taşındı. Bkz. [ContextPipeline.md](../../CustomerSupportBot.Application/Ports/Outbound/ContextResult.md).
 
 | Üye | Tip | Açıklama |
 | ----- | ----- | ---------- |

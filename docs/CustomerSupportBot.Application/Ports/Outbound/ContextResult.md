@@ -19,7 +19,7 @@ ile verir; `ReasoningTrace.ContextParts` gözlemlenebilirlik için bu parçalar�
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Detaylı akış için bkz. [ContextPipeline.md](../../Chat/ContextPipeline.md) §3.4 (Raporlama).
+Detaylı akış için bkz. [ContextPipeline.md](../../Services/Chat/ContextPipeline.md) §3.4 (Raporlama).
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 

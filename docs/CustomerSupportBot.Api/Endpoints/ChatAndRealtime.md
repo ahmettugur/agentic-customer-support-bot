@@ -73,7 +73,7 @@ sohbet (WebSocket) ve oturum/geçmiş sorgulama. Üçü de **login olmuş bir m�
 - **`GET /sessions/{id}/state` müşteriye ham `SessionState`'i döndürmez:** `ReplanNote` gibi
   alanlar bilerek "admin/agent iç iletişimi, müşteri görmesin" diye tasarlanmıştı; ham nesneyi
   serileştirmek bunu ihlal ediyordu — düzeltme `CustomerVisibleState` projeksiyonuyla yapıldı.
-  Bkz. [ContextPipeline.md](../../CustomerSupportBot.Application/Chat/ContextPipeline.md) ve
+  Bkz. [ContextPipeline.md](../../CustomerSupportBot.Application/Services/Chat/ContextPipeline.md) ve
   ilgili commit geçmişi.
 - **İki ayrı realtime modu (köprü / native) var:** köprü modda model yalnızca STT/TTS yapar,
   yanıtı agent pipeline üretir (tool onayı dahil tüm iş akışı kullanılabilir); native modda

@@ -1,7 +1,7 @@
 # IBrowserChannel (+ BrowserMessage, BrowserMessageKind)
 
 **Kaynak:** `Ports/Outbound/IBrowserChannel.cs`
-**Implementasyon:** [`WebSocketBrowserChannel`](../../../CustomerSupportBot.Api/Infrastructure/WebSocketBrowserChannel.md)
+**Implementasyon:** [`WebSocketBrowserChannel`](../../../CustomerSupportBot.Api/Infrastructure/SseAndWebSockets.md)
 
 ## 1. Ne İşe Yarar
 

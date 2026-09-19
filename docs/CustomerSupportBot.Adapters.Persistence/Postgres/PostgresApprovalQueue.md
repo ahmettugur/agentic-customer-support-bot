@@ -2,7 +2,7 @@
 
 **Dosya:** `Postgres/PostgresApprovalQueue.cs`
 **Namespace:** `CustomerSupportBot.Adapters.Persistence.Postgres`
-**Port:** [`IApprovalQueue`](../../CustomerSupportBot.Application/Ports/Outbound/IApprovalQueue.md)
+**Port:** [`IApprovalQueue`](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IApprovalQueue.md)
 
 ## 1. Ne İşe Yarar
 
@@ -66,6 +66,6 @@ HITL (human-in-the-loop) onay kayıtlarının (sipariş verme, şikayet, iptal, 
 
 ## Bağlantılar
 
-- [IApprovalQueue](../../CustomerSupportBot.Application/Ports/Outbound/IApprovalQueue.md)
+- [IApprovalQueue](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IApprovalQueue.md)
 - [ApprovalGateService](../../CustomerSupportBot.Adapters.Agents/ApprovalGateService.md) — çağıran taraf
 - [StockDeduction](StockDeduction.md) — aynı koşullu-atomik-güncelleme deseni

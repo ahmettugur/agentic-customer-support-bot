@@ -26,7 +26,7 @@ token üretilmez, istek reddedilir.
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
 - A2A token değişim akışının neresinde çağrıldığını görmek için bkz.
-  [`../../../../CustomerSupportBot.Api/A2A.md`](../../../../CustomerSupportBot.Api/A2A.md).
+  [`../../../../CustomerSupportBot.Api/Endpoints/A2A.md`](../../../../CustomerSupportBot.Api/Endpoints/A2A.md).
 - Gerçek implementasyon `ConfiguredA2ASubjectAuthorizer` — konfigürasyon tabanlı statik bir
   eşleme kullanır (örn. appsettings'te partner→izinli müşteri listesi), dış bir yetki
   sunucusuna gitmez.

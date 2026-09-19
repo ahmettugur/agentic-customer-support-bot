@@ -22,7 +22,7 @@ sağlamak.
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
 - `ICostUsageStorePort` — biriken kullanım/maliyet anlık görüntüsü (Adapters.Telemetry'de
-  implemente edilir, bkz. [CostUsageStore.md](../../../../CustomerSupportBot.Adapters.Telemetry/OpenTelemetry/CostUsageStore.md)).
+  implemente edilir, bkz. [CostUsageStore.md](../../../CustomerSupportBot.Adapters.Telemetry/OpenTelemetry/CostUsageStore.md)).
 - `ICostCalculatorPort` — bilinen model listesi (Adapters.Telemetry'de implemente edilir).
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı

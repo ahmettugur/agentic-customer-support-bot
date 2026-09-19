@@ -39,4 +39,4 @@ Diğer Postgres adaptörlerinin aksine cache/Redis/hydration YOKTUR — bu bilin
 ## Bağlantılar
 
 - [ILlmCallPersistencePort](../../CustomerSupportBot.Application/Ports/Outbound/Observability/ILlmCallPersistencePort.md)
-- [CostCalculator](../../CustomerSupportBot.Adapters.Telemetry/CostCalculator.md)
+- [CostCalculator](../../CustomerSupportBot.Adapters.Telemetry/OpenTelemetry/CostCalculator.md)

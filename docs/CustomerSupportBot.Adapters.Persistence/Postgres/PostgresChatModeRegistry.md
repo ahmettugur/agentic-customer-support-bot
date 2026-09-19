@@ -2,7 +2,7 @@
 
 **Dosya:** `Postgres/PostgresChatModeRegistry.cs`
 **Namespace:** `CustomerSupportBot.Adapters.Persistence.Postgres`
-**Port:** [`IChatModeRegistry`](../../CustomerSupportBot.Application/Ports/Outbound/Chat/IChatModeRegistry.md)
+**Port:** [`IChatModeRegistry`](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IChatModeRegistry.md)
 
 ## 1. Ne İşe Yarar
 
@@ -50,6 +50,6 @@ Admin panelinde "sohbeti devral" butonu `TakeOver`'ı, "bota geri ver" `Release`
 
 ## Bağlantılar
 
-- [IChatModeRegistry](../../CustomerSupportBot.Application/Ports/Outbound/Chat/IChatModeRegistry.md)
+- [IChatModeRegistry](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IChatModeRegistry.md)
 - [PostgresChatBridge](PostgresChatBridge.md) — mesaj alışverişi (bu sınıfın tamamlayıcısı)
 - [PostgresApprovalQueue](PostgresApprovalQueue.md) — benzer "DB-otoriter karar" deseni

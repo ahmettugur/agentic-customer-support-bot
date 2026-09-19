@@ -20,7 +20,7 @@ zaman/karakter sınırı içinde çalıştırır.
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
-Ayrıntılı davranış için bkz. [ContextPipeline.md](../../Chat/ContextPipeline.md) — bu options
+Ayrıntılı davranış için bkz. [ContextPipeline.md](../../Services/Chat/ContextPipeline.md) — bu options
 sınıfı orada anlatılan dört mekanizmadan ikisinin (timeout, bütçe) sayısal parametrelerini
 sağlar.
 

@@ -12,11 +12,11 @@ Bu klasör, Application katmanındaki giden (Outbound) kalıcılık portlarını
 
 ## HITL (İnsan Onayı) ve Canlı Sohbet Adaptörleri
 
-- [PostgresApprovalQueue](PostgresApprovalQueue.md) ➔ [IApprovalQueue](../../CustomerSupportBot.Application/Ports/Outbound/IApprovalQueue.md) — Bloklamayan onay modeli, atomik koşullu sahiplenme.
+- [PostgresApprovalQueue](PostgresApprovalQueue.md) ➔ [IApprovalQueue](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IApprovalQueue.md) — Bloklamayan onay modeli, atomik koşullu sahiplenme.
 - [PostgresEscalationSink](PostgresEscalationSink.md) ➔ [IEscalationSink](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IEscalationSink.md)
 - [PostgresHumanAgentRegistry](PostgresHumanAgentRegistry.md) ➔ [IHumanAgentRegistry](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IHumanAgentRegistry.md)
 - [PostgresChatBridge](PostgresChatBridge.md) ➔ [IChatBridge](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IChatBridge.md) — Canlı devralma mesaj köprüsü.
-- [PostgresChatModeRegistry](PostgresChatModeRegistry.md) ➔ [IChatModeRegistry](../../CustomerSupportBot.Application/Ports/Outbound/Chat/IChatModeRegistry.md) — Canlı devralma mod (Bot/Human) yönetimi.
+- [PostgresChatModeRegistry](PostgresChatModeRegistry.md) ➔ [IChatModeRegistry](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IChatModeRegistry.md) — Canlı devralma mod (Bot/Human) yönetimi.
 - [PostgresSessionManager](PostgresSessionManager.md) ➔ [ISessionManager](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/ISessionManager.md) — Oturum durumu ve konuşma geçmişi.
 
 ## Gözlemlenebilirlik, İyileştirme ve Bilgi Depoları

@@ -26,7 +26,7 @@ görüntüleyici" `GetRecent`/`GetBySession`/`Get` ile bu kayıtları okur.
 `InMemoryReasoningTraceStore` (test/tek-pod) ve `PostgresReasoningTraceStore` (prod, çoklu pod)
 implemente eder. `ContextPipeline`'ın ürettiği `ContextResult.Parts` de trace'e yazılır —
 "model bu turda neyi biliyordu?" sorusunu yanıtlamak için (bkz.
-[ContextPipeline.md](../../../Chat/ContextPipeline.md)).
+[ContextPipeline.md](../../../Services/Chat/ContextPipeline.md)).
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 

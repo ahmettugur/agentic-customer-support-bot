@@ -60,7 +60,7 @@ olayın kendisi (ör. bir SSE yazma hatası) diğer event handler'ların çalı�
 
 `Dispose()`, constructor'da eklenen TÜM event handler'ları (`-=`) kaldırır — bu, abonelik
 sızıntısını (memory leak) önlemenin standart yoludur; her `+=` bağlantısının kapanışta bir
-`-=` karşılığı vardır (bkz. [`ChatBridge`](../../../../CustomerSupportBot.Adapters.Persistence/README.md)'deki
+`-=` karşılığı vardır (bkz. [`ChatBridge`](../../../CustomerSupportBot.Adapters.Persistence/README.md)'deki
 benzer `Unregister` deseni).
 
 ## 6. Metotlar / Üyeler

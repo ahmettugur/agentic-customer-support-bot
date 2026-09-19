@@ -42,4 +42,4 @@ Admin panelinin "müşteri profilleri" sayfası, profilleri listelemek, tek bir 
 
 ## Bağlantılar
 
-- [CustomerProfile](../../Domain/Model/Memory/CustomerProfile.md)
+- [CustomerProfile](../../../CustomerSupportBot.Domain/Model/Memory/CustomerProfile.md)

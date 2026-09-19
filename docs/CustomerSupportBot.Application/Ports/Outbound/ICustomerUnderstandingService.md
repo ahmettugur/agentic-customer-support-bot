@@ -10,7 +10,7 @@ Memory'nin üç kaynağını (yapısal olgular, profil, LLM-türetilmiş çıkar
 
 ## 2. Hangi Amaçla Kullanılır
 
-`CustomerProfileContextProvider` (bkz. [ContextProviders.md](../../Providers/ContextProviders.md))
+`CustomerProfileContextProvider` (bkz. [ContextProviders.md](../../Services/Providers/IContextProvider.md))
 bir turun bağlamını kurarken `Build(session)`'ı çağırır.
 
 ## 3. Sorumlulukları

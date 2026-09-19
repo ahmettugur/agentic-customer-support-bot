@@ -40,4 +40,4 @@ Application katmanının Adapters.Telemetry'e (somut depoya) değil bu porta ba�
 
 ## Bağlantılar
 
-- [CostUsageStore](../../Adapters.Telemetry/OpenTelemetry/CostUsageStore.md)
+- [CostUsageStore](../../../CustomerSupportBot.Adapters.Telemetry/OpenTelemetry/CostUsageStore.md)

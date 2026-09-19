@@ -44,4 +44,4 @@ Köprü ve native olmak üzere iki ayrı mod (iki ayrı arayüz) olmasının ned
 ## Bağlantılar
 
 - [IRealtimeNativeBridge](IRealtimeNativeBridge.md) — native mod karşılığı.
-- [OpenAiRealtimeClientAdapter](../../Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md)
+- [OpenAiRealtimeClientAdapter](../../../CustomerSupportBot.Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md)

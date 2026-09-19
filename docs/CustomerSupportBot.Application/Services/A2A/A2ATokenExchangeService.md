@@ -22,7 +22,7 @@ A2A akışı iki aşamalıdır:
 
 ## 3. Sorumlulukları
 
-- **Üstlendiği:** Yetki kontrolünü ([`IA2ASubjectAuthorizer`](../../Ports/Outbound/A2A/README.md)'a
+- **Üstlendiği:** Yetki kontrolünü ([`IA2ASubjectAuthorizer`](../../Ports/Outbound/A2A/IA2ASubjectAuthorizer.md)'a
   sorarak) tetiklemek, yetki varsa `IJwtAccessTokenProvider` ile imzalı token üretmek, üretimi loglamak.
 - **Üstlenmediği:** Yetki kararının KENDİSİ (bu iş kuralı [`ConfiguredA2ASubjectAuthorizer`](ConfiguredA2ASubjectAuthorizer.md)'da),
   token'ın imzalanma/doğrulanma mekaniği (`IJwtAccessTokenProvider`, Adapters katmanında).

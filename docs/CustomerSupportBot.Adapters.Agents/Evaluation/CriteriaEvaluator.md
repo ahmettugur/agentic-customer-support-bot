@@ -55,4 +55,4 @@ public static CriterionResult Evaluate(CriterionSpec spec, EvalItem item, Scenar
 - `Microsoft.Agents.AI.Evaluation.EvalCheck`
 - `Microsoft.Agents.AI.Evaluation.EvalItem`
 - `Microsoft.Agents.AI.Evaluation.FunctionEvaluator`
-- [EvaluationScenario](../../CustomerSupportBot.Domain/Model/EvaluationScenario.md)
+- [EvaluationScenario](../../CustomerSupportBot.Application/Ports/Inbound/EvaluationModels.md)

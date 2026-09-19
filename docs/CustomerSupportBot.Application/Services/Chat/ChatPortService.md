@@ -24,7 +24,7 @@ akıl yürütme → agent takımı → kalıcılık) tek giriş noktasıdır.
   canlı devralma) sırasında bot'u bypass etmek, sonucu geçmişe yazmak, sentiment olaylarını
   yaymak (streaming yolda).
 - **Üstlenmediği:** Akıl yürütmenin kendisi (`IReasoningPort`), agent orkestrasyonunun kendisi
-  (`IAgentTeamPort`/[`WorkflowRunner`](../../../../CustomerSupportBot.Adapters.Agents/WorkflowRunner.md)),
+  (`IAgentTeamPort`/[`WorkflowRunner`](../../../CustomerSupportBot.Adapters.Agents/WorkflowRunner.md)),
   bağlam toplama ([`ContextPipeline`](ContextPipeline.md) — bu, reasoning/agent takımı içinde
   ayrıca çalışır).
 

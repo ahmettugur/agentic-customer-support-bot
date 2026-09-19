@@ -41,5 +41,5 @@ WebSocket üzerinden gelen bir sesli oturumu, köprü moduna göre daha düşük
 ## Bağlantılar
 
 - [IRealtimeBridge](IRealtimeBridge.md) — köprü mod karşılığı.
-- [OpenAiRealtimeClientAdapter](../../Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md)
+- [OpenAiRealtimeClientAdapter](../../../CustomerSupportBot.Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md)
 - [IInputGuard](IInputGuard.md)
