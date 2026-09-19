@@ -20,9 +20,9 @@
          tablolari, ic ice listeleri ve kod bloklarini dogru cozemez; kendi ayristiricimizi
          yazmak bu ornegin konusu degil. -->
     <PackageReference Include="Markdig" Version="1.3.2" />
-    <PackageReference Include="Microsoft.Agents.AI" Version="1.21.0" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.22.0" />
     <PackageReference Include="Microsoft.Agents.AI.A2A" Version="1.18.0-preview.260818.1" />
-    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.21.0" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.22.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
 
@@ -32,11 +32,11 @@
          W3C traceparent ekler — sunucu da AddAspNetCoreInstrumentation ile bunu okuduğu için
          (Adapters.Telemetry/DependencyInjection/TelemetryAdapterServiceCollectionExtensions.cs)
          tek bir iz, iki sürecin sınırını GERÇEKTEN geçer; süslü bir correlationId değil. -->
-    <PackageReference Include="OpenTelemetry" Version="1.18.0" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.18.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+    <PackageReference Include="OpenTelemetry" Version="1.19.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.19.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.19.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
   </ItemGroup>
 
   <ItemGroup>

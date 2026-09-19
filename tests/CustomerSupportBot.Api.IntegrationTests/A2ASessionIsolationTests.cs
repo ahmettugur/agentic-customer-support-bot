@@ -28,47 +28,50 @@ public sealed class A2AIsolationFactory : A2AConformanceFactory
         // Yalnızca çıplak store'u veriyoruz. IsolationKeyScopedAgentSessionStore veya
         // AgentIsolationKeyProvider burada kaydedilirse test üretim bağlantısını atlar ve
         // UseClaimsBasedAgentIsolation() silindiğinde yanlışlıkla yeşil kalır.
+        //
+        // MAAI001 yalnızca BURADA bastırılıyor: AgentSessionStore/AgentSessionStoreKey henüz
+        // deneysel işaretli (bkz. Api/Extensions/A2AServicesExtensions.cs'teki MEAI001 notu —
+        // aynı gerekçe).
+#pragma warning disable MAAI001
         builder.ConfigureServices(services =>
             services.AddKeyedSingleton<AgentSessionStore>(
                 A2AAgentNames.Order,
                 SessionStore));
+#pragma warning restore MAAI001
     }
 }
 
+#pragma warning disable MAAI001
 public sealed class RecordingAgentSessionStore : AgentSessionStore
 {
-    private readonly ConcurrentQueue<string> _observedIds = new();
+    // 1.22 SDK'sında AgentSessionStore artık düz bir string yerine AgentSessionStoreKey alıyor:
+    // SessionId (wire contextId) ile Partitions (izolasyon anahtarı dahil, sözlük) ayrı taşınıyor.
+    // IsolationKeyScopedAgentSessionStore izolasyon değerini "isolation" adlı partition'a yazıyor —
+    // artık eski string-birleştirme + kaçış (escape) yok, ham NameIdentifier claim değeri saklanıyor.
+    private readonly ConcurrentQueue<AgentSessionStoreKey> _observedKeys = new();
 
-    public IReadOnlyCollection<string> ObservedIds => _observedIds.ToArray();
+    public IReadOnlyCollection<AgentSessionStoreKey> ObservedKeys => _observedKeys.ToArray();
 
-    public override async ValueTask<AgentSession> GetSessionAsync(
+    public override async ValueTask<AgentSession?> GetSessionAsync(
         AIAgent agent,
-        string sessionStoreId,
+        AgentSessionStoreKey key,
         CancellationToken cancellationToken = default)
     {
-        _observedIds.Enqueue(sessionStoreId);
+        _observedKeys.Enqueue(key);
         return await agent.CreateSessionAsync(cancellationToken);
     }
 
     public override ValueTask SaveSessionAsync(
         AIAgent agent,
-        string sessionStoreId,
+        AgentSessionStoreKey key,
         AgentSession session,
         CancellationToken cancellationToken = default)
     {
-        _observedIds.Enqueue(sessionStoreId);
-        return ValueTask.CompletedTask;
-    }
-
-    public override ValueTask DeleteSessionAsync(
-        AIAgent agent,
-        string sessionStoreId,
-        CancellationToken cancellationToken = default)
-    {
-        _observedIds.Enqueue(sessionStoreId);
+        _observedKeys.Enqueue(key);
         return ValueTask.CompletedTask;
     }
 }
+#pragma warning restore MAAI001
 
 public class A2ASessionIsolationTests : IClassFixture<A2AIsolationFactory>
 {
@@ -98,15 +101,16 @@ public class A2ASessionIsolationTests : IClassFixture<A2AIsolationFactory>
         firstResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         secondResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var observed = _factory.SessionStore.ObservedIds
-            .Where(id => id.EndsWith($"::{SharedContextId}", StringComparison.Ordinal))
+        var observed = _factory.SessionStore.ObservedKeys
+            .Where(key => key.SessionId == SharedContextId)
+            .Select(key => key.Partitions?.GetValueOrDefault("isolation"))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
         observed.Should().HaveCount(2,
             "aynı wire contextId farklı NameIdentifier claim'leriyle aynı store anahtarına düşmemeli");
-        observed.Should().Contain(id => id.StartsWith("a2a\\:partner-a\\:1027::", StringComparison.Ordinal));
-        observed.Should().Contain(id => id.StartsWith("a2a\\:partner-b\\:1027::", StringComparison.Ordinal));
+        observed.Should().Contain("a2a:partner-a:1027");
+        observed.Should().Contain("a2a:partner-b:1027");
     }
 
     private HttpClient SubjectClient(string partnerId, string customerId)

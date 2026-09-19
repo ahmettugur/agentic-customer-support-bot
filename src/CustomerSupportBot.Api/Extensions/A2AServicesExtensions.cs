@@ -30,9 +30,12 @@ public static class A2AServicesExtensions
         services.AddHttpContextAccessor();
         services.UseClaimsBasedAgentIsolation();
 
-        // AgentRunMode.DisallowBackground bilinçli: arka plan (uzun süreli) görevler dış
-        // çağıranın sunucuda iş biriktirmesine izin verirdi. Bu kanal salt-okunur sorgular
-        // içindir — her çağrı istek ömrü içinde başlar ve biter.
+        // AgentRunMode.ReturnMessage bilinçli (eski adıyla DisallowBackground — 1.22 SDK'sında
+        // AgentRunMode enum'dan statik property'li bir struct'a dönüştü ve isim değişti, davranış
+        // aynı): arka plan (uzun süreli, AgentTask olarak pollanan) görevler dış çağıranın
+        // sunucuda iş biriktirmesine izin verirdi. Bu kanal salt-okunur sorgular içindir — her
+        // çağrı istek ömrü içinde başlar ve biter, yanıt her zaman tek bir AgentMessage'a
+        // toplanır.
         //
         // MEAI001 yalnızca BURADA bastırılıyor (proje genelinde değil): AgentRunMode henüz
         // deneysel işaretli. Bastırmayı dar tutmak, aynı uyarının başka bir deneysel API
@@ -42,17 +45,17 @@ public static class A2AServicesExtensions
         services
             .AddAIAgent(A2AAgentNames.Product,
                 (sp, _) => sp.GetRequiredService<A2AAgentCatalog>().Product)
-            .AddA2AServer(o => o.AgentRunMode = AgentRunMode.DisallowBackground);
+            .AddA2AServer(o => o.AgentRunMode = AgentRunMode.ReturnMessage);
 
         services
             .AddAIAgent(A2AAgentNames.Order,
                 (sp, _) => sp.GetRequiredService<A2AAgentCatalog>().Order)
-            .AddA2AServer(o => o.AgentRunMode = AgentRunMode.DisallowBackground);
+            .AddA2AServer(o => o.AgentRunMode = AgentRunMode.ReturnMessage);
 
         services
             .AddAIAgent(A2AAgentNames.Complaint,
                 (sp, _) => sp.GetRequiredService<A2AAgentCatalog>().Complaint)
-            .AddA2AServer(o => o.AgentRunMode = AgentRunMode.DisallowBackground);
+            .AddA2AServer(o => o.AgentRunMode = AgentRunMode.ReturnMessage);
 #pragma warning restore MEAI001
 
         return services;
