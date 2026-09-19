@@ -6,6 +6,7 @@
 using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound.Auth;
+using CustomerSupportBot.Application.Services.Logging;
 using CustomerSupportBot.Domain.Model.Auth;
 using Microsoft.Extensions.Logging;
 
@@ -59,7 +60,7 @@ public sealed class CustomerAuthService : ICustomerAuthService
         {
             _logger.LogWarning(
                 "[Auth] Müşteri kaydı reddedildi — e-posta müşteri kaydıyla eşleşmiyor. "
-              + "email={Email} customerId={CustomerId}", email, customerId);
+              + "email={Email} customerId={CustomerId}", PiiMasker.MaskEmail(email), customerId);
 
             // Hata mesajı hangi alanın yanlış olduğunu SÖYLEMEZ: ayrım verilseydi, geçerli
             // müşteri numaraları ile kayıtlı e-postalar deneme yanılmayla eşleştirilebilirdi.
@@ -77,7 +78,7 @@ public sealed class CustomerAuthService : ICustomerAuthService
             return (null, "Bu e-posta adresiyle zaten bir hesap var.");
 
         _logger.LogInformation("[Auth] Yeni müşteri hesabı oluşturuldu. email={Email} customerId={CustomerId}",
-            email, customerId);
+            PiiMasker.MaskEmail(email), customerId);
 
         return (created, null);
     }
@@ -91,13 +92,13 @@ public sealed class CustomerAuthService : ICustomerAuthService
         var user = await _users.FindActiveByUsernameAsync(email, ct);
         if (user is null || user.Role != CustomerRole)
         {
-            _logger.LogWarning("[Auth] Müşteri login başarısız: hesap yok/pasif. email={Email}", email);
+            _logger.LogWarning("[Auth] Müşteri login başarısız: hesap yok/pasif. email={Email}", PiiMasker.MaskEmail(email));
             return null;
         }
 
         if (!_hasher.Verify(password, user.PasswordHash))
         {
-            _logger.LogWarning("[Auth] Müşteri login başarısız: şifre yanlış. email={Email}", email);
+            _logger.LogWarning("[Auth] Müşteri login başarısız: şifre yanlış. email={Email}", PiiMasker.MaskEmail(email));
             return null;
         }
 

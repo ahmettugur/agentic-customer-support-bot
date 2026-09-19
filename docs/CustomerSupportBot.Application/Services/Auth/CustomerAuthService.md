@@ -21,7 +21,9 @@ Api katmanındaki `/auth/customer/register` ve `/auth/customer/login` endpoint'l
 
 - **Üstlendiği:** Kayıt girdisini doğrulamak (e-posta/şifre formatı, şifre uzunluğu), **müşteri
   kimlik sahipliğini** doğrulamak (bkz. §5 — bu servisin var oluş nedeni budur), şifreyi
-  hash'leyip kullanıcı kaydı oluşturmak, login sırasında şifreyi doğrulamak.
+  hash'leyip kullanıcı kaydı oluşturmak, login sırasında şifreyi doğrulamak. Başarılı/başarısız
+  her denemeyi loglarken e-postayı [`PiiMasker.MaskEmail`](../Logging/PiiMasker.md) ile
+  maskeleyerek yazmak — ham e-posta hiçbir log satırına düşmez.
 - **Üstlenmediği:** JWT üretimi/refresh token yönetimi (bu [`TokenPortService`](TokenPortService.md)'te),
   staff (Admin/Agent) login'i (bu [`UserService`](UserService.md)'te — ayrı ama paralel bir akış).
 
@@ -73,9 +75,10 @@ ile "şifre yanlış" ayrı loglanır ama ikisi de çağırana aynı `null` sonu
 - `IUserAuthRepository` — kullanıcı (auth) tablosu erişimi; staff ile paylaşılan tablo.
 - `ICustomerRepository` — müşteri varlığı (`Exists`) ve e-posta sahipliği (`IsEmailOwnedByCustomerAsync`) kontrolü.
 - `IPasswordHasher` — BCrypt tabanlı hash/verify.
-- `ILogger<CustomerAuthService>` — başarısız kayıt/login denemelerini loglar.
+- `ILogger<CustomerAuthService>` — başarısız kayıt/login denemelerini loglar (e-posta `PiiMasker` ile maskeli).
 
 ## Bağlantılar
 
 - [TokenPortService.md](TokenPortService.md) — JWT/refresh-token üretimi
 - [UserService.md](UserService.md) — staff (Admin/Agent) auth'unun paralel akışı
+- [PiiMasker.md](../Logging/PiiMasker.md) — log satırlarına yazılan e-postayı maskeleyen yardımcı

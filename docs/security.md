@@ -223,6 +223,12 @@ Kullanıcı mesajı → InputGuard.Inspect(query)
 - **Zararlı içerik** tespiti
 - **Aşırı uzun girdi** kontrolü
 - **Girdi sanitization** (zararsız hale getirme)
+- **PII maskeleme** — e-posta, telefon, TC kimlik no, kredi kartı deseni mesajda geçiyorsa
+  reddetmeden **maskeler** (`pii_masked:*` flag'i eklenir). Maskelenen metin hem LLM'e
+  (OpenAI) giden hem `ReasoningTrace.UserQuery`'ye kalıcı yazılan metinle **aynıdır** — yani
+  bir müşteri yanlışlıkla kart/TC numarasını chat'e yazarsa bu bilgi üçüncü parti LLM
+  sağlayıcısına ham gitmez, kalıcı trace'e de düşmez. Detay: [`InputGuard`](CustomerSupportBot.Application/Services/Chat/InputGuard.md),
+  [`PiiMasker`](CustomerSupportBot.Application/Services/Logging/PiiMasker.md).
 
 ### Endpoint Davranışı
 
