@@ -17,10 +17,12 @@ public static class ChatEndpoints
     {
         app.MapPost("/chat/", HandleChatAsync).RequireRateLimiting("chat").RequireAuthorization("Customer");
         app.MapPost("/chat/stream", HandleChatStreamAsync).RequireRateLimiting("chat").RequireAuthorization("Customer");
-        app.MapGet("/chat/events/{sessionId}", HandleChatEventsAsync).RequireAuthorization("Customer");
-        app.MapGet("/chat-sessions/{sessionId}/approvals/unseen", HandleGetUnseenApprovalsAsync).RequireAuthorization("Customer");
-        app.MapPost("/chat-sessions/{sessionId}/approvals/{id}/seen", HandleMarkApprovalSeenAsync).RequireAuthorization("Customer");
-        app.MapGet("/customer/approvals/history", HandleGetApprovalHistoryAsync).RequireAuthorization("Customer");
+        // "general": uzun ömürlü SSE bağlantısının kendisi limitten etkilenmez (tek istek olarak
+        // sayılır), yalnızca YENİ bağlantı AÇMA hızı sınırlanır — bağlantı-tüketimi DoS'una karşı.
+        app.MapGet("/chat/events/{sessionId}", HandleChatEventsAsync).RequireAuthorization("Customer").RequireRateLimiting("general");
+        app.MapGet("/chat-sessions/{sessionId}/approvals/unseen", HandleGetUnseenApprovalsAsync).RequireAuthorization("Customer").RequireRateLimiting("general");
+        app.MapPost("/chat-sessions/{sessionId}/approvals/{id}/seen", HandleMarkApprovalSeenAsync).RequireAuthorization("Customer").RequireRateLimiting("general");
+        app.MapGet("/customer/approvals/history", HandleGetApprovalHistoryAsync).RequireAuthorization("Customer").RequireRateLimiting("general");
         return app;
     }
 

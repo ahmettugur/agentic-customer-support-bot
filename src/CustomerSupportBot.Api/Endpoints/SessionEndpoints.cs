@@ -35,7 +35,7 @@ public static class SessionEndpoints
 
             var sessions = await sessionPort.GetAllSessionsAsync(scope, ct);
             return Results.Json(sessions);
-        }).RequireAuthorization("SessionAccess");
+        }).RequireAuthorization("SessionAccess").RequireRateLimiting("general");
 
         // GET /sessions/{sessionId}/messages — Belirli oturumun mesajlarını getir
         app.MapGet("/sessions/{sessionId}/messages", async (
@@ -51,7 +51,7 @@ public static class SessionEndpoints
                 text = m.Text ?? ""
             });
             return Results.Json(messages);
-        }).RequireAuthorization("SessionAccess");
+        }).RequireAuthorization("SessionAccess").RequireRateLimiting("general");
 
         // GET /sessions/{sessionId}/state — Oturum durumunu getir (debug/frontend için)
         app.MapGet("/sessions/{sessionId}/state", async (
@@ -78,7 +78,7 @@ public static class SessionEndpoints
                 session.LastActivity,
                 State = isStaff ? (object)session.State : CustomerVisibleState(session.State)
             });
-        }).RequireAuthorization("SessionAccess");
+        }).RequireAuthorization("SessionAccess").RequireRateLimiting("general");
 
         return app;
     }

@@ -175,8 +175,8 @@ bunu bearer token olarak okur. Aynı mekanizmayı SSE (`EventSource`) de kullan�
 
 | Policy | Limit | Kapsam |
 |--------|-------|--------|
-| `chat` | IP başına 20/dk | `POST /chat/`, `POST /chat/stream` |
-| `general` | IP başına 60/dk | Tüm `Admin`/`AdminOrAgent` scope'ları (`adminScope`, `agentScope` — Program.cs). `/analytics/*` de bu gruptadır ve **`Admin` gerektirir** |
+| `chat` | IP başına 20/dk | `POST /chat/`, `POST /chat/stream`, `WS /chat/realtime/{sid?}`, `WS /chat/realtime-native/{sid?}` |
+| `general` | IP başına 60/dk | Tüm `Admin`/`AdminOrAgent` scope'ları (`adminScope`, `agentScope` — Program.cs) + `/analytics/*` (ayrı map edildiği için **kendi başına** `RequireRateLimiting` taşır, `admin`/`agentScope` grubuna dahil DEĞİL) + `GET /sessions/*` + `GET /chat/events/{sid}`, `.../approvals/unseen`, `.../approvals/{id}/seen`, `GET /customer/approvals/history` |
 | `a2a` | **Partner başına** `A2A:RequestsPerMinute` | `/a2a/*` |
 | `auth` | IP başına `Jwt:AuthRateLimitPerMinute` (varsayılan 10/dk) | `/auth/*` (login, customer/login, customer/register, refresh, logout) |
 
@@ -190,7 +190,11 @@ var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRa
 
 > **`a2a` politikası neden IP değil partner bazlı?** Dış sistemler proxy/bulut çıkışı arkasında IP paylaşabilir (bir partnerin trafiği diğerinin kotasını tüketirdi) ya da IP değiştirebilir (sınır fiilen ortadan kalkardı). Bölümleme anahtarı token'dan çıkarılır ve çağıran onu değiştiremez. Bunun çalışması **middleware sırasına bağlıdır**: `UseRateLimiter()` `UseAuthentication()`'dan SONRA gelmek zorundadır, aksi hâlde `HttpContext.User` henüz boştur, claim bulunamaz ve politika sessizce IP'ye düşer — kural "partner başına" yazılmış olsa bile fiilen IP başına çalışırdı.
 
-> Admin/agent uçları auth arkasında olsa da önceden rate limitsizdi — sızmış bir JWT veya kötü niyetli bir admin/agent hesabı sınırsız istek atabiliyordu. `general` politikası grup seviyesinde uygulanır; SSE endpoint'leri (`/chat-sessions/{sid}/subscribe` vb.) tek bir istek olarak sayıldığından uzun ömürlü bağlantılar limitten etkilenmez.
+> Admin/agent uçları auth arkasında olsa da önceden rate limitsizdi — sızmış bir JWT veya kötü niyetli bir admin/agent hesabı sınırsız istek atabiliyordu. `general` politikası grup seviyesinde uygulanır; SSE endpoint'leri (`/chat/events/{sid}` vb.) tek bir istek olarak sayıldığından uzun ömürlü bağlantılar limitten etkilenmez — sınırlanan, yeni bağlantı AÇMA hızıdır.
+
+> **Realtime WS uçları (`/chat/realtime*`) önceden TAMAMEN limitsizdi** — her bağlantı gerçek bir OpenAI Realtime API oturumu açtığı (yazılı chat'ten daha maliyetli) için bu, geçerli/sızmış bir müşteri JWT'siyle doğrudan maliyet-bombası DoS'una açık kapıydı. `sessions/*`, `chat/events`, `chat-sessions/*/approvals/*` ve `customer/approvals/history` de aynı şekilde auth arkasında ama limitsizdi; hepsine `general` uygulandı.
+>
+> **Bilinen sınır:** tüm policy'ler `FixedWindowLimiter` kullanır (sliding window değil) — bir istemci pencerenin son saniyesinde N istek, hemen ardından yeni pencerenin ilk saniyesinde bir N istek daha göndererek kısa bir aralıkta ~2N isteğe kadar çıkabilir. Bypass değil ama sınırı gevşetir; bilinçli bir trade-off (basitlik/performans), sıkılaştırma istenirse `SlidingWindowLimiter`'a geçilebilir.
 
 > `/auth/*` önceden TAMAMEN sınırsızdı — bu uçlar AllowAnonymous olduğu için kimlik bilgisi tahmin etme (credential stuffing/brute force) ve kayıt spam'i tek istemciden ucu bucaksız denenebiliyordu. IP tabanlı: bu uçlarda henüz doğrulanmış bir kimlik yok, `a2a`'daki gibi bir claim mevcut değil.
 

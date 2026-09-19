@@ -14,9 +14,13 @@ public static class AnalyticsEndpoints
     public static IEndpointRouteBuilder MapAnalyticsEndpoints(this IEndpointRouteBuilder app)
     {
         // ─── ANALYTICS DASHBOARD (admin-only) ───
+        // "general" burada MapGroup("").RequireAuthorization("Admin").RequireRateLimiting("general")
+        // (adminScope, Program.cs) İLE DEĞİL — bu uçlar o gruba dahil değil, doğrudan app'e map
+        // ediliyor. Aksi hâlde admin scope'undaki diğer uçların aksine bu üçü limitsiz kalırdı.
         app.MapGet("/analytics/dashboard", async (IAnalyticsPort analytics, CancellationToken ct) =>
             Results.Json(await analytics.GetDashboardAsync(ct)))
-            .RequireAuthorization("Admin");
+            .RequireAuthorization("Admin")
+            .RequireRateLimiting("general");
 
         // GET /analytics/session/{sid} — Tek bir oturum için detaylı analytics
         app.MapGet("/analytics/session/{sid}", async (string sid, IAnalyticsPort analytics, CancellationToken ct) =>
@@ -26,7 +30,8 @@ public static class AnalyticsEndpoints
                 ? Results.NotFound(new { error = "Session bulunamadı." })
                 : Results.Json(result);
         })
-            .RequireAuthorization("Admin");
+            .RequireAuthorization("Admin")
+            .RequireRateLimiting("general");
 
         // ─── CONVERSATION RATING (public — kullanıcı oturum açmadan rating bırakır) ───
         app.MapPost("/sessions/{sid}/rating",
@@ -56,7 +61,8 @@ public static class AnalyticsEndpoints
         app.MapGet("/analytics/ratings/recent",
             (IAnalyticsPort analytics, int count = 20) =>
                 Results.Json(analytics.GetRecentRatings(count)))
-            .RequireAuthorization("Admin");
+            .RequireAuthorization("Admin")
+            .RequireRateLimiting("general");
 
         return app;
     }

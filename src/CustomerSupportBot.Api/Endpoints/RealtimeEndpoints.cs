@@ -9,14 +9,21 @@ public static class RealtimeEndpoints
     {
         // Köprü modu — gpt-realtime-1.5 sadece STT/TTS, agent pipeline cevabı üretir.
         // ws://host/chat/realtime/{sessionId?}
+        //
+        // "chat" rate-limit'i BİLEREK uygulanıyor: her WS bağlantısı gerçek bir OpenAI
+        // Realtime API oturumu açar (yazılı chat'ten daha maliyetli). Limitsiz bırakılırsa
+        // geçerli/sızmış bir müşteri JWT'siyle saniyede çok sayıda bağlantı açılıp doğrudan
+        // maliyet-bombası DoS'una yol açar — önceden bu uç hiç limitli değildi.
         app.Map("/chat/realtime/{sessionId?}", HandleRealtimeAsync)
-            .RequireAuthorization("Customer");
+            .RequireAuthorization("Customer")
+            .RequireRateLimiting("chat");
 
         // Native mod — gpt-realtime-1.5 kendisi konuşur, okuma-only tool'ları çağırır.
         // Sipariş oluşturma / şikayet kaydı gibi yan-etkili işlemler bu kanalda YOKTUR.
         // ws://host/chat/realtime-native/{sessionId?}
         app.Map("/chat/realtime-native/{sessionId?}", HandleRealtimeNativeAsync)
-            .RequireAuthorization("Customer");
+            .RequireAuthorization("Customer")
+            .RequireRateLimiting("chat");
 
         return app;
     }
