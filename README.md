@@ -146,15 +146,15 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 | Katman | Teknoloji |
 |--------|-----------|
 | Framework | .NET 10 (ASP.NET Core Minimal API) |
-| Ajan Framework | Microsoft Agents Framework (MAF) 1.4.0 |
+| Ajan Framework | Microsoft Agents Framework (MAF) 1.22.0 |
 | AI Soyutlamaları | `Microsoft.Extensions.AI` |
 | LLM Sağlayıcı | OpenAI (`gpt-5.4`, `gpt-5.4-nano`) / Azure OpenAI |
 | Embedding | OpenAI `text-embedding-3-large` (3072-dim) |
 | Vector Store | **Qdrant** (gRPC, Cosine distance) |
 | Kalıcı Veri | PostgreSQL 16 (EF Core 10) + Redis (opsiyonel) |
-| OpenAPI | `Microsoft.AspNetCore.OpenApi` 10.0.5 |
+| OpenAPI | `Microsoft.AspNetCore.OpenApi` 10.0.12 |
 | Serileştirme | System.Text.Json (camelCase enum string'leri) |
-| YAML Ayrıştırma | YamlDotNet 16.2.1 |
+| YAML Ayrıştırma | YamlDotNet 18.1.0 |
 | Arayüz | Vanilla HTML/JS/CSS (SSE streaming chat UI) |
 
 ---
