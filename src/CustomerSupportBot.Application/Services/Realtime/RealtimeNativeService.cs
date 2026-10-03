@@ -1,6 +1,7 @@
 // Application/Services/RealtimeNativeService.cs
 // IRealtimeNativeBridge driving port'unun Application katmanı implementasyonu.
-// Native modda model kendi karar verir ve okuma-only tool'ları çağırır.
+// Model kendi karar verir ve yazılı sohbetin iş tool'larının tamamını çağırabilir; yan etkili
+// olanlar (sipariş/iptal/iade/şikayet) yazılı sohbetle aynı HITL onay kapısından geçer.
 // Tool dispatch iş mantığı (hangi araçlar sesli modda kullanılabilir) burada kapsüllenir.
 // Tarayıcı kanalı IBrowserChannel'da, realtime voice transport IRealtimeVoiceTransport'ta gizlenir.
 
@@ -14,6 +15,7 @@ using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Services.Approval;
 using CustomerSupportBot.Application.Services.Chat;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
@@ -21,8 +23,9 @@ using Microsoft.Extensions.Logging;
 namespace CustomerSupportBot.Application.Services.Realtime;
 
 /// <summary>
-/// Native mod realtime oturumu — model konuşur, okuma-only tool'ları doğrudan çağırır.
-/// Sipariş oluşturma / şikayet kaydı HITL gerektirdiği için bu kanalda bilinçli olarak yoktur.
+/// Sesli görüşme oturumu — model konuşur ve tool'ları doğrudan çağırır. Okuma tool'ları hemen
+/// çalışır; yan etkili tool'lar (sipariş, iptal, iade, şikayet kaydı) işlemi yapmaz,
+/// <see cref="SideEffectApprovalGate"/> ile onay kaydı oluşturur — yazılı sohbetle aynı insan onayı.
 /// </summary>
 public sealed class RealtimeNativeService : IRealtimeNativeBridge
 {
@@ -42,6 +45,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
     private readonly IAppDistributedLock _sessionLock;
     private readonly SessionStateService? _sessionState;
     private readonly IEscalationSink? _escalations;
+    private readonly SideEffectApprovalGate? _approvalGate;
     private readonly ILogger<RealtimeNativeService> _logger;
 
     private volatile bool _assistantSpeaking;
@@ -59,7 +63,8 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         IAppDistributedLock sessionLock,
         ILogger<RealtimeNativeService> logger,
         SessionStateService? sessionState = null,
-        IEscalationSink? escalations = null)
+        IEscalationSink? escalations = null,
+        SideEffectApprovalGate? approvalGate = null)
     {
         _client = client;
         _sessionManager = sessionManager;
@@ -71,6 +76,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         _logger = logger;
         _sessionState = sessionState;
         _escalations = escalations;
+        _approvalGate = approvalGate;
     }
 
     public async Task RunAsync(
@@ -369,7 +375,10 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                         {
                             // DispatchToolCallsAsync takip yanıtını yalnızca görüşme bitmiyorsa ister.
                             turns.ToolCallsDispatched(followUpExpected: !_endRequested);
-                            await DispatchToolCallsAsync(channel, pendingCalls, session, ct);
+                            // Onay kaydına ve eskalasyona bu turun kullanıcı cümlesi yazılır; transkript
+                            // henüz gelmediyse (eşleşme kimliği varken) yer tutucuya düşülür.
+                            await DispatchToolCallsAsync(
+                                channel, pendingCalls, session, turns.CurrentTranscript(lastUserTranscript), ct);
                             pendingCalls.Clear();
                             break;
                         }
@@ -450,11 +459,11 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
     ///
     /// <para>
     /// Fark: metin kanalında eskalasyon, workflow'daki uzman ajanın "needs_escalation"
-    /// kararından gelir. Native modda workflow yoktur — model okuma-only tool'larla doğrudan
-    /// konuşur — dolayısıyla eskalasyona giden HİÇBİR yol yoktu; art arda olumsuz turlar
-    /// yaşayan bir sesli müşteri, yazılı kanala geçmedikçe insana ulaşamıyordu. Bu kanalda
-    /// elimizdeki tek sinyal ardışık olumsuz duygu olduğu için uyarı eşiği aşıldığında bir
-    /// eskalasyon açılır. Sink'in session + ajan dedup'ı oturum başına tek açık kayıt tutar.
+    /// kararından gelir. Sesli kanalda workflow yoktur — model tool'larla doğrudan konuşur —
+    /// dolayısıyla uzman ajan kararı da yoktur. Müşteri açıkça isterse <c>human_handoff_tool</c>
+    /// bir talep açar; istemeden art arda olumsuz turlar yaşayan müşteri için ise elimizdeki
+    /// sinyal ardışık olumsuz duygudur — uyarı eşiği aşıldığında bir eskalasyon açılır. Sink'in
+    /// session + ajan dedup'ı oturum ve ajan başına tek açık kayıt tutar.
     /// </para>
     /// </summary>
     private async Task EvaluateSentimentAsync(
@@ -526,6 +535,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         IBrowserChannel channel,
         List<(string CallId, string Name, string ArgsJson)> calls,
         AgentSession session,
+        string? userQuery,
         CancellationToken ct)
     {
         var tasks = calls.Select(async c =>
@@ -533,7 +543,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
             string outputJson;
             try
             {
-                outputJson = DispatchTool(c.Name, c.ArgsJson, session.State.AuthenticatedCustomerId ?? "");
+                outputJson = await DispatchToolAsync(c.Name, c.ArgsJson, session, userQuery);
             }
             catch (Exception ex)
             {
@@ -555,33 +565,48 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         await _client.SendToolResultsAsync(results, triggerNextResponse: !_endRequested, ct);
     }
 
-    private string DispatchTool(string name, string argumentsJson, string authenticatedCustomerId)
+    /// <summary>
+    /// Tool adına göre işi yönlendirir. Sesli kanal yazılı sohbetin iş tool'larının TAMAMINI
+    /// çalıştırır; yan etkili olanlar yazılı sohbetle AYNI onay kapısından geçer
+    /// (<see cref="RunSideEffectToolAsync"/>).
+    /// </summary>
+    internal async Task<string> DispatchToolAsync(
+        string name, string argumentsJson, AgentSession session, string? userQuery)
     {
+        // customer_id LLM argümanından ASLA okunmaz — sadece login'li kullanıcının
+        // JWT-doğrulanmış kimliği kullanılır; aksi halde model başka bir müşterinin
+        // siparişlerini isteyebilir ya da onun adına işlem başlatabilirdi.
+        var customerId = session.State.AuthenticatedCustomerId ?? "";
         ToolResult result;
         try
         {
             var args = JsonNode.Parse(argumentsJson) as JsonObject ?? new JsonObject();
 
-            // customer_id LLM argümanından ASLA okunmaz — sadece login'li kullanıcının
-            // JWT-doğrulanmış kimliği (bkz. DispatchToolCallsAsync → session.State.AuthenticatedCustomerId)
-            // kullanılır; aksi halde model başka bir müşterinin sipariş geçmişini isteyebilirdi.
             result = name switch
             {
-                "product_inquiry_tool" => _tools.ProductInquiryTool(GetString(args, "product_name") ?? ""),
-                "product_list_tool"    => _tools.ProductListTool(GetString(args, "category")),
-                "order_status_tool"    => _tools.OrderStatusTool(GetString(args, "order_id") ?? "", authenticatedCustomerId),
-                "get_last_order_tool"  => _tools.GetLastOrderTool(authenticatedCustomerId),
-                "get_all_orders_tool"  => _tools.GetAllOrdersTool(authenticatedCustomerId),
+                WellKnown.ToolNames.ProductInquiry   => _tools.ProductInquiryTool(GetString(args, "product_name") ?? ""),
+                WellKnown.ToolNames.ProductList      => _tools.ProductListTool(GetString(args, "category")),
+                WellKnown.ToolNames.OrderStatus      => _tools.OrderStatusTool(GetString(args, "order_id") ?? "", customerId),
+                WellKnown.ToolNames.GetLastOrder     => _tools.GetLastOrderTool(customerId),
+                WellKnown.ToolNames.GetAllOrders     => _tools.GetAllOrdersTool(customerId),
+                WellKnown.ToolNames.ComplaintStatus  => _tools.ComplaintStatusTool(GetString(args, "complaint_id") ?? "", customerId),
+                WellKnown.ToolNames.GetAllComplaints => _tools.GetAllComplaintsTool(customerId),
+
+                WellKnown.ToolNames.OrderPlacement
+                    or WellKnown.ToolNames.OrderCancel
+                    or WellKnown.ToolNames.ReturnRequest
+                    or WellKnown.ToolNames.ComplaintRegistration =>
+                    await RunSideEffectToolAsync(name, args, session.SessionId, customerId, userQuery),
+
+                WellKnown.ToolNames.HumanHandoff =>
+                    await RequestHumanHandoffAsync(session.SessionId, GetString(args, "reason"), userQuery),
+
                 EndConversationToolName =>
                     ToolResult.Ok("Görüşme sonlandırılıyor.", new
                     {
                         ended  = true,
                         reason = GetString(args, "reason") ?? "user_farewell"
                     }),
-                // HITL gerektiren tool'lar sesli modda bilinçli olarak engellidir.
-                "order_placement_tool" or "order_cancel_tool" or "return_request_tool" or "complaint_registration_tool" =>
-                    ToolResult.SystemError("FORBIDDEN_IN_VOICE",
-                        "Bu işlem güvenlik adımları gerektirir; yazılı sohbet üzerinden yapılmalıdır."),
                 _ => ToolResult.SystemError("UNKNOWN_TOOL", $"'{name}' bu modda mevcut değil.")
             };
         }
@@ -594,10 +619,139 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         return JsonSerializer.Serialize(result, ToolResultJsonOpts);
     }
 
+    /// <summary>
+    /// Yan etkili tool (sipariş, iptal, iade, şikayet kaydı). İşlem burada YAPILMAZ: yazılı
+    /// sohbetle aynı <see cref="SideEffectApprovalGate"/> onay kaydı oluşturur ve "onaya gönderildi"
+    /// döner; iş admin onayından sonra <c>IApprovalExecutionRouter</c> ile yürütülür, sonuç
+    /// müşteriye bildirim olarak gider. Parametre anahtarları yazılı kanalla aynıdır — yürütücü
+    /// onları okur ve aynı talebin iki kanaldan gelen kopyaları tek onay kaydında birleşir.
+    /// </summary>
+    private async Task<ToolResult> RunSideEffectToolAsync(
+        string name, JsonObject args, string sessionId, string customerId, string? userQuery)
+    {
+        if (_approvalGate is null)
+        {
+            return ToolResult.SystemError("APPROVAL_UNAVAILABLE",
+                "Bu işlem şu anda sesli kanaldan başlatılamıyor; lütfen yazılı sohbeti kullanın.");
+        }
+
+        var context = new ApprovalContext(
+            SessionId: sessionId,
+            TraceId: null,
+            UserQuery: userQuery ?? VoiceTurnPairer.Placeholder,
+            CustomerId: customerId);
+
+        switch (name)
+        {
+            case WellKnown.ToolNames.OrderPlacement:
+            {
+                var lines = ParseOrderLines(args);
+                return await _approvalGate.ExecuteAsync(
+                    name,
+                    new Dictionary<string, object?> { ["lines"] = lines, ["customerId"] = customerId },
+                    () => _tools.OrderPlacementTool(lines, customerId),
+                    context,
+                    preflight: () => ValidateOrderLines(lines));
+            }
+
+            case WellKnown.ToolNames.ComplaintRegistration:
+            {
+                var orderId = GetString(args, "order_id") ?? "";
+                var complaintText = GetString(args, "complaint_text") ?? "";
+                return await _approvalGate.ExecuteAsync(
+                    name,
+                    new Dictionary<string, object?>
+                    {
+                        ["orderId"] = orderId, ["complaintText"] = complaintText, ["customerId"] = customerId
+                    },
+                    () => _tools.ComplaintRegistrationTool(orderId, complaintText, customerId),
+                    context,
+                    preflight: () => _tools.ValidateOrderActionable(orderId, customerId));
+            }
+
+            default: // OrderCancel / ReturnRequest
+            {
+                var orderId = GetString(args, "order_id") ?? "";
+                var reason = GetString(args, "reason") ?? "";
+                return await _approvalGate.ExecuteAsync(
+                    name,
+                    new Dictionary<string, object?>
+                    {
+                        ["orderId"] = orderId, ["reason"] = reason, ["customerId"] = customerId
+                    },
+                    name == WellKnown.ToolNames.OrderCancel
+                        ? () => _tools.OrderCancelTool(orderId, reason, customerId)
+                        : () => _tools.ReturnRequestTool(orderId, reason, customerId),
+                    context,
+                    preflight: () => _tools.ValidateOrderActionable(orderId, customerId));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Müşteri insan temsilci istedi: temsilci kuyruğuna (eskalasyon) bir talep açılır —
+    /// yazılı sohbette <c>human_handoff_tool</c> çağrısının eskalasyona çevrilmesiyle aynı sonuç.
+    /// Oturuma bağlı sohbet sayfası bunu "temsilci bekleniyor" olarak görür (handoff_pending).
+    /// </summary>
+    private async Task<ToolResult> RequestHumanHandoffAsync(string sessionId, string? reason, string? userQuery)
+    {
+        var result = CustomerSupportToolsService.HumanHandoffTool(reason ?? "");
+        if (!result.Success) return result;
+
+        if (_escalations is null)
+        {
+            return ToolResult.SystemError("HANDOFF_UNAVAILABLE",
+                "Temsilci talebi şu anda alınamıyor; lütfen yazılı sohbetten tekrar deneyin.");
+        }
+
+        await _escalations.CreateAsync(new EscalationRequest
+        {
+            SessionId = sessionId,
+            AgentName = WellKnown.AgentNames.HumanHandoff,
+            UserQuery = userQuery ?? VoiceTurnPairer.Placeholder,
+            Reason = reason!.Trim()
+        });
+        return result;
+    }
+
+    private static OrderLineRequest[] ParseOrderLines(JsonObject args)
+    {
+        if (!args.TryGetPropertyValue("lines", out var node) || node is not JsonArray array) return [];
+
+        return array
+            .OfType<JsonObject>()
+            .Select(line => new OrderLineRequest(
+                GetString(line, "product_name") ?? "",
+                int.TryParse(GetString(line, "quantity"), out var quantity) ? quantity : 0))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Onay kaydı oluşturulmadan önce sipariş satırlarının biçim kontrolü — eksik/bozuk bir
+    /// talep (ses tanıma hatası, eksik adet) admin kuyruğuna düşmesin.
+    /// </summary>
+    private static ToolResult? ValidateOrderLines(IReadOnlyList<OrderLineRequest> lines)
+    {
+        if (lines.Count == 0)
+            return ToolResult.ValidationError("Sipariş için en az bir ürün ve adet gerekli.", "lines");
+        if (lines.Any(l => string.IsNullOrWhiteSpace(l.ProductName)))
+            return ToolResult.ValidationError("Her sipariş satırında ürün adı olmalı.", "product_name");
+        if (lines.Any(l => l.Quantity <= 0))
+            return ToolResult.ValidationError("Her ürün için en az 1 adet belirtilmeli.", "quantity");
+        return null;
+    }
+
+    /// <summary>
+    /// Argümanı metin olarak okur. Model sayısal alanları (sipariş numarası, adet) bazen
+    /// string yerine sayı olarak gönderir; eskiden bu durumda okuma istisna fırlatıp tool
+    /// çağrısını "TOOL_DISPATCH_ERROR" ile düşürüyordu.
+    /// </summary>
     private static string? GetString(JsonObject obj, string key)
     {
         if (!obj.TryGetPropertyValue(key, out var node) || node is null) return null;
-        return node.GetValue<string>();
+        return node is JsonValue value && value.TryGetValue<string>(out var text)
+            ? text
+            : node.ToJsonString();
     }
 
     private static readonly JsonSerializerOptions ToolResultJsonOpts = new()

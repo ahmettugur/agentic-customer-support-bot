@@ -6,7 +6,7 @@ Bu klasör, hexagonal mimaride **Driving Adapter (Giriş Adaptörü)** ve **Comp
 
 - [Program](Program.md) — WebApplication builder yapılandırması, middleware hattı, açılış güvenlik guard'ları ve uç nokta haritalaması.
 - **Endpoints/** — Minimal API uç noktaları:
-  - [ChatAndRealtime](Endpoints/ChatAndRealtime.md) — `/chat/`, `/chat/stream`, `/chat/events/{id}` (yazılı sohbet + kalıcı SSE), `/chat/realtime[-native]/{id}` (WebSocket ses akışı), `/sessions/*` oturum yönetimi. **Login zorunlu.**
+  - [ChatAndRealtime](Endpoints/ChatAndRealtime.md) — `/chat/`, `/chat/stream`, `/chat/events/{id}` (yazılı sohbet + kalıcı SSE), `/chat/realtime-native/{id}` (WebSocket ses akışı), `/sessions/*` oturum yönetimi. **Login zorunlu.**
   - [AdminAndHitl](Endpoints/AdminAndHitl.md) — `/approvals/*` (HITL onay/red kararları), `/escalations/*`, `/chat-sessions/*` (Live Takeover), `/agent/*` (Agent-kapsamlı görünüm).
   - [A2A](Endpoints/A2A.md) — `/a2a/*` (Agent-to-Agent protokolü) ve `/auth/a2a/token-exchange`.
   - [ObservabilityAndTelemetry](Endpoints/ObservabilityAndTelemetry.md) — `/agents`, `/analytics/*`, `/eval/*`, `/sla/*`, `/telemetry/*`, `/traces/*`.
@@ -34,7 +34,7 @@ Bu klasör, hexagonal mimaride **Driving Adapter (Giriş Adaptörü)** ve **Comp
 - **Login Zorunlu Müşteri Kanalı:** Chat/session/realtime uçları `RequireAuthorization("Customer"/"SessionAccess")` ile korunur; `customerId` hiçbir zaman istek gövdesinden değil, JWT'deki `linked_customer_id` claim'inden okunur.
 - **Canlı SSE Token Akışı:** `text/event-stream` protokolü ile MAF ResponseAgent token'larını ve adım adım akıl yürütme (`agent_started`, `tool_called`) olaylarını istemciye anında iletme.
 - **Non-Blocking HITL Onayları:** Onay gerektiren tool çağrıları hemen "onaya gönderildi" döner; admin/agent kararını verdiğinde sonuç `unseen`/`history` uçları ve kalıcı SSE üzerinden bildirim olarak akar.
-- **WebSocket Gerçek Zamanlı Ses:** OpenAI Realtime API ile tarayıcı Web Audio PCM16 worklet'i arasında çift yönlü ses köprüsü; köprü (agent pipeline yanıt üretir) ve native (model doğrudan konuşur, salt-okunur tool'lar) olmak üzere iki mod.
+- **WebSocket Gerçek Zamanlı Ses:** OpenAI Realtime API ile tarayıcı Web Audio PCM16 worklet'i arasında çift yönlü ses köprüsü; tek sesli mod — model doğrudan konuşur ve yazılı sohbetin tüm iş tool'larını çağırır (yan etkili işlemler insan onayına gider).
 - **Agent-to-Agent (A2A) Kanalı:** `A2A:Enabled` bayrağına bağlı, partner/özne token ayrımıyla dış sistemlere ürün/sipariş/şikayet ajanlarını yayınlama.
 - **Global Hata Yakalama:** Domain istisnalarını HTTP durum kodlarına (404, 403, 409, 503, 400) eşleyen `DomainExceptionHandler`.
 - **Rate Limiting:** `auth` (IP, yapılandırılabilir), `chat` (müşteri kimliği, 20/dk), `general` (IP, 60/dk), `a2a` (partner/özne kimliği, yapılandırılabilir) politikaları.

@@ -1,12 +1,13 @@
 // Tests/CanonicalResponsePersistenceTests.cs
 //
-// Konuşma geçmişine ve TTS'e giden metnin KAYNAĞI doğru mu?
+// Konuşma geçmişine giden metnin KAYNAĞI doğru mu?
 //
-// 🐞 Düzeltilen hata: ChatPortService ve RealtimeBridgeService, turun yanıtını response_delta
-// olaylarını birleştirerek üretiyordu. Ama delta'lar ResponseAgent'ın HAM token akışıdır
-// (yalnızca TERMINATE'ten kesilir); turun kanonik metni ise response_complete'te taşınır ve
-// ek temizlikten geçmiştir — teknik JSON blokları silinir, yanıtta ajan adı sızıntısı varsa
-// (ContainsAgentRoutingMessage) metin LLM ile TAMAMEN yeniden yazılır.
+// 🐞 Düzeltilen hata: ChatPortService (ve o zamanki sesli köprü modu — sonradan kaldırıldı),
+// turun yanıtını response_delta olaylarını birleştirerek üretiyordu. Ama delta'lar
+// ResponseAgent'ın HAM token akışıdır (yalnızca TERMINATE'ten kesilir); turun kanonik metni
+// ise response_complete'te taşınır ve ek temizlikten geçmiştir — teknik JSON blokları silinir,
+// yanıtta ajan adı sızıntısı varsa (ContainsAgentRoutingMessage) metin LLM ile TAMAMEN yeniden
+// yazılır.
 //
 // Sonuç: ekranda temiz metin görünürken (response_complete baloncuğun üzerine yazar)
 // veritabanına ham metin yazılıyordu; sesli kanalda ise müşteri "OrderAgent size yardımcı

@@ -21,12 +21,12 @@ biçimini (Server-Sent Events ve WebSocket) düşük seviyeli protokol detaylar�
   isteyebilir) `SemaphoreSlim` ile sıraya koyan sarmalayıcı; `ChatEndpoints`/`AdminEndpoints`'te
   kullanılır.
 - **`WebSocketBrowserChannel`** — `IBrowserChannel` port'unun somut WebSocket implementasyonu;
-  `RealtimeEndpoints` bunu oluşturur, Application katmanındaki `IRealtimeBridge`/
-  `IRealtimeNativeBridge` yalnızca soyut `IBrowserChannel`'a bağımlıdır (hexagonal ayrım).
+  `RealtimeEndpoints` bunu oluşturur, Application katmanındaki `IRealtimeNativeBridge`
+  yalnızca soyut `IBrowserChannel`'a bağımlıdır (hexagonal ayrım).
 
 ## 3. Sorumlulukları
 
-- `SseWriter`: JSON serileştirme (camelCase, gevşek escape) + SSE çerçeveleme + flush.
+- `SseWriter`: JSON serileştirme (camelCase, `ApiJsonEncoder` — Türkçe karakterleri korur, HTML'e duyarlı karakterleri kaçırır) + SSE çerçeveleme + flush.
 - `SseForwarder`: `SseWriter`'ı thread-safe hale getirmek, iptal/bağlantı-kopması durumlarını
   sessizce yutmak (SSE'de istemci kapanması normal bir durumdur, exception fırlatmak akışı
   gereksiz kırar).
@@ -41,7 +41,7 @@ biçimini (Server-Sent Events ve WebSocket) düşük seviyeli protokol detaylar�
 - [ChatAndRealtime.md](../Endpoints/ChatAndRealtime.md), [AdminAndHitl.md](../Endpoints/AdminAndHitl.md) —
   `SseWriter`/`SseForwarder`'ın asıl kullanıcıları.
 - `IBrowserChannel` (`CustomerSupportBot.Application.Ports.Outbound`) — `WebSocketBrowserChannel`'ın
-  implemente ettiği port; `IRealtimeBridge`/`IRealtimeNativeBridge` bu soyutlamaya bağımlıdır,
+  implemente ettiği port; `IRealtimeNativeBridge` bu soyutlamaya bağımlıdır,
   somut WebSocket tipine değil.
 - [ChatEventOrchestrator](../Services/ChatEventOrchestrator.md) — `SseForwarder`'ı kalıcı
   `/chat/events/{sessionId}` bağlantısında kullanır.

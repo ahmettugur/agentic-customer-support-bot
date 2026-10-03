@@ -1615,22 +1615,6 @@ body {
     background: #dc2626;
 }
 
-/* ⚡ Hızlı Sesli (native mod) — köprü modundan ayırt etmek için mor/amber tonu.
-   Yan-etkili tool yok; ürün/sipariş sorgu hızlı yolu. */
-.input-wrapper button.btn-voice-native:hover:not(:disabled) {
-    color: #f59e0b;
-}
-
-.input-wrapper button.btn-voice-native.active {
-    background: #8b5cf6;
-    color: #fff;
-    animation: voicePulse 1.6s ease-in-out infinite;
-}
-
-.input-wrapper button.btn-voice-native.active:hover {
-    background: #7c3aed;
-}
-
 @keyframes voicePulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, .55); }
     50%      { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }

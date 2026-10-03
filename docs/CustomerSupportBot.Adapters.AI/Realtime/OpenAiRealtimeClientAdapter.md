@@ -16,18 +16,19 @@ kurulur (bkz. [AiAdapterServiceCollectionExtensions](../DependencyInjection/AiAd
 
 ## 2. Hangi Amaçla Kullanılır
 
-Sistem sesli asistanı **iki farklı modda** çalıştırabilir, ikisi de bu sınıf üzerinden:
+Sesli asistan bu sınıf üzerinden çalışır. Oturum `ConfigureNativeSessionAsync` ile kurulur:
+model kendi başına dinler, düşünür, function-call yapar ve sesle cevap üretir
+(`create_response=true`, `tools` bağlanır). Sınırlı bir görev seti vardır — bkz. §5.
 
-| Mod | Kurulum metodu | Kim konuşuyor |
-|---|---|---|
-| **Köprü (Bridge)** | `ConfigureBridgeSessionAsync` | Model sadece TTS/ASR köprüsü — asıl akıl yürütmeyi ayrı bir metin-tabanlı ajan yapar, bu adaptöre yalnızca "şu metni sesli oku" (`SpeakTextAsync`) denir. `create_response=false` — model kendiliğinden asla cevap üretmez. |
-| **Yerel (Native)** | `ConfigureNativeSessionAsync` | Model kendi başına dinler, düşünür, function-call yapar ve sesle cevap üretir (`create_response=true`, `tools` bağlanır). Sınırlı bir görev seti vardır — bkz. §5. |
+> Eskiden ayrıca bir **köprü modu** vardı (`ConfigureBridgeSessionAsync` + `SpeakTextAsync`):
+> model yalnızca STT/TTS yapıyor, yanıtı metin tabanlı ajan hattı üretiyordu. Kaldırıldı;
+> tek sesli mod budur.
 
 ## 3. Sorumlulukları
 
 - **Üstlendiği:**
   - `ClientWebSocket` bağlantısını açmak (`TryConnectAsync`) ve düzgün kapatmak (`CloseAsync`, `DisposeAsync`).
-  - `session.update` mesajlarıyla oturumu köprü ya da yerel moda yapılandırmak.
+  - `session.update` mesajıyla sesli oturumu yapılandırmak.
   - Kullanıcı ses baytlarını (`SendAudioChunkAsync`) ve tool sonuçlarını (`SendToolResultsAsync`) sunucuya iletmek.
   - Kullanıcı araya girdiğinde modelin sesini kesmek (`SendInterruptAsync` → `response.cancel`).
   - Sunucudan gelen ham JSON frame'lerini okuyup (`ReceiveEventsAsync`/`TryReadFrameAsync`) strongly-typed `RealtimeServerEvent`'lere çevirmek (`ParseEvent`).
@@ -47,15 +48,24 @@ Sistem sesli asistanı **iki farklı modda** çalıştırabilir, ikisi de bu sı
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-**İki mod neden var:** Yerel mod düşük gecikmeli ama sınırlı (model hem dinleyip hem
-düşünüp hem konuşuyor, karmaşık çok-adımlı akışlar için güvenilir değil); köprü modu
-gecikmesi daha yüksek ama asıl akıl yürütmeyi güçlü bir metin modeline bırakır. Yerel
-modun görev seti bu yüzden bilinçli olarak **dar tutulmuştur** — `NativeSystemInstructions`
-sabiti içinde yalnızca salt-okunur sorgulara (ürün/sipariş durumu, son sipariş) izin
-verilir; sipariş oluşturma/iptal/iade/şikayet gibi onay gerektiren işlemler **kasıtlı
-olarak yerel moda tool olarak verilmez** — kullanıcı yazılı sohbete yönlendirilir.
+**Sistem talimatı bir prompt dosyasıdır:** `Prompts/services/realtime-voice.md`
+(`IPromptRepository`, anahtar `services/realtime-voice`). Eskiden bu sınıfta gömülü bir sabitti
+(`NativeSystemInstructions`) ve prompt klasörünün "tüm LLM prompt'ları burada" kuralının dışında
+kalıyordu; yazılı ajanların kuralları güncellendiğinde sesli taraf geride kalmıştı — ör. bir
+kaydın kime ait olduğunu sızdırmama kuralı (`CUSTOMER_ID_MISMATCH`) ve `pendingApproval` alanına
+göre karar verme kuralı sesli talimatta hiç yoktu. Taşınırken yazılı OrderAgent / ComplaintAgent /
+HumanHandoffAgent prompt'larındaki ilgili kurallar eklendi. Oturuma özel bağlam (müşteri adı,
+bugünün tarihi) `BuildSessionInstructions` ile dosya metninin sonuna `OTURUM BİLGİSİ` olarak eklenir.
 
-**`MÜŞTERİ KİMLİĞİ SORMA` kuralı:** `NativeSystemInstructions` metninde modele açıkça
+**Yan etkili işlemler ve talimatlar:** Model yazılı sohbetin iş tool'larının tamamını görür.
+Talimat yan etkili işlemler (sipariş, iptal, iade, şikayet kaydı) için iki
+kural koyar: (1) tool'u çağırmadan önce ayrıntıları (ürün, adet, sipariş numarası) müşteriye
+özetleyip **açık onayını al** — ses tanıma hata yapabilir; (2) tool sonucu "onaya gönderildi"
+der, işlemi **tamamlandı diye sunma**. Asıl güvence prompt değil Application katmanındaki onay
+kapısıdır (`SideEffectApprovalGate`): model ne derse desin işlem admin onayı olmadan yapılmaz.
+Ödeme/fatura ve hesap/kişisel bilgi değişiklikleri için tool yoktur; kullanıcı yönlendirilir.
+
+**`MÜŞTERİ KİMLİĞİ SORMA` kuralı:** Talimat metninde modele açıkça
 "kimlik sistemden otomatik geçiyor, asla sorma, kullanıcı başka numara söylerse yok say"
 talimatı verilmiştir — bu, LLM'in kullanıcı ağzından gelen serbest metinden `customerId`
 çıkarmasını (ve birinin başkasının hesabı üzerinden işlem yapabilmesini) engelleyen
@@ -84,12 +94,11 @@ metoduna taşınmıştır.
 | `Voice` | `string` | Seçili konuşma sesi. |
 | `NativeToolNames` | `IReadOnlyList<string>` | Yerel moda açık tool adları (`RealtimeFunctionTools.GetToolNames()`). |
 | `TryConnectAsync` | `Task<bool> TryConnectAsync(CancellationToken ct)` | WebSocket bağlantısını açar, `Authorization: Bearer` header'ı ekler. Başarısızsa loglar ve `false` döner (fırlatmaz). |
-| `ConfigureBridgeSessionAsync` | `Task ConfigureBridgeSessionAsync(CancellationToken ct)` | Oturumu köprü moduna alır: `create_response=false`, sabit "sadece sesli oku" talimatı, tool yok. |
-| `ConfigureNativeSessionAsync` | `Task ConfigureNativeSessionAsync(string? sessionContext, CancellationToken ct)` | Oturumu yerel moda alır: `create_response=true`, `tools` bağlanır, `sessionContext` (müşteri adı/tarih) sistem talimatının sonuna eklenir. |
+| `ConfigureNativeSessionAsync` | `Task ConfigureNativeSessionAsync(string? sessionContext, CancellationToken ct)` | Sesli oturumu kurar: `create_response=true`, `tools` bağlanır, talimat `BuildSessionInstructions` ile üretilir. |
+| `BuildSessionInstructions` | `internal string BuildSessionInstructions(string? sessionContext)` | `services/realtime-voice` prompt'u + (varsa) `OTURUM BİLGİSİ` bölümü. |
 | `SendAudioChunkAsync` | `Task SendAudioChunkAsync(byte[] pcm16, CancellationToken ct)` | PCM16 baytlarını Base64'e çevirip `input_audio_buffer.append` gönderir. |
 | `SendInterruptAsync` | `Task SendInterruptAsync(CancellationToken ct)` | `response.cancel` gönderir — kullanıcı araya girdiğinde modelin konuşmasını kesmek için. |
 | `CloseAsync` | `Task CloseAsync(string reason, CancellationToken ct)` | Bağlantı açıksa 1 saniyelik zaman aşımıyla `NormalClosure` kapatması yapar (best-effort, hatayı yutar). |
-| `SpeakTextAsync` | `Task SpeakTextAsync(string text, string speakInstructions, CancellationToken ct)` | Köprü modunda kullanılır: verilen metni `conversation.item.create` ile asistan mesajı olarak ekler, ardından `response.create` ile sesli okunmasını tetikler. |
 | `SendToolResultsAsync` | `Task SendToolResultsAsync(IReadOnlyList<RealtimeToolResult> results, bool triggerNextResponse, CancellationToken ct)` | Her sonucu `function_call_output` olarak gönderir; `triggerNextResponse=true` ise ardından `response.create` ile modelin devam etmesini tetikler. |
 | `ReceiveEventsAsync` | `IAsyncEnumerable<RealtimeServerEvent> ReceiveEventsAsync(CancellationToken ct)` | WebSocket'ten gelen JSON frame'leri okur, `ParseEvent` ile domain event'ine çevirip `yield return` eder; bağlantı kapanınca `ConnectionClosed` verip döngüden çıkar. |
 | `DisposeAsync` | `ValueTask DisposeAsync()` | Açık bağlantıyı `NormalClosure` ile kapatmaya çalışır (best-effort), `ClientWebSocket`'i dispose eder. |
@@ -117,11 +126,12 @@ metoduna taşınmıştır.
 ## 7. Bağımlılıklar
 
 Constructor: `IOptions<AiOptions> aiOptions`, `RealtimeFunctionTools functionTools`,
-`ILogger<OpenAiRealtimeClientAdapter> logger`.
+`IPromptRepository prompts`, `ILogger<OpenAiRealtimeClientAdapter> logger`.
 
 - `_options = aiOptions.Value.Realtime` — model/ses/VAD ayarları.
 - `_apiKey` — önce `Realtime.ApiKey`, boşsa `OpenAI.ApiKey`'e düşer (fallback).
-- `_functionTools` — yerel mod tool şemaları.
+- `_functionTools` — sesli tool şemaları.
+- `_prompts` — sistem talimatı (`services/realtime-voice`).
 
 ## Bağlantılar
 

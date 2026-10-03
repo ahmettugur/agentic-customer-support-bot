@@ -8,8 +8,7 @@
 
 Bir sohbet oturumunu JWT-doğrulanmış müşteri kimliğine bağlayan ve oturum sahipliğini
 doğrulayan **tek nokta**. "Bu oturumu bu müşteri kullanabilir mi?" sorusunun cevaplandığı
-tek kod yeri — yazılı chat, sesli köprü modu ve sesli native mod dahil üç farklı kanal
-BURAYA çağrı yapar.
+tek kod yeri — yazılı chat ve sesli görüşme kanalları BURAYA çağrı yapar.
 
 ## 2. Hangi Amaçla Kullanılır
 

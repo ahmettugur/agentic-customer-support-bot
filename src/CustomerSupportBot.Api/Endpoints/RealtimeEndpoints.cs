@@ -8,20 +8,17 @@ public static class RealtimeEndpoints
 {
     public static IEndpointRouteBuilder MapRealtimeEndpoints(this IEndpointRouteBuilder app)
     {
-        // Köprü modu — gpt-realtime-1.5 sadece STT/TTS, agent pipeline cevabı üretir.
-        // ws://host/chat/realtime/{sessionId?}
+        // Sesli kanal — gpt-realtime modeli kendisi konuşur ve tool'ları çağırır. Sipariş oluşturma,
+        // iptal, iade ve şikayet kaydı yazılı sohbetle aynı insan onayına gönderilir.
+        // ws://host/chat/realtime-native/{sessionId?}
+        //
+        // (Eskiden ayrıca /chat/realtime "köprü modu" vardı — model yalnızca STT/TTS yapıyor,
+        // yanıtı agent pipeline üretiyordu. Kaldırıldı; tek sesli mod budur.)
         //
         // "chat" rate-limit'i BİLEREK uygulanıyor: her WS bağlantısı gerçek bir OpenAI
         // Realtime API oturumu açar (yazılı chat'ten daha maliyetli). Limitsiz bırakılırsa
         // geçerli/sızmış bir müşteri JWT'siyle saniyede çok sayıda bağlantı açılıp doğrudan
-        // maliyet-bombası DoS'una yol açar — önceden bu uç hiç limitli değildi.
-        app.Map("/chat/realtime/{sessionId?}", HandleRealtimeAsync)
-            .RequireAuthorization("Customer")
-            .RequireRateLimiting("chat");
-
-        // Native mod — gpt-realtime-1.5 kendisi konuşur, okuma-only tool'ları çağırır.
-        // Sipariş oluşturma / şikayet kaydı gibi yan-etkili işlemler bu kanalda YOKTUR.
-        // ws://host/chat/realtime-native/{sessionId?}
+        // maliyet-bombası DoS'una yol açar.
         app.Map("/chat/realtime-native/{sessionId?}", HandleRealtimeNativeAsync)
             .RequireAuthorization("Customer")
             .RequireRateLimiting("chat");
@@ -35,48 +32,6 @@ public static class RealtimeEndpoints
     /// </summary>
     private static string? AuthenticatedCustomerId(HttpContext httpContext) =>
         httpContext.User.FindFirst("linked_customer_id")?.Value;
-
-    private static async Task HandleRealtimeAsync(
-        HttpContext httpContext,
-        string? sessionId,
-        IRealtimeBridge bridge,
-        ILoggerFactory loggerFactory)
-    {
-        if (!httpContext.WebSockets.IsWebSocketRequest)
-        {
-            httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
-            await httpContext.Response.WriteAsync("WebSocket bağlantısı bekleniyor.");
-            return;
-        }
-
-        // Soket AÇILMADAN önce: kabul edildikten sonra durum kodu yoktur ve her bağlantı
-        // gerçek bir OpenAI Realtime oturumu açar.
-        if (sessionId is not null && !SessionIdPolicy.IsValid(sessionId))
-        {
-            httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
-            await httpContext.Response.WriteAsync(SessionIdPolicy.ErrorMessage);
-            return;
-        }
-
-        var logger = loggerFactory.CreateLogger("RealtimeEndpoints");
-        var ws = await httpContext.WebSockets.AcceptWebSocketAsync();
-        var sid = sessionId ?? Guid.NewGuid().ToString();
-        var channel = new WebSocketBrowserChannel(ws);
-
-        try
-        {
-            await bridge.RunAsync(channel, sid, AuthenticatedCustomerId(httpContext), httpContext.RequestAborted);
-        }
-        catch (OperationCanceledException) { /* client kapattı */ }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Realtime endpoint hata session={Sid}", sid);
-        }
-        finally
-        {
-            await CloseGracefullyAsync(ws);
-        }
-    }
 
     private static async Task HandleRealtimeNativeAsync(
         HttpContext httpContext,

@@ -445,7 +445,8 @@ CustomerSupportBot.Api/Prompts/
 └── services/
     ├── reasoning-system.md    ← ReasoningAgent system prompt
     ├── reasoning-hint.md      ← ID hint template
-    └── routing-rewrite-*.md
+    ├── routing-rewrite-*.md
+    └── realtime-voice.md      ← Sesli görüşme (OpenAI Realtime) sistem talimatı
 ```
 
 Her prompt:

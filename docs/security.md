@@ -73,7 +73,7 @@ SSE bağlantıları HTTP header gönderemediği için, `access_token` query stri
 GET /chat/events/{sessionId}?access_token=<jwt>
 ```
 
-Bu davranış `AuthServicesExtensions.cs` içinde `OnMessageReceived` event handler'ı ile sağlanır ve **yalnızca header taşıyamayan istemcilerin uçlarında** geçerlidir (`AcceptsQueryStringToken`): `/chat/events/*`, `…/chat-sessions/{sid}/subscribe` ve `/chat/realtime*`. Diğer tüm uçlar URL'deki token'ı yok sayar (401). Eskiden bu kabul tüm uçlara açıktı; yeni bir SSE/WS ucu eklenirse listeye de eklenmeli (bkz. `QueryStringTokenScopeTests`).
+Bu davranış `AuthServicesExtensions.cs` içinde `OnMessageReceived` event handler'ı ile sağlanır ve **yalnızca header taşıyamayan istemcilerin uçlarında** geçerlidir (`AcceptsQueryStringToken`): `/chat/events/*`, `…/chat-sessions/{sid}/subscribe` ve `/chat/realtime-native/*`. Diğer tüm uçlar URL'deki token'ı yok sayar (401). Eskiden bu kabul tüm uçlara açıktı; yeni bir SSE/WS ucu eklenirse listeye de eklenmeli (bkz. `QueryStringTokenScopeTests`).
 
 ### Password Hashing
 
@@ -126,7 +126,7 @@ var agentScope = app.MapGroup("/agent").RequireAuthorization("AdminOrAgent");
 
 | Scope | Endpoint'ler |
 |-------|-------------|
-| **Customer** | `POST /chat/`, `POST /chat/stream`, `GET /chat/events/{sid}`, `/chat-sessions/{sid}/approvals/*`, `GET /customer/approvals/history`, **`WS /chat/realtime/{sid?}`**, **`WS /chat/realtime-native/{sid?}`** |
+| **Customer** | `POST /chat/`, `POST /chat/stream`, `GET /chat/events/{sid}`, `/chat-sessions/{sid}/approvals/*`, `GET /customer/approvals/history`, **`WS /chat/realtime-native/{sid?}`** |
 | **SessionAccess** (`Customer`, `Admin` veya `Agent`) | `GET /sessions/`, `GET /sessions/{sid}/messages`, `GET /sessions/{sid}/state` |
 | **Public** (auth gerektirmez) | `POST/GET /sessions/{sid}/rating` |
 | **Auth gerektirir** | `POST /auth/logout` |
@@ -190,7 +190,7 @@ iki realtime WS ucu (bkz. `SessionIdValidationTests`).
 | `GET /chat/events/{sid}` | 403 (header yazılmadan önce) |
 | `GET /chat-sessions/{sid}/approvals/unseen` | 403 JSON |
 | `POST /chat-sessions/{sid}/approvals/{id}/seen` | 403 JSON |
-| `WS /chat/realtime*` | Bağlantı `SessionIdentityBinder` ile reddedilir |
+| `WS /chat/realtime-native/*` | Bağlantı `SessionIdentityBinder` ile reddedilir |
 | `GET /customer/approvals/history` | `sessionId` almaz — kimlik doğrudan JWT claim'inden, sahiplik sorusu doğmaz |
 
 Davranış `ChatSessionOwnershipTests` (uçtan uca HTTP) ve `SessionIdentityBinderTests`
@@ -211,7 +211,7 @@ bunu bearer token olarak okur. Aynı mekanizmayı SSE (`EventSource`) de kullan�
 
 | Policy | Limit | Kapsam |
 |--------|-------|--------|
-| `chat` | **Müşteri başına** 20/dk (`linked_customer_id`; claim yoksa IP) | `POST /chat/`, `POST /chat/stream`, `WS /chat/realtime/{sid?}`, `WS /chat/realtime-native/{sid?}` |
+| `chat` | **Müşteri başına** 20/dk (`linked_customer_id`; claim yoksa IP) | `POST /chat/`, `POST /chat/stream`, `WS /chat/realtime-native/{sid?}` |
 | `general` | IP başına 60/dk | Tüm `Admin`/`AdminOrAgent` scope'ları (`adminScope`, `agentScope` — Program.cs) + `/analytics/*` (ayrı map edildiği için **kendi başına** `RequireRateLimiting` taşır, `admin`/`agentScope` grubuna dahil DEĞİL) + `GET /sessions/*` + `GET /chat/events/{sid}`, `.../approvals/unseen`, `.../approvals/{id}/seen`, `GET /customer/approvals/history` |
 | `a2a` | **Partner başına** `A2A:RequestsPerMinute` | `/a2a/*` |
 | `auth` | IP başına `Jwt:AuthRateLimitPerMinute` (varsayılan 10/dk) | `/auth/*` (login, customer/login, customer/register, refresh, logout) |
@@ -228,7 +228,7 @@ var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRa
 
 > Admin/agent uçları auth arkasında olsa da önceden rate limitsizdi — sızmış bir JWT veya kötü niyetli bir admin/agent hesabı sınırsız istek atabiliyordu. `general` politikası grup seviyesinde uygulanır; SSE endpoint'leri (`/chat/events/{sid}` vb.) tek bir istek olarak sayıldığından uzun ömürlü bağlantılar limitten etkilenmez — sınırlanan, yeni bağlantı AÇMA hızıdır.
 
-> **Realtime WS uçları (`/chat/realtime*`) önceden TAMAMEN limitsizdi** — her bağlantı gerçek bir OpenAI Realtime API oturumu açtığı (yazılı chat'ten daha maliyetli) için bu, geçerli/sızmış bir müşteri JWT'siyle doğrudan maliyet-bombası DoS'una açık kapıydı. `sessions/*`, `chat/events`, `chat-sessions/*/approvals/*` ve `customer/approvals/history` de aynı şekilde auth arkasında ama limitsizdi; hepsine `general` uygulandı.
+> **Realtime WS ucu (`/chat/realtime-native`) önceden TAMAMEN limitsizdi** — her bağlantı gerçek bir OpenAI Realtime API oturumu açtığı (yazılı chat'ten daha maliyetli) için bu, geçerli/sızmış bir müşteri JWT'siyle doğrudan maliyet-bombası DoS'una açık kapıydı. `sessions/*`, `chat/events`, `chat-sessions/*/approvals/*` ve `customer/approvals/history` de aynı şekilde auth arkasında ama limitsizdi; hepsine `general` uygulandı.
 >
 > **Bilinen sınır:** tüm policy'ler `FixedWindowLimiter` kullanır (sliding window değil) — bir istemci pencerenin son saniyesinde N istek, hemen ardından yeni pencerenin ilk saniyesinde bir N istek daha göndererek kısa bir aralıkta ~2N isteğe kadar çıkabilir. Bypass değil ama sınırı gevşetir; bilinçli bir trade-off (basitlik/performans), sıkılaştırma istenirse `SlidingWindowLimiter`'a geçilebilir.
 

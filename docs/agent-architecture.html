@@ -800,8 +800,8 @@
               çalışmaz</b>: hem normal HTTP hem streaming yolunda yalnızca kullanıcı mesajı geçmişe yazılır
             ve admin paneline iletilir. Normal HTTP bir iletim teyidi döner; bot yanıtı geçmişe eklenmez.</li>
           <li><b>InputGuard</b> — uzunluk, görünmez/RTL karakter, enjeksiyon kalıpları, HTML/script, ID enumeration.
-            Reddedilirse istek LLM'e hiç ulaşmaz. Dört giriş noktasının (chat, chat/stream, realtime bridge, realtime
-            native) hepsinde çalışır.</li>
+            Reddedilirse istek LLM'e hiç ulaşmaz. Üç giriş noktasının (chat, chat/stream, sesli görüşme) hepsinde
+            çalışır.</li>
           <li><b>ReasoningService</b> — niyet, güven skoru, adımlar ve alt görevler üretir. İçinde
             <code>EntityVerifier</code> sorgu + geçmiş + oturum durumu + DB'yi birleştirip
             <code>VerifiedEntities</code>'i kurar; <code>ReasoningSanityChecker</code> tutarsızlıkları işaretler.
@@ -1585,55 +1585,49 @@
 
       <!-- 09 -->
       <section id="ses">
-        <h2><span class="n">09</span>Sesli konuşma — iki ayrı kanal</h2>
+        <h2><span class="n">09</span>Sesli konuşma — tek kanal</h2>
         <p class="lede">
-          OpenAI Realtime API üzerinden iki mod var ve aralarındaki fark güvenlik açısından
-          belirleyici: biri yazılı sohbetle <b>aynı</b> ajan hattını kullanır, diğeri hız için
-          onu atlar.
+          OpenAI Realtime API üzerinden tek sesli mod var: model kendisi konuşur ve function
+          calling yapar; hız için ajan hattını atlar ama yan etkili işlemlerde aynı insan onayını kullanır. (Eskiden yanıtı yazılı sohbetle aynı ajan
+          hattına ürettiren ikinci bir "köprü" modu da vardı; kaldırıldı.)
         </p>
         <div class="scroll">
           <table>
             <thead>
               <tr>
                 <th></th>
-                <th>🎤 Sesli Asistan (köprü)</th>
-                <th>⚡ Hızlı Sesli (native)</th>
+                <th>🎤 Sesli görüşme (<code>/chat/realtime-native</code>)</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td><b>Model rolü</b></td>
-                <td>Yalnızca STT/TTS köprüsü — konuşmayı yorumlamaz</td>
-                <td>Modelin kendisi function calling yapar</td>
+                <td>Modelin kendisi dinler, konuşur ve function calling yapar</td>
               </tr>
               <tr>
                 <td><b>Ajan hattı</b></td>
-                <td>Yazılı sohbetle <b>aynı</b> 6-ajanlı pipeline (reasoning, routing, HITL)</td>
                 <td>Pipeline <b>atlanır</b></td>
               </tr>
               <tr>
                 <td><b>Tool erişimi</b></td>
-                <td>Tümü</td>
-                <td>Yalnızca salt-okunur</td>
+                <td>Yazılı sohbetin iş tool'larının tamamı (ürün, sipariş ve şikayet sorguları; işlem talepleri; temsilciye yönlendirme)</td>
               </tr>
               <tr>
                 <td><b>Yazan tool'lar</b></td>
-                <td>HITL onayından geçer</td>
-                <td><span class="chip chip-gate">engelli</span> — model kullanıcıyı yazılı sohbete yönlendirir</td>
+                <td><span class="chip chip-gate">onaya gider</span> — model ayrıntıları teyit ettirir; talep insan onayına düşer, sonuç bildirim olarak gelir</td>
               </tr>
               <tr>
-                <td><b>Karşılığı</b></td>
-                <td>Tam yetenek, daha yavaş</td>
-                <td>Belirgin hız/maliyet kazancı, sınırlı yetenek</td>
+                <td><b>İnsana ulaşma</b></td>
+                <td>Müşteri isterse <code>human_handoff_tool</code>; istemese de art arda olumsuz turlarda tek bir eskalasyon açılır</td>
               </tr>
             </tbody>
           </table>
         </div>
         <div class="note">
           <span class="tag">Güvenlik değişmezi korunuyor</span>
-          Native modda sipariş/iptal/iade/şikayet tool'ları <b>kod seviyesinde</b> reddedilir
-          (<code>FORBIDDEN_IN_VOICE</code>). Yani "hızlı mod" HITL kapısını delmez — yan etkili
-          her işlem, hangi kanaldan gelirse gelsin, insan onayı gerektiren yazılı hatta düşer.
+          Sesli kanaldaki sipariş/iptal/iade/şikayet çağrıları yazılı sohbetle <b>aynı onay
+          kapısından</b> (<code>SideEffectApprovalGate</code>) geçer: işlem yapılmaz, onay kaydı açılır.
+          Kapı yoksa çağrı reddedilir — sesli kanal HITL'ı delmez.
         </div>
       </section>
 

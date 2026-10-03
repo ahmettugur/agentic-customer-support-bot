@@ -36,6 +36,7 @@ Bu klasör, Onion / Hexagonal Mimari'de **Use Cases & Application Core (İş Ak�
   - [ApprovalPortService](Services/Approval/ApprovalPortService.md) — [IApprovalPort](Ports.md) uygulayıcısı.
   - [ApprovalExecutionRouter](Services/Approval/ApprovalExecutionRouter.md) — Onaylanan talepleri (sipariş/şikayet/iptal/iade) otomatik işleten yönlendirici (bloklamayan onay modelinin yürütme ayağı).
   - [ApprovalContextAccessor](Services/Approval/ApprovalContextAccessor.md) — Ambient `CurrentCustomerId` ve `TraceId` güvenliği (`AsyncLocal` tabanlı).
+  - [SideEffectApprovalGate](Services/Approval/SideEffectApprovalGate.md) — Yan etkili tool'ların onay kapısı; yazılı ve sesli kanalın ortak kaynağı.
 - [Providers/](Services/Providers/IContextProvider.md) — Dinamik Bağlam Sağlayıcılar (`IContextProvider` sözleşmesi + `ConversationSummaryProvider`, `CustomerIdentityHintBuilder`, `SemanticMemoryContextProvider`, `ProductRecommendationContextProvider`, `CustomerProfileContextProvider`, `NoopContextProvider`).
 - [Memory/](Services/Memory/SemanticMemoryService.md) — RAG ve Anlamsal Bellek Servisleri:
   - [SemanticMemoryService](Services/Memory/SemanticMemoryService.md) — Üst seviye memory facade'ı (embed + upsert + arama, üç koleksiyon).
@@ -46,7 +47,7 @@ Bu klasör, Onion / Hexagonal Mimari'de **Use Cases & Application Core (İş Ak�
   - [IKnowledgeBaseIngestor](Services/Memory/IKnowledgeBaseIngestor.md) — KB ingest use case arayüzü.
   - [MemoryPortService](Services/Memory/MemoryPortService.md) — [IMemoryPort](Ports.md) uygulayıcısı (+ `DisabledMemoryPort` Null Object).
 - [Personalization/](Services/Personalization/PersonalizationPortService.md) — Müşteri Profili ve Öneri Servisleri (`CustomerProfileService`, `CustomerUnderstandingService`, `RecommendationService`).
-- [Realtime/](Services/Realtime/RealtimeNativeService.md) — Sesli Görüşme Servisleri (`RealtimeNativeService`, `RealtimeBridgeService`).
+- [Realtime/](Services/Realtime/RealtimeNativeService.md) — Sesli Görüşme Servisleri (`RealtimeNativeService`, `VoiceTurnPairer`).
 - [Escalation/](Services/Escalation/EscalationPortService.md) — Canlı Temsilci Eskalasyon Politikaları:
   - [EscalationPolicyService](Services/Escalation/EscalationPolicyService.md) — Eskalasyon adaylığı, dedup, skills-based routing kararı.
   - [EscalationPortService](Services/Escalation/EscalationPortService.md) — [IEscalationPort](Ports.md) uygulayıcısı (admin panel CRUD).

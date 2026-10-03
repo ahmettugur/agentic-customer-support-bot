@@ -5,4 +5,4 @@ Bu klasör, OpenAI Realtime API (WebSocket / WebRTC) üzerinden gerçek zamanlı
 ## Dosyalar
 
 - [OpenAiRealtimeClientAdapter](OpenAiRealtimeClientAdapter.md) — [IRealtimeVoiceTransport](../../CustomerSupportBot.Application/Ports/Outbound/AI/IRealtimeVoiceTransport.md) portunu uygulayan; WebSocket bağlantısı, ses tamponlama, session.update yapılandırması ve sesli araç yanıtlarını yöneten ana adaptör.
-- [RealtimeFunctionTools](RealtimeFunctionTools.md) — Realtime ses oturumu için OpenAI function calling formatında JSON Schema tanımlarını sunan salt-okunur araç kataloğu.
+- [RealtimeFunctionTools](RealtimeFunctionTools.md) — Realtime ses oturumu için OpenAI function calling formatında JSON Schema tanımlarını sunan araç kataloğu (yazılı sohbetin tüm iş tool'ları; yan etkili olanlar onaya gider).

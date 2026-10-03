@@ -1,5 +1,5 @@
 // realtime-client.js
-// Tarayıcı tarafı OpenAI Realtime köprü istemcisi.
+// Tarayıcı tarafı sesli görüşme istemcisi (backend /chat/realtime-native WebSocket'i).
 //
 // Akış:
 //   getUserMedia → AudioWorklet (PCM16 24kHz) → WebSocket binary → backend
@@ -22,8 +22,7 @@
             this.baseUrl = baseUrl || ''; // boş ise aynı origin
             this.sessionId = sessionId || null;
             this.callbacks = callbacks || {};
-            // Köprü modu: '/chat/realtime', native (gpt-realtime-1.5 doğrudan): '/chat/realtime-native'
-            this.endpoint = endpoint || '/chat/realtime';
+            this.endpoint = endpoint || '/chat/realtime-native';
 
             this.ws = null;
             this.mediaStream = null;
@@ -218,13 +217,6 @@
                 case 'user_transcript':
                     this._emit('user_transcript', msg);
                     break;
-                case 'workflow_start':
-                    this._setState('thinking');
-                    this._emit('workflow_start', msg);
-                    break;
-                case 'workflow_done':
-                    this._emit('workflow_done', msg);
-                    break;
                 case 'assistant_text':
                     this._setState('speaking');
                     this._emit('assistant_text', msg);
@@ -241,11 +233,11 @@
                     this._emit('response_done', msg);
                     break;
                 case 'tool_call':
-                    // Native modda model bir tool çağırdı (UI ipucu)
+                    // Model bir tool çağırdı (UI ipucu)
                     this._emit('tool_call', msg);
                     break;
                 case 'tool_result':
-                    // Native modda tool sonucu modele iletildi (UI ipucu)
+                    // Tool sonucu modele iletildi (UI ipucu)
                     this._emit('tool_result', msg);
                     break;
                 case 'conversation_ended':
@@ -256,19 +248,12 @@
                     try { this.stop(); } catch (_) { /* best effort */ }
                     break;
                 case 'error':
-                    // İki kaynak: (a) RealtimeBridge bağlantı/sistem hatası ({type:"error", message:"..."}),
-                    // (b) agent pipeline'dan forward edilen StreamEvent ({type:"error", data:{message:"..."}}).
-                    // İkincisi sadece o turun bubble'ına uyarı eklenmeli; bağlantı durumu değişmemeli.
-                    if (msg.data) {
-                        this._emit('chat_event', { type: 'error', data: msg.data });
-                    } else {
-                        this._setState('error');
-                        this._emit('error', msg);
-                    }
+                    this._setState('error');
+                    this._emit('error', msg);
                     break;
                 default:
-                    // Agent pipeline event'leri (reasoning_*, agent, response_*, done...)
-                    // text chat SSE sözleşmesiyle aynı; UI tarafına ham olarak yansıtırız.
+                    // Yazılı sohbet SSE sözleşmesiyle aynı biçimdeki ({type, data}) diğer olaylar
+                    // (ör. sentiment_update / sentiment_alert) — UI'ya ham olarak yansıtılır.
                     this._emit('chat_event', { type: msg.type, data: msg.data });
                     break;
             }

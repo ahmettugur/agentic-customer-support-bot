@@ -27,8 +27,7 @@ Sürücü adaptörlerin (ASP.NET Core Minimal API, Blazor Web, Arkaplan servisle
 | `IKnowledgeBasePort` | [Ports/Inbound/IKnowledgeBasePort.md](Ports/Inbound/IKnowledgeBasePort.md) | Bilgi bankası makalelerini yönetme. |
 | `IMemoryPort` | [Ports/Inbound/IMemoryPort.md](Ports/Inbound/IMemoryPort.md) | RAG anlamsal arama ve doküman indeksleme. |
 | `IPersonalizationPort` | [Ports/Inbound/IPersonalizationPort.md](Ports/Inbound/IPersonalizationPort.md) | Müşteri profili ve ürün önerileri. |
-| `IRealtimeBridge` | [Ports/Inbound/IRealtimeBridge.md](Ports/Inbound/IRealtimeBridge.md) | Realtime ses köprüsü sözleşmesi. |
-| `IRealtimeNativeBridge` | [Ports/Inbound/IRealtimeNativeBridge.md](Ports/Inbound/IRealtimeNativeBridge.md) | Native WebRTC/WebSocket ses köprüsü. |
+| `IRealtimeNativeBridge` | [Ports/Inbound/IRealtimeNativeBridge.md](Ports/Inbound/IRealtimeNativeBridge.md) | Sesli görüşme (WebSocket) sözleşmesi — tek sesli mod. |
 | `ISessionPort` | [Ports/Inbound/ISessionPort.md](Ports/Inbound/ISessionPort.md) | Oturum CRUD ve mesaj geçmişi sözleşmesi. |
 | `ISlaPort` | [Ports/Inbound/ISlaPort.md](Ports/Inbound/ISlaPort.md) | SLA metrikleri ve ihlal raporlaması. |
 | `ITelemetryPort` | [Ports/Inbound/ITelemetryPort.md](Ports/Inbound/ITelemetryPort.md) | Telemetri ve maliyet verisi sözleşmesi. |

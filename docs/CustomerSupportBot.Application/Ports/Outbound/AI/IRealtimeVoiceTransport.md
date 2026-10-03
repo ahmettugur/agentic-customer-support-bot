@@ -38,9 +38,11 @@ event stream'ini (transkript, ses delta'ları, tool çağrıları) okur.
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
 Vendor-agnostik olacak şekilde tasarlanmıştır: OpenAI, Google veya başka bir sağlayıcı ile
-değiştirilebilir olması hedeflenir. **Bridge modu** ile **native modu** arasındaki fark önemlidir:
-bridge modunda model otomatik yanıt vermez (metin cevabı ayrıca `SpeakTextAsync` ile
-seslendirilir), native modda model kendi cevaplar ve tool'ları kendi çağırır.
+değiştirilebilir olması hedeflenir. Model kendi cevaplar ve tool'ları kendi çağırır.
+
+> Eskiden ayrıca bir köprü modu için `ConfigureBridgeSessionAsync` ve `SpeakTextAsync`
+> (model otomatik yanıt vermiyor, metin cevabı ayrıca seslendiriliyordu) vardı; köprü modu
+> kaldırılınca port'tan da çıkarıldı.
 
 ## 6. Metotlar / Üyeler
 
@@ -50,13 +52,11 @@ seslendirilir), native modda model kendi cevaplar ve tool'ları kendi çağırı
 | `string ModelName { get; }` / `string Voice { get; }` | Kullanılan model ve ses profili. |
 | `IReadOnlyList<string> NativeToolNames { get; }` | Native modda tanımlı tool adları (frontend'e bilgi vermek için). |
 | `Task<bool> TryConnectAsync(CancellationToken ct)` | Realtime WS'e bağlanır; başarısızsa `false`. |
-| `Task ConfigureBridgeSessionAsync(CancellationToken ct)` | Bridge modu session'ını konfigüre eder. |
-| `Task ConfigureNativeSessionAsync(string? sessionContext, CancellationToken ct)` | Native modu konfigüre eder; `sessionContext` login'li müşteri adı + tarih gibi oturuma özel talimatı sabit talimatların sonuna ekler. |
+| `Task ConfigureNativeSessionAsync(string? sessionContext, CancellationToken ct)` | Sesli oturumu konfigüre eder; `sessionContext` login'li müşteri adı + tarih gibi oturuma özel talimatı sabit talimatların sonuna ekler. |
 | `Task SendAudioChunkAsync(byte[] pcm16, CancellationToken ct)` | Tarayıcıdan gelen PCM16 ses chunk'ını base64 encode edip sağlayıcıya iletir. |
 | `Task SendInterruptAsync(CancellationToken ct)` | Devam eden yanıtı iptal eder (kullanıcı sözünü kestiğinde). |
 | `Task CloseAsync(string reason, CancellationToken ct)` | WS bağlantısını kapatır. |
-| `Task SpeakTextAsync(string text, string speakInstructions, CancellationToken ct)` | Bridge modu: asistan metnini seslendirme için gönderir. |
-| `Task SendToolResultsAsync(IReadOnlyList<RealtimeToolResult> results, bool triggerNextResponse, CancellationToken ct)` | Native modu: tool sonuçlarını iletir; `triggerNextResponse=true` ise ardından `response.create` gönderir. |
+| `Task SendToolResultsAsync(IReadOnlyList<RealtimeToolResult> results, bool triggerNextResponse, CancellationToken ct)` | Tool sonuçlarını iletir; `triggerNextResponse=true` ise ardından `response.create` gönderir. |
 | `IAsyncEnumerable<RealtimeServerEvent> ReceiveEventsAsync(CancellationToken ct)` | Sağlayıcı event stream'ini okur; bağlantı kapanana kadar yield eder. |
 
 ## 7. Bağımlılıklar

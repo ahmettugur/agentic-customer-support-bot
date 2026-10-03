@@ -24,8 +24,8 @@ public class SessionIdValidationTests
 {
     private static readonly string TooLong = new('a', 65);
 
-    /// <summary>Gerçek OpenAI Realtime'a bağlanmadan dönen köprü — yalnızca el sıkışma ölçülür.</summary>
-    private sealed class NoopRealtimeBridge : IRealtimeBridge, IRealtimeNativeBridge
+    /// <summary>Gerçek OpenAI Realtime'a bağlanmadan dönen sesli kanal — yalnızca el sıkışma ölçülür.</summary>
+    private sealed class NoopRealtimeBridge : IRealtimeNativeBridge
     {
         public Task RunAsync(IBrowserChannel channel, string sessionId, string? authenticatedCustomerId, CancellationToken ct)
             => Task.CompletedTask;
@@ -38,7 +38,6 @@ public class SessionIdValidationTests
             base.ConfigureWebHost(builder);
             builder.ConfigureServices(s =>
             {
-                s.Replace(ServiceDescriptor.Singleton<IRealtimeBridge, NoopRealtimeBridge>());
                 s.Replace(ServiceDescriptor.Singleton<IRealtimeNativeBridge, NoopRealtimeBridge>());
             });
         }
@@ -117,11 +116,10 @@ public class SessionIdValidationTests
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    [Theory]
-    [InlineData("/chat/realtime/")]
-    [InlineData("/chat/realtime-native/")]
-    public async Task Realtime_RejectsAnInvalidSessionIdBeforeAcceptingTheSocket(string path)
+    [Fact]
+    public async Task Realtime_RejectsAnInvalidSessionIdBeforeAcceptingTheSocket()
     {
+        const string path = "/chat/realtime-native/";
         var ct = TestContext.Current.CancellationToken;
         using var factory = new Factory();
         var client = factory.Server.CreateWebSocketClient();

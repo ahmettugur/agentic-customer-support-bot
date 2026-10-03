@@ -86,6 +86,7 @@ private async Task<ToolResult> ExecuteWithApprovalGateAsync(
     Func<ToolResult?>? preflight = null)
 ```
 - **Ne işe yarar?:** Yan etkili araç çağrılarında **bloklamayan** onay kapısı mantığını işletir — dönen `ToolResult`, admin kararını beklemez.
+- **Not:** Mantığın kendisi artık Application katmanındaki [`SideEffectApprovalGate`](../CustomerSupportBot.Application/Services/Approval/SideEffectApprovalGate.md)'tedir; bu metot ambient bağlamı (`IApprovalContextAccessor.Context`) vererek ona devreder. Aynı kapıyı sesli görüşme de kullanır — iki kanalın onay kuralı tek yerdedir. Aşağıdaki adımlar o sınıfın davranışıdır.
 - **İç Mantığı:**
   1. `RequiresApproval(toolName)` — `_approvalOptions.Enabled` kapalıysa veya `toolName` `ToolsRequiringApproval` listesinde değilse `executeDirectly()` doğrudan çalıştırılır (onaya hiç girmez).
   2. `preflight` varsa çağrılır; salt-okunur bir ön kontroldür (ör. sipariş gerçekten var mı / login'li müşteriye mi ait) ve `ToolResult?` döner — `null` değilse (yani reddettiyse) onay kaydı hiç OLUŞTURULMADAN o sonuç döner. Bu, baştan başarısız olacağı belli bir talebin admin'in zamanını harcamasını önler; yürütme anındaki asıl kontrolün yerine geçmez, onunla birlikte çalışır.

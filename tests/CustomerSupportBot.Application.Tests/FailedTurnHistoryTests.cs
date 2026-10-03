@@ -11,10 +11,8 @@
 
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
-using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Chat;
-using CustomerSupportBot.Application.Services.Realtime;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Tests.Shared;
@@ -120,37 +118,5 @@ public class FailedTurnHistoryTests
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         await sessions.DidNotReceive().AppendUserMessageAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Voice_WhenTheTurnFailsWithNoResponse_TheTranscriptIsStillRecorded()
-    {
-        var sessions = Substitute.For<ISessionManager>();
-        sessions.GetHistoryAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new List<ConversationMessage>());
-
-        var guard = Substitute.For<IInputGuard>();
-        guard.Inspect(Arg.Any<string>())
-            .Returns(ci => new InputGuardResult(InputGuardVerdict.Allow, ci.Arg<string>() ?? "", [], null));
-
-        var approvalContext = Substitute.For<IApprovalContextAccessor>();
-        approvalContext.SetScope(Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>())
-            .Returns(Substitute.For<IDisposable>());
-
-        var svc = new RealtimeBridgeService(
-            Substitute.For<IRealtimeVoiceTransport>(),
-            new FakeTeam { Events = [WorkflowError] },
-            sessions,
-            new NoopReasoning(),
-            approvalContext,
-            Substitute.For<IChatBridge>(),
-            guard,
-            new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 10 })),
-            NullLogger<RealtimeBridgeService>.Instance);
-
-        await svc.HandleUserTranscriptAsync(
-            Substitute.For<IBrowserChannel>(), new AgentSession { SessionId = "s1" }, Query, CancellationToken.None);
-
-        await sessions.Received(1).AppendUserMessageAsync("s1", Query, Arg.Any<CancellationToken>());
     }
 }

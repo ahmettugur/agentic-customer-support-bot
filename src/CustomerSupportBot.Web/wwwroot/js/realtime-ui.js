@@ -17,82 +17,25 @@
 
     function init() {
         const voiceBtn = document.getElementById('voiceBtn');
-        const voiceNativeBtn = document.getElementById('voiceNativeBtn');
         const statusEl = document.getElementById('voiceStatus');
         const statusText = document.getElementById('voiceStatusText');
         const interruptBtn = document.getElementById('voiceInterruptBtn');
         if (!voiceBtn || !statusEl || !statusText) return;
 
         let client = null;
-        let activeMode = null; // 'bridge' | 'native' | null
 
         const setStatus = (state, msg) => {
             statusEl.hidden = (state === 'idle' || state === 'error');
-            const prefix = activeMode === 'native' ? '⚡ ' : '';
-            statusText.textContent = msg || (prefix + (STATE_LABELS[state] || state));
+            statusText.textContent = msg || (STATE_LABELS[state] || state);
             const isActive = state !== 'idle' && state !== 'error';
-            voiceBtn.classList.toggle('active', isActive && activeMode === 'bridge');
-            if (voiceNativeBtn) {
-                voiceNativeBtn.classList.toggle('active', isActive && activeMode === 'native');
-            }
+            voiceBtn.classList.toggle('active', isActive && client !== null);
         };
 
-        // ─── Köprü modu (mevcut) — agent pipeline UI'sini kullanır ───
+        // ─── Sesli görüşme — gpt-realtime modeli doğrudan konuşur, yalnızca okuma tool'ları ───
+        // (Eskiden ayrıca bir "köprü modu" vardı: model yalnızca STT/TTS yapıyor, yanıtı agent
+        // pipeline üretiyordu. Kaldırıldı; tek sesli mod budur.)
 
-        const startBridge = async () => {
-            const app = window.chatApp;
-            const sessionId = app?.api?.sessionId || null;
-
-            let streamActive = false;
-
-            const finalizeBubbleIfAny = () => {
-                if (streamActive) {
-                    window.App?.voiceStreamComplete?.();
-                    streamActive = false;
-                }
-            };
-
-            activeMode = 'bridge';
-            client = new RealtimeClient({
-                baseUrl: app?.api?.baseUrl || '',
-                sessionId,
-                endpoint: '/chat/realtime',
-                callbacks: {
-                    state: ({ state }) => setStatus(state),
-                    connected: ({ sessionId: sid }) => {
-                        if (sid && app?.api && !app.api.sessionId) {
-                            app.api.setSession(sid);
-                            try { app.refreshSessionList?.(); } catch { }
-                        }
-                    },
-                    user_transcript: ({ text }) => {
-                        if (!text) return;
-                        finalizeBubbleIfAny();
-                        window.App?.voiceTranscript?.(text);
-                        streamActive = true;
-                    },
-                    chat_event: (evt) => {
-                        if (!streamActive) return;
-                        window.App?.voiceStreamEvent?.(evt.type, evt.data || {});
-                    },
-                    workflow_done: () => finalizeBubbleIfAny(),
-                    response_done: () => { },
-                    error: ({ message }) => {
-                        console.warn('Realtime error:', message);
-                        setStatus('error', '⚠ ' + (message || 'Hata'));
-                        setTimeout(() => setStatus('idle'), 3000);
-                        finalizeBubbleIfAny();
-                    },
-                    close: () => { finalizeBubbleIfAny(); setStatus('idle'); }
-                }
-            });
-
-            await launchClient(client);
-        };
-
-        // ─── Native modu (yeni) — gpt-realtime-1.5 doğrudan, tool subset kısıtlı ───
-
-        const startNative = async () => {
+        const startVoice = async () => {
             const app = window.chatApp;
             const sessionId = app?.api?.sessionId || null;
 
@@ -170,7 +113,6 @@
 
             // ── Client ──
 
-            activeMode = 'native';
             client = new RealtimeClient({
                 baseUrl: app?.api?.baseUrl || '',
                 sessionId,
@@ -254,7 +196,6 @@
                         setTimeout(() => setStatus('idle'), 3000);
                         // client.stop() zaten realtime-client.js tarafında çağrılıyor
                         client = null;
-                        activeMode = null;
                     },
 
                     error: ({ message }) => {
@@ -280,7 +221,6 @@
                 await c.start();
             } catch (err) {
                 client = null;
-                activeMode = null;
                 const msg = (err?.name === 'NotAllowedError')
                     ? 'Mikrofon izni reddedildi.'
                     : (err?.message || 'Sesli konuşma başlatılamadı.');
@@ -294,25 +234,17 @@
                 client.stop();
                 client = null;
             }
-            activeMode = null;
             setStatus('idle');
         };
 
         // Blazor tarafından çağrılabilir (ör. human_joined → sesli kanalı kapat)
         window.__stopVoice = stop;
 
-        // Sesli butonu — modlar mutually exclusive: aktif farklı modu durdur, istenen modu başlat
+        // Sesli butonu — açıksa kapatır, kapalıysa başlatır
         voiceBtn.addEventListener('click', () => {
-            if (activeMode === 'bridge') stop();
-            else { stop(); startBridge(); }
+            if (client) stop();
+            else startVoice();
         });
-
-        if (voiceNativeBtn) {
-            voiceNativeBtn.addEventListener('click', () => {
-                if (activeMode === 'native') stop();
-                else { stop(); startNative(); }
-            });
-        }
 
         if (interruptBtn) {
             interruptBtn.addEventListener('click', () => {
@@ -324,12 +256,21 @@
         setStatus('idle');
     }
 
-    // Native modda chip etiketleri — kullanıcıya teknik isim yerine dostça gösterilir
+    // Sesli modda chip etiketleri — kullanıcıya teknik isim yerine dostça gösterilir
     const TOOL_LABELS = {
         product_inquiry_tool: 'Ürün sorgulanıyor',
+        product_list_tool: 'Ürünler listeleniyor',
         order_status_tool: 'Sipariş durumu sorgulanıyor',
         get_last_order_tool: 'Son sipariş getiriliyor',
-        get_all_orders_tool: 'Siparişler listeleniyor'
+        get_all_orders_tool: 'Siparişler listeleniyor',
+        complaint_status_tool: 'Şikayet durumu sorgulanıyor',
+        get_all_complaints_tool: 'Şikayetler listeleniyor',
+        // Yan etkili işlemler hemen gerçekleşmez — onaya gönderilir
+        order_placement_tool: 'Sipariş talebi onaya gönderiliyor',
+        order_cancel_tool: 'İptal talebi onaya gönderiliyor',
+        return_request_tool: 'İade talebi onaya gönderiliyor',
+        complaint_registration_tool: 'Şikayet kaydı onaya gönderiliyor',
+        human_handoff_tool: 'Temsilci talebi oluşturuluyor'
     };
 
     if (document.readyState === 'loading') {

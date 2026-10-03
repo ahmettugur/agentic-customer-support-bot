@@ -8,7 +8,7 @@
 
 > 🐞 **Bu doküman kapsamlı biçimde güncellendi.** Önceki sürüm `/api/chat`, `/api/sessions` gibi
 > yolları ve anonim erişimi tarif ediyordu — kod artık **müşteri login'i zorunlu** (`RequireAuthorization("Customer")`)
-> ve gerçek route'lar `/chat/`, `/chat/stream`, `/chat/realtime/{sessionId?}` biçimindedir.
+> ve gerçek route'lar `/chat/`, `/chat/stream`, `/chat/realtime-native/{sessionId?}` biçimindedir.
 > Aşağıdaki içerik doğrudan güncel `.cs` dosyalarından çıkarıldı.
 
 ## 1. Ne İşe Yarar
@@ -40,7 +40,7 @@ sohbet (WebSocket) ve oturum/geçmiş sorgulama. Üçü de **login olmuş bir m�
   gösterecek şekilde kapsam daraltır (`TryResolveScope`) ve müşteriye dönen `SessionState`'ten
   admin-özel alanları (`ReplanNote`, `ReplanRequestedBy/At`) çıkarır (`CustomerVisibleState`).
 - **Üstlenmediği:** reasoning/workflow yürütme mantığı (`IChatPort`/`ChatPortService`'te),
-  gerçek ses köprüsü mantığı (`IRealtimeBridge`/`IRealtimeNativeBridge`'de).
+  sesli görüşme mantığı (`IRealtimeNativeBridge`/`RealtimeNativeService`'te).
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
@@ -52,8 +52,9 @@ sohbet (WebSocket) ve oturum/geçmiş sorgulama. Üçü de **login olmuş bir m�
 - [SseWriter / SseForwarder](../Infrastructure/SseAndWebSockets.md) — SSE çerçeveleme.
 - [WebSocketBrowserChannel](../Infrastructure/SseAndWebSockets.md) — PCM16 ses baytlarının
   WebSocket üzerinden taşınması, boyut sınırı (`MaxMessageBytes`).
-- `IRealtimeBridge` (köprü modu) / `IRealtimeNativeBridge` (native mod) — `Adapters.AI`
-  katmanında OpenAI Realtime API ile konuşan gerçek uygulamalar.
+- `IRealtimeNativeBridge` — sesli görüşmenin Application katmanı portu
+  ([RealtimeNativeService](../../CustomerSupportBot.Application/Services/Realtime/RealtimeNativeService.md));
+  OpenAI Realtime API ile konuşan taşıyıcı `Adapters.AI` katmanındadır.
 - [ChatEventOrchestrator](../Services/ChatEventOrchestrator.md) — `GET /chat/events/{sessionId}`
   kalıcı SSE bağlantısını yöneten orkestratör.
 - `Program.cs` — bu üç sınıfın tüm uçları `RequireAuthorization("Customer")` (SessionEndpoints
@@ -75,11 +76,13 @@ sohbet (WebSocket) ve oturum/geçmiş sorgulama. Üçü de **login olmuş bir m�
   serileştirmek bunu ihlal ediyordu — düzeltme `CustomerVisibleState` projeksiyonuyla yapıldı.
   Bkz. [ContextPipeline.md](../../CustomerSupportBot.Application/Services/Chat/ContextPipeline.md) ve
   ilgili commit geçmişi.
-- **İki ayrı realtime modu (köprü / native) var:** köprü modda model yalnızca STT/TTS yapar,
-  yanıtı agent pipeline üretir (tool onayı dahil tüm iş akışı kullanılabilir); native modda
-  model doğrudan konuşur ve yalnızca **salt-okunur** tool'ları çağırabilir — yan etkili işlemler
-  (sipariş oluşturma, iade) bu kanalda kasıtlı olarak YOKTUR (ses kanalında onay akışını
-  yürütmek riskli/karmaşık olurdu).
+- **Tek sesli mod:** model doğrudan konuşur ve yazılı sohbetin iş tool'larının **tamamını**
+  çağırabilir. Yan etkili işlemler (sipariş oluşturma, iptal, iade, şikayet kaydı) yazılı sohbetle
+  aynı onay kapısından geçer — işlem yapılmaz, onay kaydı açılır, sonuç bildirim olarak gelir.
+  (Bunlar bir süre sesli kanalda tamamen kapalıydı; onay kapısı Application katmanına taşınınca
+  açıldı.) Eskiden ayrıca `/chat/realtime` "köprü modu"
+  vardı (model yalnızca STT/TTS yapıyor, yanıtı agent pipeline üretiyordu); kaldırıldı. Kalan
+  ucun yolu geriye dönük uyumluluk için `/chat/realtime-native` olarak kaldı.
 - **`/chat/stream`'de tur ortasındaki hata akış içinde bildirilir.** SSE'de ilk olay yazıldığında
   yanıt başlamış olur; sonrasında HTTP durum kodu ve ProblemDetails yazılamaz
   ([DomainExceptionHandler](../Infrastructure/DomainExceptionHandler.md) `HasStarted`'da devreden
@@ -111,8 +114,7 @@ sohbet (WebSocket) ve oturum/geçmiş sorgulama. Üçü de **login olmuş bir m�
 
 | Route | Açıklama |
 |---|---|
-| `ws:// /chat/realtime/{sessionId?}` | **Köprü modu.** OpenAI Realtime API yalnızca STT/TTS yapar; yanıtı agent pipeline üretir. `IRealtimeBridge.RunAsync`'e delege eder. |
-| `ws:// /chat/realtime-native/{sessionId?}` | **Native modu.** Model kendisi konuşur, yalnızca salt-okunur tool'ları çağırabilir; yan etkili işlemler bu kanalda yoktur. `IRealtimeNativeBridge.RunAsync`'e delege eder. |
+| `ws:// /chat/realtime-native/{sessionId?}` | **Sesli görüşme.** Model kendisi konuşur ve tüm iş tool'larını çağırabilir; yan etkili işlemler insan onayına gider. `IRealtimeNativeBridge.RunAsync`'e delege eder. |
 | `AuthenticatedCustomerId(HttpContext)` *(private)* | Yazılı chat ile aynı claim'i okur. |
 | `CloseGracefullyAsync(WebSocket)` *(private)* | Bağlantıyı `NormalClosure` ile best-effort kapatır. |
 
@@ -134,7 +136,7 @@ sohbet (WebSocket) ve oturum/geçmiş sorgulama. Üçü de **login olmuş bir m�
 ## 7. Bağımlılıklar
 
 Constructor injection yok — her endpoint lambda'sı ilgili port'u (`IChatPort`, `IInputGuard`,
-`ISessionManager`, `IHitlEventPort`, `ISessionPort`, `IApprovalQueue`, `IRealtimeBridge`,
+`ISessionManager`, `IHitlEventPort`, `ISessionPort`, `IApprovalQueue`,
 `IRealtimeNativeBridge`) minimal API parametre injection'ı ile alır.
 
 ## Bağlantılar

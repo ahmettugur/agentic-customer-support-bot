@@ -575,8 +575,8 @@ public static class A2AEndpoints
     /// kimliğini LLM'den değil <c>IApprovalContextAccessor</c>'dan alır (bkz.
     /// <c>ApprovalGateService.CurrentCustomerId</c>). Bağlam kurulmazsa kimlik boş string olur,
     /// sorgular hiçbir şey bulamaz ve ajan "siparişiniz yok" der — altyapı eksiği <b>yanlış
-    /// olguya</b> dönüşür. Sohbet ve sesli kanallar aynı işi <c>ChatPortService</c> /
-    /// <c>RealtimeBridgeService</c> içinde yapıyor; A2A'nın karşılığı burasıdır.
+    /// olguya</b> dönüşür. Yazılı sohbet aynı işi <c>ChatPortService</c> içinde yapıyor;
+    /// A2A'nın karşılığı burasıdır.
     /// </para>
     ///
     /// <para>

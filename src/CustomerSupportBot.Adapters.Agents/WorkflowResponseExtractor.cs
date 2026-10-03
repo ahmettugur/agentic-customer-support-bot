@@ -216,9 +216,9 @@ public static class WorkflowResponseExtractor
     /// <para>
     /// <b>Parçalama neden gerekli:</b> <c>response_complete</c>'in sunucu tarafında hiçbir
     /// tüketicisi yok — yalnızca tarayıcıya gider. Konuşma geçmişine yazılan metin
-    /// (<c>ChatPortService</c> → <c>PersistExchangeAsync</c>) ve sesli yolda TTS'in okuduğu
-    /// metin (<c>RealtimeBridgeService</c> → <c>SpeakTextAsync</c>) <b>delta'ların
-    /// birleştirilmesiyle</b> elde edilir. Yani delta'lar kozmetik değil, kalıcılığın kaynağıdır.
+    /// (<c>ChatPortService</c> → <c>PersistExchangeAsync</c>), <c>response_complete</c> gelmediğinde
+    /// <b>delta'ların birleştirilmesiyle</b> elde edilir. Yani delta'lar kozmetik değil,
+    /// kalıcılığın yedek kaynağıdır.
     /// </para>
     ///
     /// <para>

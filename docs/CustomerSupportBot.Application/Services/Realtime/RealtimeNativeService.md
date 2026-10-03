@@ -7,27 +7,33 @@
 ## 1. Ne İşe Yarar
 
 **Native mod** sesli görüşmenin orkestratörüdür: OpenAI'nin kendi modelinin doğrudan konuşup
-karar vermesine izin verir (`create_response=true`), model yalnızca **okuma-only** tool'ları
-(ürün sorgulama, sipariş/şikayet durumu) doğrudan çağırabilir. Sipariş oluşturma, iptal, iade,
-şikayet kaydı gibi **yan etkili ve HITL gerektiren** tool'lar bu modda bilinçli olarak yoktur —
-[`RealtimeBridgeService`](RealtimeBridgeService.md)'in aksine, burada cevabı model kendisi
-üretir, bir agent-team pipeline'ı araya girmez.
+karar vermesine izin verir (`create_response=true`); cevabı model kendisi üretir, bir agent-team
+pipeline'ı araya girmez. Model yazılı sohbetin iş tool'larının **tamamını** çağırabilir: okuma
+tool'ları hemen çalışır; **yan etkili** olanlar (sipariş oluşturma, iptal, iade, şikayet kaydı)
+işlemi yapmaz, yazılı sohbetle aynı [`SideEffectApprovalGate`](../Approval/SideEffectApprovalGate.md)
+üzerinden insan onayına kayıt açar.
+
+> Uygulamadaki **tek sesli moddur.** Eskiden ayrıca yanıtı agent-team pipeline'ına ürettiren bir
+> "köprü" modu (`RealtimeBridgeService`, `/chat/realtime`) vardı; kaldırıldı.
 
 ## 2. Hangi Amaçla Kullanılır
 
-Düşük gecikmeli, doğal sesli etkileşim isteyen ama hassas/yan-etkili işlemler gerektirmeyen
-sorgular için (ürün bilgisi, sipariş durumu vb.) — model kendi başına, agent-team/reasoning
-pipeline'ını beklemeden cevap üretebilir.
+Düşük gecikmeli, doğal sesli etkileşim için — model kendi başına, agent-team/reasoning
+pipeline'ını beklemeden cevap üretir. Sorgular, işlem talepleri (onaya gider) ve temsilciye
+yönlendirme sesle yapılabilir.
 
 ## 3. Sorumlulukları
 
 **Üstlendiği:**
 - Oturum kimliğini `SessionIdentityBinder.BindAtomicallyAsync` ile atomik bağlamak.
 - Tarayıcı ↔ OpenAI ses/kontrol köprüsü.
-- Model tool çağırdığında (`ToolCallReady`) çağrıyı **kendi içinde** (`DispatchTool`) işleyip
+- Model tool çağırdığında (`ToolCallReady`) çağrıyı **kendi içinde** (`DispatchToolAsync`) işleyip
   sonucu OpenAI'ye geri vermek — burada agent-team/reasoning pipeline'ı YOKTUR.
-- Hangi tool'ların sesli modda mevcut olduğuna karar vermek: okuma-only olanlar çalışır,
-  yan-etkili olanlar `FORBIDDEN_IN_VOICE` ile reddedilir.
+- Yan etkili tool'ları onay kapısına yönlendirmek (`RunSideEffectToolAsync`): parametre
+  anahtarları yazılı kanalla aynıdır (aynı yürütücü okur, aynı talebin iki kanaldan gelen kopyası
+  tek onay kaydında birleşir); onay kaydı oluşturulmadan önce ön kontrol yapılır (sipariş var mı,
+  bu müşteriye mi ait; sipariş satırları eksiksiz mi).
+- `human_handoff_tool` ile müşteri temsilci istediğinde temsilci kuyruğuna (eskalasyon) talep açmak.
 - `end_conversation` tool'unu özel olarak yakalayıp görüşmeyi kapatmak.
 - 60 saniyelik kullanıcı hareketsizliği sonrası görüşmeyi otomatik sonlandırmak (`WatchInactivityAsync`).
 - Sesli turu hem admin panelinin izleyebilmesi için `IChatBridge`'e hem ajan bağlamı için
@@ -35,13 +41,14 @@ pipeline'ını beklemeden cevap üretebilir.
 - Tur kaydından sonra duygu durumunu değerlendirmek (`sentiment_update` / `sentiment_alert`
   olayları) ve uyarı eşiği aşıldığında eskalasyon açmak (`EvaluateSentimentAsync`).
 
-**Üstlenmediği:** Reasoning/routing (bu modda hiç çalışmaz), yan etkili işlemler (yazılı
-sohbete veya bridge moduna yönlendirilir).
+**Üstlenmediği:** Reasoning/routing (bu modda hiç çalışmaz), yan etkili işlemin kendisi
+(admin onayından sonra `IApprovalExecutionRouter` yürütür).
 
 ## 4. Diğer Katman ve Bileşenlerle İlişkileri
 
 - `IRealtimeVoiceTransport` — OpenAI Realtime bağlantısı.
-- `CustomerSupportToolsService` — doğrudan çağrılan okuma-only tool'ların kaynağı.
+- `CustomerSupportToolsService` — tool'ların iş mantığı (yazılı sohbetle aynı).
+- [`SideEffectApprovalGate`](../Approval/SideEffectApprovalGate.md) — yan etkili tool'ların onay kapısı.
 - `CustomerIdentityHintBuilder` — oturum talimatlarına eklenen kimlik/tarih metni (yazılı
   kanalla **aynı kaynaktan** üretilir).
 - `IInputGuard` — transkript güvenlik denetimi.
@@ -133,18 +140,20 @@ transport hem tarayıcı kanalı kapatılır.
 | `PumpBrowserAsync(channel, ct)` *(private)* | Tarayıcıdan gelen ses/kontrol mesajlarını işler; asistan konuşmuyorsa sesi OpenAI'ye iletir ve son aktivite zamanını günceller. |
 | `HandleBrowserControlAsync(json, ct)` *(private)* | `interrupt`/`stop` kontrol mesajlarını işler. |
 | `HandleEventsAsync(channel, session, ct)` *(private)* | OpenAI event akışının ana durumu: transkript geldiğinde guard kontrolü + geçmiş temizleme, asistan metin delta'larını buffer'lama/flush etme, `ToolCallReady` geldiğinde `pendingCalls`'a ekleme (`end_conversation` özel işlenir), `ResponseDone`'da bekleyen tool çağrıları varsa `DispatchToolCallsAsync`'i tetikleme, yoksa nihai metni geçmişe/chat-bridge'e yazıp `end_conversation` istenmişse bağlantıyı kapatma. |
-| `DispatchToolCallsAsync(channel, calls, session, ct)` *(private)* | Bekleyen tüm tool çağrılarını paralel (`Task.WhenAll`) çalıştırır, sonuçları tarayıcıya bildirir ve `SendToolResultsAsync` ile OpenAI'ye geri verir (`triggerNextResponse: !_endRequested`). |
-| `DispatchTool(name, argumentsJson, authenticatedCustomerId)` *(private)* | Tool adına göre `switch`: okuma-only tool'lar (`product_inquiry_tool`, `product_list_tool`, `order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`) `CustomerSupportToolsService`'e delege edilir; `end_conversation` özel `ToolResult.Ok` döner; yan-etkili tool adları (`order_placement_tool`, `order_cancel_tool`, `return_request_tool`, `complaint_registration_tool`) `FORBIDDEN_IN_VOICE` ile reddedilir; bilinmeyenler `UNKNOWN_TOOL`. |
+| `DispatchToolCallsAsync(channel, calls, session, userQuery, ct)` *(private)* | Bekleyen tüm tool çağrılarını paralel (`Task.WhenAll`) çalıştırır, sonuçları tarayıcıya bildirir ve `SendToolResultsAsync` ile OpenAI'ye geri verir (`triggerNextResponse: !_endRequested`). `userQuery`, bu turun kullanıcı cümlesidir (onay kaydı/eskalasyon için; transkript henüz gelmediyse yer tutucu). |
+| `DispatchToolAsync(name, argumentsJson, session, userQuery)` *(internal)* | Tool adına göre yönlendirir: okuma tool'ları (ürün, sipariş, şikayet sorguları) `CustomerSupportToolsService`'e; yan etkili tool'lar `RunSideEffectToolAsync`'e; `human_handoff_tool` `RequestHumanHandoffAsync`'e; `end_conversation` özel `ToolResult.Ok`; bilinmeyenler `UNKNOWN_TOOL`. Müşteri kimliği her zaman oturumdaki doğrulanmış kimliktir, model argümanından okunmaz. Sayısal argümanlar (ör. `order_id: 1030`) da kabul edilir. |
+| `RunSideEffectToolAsync(...)` *(private)* | Sipariş/iptal/iade/şikayet kaydı → `SideEffectApprovalGate.ExecuteAsync` (ön kontrol + onay kaydı + "onaya gönderildi"). Kapı yoksa `APPROVAL_UNAVAILABLE` — yan etkili işlem asla doğrudan çalışmaz. |
+| `RequestHumanHandoffAsync(...)` *(private)* | `HumanHandoffAgent` adına eskalasyon açar; sohbet sayfası bunu `handoff_pending` olarak görür. |
 
 ## 7. Bağımlılıklar
 
 Constructor injection ile: `IRealtimeVoiceTransport`, `ISessionManager`,
 `CustomerSupportToolsService`, `IInputGuard`, `IChatBridge`, `CustomerIdentityHintBuilder`,
 `IAppDistributedLock`, `ILogger<RealtimeNativeService>`, ve opsiyonel olarak
-`SessionStateService?` (duygu uyarısı) ile `IEscalationSink?` (eskalasyon) — verilmezse ilgili
-adım atlanır.
+`SessionStateService?` (duygu uyarısı), `IEscalationSink?` (eskalasyon, temsilci talebi) ve
+`SideEffectApprovalGate?` (yan etkili tool'lar) — verilmezse ilgili adım atlanır; onay kapısı
+yoksa yan etkili tool'lar reddedilir.
 
 ## Bağlantılar
 
-- [RealtimeBridgeService.md](RealtimeBridgeService.md) — alternatif "köprü" modu (agent-team pipeline üretir)
 - [../Providers/CustomerIdentityHintBuilder.md](../Providers/CustomerIdentityHintBuilder.md) — kimlik/tarih metninin ortak kaynağı

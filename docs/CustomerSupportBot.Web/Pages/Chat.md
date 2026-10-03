@@ -112,11 +112,16 @@ Artık JS yalnızca bir **tutamaç** (`{ id }`) üretir ve değişiklikleri .NET
 | `finalizeStreamingMessage(h)` / `removeMessage(h)` | `VoiceNativeFinalize` / `VoiceNativeRemove` | Akışı bitirir / boş balonu kaldırır. |
 
 `ChatMsg` bu iş için `VoiceId`, `IsPlaceholder` ve `VoiceStatus` alanlarını taşır. JS → .NET
-çağrıları sırayla işlenir. Ayrıca `NewChatFromVoice` artık `StateHasChanged` çağırır — JS'ten
-gelen çağrılar event handler'ların aksine otomatik render tetiklemez; durum temizlense bile eski
-balonlar ekranda kalıyordu. (Köprü modu zaten `VoiceTranscript`/`OnStreamEvent` ile Blazor
-üzerinden gidiyordu.) Gerçek mikrofonla uçtan uca test edilmedi; tutamaç köprüsü tarayıcıda
+çağrıları sırayla işlenir. Gerçek mikrofonla uçtan uca test edilmedi; tutamaç köprüsü tarayıcıda
 `chatApp.ui` doğrudan çağrılarak doğrulandı.
+
+### Tek sesli buton
+
+Giriş satırında tek bir mikrofon butonu (`#voiceBtn`) vardır; sesli görüşmeyi
+(`/chat/realtime-native`) açar/kapatır. Eskiden yanında ikinci bir "⚡ Hızlı Sesli" butonu ve
+"köprü modu" vardı (model yalnızca STT/TTS yapıyor, yanıt ajan hattından geliyordu; JS
+`window.App` üzerinden `VoiceTranscript`/`VoiceSendMessage`/`NewChatFromVoice` çağırıyordu).
+Köprü modu kaldırılınca bu buton, `window.App` ve ilgili JSInvokable'lar da kaldırıldı.
 
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 SSE tercih edilmesinin nedeni tek yönlü streaming için WebSocket'ten daha basit olmasıdır. Mesajlar önce `localStorage`'da tutulur (offline erişim), sonra API ile senkronize edilir. `IAsyncDisposable` uygulanır çünkü SSE bağlantısının temizlenmesi gerekir.

@@ -29,8 +29,7 @@ Bu klasör, dış dünyanın (Api katmanı — HTTP endpoint'leri, WebSocket kö
 
 ## Sesli Sohbet (Realtime)
 
-- [IRealtimeBridge](IRealtimeBridge.md) — Köprü modu (STT/TTS + normal pipeline).
-- [IRealtimeNativeBridge](IRealtimeNativeBridge.md) — Native mod (model doğrudan konuşur).
+- [IRealtimeNativeBridge](IRealtimeNativeBridge.md) — Sesli görüşme (model doğrudan konuşur; tek sesli mod).
 
 ## Gözlemlenebilirlik
 

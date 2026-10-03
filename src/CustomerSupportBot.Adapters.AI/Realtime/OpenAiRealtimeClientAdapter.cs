@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -22,9 +23,18 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
 {
     private const string OpenAiRealtimeUrl = "wss://api.openai.com/v1/realtime?model=";
 
+    /// <summary>
+    /// Sesli asistanın sistem talimatı — <c>Prompts/services/realtime-voice.md</c>. Eskiden bu
+    /// sınıfta gömülü bir sabitti; prompt klasörünün "tüm LLM prompt'ları burada" kuralının
+    /// dışında kaldığı için yazılı ajanların kuralları güncellendiğinde sesli taraf geride
+    /// kalıyordu (ör. kaydın kime ait olduğunu sızdırmama kuralı hiç yoktu).
+    /// </summary>
+    internal const string InstructionsPromptKey = "services/realtime-voice";
+
     private readonly RealtimeOptions _options;
     private readonly string _apiKey;
     private readonly RealtimeFunctionTools _functionTools;
+    private readonly IPromptRepository _prompts;
     private readonly ILogger<OpenAiRealtimeClientAdapter> _logger;
 
     private ClientWebSocket? _ws;
@@ -32,6 +42,7 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
     public OpenAiRealtimeClientAdapter(
         IOptions<AiOptions> aiOptions,
         RealtimeFunctionTools functionTools,
+        IPromptRepository prompts,
         ILogger<OpenAiRealtimeClientAdapter> logger)
     {
         _options = aiOptions.Value.Realtime;
@@ -39,6 +50,7 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
             ? _options.ApiKey!
             : aiOptions.Value.OpenAI.ApiKey ?? string.Empty;
         _functionTools = functionTools;
+        _prompts       = prompts;
         _logger        = logger;
     }
 
@@ -65,44 +77,9 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
         }
     }
 
-    public async Task ConfigureBridgeSessionAsync(CancellationToken ct)
-    {
-        await SendJsonAsync(new
-        {
-            type = "session.update",
-            session = new
-            {
-                type = "realtime",
-                output_modalities = new[] { "audio" },
-                audio = new
-                {
-                    input = new
-                    {
-                        format       = new { type = "audio/pcm", rate = 24000 },
-                        transcription = BuildTranscriptionConfig(),
-                        turn_detection = new
-                        {
-                            type             = "semantic_vad",
-                            eagerness        = "medium",
-                            create_response  = false,  // model otomatik cevap vermesin
-                            interrupt_response = true
-                        }
-                    },
-                    output = new { format = new { type = "audio/pcm", rate = 24000 }, voice = _options.Voice }
-                },
-                instructions = "Sen sadece bir ses-metin köprüsüsün. Kullanıcı konuşmasını kendin yorumlama. " +
-                               "Yanıt verirken yalnızca sana verilen metni Türkçe olarak doğal bir tonla harfiyen oku."
-            }
-        }, ct);
-    }
-
     public async Task ConfigureNativeSessionAsync(string? sessionContext, CancellationToken ct)
     {
-        // Oturuma özel bağlam (müşteri adı + bugünün tarihi) sabit talimatların SONUNA eklenir —
-        // sesli modda mesaj listesi yok, tek enjeksiyon noktası session.instructions.
-        var instructions = string.IsNullOrWhiteSpace(sessionContext)
-            ? NativeSystemInstructions
-            : $"{NativeSystemInstructions}\n\nOTURUM BİLGİSİ:\n{sessionContext.Trim()}";
+        var instructions = BuildSessionInstructions(sessionContext);
 
         await SendJsonAsync(new
         {
@@ -149,30 +126,6 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
             await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, reason, cts.Token);
         }
         catch { /* best effort */ }
-    }
-
-    public async Task SpeakTextAsync(string text, string speakInstructions, CancellationToken ct)
-    {
-        await SendJsonAsync(new
-        {
-            type = "conversation.item.create",
-            item = new
-            {
-                type    = "message",
-                role    = "assistant",
-                content = new[] { new { type = "output_text", text } }
-            }
-        }, ct);
-
-        await SendJsonAsync(new
-        {
-            type     = "response.create",
-            response = new
-            {
-                output_modalities = new[] { "audio" },
-                instructions      = speakInstructions
-            }
-        }, ct);
     }
 
     public async Task SendToolResultsAsync(
@@ -344,45 +297,18 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
-    // ─── Native mod sistem talimatları ───
-
-    private const string NativeSystemInstructions = """
-        Sen bir müşteri destek asistanısın. Türkçe konuş ve yanıtların KISA, doğal, samimi olsun (1-2 cümle, sesli okumaya uygun).
-
-        YAPABİLDİKLERİN (function calling ile):
-        - Ürün katalog sorgusu (fiyat/stok)
-        - Sipariş durumu sorgulama (4+ haneli sipariş numarasıyla)
-        - Görüştüğün müşterinin son siparişi (parametre gerekmez)
-        - Görüştüğün müşterinin tüm siparişlerinin listesi (parametre gerekmez)
-
-        YAPAMADIKLARIN (bunları İSTEDİĞİNDE TOOL ÇAĞIRMA, kullanıcıyı yazılı sohbete yönlendir):
-        - YENİ SİPARİŞ OLUŞTURMA
-        - ŞİKAYET KAYDI OLUŞTURMA
-        - İADE / İPTAL TALEBİ
-        - ÖDEME / FATURA değişiklikleri
-        - HESAP / ŞİFRE / KİŞİSEL BİLGİ değişiklikleri
-
-        Bu istekler için kibarca şöyle de:
-        "Bu işlemler güvenlik adımları gerektirdiği için yazılı sohbet üzerinden ilerletmeniz gerekiyor.
-        Lütfen sohbet penceresine geçin, ben oradan da yardımcı olmaya devam edebilirim."
-
-        KURALLAR:
-        - Tool sonuçlarını YORUMLA, ham JSON OKUMA. Örneğin status:"shipped" → "kargoya verildi" de.
-        - Tool başarısızsa kullanıcıya nazikçe açıkla, kendi uydurma cevap üretme.
-        - MÜŞTERİ KİMLİĞİ SORMA. Kullanıcı giriş yapmış durumda; kimliği sistemden biliniyor ve
-          tool'lara otomatik geçiyor. "Müşteri numaranız nedir?" gibi bir soru ASLA sorma.
-          Kullanıcı başka bir müşteri numarası söylerse de görmezden gel — sorgular her zaman
-          kendi hesabı üzerinde çalışır.
-        - Sipariş numarası gereken bir sorguda (sipariş durumu) numara verilmemişse iste;
-          numara yoksa "son siparişiniz" sorgusuna yönlendir. Sipariş numarasını varsay-ma.
-        - Asla başka dilde cevap verme.
-
-        GÖRÜŞMEYİ SONLANDIRMA:
-        - Kullanıcı açıkça vedalaştığında ("görüşürüz", "teşekkürler kapat", "hoşçakal",
-          "başka soru yok", "yeterli" gibi) ÖNCE kısa bir veda cümlesi söyle
-          (örn. "Tabii, iyi günler dilerim."), ARDINDAN end_conversation tool'unu çağır.
-        - Kullanıcı açıkça vedalaşmadıkça end_conversation çağırma.
-        """;
+    /// <summary>
+    /// Oturumun sistem talimatı: prompt dosyası + oturuma özel bağlam (müşteri adı, bugünün
+    /// tarihi) SONUNA eklenir — sesli modda mesaj listesi yok, tek enjeksiyon noktası
+    /// <c>session.instructions</c>.
+    /// </summary>
+    internal string BuildSessionInstructions(string? sessionContext)
+    {
+        var instructions = _prompts.Get(InstructionsPromptKey).Trim();
+        return string.IsNullOrWhiteSpace(sessionContext)
+            ? instructions
+            : $"{instructions}\n\nOTURUM BİLGİSİ:\n{sessionContext.Trim()}";
+    }
 
     public async ValueTask DisposeAsync()
     {

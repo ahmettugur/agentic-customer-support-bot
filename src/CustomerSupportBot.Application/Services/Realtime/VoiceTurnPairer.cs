@@ -91,6 +91,16 @@ internal sealed class VoiceTurnPairer
     public void ResponseCancelled() => _awaitingToolFollowUp = false;
 
     /// <summary>
+    /// Şu an üretilen yanıtın ait olduğu kullanıcı cümlesi (onay kaydı / eskalasyon için).
+    /// Eşleştirme kimliği yoksa <paramref name="legacy"/> (son transkript) döner; kimlik var ama
+    /// transkript henüz gelmediyse <c>null</c> — bir önceki turun cümlesi yanlışlıkla yazılmasın.
+    /// </summary>
+    public string? CurrentTranscript(string? legacy) =>
+        _currentResponseItemId is null
+            ? legacy
+            : _transcripts.GetValueOrDefault(_currentResponseItemId);
+
+    /// <summary>
     /// Bir yanıt metniyle tamamlandı. <paramref name="legacyUserSide"/>, eşleştirme kimliği
     /// olmayan akışta kullanılacak kullanıcı tarafıdır (son transkript).
     /// </summary>

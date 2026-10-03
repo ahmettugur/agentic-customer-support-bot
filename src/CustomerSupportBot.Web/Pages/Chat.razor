@@ -450,16 +450,11 @@
                        @bind:event="oninput"
                        @onkeydown="HandleKeyDown"
                        disabled="@(_isStreaming || (_pendingHandoff && !_humanMode))" />
-                <button id="voiceBtn" title="Sesli Asistan (tam pipeline)" aria-label="Sesli konuşmayı başlat" class="btn-voice">
+                <button id="voiceBtn" title="Sesli konuşma" aria-label="Sesli konuşmayı başlat" class="btn-voice">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="9" y="2" width="6" height="12" rx="3"/>
                         <path d="M5 10v2a7 7 0 0 0 14 0v-2"/>
                         <line x1="12" y1="19" x2="12" y2="22"/>
-                    </svg>
-                </button>
-                <button id="voiceNativeBtn" title="Hızlı Sesli" aria-label="Hızlı sesli modu başlat" class="btn-voice btn-voice-native">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                     </svg>
                 </button>
                 @if (_isStreaming)
@@ -517,13 +512,13 @@
         /// </summary>
         public List<string> ProcessedAgents { get; set; } = new();
 
-        /// <summary>Native sesli modda JS'in bu balonu tanıdığı tutamaç (bkz. VoiceNative*).</summary>
+        /// <summary>Sesli modda JS'in bu balonu tanıdığı tutamaç (bkz. VoiceNative*).</summary>
         public string? VoiceId { get; set; }
 
         /// <summary>Sesli modda transcript beklenirken gösterilen yer tutucu kullanıcı balonu.</summary>
         public bool IsPlaceholder { get; set; }
 
-        /// <summary>Native sesli modda çalışan tool'un durum etiketi ("Sipariş sorgulanıyor…").</summary>
+        /// <summary>Sesli modda çalışan tool'un durum etiketi ("Sipariş sorgulanıyor…").</summary>
         public string? VoiceStatus { get; set; }
     }
 
@@ -803,10 +798,6 @@
     }
 
     [JSInvokable]
-    public async Task VoiceSendMessage(string text) =>
-        await InvokeAsync(async () => await SendAsync(text));
-
-    [JSInvokable]
     public void VoiceSetSession(string id)
     {
         if (!string.IsNullOrEmpty(id) && _sessionId != id)
@@ -817,32 +808,7 @@
         }
     }
 
-    [JSInvokable]
-    public void VoiceTranscript(string text)
-    {
-        _ = InvokeAsync(() =>
-        {
-            _messages.Add(new ChatMsg { Role = "user", Content = text });
-            _currentBot  = new ChatMsg { Role = "assistant", IsStreaming = true };
-            _messages.Add(_currentBot);
-            ClearAgentChips();
-            _isStreaming  = true;
-            StateHasChanged();
-            _ = ScrollBottomAsync();
-        });
-    }
-
-    // JS'ten gelen çağrılar (event handler'ların aksine) otomatik render tetiklemez — durum
-    // temizlense bile ekranda eski balonlar kalıyordu.
-    [JSInvokable]
-    public async Task NewChatFromVoice() =>
-        await InvokeAsync(async () =>
-        {
-            await NewChatAsync();
-            StateHasChanged();
-        });
-
-    // ── Native sesli mod (realtime-native) balonları ─────────────────────────
+    // ── Sesli görüşme (realtime-native) balonları ────────────────────────────
     // JS balonları bir tutamaçla (id) yönetir ama balonlar _messages'ta yaşar ve Blazor
     // tarafından çizilir. Eskiden realtime-ui.js #messages'a ham DOM düğümleri ekliyordu:
     // Blazor'un render ağacındaki bu yabancı düğümler "yeni sohbet"te silinmiyor ve sonraki

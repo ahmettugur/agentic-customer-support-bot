@@ -371,8 +371,8 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         }
 
         // Tipli payload: bu metin turun KANONİK yanıtıdır ve delta akışından farklı olabilir
-        // (delta'lar ham, bu metin temizlenmiş/yeniden yazılmış). ChatPortService ve
-        // RealtimeBridgeService kalıcılaştırma ve TTS için bunu okur — bkz. ResponseCompletePayload.
+        // (delta'lar ham, bu metin temizlenmiş/yeniden yazılmış). ChatPortService
+        // kalıcılaştırma için bunu okur — bkz. ResponseCompletePayload.
         yield return new StreamEvent(StreamEventTypes.ResponseComplete,
             new ResponseCompletePayload(result, terminationReason));
     }

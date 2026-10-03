@@ -11,7 +11,7 @@ SSE (Server-Sent Events) ile istemciye akan bir chat turunun her adımını (rea
 
 ## 2. Hangi amaçla kullanılır?
 
-`IChatPort.HandleStreamAsync`, `ChatPortService`, `WorkflowResponseExtractor`, `RealtimeBridgeService` gibi bileşenler bu event'leri üretir; Api katmanındaki SSE endpoint'i bunları JSON'a çevirip istemciye yollar; frontend (`chat-bridge.js`) `Type` alanına göre event'i işler.
+`IChatPort.HandleStreamAsync`, `ChatPortService`, `WorkflowResponseExtractor` gibi bileşenler bu event'leri üretir; Api katmanındaki SSE endpoint'i bunları JSON'a çevirip istemciye yollar; frontend (`chat-bridge.js`) `Type` alanına göre event'i işler.
 
 ## 3. Sorumlulukları
 
@@ -20,7 +20,7 @@ SSE (Server-Sent Events) ile istemciye akan bir chat turunun her adımını (rea
 
 ## 4. Diğer katman/bileşenlerle ilişkileri
 
-- `ChatPortService`, `WorkflowResponseExtractor`, `RealtimeBridgeService` (Application/Adapters.Agents) event üretir.
+- `ChatPortService`, `WorkflowResponseExtractor` (Application/Adapters.Agents) event üretir.
 - Api katmanındaki SSE endpoint'i tüketip JSON'a serileştirir.
 - `chat-bridge.js` (Web katmanı) `Type` alanına göre dallanır.
 
@@ -28,7 +28,7 @@ SSE (Server-Sent Events) ile istemciye akan bir chat turunun her adımını (rea
 
 `TextDeltaPayload` ve `ResponseCompletePayload`'ın tipli kayıtlar olarak var olması, geçmişte gerçek bir hatayı kapatmak için eklenmiştir:
 
-> 🐞 **Geçmiş hata:** Bu payload'lar eskiden anonim `new { text = ... }` nesneleriydi. `ResponseCompletePayload` için sunucu tarafında **hiçbir tipli tüketicisi yoktu** — okunamadığı için kimse okumaya çalışmamıştı. Sonuç: `ChatPortService` konuşma geçmişini, `RealtimeBridgeService` ise TTS'e okutulacak metni, event'i okumak yerine delta'ları birleştirerek üretiyordu. Ajan adı sızıntısı olan bir turda ekranda temiz metin görünürken **veritabanına ham metin yazılıyor** ve **sesli kanalda müşteri "OrderAgent size yardımcı olacak" gibi bir cümleyi duyuyordu** — yani `RewriteRoutingMessageAsync` savunması yalnızca yazılı sohbet ekranı için çalışıyor, kalıcılığı ve sesi baypas ediyordu. Artık tüketiciler bu metni kanonik kaynak olarak kullanır; event hiç gelmezse (hata/iptal) delta birleşimine geri düşülür.
+> 🐞 **Geçmiş hata:** Bu payload'lar eskiden anonim `new { text = ... }` nesneleriydi. `ResponseCompletePayload` için sunucu tarafında **hiçbir tipli tüketicisi yoktu** — okunamadığı için kimse okumaya çalışmamıştı. Sonuç: `ChatPortService` konuşma geçmişini, o zamanki sesli köprü modu (sonradan kaldırıldı) ise TTS'e okutulacak metni, event'i okumak yerine delta'ları birleştirerek üretiyordu. Ajan adı sızıntısı olan bir turda ekranda temiz metin görünürken **veritabanına ham metin yazılıyor** ve **sesli kanalda müşteri "OrderAgent size yardımcı olacak" gibi bir cümleyi duyuyordu** — yani `RewriteRoutingMessageAsync` savunması yalnızca yazılı sohbet ekranı için çalışıyor, kalıcılığı ve sesi baypas ediyordu. Artık tüketiciler bu metni kanonik kaynak olarak kullanır; event hiç gelmezse (hata/iptal) delta birleşimine geri düşülür.
 
 ## 6. Tipler ve Üyeler
 

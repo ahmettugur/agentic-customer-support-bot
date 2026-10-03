@@ -50,4 +50,21 @@ public class PromptServiceTests
         rendered.Should().Contain("MARKED");
         rendered.Should().NotContain($"{{{{{key}}}}}");
     }
+
+    /// <summary>
+    /// Sesli asistanın talimatı da bu klasörden gelir (eskiden koda gömülüydü). Yazılı ajan
+    /// prompt'larındaki kritik kurallar orada da bulunmalı — özellikle kaydın kime ait olduğunu
+    /// sızdırmama ve "onaya gönderildi"yi "tamamlandı" diye sunmama.
+    /// </summary>
+    [Theory]
+    [InlineData("CUSTOMER_ID_MISMATCH")]
+    [InlineData("COMPLAINT_NOT_FOUND")]
+    [InlineData("pendingApproval")]
+    [InlineData("STOCK_INSUFFICIENT")]
+    [InlineData("human_handoff_tool")]
+    [InlineData("end_conversation")]
+    public void RealtimeVoicePrompt_CarriesTheRulesItMustEnforce(string rule)
+    {
+        _svc.Get("services/realtime-voice").Should().Contain(rule);
+    }
 }

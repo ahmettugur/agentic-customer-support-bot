@@ -60,6 +60,7 @@ thread-safe değildir.
 | `AudioCommitted(itemId)` | Son commit edilmiş kullanıcı öğesini kaydeder. |
 | `ResponseCreated(): bool` | Yanıtı öğeye bağlar; tool takip yanıtıysa `true` (aynı tur). |
 | `ToolCallsDispatched(followUpExpected)` | Sıradaki yanıtın takip yanıtı olacağını işaretler. |
+| `CurrentTranscript(legacy)` | Şu anki yanıtın ait olduğu kullanıcı cümlesi (onay kaydı/eskalasyon için). Kimlik yoksa `legacy`; kimlik var ama transkript gelmediyse `null` — önceki turun cümlesi yazılmasın. |
 | `ResponseCancelled()` | Takip beklentisini sıfırlar. |
 | `ResponseCompleted(botText, legacyUserSide)` | Yanıt metnini kuyruğa ekler; hazır turları döner. |
 | `TranscriptArrived(itemId, transcript)` | Transkripti öğeye yazar; hazır turları döner. |

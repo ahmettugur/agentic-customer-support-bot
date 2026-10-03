@@ -101,13 +101,12 @@ public static class AuthServicesExtensions
     /// <summary>
     /// Token'ı query string'den kabul eden uçlar — tarayıcıda header taşıyamayan istemciler:
     /// müşteri olay akışı (<c>/chat/events/{sid}</c>, EventSource), admin/agent canlı devralma
-    /// akışı (<c>…/chat-sessions/{sid}/subscribe</c>, EventSource) ve sesli kanallar
-    /// (<c>/chat/realtime*</c>, WebSocket). Yeni bir SSE/WS ucu eklenirse buraya da eklenmeli.
+    /// akışı (<c>…/chat-sessions/{sid}/subscribe</c>, EventSource) ve sesli kanal
+    /// (<c>/chat/realtime-native</c>, WebSocket). Yeni bir SSE/WS ucu eklenirse buraya da eklenmeli.
     /// </summary>
     internal static bool AcceptsQueryStringToken(PathString path)
     {
         if (path.StartsWithSegments("/chat/events")
-            || path.StartsWithSegments("/chat/realtime")
             || path.StartsWithSegments("/chat/realtime-native"))
             return true;
 

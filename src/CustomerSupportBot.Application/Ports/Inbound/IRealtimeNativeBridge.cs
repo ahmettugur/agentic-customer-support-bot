@@ -3,7 +3,8 @@ using CustomerSupportBot.Application.Ports.Outbound;
 namespace CustomerSupportBot.Application.Ports.Inbound;
 
 /// <summary>
-/// Native mod — gpt-realtime-2 kendisi konuşur, okuma-only tool'ları çağırır.
+/// Sesli görüşme — gpt-realtime modeli kendisi konuşur ve tool'ları çağırır; yan etkili
+/// işlemler insan onayına gönderilir.
 /// </summary>
 public interface IRealtimeNativeBridge
 {

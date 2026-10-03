@@ -121,7 +121,7 @@ CustomerSupport.slnx
 │   │   │   ├── ISlaPort.cs              # SLA izleme port'u
 │   │   │   ├── IMemoryPort.cs           # Semantic memory port'u
 │   │   │   ├── IEvaluationPort.cs       # Senaryo değerlendirme port'u
-│   │   │   ├── IRealtimeBridge.cs       # Realtime ses köprüsü port'u
+│   │   │   ├── IRealtimeNativeBridge.cs # Sesli görüşme port'u
 │   │   │   ├── IInputGuard.cs           # Girdi güvenlik filtresi port'u
 │   │   │   ├── ChatRequest.cs / ChatResponse.cs / StreamEvent.cs / EvaluationModels.cs
 │   │   │   └── Auth/                    # ITokenService, IUserService, AuthResponse
@@ -185,7 +185,7 @@ CustomerSupport.slnx
 │       ├── Routing/                     # SkillsBasedRouter + RoutingOptions
 │       ├── Sla/                         # SlaPortService, SlaPolicyEvaluator, SlaOptions
 │       ├── Telemetry/                   # AnalyticsPortService, TelemetryPortService, TracePortService
-│       ├── Realtime/                    # RealtimeBridgeService, RealtimeNativeService
+│       ├── Realtime/                    # RealtimeNativeService, VoiceTurnPairer
 │       └── Evaluation/                  # CriteriaEvaluator, EvaluationRunner
 │
 ├── CustomerSupportBot.Adapters.Agents/  ← Katman 3a: MAF ajan adaptörü
@@ -275,7 +275,7 @@ CustomerSupport.slnx
 │   ├── Endpoints/                       # HTTP endpoint'leri — 16 dosya (Minimal API)
 │   │   ├── ChatEndpoints.cs             # POST /chat + /chat/stream (SSE) + GET /chat/events
 │   │   ├── AuthEndpoints.cs             # /auth/login + /auth/refresh + /auth/logout
-│   │   ├── RealtimeEndpoints.cs         # WS /chat/realtime + /chat/realtime-native
+│   │   ├── RealtimeEndpoints.cs         # WS /chat/realtime-native (sesli görüşme)
 │   │   ├── SessionEndpoints.cs          # GET /sessions/... (debug + sidebar)
 │   │   ├── TraceEndpoints.cs            # GET /traces/... (dashboard + replay)
 │   │   ├── AdminEndpoints.cs            # HITL approvals + escalations + chat takeover

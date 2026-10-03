@@ -18,7 +18,6 @@
 // artık ApprovalRequiredAIFunction ile sarılmıyor, dolayısıyla o event'i üretmiyorlar.
 // Köprü, ileride biri bilerek bir tool'u o modelde sararsa çalışsın diye korunuyor.
 
-using System.Text.Json;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Application.Services;
 using CustomerSupportBot.Application.Services.Approval;
@@ -35,11 +34,11 @@ namespace CustomerSupportBot.Adapters.Agents;
 public class ApprovalGateService
 {
     private readonly IApprovalQueue _approvalQueue;
-    private readonly ApprovalOptions _approvalOptions;
     private readonly IEscalationSink _escalationSink;
     private readonly IApprovalContextAccessor _contextAccessor;
     private readonly ICustomerSupportToolsService _tools;
     private readonly EscalationPolicyService _escalationPolicy;
+    private readonly SideEffectApprovalGate _gate;
     private readonly ILogger<ApprovalGateService> _logger;
 
     public ApprovalGateService(
@@ -52,12 +51,13 @@ public class ApprovalGateService
         ILogger<ApprovalGateService>? logger = null)
     {
         _approvalQueue = approvalQueue;
-        _approvalOptions = approvalOptions.Value;
         _escalationSink = escalationSink;
         _contextAccessor = contextAccessor;
         _tools = tools;
         _escalationPolicy = escalationPolicy;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ApprovalGateService>.Instance;
+        // Kapı kuralı tek yerde (Application) — sesli kanal da aynı sınıfı kullanır.
+        _gate = new SideEffectApprovalGate(approvalQueue, approvalOptions, _logger);
     }
 
     /// <summary>
@@ -197,81 +197,21 @@ public class ApprovalGateService
                 "otomatik alınır.");
 
     /// <summary>
-    /// Onay gerekmiyorsa tool'u doğrudan çalıştırır. Onay gerekiyorsa <see cref="IApprovalQueue.CreateAsync"/>
-    /// ile kaydı oluşturur ve KARARI BEKLEMEDEN hemen "onaya gönderildi" sonucunu döner — turn burada biter.
-    /// Gerçek iş (execute), admin karar verdiğinde <see cref="IApprovalExecutionRouter"/> üzerinden ayrıca
-    /// tetiklenir (bkz. <c>PostgresApprovalQueue.DecideAsync</c>/<c>InMemoryApprovalQueue.DecideAsync</c>);
-    /// sonucu kullanıcıya bir bildirim/badge olarak ulaşır, bu turda değil.
-    ///
-    /// <para>
-    /// <paramref name="preflight"/> — onay kaydı OLUŞTURULMADAN önce çalışan salt-okunur ön kontrol
-    /// (ör. sipariş var mı, login'li müşteriye ait mi). Gerçek iş admin kararından sonra çalıştığı
-    /// için bu kontrol olmasaydı, baştan başarısız olacağı belli bir talep önce kuyruğa düşer,
-    /// admin'in zamanını harcar, onaylanır ve ancak o zaman sessizce başarısız olurdu. Yürütme
-    /// anındaki kontrolün YERİNE geçmez (durum arada değişebilir) — birlikte çalışırlar.
-    /// </para>
+    /// Onay gerekmiyorsa tool'u doğrudan çalıştırır; gerekiyorsa kaydı oluşturup KARARI
+    /// BEKLEMEDEN "onaya gönderildi" sonucunu döner. Kural <see cref="SideEffectApprovalGate"/>'te
+    /// (yazılı ve sesli kanalın ortak kaynağı); bağlam burada ambient scope'tan okunur.
     /// </summary>
-    private async Task<ToolResult> ExecuteWithApprovalGateAsync(
+    private Task<ToolResult> ExecuteWithApprovalGateAsync(
         string toolName,
         Dictionary<string, object?> parameters,
         Func<ToolResult> executeDirectly,
-        Func<ToolResult?>? preflight = null)
-    {
-        if (!RequiresApproval(toolName))
-            return executeDirectly();
-
-        if (preflight?.Invoke() is { } blocked)
-        {
-            _logger.LogInformation(
-                "[HITL] Onay kaydı oluşturulmadı — ön kontrol reddetti tool={Tool} code={Code}",
-                toolName, blocked.Error?.Code);
-            return blocked;
-        }
-
-        var ctx = _contextAccessor.Context;
-        var agentName = ResolveAgentName(toolName);
-
-        // Mükerrer talep engellemesi (ör. LLM tool çağrısını tekrarladıysa) artık burada
-        // "önce oku sonra yaz" ile YAPILMAZ — bu, kontrol ile yazma arasında (TOCTOU) ve
-        // çok-pod'lu kurulumda (GetPending() süreç-içi cache, başka pod'daki kayıt
-        // görülmeyebilir) bir yarış açıyordu: aynı işlem için iki ayrı onay kaydı oluşup
-        // admin ikisini de onayladığında gerçek iş İKİ KEZ yürütülebiliyordu. Bunun yerine
-        // her zaman CreateAsync çağrılır; dedup DB'deki kısmi unique index'te (ya da
-        // in-memory implementasyonda tek bir kilit altında) ATOMİK olarak yapılır — zaten
-        // bekleyen bir kayıt varsa CreateAsync onu geri döner, yeni kayıt oluşturmaz
-        // (bkz. ApprovalRequest.ParamSignature, PostgresApprovalQueue.CreateAsync).
-        var req = new ApprovalRequest
-        {
-            SessionId = ctx?.SessionId,
-            CustomerId = ctx?.CustomerId,
-            TraceId = ctx?.TraceId,
-            UserQuery = ctx?.UserQuery,
-            ToolName = toolName,
-            AgentName = agentName,
-            Parameters = parameters,
-            ParamSignature = BuildParamSignature(parameters),
-            Justification = string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName),
-            TimeoutSeconds = _approvalOptions.TimeoutSeconds
-        };
-        req = await _approvalQueue.CreateAsync(req);
-
-        return ToolResult.Pending(string.Format(WellKnown.FallbackMessages.ApprovalPending, req.Id));
-    }
-
-    private bool RequiresApproval(string toolName) =>
-        _approvalOptions.Enabled && _approvalOptions.ToolsRequiringApproval.Contains(toolName);
+        Func<ToolResult?>? preflight = null) =>
+        _gate.ExecuteAsync(toolName, parameters, executeDirectly, _contextAccessor.Context, preflight);
 
     /// <summary>
-    /// Hangi ajanın hangi tool'u sahiplendiğini çözer — <c>ToolApprovalRequestContent</c>
-    /// sadece tool adını taşıdığı için (workflow hangi ajanın turduğunu doğrudan söylemiyor),
-    /// bu eşleme admin panelinde "hangi ajan istiyor" bilgisini göstermek için gerekiyor.
-    /// Eşleme <see cref="WellKnown.SideEffectToolOwners"/>'dan okunur — burada ayrıca
-    /// elle sürdürülen bir switch tutulmaz.
+    /// Hangi ajanın hangi tool'u sahiplendiğini çözer — bkz. <see cref="SideEffectApprovalGate.ResolveAgentName"/>.
     /// </summary>
-    public static string ResolveAgentName(string toolName) =>
-        WellKnown.SideEffectToolOwners.TryGetValue(toolName, out var agentName)
-            ? agentName
-            : "UnknownAgent";
+    public static string ResolveAgentName(string toolName) => SideEffectApprovalGate.ResolveAgentName(toolName);
 
     /// <summary>
     /// Bir onay talebi oluşturur (veya aynı imzalı bekleyen bir talep varsa onu yeniden kullanır)
@@ -306,7 +246,7 @@ public class ApprovalGateService
             ToolName = toolName,
             AgentName = agentName,
             Parameters = paramsDict,
-            ParamSignature = BuildParamSignature(paramsDict),
+            ParamSignature = SideEffectApprovalGate.BuildParamSignature(paramsDict),
             // Çağıran taraf (WorkflowRunner) o an trace'te bulunan gerçek gerekçeyi
             // (PlanningAgent rationale'ı) geçer; yoksa jenerik şablona düşülür.
             Justification = string.IsNullOrWhiteSpace(justification)
@@ -332,71 +272,6 @@ public class ApprovalGateService
     {
         await _escalationPolicy.ProcessPendingEscalationsAsync(trace, userQuery, finalResponse, ct);
     }
-
-    /// <summary>
-    /// Mükerrer onay talebi tespiti için parametrelerin kanonik imzası.
-    ///
-    /// <para>
-    /// Eskiden imza <c>"anahtar=deger"</c> parçalarının <c>|</c> ile birleştirilmesiydi ve iki
-    /// ayrı şekilde yanlış cevap veriyordu:
-    /// </para>
-    ///
-    /// <para>
-    /// <b>1. Yanlış EŞLEŞME.</b> Ayraçlar kaçışlanmadığı için <c>{a:"x|b=y"}</c> ile
-    /// <c>{a:"x", b:"y"}</c> aynı imzayı üretiyordu. Farklı iki talep aynı sayıldığında
-    /// ikincisi sessizce birincinin kaydına katlanır ve hiçbir zaman yürütülmez.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>2. Yanlış AYRIŞMA.</b> <c>ToString()</c> geçerli kültürü kullanır. Kayıt Redis veya
-    /// veritabanından geri okunduğunda değerler <c>JsonElement</c> olur ve onların
-    /// <c>ToString()</c>'i ham JSON metnidir — kültürden bağımsız. Türkçe kurulumda ölçülen
-    /// fark: taze <c>amount=100,5</c> ile round-trip <c>amount=100.5</c>. Yani BAŞKA bir pod'da
-    /// oluşmuş (ya da restart'tan sonra DB'den yüklenmiş) bekleyen bir talep, aynı parametrelerle
-    /// gelen yeni çağrıyla asla eşleşmez. Mükerrer koruma tam da en çok gerektiği yerde —
-    /// çok pod'lu kurulumda — sessizce devre dışı kalır: iki onay kaydı oluşur, admin ikisini
-    /// de onaylarsa iş İKİ KEZ yürütülür.
-    /// </para>
-    ///
-    /// <para>
-    /// JSON serileştirme her ikisini birden çözer: yapısal olarak kaçışlıdır (çakışma olmaz) ve
-    /// sayı biçimi kültürden bağımsızdır, dolayısıyla CLR değeri ile onun <c>JsonElement</c>
-    /// karşılığı aynı metni üretir.
-    /// </para>
-    /// </summary>
-    /// <summary>
-    /// DB'deki <c>param_signature</c> kolonunun sınırı (bkz. ApprovalRequestConfiguration) —
-    /// bunu aşan bir imza dedup için kullanılamaz, aşağıda benzersiz bir imzaya düşülür.
-    /// </summary>
-    private const int MaxParamSignatureLength = 1000;
-
-    private static string BuildParamSignature(IReadOnlyDictionary<string, object?> parameters)
-    {
-        if (parameters.Count == 0) return string.Empty;
-
-        // Anahtar sırası çağrıdan çağrıya değişebilir; imza sıradan bağımsız olmalı.
-        var ordered = new SortedDictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var kv in parameters) ordered[kv.Key] = kv.Value;
-
-        string signature;
-        try { signature = JsonSerializer.Serialize(ordered); }
-        catch (NotSupportedException)
-        {
-            // Serileştirilemeyen bir değer (ör. beklenmeyen bir CLR tipi) imza üretimini
-            // engellememeli: mükerrer koruması bir OPTİMİZASYONDUR, onay akışının kendisi
-            // değil. Boş imza dönmek yerine benzersiz bir imza döneriz — böylece talep
-            // "mükerrer" sayılıp yanlışlıkla bastırılmaz, yalnızca kendi kaydını alır.
-            return Guid.NewGuid().ToString("N");
-        }
-
-        // Aynı gerekçeyle: alışılmadık derecede büyük bir parametre kümesi (ör. çok satırlı
-        // sipariş) DB kolon sınırını aşarsa dedup'tan tamamen çıkarılır, yoksa iki FARKLI
-        // büyük talep aynı (kesilmiş) imzaya sahipmiş gibi yanlışlıkla birleştirilebilirdi.
-        return signature.Length <= MaxParamSignatureLength
-            ? signature
-            : Guid.NewGuid().ToString("N");
-    }
-
 }
 
 public sealed record ApprovalDecisionResult(bool Approved, string? Reason);

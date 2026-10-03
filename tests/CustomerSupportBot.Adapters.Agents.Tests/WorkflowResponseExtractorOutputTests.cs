@@ -285,10 +285,10 @@ public class WorkflowResponseExtractorOutputTests
 
     /// <summary>
     /// Parçaların birleşimi girdiyle BİREBİR aynı olmalı — bu, kozmetik bir istek değil:
-    /// konuşma geçmişine yazılan metin (ChatPortService) ve sesli yolda TTS'in okuduğu metin
-    /// (RealtimeBridgeService) delta'ların birleştirilmesiyle elde ediliyor. Burada bir
-    /// karakter kaybı olsa kullanıcıya doğru metin gösterilir (response_complete üzerine yazar)
-    /// ama DB'ye ve sese BOZUK metin gider — yani hata sessiz kalırdı.
+    /// response_complete gelmediğinde konuşma geçmişine yazılan metin (ChatPortService)
+    /// delta'ların birleştirilmesiyle elde ediliyor. Burada bir karakter kaybı olsa kullanıcıya
+    /// doğru metin gösterilir (response_complete üzerine yazar) ama DB'ye BOZUK metin gider —
+    /// yani hata sessiz kalırdı.
     /// </summary>
     [Theory]
     [InlineData("tek")]

@@ -17,11 +17,8 @@ public interface IRealtimeVoiceTransport : IAsyncDisposable
     /// <summary>Realtime WS'e bağlanır. Başarısız olursa false döner.</summary>
     Task<bool> TryConnectAsync(CancellationToken ct);
 
-    /// <summary>Bridge modu session konfigürasyonunu gönderir (model otomatik yanıt vermez).</summary>
-    Task ConfigureBridgeSessionAsync(CancellationToken ct);
-
     /// <summary>
-    /// Native modu session konfigürasyonunu gönderir (model kendi cevaplar + tool'lar açık).
+    /// Sesli oturum konfigürasyonunu gönderir (model kendi cevaplar + tool'lar açık).
     /// </summary>
     /// <param name="sessionContext">
     /// Oturuma özel ek system talimatı — login'li müşterinin adı ve bugünün tarihi
@@ -40,11 +37,8 @@ public interface IRealtimeVoiceTransport : IAsyncDisposable
     /// <summary>WS bağlantısını kapatır.</summary>
     Task CloseAsync(string reason, CancellationToken ct);
 
-    /// <summary>Bridge modu: asistan cevap metnini provider'a seslendirme için gönderir.</summary>
-    Task SpeakTextAsync(string text, string speakInstructions, CancellationToken ct);
-
     /// <summary>
-    /// Native modu: function call sonuçlarını provider'a iletir.
+    /// Function call sonuçlarını provider'a iletir.
     /// <paramref name="triggerNextResponse"/> true ise ardından response.create gönderir.
     /// </summary>
     Task SendToolResultsAsync(

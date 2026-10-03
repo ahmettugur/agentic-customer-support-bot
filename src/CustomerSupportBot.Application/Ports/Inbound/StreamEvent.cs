@@ -20,7 +20,7 @@ public sealed record SessionEventPayload(string SessionId);
 /// <summary>
 /// <see cref="StreamEventTypes.ResponseDelta"/> ve <see cref="StreamEventTypes.ReasoningDelta"/>
 /// event'lerinin payload'ı. Önceden anonim <c>new { text = ... }</c> nesneleri kullanılıyordu ve
-/// aggregator'lar (ChatPortService, RealtimeBridgeService, WorkflowResponseExtractor) bunu JSON
+/// aggregator'lar (ChatPortService, WorkflowResponseExtractor) bunu JSON
 /// round-trip veya reflection ile okumak zorunda kalıyordu — rename'de sessizce boş string
 /// dönerlerdi. Bu record aynı JSON şekli (camelCase → "text") üretir, tipli okumaya izin verir.
 /// </summary>
@@ -41,8 +41,8 @@ public sealed record TextDeltaPayload(string Text);
 /// 🐞 <b>Bu tip bir hatayı kapatmak için eklendi.</b> Payload eskiden anonim bir
 /// <c>new { text = ... }</c> nesnesiydi ve sunucu tarafında <b>hiçbir tüketicisi yoktu</b> —
 /// tipli okunamadığı için kimse okumaya çalışmamıştı. Sonuç: <c>ChatPortService</c> konuşma
-/// geçmişini, <c>RealtimeBridgeService</c> ise TTS'e okutulacak metni delta'ları birleştirerek
-/// üretiyordu. Ajan adı sızıntısı olan bir turda ekranda temiz metin görünürken
+/// geçmişini, o zamanki sesli köprü modu (sonradan kaldırıldı) ise TTS'e okutulacak metni
+/// delta'ları birleştirerek üretiyordu. Ajan adı sızıntısı olan bir turda ekranda temiz metin görünürken
 /// <b>veritabanına ham metin yazılıyor</b> ve <b>sesli kanalda müşteri "OrderAgent size
 /// yardımcı olacak" gibi bir cümleyi duyuyordu</b> — yani <c>RewriteRoutingMessageAsync</c>
 /// savunması yalnızca yazılı sohbet ekranı için çalışıyor, kalıcılığı ve sesi baypas ediyordu.

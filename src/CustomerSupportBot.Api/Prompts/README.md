@@ -20,6 +20,7 @@ ve `Get(key)` / `Render(key, vars)` metodlarıyla erişim sağlar.
   - `reasoning-hint.md` — PlanningAgent'a enjekte edilen ön-analiz hint'i (`{{REASONING_LINES}}` placeholder)
   - `routing-rewrite-system.md` — Dahili yönlendirme mesajını kullanıcı dostu Türkçe yanıta çevirme kuralları
   - `routing-rewrite-user.md` — Rewrite isteğinin kullanıcı şablonu; `{{ORIGINAL_QUERY}}` ve `{{ROUTING_MESSAGE}}` placeholder'ları + 5 örnek senaryo
+  - `realtime-voice.md` — Sesli görüşme (OpenAI Realtime) sistem talimatı. `OpenAiRealtimeClientAdapter` oturum kurulurken okur; sonuna oturuma özel `OTURUM BİLGİSİ` (müşteri adı, tarih) eklenir. Yazılı ajanların (OrderAgent, ComplaintAgent, HumanHandoffAgent) iş/güvenlik kuralları değişirse **burası da güncellenmeli** — sesli kanalda bu ajanlar yoktur, model kuralları yalnızca bu dosyadan öğrenir.
 
 ## Dosya-dışı (kod içinde üretilen) system mesajları
 

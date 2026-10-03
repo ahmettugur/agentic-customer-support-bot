@@ -91,7 +91,6 @@ public static class ApplicationServiceCollectionExtensions
         // Singleton lifetime: tutarlı, gereksiz allokasyon yok, event subscription'lar tek sefer.
 
         // Realtime oturumları bağlantı başına durum taşıdığından Scoped kaydedilir.
-        services.AddScoped<IRealtimeBridge, RealtimeBridgeService>();
         services.AddScoped<IRealtimeNativeBridge, RealtimeNativeService>();
 
         services.AddSingleton<ISessionPort, SessionPortService>();
@@ -130,6 +129,12 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
         services.AddSingleton<IApprovalExecutionRouter, ApprovalExecutionRouter>();
+        // Yan etkili tool'ların HITL onay kapısı — sesli kanal kullanır (yazılı kanalın
+        // ApprovalGateService'i aynı sınıfı kendi içinde kurar).
+        services.AddSingleton(sp => new SideEffectApprovalGate(
+            sp.GetRequiredService<Ports.Outbound.Persistence.IApprovalQueue>(),
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ApprovalOptions>>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SideEffectApprovalGate>>()));
         services.AddSingleton<IUiHintEmitter, UiHintEmitter>();
         services.AddSingleton<IReplanService, ReplanService>();
         services.AddSingleton<SessionStateService>();

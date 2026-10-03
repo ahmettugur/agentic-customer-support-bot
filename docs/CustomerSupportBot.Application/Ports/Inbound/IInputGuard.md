@@ -18,7 +18,7 @@ Kullanıcıdan gelen ham metni, workflow'a/LLM'e geçmeden önce denetleyen guar
 
 ## 4. Diğer katman/bileşenlerle ilişkileri
 
-- `ChatPortService`, realtime bridge'ler (`IRealtimeBridge`/`IRealtimeNativeBridge` implementasyonları) tüketicisidir.
+- `ChatPortService` ve sesli görüşme (`IRealtimeNativeBridge` implementasyonu `RealtimeNativeService`) tüketicisidir.
 
 ## 5. Kullanılma nedeni ve tasarım yaklaşımı
 
