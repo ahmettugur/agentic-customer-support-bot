@@ -72,9 +72,32 @@ sağlayıcısı" soyutlamasının arkasında iki farklı kimlik doğrulama/adres
 | `VadSilenceMs` | `int` | `600` | VAD'in "konuşma bitti" sayması için gereken sessizlik süresi |
 | `ReasoningEffort` | `string` | `"low"` | Realtime modelinin muhakeme eforu |
 | `MaxResponseTokens` | `int` | `4096` | Model yanıtı için token tavanı |
-| `TranscriptionModel` | `string` | `"gpt-4o-transcribe"` | ASR (konuşma→metin) modeli |
-| `TranscriptionLanguage` | `string?` | `"tr"` | ASR dil ipucu |
+| `TranscriptionModel` | `string` | `"gpt-4o-transcribe"` | Kullanıcı konuşmasının transkripsiyon modeli — `gpt-4o-transcribe`, `gpt-transcribe` veya `gpt-live-transcribe` (aşağıya bakınız) |
+| `TranscriptionLanguage` | `string?` | `"tr"` | Dil ipucu; eski nesilde `language`, yeni nesilde `languages: [..]` olarak gönderilir |
 | `TranscriptionPrompt` | `string` | aşağıya bakınız | ASR'ye verilen bağlam ipucu |
+| `TranscriptionKeywords` | `List<string>` | boş | Seste geçmesi beklenen terimler (ürün/kategori adları, "iade", "kargo"). Yalnızca `gpt-transcribe` / `gpt-live-transcribe` ile gönderilir. **Örnek numara/cümle yazmayın** — aşağıdaki `TranscriptionPrompt` notu burada da geçerli. |
+| `TranscriptionDelay` | `string?` | boş | Yalnızca `gpt-live-transcribe`: `minimal` / `low` / `medium` / `high` / `xhigh` — yüksek değer modele daha fazla ses bağlamı verir, hata oranını düşürür, ilk metni geciktirir. Boşsa sağlayıcı varsayılanı. |
+
+#### Transkripsiyon modeli seçimi
+
+Model yalnızca appsettings'ten değişir (`AI:Realtime:TranscriptionModel`); gönderilecek alanları
+adaptör model adının başından kendisi çıkarır (`RealtimeTranscriptionConfig`, tarihli sürümler ve
+büyük/küçük harf farkı tanınır):
+
+| Model | Dil alanı | `prompt` | `keywords` | `delay` | Ne zaman |
+|---|---|---|---|---|---|
+| `gpt-4o-transcribe` (+ `gpt-4o-mini-transcribe`, `whisper-1`) | `language: "tr"` | ✓ | — | — | Varsayılan; önceki nesil |
+| `gpt-transcribe` | `languages: ["tr"]` | ✓ | ✓ | — | Tamamlanmış turu yüksek doğrulukla yazar; sayılar/kısa cümleler/gürültüde daha iyi olduğu belirtiliyor |
+| `gpt-live-transcribe` | `languages: ["tr"]` | ✓ | ✓ | ✓ | Konuşurken anlık yazar (canlı altyazı). Not: kod bugün yalnızca "tamamlandı" olayını işler, anlık parçaları kullanmaz |
+
+Yeni nesil modellere `language` gönderilmez — sağlayıcı `language` ile `languages`'ın birlikte
+gönderilmesini reddeder. Bilinmeyen bir model adı eski nesil biçimine düşer. Modele uymayan bir
+ayar (ör. eski nesilde `TranscriptionDelay`, geçersiz bir `delay` değeri) gönderilmez; açılıştan
+sonraki ilk sesli oturumda bir kez uyarı loglanır (seçilen model ve ailesiyle birlikte).
+
+> Yeni nesil modellerin Türkçe doğruluğu ve otomatik tur algılamayla (semantic VAD) davranışı
+> canlı bir sesli görüşmede doğrulanmalıdır; varsayılan bu yüzden `gpt-4o-transcribe` olarak
+> bırakıldı.
 
 > 🐞 **`TranscriptionPrompt` neden somut örnek numara İÇERMİYOR:** Eskiden prompt
 > "müşteri numarası (1008, 1027 gibi...)" gibi somut örnekler içeriyordu. ASR modeli

@@ -16,7 +16,7 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 - **Smart Routing & Skills-Based Escalation** — Eskalasyon oluştuğunda intent + müşteri profili üzerinden gerekli skill tag'leri çıkarılır ve `IHumanAgentRegistry`'deki temsilciler arasında en iyi skill + dil + load match'iyle aday önerilir. Manuel re-route + load tracking + auto-decrement.
 - **Parallel SubTask Execution** — Compound query'lerde (ör. "1030 ve 1042 durumu") yan-etkisiz alt görevler (Product/OrderInquiry) `Task.WhenAll` ile paralel çalışır; yan-etkili olanlar (OrderPlacement/Complaint) HITL gate'i nedeniyle sıralı kalır. p50 latency düşer.
 - **SLA / Response Time Guardian** — Bekleyen onay ve açık eskalasyonları periyodik tarayan `BackgroundService`. Eşik aşılan onaylar `AutoReject`, eskalasyonların önceliği otomatik **bir kademe yükseltilir** (Low→Normal→High→Critical). Admin `/sla/status` ve `/sla/events` endpoint'lerinden görür.
-- **Sesli Konuşma (Realtime)** — OpenAI Realtime API (`gpt-realtime-2`) üzerinden tek sesli mod: model **kendisi** konuşur ve function calling yapar; yazılı sohbetin iş tool'larının **tamamı** açıktır (ürün, sipariş ve şikayet sorguları; sipariş oluşturma, iptal, iade, şikayet kaydı; temsilciye yönlendirme). Yan etkili işlemler yazılı sohbetle **aynı HITL onay kapısından** geçer: model ayrıntıları müşteriye teyit ettirir, talep onaya gönderilir, sonuç bildirim olarak gelir. Art arda olumsuz turlarda bir temsilciye eskalasyon açılır. (Eskiden ayrıca yanıtı ajan hattına ürettiren bir "köprü" modu vardı; kaldırıldı.)
+- **Sesli Konuşma (Realtime)** — OpenAI Realtime API (`gpt-realtime-2.1`) üzerinden tek sesli mod: model **kendisi** konuşur ve function calling yapar; yazılı sohbetin iş tool'larının **tamamı** açıktır (ürün, sipariş ve şikayet sorguları; sipariş oluşturma, iptal, iade, şikayet kaydı; temsilciye yönlendirme). Yan etkili işlemler yazılı sohbetle **aynı HITL onay kapısından** geçer: model ayrıntıları müşteriye teyit ettirir, talep onaya gönderilir, sonuç bildirim olarak gelir. Art arda olumsuz turlarda bir temsilciye eskalasyon açılır. (Eskiden ayrıca yanıtı ajan hattına ürettiren bir "köprü" modu vardı; kaldırıldı.)
   Detay → [`docs/CustomerSupportBot.Adapters.AI/Realtime/`](docs/CustomerSupportBot.Adapters.AI/Realtime/README.md).
 
 ---
@@ -192,6 +192,33 @@ Gizli değerleri takip edilen `appsettings.json`'a değil, git'e girmeyen `src/C
 ```
 
 Development ortamında migration'lar otomatik uygulanır ve demo veri (admin, temsilciler, katalog, örnek müşteri hesabı) seed edilir.
+
+#### Sesli görüşme modelleri
+
+Sesli görüşmenin modelleri `AI:Realtime` altında ayarlanır. Development ortamında
+`appsettings.Development.json` `appsettings.json`'ı ezer — değişikliği çalıştığınız ortamın dosyasında yapın.
+(`appsettings.json`'a yorum satırı eklenemez: testler dosyayı katı JSON olarak okur.)
+
+**Konuşma modeli** — `AI:Realtime:Model`: şu an `gpt-realtime-2.1`.
+
+**Kullanıcı konuşmasının transkripsiyon modeli** — `AI:Realtime:TranscriptionModel`. Kod üç modeli
+destekler; OpenAI'ye gönderilecek alanları adaptör model adından kendisi seçer
+(bkz. [RealtimeTranscriptionConfig](docs/CustomerSupportBot.Adapters.AI/Realtime/RealtimeTranscriptionConfig.md)):
+
+| Değer | Ne zaman | Ek ayarlar | Fiyat (dk) |
+|---|---|---|---|
+| `gpt-4o-transcribe` *(varsayılan)* | Önceki nesil, kanıtlanmış | — | — |
+| `gpt-transcribe` | **Önerilen aday:** tamamlanmış turu yüksek doğrulukla yazar; sayılar ve kısa cümlelerde daha iyi olduğu belirtiliyor | `TranscriptionKeywords` | 0,0045 $ |
+| `gpt-live-transcribe` | Konuşurken anlık yazar (canlı altyazı). Kod anlık parçaları henüz işlemiyor — bugün `gpt-transcribe`'dan fazlasını vermez | `TranscriptionKeywords`, `TranscriptionDelay` (`minimal`…`xhigh`) | 0,017 $ |
+
+- Yeni modellerin (`gpt-transcribe`, `gpt-live-transcribe`) Türkçe kalitesi canlı bir sesli görüşmede
+  doğrulanmadı; geçmeden önce kısa bir deneme yapın.
+- `TranscriptionKeywords`'e ve `TranscriptionPrompt`'a **örnek numara/cümle yazmayın** — model
+  sessizlikte bu sözlükten metin uydurabilir.
+- Modele uymayan bir ayar (ör. `gpt-4o-transcribe` ile `TranscriptionDelay`) gönderilmez, uyarı loglanır.
+- Diğer modeller de çalışır ama önerilmez: `gpt-4o-mini-transcribe` (daha az isabetli), `whisper-1`
+  (en eski nesil), `gpt-realtime-whisper` (`gpt-live-transcribe`'ın eski sürümü),
+  `gpt-4o-transcribe-diarize` (konuşmacı ayırma; tek kişili görüşmede gereksiz).
 
 ### Çalıştırma
 

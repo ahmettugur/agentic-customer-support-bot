@@ -48,6 +48,14 @@ model kendi başına dinler, düşünür, function-call yapar ve sesle cevap ür
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
+**Transkripsiyon ayarı model ailesine göre üretilir:** `audio.input.transcription` nesnesi
+[`RealtimeTranscriptionConfig`](RealtimeTranscriptionConfig.md) tarafından kurulur —
+`gpt-4o-transcribe` (eski nesil, `language`), `gpt-transcribe` ve `gpt-live-transcribe` (yeni nesil,
+`languages` + `keywords`; canlı modelde `delay`). Model appsettings'ten değiştirilir; uygulanamayan
+ayarlar için uyarı, adaptör her bağlantıda yeniden oluşturulduğu hâlde süreç başına bir kez loglanır.
+Canlı modelin anlık parça olayları (`…input_audio_transcription.delta`) `ParseEvent`'te yok sayılır;
+yalnızca "tamamlandı" olayı işlenir.
+
 **Sistem talimatı bir prompt dosyasıdır:** `Prompts/services/realtime-voice.md`
 (`IPromptRepository`, anahtar `services/realtime-voice`). Eskiden bu sınıfta gömülü bir sabitti
 (`NativeSystemInstructions`) ve prompt klasörünün "tüm LLM prompt'ları burada" kuralının dışında
@@ -111,7 +119,7 @@ metoduna taşınmıştır.
 | `input_audio_buffer.speech_stopped` | `SpeechStopped` |
 | `input_audio_buffer.committed` | `InputAudioCommitted` (+ `ItemId`) |
 | `response.created` | `ResponseCreated` |
-| `conversation.item.input_audio_transcription.completed` | `InputTranscriptCompleted` (+ `Transcript`, `ItemId`) |
+| `conversation.item.input_audio_transcription.completed` | `InputTranscriptCompleted` (+ `Transcript`, `ItemId`) — üç transkripsiyon ailesi de aynı olayı gönderir |
 | `conversation.item.input_audio_transcription.failed` | `InputTranscriptFailed` (+ `ItemId`, `ErrorMessage`) |
 | `response.output_audio.delta` | `AudioDelta` (+ Base64 çözülmüş `AudioDelta` baytları) |
 | `response.output_audio_transcript.delta` | `AssistantTextDelta` (+ `TextDelta`) |

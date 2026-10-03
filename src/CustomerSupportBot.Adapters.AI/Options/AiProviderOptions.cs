@@ -39,8 +39,37 @@ public sealed class RealtimeOptions
     public int VadSilenceMs { get; set; } = 600;
     public string ReasoningEffort { get; set; } = "low";
     public int MaxResponseTokens { get; set; } = 4096;
+    /// <summary>
+    /// Kullanıcı konuşmasının transkripsiyon modeli. Desteklenen aileler (bkz.
+    /// <c>RealtimeTranscriptionConfig</c>):
+    /// <list type="bullet">
+    /// <item><c>gpt-4o-transcribe</c> (varsayılan), <c>gpt-4o-mini-transcribe</c>, <c>whisper-1</c> —
+    /// önceki nesil; dil tek değer olarak (<c>language</c>) gönderilir.</item>
+    /// <item><c>gpt-transcribe</c> — tamamlanmış turu yüksek doğrulukla yazar; dil listesi
+    /// (<c>languages</c>) ve isteğe bağlı <see cref="TranscriptionKeywords"/> gönderilir.</item>
+    /// <item><c>gpt-live-transcribe</c> — konuşurken anlık yazar; ek olarak
+    /// <see cref="TranscriptionDelay"/> gönderilir.</item>
+    /// </list>
+    /// Aile model adının başından anlaşılır; tarihli sürümler (ör. <c>gpt-transcribe-2026-07-29</c>)
+    /// da tanınır.
+    /// </summary>
     public string TranscriptionModel { get; set; } = "gpt-4o-transcribe";
     public string? TranscriptionLanguage { get; set; } = "tr";
+
+    /// <summary>
+    /// Ses içinde geçmesi beklenen terimler (ör. ürün/kategori adları, "iade", "kargo").
+    /// Yalnızca yeni nesil modellerde (<c>gpt-transcribe</c>, <c>gpt-live-transcribe</c>) gönderilir.
+    /// <b>Örnek numara/cümle YAZMAYIN</b> — <see cref="TranscriptionPrompt"/>'taki aynı sebeple:
+    /// model sessizlikte bu sözlükten metin uydurabilir.
+    /// </summary>
+    public List<string> TranscriptionKeywords { get; set; } = new();
+
+    /// <summary>
+    /// Yalnızca <c>gpt-live-transcribe</c>: anlık metin üretiminde gecikme/doğruluk dengesi —
+    /// <c>minimal</c>, <c>low</c>, <c>medium</c>, <c>high</c>, <c>xhigh</c>. Daha yüksek değer modele
+    /// daha fazla ses bağlamı verir, hata oranını düşürür. Boşsa sağlayıcı varsayılanı kullanılır.
+    /// </summary>
+    public string? TranscriptionDelay { get; set; }
     /// <summary>
     /// ASR'ye verilen alan ipucu. <b>Örnek numara/cümle YAZMAYIN.</b>
     ///

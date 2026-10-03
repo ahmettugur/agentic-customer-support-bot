@@ -282,14 +282,28 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
         await _ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
     }
 
+    // Adaptör her WebSocket bağlantısında yeniden oluşturulur (scoped); ayar ise süreç
+    // boyunca sabittir — yapılandırma notu her görüşmede değil, süreç başına bir kez loglanır.
+    private static int s_transcriptionConfigLogged;
+
+    /// <summary>
+    /// Kullanıcı konuşmasının transkripsiyon ayarı — biçim model ailesine göre
+    /// <see cref="RealtimeTranscriptionConfig"/>'te belirlenir.
+    /// </summary>
     private Dictionary<string, object?> BuildTranscriptionConfig()
     {
-        var cfg = new Dictionary<string, object?> { ["model"] = _options.TranscriptionModel };
-        if (!string.IsNullOrWhiteSpace(_options.TranscriptionLanguage))
-            cfg["language"] = _options.TranscriptionLanguage;
-        if (!string.IsNullOrWhiteSpace(_options.TranscriptionPrompt))
-            cfg["prompt"] = _options.TranscriptionPrompt;
-        return cfg;
+        var (config, warnings) = RealtimeTranscriptionConfig.Build(_options);
+
+        if (Interlocked.Exchange(ref s_transcriptionConfigLogged, 1) == 0)
+        {
+            _logger.LogInformation(
+                "OpenAiRealtimeClient: transkripsiyon modeli={Model} aile={Family}",
+                _options.TranscriptionModel, RealtimeTranscriptionConfig.Classify(_options.TranscriptionModel));
+            foreach (var warning in warnings)
+                _logger.LogWarning("OpenAiRealtimeClient: {Warning}", warning);
+        }
+
+        return config;
     }
 
     private static readonly JsonSerializerOptions JsonOpts = new()
