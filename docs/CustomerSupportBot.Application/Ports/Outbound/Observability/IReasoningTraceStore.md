@@ -11,7 +11,7 @@ adımlarını saklar.
 
 ## 2. Hangi Amaçla Kullanılır
 
-`WorkflowRunner` bir tur başladığında `StartTrace` çağırır, tur ilerledikçe `Update` ile
+`WorkflowRunner` bir tur başladığında `StartTraceAsync` çağırır, tur ilerledikçe `Update` ile
 trace'i günceller, tur bittiğinde `Complete` ile kapatır. Admin/debug panelindeki "trace
 görüntüleyici" `GetRecent`/`GetBySession`/`Get` ile bu kayıtları okur.
 
@@ -38,9 +38,9 @@ iş mantığından bağımsız, saf bir "ne oldu" kaydıdır.
 
 | Metot | Açıklama |
 |---|---|
-| `ReasoningTrace StartTrace(string sessionId, string query)` | Yeni bir trace başlatır. |
-| `void Update(ReasoningTrace trace)` | Var olan trace'i günceller. |
-| `void Complete(string traceId, string? terminationReason = null, string? finalResponse = null, string? error = null)` | Trace'i sonlandırır. |
+| `Task<ReasoningTrace> StartTraceAsync(string sessionId, string query)` | Yeni bir trace başlatır. Her turda çağrıldığı için asenkron. |
+| `void Update(ReasoningTrace trace)` | Var olan trace'i günceller (yalnızca cache, I/O yok — senkron kalır). |
+| `Task CompleteAsync(string traceId, string? terminationReason = null, string? finalResponse = null, string? error = null)` | Trace'i sonlandırır. Bilinçli olarak `CancellationToken` almaz: iptal/timeout yollarında da çağrılır ve kapanış yazısı iptal edilmemeli. |
 | `IReadOnlyList<ReasoningTrace> GetRecent(int count = 50)` | Son N trace. |
 | `IReadOnlyList<ReasoningTrace> GetBySession(string sessionId)` | Bir oturuma ait tüm trace'ler. |
 | `ReasoningTrace? Get(string traceId)` | Tekil trace. |

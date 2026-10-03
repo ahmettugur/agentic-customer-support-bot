@@ -19,11 +19,12 @@ mantığı + HTTP altyapısı" tarafının büyük bölümünü tek bir çağrı
 - `services.AddApplicationDrivingPorts(configuration)` ile Application katmanının kendi DI
   kayıtlarını tetikler (hexagonal: API katmanı yalnızca "başlat" der, ne kaydedileceğine
   Application katmanı karar verir).
-- CORS politikasını `Cors:AllowedOrigins` yapılandırmasından kurar; boşsa `AllowAnyOrigin`'e
-  düşer (geliştirme kolaylığı).
+- CORS politikasını `Cors:AllowedOrigins` yapılandırmasından kurar (options oluşturulurken
+  okunur). Liste boşsa yalnızca Development'ta `AllowAnyOrigin`; diğer ortamlarda hiçbir
+  cross-origin çağırana izin verilmez.
 - Enum'ları camelCase string olarak JSON'a yazacak şekilde `HttpJsonOptions`'ı yapılandırır.
 - Dört rate-limit policy'si tanımlar: `auth` (IP bazlı, `JwtOptions.AuthRateLimitPerMinute`'tan
-  okunur), `chat` (IP bazlı, 20/dk sabit), `general` (IP bazlı, 60/dk sabit), `a2a` (partner/özne
+  okunur), `chat` (müşteri kimliği bazlı — `linked_customer_id`, yoksa IP — 20/dk sabit), `general` (IP bazlı, 60/dk sabit), `a2a` (partner/özne
   kimliğine göre bölümlenmiş, `A2AOptions.RequestsPerMinute`'tan okunur).
 - `services.AddAgentsAdapter()` ile Adapters.Agents katmanının (CustomerSupportTeam,
   ApprovalGateService) DI kaydını tetikler.

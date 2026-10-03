@@ -84,7 +84,7 @@ internal sealed class TurnFinalizer
             await UpdateCustomerProfileSafeAsync(session, trace, query, result, ct);
         }
 
-        _traceStore.Complete(trace.TraceId,
+        await _traceStore.CompleteAsync(trace.TraceId,
             terminationReason: terminationReason,
             finalResponse: result);
     }

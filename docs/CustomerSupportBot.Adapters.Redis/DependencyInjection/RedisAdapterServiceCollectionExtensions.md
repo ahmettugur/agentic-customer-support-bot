@@ -6,7 +6,7 @@
 
 ## Ne işe yarar?
 
-`RedisAdapterServiceCollectionExtensions`, `StackExchange.Redis.IConnectionMultiplexer` singleton bağlantı havuzunu, `RedisDistributedLockAdapter` (`IAppDistributedLock`) ve `RedisMessageBusAdapter` (`IMessageBusPort`) bileşenlerini DI konteynerine kaydeden uzantıdır.
+`RedisAdapterServiceCollectionExtensions`, `StackExchange.Redis.IConnectionMultiplexer` singleton bağlantı havuzunu, `RedisDistributedLockAdapter` (`IAppDistributedLock`), `RedisMessageBusAdapter` (`IMessageBusPort`) ve [`RedisIdempotencyStore`](../Idempotency/RedisIdempotencyStore.md) (`IDistributedIdempotencyStore`) bileşenlerini DI konteynerine kaydeden uzantıdır.
 
 ## Hangi amaçla kullanılır`?
 
@@ -19,7 +19,7 @@
 - **Üstlendiği:**
   - `RedisOptions`'ı okuyup bağlantı dizesini çözümlemek (öncelik: `Redis:ConnectionString` → `ConnectionStrings:Redis`).
   - `IConnectionMultiplexer` singleton'ını, retry/reconnect politikalarıyla birlikte kurmak.
-  - `IAppDistributedLock` ve `IMessageBusPort` portlarını somut Redis implementasyonlarına bağlamak.
+  - `IAppDistributedLock`, `IMessageBusPort` ve `IDistributedIdempotencyStore` portlarını somut Redis implementasyonlarına bağlamak.
 - **Üstlenmediği:**
   - Redis'e gerçek komut göndermek (bu iş [RedisDistributedLockAdapter](../Locking/RedisDistributedLockAdapter.md) ve [RedisMessageBusAdapter](../Messaging/RedisMessageBusAdapter.md)'a ait).
   - `RedisHealthCheck`'i kaydetmek — bu, `CustomerSupportBot.Api/Extensions/HealthCheckExtensions.cs` içinde ayrıca yapılır (Api katmanı health-check pipeline'ını kendi kurar).

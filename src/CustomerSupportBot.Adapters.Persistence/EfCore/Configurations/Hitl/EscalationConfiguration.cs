@@ -9,6 +9,9 @@ namespace CustomerSupportBot.Adapters.Persistence.EfCore.Configurations.Hitl;
 
 internal sealed class EscalationConfiguration : IEntityTypeConfiguration<EscalationEntity>
 {
+    /// <summary>Açık eskalasyon dedup kısıtının adı — ihlal yakalanırken bu adla eşleştirilir.</summary>
+    public const string OpenDedupIndexName = "ux_escalations_open_session_agent";
+
     public void Configure(EntityTypeBuilder<EscalationEntity> builder)
     {
         builder.ToTable("escalations", Schemas.Hitl);
@@ -76,9 +79,16 @@ internal sealed class EscalationConfiguration : IEntityTypeConfiguration<Escalat
         builder.HasIndex(e => new { e.Status, e.CreatedAt })
             .HasDatabaseName("ix_escalations_status_created_at");
 
-        // Session içi dedup için partial index — açık eskalasyonları hızlı bul
-        builder.HasIndex(e => e.SessionId)
-            .HasDatabaseName("ix_escalations_session_open")
+        // Session + ajan başına EN FAZLA BİR açık eskalasyon — dedup'ın asıl garantisi.
+        //
+        // EscalationPolicyService önce cache'e bakıp sonra INSERT ediyordu; ikisi atomik
+        // değildi. Bileşik sorgunun paralel alt görevleri (ya da farklı pod'lar) aynı anda
+        // kontrolden geçip aynı ajan için iki eskalasyon açabiliyordu. Kısıt yarışın kazananını
+        // DB'de belirler; kaybeden mevcut kaydı alır (bkz. PostgresEscalationSink.CreateAsync).
+        // Aynı index açık eskalasyonları session'a göre bulmak için de kullanılır.
+        builder.HasIndex(e => new { e.SessionId, e.AgentName })
+            .HasDatabaseName(OpenDedupIndexName)
+            .IsUnique()
             .HasFilter("status IN ('Open', 'Acknowledged')");
     }
 }

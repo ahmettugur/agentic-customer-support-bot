@@ -58,9 +58,29 @@ değil. Bu, başka bir müşterinin adının bu yolla yanlışlıkla dönmesini 
 kılar. Repo çözülemezse (`_customers is null`, staff hesabı, veya kayıt yok) sessizce `null`
 döner — ad sadece gösterim amaçlıdır, eksikliği login'i bozmamalıdır.
 
-`RevokeAsync` (logout) `TryRevokeAsync` DEĞİL, düz `RevokeAsync` kullanır çünkü burada rotasyon
-yarışı yoktur — tek bir istemcinin kendi token'ını iptal etmesi, herhangi bir "hâlâ geçerli mi"
-koşuluna bağlı değildir.
+> 🐞 **Refresh token yeniden kullanım tespiti (rotation reuse detection).** Rotasyonla iptal
+> edilmiş (yerine yenisi verilmiş, `ReplacedByTokenHash` dolu) bir token'ın tekrar sunulması,
+> token'ın iki farklı tarafın elinde olduğunu gösterir: ya saldırgan çalıp önce kullandı ve meşru
+> kullanıcı eski kopyayla geliyor, ya da tersi. `ReplacedByTokenHash` eskiden yazılıyor ama hiç
+> okunmuyordu; istek yalnızca reddediliyor, saldırgan önce yenilediyse elde ettiği zincir
+> sınırsızca yaşıyordu. Artık böyle bir sunumda kullanıcının **tüm aktif refresh token'ları**
+> iptal edilir (`IRefreshTokenRepository.RevokeAllActiveForUserAsync`) ve `[Security]` uyarısı
+> loglanır (OAuth 2.0 Security BCP). Token ailesi ayrıca izlenmediği için kapsam "kullanıcının
+> tüm oturumları"dır — güvenli tarafta kalan seçim.
+>
+> İstisnalar (yalnızca reddedilir, aile iptali yok):
+> - **Logout ile iptal edilmiş** token (`ReplacedByTokenHash` boş) — kopyalanma işareti değil.
+> - Rotasyondan **`ReuseGracePeriod` (30 sn) içinde** gelen tekrar — aynı localStorage'ı paylaşan
+>   iki sekmenin eşzamanlı yenilemesi gibi meşru bir yarıştır. İstemci tarafı da buna göre
+>   davranır: reddedilen sekme depoda başka bir sekmenin yeni token'ını bulursa onu kullanır
+>   (bkz. [AuthService](../../../CustomerSupportBot.Web/Services/AuthService.md)).
+>
+> İptal kontrolü süre dolumundan **önce** yapılır: süresi dolmuş ama rotasyonla iptal edilmiş
+> bir token'ın tekrar gelmesi de kopyalanma işaretidir.
+
+`RevokeAsync` (logout) da artık **koşullu** iptal (`TryRevokeAsync`) kullanır. Logout'un okuması
+ile yazması arasında aynı token'la gelen bir refresh onu rotasyonla iptal etmiş olabilir; koşulsuz
+yazma o kaydın `ReplacedByTokenHash`'ini silip yukarıdaki yeniden kullanım tespitini kör ederdi.
 
 ## 6. Metotlar / Üyeler
 
@@ -68,7 +88,8 @@ koşuluna bağlı değildir.
 |---|---|
 | `IssueAsync(UserInfo user, CancellationToken ct = default): Task<AuthResponse>` | Yeni refresh token üretir, kaydeder, `LastLoginAt`'i günceller, access token'ı imzalar. |
 | `RefreshAsync(string refreshToken, CancellationToken ct = default): Task<AuthResponse?>` | Refresh token'ı doğrular, koşullu olarak iptal edip rotasyonlar; yarışta kaybederse veya token geçersizse `null`. |
-| `RevokeAsync(string refreshToken, CancellationToken ct = default): Task<bool>` | Logout — token'ı koşulsuz iptal eder. |
+| `RevokeAsync(string refreshToken, CancellationToken ct = default): Task<bool>` | Logout — token'ı koşullu iptal eder (`TryRevokeAsync`); zaten iptal edilmişse `false`. |
+| `ReuseGracePeriod` *(internal static, 30 sn)* | Rotasyondan sonra meşru eşzamanlı yenileme sayılan pencere. |
 | `GenerateRefreshToken()` *(private static)* | 64 baytlık kriptografik rastgele token + SHA-256 hash'i üretir. |
 | `HashToken(string token)` *(private static)* | SHA-256 hash, hex string. |
 | `ResolveFullNameAsync(UserInfo user, CancellationToken ct)` *(private)* | Müşteri hesapları için katalogdaki tam adı `LinkedCustomerId` üzerinden çözer. |
@@ -76,10 +97,11 @@ koşuluna bağlı değildir.
 ## 7. Bağımlılıklar (Constructor Injection)
 
 - `IUserAuthRepository` — kullanıcı kaydı (`FindByIdAsync`, `UpdateLastLoginAsync`).
-- `IRefreshTokenRepository` — refresh token kalıcılığı (`CreateAsync`, `FindByHashAsync`, `TryRevokeAsync`, `RevokeAsync`).
+- `IRefreshTokenRepository` — refresh token kalıcılığı (`CreateAsync`, `FindByHashAsync`, `TryRevokeAsync`, `RevokeAllActiveForUserAsync`).
 - `IJwtAccessTokenProvider` — access token imzalama (Adapters katmanı).
 - `IOptions<JwtOptions>` — `RefreshTokenDays` gibi ayarlar.
 - `ICustomerRepository?` (opsiyonel) — müşteri tam adı çözümü.
+- `ILogger<TokenPortService>?` (opsiyonel) — yeniden kullanım tespiti güvenlik logu.
 
 ## Bağlantılar
 

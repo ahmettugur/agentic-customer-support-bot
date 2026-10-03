@@ -28,14 +28,14 @@ public sealed class PersonalizationPortService : IPersonalizationPort
     public Task<CustomerProfile?> RefreshProfileAsync(string customerId, CancellationToken ct = default)
         => _profileService.ConsolidateAsync(customerId, ct);
 
-    public CustomerProfile SetAdminNote(string customerId, string? note)
+    public async Task<CustomerProfile> SetAdminNoteAsync(string customerId, string? note)
     {
-        var profile = _profiles.GetOrCreate(customerId);
+        var profile = await _profiles.GetOrCreateAsync(customerId);
         profile.AdminNote = string.IsNullOrWhiteSpace(note) ? null : note;
-        _profiles.Upsert(profile);
+        await _profiles.UpsertAsync(profile);
         return profile;
     }
 
-    public bool DeleteProfile(string customerId)
-        => _profiles.Delete(customerId);
+    public Task<bool> DeleteProfileAsync(string customerId)
+        => _profiles.DeleteAsync(customerId);
 }

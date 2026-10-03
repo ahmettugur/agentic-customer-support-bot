@@ -74,6 +74,7 @@ anlamlı bir durum koduyla ulaşır.
 | `ValueTask<bool> TryHandleAsync(HttpContext, Exception, CancellationToken)` | `IExceptionHandler`'ın tek metodu; `DomainException` değilse veya yanıt başlamışsa `false`, aksi halde `ProblemDetails` yazıp `true` döner. |
 | `Map(DomainException)` *(private static)* | İstisna tipini `(Status, LogLevel, ExposeDetail)` üçlüsüne eşler — bkz. tablo. |
 | `GenericServerDetail` *(private const)* | 5xx'te istemciye gösterilen sabit, bağlam sızdırmayan mesaj. |
+| `static string ClientMessage(Exception)` *(internal)* | Yanıtı zaten başlamış bir akışta (SSE) istemciye gösterilecek mesaj — HTTP yanıtıyla aynı ifşa kuralı: 4xx domain mesajı, aksi hâlde `GenericServerDetail`. `/chat/stream` tur ortası hatalarında kullanır. |
 
 **`Map` eşleme tablosu:**
 

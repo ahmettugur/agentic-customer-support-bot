@@ -41,10 +41,10 @@ public class CustomerUnderstandingServiceTests
     }
 
     [Fact]
-    public void Build_ProfileWithZeroTurns_ReturnsNull()
+    public async Task Build_ProfileWithZeroTurns_ReturnsNull()
     {
         var svc = Build(out var store);
-        store.Upsert(new CustomerProfile { CustomerId = "1001", TotalTurns = 0 });
+        await store.UpsertAsync(new CustomerProfile { CustomerId = "1001", TotalTurns = 0 });
         svc.Build(Session("1001")).Should().BeNull();
     }
 
@@ -54,10 +54,10 @@ public class CustomerUnderstandingServiceTests
     /// sentez servise taşınırken kaybolmadığını doğrular.
     /// </summary>
     [Fact]
-    public void Build_UsesOnlyAuthenticatedCustomerId_NotLlmExtractedOne()
+    public async Task Build_UsesOnlyAuthenticatedCustomerId_NotLlmExtractedOne()
     {
         var svc = Build(out var store);
-        store.Upsert(new CustomerProfile { CustomerId = "1008", AdminNote = "GİZLİ", TotalTurns = 10 });
+        await store.UpsertAsync(new CustomerProfile { CustomerId = "1008", AdminNote = "GİZLİ", TotalTurns = 10 });
 
         var session = new AgentSession
         {
@@ -71,11 +71,11 @@ public class CustomerUnderstandingServiceTests
     // ═══ Sentez içeriği ═══
 
     [Fact]
-    public void Build_PopulatedProfile_MapsAllFields()
+    public async Task Build_PopulatedProfile_MapsAllFields()
     {
         var svc = Build(out var store);
         var consolidatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        store.Upsert(new CustomerProfile
+        await store.UpsertAsync(new CustomerProfile
         {
             CustomerId = "1027",
             Summary = "Dell XPS 15 müşterisi",
@@ -102,22 +102,22 @@ public class CustomerUnderstandingServiceTests
     }
 
     [Fact]
-    public void Build_NoRatings_AverageRatingIsNull()
+    public async Task Build_NoRatings_AverageRatingIsNull()
     {
         var svc = Build(out var store);
-        store.Upsert(new CustomerProfile { CustomerId = "1027", TotalTurns = 1 });
+        await store.UpsertAsync(new CustomerProfile { CustomerId = "1027", TotalTurns = 1 });
 
         svc.Build(Session("1027"))!.AverageRating.Should().BeNull();
     }
 
     [Fact]
-    public void Build_NeverConsolidated_PersonaAndTraitsAreEmpty_ButProfileStillReturned()
+    public async Task Build_NeverConsolidated_PersonaAndTraitsAreEmpty_ButProfileStillReturned()
     {
         // Heuristik alanlar (IntentFrequency, ProductInterests) her turda güncellenir ve
         // consolidate'e bağlı değildir — hiç consolidate edilmemiş bir profil yine de
         // anlamlı bir Understanding üretmeli, yalnızca Persona/Traits boş kalır.
         var svc = Build(out var store);
-        store.Upsert(new CustomerProfile
+        await store.UpsertAsync(new CustomerProfile
         {
             CustomerId = "1027",
             TotalTurns = 2,
@@ -137,10 +137,10 @@ public class CustomerUnderstandingServiceTests
     // ═══ Top-N sınırlama ve sıralama ═══
 
     [Fact]
-    public void Build_MoreThanFiveProductInterests_TakesFirstFive()
+    public async Task Build_MoreThanFiveProductInterests_TakesFirstFive()
     {
         var svc = Build(out var store);
-        store.Upsert(new CustomerProfile
+        await store.UpsertAsync(new CustomerProfile
         {
             CustomerId = "1027",
             TotalTurns = 1,
@@ -151,10 +151,10 @@ public class CustomerUnderstandingServiceTests
     }
 
     [Fact]
-    public void Build_TopIntents_OrderedByFrequencyDescending_CappedAtThree()
+    public async Task Build_TopIntents_OrderedByFrequencyDescending_CappedAtThree()
     {
         var svc = Build(out var store);
-        store.Upsert(new CustomerProfile
+        await store.UpsertAsync(new CustomerProfile
         {
             CustomerId = "1027",
             TotalTurns = 1,

@@ -179,7 +179,7 @@
                 {
                     @if (msg.Role == "user")
                     {
-                        <div class="message user">
+                        <div class="message user @(msg.IsPlaceholder ? "placeholder" : "")">
                             <div class="message-avatar">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                             </div>
@@ -195,6 +195,10 @@
                                 <img class="avatar-img" src="images/chatbot.png" alt="Bot" />
                             </div>
                             <div class="message-content">
+                                @if (!string.IsNullOrEmpty(msg.VoiceStatus))
+                                {
+                                    <div class="voice-agent-chip">@msg.VoiceStatus</div>
+                                }
                                 @if (msg.IsStreaming && _agentChips.Count > 0)
                                 {
                                     <div class="agent-chip-list">
@@ -512,6 +516,15 @@
         /// tamamlandıktan sonra da "hangi ajanlar çalıştı" izini kaybetmemek için.
         /// </summary>
         public List<string> ProcessedAgents { get; set; } = new();
+
+        /// <summary>Native sesli modda JS'in bu balonu tanıdığı tutamaç (bkz. VoiceNative*).</summary>
+        public string? VoiceId { get; set; }
+
+        /// <summary>Sesli modda transcript beklenirken gösterilen yer tutucu kullanıcı balonu.</summary>
+        public bool IsPlaceholder { get; set; }
+
+        /// <summary>Native sesli modda çalışan tool'un durum etiketi ("Sipariş sorgulanıyor…").</summary>
+        public string? VoiceStatus { get; set; }
     }
 
     /// <summary>
@@ -819,9 +832,86 @@
         });
     }
 
+    // JS'ten gelen çağrılar (event handler'ların aksine) otomatik render tetiklemez — durum
+    // temizlense bile ekranda eski balonlar kalıyordu.
     [JSInvokable]
     public async Task NewChatFromVoice() =>
-        await InvokeAsync(NewChatAsync);
+        await InvokeAsync(async () =>
+        {
+            await NewChatAsync();
+            StateHasChanged();
+        });
+
+    // ── Native sesli mod (realtime-native) balonları ─────────────────────────
+    // JS balonları bir tutamaçla (id) yönetir ama balonlar _messages'ta yaşar ve Blazor
+    // tarafından çizilir. Eskiden realtime-ui.js #messages'a ham DOM düğümleri ekliyordu:
+    // Blazor'un render ağacındaki bu yabancı düğümler "yeni sohbet"te silinmiyor ve sonraki
+    // render'larda Blazor'un kendi düğümleriyle sıraları karışıyordu.
+
+    private ChatMsg? FindVoiceMsg(string id) => _messages.FirstOrDefault(m => m.VoiceId == id);
+
+    private void ApplyVoiceChange(Action change) =>
+        _ = InvokeAsync(() =>
+        {
+            change();
+            StateHasChanged();
+            _ = ScrollBottomAsync();
+        });
+
+    [JSInvokable]
+    public void VoiceNativeAdd(string id, string role, string text, bool placeholder, string? beforeId) =>
+        ApplyVoiceChange(() =>
+        {
+            var msg = new ChatMsg
+            {
+                VoiceId = id,
+                Role = role,
+                Content = text,
+                IsPlaceholder = placeholder,
+                IsStreaming = role == "assistant"
+            };
+            var before = beforeId is null ? null : FindVoiceMsg(beforeId);
+            var index = before is null ? -1 : _messages.IndexOf(before);
+            if (index >= 0) _messages.Insert(index, msg);
+            else _messages.Add(msg);
+        });
+
+    [JSInvokable]
+    public void VoiceNativeSetText(string id, string text, bool placeholder) =>
+        ApplyVoiceChange(() =>
+        {
+            if (FindVoiceMsg(id) is not { } msg) return;
+            msg.Content = text;
+            msg.IsPlaceholder = placeholder;
+        });
+
+    [JSInvokable]
+    public void VoiceNativeAppend(string id, string chunk) =>
+        ApplyVoiceChange(() =>
+        {
+            if (FindVoiceMsg(id) is { } msg) msg.Content += chunk;
+        });
+
+    [JSInvokable]
+    public void VoiceNativeStatus(string id, string label) =>
+        ApplyVoiceChange(() =>
+        {
+            if (FindVoiceMsg(id) is { } msg) msg.VoiceStatus = label;
+        });
+
+    [JSInvokable]
+    public void VoiceNativeFinalize(string id) =>
+        ApplyVoiceChange(() =>
+        {
+            if (FindVoiceMsg(id) is { } msg) msg.IsStreaming = false;
+        });
+
+    [JSInvokable]
+    public void VoiceNativeRemove(string id) =>
+        ApplyVoiceChange(() =>
+        {
+            if (FindVoiceMsg(id) is { } msg) _messages.Remove(msg);
+        });
 
     private async Task SendAsync(string text)
     {

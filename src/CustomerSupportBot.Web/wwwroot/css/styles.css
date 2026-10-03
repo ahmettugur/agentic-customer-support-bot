@@ -687,6 +687,14 @@ body {
     border-bottom-right-radius: var(--space-1);
 }
 
+/* Native sesli modda çalışan tool'un durum etiketi (bot balonunun üstünde) */
+.voice-agent-chip {
+    font-size: 11px;
+    opacity: 0.6;
+    margin-bottom: 6px;
+    color: inherit;
+}
+
 /* Sesli modda transcript beklenirken gösterilen placeholder kullanıcı baloncuğu */
 .message.user.placeholder .message-bubble {
     opacity: 0.55;

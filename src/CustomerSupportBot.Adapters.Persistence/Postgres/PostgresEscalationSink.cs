@@ -3,9 +3,12 @@
 //
 // Davranış:
 //   - In-memory dictionary + RequestCreated/RequestDecided event'leri korunur.
-//   - Create: DB'ye INSERT + cache'e ekle + event fire.
-//   - Decide: state machine (EscalationStateFactory) cache üzerinde çalışır;
-//     başarılıysa DB UPDATE + event fire.
+//   - Create: DB'ye INSERT + cache'e ekle + event fire. Session + ajan başına tek açık
+//     eskalasyon DB'deki unique filtered index ile garanti edilir; yarışı kaybeden çağrı
+//     mevcut kaydı geri alır (yeni kayıt/event yok).
+//   - Decide: state machine (EscalationStateFactory) cache nesnesinin KOPYASI üzerinde
+//     çalışır; DB'ye koşullu UPDATE (WHERE status = beklenen) yazılır. Yarışı kaybeden
+//     karar false döner ve cache DB'den tazelenir.
 //   - Cache lazy hydrate: son N kayıt yüklenir.
 //
 // Yatay ölçeklendirme (Redis pub/sub):
@@ -15,22 +18,24 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using CustomerSupportBot.Adapters.Persistence.EfCore;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Configurations.Hitl;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
 using CustomerSupportBot.Application.Ports.Outbound.Messaging;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresEscalationSink : IEscalationSink
+public sealed class PostgresEscalationSink : IEscalationSink, ICacheWarmup
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresEscalationSink> _logger;
     private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, EscalationRequest> _byId = new();
-    private readonly object _hydrationLock = new();
+    private readonly SemaphoreSlim _hydrationGate = new(1, 1);
     private volatile bool _hydrated;
 
     private const int HydrateRecentCount = 500;
@@ -50,11 +55,34 @@ public sealed class PostgresEscalationSink : IEscalationSink
         _messageBus.Subscribe("csbot:escalation:decided", OnRemoteDecided);
     }
 
-    public EscalationRequest Create(EscalationRequest request)
-    {
-        EnsureHydrated();
+    public async Task<EscalationRequest> CreateAsync(EscalationRequest request)
+{
+        await EnsureHydratedAsync().ConfigureAwait(false);
 
-        try { InsertAsync(request).GetAwaiter().GetResult(); }
+        try { await InsertAsync(request).ConfigureAwait(false); }
+        catch (Exception ex) when (IsOpenDedupViolation(ex))
+        {
+            // Yarışı başka bir çağrı (paralel alt görev ya da başka bir pod) kazandı: aynı
+            // session+ajan için açık bir eskalasyon zaten var. Mükerrer kayıt oluşmaz; kazanan
+            // döndürülür. Çağıran, döndürülen Id'nin kendi Id'si olup olmadığına bakarak
+            // kaydın yeni oluşup oluşmadığını anlar.
+            var existing = await FindOpenAsync(request.SessionId, request.AgentName).ConfigureAwait(false);
+            if (existing is not null)
+            {
+                _byId.TryAdd(existing.Id, existing);
+                _logger.LogInformation(
+                    "[HITL] Mükerrer eskalasyon DB kısıtınca engellendi — mevcut kayıt kullanılıyor. "
+                  + "session={Session} agent={Agent} existingId={ExistingId}",
+                    request.SessionId, request.AgentName, existing.Id);
+                return existing;
+            }
+
+            // Kısıt ihlal edildi ama açık kayıt artık yok — tam bu sırada kapatılmış olabilir.
+            _logger.LogWarning(ex,
+                "[HITL] Escalation INSERT dedup kısıtına takıldı ama açık kayıt bulunamadı. Id={Id}",
+                request.Id);
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[HITL] Escalation INSERT başarısız. Id={Id}", request.Id);
@@ -122,10 +150,17 @@ public sealed class PostgresEscalationSink : IEscalationSink
         return _byId.TryGetValue(id, out var e) ? e : null;
     }
 
-    public bool Decide(string id, string action, string? assignedTo = null, string? resolution = null)
-    {
-        EnsureHydrated();
-        if (!_byId.TryGetValue(id, out var req)) return false;
+    public async Task<bool> DecideAsync(string id, string action, string? assignedTo = null, string? resolution = null)
+{
+        await EnsureHydratedAsync().ConfigureAwait(false);
+        if (!_byId.TryGetValue(id, out var cached)) return false;
+
+        // Geçiş cache'teki nesnenin KOPYASI üzerinde hesaplanır. Eskiden state machine paylaşılan
+        // nesneyi doğrudan değiştiriyor, ardından DB koşulsuz UPDATE ediliyordu: aynı kaydı aynı
+        // anda karara bağlayan iki çağrı (iki admin, iki pod) ikisi de "Open" görüp ikisi de
+        // başarılı sayılıyor, sonra yazan öncekinin kararını eziyordu.
+        var expectedStatus = cached.Status;
+        var req = Clone(cached);
 
         var normalized = (action ?? "").Trim().ToLowerInvariant();
         var state = EscalationStateFactory.Create(req.Status);
@@ -141,12 +176,23 @@ public sealed class PostgresEscalationSink : IEscalationSink
 
         if (!success) return false;
 
-        try { UpdateAsync(req).GetAwaiter().GetResult(); }
+        bool applied;
+        try { applied = await TryApplyDecisionAsync(req, expectedStatus).ConfigureAwait(false); }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[HITL] Escalation UPDATE başarısız. Id={Id}", id);
             throw;
         }
+
+        if (!applied)
+        {
+            _logger.LogInformation(
+                "[HITL] Escalation kararı uygulanmadı — kayıt bu arada değişmiş. Id={Id} beklenen={Expected}",
+                id, expectedStatus);
+            return false;
+        }
+
+        _byId[id] = req;
 
         _logger.LogInformation(
             "[HITL] Escalation decided: id={Id}, action={Action}, status={Status}",
@@ -168,25 +214,88 @@ public sealed class PostgresEscalationSink : IEscalationSink
         await ctx.SaveChangesAsync();
     }
 
-    private async Task UpdateAsync(EscalationRequest req)
+    /// <summary>
+    /// Kararı yalnızca kayıt hâlâ <paramref name="expectedStatus"/> durumundaysa yazar
+    /// (koşullu UPDATE — optimistic concurrency). Aynı kararı yarışan ikinci çağrı 0 satır
+    /// günceller ve <c>false</c> alır; böylece iki admin/pod'un ikisi de "başarılı" sayılıp
+    /// birbirinin kararını ezemez.
+    /// </summary>
+    private async Task<bool> TryApplyDecisionAsync(EscalationRequest req, EscalationStatus expectedStatus)
     {
         await using var ctx = await _dbFactory.CreateDbContextAsync();
-        var existing = await ctx.Escalations.FirstOrDefaultAsync(e => e.Id == req.Id);
-        if (existing is null)
+        var expected = expectedStatus.ToString();
+        var newStatus = req.Status.ToString();
+
+        var updated = await ctx.Escalations
+            .Where(e => e.Id == req.Id && e.Status == expected)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(e => e.Status, newStatus)
+                .SetProperty(e => e.AcknowledgedAt, req.AcknowledgedAt)
+                .SetProperty(e => e.ResolvedAt, req.ResolvedAt)
+                .SetProperty(e => e.AssignedTo, req.AssignedTo)
+                .SetProperty(e => e.Resolution, req.Resolution));
+
+        if (updated == 1) return true;
+
+        // 0 satır: ya kayıt DB'de yok ya da durumu başka biri tarafından değiştirildi.
+        var current = await ctx.Escalations.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == req.Id);
+
+        if (current is null)
         {
-            // Cache'de var, DB'de yok — beklenmez ama dirence INSERT yapalım.
+            // Cache'de var, DB'de yok — beklenmez ama dirence INSERT yapalım (eski davranış).
             ctx.Escalations.Add(ToEntity(req));
+            await ctx.SaveChangesAsync();
+            return true;
         }
-        else
+
+        // Yarışı kaybettik: cache'i DB'nin gerçeğiyle tazele ki sonraki okumalar eski durumu
+        // göstermesin. Yalnızca DB'de kalıcı olan alanlar güncellenir; routing alanları
+        // (SuggestedAgentId vb.) cache'teki nesnede korunur.
+        if (_byId.TryGetValue(req.Id, out var cached))
         {
-            existing.Status = req.Status.ToString();
-            existing.AcknowledgedAt = req.AcknowledgedAt;
-            existing.ResolvedAt = req.ResolvedAt;
-            existing.AssignedTo = req.AssignedTo;
-            existing.Resolution = req.Resolution;
+            var fresh = Clone(cached);
+            fresh.Status = ParseStatus(current.Status);
+            fresh.AcknowledgedAt = current.AcknowledgedAt;
+            fresh.ResolvedAt = current.ResolvedAt;
+            fresh.AssignedTo = current.AssignedTo;
+            fresh.Resolution = current.Resolution;
+            _byId[req.Id] = fresh;
         }
-        await ctx.SaveChangesAsync();
+        return false;
     }
+
+    /// <summary>
+    /// Session + ajan için açık eskalasyonu döndürür. Önce cache'e bakılır (routing alanları
+    /// yalnızca orada var — DB'de saklanmıyor); yoksa DB'den okunur.
+    /// </summary>
+    private async Task<EscalationRequest?> FindOpenAsync(string? sessionId, string? agentName)
+    {
+        var cached = _byId.Values.FirstOrDefault(e =>
+            (e.Status == EscalationStatus.Open || e.Status == EscalationStatus.Acknowledged)
+            && string.Equals(e.SessionId, sessionId, StringComparison.Ordinal)
+            && string.Equals(e.AgentName, agentName, StringComparison.Ordinal));
+        if (cached is not null) return cached;
+
+        await using var ctx = await _dbFactory.CreateDbContextAsync();
+        var row = await ctx.Escalations.AsNoTracking()
+            .Where(e => e.SessionId == sessionId && e.AgentName == agentName
+                     && (e.Status == "Open" || e.Status == "Acknowledged"))
+            .OrderBy(e => e.CreatedAt)
+            .FirstOrDefaultAsync();
+        return row is null ? null : ToDomain(row);
+    }
+
+    private static bool IsOpenDedupViolation(Exception ex) =>
+        ex is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg }
+        && string.Equals(pg.ConstraintName, EscalationConfiguration.OpenDedupIndexName, StringComparison.Ordinal);
+
+    /// <summary>Derin kopya — state machine paylaşılan cache nesnesini değiştirmesin diye.</summary>
+    private static EscalationRequest Clone(EscalationRequest req) =>
+        JsonSerializer.Deserialize<EscalationRequest>(JsonSerializer.Serialize(req))!;
+
+    private static EscalationStatus ParseStatus(string? status) =>
+        Enum.TryParse<EscalationStatus>(status, ignoreCase: true, out var s) ? s : EscalationStatus.Open;
 
     private static EscalationEntity ToEntity(EscalationRequest req) => new()
     {
@@ -213,8 +322,7 @@ public sealed class PostgresEscalationSink : IEscalationSink
             : System.Text.Json.JsonSerializer.Deserialize<List<string>>(e.MissingContextJson)
               ?? new List<string>();
 
-        var status = Enum.TryParse<EscalationStatus>(e.Status, ignoreCase: true, out var s)
-            ? s : EscalationStatus.Open;
+        var status = ParseStatus(e.Status);
 
         return new EscalationRequest
         {
@@ -235,21 +343,37 @@ public sealed class PostgresEscalationSink : IEscalationSink
         };
     }
 
+    /// <inheritdoc />
+    public Task WarmUpAsync(CancellationToken ct = default) => EnsureHydratedAsync();
+
+    /// <summary>
+    /// Senkron okuma yolları için YEDEK. Normalde cache açılışta <see cref="WarmUpAsync"/> ile
+    /// doldurulmuştur ve bu çağrı bayrağı okuyup hemen döner; yalnızca ısıtma başarısız
+    /// olduysa ilk okuma hydrate'i senkron bekler.
+    /// </summary>
     private void EnsureHydrated()
     {
         if (_hydrated) return;
-        lock (_hydrationLock)
+        EnsureHydratedAsync().GetAwaiter().GetResult();
+    }
+
+    private async Task EnsureHydratedAsync()
+    {
+        if (_hydrated) return;
+        await _hydrationGate.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_hydrated) return;
-            try
-            {
-                HydrateAsync().GetAwaiter().GetResult();
-                _hydrated = true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[HITL] Escalation cache hydrate başarısız.");
-            }
+            await HydrateAsync().ConfigureAwait(false);
+            _hydrated = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[HITL] Escalation cache hydrate başarısız.");
+        }
+        finally
+        {
+            _hydrationGate.Release();
         }
     }
 

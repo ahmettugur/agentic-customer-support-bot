@@ -24,7 +24,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresRatingStore : IRatingStore
+public sealed class PostgresRatingStore : IRatingStore, ICacheWarmup
 {
     private const string ChannelSubmitted = "csbot:rating:submitted";
 
@@ -32,7 +32,7 @@ public sealed class PostgresRatingStore : IRatingStore
     private readonly ILogger<PostgresRatingStore> _logger;
     private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, ConversationRating> _cache = new();
-    private readonly object _hydrationLock = new();
+    private readonly SemaphoreSlim _hydrationGate = new(1, 1);
     private volatile bool _hydrated;
 
     public PostgresRatingStore(
@@ -46,9 +46,9 @@ public sealed class PostgresRatingStore : IRatingStore
         _messageBus.Subscribe(ChannelSubmitted, OnRemoteSubmitted);
     }
 
-    public ConversationRating Submit(string sessionId, int stars, string? feedback)
-    {
-        EnsureHydrated();
+    public async Task<ConversationRating> SubmitAsync(string sessionId, int stars, string? feedback)
+{
+        await EnsureHydratedAsync().ConfigureAwait(false);
 
         var rating = new ConversationRating
         {
@@ -61,7 +61,7 @@ public sealed class PostgresRatingStore : IRatingStore
         // 1) DB write-through (UPSERT) — sync wrap (Singleton + sync interface).
         try
         {
-            UpsertAsync(rating).GetAwaiter().GetResult();
+            await UpsertAsync(rating).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -74,9 +74,12 @@ public sealed class PostgresRatingStore : IRatingStore
         _cache.AddOrUpdate(sessionId, rating, (_, _) => rating);
         PublishSubmitted(rating);
 
+        // Yorumun KENDİSİ loglanmaz: serbest metindir (müşteri telefon/adres yazabilir) ve
+        // log, kişisel verinin saklanması için tasarlanmış bir yüzey değildir. Yorum zaten
+        // DB'de; log yalnızca olayın varlığını ve boyutunu taşır.
         _logger.LogInformation(
-            "[Rating] Session {SessionId} rated {Stars} stars. Feedback: {Feedback}",
-            sessionId, rating.Stars, rating.Feedback ?? "(yok)");
+            "[Rating] Session {SessionId} rated {Stars} stars. FeedbackLength={FeedbackLength}",
+            sessionId, rating.Stars, rating.Feedback?.Length ?? 0);
 
         return rating;
     }
@@ -106,7 +109,26 @@ public sealed class PostgresRatingStore : IRatingStore
 
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Session başına tek puan (session_id birincil anahtar). Oku-sonra-yaz atomik değil:
+    /// aynı oturuma eşzamanlı İLK iki puanlamanın ikisi de "kayıt yok" görüp INSERT eder ve
+    /// kaybeden birincil anahtar ihlaliyle 500 alırdı. Kaybeden artık bir kez, kazananın
+    /// satırını güncelleyerek tekrar dener (son yazan kazanır — tekrar puanlamayla aynı anlam).
+    /// </summary>
     private async Task UpsertAsync(ConversationRating rating)
+    {
+        try
+        {
+            await UpsertOnceAsync(rating).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException
+                                           { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        {
+            await UpsertOnceAsync(rating).ConfigureAwait(false);
+        }
+    }
+
+    private async Task UpsertOnceAsync(ConversationRating rating)
     {
         await using var ctx = await _dbFactory.CreateDbContextAsync();
 
@@ -135,23 +157,38 @@ public sealed class PostgresRatingStore : IRatingStore
         await ctx.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public Task WarmUpAsync(CancellationToken ct = default) => EnsureHydratedAsync();
+
+    /// <summary>
+    /// Senkron okuma yolları için YEDEK. Normalde cache açılışta <see cref="WarmUpAsync"/> ile
+    /// doldurulmuştur ve bu çağrı bayrağı okuyup hemen döner; yalnızca ısıtma başarısız
+    /// olduysa ilk okuma hydrate'i senkron bekler.
+    /// </summary>
     private void EnsureHydrated()
     {
         if (_hydrated) return;
+        EnsureHydratedAsync().GetAwaiter().GetResult();
+    }
 
-        lock (_hydrationLock)
+    private async Task EnsureHydratedAsync()
+    {
+        if (_hydrated) return;
+        await _hydrationGate.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_hydrated) return;
-            try
-            {
-                HydrateAsync().GetAwaiter().GetResult();
-                _hydrated = true;
-            }
-            catch (Exception ex)
-            {
-                // Cache hydrate edilemese bile yazma yolu çalışmaya devam eder.
-                _logger.LogError(ex, "[Rating] Cache hydrate başarısız.");
-            }
+            await HydrateAsync().ConfigureAwait(false);
+            _hydrated = true;
+        }
+        catch (Exception ex)
+        {
+            // Cache hydrate edilemese bile yazma yolu çalışmaya devam eder.
+            _logger.LogError(ex, "[Rating] Cache hydrate başarısız.");
+        }
+        finally
+        {
+            _hydrationGate.Release();
         }
     }
 

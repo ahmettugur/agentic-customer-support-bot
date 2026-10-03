@@ -409,6 +409,40 @@ public class ApprovalGateServiceToolBuilderTests
         decision.Approved.Should().BeTrue();
     }
 
+    /// <summary>
+    /// Köprü yolu da onay kaydına müşteri kimliğini yazmalı — ExecuteWithApprovalGateAsync ile
+    /// aynı alan. Yazılmazsa kayıt müşterisiz kalır: müşterinin "geçmiş işlemlerim" ve okunmamış
+    /// bildirim uçları (CustomerId'ye göre filtreler) onu hiç göstermez, yürütücü de kimliği
+    /// yedek Parameters kopyasından çözmek zorunda kalır.
+    /// </summary>
+    [Fact]
+    public async Task RequestApprovalAsync_RecordsTheAuthenticatedCustomerOnTheApproval()
+    {
+        var opts = new ApprovalOptions { Enabled = true, TimeoutSeconds = 5 };
+        var queue = new InMemoryApprovalQueue(
+            Options.Create(opts),
+            new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
+        ApprovalRequest? created = null;
+        queue.RequestCreated += (_, req) =>
+        {
+            created = req;
+            _ = queue.DecideAsync(req.Id, approved: true, decidedBy: "test", reason: "ok");
+        };
+        var contextAccessor = new ApprovalContextAccessor();
+        using var scope = contextAccessor.SetScope("s1", null, "siparişi iptal et", customerId: "1001");
+
+        var svc = Build(opts, queue, contextAccessor);
+        await svc.RequestApprovalAsync(
+            WellKnown.ToolNames.OrderCancel,
+            WellKnown.AgentNames.Order,
+            new Dictionary<string, object?> { ["orderId"] = "1030" },
+            justification: null,
+            TestContext.Current.CancellationToken);
+
+        created.Should().NotBeNull();
+        created!.CustomerId.Should().Be("1001");
+    }
+
     [Fact]
     public async Task RequestApprovalAsync_NullParameters_TreatedAsEmptyDictionary()
     {

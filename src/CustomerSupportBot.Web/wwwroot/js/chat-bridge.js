@@ -41,150 +41,47 @@ window.__chatSetup = function (ref, apiBase, authToken) {
             },
             resetSession: function () { this.sessionId = null; }
         },
+        // Native sesli modun (realtime-native) balonları. #messages Blazor'un render
+        // ağacıdır: eskiden buraya ham DOM düğümleri ekleniyordu — Blazor onları bilmediği için
+        // "yeni sohbet"te silinmiyor, sonraki render'larda Blazor'un kendi düğümleriyle sırası
+        // karışıyordu. Artık JS yalnızca bir tutamaç (id) üretir; içerik Chat.razor'daki
+        // _messages listesine yazılır ve Blazor çizer. Çağrılar sırayla .NET'e gider.
         ui: {
-            addMessage: function (role, text) {
-                var msgs = document.getElementById('messages');
-                if (!msgs) return null;
-                var welcome = document.getElementById('welcome');
-                if (welcome) welcome.style.display = 'none';
-                var div = document.createElement('div');
-                div.className = 'message ' + role;
-                var bubble = document.createElement('div');
-                bubble.className = 'bubble message-bubble';
-                bubble.textContent = text || '';
-                div.appendChild(bubble);
-                msgs.appendChild(div);
-                msgs.scrollTop = msgs.scrollHeight;
-                return div;
+            _seq: 0,
+            _newHandle: function () { return { id: 'voice-' + Date.now() + '-' + (++this._seq) }; },
+            _call: function (method) {
+                var args = Array.prototype.slice.call(arguments, 1);
+                ref.invokeMethodAsync.apply(ref, [method].concat(args)).catch(function () { });
+            },
+            // opts: { placeholder: bool, before: handle }
+            addMessage: function (role, text, opts) {
+                var h = this._newHandle();
+                opts = opts || {};
+                this._call('VoiceNativeAdd', h.id, role, text || '', !!opts.placeholder,
+                    opts.before ? opts.before.id : null);
+                return h;
+            },
+            setMessageText: function (h, text, placeholder) {
+                if (h) this._call('VoiceNativeSetText', h.id, text || '', !!placeholder);
+            },
+            removeMessage: function (h) {
+                if (h) this._call('VoiceNativeRemove', h.id);
             },
             startStreamingMessage: function () {
-                var msgs = document.getElementById('messages');
-                if (!msgs) return null;
-                var div = document.createElement('div');
-                div.className = 'message assistant';
-                var bubble = document.createElement('div');
-                bubble.className = 'bubble message-bubble';
-                div.appendChild(bubble);
-                msgs.appendChild(div);
-                msgs.scrollTop = msgs.scrollHeight;
-                return { messageDiv: div, bubble: bubble, _text: '' };
+                var h = this._newHandle();
+                this._call('VoiceNativeAdd', h.id, 'assistant', '', false, null);
+                return h;
             },
-            finalizeStreamingMessage: function (ctx) { /* no-op */ },
-            appendResponseChunk: function (ctx, text) {
-                if (!ctx || !ctx.bubble || !text) return;
-                ctx._text = (ctx._text || '') + text;
-                ctx.bubble.textContent = ctx._text;
-                var msgs = document.getElementById('messages');
-                if (msgs) msgs.scrollTop = msgs.scrollHeight;
+            finalizeStreamingMessage: function (h) {
+                if (h) this._call('VoiceNativeFinalize', h.id);
             },
-            setAgentStatus: function (ctx, label, state) {
-                if (!ctx || !ctx.bubble) return;
-                var chip = ctx.bubble.querySelector('.voice-agent-chip');
-                if (!chip) {
-                    chip = document.createElement('div');
-                    chip.className = 'voice-agent-chip';
-                    chip.style.cssText = 'font-size:11px;opacity:.6;margin-bottom:6px;color:inherit';
-                    ctx.bubble.insertBefore(chip, ctx.bubble.firstChild);
-                }
-                chip.textContent = label + (state === 'running' ? '…' : ' ✓');
+            appendResponseChunk: function (h, text) {
+                if (h && text) this._call('VoiceNativeAppend', h.id, text);
             },
-            scrollToBottom: function () {
-                var msgs = document.getElementById('messages');
-                if (msgs) msgs.scrollTop = msgs.scrollHeight;
-            }
-        },
-        _handleStreamEvent: function (ctx, reasoningState, evt) {
-            if (!ctx) return;
-            var d = evt.data || {};
-            switch (evt.type) {
-                case 'reasoning_start':
-                    reasoningState.buffer = '';
-                    if (!ctx._reasoningPanel) {
-                        var content = ctx.messageDiv.querySelector('.message-content');
-                        if (!content) {
-                            content = document.createElement('div');
-                            content.className = 'message-content';
-                            ctx.messageDiv.replaceChild(content, ctx.bubble);
-                            content.appendChild(ctx.bubble);
-                        }
-                        var panel = document.createElement('details');
-                        panel.className = 'reasoning-panel streaming';
-                        panel.open = true;
-                        panel.innerHTML =
-                            '<summary class="reasoning-summary">' +
-                            '<span class="reasoning-icon">🧠</span>' +
-                            '<span class="reasoning-label">Düşünce süreci</span>' +
-                            '<span class="reasoning-dots inline"><span></span><span></span><span></span></span>' +
-                            '<span class="reasoning-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></span>' +
-                            '</summary>' +
-                            '<div class="reasoning-body"><div class="reasoning-section-text"></div></div>';
-                        content.insertBefore(panel, ctx.bubble);
-                        ctx._reasoningPanel = panel;
-                    }
-                    break;
-                case 'reasoning_delta':
-                    if (ctx._reasoningPanel && d.text) {
-                        reasoningState.buffer += d.text;
-                        var textEl = ctx._reasoningPanel.querySelector('.reasoning-section-text');
-                        if (textEl) textEl.textContent = this._extractAnalysis(reasoningState.buffer);
-                    }
-                    break;
-                case 'reasoning_complete':
-                    if (ctx._reasoningPanel) {
-                        ctx._reasoningPanel.classList.remove('streaming');
-                        var sum = ctx._reasoningPanel.querySelector('.reasoning-summary');
-                        var dots = sum && sum.querySelector('.reasoning-dots');
-                        if (dots) dots.remove();
-                        if (d.confidence) {
-                            var badge = document.createElement('span');
-                            badge.className = 'reasoning-badge';
-                            badge.textContent = d.confidence;
-                            var chev = sum && sum.querySelector('.reasoning-chevron');
-                            if (chev) sum.insertBefore(badge, chev);
-                        }
-                        if (d.analysis) {
-                            var body = ctx._reasoningPanel.querySelector('.reasoning-body');
-                            if (body) {
-                                body.innerHTML = '<div class="reasoning-section"><div class="reasoning-section-text">' +
-                                    this._htmlEsc(d.analysis) + '</div></div>';
-                            }
-                        }
-                    }
-                    break;
-                case 'agent':
-                    if (d.name && this.ui && this.ui.setAgentStatus) {
-                        var label = this._friendlyAgent(d.name);
-                        var agentState = (d.status === 'done') ? 'completed' : 'running';
-                        try { this.ui.setAgentStatus(ctx, label, agentState); } catch (e) { }
-                    }
-                    break;
-                case 'response_start':
-                    break;
-                case 'response_delta':
-                    if (d.text) this.ui.appendResponseChunk(ctx, d.text);
-                    break;
-                case 'response_complete':
-                    if (d.text) { if (ctx.bubble) ctx.bubble.textContent = d.text; ctx._text = d.text; }
-                    break;
-            }
-        },
-        _extractAnalysis: function (raw) {
-            var marker = '"analysis"';
-            var idx = raw.indexOf(marker);
-            if (idx < 0) return '';
-            var ci = raw.indexOf(':', idx + marker.length);
-            if (ci < 0) return '';
-            var qs = raw.indexOf('"', ci + 1);
-            if (qs < 0) return '';
-            var vs = qs + 1, qe = -1;
-            for (var i = vs; i < raw.length; i++) {
-                if (raw[i] === '\\') { i++; continue; }
-                if (raw[i] === '"') { qe = i; break; }
-            }
-            return qe > vs ? raw.substring(vs, qe) : raw.substring(vs);
-        },
-        _htmlEsc: function (s) {
-            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            setAgentStatus: function (h, label, state) {
+                if (h) this._call('VoiceNativeStatus', h.id, label + (state === 'running' ? '…' : ' ✓'));
+            },
+            scrollToBottom: function () { window.__scrollToBottom('messages'); }
         },
         _friendlyAgent: function (id) {
             // Workflow executor id'leri "<AjanAdı>_<guid>" biçiminde gelir — eşleşme

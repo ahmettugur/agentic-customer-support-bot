@@ -19,6 +19,13 @@ public static class AuthServicesExtensions
         services.Configure<JwtOptions>(jwtSection);
         var jwtOptions = jwtSection.Get<JwtOptions>() ?? new JwtOptions();
 
+        // Başlangıçta, tüm ortamlarda doğrulanır. Eskiden boş anahtarda JwtBearer'a sabit bir
+        // yedek ('x' × 32) veriliyor ve hata ancak ilk login'de (scoped JwtAccessTokenProvider
+        // ilk kez oluşturulduğunda) çıkıyordu — o ana kadar API, herkesin bildiği o anahtarla
+        // imzalanmış token'ları geçerli sayıyordu.
+        if (JwtOptions.ValidateSigningKey(jwtOptions.SigningKey) is { } keyError)
+            throw new InvalidOperationException(keyError);
+
         services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtAccessTokenProvider, JwtAccessTokenProvider>();
         services.AddScoped<ITokenService, TokenPortService>();
@@ -37,19 +44,23 @@ public static class AuthServicesExtensions
                     ValidateAudience = true,
                     ValidAudience = jwtOptions.Audience,
                     ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
-                        string.IsNullOrWhiteSpace(jwtOptions.SigningKey)
-                            ? new string('x', 32) // boşsa boot fail edecek (JwtAccessTokenProvider throw eder)
-                            : jwtOptions.SigningKey)),
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
 
-                // SSE / EventSource için query string desteği
+                // Query string token'ı YALNIZCA header taşıyamayan istemcilerin uçlarında.
+                //
+                // Tarayıcının EventSource ve WebSocket API'leri Authorization header'ı
+                // gönderemez; bu uçlar token'ı ?access_token= ile alır. Eskiden bu kabul TÜM
+                // uçlara açıktı — URL'deki token erişim loglarına, proxy kayıtlarına ve tarayıcı
+                // geçmişine düştüğü için, header taşıyabilen uçlarda kabul edilmemelidir.
                 options.Events = new JwtBearerEvents
                 {
                     OnMessageReceived = ctx =>
                     {
+                        if (!AcceptsQueryStringToken(ctx.Request.Path)) return Task.CompletedTask;
+
                         var token = ctx.Request.Query["access_token"].ToString();
                         if (!string.IsNullOrEmpty(token)) ctx.Token = token;
                         return Task.CompletedTask;
@@ -85,5 +96,23 @@ public static class AuthServicesExtensions
         });
 
         return services;
+    }
+
+    /// <summary>
+    /// Token'ı query string'den kabul eden uçlar — tarayıcıda header taşıyamayan istemciler:
+    /// müşteri olay akışı (<c>/chat/events/{sid}</c>, EventSource), admin/agent canlı devralma
+    /// akışı (<c>…/chat-sessions/{sid}/subscribe</c>, EventSource) ve sesli kanallar
+    /// (<c>/chat/realtime*</c>, WebSocket). Yeni bir SSE/WS ucu eklenirse buraya da eklenmeli.
+    /// </summary>
+    internal static bool AcceptsQueryStringToken(PathString path)
+    {
+        if (path.StartsWithSegments("/chat/events")
+            || path.StartsWithSegments("/chat/realtime")
+            || path.StartsWithSegments("/chat/realtime-native"))
+            return true;
+
+        var value = path.Value ?? "";
+        return value.Contains("/chat-sessions/", StringComparison.Ordinal)
+            && value.EndsWith("/subscribe", StringComparison.Ordinal);
     }
 }

@@ -30,4 +30,13 @@ public interface IRefreshTokenRepository
     /// <returns>Bu çağrı kaydı iptal ettiyse <c>true</c>; kayıt zaten iptal edilmişse <c>false</c>.</returns>
     Task<bool> TryRevokeAsync(string id, DateTime revokedAt,
         string? replacedByTokenHash, CancellationToken ct = default);
+
+    /// <summary>
+    /// Kullanıcının HÂLÂ geçerli (iptal edilmemiş) tüm refresh token'larını tek bir koşullu
+    /// UPDATE ile iptal eder. Refresh token yeniden kullanımı tespit edildiğinde çağrılır:
+    /// rotasyonla geçersiz kılınmış bir token'ın tekrar sunulması, token'ın kopyalandığı
+    /// anlamına gelir ve hangi zincirin meşru olduğu bilinemez.
+    /// </summary>
+    /// <returns>İptal edilen kayıt sayısı.</returns>
+    Task<int> RevokeAllActiveForUserAsync(string userId, DateTime revokedAt, CancellationToken ct = default);
 }

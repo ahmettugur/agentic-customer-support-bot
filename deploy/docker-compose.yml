@@ -1,13 +1,24 @@
+# Yerel geliştirme yığını.
+#
+# Güvenlik notları:
+#   - Tüm portlar yalnızca 127.0.0.1'e bağlanır: Redis, Elasticsearch/Kibana ve Qdrant burada
+#     kimlik doğrulamasız çalışır; 0.0.0.0'a açılmaları aynı ağdaki herkese erişim verirdi.
+#     Bu dosya üretim için DEĞİLDİR — paylaşımlı/uzak bir ortamda Redis requirepass,
+#     Qdrant API key ve Elasticsearch xpack.security açılmalıdır.
+#   - Gizli değerler deploy/.env dosyasından okunur (git'e girmez); şablon: deploy/.env.example.
+#   - İmajlar sabit sürümlere bağlıdır: "latest" bir sonraki pull'da ana sürüm atlatıp
+#     (ör. Postgres veri dizini uyumsuzluğu) yığını sessizce bozabilir.
+
 services:
   postgres:
-    image: postgres
+    image: postgres:18
     container_name: aibot_postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Ahmet1990.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD tanımlı değil - deploy/.env.example dosyasını deploy/.env olarak kopyalayın}
       PGDATA: /var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
@@ -17,10 +28,10 @@ services:
       retries: 5
 
   redis:
-    image: redis
+    image: redis:8.2
     container_name: aibot_redis
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -31,14 +42,14 @@ services:
       retries: 5
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.15.5
     container_name: aibot_qdrant_vector_db
     restart: unless-stopped
     ports:
       # HTTP API (host 7333 -> container 6333) — 6333 başka projede kullanımda
-      - "7333:6333"
+      - "127.0.0.1:7333:6333"
       # gRPC API (host 7334 -> container 6334)
-      - "7334:6334"
+      - "127.0.0.1:7334:6334"
     volumes:
       # Verileri kalıcı tutmak için
       - qdrant_storage:/qdrant/storage
@@ -78,7 +89,7 @@ services:
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
     healthcheck:
@@ -98,7 +109,7 @@ services:
       - xpack.security.enabled=false
     ports:
       # Kibana UI
-      - "5601:5601"
+      - "127.0.0.1:5601:5601"
     depends_on:
       elasticsearch:
         condition: service_healthy
@@ -113,18 +124,18 @@ services:
   # OpenTelemetry Collector (opsiyonel — Jaeger v2 zaten OTLP alabilir)
   # Jaeger ile aynı anda çalıştırılacaksa farklı host portları kullanılmalı.
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
+    image: otel/opentelemetry-collector-contrib:0.138.0
     container_name: aibot_otel-collector
     restart: unless-stopped
     profiles: ["otel"]
     command: ["--config=/etc/otel-collector-config.yaml"]
     ports:
       # OTLP gRPC receiver (host 4327 → container 4317)
-      - "4327:4317"
+      - "127.0.0.1:4327:4317"
       # OTLP HTTP receiver (host 4328 → container 4318)
-      - "4328:4318"
+      - "127.0.0.1:4328:4318"
       # Health check endpoint
-      - "13133:13133"
+      - "127.0.0.1:13133:13133"
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
     environment:
@@ -145,11 +156,11 @@ services:
       - ./jaeger-v2-config.yaml:/jaeger/config.yaml:ro
     ports:
       # Jaeger UI
-      - "16686:16686"
+      - "127.0.0.1:16686:16686"
       # OTLP gRPC receiver
-      - "4317:4317"
+      - "127.0.0.1:4317:4317"
       # OTLP HTTP receiver
-      - "4318:4318"
+      - "127.0.0.1:4318:4318"
     depends_on:
       elasticsearch:
         condition: service_healthy

@@ -49,6 +49,24 @@ sonuç döndürmesi için orijinal kayıt (`IdempotentCall`) geri verilir (bkz.
 mükerrer kayıt engellenir hem meşru bir tekrar talebi (kullanıcı gerçekten ikinci bir sipariş
 istiyorsa) fark edilebilir kalır.
 
+### Pod'lar arası katman — `IDistributedIdempotencyStore`
+
+Bellek içi cache **pod başınadır**. Yatay ölçeklendirmede aynı istek (istemci yeniden denemesi,
+yük dengeleyicinin isteği başka pod'a yönlendirmesi) ikinci pod'a düştüğünde o pod'un cache'i
+boştur ve ikinci bir sipariş/şikayet kaydı oluşuyordu. İsteğe bağlı
+[`IDistributedIdempotencyStore`](../../Ports/Outbound/Persistence/IDistributedIdempotencyStore.md)
+(üretimde [`RedisIdempotencyStore`](../../../CustomerSupportBot.Adapters.Redis/Idempotency/RedisIdempotencyStore.md),
+`SET NX PX`) ikinci katmandır:
+
+- `TryGetRecent` önce yerel cache'e, ıskalarsa dağıtık kayda bakar; bulursa
+  `"Kayıt zaten oluşturulmuş: {id}."` sonucuyla bir `IdempotentCall` döndürür.
+- `Record` yerel kayda ek olarak dağıtık kayda da yazar (aynı pencere süresiyle, ilk yazan kazanır).
+- **Fail-open:** dağıtık kayıt erişilemezse (Redis kesintisi) uyarı loglanır ve yalnızca yerel
+  katmanla devam edilir — idempotency kaydının kesintisi sipariş akışını durdurmamalı. Bu
+  "en iyi çaba" bir korumadır; kesin tekillik gerektiren durumlarda DB kısıtı gerekir.
+
+Kayıt yoksa (testler, tek süreç) davranış eskisiyle aynıdır.
+
 ### Yalnızca başarılı sonuçlar cache'lenir
 
 `Record`, `result.Success == false` ise hiçbir şey yapmaz — hata durumunda tekrar denemenin
@@ -82,8 +100,8 @@ olarak) tutulmasını önler.
 |---|---|
 | `DefaultWindow` *(static readonly, `TimeSpan`)* | Varsayılan mükerrer tespit penceresi — 60 saniye. |
 | `DefaultMaxEntries` *(const int)* | Bellekte tutulacak maksimum kayıt sayısı — 200. |
-| `TryGetRecent(toolName, parameters, out recent)` | Aynı tool aynı parametrelerle pencere içinde çağrılmış mı diye bakar; süresi dolmuş kayıtları önce temizler (`PruneExpired`). |
-| `Record(toolName, parameters, result, entityId)` | Başarılı bir çağrıyı kaydeder (başarısızsa no-op); kapasite aşımında en eski kayıtları FIFO ile atar. |
+| `TryGetRecent(toolName, parameters, out recent)` | Aynı tool aynı parametrelerle pencere içinde çağrılmış mı diye bakar; süresi dolmuş kayıtları önce temizler (`PruneExpired`). Yerelde yoksa dağıtık kayda bakar (varsa; hata → fail-open). |
+| `Record(toolName, parameters, result, entityId)` | Başarılı bir çağrıyı kaydeder (başarısızsa no-op); kapasite aşımında en eski kayıtları FIFO ile atar. Dağıtık kayda da yazar (varsa). |
 | `Clear()` | Test/oturum sıfırlama için tüm cache'i temizler. |
 | `PruneExpired(now)` *(private)* | `_window`'u aşan kayıtları siler; `_gate` kilidi altında çağrılmalı. |
 | `BuildKey(toolName, parameters)` *(private static)* | Tool adı + parametreleri birleştirip SHA-256 hash'ler, hex string döner. |
@@ -91,7 +109,8 @@ olarak) tutulmasını önler.
 ## 7. Bağımlılıklar
 
 Constructor injection ile (hepsi opsiyonel, test edilebilirlik için): `TimeSpan? window`,
-`int maxEntries`, `TimeProvider? clock`.
+`int maxEntries`, `TimeProvider? clock`, `IDistributedIdempotencyStore? distributed`,
+`ILogger<SideEffectIdempotencyCache>? logger`.
 
 ## Bağlantılar
 

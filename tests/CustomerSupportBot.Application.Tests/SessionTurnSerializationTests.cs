@@ -39,7 +39,7 @@ public class SessionTurnSerializationTests
         await service.HandleAsync(new ChatRequest("hello", "human") { CustomerId = "1001" }, TestContext.Current.CancellationToken);
 
         await sessions.Received(1).AppendUserMessageAsync("human", "hello", Arg.Any<CancellationToken>());
-        bridge.Received(1).PublishUserMessage("human", "hello");
+        await bridge.Received(1).PublishUserMessageAsync("human", "hello");
         team.ReceivedCalls().Should().BeEmpty();
         reasoning.ReceivedCalls().Should().BeEmpty();
         sessions.ReceivedCalls().Should().NotContain(c => c.GetMethodInfo().Name == "AddExchangeAsync");

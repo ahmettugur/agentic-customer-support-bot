@@ -77,7 +77,7 @@ public sealed class ReplanService : IReplanService
                 }
 
                 await _sessions.AppendAssistantMessageAsync(sessionId, response, ct);
-                _bridge.PublishBotMessage(sessionId, response);
+                await _bridge.PublishBotMessageAsync(sessionId, response);
             }
             finally
             {
@@ -89,7 +89,7 @@ public sealed class ReplanService : IReplanService
             _logger.LogError(ex, "Replan bot run failed for session {Session}", sessionId);
             try
             {
-                _bridge.PublishSystemMessage(sessionId,
+                await _bridge.PublishSystemMessageAsync(sessionId,
                     "⚠️ Otomatik yeniden planlama sırasında bir sorun oluştu. " +
                     "Lütfen sorunuzu tekrar yazar mısınız?");
             }

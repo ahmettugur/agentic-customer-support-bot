@@ -44,8 +44,15 @@ duygu durumunu kontrol et" mantığını tekrarlamak yerine buraya devreder.
 > `SessionStateExtractor.ExtractAndApply`'dır — `AddExchangeAsync` içinden, turun kapanışında,
 > tam olarak bir kez çağrılır.
 
-`PersistExchangeAsync` yalnızca `response` boş DEĞİLSE yazar — boş bir bot cevabının geçmişe
-"boş bir tur" olarak eklenmesi anlamsızdır (ör. bir hata/iptal durumunda).
+`PersistExchangeAsync` bot cevabını yalnızca `response` boş DEĞİLSE yazar — boş bir bot
+cevabının geçmişe "boş bir tur" olarak eklenmesi anlamsızdır. Ama yanıt boşsa (tur ResponseAgent
+hiç konuşmadan hata/timeout ile kesildi) **kullanıcının mesajı yine yazılır**
+(`AppendUserMessageAsync` + köprüye yalnızca kullanıcı mesajı). Eskiden bu durumda hiçbir şey
+yazılmıyordu: kullanıcının sorusu geçmişten ve admin panelinden kayboluyor, sonraki tur
+bağlamsız başlıyordu. Non-streaming yol (`ChatPortService.HandleAsync`) ve sesli köprü de aynı
+kuralı uygular; çağıranın iptali (kullanıcı vazgeçti) bu dala girmez (bkz. `FailedTurnHistoryTests`).
+Kısmi delta'ların yazılması (response_complete hiç gelmezse) bilinçli bir tasarım kararı olarak
+korunur.
 
 `CheckSentimentAlert`'teki `lock (session)` kilidi, oturum nesnesinin (bellekte, cache'te
 paylaşılan) birden fazla eşzamanlı okuyucu/yazıcı tarafından erişilebilmesine karşı bir

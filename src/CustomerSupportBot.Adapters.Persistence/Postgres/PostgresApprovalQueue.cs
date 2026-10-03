@@ -39,7 +39,7 @@ using Npgsql;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresApprovalQueue : IApprovalQueue
+public sealed class PostgresApprovalQueue : IApprovalQueue, ICacheWarmup
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ApprovalOptions _options;
@@ -48,10 +48,21 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
     private readonly IAppDistributedLock _distributedLock;
     private readonly IApprovalExecutionRouter _executionRouter;
     private readonly ConcurrentDictionary<string, QueueEntry> _entries = new();
-    private readonly object _hydrationLock = new();
+    private readonly SemaphoreSlim _hydrationGate = new(1, 1);
     private volatile bool _hydrated;
 
     private const int HydrateRecentCount = 200;
+    private int _trimming;
+
+    /// <summary>
+    /// Bellekte tutulan KARARA BAĞLANMIŞ kayıt üst sınırı. Kayıtlar eskiden hiç çıkarılmıyordu:
+    /// her onay talebi süreç ömrü boyunca bellekte kalıyor, uzun çalışan bir pod'un belleği
+    /// trafikle doğrusal büyüyordu. Pending kayıtlar, yürütmesi süren (Running) kayıtlar ve
+    /// bekleyeni olan kayıtlar asla çıkarılmaz; çıkarılan bir kayda tekil erişim
+    /// (<see cref="GetAsync"/>, <see cref="DecideAsync"/>) zaten DB'ye düşer. Sınır, cache
+    /// tabanlı <see cref="GetRecent"/> çağıranlarının (analitik: son 200) penceresinin üstündedir.
+    /// </summary>
+    public int MaxCachedDecided { get; init; } = 1000;
 
     public event EventHandler<ApprovalRequest>? RequestCreated;
     public event EventHandler<ApprovalRequest>? RequestDecided;
@@ -326,6 +337,7 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
                 executionStatus = entry.Request.ExecutionStatus.ToString()
             });
 
+            TrimDecidedEntries();
             return true;
         }
         finally
@@ -700,21 +712,37 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
     // async'e zorlar. Bloklama süreç ömrü boyunca yalnızca BİR KEZ (ilk çağrıda)
     // gerçekleşir — CreateAsync/DecideAsync'teki her-istekte-bir DB round-trip'i ile
     // aynı sınıfta değildir, bu yüzden kapsam dışı bırakıldı.
+    /// <inheritdoc />
+    public Task WarmUpAsync(CancellationToken ct = default) => EnsureHydratedAsync();
+
+    /// <summary>
+    /// Senkron okuma yolları için YEDEK. Normalde cache açılışta <see cref="WarmUpAsync"/> ile
+    /// doldurulmuştur ve bu çağrı bayrağı okuyup hemen döner; yalnızca ısıtma başarısız
+    /// olduysa ilk okuma hydrate'i senkron bekler.
+    /// </summary>
     private void EnsureHydrated()
     {
         if (_hydrated) return;
-        lock (_hydrationLock)
+        EnsureHydratedAsync().GetAwaiter().GetResult();
+    }
+
+    private async Task EnsureHydratedAsync()
+    {
+        if (_hydrated) return;
+        await _hydrationGate.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_hydrated) return;
-            try
-            {
-                HydrateAsync().GetAwaiter().GetResult();
-                _hydrated = true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[HITL] Approval cache hydrate başarısız.");
-            }
+            await HydrateAsync().ConfigureAwait(false);
+            _hydrated = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[HITL] Approval cache hydrate başarısız.");
+        }
+        finally
+        {
+            _hydrationGate.Release();
         }
     }
 
@@ -856,10 +884,42 @@ public sealed class PostgresApprovalQueue : IApprovalQueue
 
             try { RequestDecided?.Invoke(this, entry.Request); }
             catch (Exception ex) { _logger.LogWarning(ex, "RequestDecided handler (remote) failed"); }
+
+            TrimDecidedEntries();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[HITL] Redis OnRemoteDecided parse hatası");
+        }
+    }
+
+    /// <summary>
+    /// <see cref="MaxCachedDecided"/>'ı aşan en eski karara bağlanmış kayıtları cache'ten
+    /// çıkarır. Amortize: yalnızca sınırın %25 üstüne çıkıldığında çalışır ve aynı anda tek
+    /// budama yapılır. Bir kayıt yalnızca hâlâ AYNI nesneyse çıkarılır — arada tazelenmiş
+    /// (RefreshFromDbAsync) bir kaydın yenisi silinmez.
+    /// </summary>
+    private void TrimDecidedEntries()
+    {
+        if (_entries.Count <= MaxCachedDecided + MaxCachedDecided / 4) return;
+        if (Interlocked.Exchange(ref _trimming, 1) == 1) return;
+        try
+        {
+            var evictable = _entries
+                .Where(kv => kv.Value.Request.Status != ApprovalStatus.Pending
+                          && kv.Value.Request.ExecutionStatus != ApprovalExecutionStatus.Running
+                          && (kv.Value.Tcs is null || kv.Value.Tcs.Task.IsCompleted))
+                .OrderByDescending(kv => kv.Value.Request.RequestedAt)
+                .Skip(MaxCachedDecided)
+                .ToList();
+
+            var removed = evictable.Count(kv => _entries.TryRemove(kv));
+            if (removed > 0)
+                _logger.LogDebug("[HITL] Approval cache budandı: {Removed} karara bağlanmış kayıt çıkarıldı.", removed);
+        }
+        finally
+        {
+            Volatile.Write(ref _trimming, 0);
         }
     }
 

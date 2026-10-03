@@ -66,17 +66,17 @@ metodunu paylaşır — replan mantığının iki farklı tetikleyicide birbirin
 |---|---|
 | `GetActive(): IReadOnlyList<ChatSessionState>` | Şu an human/bot modda olan tüm oturumları döner. |
 | `GetStateOrDefault(string sessionId): ChatSessionState` | Oturumun mod durumunu döner; kayıt yoksa varsayılan `Bot` modu üretir. |
-| `GetHistory(string sessionId, int take = 50): IReadOnlyList<ChatBridgeMessage>` | Sohbet köprüsü geçmişini döner. |
+| `GetHistoryAsync(string sessionId, int take = 50): Task<IReadOnlyList<ChatBridgeMessage>>` | Sohbet köprüsü geçmişini döner. |
 | `GetSentimentAsync(string sessionId, CancellationToken ct = default): Task<ChatSessionSentimentSnapshot?>` | Oturumun güncel duygu durumu + son 10 kayıt. |
-| `PublishSystemMessage(string sessionId, string text): void` | Sohbet köprüsüne sistem mesajı yayınlar. |
-| `TakeOver(string sessionId, string humanAgent, string? agentId = null): ChatSessionTakeoverResult` | Oturumu bota devralır (Human moda geçer), açık eskalasyonları onaylar, temsilci yükünü artırır. |
-| `Release(string sessionId, string? agentId = null): ChatSessionReleaseResult` | Oturumu bota geri bırakır, açık eskalasyonları çözer, temsilci yükünü azaltır. |
+| `PublishSystemMessageAsync(string sessionId, string text): Task` | Sohbet köprüsüne sistem mesajı yayınlar. |
+| `TakeOverAsync(string sessionId, string humanAgent, string? agentId = null): Task<ChatSessionTakeoverResult>` | Oturumu bota devralır (Human moda geçer), açık eskalasyonları onaylar, temsilci yükünü artırır. |
+| `ReleaseAsync(string sessionId, string? agentId = null): Task<ChatSessionReleaseResult>` | Oturumu bota geri bırakır, açık eskalasyonları çözer, temsilci yükünü azaltır. |
 | `SendAdminMessageAsync(string sessionId, string humanAgent, string text, CancellationToken ct = default): Task<ChatSessionMessageResult>` | Yalnızca Human moddaki oturumlarda temsilci mesajı yayınlar ve asistan rolüyle geçmişe yazar. |
 | `ReplanSessionAsync(string sessionId, string requestedBy, string? note, CancellationToken ct = default): Task<ChatSessionReplanResult>` | Belirtilen oturumu yeniden planlamaya zorlar. |
 | `ReplanEscalationAsync(string escalationId, string requestedBy, string? note, CancellationToken ct = default): Task<ChatSessionReplanResult>` | Bir eskalasyon kaydı üzerinden bağlı oturumu yeniden planlamaya zorlar. |
 | `SubscribeToAdminAsync`/`SubscribeToUserAsync(string sessionId, CancellationToken ct): IAsyncEnumerable<ChatBridgeMessage>` | Canlı sohbet köprüsüne (admin veya kullanıcı tarafı) abone olur. |
 | `GetOpenEscalations(): IReadOnlyList<EscalationRequest>` | Açık eskalasyonları döner. |
-| `DismissOrphanedEscalations(string sessionId): int` | Bağlantısı kesilen müşterinin eskalasyonlarını reddeder. |
+| `DismissOrphanedEscalationsAsync(string sessionId): Task<int>` | Bağlantısı kesilen müşterinin eskalasyonlarını reddeder. |
 
 ## 7. Bağımlılıklar (Constructor Injection)
 

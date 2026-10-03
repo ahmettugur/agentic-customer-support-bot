@@ -44,8 +44,8 @@ Sipariş yaşam döngüsünün (oluşturma, sorgulama, iptal, iade talebi) `cata
 | `OrderInfo? Get(string orderId)` | Tek siparişi tüm satırlarıyla getirir. |
 | `IReadOnlyList<(string OrderId, OrderInfo Order)> GetByCustomer(string customerId)` | Müşterinin tüm siparişlerini tarihe göre azalan sıralar. |
 | `(string OrderId, OrderInfo Order)? GetLast(string customerId)` | Müşterinin en son siparişi. |
-| `bool Cancel(string orderId, string reason)` | Yalnızca `Processing`/`Shipped` durumundaki siparişi `Cancelled` yapar; aksi durum `false` döner (sessiz red — çağıran karar verir). |
-| `bool RequestReturn(string orderId, string reason)` | Yalnızca `Delivered` ve 14 günden eski olmayan siparişler için `ReturnRequested` durumuna geçirir. |
+| `bool Cancel(string orderId, string reason)` | Yalnızca `Processing`/`Shipped` durumundaki siparişi `Cancelled` yapar ve satırların stoğunu **aynı transaction'da** iade eder; aksi durum `false` döner (sessiz red — çağıran karar verir). Geçiş koşullu tek bir `UPDATE ... WHERE status IN (...)` olduğu için eşzamanlı iptallerden yalnızca biri kazanır ve stok tam bir kez iade edilir. |
+| `bool RequestReturn(string orderId, string reason)` | Yalnızca `Delivered` ve teslimden (`DeliveredAt`; boşsa eski kayıtlar için `OrderDate`) itibaren 14 günü geçmemiş siparişler için `ReturnRequested` durumuna geçirir. |
 | `private static OrderInfo MapToModel(OrderEntity e)` | Entity → Domain modeli, tüm satırları ürün adına göre sıralı map eder. |
 
 ## 7. Bağımlılıklar

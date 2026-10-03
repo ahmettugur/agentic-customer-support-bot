@@ -8,7 +8,8 @@ namespace CustomerSupportBot.Application.Ports.Outbound.Persistence;
 public interface ISlaEventSink
 {
     /// <summary>Yeni bir SLA olayı kaydeder ve event yayar.</summary>
-    void Record(SlaEvent evt);
+    /// <summary>Olayı kaydeder ve kalıcılaştırır. Yazma bilinçli olarak CancellationToken almaz: istemci bağlantıyı kesse bile cache ile DB tutarlı kalmalı.</summary>
+    Task RecordAsync(SlaEvent evt);
 
     /// <summary>En son N olay (default 100).</summary>
     IReadOnlyList<SlaEvent> GetRecent(int count = 100);

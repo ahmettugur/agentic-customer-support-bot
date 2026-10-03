@@ -33,8 +33,8 @@ Admin panelinin "müşteri profilleri" sayfası, profilleri listelemek, tek bir 
 | `(int Count, IReadOnlyList<CustomerProfile> Items) GetProfiles(int take = 100)` | Profilleri (toplam sayıyla birlikte) listeler. |
 | `CustomerProfile? GetProfile(string customerId)` | Tek müşteri profili. |
 | `Task<CustomerProfile?> RefreshProfileAsync(string customerId, CancellationToken ct = default)` | Profili manuel olarak yeniden hesaplatır. |
-| `CustomerProfile SetAdminNote(string customerId, string? note)` | Admin notu ekler/günceller/temizler. |
-| `bool DeleteProfile(string customerId)` | Profili siler. |
+| `Task<CustomerProfile> SetAdminNoteAsync(string customerId, string? note)` | Admin notu ekler/günceller/temizler. |
+| `Task<bool> DeleteProfileAsync(string customerId)` | Profili siler. |
 
 ## 7. Bağımlılıklar
 

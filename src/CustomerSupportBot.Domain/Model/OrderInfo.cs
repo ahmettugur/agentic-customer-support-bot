@@ -41,6 +41,10 @@ public class OrderInfo
     public DateTime? CancelledAt { get; set; }
     public string? CancelReason { get; set; }
 
+    // ─── Teslim bilgisi ───
+    /// <summary>Teslim anı; iade süresi buradan sayılır. Eski kayıtlarda boş olabilir.</summary>
+    public DateTime? DeliveredAt { get; set; }
+
     // ─── İade bilgileri ───
     public DateTime? ReturnRequestedAt { get; set; }
     public string? ReturnReason { get; set; }

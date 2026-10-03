@@ -90,7 +90,7 @@ birleştirildiği için geçmişe ham (temizlenmemiş) metin yazılıyordu.
 | Üye | Açıklama |
 |---|---|
 | `HandleAsync(ChatRequest request, CancellationToken ct = default): Task<ChatResponse>` | Senkron tur: oturum → kilit → bind → geçmiş → reasoning → agent takımı → kalıcılık → tek `ChatResponse`. |
-| `HandleStreamAsync(ChatRequest request, CancellationToken ct = default): IAsyncEnumerable<StreamEvent>` | Aynı akışın SSE/WebSocket streaming versiyonu; human-mode bypass ve sentiment olayları da burada yayılır. |
+| `HandleStreamAsync(ChatRequest request, CancellationToken ct = default): IAsyncEnumerable<StreamEvent>` | Aynı akışın SSE/WebSocket streaming versiyonu; human-mode bypass ve sentiment olayları da burada yayılır. Sentiment uyarısı, tur başında alınan referanstan değil oturum yöneticisinin elindeki **güncel** nesneden (`ISessionManager.GetAsync`) okunur — tur sırasında oturum cache'ten yeniden yüklendiyse eski referans bu turun duygu güncellemesini görmez ve uyarı bir tur geriden gelirdi. |
 | `AcquireTurnLockAsync(string sessionId, CancellationToken ct)` *(private)* | Oturuma özel dağıtık kilit alır (120sn bekleme, medallion self-renew); alınamazsa kullanıcıya "hâlâ işlenen bir mesaj var" hatası döner. |
 | `BindAuthenticatedCustomerAsync(AgentSession session, string? customerId, CancellationToken ct)` *(private)* | `SessionIdentityBinder` ile kimlik bağlar; ihlalde `UnauthorizedSessionAccessException` fırlatır. |
 

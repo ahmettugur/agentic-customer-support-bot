@@ -35,6 +35,8 @@ HITL (human-in-the-loop) onay kayıtlarının (sipariş verme, şikayet, iptal, 
 
 > 🐞 **`HydrateAsync` neden TÜM Pending kayıtları çekiyor, son N değil:** Eskiden (yorum "tüm açık kayıtlar" dese de) yalnızca tarihe göre son `HydrateRecentCount` (200) kayıt çekiliyordu. Yoğun kurulumda 200 yeni kaydın gerisinde kalmış eski bir Pending onay cache'e hiç girmez — admin panelinde görünmez, `StaleApprovalSweepService` onu bulamaz, sonsuza dek askıda kalırdı. Karara bağlanmış kayıtlarda sınır zararsızdır (üzerlerinde artık iş yapılmaz).
 
+> 🐞 **Cache sınırlıdır (`MaxCachedDecided`, varsayılan 1000).** Kayıtlar eskiden cache'ten hiç çıkarılmıyordu: her onay talebi süreç ömrü boyunca bellekte kalıyor, uzun çalışan bir pod'un belleği trafikle doğrusal büyüyordu. Bir karar (yerel ya da uzak pod'dan gelen) işlendikten sonra, sınırın %25 üstüne çıkıldıysa en eski **karara bağlanmış** kayıtlar çıkarılır. Pending kayıtlar, yürütmesi süren (`ExecutionStatus = Running`) kayıtlar ve bekleyeni (`Tcs`) olan kayıtlar asla çıkarılmaz. Çıkarılmış bir kayda tekil erişim zaten DB'ye düşer (`GetAsync`; `DecideAsync` cache'te bulamazsa DB'den yükler); sınır, cache tabanlı `GetRecent` çağıranlarının (analitik: son 200) penceresinin üstündedir. Bir kayıt yalnızca hâlâ aynı nesneyse çıkarılır — arada tazelenmiş bir kaydın yenisi silinmez.
+
 > 🐞 **`GetUnseenForSessionAsync`/`GetAsync`/`GetHistoryForCustomerAsync` neden cache'e değil doğrudan DB'ye sorar:** Redis pub/sub en-fazla-bir-kez teslimattır ve mesaj kaybı bilinçli olarak yutulur (bkz. `RedisMessageBusAdapter`) — cache üzerinden okumak bu sorguları kayıp bir mesaja bağımlı kılardı; müşteri kararı hiç göremezdi. Bu yüzden "kalıcı/geçmişe dönük" okumalar DB'den, yalnızca "anlık bildirim" amaçlı olanlar cache'ten yapılır.
 
 ## 6. Metotlar / Üyeler
@@ -47,7 +49,8 @@ HITL (human-in-the-loop) onay kayıtlarının (sipariş verme, şikayet, iptal, 
 | `IReadOnlyList<ApprovalRequest> GetPending()` | Cache'ten senkron — admin panel salt-okunur uçları için. |
 | `Task<IReadOnlyList<ApprovalRequest>> GetPendingAsync(CancellationToken ct)` | DB'den okur VE cache'i uzlaştırır (Redis mesajı kaçırılmış kayıtlar böylece cache'e girer). |
 | `IReadOnlyList<ApprovalRequest> GetRecent(int count = 50)` | Cache'ten en son N kayıt. |
-| `ApprovalRequest? Get(string id)` | Cache'ten tek kayıt. |
+| `ApprovalRequest? Get(string id)` | Cache'ten tek kayıt (cache'ten çıkarılmış eski bir karar için `null`; kalıcı okuma için `GetAsync`). |
+| `int MaxCachedDecided { get; init; }` | Cache'te tutulan karara bağlanmış kayıt üst sınırı (varsayılan 1000). |
 | `Task<IReadOnlyList<ApprovalRequest>> GetUnseenForSessionAsync(string sessionId, string customerId, CancellationToken ct)` | DB'den, `CustomerSeenAt == null` ve karara bağlanmış kayıtlar — badge/bildirim ekranı. |
 | `Task<IReadOnlyList<ApprovalRequest>> GetStuckExecutionsAsync(CancellationToken ct)` | Approved+Running durumunda `StuckExecutionAfterMinutes`'ten eski kayıtlar — operasyonel alarm için. |
 | `Task<ApprovalRequest?> GetAsync(string id, CancellationToken ct)` | DB'den tek kayıt (cache'e bakmaz). |

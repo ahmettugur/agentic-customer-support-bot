@@ -34,12 +34,12 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         _logger = logger;
     }
 
-    public ConversationRating Rate(string sessionId, int stars, string? comment = null)
+    public async Task<ConversationRating> RateAsync(string sessionId, int stars, string? comment = null)
     {
         if (stars < 1 || stars > 5)
             throw new ArgumentOutOfRangeException(nameof(stars), "Rating must be between 1 and 5");
 
-        var rating = _ratings.Submit(sessionId, stars, comment);
+        var rating = await _ratings.SubmitAsync(sessionId, stars, comment);
         _logger.LogInformation(
             "Rating submitted: session={SessionId} stars={Stars}",
             sessionId, stars);

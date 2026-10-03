@@ -48,9 +48,11 @@ Ek alanlar (hepsi nullable, `EventType`'a göre hangisi dolu olduğu değişir):
 | `TextDelta` / `FullText` | Modelin metin çıktısı (delta / tam) |
 | `ErrorMessage` | `Error` event'inde |
 | `ToolCallId` / `ToolName` / `ToolArguments` | Model bir tool çağırmak istediğinde |
+| `ItemId` | `InputAudioCommitted`, `InputTranscriptCompleted`, `InputTranscriptFailed` — olayın ait olduğu kullanıcı ses öğesi. Transkript yanıt olaylarından önce de sonra da gelebildiği için sesli turu eşleştirmenin tek güvenilir anahtarıdır (bkz. [VoiceTurnPairer](../../../Services/Realtime/VoiceTurnPairer.md)). |
 
 **`RealtimeServerEventType`** enum değerleri: `SpeechStarted`, `SpeechStopped`,
-`InputTranscriptCompleted`, `ResponseCreated`, `AudioDelta`, `AssistantTextDelta`,
+`InputAudioCommitted`, `InputTranscriptCompleted`, `InputTranscriptFailed`, `ResponseCreated`,
+`AudioDelta`, `AssistantTextDelta`,
 `AssistantTextDone`, `ToolCallReady`, `ResponseDone`, `ResponseCancelled`, `Error`,
 `ConnectionClosed`.
 

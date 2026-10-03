@@ -39,10 +39,10 @@ public sealed class SlaPortService : ISlaPort
         foreach (var req in await _approvals.GetPendingAsync(ct))
         {
             var eval = SlaPolicyEvaluator.EvaluateApproval(req, opts.Approvals, _events, now);
-            if (eval.WarnEvent is not null) _events.Record(eval.WarnEvent);
+            if (eval.WarnEvent is not null) await _events.RecordAsync(eval.WarnEvent);
             if (eval.BreachEvent is not null)
             {
-                _events.Record(eval.BreachEvent);
+                await _events.RecordAsync(eval.BreachEvent);
                 await ApplyApprovalBreachAsync(req, eval.BreachAction, ct);
             }
         }
@@ -50,10 +50,10 @@ public sealed class SlaPortService : ISlaPort
         foreach (var esc in _escalations.GetOpen())
         {
             var eval = SlaPolicyEvaluator.EvaluateEscalation(esc, opts.Escalations, _events, now);
-            if (eval.WarnEvent is not null) _events.Record(eval.WarnEvent);
+            if (eval.WarnEvent is not null) await _events.RecordAsync(eval.WarnEvent);
             if (eval.BreachEvent is not null)
             {
-                _events.Record(eval.BreachEvent);
+                await _events.RecordAsync(eval.BreachEvent);
                 if (eval.NewPriority.HasValue && eval.NewPriority.Value != esc.Priority)
                     esc.Priority = eval.NewPriority.Value;
             }

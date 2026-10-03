@@ -15,7 +15,9 @@ using System.Net.Http.Headers;
 using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using CustomerSupportBot.Application.Services.A2A;
 using CustomerSupportBot.Domain.Model.Auth;
+using CustomerSupportBot.Api.Endpoints;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CustomerSupportBot.Api.IntegrationTests;
@@ -255,10 +257,17 @@ public class A2AEndpointsTests : IClassFixture<A2AEnabledFactory>
         var json = await client.GetStringAsync(
             $"{basePath}/.well-known/agent-card.json", TestContext.Current.CancellationToken);
 
-        json.Should().Contain("supportedInterfaces");
-        json.Should().Contain(A2A.ProtocolBindingNames.JsonRpc);
-        json.Should().Contain(A2A.ProtocolBindingNames.HttpJson);
-        json.Should().Contain(basePath, "her binding gerçek yolu göstermeli");
+        // Ham metin değil, ayrıştırılmış değerler karşılaştırılır: JSON kodlayıcı HTML'e duyarlı
+        // karakterleri kaçırır ("HTTP+JSON" telde "HTTP\u002BJSON" olur) — geçerli JSON'dur ve
+        // istemcinin gördüğü değer aynıdır, ama düz metin araması bunu kaçırırdı.
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var interfaces = doc.RootElement.GetProperty("supportedInterfaces").EnumerateArray().ToList();
+
+        interfaces.Select(i => i.GetProperty("protocolBinding").GetString()).Should()
+            .Contain(A2A.ProtocolBindingNames.JsonRpc)
+            .And.Contain(A2A.ProtocolBindingNames.HttpJson);
+        interfaces.Should().OnlyContain(i => i.GetProperty("url").GetString()!.EndsWith(basePath),
+            "her binding gerçek yolu göstermeli");
     }
 
     /// <summary>
@@ -569,6 +578,47 @@ public class A2AEndpointsTests : IClassFixture<A2AEnabledFactory>
 
         response.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge,
             "Content-Length bildirilmese de sınır uygulanmalı");
+    }
+
+    /// <summary>
+    /// Sınırın ALTINDA kalan ama damla damla gönderilen bir gövde de süresiz bağlantı
+    /// tutamamalı. Kestrel'in hız alt sınırı (240 B/sn) 64 KB'lık sınıra kadar ~4.5 dakikalık
+    /// bir tutma süresine izin verir; gövdenin tamamı için ayrıca toplam süre sınırı var.
+    ///
+    /// <para>
+    /// Yardımcı doğrudan çağrılır: TestServer chunked istek içeriğini uygulamaya vermeden
+    /// önce tamamen bekliyor (ölçüldü — gövde 45 sn sonra tek parça geldi), yani yavaş
+    /// istemci o yoldan taklit edilemiyor.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task StalledBody_IsCutOffWithRequestTimeout()
+    {
+        var http = new DefaultHttpContext();
+        var pipe = new System.IO.Pipelines.Pipe();
+        await pipe.Writer.WriteAsync("{\"jsonrpc\":"u8.ToArray(), TestContext.Current.CancellationToken);
+        http.Request.Body = pipe.Reader.AsStream();   // yazıcı hiç tamamlanmıyor
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var buffered = await A2AEndpoints.BufferBodyWithinLimitAsync(
+            http, maxBytes: 64 * 1024, readTimeout: TimeSpan.FromMilliseconds(300));
+
+        buffered.Should().BeNull();
+        http.Response.StatusCode.Should().Be(StatusCodes.Status408RequestTimeout);
+        started.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task CompleteBody_WithinTimeout_IsBuffered()
+    {
+        var http = new DefaultHttpContext();
+        http.Request.Body = new MemoryStream("{\"jsonrpc\":\"2.0\"}"u8.ToArray());
+
+        var buffered = await A2AEndpoints.BufferBodyWithinLimitAsync(
+            http, maxBytes: 64 * 1024, readTimeout: TimeSpan.FromSeconds(5));
+
+        buffered.Should().NotBeNull();
+        buffered!.Length.Should().Be(17);
     }
 
     /// <summary>Content-Length bildirmeyen içerik — chunked aktarımı taklit eder.</summary>

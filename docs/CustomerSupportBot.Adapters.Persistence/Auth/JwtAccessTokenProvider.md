@@ -14,7 +14,7 @@ Login/refresh akışlarının (staff ve müşteri, `TokenPortService`) token ür
 
 ## 3. Sorumlulukları
 
-- Constructor'da `JwtOptions.SigningKey`'in en az 32 karakter olduğunu doğrulama (HMAC-SHA256 için minimum anahtar uzunluğu) — kısa/boş anahtarla uygulama **başlangıçta** hata verir, ilk login denemesinde değil (fail-fast).
+- Constructor'da `JwtOptions.ValidateSigningKey` ile anahtarı doğrulama (boş değil, ≥ 32 bayt, ≥ 12 farklı karakter). Bu sınıf **scoped** kayıtlıdır, yani constructor ilk login'de çalışır; başlangıçta (fail-fast) doğrulamayı aynı kuralla `AuthServicesExtensions` yapar.
 - `GenerateAccessToken` — standart claim'leri (`sub`, `unique_name`, `NameIdentifier`, `Name`, `Role`, `jti`) ve role-özel bağ claim'lerini (`linked_agent_id` staff için, `linked_customer_id` müşteri için — ikisi de sadece doluysa eklenir) içeren imzalı token üretir.
 
 **Üstlenmediği:** Refresh token üretimi/rotasyonu (bkz. `TokenPortService`, Application katmanı — refresh token ayrı bir mekanizma, opak rastgele string + veritabanı kaydı).
@@ -32,7 +32,7 @@ IdentityModel bağımlılığının bu adaptöre izole edilmesi — Application/
 
 | Üye | Açıklama |
 |---|---|
-| `JwtAccessTokenProvider(IOptions<JwtOptions>)` | `SigningKey` uzunluk kontrolü yapar, geçersizse `InvalidOperationException`. |
+| `JwtAccessTokenProvider(IOptions<JwtOptions>)` | `JwtOptions.ValidateSigningKey` ile anahtarı doğrular, geçersizse `InvalidOperationException`. |
 | `GenerateAccessToken(user, nowUtc, lifetimeMinutes)` | İmzalı JWT ve son kullanma zamanını `(string Token, DateTime ExpiresAt)` olarak döner; `lifetimeMinutes` verilmezse `JwtOptions.AccessTokenMinutes` kullanılır. |
 
 ## 7. Bağımlılıklar

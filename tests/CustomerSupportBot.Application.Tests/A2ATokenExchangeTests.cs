@@ -55,6 +55,29 @@ public class A2ATokenExchangeTests
         (await svc.ExchangeAsync("acme", "1027", TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
+    /// <summary>
+    /// Ayraç içeren partner kimliği, yapılandırmada tanımlı ve müşteriye yetkili olsa bile
+    /// token almamalı: <c>a2a:acme:x:1027</c> kimliği rate limit'te <c>acme</c>'nin kovasına
+    /// düşer, denetim kaydında da yanlış partner görünür.
+    /// </summary>
+    [Fact]
+    public async Task PartnerIdContainingSeparator_IsDenied()
+    {
+        var (svc, _, issued) = Build(WithPartner("acme:x", "1027"));
+
+        (await svc.ExchangeAsync("acme:x", "1027", TestContext.Current.CancellationToken)).Should().BeNull();
+        issued.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SubjectIdentity_RoundTripsThePartner_AndRejectsSeparator()
+    {
+        A2ASubjectIdentity.TryGetPartnerId(A2ASubjectIdentity.BuildId("acme", "1027")).Should().Be("acme");
+
+        var act = () => A2ASubjectIdentity.BuildId("acme:x", "1027");
+        act.Should().Throw<ArgumentException>();
+    }
+
     [Fact]
     public async Task UnknownPartner_IsDenied()
     {

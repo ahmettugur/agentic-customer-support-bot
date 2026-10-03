@@ -45,6 +45,7 @@ EF Core `ExecuteUpdateAsync` ile tek bir koşullu `UPDATE ... WHERE Id = id AND 
 | `Task<RefreshTokenInfo?> FindByHashAsync(string tokenHash, CancellationToken ct = default)` | Hash ile kaydı bulur. |
 | `Task RevokeAsync(string id, DateTime revokedAt, string? replacedByTokenHash, CancellationToken ct = default)` | Koşulsuz iptal — oku-değiştir-yaz. |
 | `Task<bool> TryRevokeAsync(string id, DateTime revokedAt, string? replacedByTokenHash, CancellationToken ct = default)` | **Koşullu** iptal: yalnızca kayıt HÂLÂ iptal edilmemişse iptal eder (tek UPDATE, race-safe). Kayıt zaten iptal edilmişse `false` döner. |
+| `Task<int> RevokeAllActiveForUserAsync(string userId, DateTime revokedAt, CancellationToken ct = default)` | Kullanıcının iptal edilmemiş tüm token'larını tek koşullu UPDATE ile iptal eder; refresh token yeniden kullanımı tespit edildiğinde çağrılır. İptal edilen kayıt sayısını döner. |
 
 ## 7. Bağımlılıklar
 

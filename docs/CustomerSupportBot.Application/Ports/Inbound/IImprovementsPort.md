@@ -35,7 +35,7 @@ Otomatik üretilen "ders"lerin doğrudan uygulanmaması, admin onayından geçme
 | `IReadOnlyList<Lesson> GetLessons(LessonStatus? status = null)` | Dersleri (isteğe bağlı durum filtresiyle) listeler. |
 | `Lesson? GetLesson(string id)` | Tek ders. |
 | `Task<bool> ApproveAsync(string id, string decidedBy, string? reason, CancellationToken ct = default)` | Dersi onaylar. |
-| `bool Reject(string id, string decidedBy, string? reason)` | Dersi reddeder. |
+| `Task<bool> RejectAsync(string id, string decidedBy, string? reason)` | Dersi reddeder. |
 
 ## 7. Bağımlılıklar
 

@@ -46,6 +46,7 @@ Sonuç: ikinci ve sonraki ürünler **sessizce kayboluyordu** ve çok ürünlü 
 | `OrderDate` | `DateTime` | Sipariş tarihi |
 | `CancelledAt` | `DateTime?` | İptal tarihi |
 | `CancelReason` | `string?` | İptal gerekçesi |
+| `DeliveredAt` | `DateTime?` | Teslim tarihi; iade süresi buradan sayılır (eski kayıtlarda boş olabilir) |
 | `ReturnRequestedAt` | `DateTime?` | İade talep tarihi |
 | `ReturnReason` | `string?` | İade gerekçesi |
 | `LinesSummary()` | `string` | İnsan-okunur özet: `"Kahve x2, Çikolata x1"`. Boş listede `"—"` |

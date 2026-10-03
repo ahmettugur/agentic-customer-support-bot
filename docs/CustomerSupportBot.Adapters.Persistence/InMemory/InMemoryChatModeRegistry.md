@@ -36,8 +36,8 @@ Bir sohbet oturumunun `Bot` mu yoksa `Human` (admin devraldı) modunda mı oldu�
 | `event ModeChanged` | Mod değiştiğinde tetiklenir. |
 | `GetMode(sessionId)` | Session bulunamazsa varsayılan `ChatMode.Bot` döner. |
 | `GetState(sessionId)` | Tam `ChatSessionState` nesnesini döner (bulunamazsa `null`). |
-| `TakeOver(sessionId, humanAgent)` | `humanAgent` boşsa `WellKnown.Defaults.Admin` kullanılır; zaten başka bir admin tarafından alınmışsa `false`. |
-| `Release(sessionId)` | Zaten `Bot` moddaysa `false`; aksi halde modu sıfırlar. |
+| `TakeOverAsync(sessionId, humanAgent)` | `humanAgent` boşsa `WellKnown.Defaults.Admin` kullanılır; zaten başka bir admin tarafından alınmışsa `false`. |
+| `ReleaseAsync(sessionId)` | Zaten `Bot` moddaysa `false`; aksi halde modu sıfırlar. |
 | `GetActive()` | `Human` moddaki tüm oturumları, en son devralınana göre sıralı döner. |
 
 ## 7. Bağımlılıklar

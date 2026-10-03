@@ -28,6 +28,9 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
 {
     // end_conversation aracı bu sabit üzerinden tanımlanır; adapter'daki tool adıyla tutarlı olmalı.
     private const string EndConversationToolName = "end_conversation";
+
+    /// <summary>Native sesli kanalın açtığı eskalasyonlarda ajan adı (session + ajan dedup anahtarı).</summary>
+    internal const string VoiceAgentName = "RealtimeVoiceAgent";
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromSeconds(60);
 
     private readonly IRealtimeVoiceTransport _client;
@@ -37,6 +40,8 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
     private readonly CustomerIdentityHintBuilder _identityHint;
     private readonly IChatBridge _chatBridge;
     private readonly IAppDistributedLock _sessionLock;
+    private readonly SessionStateService? _sessionState;
+    private readonly IEscalationSink? _escalations;
     private readonly ILogger<RealtimeNativeService> _logger;
 
     private volatile bool _assistantSpeaking;
@@ -52,7 +57,9 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         IChatBridge chatBridge,
         CustomerIdentityHintBuilder identityHint,
         IAppDistributedLock sessionLock,
-        ILogger<RealtimeNativeService> logger)
+        ILogger<RealtimeNativeService> logger,
+        SessionStateService? sessionState = null,
+        IEscalationSink? escalations = null)
     {
         _client = client;
         _sessionManager = sessionManager;
@@ -62,6 +69,8 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         _chatBridge = chatBridge;
         _sessionLock = sessionLock;
         _logger = logger;
+        _sessionState = sessionState;
+        _escalations = escalations;
     }
 
     public async Task RunAsync(
@@ -224,150 +233,292 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         string? lastUserTranscript = null;
         var bufferedAssistantDeltas = new List<string>();
 
-        await foreach (var evt in _client.ReceiveEventsAsync(ct))
+        // Transkript yanıttan önce de sonra da gelebilir; tur yarıları item_id ile eşleştirilir
+        // (bkz. VoiceTurnPairer). lastUserTranscript yalnızca kimliksiz akış için yedektir.
+        var turns = new VoiceTurnPairer();
+
+        try
         {
-            switch (evt.EventType)
+            await foreach (var evt in _client.ReceiveEventsAsync(ct))
             {
-                case RealtimeServerEventType.ResponseCreated:
-                    _assistantSpeaking = true;
-                    userTranscriptSent = false;
-                    bufferedAssistantDeltas.Clear();
-                    break;
-
-                case RealtimeServerEventType.SpeechStarted:
-                    await channel.SendJsonAsync(new { type = "speech_started" }, ct);
-                    break;
-
-                case RealtimeServerEventType.SpeechStopped:
-                    await channel.SendJsonAsync(new { type = "speech_stopped" }, ct);
-                    break;
-
-                case RealtimeServerEventType.InputTranscriptCompleted:
+                switch (evt.EventType)
                 {
-                    var transcript = evt.Transcript;
-                    if (string.IsNullOrWhiteSpace(transcript)) break;
-
-                    var guard = _inputGuard.Inspect(transcript);
-                    if (guard.Verdict == InputGuardVerdict.Reject)
-                    {
-                        _logger.LogInformation("RealtimeNative: input guard reject session={Sid}", session.SessionId);
-                        await _client.SendInterruptAsync(ct);
-                        await channel.SendJsonAsync(new { type = "user_transcript", text = transcript }, ct);
-                        await channel.SendJsonAsync(
-                            new { type = "error", message = guard.RejectionReason ?? "Mesaj işlenemedi." }, ct);
+                    case RealtimeServerEventType.InputAudioCommitted:
+                        turns.AudioCommitted(evt.ItemId);
                         break;
-                    }
 
-                    Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
-                    await channel.SendJsonAsync(new { type = "user_transcript", text = transcript }, ct);
-                    userTranscriptSent = true;
-                    lastUserTranscript = transcript;
-                    foreach (var delta in bufferedAssistantDeltas)
-                        await channel.SendJsonAsync(new { type = "assistant_text_delta", text = delta }, ct);
-                    bufferedAssistantDeltas.Clear();
-                    assistantTextBuilder.Clear();
-                    break;
-                }
-
-                case RealtimeServerEventType.AudioDelta:
-                    _assistantSpeaking = true;
-                    if (evt.AudioDelta is { Length: > 0 })
-                        await channel.SendBinaryAsync(evt.AudioDelta, ct);
-                    break;
-
-                case RealtimeServerEventType.AssistantTextDelta:
-                {
-                    var delta = evt.TextDelta;
-                    if (string.IsNullOrEmpty(delta)) break;
-                    assistantTextBuilder.Append(delta);
-                    if (userTranscriptSent)
-                        await channel.SendJsonAsync(new { type = "assistant_text_delta", text = delta }, ct);
-                    else
-                        bufferedAssistantDeltas.Add(delta);
-                    break;
-                }
-
-                case RealtimeServerEventType.AssistantTextDone:
-                    if (!string.IsNullOrEmpty(evt.FullText) && assistantTextBuilder.Length == 0)
-                        assistantTextBuilder.Append(evt.FullText);
-                    break;
-
-                case RealtimeServerEventType.ToolCallReady:
-                {
-                    if (string.IsNullOrWhiteSpace(evt.ToolCallId) || string.IsNullOrWhiteSpace(evt.ToolName)) break;
-
-                    if (evt.ToolName == EndConversationToolName)
-                    {
-                        _endRequested = true;
-                        try
+                    case RealtimeServerEventType.ResponseCreated:
+                        _assistantSpeaking = true;
+                        // Tool sonucu üzerine gelen takip yanıtı aynı kullanıcı turudur: transkript
+                        // zaten gönderildiyse akış devam eder; önceki yanıtın tamponlanmış metni de
+                        // atılmaz (eskiden atılıyor, tool öncesi söylenen cümle ekranda hiç çıkmıyordu).
+                        if (!turns.ResponseCreated())
                         {
-                            var argNode = JsonNode.Parse(evt.ToolArguments ?? "{}") as JsonObject;
-                            var reason = argNode?["reason"]?.GetValue<string>();
-                            if (!string.IsNullOrWhiteSpace(reason)) _endReason = reason!;
+                            userTranscriptSent = false;
+                            bufferedAssistantDeltas.Clear();
                         }
-                        catch { }
-                    }
+                        break;
 
-                    await channel.SendJsonAsync(
-                        new { type = "tool_call", name = evt.ToolName, arguments = evt.ToolArguments }, ct);
-                    pendingCalls.Add((evt.ToolCallId!, evt.ToolName!, evt.ToolArguments ?? "{}"));
-                    break;
-                }
+                    case RealtimeServerEventType.SpeechStarted:
+                        await channel.SendJsonAsync(new { type = "speech_started" }, ct);
+                        break;
 
-                case RealtimeServerEventType.ResponseCancelled:
-                    _assistantSpeaking = false;
-                    pendingCalls.Clear();
-                    assistantTextBuilder.Clear();
-                    break;
+                    case RealtimeServerEventType.SpeechStopped:
+                        await channel.SendJsonAsync(new { type = "speech_stopped" }, ct);
+                        break;
 
-                case RealtimeServerEventType.ResponseDone:
-                {
-                    if (pendingCalls.Count > 0)
+                    case RealtimeServerEventType.InputTranscriptCompleted:
                     {
-                        await DispatchToolCallsAsync(channel, pendingCalls, session, ct);
-                        pendingCalls.Clear();
+                        var transcript = evt.Transcript;
+                        if (string.IsNullOrWhiteSpace(transcript))
+                        {
+                            // Anlaşılır konuşma yok (gürültü/sessizlik). Tur yine de çözülmeli; aksi
+                            // hâlde o öğeye ait yanıt transkript beklerken geçmişe yazılmaz.
+                            await PersistTurnsAsync(channel, session, turns.TranscriptFailed(evt.ItemId), ct);
+                            break;
+                        }
+
+                        var guard = _inputGuard.Inspect(transcript);
+                        if (guard.Verdict == InputGuardVerdict.Reject)
+                        {
+                            _logger.LogInformation("RealtimeNative: input guard reject session={Sid}", session.SessionId);
+                            await _client.SendInterruptAsync(ct);
+                            await channel.SendJsonAsync(new { type = "user_transcript", text = transcript }, ct);
+                            await channel.SendJsonAsync(
+                                new { type = "error", message = guard.RejectionReason ?? "Mesaj işlenemedi." }, ct);
+                            await PersistTurnsAsync(channel, session, turns.TranscriptRejected(evt.ItemId), ct);
+                            break;
+                        }
+
+                        Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
+                        await channel.SendJsonAsync(new { type = "user_transcript", text = transcript }, ct);
+                        userTranscriptSent = true;
+                        lastUserTranscript = transcript;
+                        foreach (var delta in bufferedAssistantDeltas)
+                            await channel.SendJsonAsync(new { type = "assistant_text_delta", text = delta }, ct);
+                        bufferedAssistantDeltas.Clear();
+                        // assistantTextBuilder burada TEMİZLENMEZ: transkript yanıtın ortasında
+                        // gelebilir ve eskiden o ana kadarki asistan metni kayda hiç girmiyordu
+                        // ("Siparişiniz kargoda." → "kargoda.").
+                        await PersistTurnsAsync(channel, session, turns.TranscriptArrived(evt.ItemId, transcript), ct);
                         break;
                     }
 
-                    _assistantSpeaking = false;
-                    foreach (var delta in bufferedAssistantDeltas)
-                        await channel.SendJsonAsync(new { type = "assistant_text_delta", text = delta }, ct);
-                    bufferedAssistantDeltas.Clear();
+                    case RealtimeServerEventType.InputTranscriptFailed:
+                        _logger.LogInformation(
+                            "RealtimeNative: transkripsiyon başarısız session={Sid} item={Item} hata={Error}",
+                            session.SessionId, evt.ItemId, evt.ErrorMessage);
+                        await PersistTurnsAsync(channel, session, turns.TranscriptFailed(evt.ItemId), ct);
+                        break;
 
-                    var finalText = assistantTextBuilder.ToString().Trim();
-                    if (!string.IsNullOrEmpty(finalText))
+                    case RealtimeServerEventType.AudioDelta:
+                        _assistantSpeaking = true;
+                        if (evt.AudioDelta is { Length: > 0 })
+                            await channel.SendBinaryAsync(evt.AudioDelta, ct);
+                        break;
+
+                    case RealtimeServerEventType.AssistantTextDelta:
                     {
-                        var userSide = lastUserTranscript ?? "(sesli)";
-                        _chatBridge.RecordBotExchange(session.SessionId, userSide, finalText);
-
-                        // Oturum geçmişine de yaz: chat bridge yalnızca admin panelini besler,
-                        // ajanın bağlamı ISessionManager'dan gelir. Bu yazma olmadan sesli
-                        // turlar konuşma geçmişinde hiç görünmüyordu.
-                        await _sessionManager.AddExchangeAsync(
-                            session.SessionId, userSide, finalText, ct: ct);
+                        var delta = evt.TextDelta;
+                        if (string.IsNullOrEmpty(delta)) break;
+                        assistantTextBuilder.Append(delta);
+                        if (userTranscriptSent)
+                            await channel.SendJsonAsync(new { type = "assistant_text_delta", text = delta }, ct);
+                        else
+                            bufferedAssistantDeltas.Add(delta);
+                        break;
                     }
-                    await channel.SendJsonAsync(new { type = "assistant_text", text = finalText }, ct);
-                    await channel.SendJsonAsync(new { type = "response_done" }, ct);
-                    assistantTextBuilder.Clear();
 
-                    if (_endRequested)
+                    case RealtimeServerEventType.AssistantTextDone:
+                        if (!string.IsNullOrEmpty(evt.FullText) && assistantTextBuilder.Length == 0)
+                            assistantTextBuilder.Append(evt.FullText);
+                        break;
+
+                    case RealtimeServerEventType.ToolCallReady:
                     {
+                        if (string.IsNullOrWhiteSpace(evt.ToolCallId) || string.IsNullOrWhiteSpace(evt.ToolName)) break;
+
+                        if (evt.ToolName == EndConversationToolName)
+                        {
+                            _endRequested = true;
+                            try
+                            {
+                                var argNode = JsonNode.Parse(evt.ToolArguments ?? "{}") as JsonObject;
+                                var reason = argNode?["reason"]?.GetValue<string>();
+                                if (!string.IsNullOrWhiteSpace(reason)) _endReason = reason!;
+                            }
+                            catch { }
+                        }
+
                         await channel.SendJsonAsync(
-                            new { type = "conversation_ended", reason = _endReason }, ct);
-                        try { await _client.CloseAsync("end_conversation", CancellationToken.None); } catch { }
-                        try { await channel.CloseAsync("end_conversation", CancellationToken.None); } catch { }
+                            new { type = "tool_call", name = evt.ToolName, arguments = evt.ToolArguments }, ct);
+                        pendingCalls.Add((evt.ToolCallId!, evt.ToolName!, evt.ToolArguments ?? "{}"));
+                        break;
                     }
-                    break;
+
+                    case RealtimeServerEventType.ResponseCancelled:
+                        _assistantSpeaking = false;
+                        pendingCalls.Clear();
+                        assistantTextBuilder.Clear();
+                        turns.ResponseCancelled();
+                        break;
+
+                    case RealtimeServerEventType.ResponseDone:
+                    {
+                        if (pendingCalls.Count > 0)
+                        {
+                            // DispatchToolCallsAsync takip yanıtını yalnızca görüşme bitmiyorsa ister.
+                            turns.ToolCallsDispatched(followUpExpected: !_endRequested);
+                            await DispatchToolCallsAsync(channel, pendingCalls, session, ct);
+                            pendingCalls.Clear();
+                            break;
+                        }
+
+                        _assistantSpeaking = false;
+                        foreach (var delta in bufferedAssistantDeltas)
+                            await channel.SendJsonAsync(new { type = "assistant_text_delta", text = delta }, ct);
+                        bufferedAssistantDeltas.Clear();
+
+                        var finalText = assistantTextBuilder.ToString().Trim();
+                        if (!string.IsNullOrEmpty(finalText))
+                        {
+                            await PersistTurnsAsync(
+                                channel, session, turns.ResponseCompleted(finalText, lastUserTranscript), ct);
+                        }
+                        await channel.SendJsonAsync(new { type = "assistant_text", text = finalText }, ct);
+                        await channel.SendJsonAsync(new { type = "response_done" }, ct);
+                        assistantTextBuilder.Clear();
+
+                        if (_endRequested)
+                        {
+                            await channel.SendJsonAsync(
+                                new { type = "conversation_ended", reason = _endReason }, ct);
+                            try { await _client.CloseAsync("end_conversation", CancellationToken.None); } catch { }
+                            try { await channel.CloseAsync("end_conversation", CancellationToken.None); } catch { }
+                        }
+                        break;
+                    }
+
+                    case RealtimeServerEventType.Error:
+                        _logger.LogWarning("RealtimeNative: OpenAI error {Msg}", evt.ErrorMessage);
+                        await channel.SendJsonAsync(new { type = "error", message = evt.ErrorMessage }, ct);
+                        break;
+
+                    case RealtimeServerEventType.ConnectionClosed:
+                        return;
                 }
-
-                case RealtimeServerEventType.Error:
-                    _logger.LogWarning("RealtimeNative: OpenAI error {Msg}", evt.ErrorMessage);
-                    await channel.SendJsonAsync(new { type = "error", message = evt.ErrorMessage }, ct);
-                    break;
-
-                case RealtimeServerEventType.ConnectionClosed:
-                    return;
             }
+        }
+        finally
+        {
+            // Bağlantı kapanıyor (tarayıcı ayrıldı, görüşme bitti, iptal). Transkripti gelmemiş
+            // turlar yer tutucuyla yazılır; tool çağrısıyla biten son yanıtın (ör. end_conversation
+            // ile birlikte söylenen veda) metni de kaybolmasın. İptal edilmiş token'la değil —
+            // kayıt, bağlantının kopmasından bağımsız tamamlanmalı.
+            var trailing = assistantTextBuilder.ToString().Trim();
+            if (!string.IsNullOrEmpty(trailing))
+                turns.ResponseCompleted(trailing, lastUserTranscript);
+
+            try { await PersistTurnsAsync(channel, session, turns.DrainAll(), CancellationToken.None); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "RealtimeNative: bekleyen sesli turlar kaydedilemedi session={Sid}",
+                    session.SessionId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Eşleştirilmiş sesli turları geçmişe yazar: admin paneli için chat bridge'e, ajan bağlamı
+    /// için oturum geçmişine (bu yazma olmadan sesli turlar konuşma geçmişinde hiç görünmüyordu)
+    /// ve ardından duygu değerlendirmesi.
+    /// </summary>
+    private async Task PersistTurnsAsync(
+        IBrowserChannel channel, AgentSession session, IReadOnlyList<VoiceTurn> ready, CancellationToken ct)
+    {
+        foreach (var turn in ready)
+        {
+            await _chatBridge.RecordBotExchangeAsync(session.SessionId, turn.UserSide, turn.BotText);
+            await _sessionManager.AddExchangeAsync(session.SessionId, turn.UserSide, turn.BotText, ct: ct);
+            await EvaluateSentimentAsync(channel, session.SessionId, turn.UserSide, turn.BotText, ct);
+        }
+    }
+
+    /// <summary>
+    /// Metin kanalıyla eşdeğerlik: tur kaydedildikten sonra duygu durumu değerlendirilir
+    /// (bkz. <c>ChatPortService.HandleStreamAsync</c> sonu) ve aynı olaylar yayınlanır.
+    ///
+    /// <para>
+    /// Fark: metin kanalında eskalasyon, workflow'daki uzman ajanın "needs_escalation"
+    /// kararından gelir. Native modda workflow yoktur — model okuma-only tool'larla doğrudan
+    /// konuşur — dolayısıyla eskalasyona giden HİÇBİR yol yoktu; art arda olumsuz turlar
+    /// yaşayan bir sesli müşteri, yazılı kanala geçmedikçe insana ulaşamıyordu. Bu kanalda
+    /// elimizdeki tek sinyal ardışık olumsuz duygu olduğu için uyarı eşiği aşıldığında bir
+    /// eskalasyon açılır. Sink'in session + ajan dedup'ı oturum başına tek açık kayıt tutar.
+    /// </para>
+    /// </summary>
+    private async Task EvaluateSentimentAsync(
+        IBrowserChannel channel, string sessionId, string userSide, string botText, CancellationToken ct)
+    {
+        if (_sessionState is null) return;
+
+        try
+        {
+            var current = await _sessionManager.GetAsync(sessionId, ct);
+            if (current is null) return;
+
+            var alert = _sessionState.CheckSentimentAlert(current);
+            await channel.SendJsonAsync(new
+            {
+                type = StreamEventTypes.SentimentUpdate,
+                data = new
+                {
+                    sentiment = alert.Sentiment,
+                    score = alert.Score,
+                    consecutive = alert.ConsecutiveNegativeTurns,
+                    sessionId = alert.SessionId
+                }
+            }, ct);
+
+            if (!alert.ShouldAlert) return;
+
+            await channel.SendJsonAsync(new
+            {
+                type = StreamEventTypes.SentimentAlert,
+                data = new
+                {
+                    sentiment = alert.Sentiment,
+                    score = alert.Score,
+                    consecutive = alert.ConsecutiveNegativeTurns,
+                    sessionId = alert.SessionId,
+                    message = alert.AlertMessage
+                }
+            }, ct);
+
+            if (_escalations is null) return;
+
+            var request = new EscalationRequest
+            {
+                SessionId = sessionId,
+                AgentName = VoiceAgentName,
+                UserQuery = userSide,
+                Reason = $"Sesli görüşmede {alert.ConsecutiveNegativeTurns} ardışık olumsuz tur " +
+                         $"(skor: {alert.Score:0.00}). {alert.AlertMessage}",
+                ResponseSummary = botText.Length > 500 ? botText[..500] + "…" : botText,
+                Priority = EscalationPriority.High
+            };
+            var stored = await _escalations.CreateAsync(request);
+            if (stored.Id == request.Id)
+            {
+                _logger.LogWarning(
+                    "RealtimeNative: ardışık olumsuz duygu — eskalasyon açıldı session={Sid} id={Id}",
+                    sessionId, stored.Id);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Sesli görüşme, duygu değerlendirmesi/eskalasyon kaydı yüzünden kesilmemeli.
+            _logger.LogWarning(ex, "RealtimeNative: duygu değerlendirmesi başarısız session={Sid}", sessionId);
         }
     }
 

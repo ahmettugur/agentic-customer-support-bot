@@ -117,17 +117,16 @@
 
             // ── Helpers ──
 
+            // Balonlar tutamaçtır ({ id }) — içerik Blazor'da çizilir (bkz. chat-bridge.js ui).
             const removePendingUserBubble = () => {
                 if (!pendingUserBubble) return;
-                try { pendingUserBubble.remove(); } catch { }
+                try { app?.ui?.removeMessage(pendingUserBubble); } catch { }
                 pendingUserBubble = null;
             };
 
             const fillPendingUserBubble = (text) => {
                 if (!pendingUserBubble) return false;
-                const bubbleEl = pendingUserBubble.querySelector('.message-bubble');
-                if (bubbleEl) bubbleEl.textContent = text;
-                pendingUserBubble.classList.remove('placeholder');
+                try { app?.ui?.setMessageText(pendingUserBubble, text, false); } catch { }
                 pendingUserBubble = null;
                 return true;
             };
@@ -143,8 +142,8 @@
                 if (!assistantBubble) return;
                 if (!assistantText && app?.ui) {
                     // Bot baloncuğunda hiç metin yok (ör. tool-call-only yanıtı).
-                    // Boş balon bırakmak yerine DOM'dan kaldır.
-                    try { assistantBubble.messageDiv.remove(); } catch { }
+                    // Boş balon bırakmak yerine kaldır.
+                    try { app.ui.removeMessage(assistantBubble); } catch { }
                 } else if (app?.ui) {
                     try { app.ui.finalizeStreamingMessage(assistantBubble); } catch { }
                 }
@@ -195,11 +194,7 @@
                         // Önceki tur transcript gelmeden yeni tur başladıysa eski
                         // placeholder'ı temizle (gürültü/sessizlikten kalan hayalet).
                         removePendingUserBubble();
-                        const ph = app.ui.addMessage('user', '…');
-                        if (ph) {
-                            ph.classList.add('placeholder');
-                            pendingUserBubble = ph;
-                        }
+                        pendingUserBubble = app.ui.addMessage('user', '…', { placeholder: true });
                     },
 
                     // ── Kullanıcı transcript'i geldi ──
@@ -214,11 +209,7 @@
 
                         // 2) Placeholder yok (beklenmedik durum). Yeni user bubble oluştur.
                         //    Bot bubble varsa onun ÖNÜNE yerleştir; yoksa normale ekle.
-                        const userMsg = app.ui.addMessage('user', text);
-                        const botEl = assistantBubble?.messageDiv;
-                        if (userMsg && botEl && botEl.parentNode) {
-                            try { botEl.parentNode.insertBefore(userMsg, botEl); } catch { }
-                        }
+                        app.ui.addMessage('user', text, { before: assistantBubble });
                     },
 
                     // ── Tool call ──

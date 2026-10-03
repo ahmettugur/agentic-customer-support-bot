@@ -121,7 +121,19 @@ public sealed class ChatPortService : IChatPort
         var reasoningResult = await _reasoning.ReasonAsync(query, session, history, ct);
 
         using var approvalScope = _approvalContext.SetScope(sessionId, null, query, session.State.AuthenticatedCustomerId);
-        var response = await _team.RunAsync(query, history, session, reasoningResult, ct);
+        string response;
+        try
+        {
+            response = await _team.RunAsync(query, history, session, reasoningResult, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Hata/timeout'ta kullanıcının mesajı yine geçmişe yazılır — streaming yolla aynı
+            // davranış (bkz. SessionStateService.PersistExchangeAsync). Çağıranın iptali
+            // (kullanıcı vazgeçti) bu dala girmez.
+            await _sessions.AppendUserMessageAsync(sessionId, query, ct);
+            throw;
+        }
 
         // Intent/sentiment turun kapanışında TEK yerde işlenir — bkz. TurnSignals.
         // (Bu yol eskiden sentiment'i hiç iletmiyordu; streaming yolla arasındaki
@@ -158,7 +170,7 @@ public sealed class ChatPortService : IChatPort
     {
         if (string.IsNullOrWhiteSpace(query)) return;
         await _sessions.AppendUserMessageAsync(sessionId, query, ct);
-        _chatBridge.PublishUserMessage(sessionId, query);
+        await _chatBridge.PublishUserMessageAsync(sessionId, query);
     }
 
     /// <inheritdoc/>
@@ -245,7 +257,13 @@ public sealed class ChatPortService : IChatPort
             sessionId, query, fullResponse, _chatBridge, TurnSignals.From(reasoningResult), ct);
 
         // Sentiment events
-        var alert = _sessionState.CheckSentimentAlert(session);
+        //
+        // Durum, tur BAŞINDA alınan referanstan değil cache'teki güncel nesneden okunur:
+        // PersistExchangeAsync duygu alanlarını oturum yöneticisinin elindeki nesneye yazar;
+        // tur sırasında oturum cache'ten çıkarılıp yeniden yüklendiyse elimizdeki referans
+        // bu turun güncellemesini görmez ve uyarı bir tur geriden gelirdi.
+        var alert = _sessionState.CheckSentimentAlert(
+            await _sessions.GetAsync(sessionId, ct) ?? session);
         yield return new StreamEvent(StreamEventTypes.SentimentUpdate, new
         {
             sentiment = alert.Sentiment,

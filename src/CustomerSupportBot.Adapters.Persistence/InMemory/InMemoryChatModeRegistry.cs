@@ -26,7 +26,10 @@ public class InMemoryChatModeRegistry : IChatModeRegistry
     public ChatSessionState? GetState(string sessionId) =>
         _states.TryGetValue(sessionId, out var s) ? s : null;
 
-    public bool TakeOver(string sessionId, string? humanAgent)
+    public Task<bool> TakeOverAsync(string sessionId, string? humanAgent)
+        => Task.FromResult(TakeOver(sessionId, humanAgent));
+
+    private bool TakeOver(string sessionId, string? humanAgent)
     {
         if (string.IsNullOrWhiteSpace(sessionId)) return false;
 
@@ -71,7 +74,10 @@ public class InMemoryChatModeRegistry : IChatModeRegistry
         return true;
     }
 
-    public bool Release(string sessionId)
+    public Task<bool> ReleaseAsync(string sessionId)
+        => Task.FromResult(Release(sessionId));
+
+    private bool Release(string sessionId)
     {
         if (!_states.TryGetValue(sessionId, out var state)) return false;
         if (state.Mode == ChatMode.Bot) return false;

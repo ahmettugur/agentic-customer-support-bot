@@ -80,6 +80,14 @@ sohbet (WebSocket) ve oturum/geçmiş sorgulama. Üçü de **login olmuş bir m�
   model doğrudan konuşur ve yalnızca **salt-okunur** tool'ları çağırabilir — yan etkili işlemler
   (sipariş oluşturma, iade) bu kanalda kasıtlı olarak YOKTUR (ses kanalında onay akışını
   yürütmek riskli/karmaşık olurdu).
+- **`/chat/stream`'de tur ortasındaki hata akış içinde bildirilir.** SSE'de ilk olay yazıldığında
+  yanıt başlamış olur; sonrasında HTTP durum kodu ve ProblemDetails yazılamaz
+  ([DomainExceptionHandler](../Infrastructure/DomainExceptionHandler.md) `HasStarted`'da devreden
+  çıkar). Eskiden exception yukarı fırlıyor, bağlantı kopuyor ve istemci ne bir hata olayı ne de
+  `done` görüp yarım bir balonla kalıyordu. Artık yanıt başladıysa hata loglanır, `error` olayı
+  (mesajı `DomainExceptionHandler.ClientMessage` ile güvenli hâle getirilmiş: 4xx domain mesajı
+  gösterilir, 5xx ve domain dışı hatalarda iç ayrıntı sızmaz) ve ardından normal `done` yazılır.
+  Yanıt henüz başlamadıysa exception global handler'a bırakılır (doğru HTTP kodu).
 - **Onay bildirimleri "unseen" (görülmemiş) ve "history" (tam geçmiş) olarak iki ayrı uca
   bölündü:** ilki badge sayacı için hafif bir sorgu, ikincisi salt-okunur tam liste — aynı veriyi
   farklı UI ihtiyaçları için iki kez sorgulamak yerine iki farklı projeksiyon sunulur.
@@ -91,7 +99,7 @@ sohbet (WebSocket) ve oturum/geçmiş sorgulama. Üçü de **login olmuş bir m�
 | Route | Açıklama |
 |---|---|
 | `POST /chat/` *(`chat` rate-limit)* | Senkron sohbet: `ChatRequest` alır, `IChatPort.HandleAsync` ile reasoning+workflow tamamlanana kadar bekler, tek `ChatResponse` JSON döner. Girdi önce `IInputGuard.Inspect` ile taranır; reddedilirse `400 input_blocked`. |
-| `POST /chat/stream` *(`chat` rate-limit)* | Aynı akış, SSE (`text/event-stream`) ile adım adım (`agent_started`, `tool_called`, `response_delta`, ...) yayınlanır. HITL olayları (`hitlEvents.Subscribe`) aynı akışa bindirilir. |
+| `POST /chat/stream` *(`chat` rate-limit)* | Aynı akış, SSE (`text/event-stream`) ile adım adım (`agent_started`, `tool_called`, `response_delta`, ...) yayınlanır. HITL olayları (`hitlEvents.Subscribe`) aynı akışa bindirilir. Akış başladıktan sonraki hatalar `error` + `done` olarak bildirilir. |
 | `GET /chat/events/{sessionId}` | Kalıcı SSE bağlantısı — [ChatEventOrchestrator](../Services/ChatEventOrchestrator.md)'a delege eder; bot yanıtları + onay sonuçları + temsilci mesajlarının hepsini canlı yayınlar. |
 | `GET /chat-sessions/{sessionId}/approvals/unseen` | Bağlı değilken kaçırılan onay sonuçlarını döner (badge/bildirim doldurma). |
 | `POST /chat-sessions/{sessionId}/approvals/{id}/seen` | Bir onay bildirimini "görüldü" işaretler; hem oturum sahipliği hem onay kaydının `CustomerId`'si doğrulanır. |

@@ -19,7 +19,7 @@ public class ProfileConsolidationConcurrencyTests
     public async Task Consolidation_DoesNotReplaceNewerFieldsOrRecreateDeletedProfile(bool delete)
     {
         var store = new InMemoryCustomerProfileStore();
-        store.Upsert(new CustomerProfile { CustomerId = "1001", TotalTurns = 1 });
+        await store.UpsertAsync(new CustomerProfile { CustomerId = "1001", TotalTurns = 1 });
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var chat = Substitute.For<IGeneralChatClient>();
@@ -31,8 +31,8 @@ public class ProfileConsolidationConcurrencyTests
 
         var pending = service.ConsolidateAsync("1001", TestContext.Current.CancellationToken);
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
-        if (delete) store.Delete("1001");
-        else store.Upsert(new CustomerProfile { CustomerId = "1001", TotalTurns = 3, AdminNote = "new note" });
+        if (delete) await store.DeleteAsync("1001");
+        else await store.UpsertAsync(new CustomerProfile { CustomerId = "1001", TotalTurns = 3, AdminNote = "new note" });
         release.SetResult("{\"summary\":\"new summary\",\"preferredTone\":\"formal\",\"traits\":[]}");
         var result = await pending;
 

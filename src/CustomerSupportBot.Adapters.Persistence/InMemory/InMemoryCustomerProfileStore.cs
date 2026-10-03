@@ -18,7 +18,10 @@ public sealed class InMemoryCustomerProfileStore : ICustomerProfileStore
         return _byId.TryGetValue(customerId, out var p) ? p : null;
     }
 
-    public CustomerProfile GetOrCreate(string customerId)
+    public Task<CustomerProfile> GetOrCreateAsync(string customerId)
+        => Task.FromResult(GetOrCreate(customerId));
+
+    private CustomerProfile GetOrCreate(string customerId)
     {
         if (string.IsNullOrWhiteSpace(customerId))
             throw new ArgumentException("customerId boş olamaz", nameof(customerId));
@@ -26,7 +29,13 @@ public sealed class InMemoryCustomerProfileStore : ICustomerProfileStore
         return _byId.GetOrAdd(customerId, id => new CustomerProfile { CustomerId = id });
     }
 
-    public void Upsert(CustomerProfile profile)
+    public Task UpsertAsync(CustomerProfile profile)
+    {
+        Upsert(profile);
+        return Task.CompletedTask;
+    }
+
+    private void Upsert(CustomerProfile profile)
     {
         if (string.IsNullOrWhiteSpace(profile.CustomerId))
             throw new ArgumentException("CustomerId boş olamaz", nameof(profile));
@@ -38,7 +47,10 @@ public sealed class InMemoryCustomerProfileStore : ICustomerProfileStore
         _byId[profile.CustomerId] = profile;
     }
 
-    public bool Delete(string customerId)
+    public Task<bool> DeleteAsync(string customerId)
+        => Task.FromResult(Delete(customerId));
+
+    private bool Delete(string customerId)
     {
         if (string.IsNullOrWhiteSpace(customerId)) return false;
         return _byId.TryRemove(customerId, out _);

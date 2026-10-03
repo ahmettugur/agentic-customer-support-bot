@@ -18,7 +18,10 @@ public class InMemoryReasoningTraceStore : IReasoningTraceStore
         _maxCapacity = maxCapacity;
     }
 
-    public ReasoningTrace StartTrace(string sessionId, string userQuery)
+    public Task<ReasoningTrace> StartTraceAsync(string sessionId, string userQuery)
+        => Task.FromResult(StartTrace(sessionId, userQuery));
+
+    private ReasoningTrace StartTrace(string sessionId, string userQuery)
     {
         var trace = new ReasoningTrace
         {
@@ -45,7 +48,13 @@ public class InMemoryReasoningTraceStore : IReasoningTraceStore
         _byId[trace.TraceId] = trace;
     }
 
-    public void Complete(string traceId, string? terminationReason = null, string? finalResponse = null, string? error = null)
+    public Task CompleteAsync(string traceId, string? terminationReason = null, string? finalResponse = null, string? error = null)
+    {
+        Complete(traceId, terminationReason, finalResponse, error);
+        return Task.CompletedTask;
+    }
+
+    private void Complete(string traceId, string? terminationReason, string? finalResponse, string? error)
     {
         if (!_byId.TryGetValue(traceId, out var trace)) return;
 

@@ -30,7 +30,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
+public sealed class PostgresReasoningTraceStore : IReasoningTraceStore, ICacheWarmup
 {
     private const string ChannelStarted = "csbot:trace:started";
     private const string ChannelCompleted = "csbot:trace:completed";
@@ -41,7 +41,7 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
     private readonly ConcurrentDictionary<string, ReasoningTrace> _byId = new();
     private readonly ConcurrentQueue<string> _insertionOrder = new();
     private readonly int _maxCacheCapacity;
-    private readonly object _hydrationLock = new();
+    private readonly SemaphoreSlim _hydrationGate = new(1, 1);
     private volatile bool _hydrated;
 
     public PostgresReasoningTraceStore(
@@ -58,9 +58,14 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
         _messageBus.Subscribe(ChannelCompleted, OnRemoteCompleted);
     }
 
-    public ReasoningTrace StartTrace(string sessionId, string userQuery)
+    /// <remarks>
+    /// Her sohbet turunda çağrılır. Eskiden senkron arayüzün arkasında
+    /// <c>GetAwaiter().GetResult()</c> ile yazıyordu: DB yavaşladığında her tur bir thread-pool
+    /// thread'ini boşuna rehin tutuyordu.
+    /// </remarks>
+    public async Task<ReasoningTrace> StartTraceAsync(string sessionId, string userQuery)
     {
-        EnsureHydrated();
+        await EnsureHydratedAsync().ConfigureAwait(false);
 
         var trace = new ReasoningTrace
         {
@@ -73,7 +78,7 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
         _insertionOrder.Enqueue(trace.TraceId);
         TrimCache();
 
-        try { InsertSkeletonAsync(trace).GetAwaiter().GetResult(); }
+        try { await InsertSkeletonAsync(trace).ConfigureAwait(false); }
         catch (Exception ex)
         {
             _logger.LogError(ex,
@@ -91,7 +96,7 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
         _byId[trace.TraceId] = trace;
     }
 
-    public void Complete(string traceId, string? terminationReason = null, string? finalResponse = null, string? error = null)
+    public async Task CompleteAsync(string traceId, string? terminationReason = null, string? finalResponse = null, string? error = null)
     {
         if (!_byId.TryGetValue(traceId, out var trace)) return;
 
@@ -105,7 +110,7 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
         }
         if (error != null) trace.Error = error;
 
-        try { UpdateFullAsync(trace).GetAwaiter().GetResult(); }
+        try { await UpdateFullAsync(trace).ConfigureAwait(false); }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Trace] Complete UPDATE başarısız. TraceId={TraceId}", traceId);
@@ -276,22 +281,38 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore
         }
     }
 
+    /// <inheritdoc />
+    public Task WarmUpAsync(CancellationToken ct = default) => EnsureHydratedAsync();
+
+    private async Task EnsureHydratedAsync()
+    {
+        if (_hydrated) return;
+        await _hydrationGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_hydrated) return;
+            await HydrateAsync().ConfigureAwait(false);
+            _hydrated = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Trace] Cache hydrate başarısız.");
+        }
+        finally
+        {
+            _hydrationGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Senkron okuma yolları (<see cref="GetRecent"/>, <see cref="GetBySession"/> — admin
+    /// listeleri, sıcak yol değil) için. Hydrate süreç ömründe bir kez çalışır; sonrasında
+    /// bu çağrı bayrağı okuyup hemen döner.
+    /// </summary>
     private void EnsureHydrated()
     {
         if (_hydrated) return;
-        lock (_hydrationLock)
-        {
-            if (_hydrated) return;
-            try
-            {
-                HydrateAsync().GetAwaiter().GetResult();
-                _hydrated = true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[Trace] Cache hydrate başarısız.");
-            }
-        }
+        EnsureHydratedAsync().GetAwaiter().GetResult();
     }
 
     private async Task HydrateAsync()

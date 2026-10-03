@@ -36,8 +36,8 @@ Admin panelinde "sohbeti devral" butonu `TakeOver`'ı, "bota geri ver" `Release`
 |---|---|
 | `ChatMode GetMode(string sessionId)` | Cache'ten; kayıt yoksa varsayılan `Bot`. |
 | `ChatSessionState? GetState(string sessionId)` | Cache'ten tam durum nesnesi. |
-| `bool TakeOver(string sessionId, string? humanAgent)` | Distributed lock altında DB'den taze durumu okur; başka bir admin zaten devralmışsa `false`; aksi hâlde `Human` moduna geçirir, DB + cache + Redis günceller. |
-| `bool Release(string sessionId)` | Aynı kilit altında DB'den okur, `Bot` moduna döner. Zaten Bot modundaysa `false`. |
+| `Task<bool> TakeOverAsync(string sessionId, string? humanAgent)` | Distributed lock altında DB'den taze durumu okur; başka bir admin zaten devralmışsa `false`; aksi hâlde `Human` moduna geçirir, DB + cache + Redis günceller. |
+| `Task<bool> ReleaseAsync(string sessionId)` | Aynı kilit altında DB'den okur, `Bot` moduna döner. Zaten Bot modundaysa `false`. |
 | `IReadOnlyList<ChatSessionState> GetActive()` | Cache'ten `Human` modundaki tüm oturumlar, en yeni devralınan önce. |
 | `event EventHandler<ChatSessionState>? ModeChanged` | Mod her değiştiğinde (yerel veya uzak pod'dan) tetiklenir. |
 

@@ -38,7 +38,8 @@ public PersistenceHydrator(
 public async Task StartAsync(CancellationToken cancellationToken)
 ```
 - **Ne işe yarar?:** Uygulama başlarken kurtarma işlemlerini yürütür.
-- **İç Mantığı:** `_services.GetService<IReasoningTraceStore>()` çözülür; eğer `PostgresReasoningTraceStore` ise `await pgTrace.MarkInflightAsErrorOnStartupAsync(cancellationToken)` çağrılır.
+- **İç Mantığı:** `_services.GetService<IReasoningTraceStore>()` çözülür; eğer `PostgresReasoningTraceStore` ise `await pgTrace.MarkInflightAsErrorOnStartupAsync(cancellationToken)` çağrılır. Ardından hibrit cache'ler **asenkron ısıtılır** (`WarmUpCachesAsync`): `IApprovalQueue`, `IEscalationSink`, `IChatModeRegistry`, `IRatingStore`, `ICustomerProfileStore`, `ILessonStore`, `ISlaEventSink`, `IReasoningTraceStore` — implementasyonu `ICacheWarmup` ise `WarmUpAsync` beklenir.
+- **🐞 Neden ısıtma:** Bu adaptörlerin okuma uçları senkron port arayüzlerinin arkasındadır; ısıtılmamış bir cache'in ilk okuması hydrate'i `GetAwaiter().GetResult()` ile bekler ve o isteğin thread'ini DB okuması boyunca bloklar. Isıtma trace kurtarmasından SONRA yapılır ki trace cache'i kapatılmış hâli görsün. Isıtma başarısız olursa loglanır; o cache ilk okumada eskisi gibi senkron hydrate eder (bkz. `PersistenceHydratorWarmupTests`).
 
 ## Bağımlılıklar
 

@@ -22,6 +22,7 @@ Chat sona erdiğinde kullanıcıya değerlendirme formu gösterilir. Gönderilen
 | `SessionId` | `string` | Hangi oturuma ait |
 | `Stars` | `int` | 1–5 arası yıldız puanı |
 | `Feedback` | `string?` | Opsiyonel kullanıcı yorumu |
+| `MaxFeedbackLength` | `const int` | `2000` — puanlama ucunun kabul ettiği azami yorum uzunluğu (uç kimliksizdir). |
 | `RatedAt` | `DateTime` | Değerlendirme zamanı (UTC) |
 
 ---

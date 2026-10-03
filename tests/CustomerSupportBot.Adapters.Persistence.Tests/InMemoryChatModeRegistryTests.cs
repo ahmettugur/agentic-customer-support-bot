@@ -17,50 +17,50 @@ public class InMemoryChatModeRegistryTests
     }
 
     [Fact]
-    public void TakeOver_SwitchesToHuman()
+    public async Task TakeOver_SwitchesToHuman()
     {
-        _reg.TakeOver("s1", "agent42").Should().BeTrue();
+        (await _reg.TakeOverAsync("s1", "agent42")).Should().BeTrue();
         _reg.GetMode("s1").Should().Be(ChatMode.Human);
         _reg.GetState("s1")!.HumanAgent.Should().Be("agent42");
     }
 
     [Fact]
-    public void TakeOver_BlankSession_False()
+    public async Task TakeOver_BlankSession_False()
     {
-        _reg.TakeOver("", "x").Should().BeFalse();
+        (await _reg.TakeOverAsync("", "x")).Should().BeFalse();
     }
 
     [Fact]
-    public void Release_RetursToBot()
+    public async Task Release_RetursToBot()
     {
-        _reg.TakeOver("s1", "a");
-        _reg.Release("s1").Should().BeTrue();
+        await _reg.TakeOverAsync("s1", "a");
+        (await _reg.ReleaseAsync("s1")).Should().BeTrue();
         _reg.GetMode("s1").Should().Be(ChatMode.Bot);
     }
 
     [Fact]
-    public void Release_NotInHuman_False()
+    public async Task Release_NotInHuman_False()
     {
-        _reg.Release("unknown").Should().BeFalse();
+        (await _reg.ReleaseAsync("unknown")).Should().BeFalse();
     }
 
     [Fact]
-    public void GetActive_OnlyHumans()
+    public async Task GetActive_OnlyHumans()
     {
-        _reg.TakeOver("s1", "a");
-        _reg.TakeOver("s2", "b");
-        _reg.Release("s2");
+        await _reg.TakeOverAsync("s1", "a");
+        await _reg.TakeOverAsync("s2", "b");
+        await _reg.ReleaseAsync("s2");
         var active = _reg.GetActive();
         active.Should().ContainSingle();
         active[0].SessionId.Should().Be("s1");
     }
 
     [Fact]
-    public void TakeOver_FiresModeChanged()
+    public async Task TakeOver_FiresModeChanged()
     {
         ChatSessionState? captured = null;
         _reg.ModeChanged += (_, s) => captured = s;
-        _reg.TakeOver("s1", "a");
+        await _reg.TakeOverAsync("s1", "a");
         captured.Should().NotBeNull();
         captured!.Mode.Should().Be(ChatMode.Human);
     }

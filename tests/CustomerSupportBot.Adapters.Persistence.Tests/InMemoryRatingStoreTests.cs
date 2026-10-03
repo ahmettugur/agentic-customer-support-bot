@@ -10,24 +10,24 @@ public class InMemoryRatingStoreTests
     private readonly InMemoryRatingStore _store = new(NullLogger<InMemoryRatingStore>.Instance);
 
     [Fact]
-    public void Submit_StarsClampedHigh()
+    public async Task Submit_StarsClampedHigh()
     {
-        var r = _store.Submit("s1", 10, "great");
+        var r = await _store.SubmitAsync("s1", 10, "great");
         r.Stars.Should().Be(5);
     }
 
     [Fact]
-    public void Submit_StarsClampedLow()
+    public async Task Submit_StarsClampedLow()
     {
-        var r = _store.Submit("s1", 0, null);
+        var r = await _store.SubmitAsync("s1", 0, null);
         r.Stars.Should().Be(1);
     }
 
     [Fact]
-    public void Submit_PersistsAndOverwrites()
+    public async Task Submit_PersistsAndOverwrites()
     {
-        _store.Submit("s1", 3, "ok");
-        _store.Submit("s1", 5, "great");
+        await _store.SubmitAsync("s1", 3, "ok");
+        await _store.SubmitAsync("s1", 5, "great");
         var r = _store.GetBySession("s1");
         r!.Stars.Should().Be(5);
         r.Feedback.Should().Be("great");
@@ -40,17 +40,17 @@ public class InMemoryRatingStoreTests
     }
 
     [Fact]
-    public void GetAll_ReturnsAllRatings()
+    public async Task GetAll_ReturnsAllRatings()
     {
-        _store.Submit("s1", 4, null);
-        _store.Submit("s2", 3, null);
+        await _store.SubmitAsync("s1", 4, null);
+        await _store.SubmitAsync("s2", 3, null);
         _store.GetAll().Should().HaveCount(2);
     }
 
     [Fact]
-    public void GetRecent_RespectsLimit()
+    public async Task GetRecent_RespectsLimit()
     {
-        for (int i = 0; i < 5; i++) _store.Submit($"s{i}", 3, null);
+        for (int i = 0; i < 5; i++) await _store.SubmitAsync($"s{i}", 3, null);
         _store.GetRecent(2).Should().HaveCount(2);
     }
 }

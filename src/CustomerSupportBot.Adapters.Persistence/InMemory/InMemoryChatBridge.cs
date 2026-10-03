@@ -34,7 +34,13 @@ public class InMemoryChatBridge : IChatBridge
 
     // ─── Publish ───
 
-    public void PublishUserMessage(string sessionId, string text)
+    public Task PublishUserMessageAsync(string sessionId, string text)
+    {
+        PublishUserMessage(sessionId, text);
+        return Task.CompletedTask;
+    }
+
+    private void PublishUserMessage(string sessionId, string text)
     {
         var msg = new ChatBridgeMessage
         {
@@ -46,7 +52,13 @@ public class InMemoryChatBridge : IChatBridge
         Broadcast(_toAdmin, sessionId, msg);
     }
 
-    public void PublishAdminMessage(string sessionId, string humanAgent, string text)
+    public Task PublishAdminMessageAsync(string sessionId, string humanAgent, string text)
+    {
+        PublishAdminMessage(sessionId, humanAgent, text);
+        return Task.CompletedTask;
+    }
+
+    private void PublishAdminMessage(string sessionId, string humanAgent, string text)
     {
         var msg = new ChatBridgeMessage
         {
@@ -59,7 +71,13 @@ public class InMemoryChatBridge : IChatBridge
         Broadcast(_toUser, sessionId, msg);
     }
 
-    public void PublishSystemMessage(string sessionId, string text)
+    public Task PublishSystemMessageAsync(string sessionId, string text)
+    {
+        PublishSystemMessage(sessionId, text);
+        return Task.CompletedTask;
+    }
+
+    private void PublishSystemMessage(string sessionId, string text)
     {
         var msg = new ChatBridgeMessage
         {
@@ -73,7 +91,13 @@ public class InMemoryChatBridge : IChatBridge
         Broadcast(_toUser, sessionId, msg);
     }
 
-    public void PublishAdminOnlyMessage(string sessionId, string text)
+    public Task PublishAdminOnlyMessageAsync(string sessionId, string text)
+    {
+        PublishAdminOnlyMessage(sessionId, text);
+        return Task.CompletedTask;
+    }
+
+    private void PublishAdminOnlyMessage(string sessionId, string text)
     {
         var msg = new ChatBridgeMessage
         {
@@ -86,7 +110,13 @@ public class InMemoryChatBridge : IChatBridge
         // _toUser'a gönderilmez — müşteri görmez
     }
 
-    public void PublishBotMessage(string sessionId, string text)
+    public Task PublishBotMessageAsync(string sessionId, string text)
+    {
+        PublishBotMessage(sessionId, text);
+        return Task.CompletedTask;
+    }
+
+    private void PublishBotMessage(string sessionId, string text)
     {
         var msg = new ChatBridgeMessage
         {
@@ -112,7 +142,13 @@ public class InMemoryChatBridge : IChatBridge
         Broadcast(_toUser, sessionId, msg);
     }
 
-    public void RecordBotExchange(string sessionId, string userQuery, string botResponse)
+    public Task RecordBotExchangeAsync(string sessionId, string userQuery, string botResponse)
+    {
+        RecordBotExchange(sessionId, userQuery, botResponse);
+        return Task.CompletedTask;
+    }
+
+    private void RecordBotExchange(string sessionId, string userQuery, string botResponse)
     {
         // Sadece history'ye yaz — broadcast etmiyoruz çünkü zaten user kendi
         // Chat penceresinde görüyor. Admin bağlam için Get'leyecek.
@@ -178,10 +214,17 @@ public class InMemoryChatBridge : IChatBridge
 
     // ─── History ───
 
-    public IReadOnlyList<ChatBridgeMessage> GetHistory(string sessionId, int take = 50) =>
-        _history.TryGetValue(sessionId, out var list)
-            ? list.TakeLast(take).ToList()
-            : Array.Empty<ChatBridgeMessage>();
+    public Task<IReadOnlyList<ChatBridgeMessage>> GetHistoryAsync(string sessionId, int take = 50)
+        => Task.FromResult(GetHistory(sessionId, take));
+
+    private IReadOnlyList<ChatBridgeMessage> GetHistory(string sessionId, int take)
+    {
+        if (!_history.TryGetValue(sessionId, out var list)) return Array.Empty<ChatBridgeMessage>();
+
+        // Kilit altında kopyala — Append kilit altında ekleyip RemoveRange yapar; kilitsiz
+        // okuma küçülen listeyi indeksle gezerken ArgumentOutOfRangeException veriyordu.
+        lock (list) return list.TakeLast(take).ToList();
+    }
 
     public void Reset(string sessionId)
     {

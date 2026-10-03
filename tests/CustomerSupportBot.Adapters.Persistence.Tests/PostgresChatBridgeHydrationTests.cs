@@ -23,23 +23,23 @@ public class PostgresChatBridgeHydrationTests
         => new(dbFactory, new NoopMessageBus(), NullLogger<PostgresChatBridge>.Instance);
 
     [Fact]
-    public void GetHistory_TransientHydrationFailure_RetriesOnNextCall()
+    public async Task GetHistory_TransientHydrationFailure_RetriesOnNextCall()
     {
         var sessionId = $"bridge-{Guid.NewGuid():N}";
 
         // 1. bridge instance: gerçek DB'ye bir mesaj yazar (hydrate + INSERT).
         var writer = NewBridge(_fixture.DbFactory);
-        writer.PublishUserMessage(sessionId, "merhaba");
+        await writer.PublishUserMessageAsync(sessionId, "merhaba");
 
         // 2. instance: cache boş, ilk deneme yapay olarak başarısız kılınır.
         var flaky = new FlakyDbContextFactory(_fixture.DbFactory, failuresRemaining: 1);
         var reader = NewBridge(flaky);
 
-        var firstAttempt = reader.GetHistory(sessionId);
+        var firstAttempt = await reader.GetHistoryAsync(sessionId);
         firstAttempt.Should().BeEmpty(
             "ilk deneme DB hatasıyla başarısız olmalı — bu sırada geçmiş hiç yüklenmemeli");
 
-        var secondAttempt = reader.GetHistory(sessionId);
+        var secondAttempt = await reader.GetHistoryAsync(sessionId);
         secondAttempt.Should().ContainSingle(m => m.Text == "merhaba",
             "flag geri alınmadıysa ikinci deneme DB'yi hiç sorgulamaz ve geçmiş sonsuza dek boş kalırdı");
     }

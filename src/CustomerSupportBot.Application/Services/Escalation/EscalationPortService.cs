@@ -32,9 +32,9 @@ public sealed class EscalationPortService : IEscalationPort
         _escalations.RequestDecided += (_, req) => RequestDecided?.Invoke(this, req);
     }
 
-    public EscalationRequest Create(EscalationRequest request)
+    public async Task<EscalationRequest> CreateAsync(EscalationRequest request)
     {
-        var created = _escalations.Create(request);
+        var created = await _escalations.CreateAsync(request);
         _logger.LogInformation(
             "Escalation created: {Id} session={SessionId} reason={Reason}",
             created.Id, created.SessionId, created.Reason);
@@ -64,7 +64,7 @@ public sealed class EscalationPortService : IEscalationPort
         return _escalations.Get(id);
     }
 
-    public bool Decide(string id, string action, string? assignedTo = null, string? resolution = null)
+    public async Task<bool> DecideAsync(string id, string action, string? assignedTo = null, string? resolution = null)
     {
         var request = _escalations.Get(id);
         if (request is null)
@@ -73,7 +73,7 @@ public sealed class EscalationPortService : IEscalationPort
             return false;
         }
 
-        var result = _escalations.Decide(id, action, assignedTo, resolution);
+        var result = await _escalations.DecideAsync(id, action, assignedTo, resolution);
 
         if (result)
         {

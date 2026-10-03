@@ -36,7 +36,7 @@ public sealed class PostgresChatBridge : IChatBridge
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> _toAdmin = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<Channel<ChatBridgeMessage>, byte>> _toUser = new();
     private readonly ConcurrentDictionary<string, List<ChatBridgeMessage>> _history = new();
-    private readonly ConcurrentDictionary<string, byte> _hydratedSessions = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task>> _hydratedSessions = new();
 
     public PostgresChatBridge(
         IDbContextFactory<CustomerSupportDbContext> dbFactory,
@@ -52,45 +52,45 @@ public sealed class PostgresChatBridge : IChatBridge
 
     // ─── Publish ───
 
-    public void PublishUserMessage(string sessionId, string text)
+    public async Task PublishUserMessageAsync(string sessionId, string text)
     {
         var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.User, Text = text };
-        Append(sessionId, msg);
+        await AppendAsync(sessionId, msg).ConfigureAwait(false);
         Broadcast(_toAdmin, sessionId, msg);
         PublishRedis("csbot:bridge:toadmin", msg);
     }
 
-    public void PublishAdminMessage(string sessionId, string humanAgent, string text)
-    {
+    public async Task PublishAdminMessageAsync(string sessionId, string humanAgent, string text)
+{
         var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.Admin, HumanAgent = humanAgent, Text = text };
-        Append(sessionId, msg);
+        await AppendAsync(sessionId, msg).ConfigureAwait(false);
         Broadcast(_toUser, sessionId, msg);
         PublishRedis("csbot:bridge:touser", msg);
     }
 
-    public void PublishSystemMessage(string sessionId, string text)
-    {
+    public async Task PublishSystemMessageAsync(string sessionId, string text)
+{
         var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.System, Text = text };
-        Append(sessionId, msg);
+        await AppendAsync(sessionId, msg).ConfigureAwait(false);
         Broadcast(_toAdmin, sessionId, msg);
         Broadcast(_toUser, sessionId, msg);
         PublishRedis("csbot:bridge:toadmin", msg);
         PublishRedis("csbot:bridge:touser", msg);
     }
 
-    public void PublishAdminOnlyMessage(string sessionId, string text)
-    {
+    public async Task PublishAdminOnlyMessageAsync(string sessionId, string text)
+{
         var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.System, Text = text };
-        Append(sessionId, msg);
+        await AppendAsync(sessionId, msg).ConfigureAwait(false);
         Broadcast(_toAdmin, sessionId, msg);
         PublishRedis("csbot:bridge:toadmin", msg);
         // _toUser'a gönderilmez — müşteri görmez
     }
 
-    public void PublishBotMessage(string sessionId, string text)
-    {
+    public async Task PublishBotMessageAsync(string sessionId, string text)
+{
         var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.Bot, Text = text };
-        Append(sessionId, msg);
+        await AppendAsync(sessionId, msg).ConfigureAwait(false);
         Broadcast(_toUser, sessionId, msg);
         Broadcast(_toAdmin, sessionId, msg);
         PublishRedis("csbot:bridge:touser", msg);
@@ -105,25 +105,25 @@ public sealed class PostgresChatBridge : IChatBridge
         PublishRedis("csbot:bridge:touser", msg);
     }
 
-    public void RecordBotExchange(string sessionId, string userQuery, string botResponse)
+    public async Task RecordBotExchangeAsync(string sessionId, string userQuery, string botResponse)
     {
         if (!string.IsNullOrWhiteSpace(userQuery))
         {
-            Append(sessionId, new ChatBridgeMessage
+            await AppendAsync(sessionId, new ChatBridgeMessage
             {
                 SessionId = sessionId,
                 Sender = ChatBridgeSender.User,
                 Text = userQuery
-            });
+            }).ConfigureAwait(false);
         }
         if (!string.IsNullOrWhiteSpace(botResponse))
         {
-            Append(sessionId, new ChatBridgeMessage
+            await AppendAsync(sessionId, new ChatBridgeMessage
             {
                 SessionId = sessionId,
                 Sender = ChatBridgeSender.Bot,
                 Text = botResponse
-            });
+            }).ConfigureAwait(false);
         }
     }
 
@@ -133,7 +133,7 @@ public sealed class PostgresChatBridge : IChatBridge
         string sessionId,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        EnsureSessionHydrated(sessionId);
+        await EnsureSessionHydratedAsync(sessionId).ConfigureAwait(false);
         var channel = CreateAndRegister(_toAdmin, sessionId);
         try
         {
@@ -153,7 +153,7 @@ public sealed class PostgresChatBridge : IChatBridge
         string sessionId,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        EnsureSessionHydrated(sessionId);
+        await EnsureSessionHydratedAsync(sessionId).ConfigureAwait(false);
         var channel = CreateAndRegister(_toUser, sessionId);
         try
         {
@@ -171,12 +171,14 @@ public sealed class PostgresChatBridge : IChatBridge
 
     // ─── History ───
 
-    public IReadOnlyList<ChatBridgeMessage> GetHistory(string sessionId, int take = 50)
+    public async Task<IReadOnlyList<ChatBridgeMessage>> GetHistoryAsync(string sessionId, int take = 50)
     {
-        EnsureSessionHydrated(sessionId);
-        return _history.TryGetValue(sessionId, out var list)
-            ? list.TakeLast(take).ToList()
-            : Array.Empty<ChatBridgeMessage>();
+        await EnsureSessionHydratedAsync(sessionId).ConfigureAwait(false);
+        if (!_history.TryGetValue(sessionId, out var list)) return Array.Empty<ChatBridgeMessage>();
+
+        // Kilit altında kopyala: Append aynı listeye kilit altında ekleyip kapasite taşınca
+        // RemoveRange yapar; kilitsiz okuma küçülen listeyi indeksle gezerken patlıyordu.
+        lock (list) return list.TakeLast(take).ToList();
     }
 
     public void Reset(string sessionId)
@@ -240,9 +242,9 @@ public sealed class PostgresChatBridge : IChatBridge
         }
     }
 
-    private void Append(string sessionId, ChatBridgeMessage msg)
+    private async Task AppendAsync(string sessionId, ChatBridgeMessage msg)
     {
-        EnsureSessionHydrated(sessionId);
+        await EnsureSessionHydratedAsync(sessionId).ConfigureAwait(false);
 
         var list = _history.GetOrAdd(sessionId, _ => new List<ChatBridgeMessage>());
         lock (list)
@@ -255,7 +257,7 @@ public sealed class PostgresChatBridge : IChatBridge
         }
 
         // DB persist — INSERT (BotTyping zaten Append'e gönderilmiyor).
-        try { InsertAsync(msg).GetAwaiter().GetResult(); }
+        try { await InsertAsync(msg).ConfigureAwait(false); }
         catch (Exception ex)
         {
             _logger.LogError(ex,
@@ -279,20 +281,34 @@ public sealed class PostgresChatBridge : IChatBridge
         await ctx.SaveChangesAsync();
     }
 
-    private void EnsureSessionHydrated(string sessionId)
+    /// <summary>
+    /// Oturum geçmişinin DB'den yüklenmesini garanti eder — <b>tamamlanana kadar bekleyerek</b>.
+    ///
+    /// <para>
+    /// Eskiden bir bayrak vardı ve DB okuması BAŞLAMADAN konuyordu: eşzamanlı gelen ikinci
+    /// çağıran bayrağı görüp hemen devam ediyor, okuma sürerken boş geçmiş döndürüyor ya da
+    /// mesajını cache'e ve DB'ye yazıyordu — ardından biten hydrate aynı mesajı DB'den bir kez
+    /// daha ekliyor, admin paneli onu iki kez gösteriyordu. Değer artık işin kendisi
+    /// (<c>Lazy&lt;Task&gt;</c>): herkes AYNI yüklemeyi bekler (bkz. PostgresSessionManager).
+    /// </para>
+    /// </summary>
+    private async Task EnsureSessionHydratedAsync(string sessionId)
     {
-        if (_hydratedSessions.ContainsKey(sessionId)) return;
-        if (!_hydratedSessions.TryAdd(sessionId, 0)) return;
+        var work = _hydratedSessions.GetOrAdd(
+            sessionId,
+            id => new Lazy<Task>(() => HydrateSessionAsync(id), LazyThreadSafetyMode.ExecutionAndPublication));
 
         try
         {
-            HydrateSessionAsync(sessionId).GetAwaiter().GetResult();
+            await work.Value.ConfigureAwait(false);
         }
         catch (Exception ex)
         {
-            // Flag'i geri al — aksi halde geçici bir DB hatası bu session'ı process ömrü
-            // boyunca "hydrate edildi ama boş" olarak kalıcı hale getirir.
-            _hydratedSessions.TryRemove(sessionId, out _);
+            // Girdiyi geri al — aksi halde geçici bir DB hatası bu session'ı process ömrü
+            // boyunca "hydrate edildi ama boş" olarak kalıcı hale getirir (başarısız Task
+            // cache'lenirse Lazy aynı hatayı sonsuza kadar yeniden fırlatırdı). Yalnızca bu
+            // çağrının gördüğü girdi kaldırılır.
+            _hydratedSessions.TryRemove(new KeyValuePair<string, Lazy<Task>>(sessionId, work));
             _logger.LogError(ex, "[Bridge] Session hydrate başarısız. Session={Session}", sessionId);
         }
     }

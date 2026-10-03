@@ -245,7 +245,16 @@ public static class A2AEndpoints
             .ExecuteAsync(http);
     }
 
-    private static async Task<MemoryStream?> BufferBodyWithinLimitAsync(HttpContext http, long maxBytes)
+    /// <summary>
+    /// Gövdenin TAMAMININ okunması için üst süre. Kestrel'in <c>MinRequestBodyDataRate</c>'i
+    /// (varsayılan 240 B/sn) yalnızca hız alt sınırıdır: o hızda 64 KB'lık sınıra kadar damla
+    /// damla gönderen bir istemci bağlantıyı ~4.5 dakika tutabilir. Meşru bir A2A isteği birkaç
+    /// KB'lık JSON'dur; bu süre onu rahatça karşılar.
+    /// </summary>
+    private static readonly TimeSpan BodyReadTimeout = TimeSpan.FromSeconds(15);
+
+    internal static async Task<MemoryStream?> BufferBodyWithinLimitAsync(
+        HttpContext http, long maxBytes, TimeSpan? readTimeout = null)
     {
         if (http.Request.ContentLength is { } declared && declared > maxBytes)
         {
@@ -256,13 +265,15 @@ public static class A2AEndpoints
         var initialCapacity = (int)Math.Min(http.Request.ContentLength ?? 0, 64 * 1024);
         var buffered = new MemoryStream(initialCapacity);
         var rented = ArrayPool<byte>.Shared.Rent(8192);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted);
+        timeout.CancelAfter(readTimeout ?? BodyReadTimeout);
 
         try
         {
             long total = 0;
             while (true)
             {
-                var read = await http.Request.Body.ReadAsync(rented.AsMemory(), http.RequestAborted);
+                var read = await http.Request.Body.ReadAsync(rented.AsMemory(), timeout.Token);
                 if (read == 0)
                     break;
 
@@ -274,11 +285,17 @@ public static class A2AEndpoints
                     return null;
                 }
 
-                await buffered.WriteAsync(rented.AsMemory(0, read), http.RequestAborted);
+                await buffered.WriteAsync(rented.AsMemory(0, read), timeout.Token);
             }
 
             buffered.Position = 0;
             return buffered;
+        }
+        catch (OperationCanceledException) when (!http.RequestAborted.IsCancellationRequested)
+        {
+            await buffered.DisposeAsync();
+            http.Response.StatusCode = StatusCodes.Status408RequestTimeout;
+            return null;
         }
         finally
         {

@@ -726,7 +726,7 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
 
 | Tip | Sorumluluk |
 |---|---|
-| `IChatModeRegistry` | Session başına `(Mode, HumanAgent, EnteredAt, MessageCount)` snapshot. `TakeOver()` / `Release()` + `ModeChanged` event. |
+| `IChatModeRegistry` | Session başına `(Mode, HumanAgent, EnteredAt, MessageCount)` snapshot. `TakeOverAsync()` / `ReleaseAsync()` + `ModeChanged` event. |
 | `IChatBridge` | Per-session `Channel<ChatBridgeMessage>` pub/sub (toAdmin + toUser) + ring-buffer history (200 msg). |
 | `ChatBridgeMessage` | `{Sender: User\|Bot\|Admin\|System, Text, HumanAgent?, Timestamp}` |
 | Admin endpoint'leri | `/chat-sessions/{active,/{sid}/state,/history,/takeover,/release,/messages,/subscribe}` |
@@ -736,19 +736,19 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
 
 ```
                   ┌─── ChatEndpoints (/chat/stream) ───┐
-   USER ──text──▶ │ if mode == Human:                  │ ──► bridge.PublishUserMessage
+   USER ──text──▶ │ if mode == Human:                  │ ──► bridge.PublishUserMessageAsync
                   │   bridge.SubscribeToUser stream    │ ◀── bridge.PublishAdminMessage
                   └────────────────────────────────────┘            ▲
                                                                     │
                   ┌─── AdminEndpoints (/chat-sessions/{sid}) ───┐   │
-  ADMIN ──takeover──▶ registry.TakeOver(sid, agent)             │   │
-        ──text──▶     bridge.PublishAdminMessage(sid, agent, t) │───┘
+  ADMIN ──takeover──▶ registry.TakeOverAsync(sid, agent)             │   │
+        ──text──▶     bridge.PublishAdminMessageAsync(sid, agent, t) │───┘
         ◀──bridge_message── bridge.SubscribeToAdmin stream      │
         ──release──▶  registry.Release(sid)                     │
                   └─────────────────────────────────────────────┘
 ```
 
-**Bot history → admin context**: Bot moddayken her tur sonunda `chatBridge.RecordBotExchange()` çağrılır (`CustomerSupportBot.Api/Endpoints/ChatEndpoints.cs:202-204`). Admin "Devral" deyince son 200 mesajlık tam bağlam (bot + user) panele yüklenir — temsilci sıfırdan başlamaz.
+**Bot history → admin context**: Bot moddayken her tur sonunda `chatBridge.RecordBotExchangeAsync()` çağrılır (`CustomerSupportBot.Api/Endpoints/ChatEndpoints.cs:202-204`). Admin "Devral" deyince son 200 mesajlık tam bağlam (bot + user) panele yüklenir — temsilci sıfırdan başlamaz.
 
 **Mod değişim kanalı**: `ModeChanged` event'i, açık duran user `/chat/stream` SSE bağlantısını da koparır → `human_left` + `done` gönderilir, akış normal Bot moduna düşer (bir sonraki user mesajı tekrar workflow tetikler).
 
@@ -801,7 +801,7 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
 | `WellKnown.FallbackMessages.ReplanPlanningHint` | "🔄 ADMIN OVERRIDE — önceki TOOL ÇAĞRILARINI ve specialist agent kararlarını geçersiz say…" sabit metin. |
 | `WellKnown.FallbackMessages.ReplanCustomerNotice` | "ℹ️ Talebinizi tekrar değerlendiriyoruz…" müşteri bildirimi. |
 | `IChatBridge.PublishBotTyping(sid, on)` | Transient typing-indicator sinyali (history'ye yazılmaz). |
-| `IChatBridge.PublishBotMessage(sid, text)` | Otomatik bot yanıtını müşteriye `human_message` (`from="bot"`) olarak push'lar. |
+| `IChatBridge.PublishBotMessageAsync(sid, text)` | Otomatik bot yanıtını müşteriye `human_message` (`from="bot"`) olarak push'lar. |
 | `AdminEndpoints.RunReplanBotTurnAsync` | Fire-and-forget arka plan turu — reasoning + workflow + bridge yayını. |
 
 **Akış**:
@@ -813,7 +813,7 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
                        ├── state.ReplanNote = note
                        ├── escalations[sid].Decide(Resolve, resolution=note??default)
                        ├── if Mode==Human: registry.Release(sid)            ──▶ human_left
-                       ├── bridge.PublishSystemMessage(ReplanCustomerNotice) ──▶ human_message(system)
+                       ├── bridge.PublishSystemMessageAsync(ReplanCustomerNotice) ──▶ human_message(system)
                        └── _ = RunReplanBotTurnAsync(...)        ◀──── fire-and-forget
                                 ├── lastUserQuery = history.LastOrDefault(role=user)
                                 ├── bridge.PublishBotTyping(true)            ──▶ bot_typing(on)
@@ -825,7 +825,7 @@ ChatMode.Bot   ──takeover──▶  ChatMode.Human  ──release──▶  
                                 │              state.ForceReplanNextTurn = false
                                 │              state.ReplanNote = null
                                 ├── sessions.AppendAssistantMessage(response)
-                                ├── bridge.PublishBotMessage(response)       ──▶ human_message(bot)
+                                ├── bridge.PublishBotMessageAsync(response)       ──▶ human_message(bot)
                                 └── bridge.PublishBotTyping(false)           ──▶ bot_typing(off)
 ```
 

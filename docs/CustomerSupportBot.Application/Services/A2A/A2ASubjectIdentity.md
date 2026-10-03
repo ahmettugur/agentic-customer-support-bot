@@ -46,11 +46,18 @@ Bu biçim iki farklı yerde tüketilir:
 sayısı 3'ten az) **exception fırlatmak yerine `null` döner** — çağıran taraf bunu "bilinmeyen
 partner" olarak ele almalı, asla tahmin etmemelidir (örn. ilk parçayı partner sanmak gibi).
 
+> 🐞 **Partner kimliği ayraç içeremez (`IsValidPartnerId`).** `acme:x` gibi bir partner kimliği
+> `a2a:acme:x:1027` üretir ve `TryGetPartnerId` onu `acme` olarak çözer: rate limit iki partneri
+> AYNI kovada sayar, denetim kaydında yanlış partner görünür. `BuildId` artık böyle bir kimliği
+> `ArgumentException` ile reddeder; [`A2ATokenExchangeService`](A2ATokenExchangeService.md) da
+> değişimden önce kontrol edip diğer retlerle aynı şekilde sessizce `null` döner.
+
 ## 6. Metotlar / Üyeler
 
 | Üye | Açıklama |
 |---|---|
-| `BuildId(string partnerId, string customerId): string` | `"a2a:{partnerId}:{customerId}"` biçiminde kimlik üretir. |
+| `IsValidPartnerId(string? partnerId): bool` | Boş değil ve ayraç (`:`) içermiyor mu. |
+| `BuildId(string partnerId, string customerId): string` | `"a2a:{partnerId}:{customerId}"` biçiminde kimlik üretir; geçersiz partner kimliğinde `ArgumentException`. |
 | `TryGetPartnerId(string? subjectId): string?` | Kimlikten partner'ı çıkarır; biçim/prefix uymuyorsa veya partner alanı boşsa `null` döner. |
 
 Sabitler: `Prefix = "a2a"`, `Separator = ':'` — biçim değişecekse tek değişiklik noktası buradadır.

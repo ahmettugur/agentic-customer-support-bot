@@ -10,6 +10,6 @@ public interface IPersonalizationPort
     (int Count, IReadOnlyList<CustomerProfile> Items) GetProfiles(int take = 100);
     CustomerProfile? GetProfile(string customerId);
     Task<CustomerProfile?> RefreshProfileAsync(string customerId, CancellationToken ct = default);
-    CustomerProfile SetAdminNote(string customerId, string? note);
-    bool DeleteProfile(string customerId);
+    Task<CustomerProfile> SetAdminNoteAsync(string customerId, string? note);
+    Task<bool> DeleteProfileAsync(string customerId);
 }

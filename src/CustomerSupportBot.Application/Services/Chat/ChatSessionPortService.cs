@@ -41,8 +41,8 @@ public sealed class ChatSessionPortService : IChatSessionPort
             Mode = ChatMode.Bot
         };
 
-    public IReadOnlyList<ChatBridgeMessage> GetHistory(string sessionId, int take = 50) =>
-        _chatBridge.GetHistory(sessionId, take);
+    public Task<IReadOnlyList<ChatBridgeMessage>> GetHistoryAsync(string sessionId, int take = 50) =>
+        _chatBridge.GetHistoryAsync(sessionId, take);
 
     public async Task<ChatSessionSentimentSnapshot?> GetSentimentAsync(string sessionId, CancellationToken ct = default)
     {
@@ -60,12 +60,12 @@ public sealed class ChatSessionPortService : IChatSessionPort
             state.SentimentHistory.TakeLast(10).ToList());
     }
 
-    public void PublishSystemMessage(string sessionId, string text) =>
-        _chatBridge.PublishSystemMessage(sessionId, text);
+    public Task PublishSystemMessageAsync(string sessionId, string text) =>
+        _chatBridge.PublishSystemMessageAsync(sessionId, text);
 
-    public ChatSessionTakeoverResult TakeOver(string sessionId, string humanAgent, string? agentId = null)
+    public async Task<ChatSessionTakeoverResult> TakeOverAsync(string sessionId, string humanAgent, string? agentId = null)
     {
-        var ok = _chatModes.TakeOver(sessionId, humanAgent);
+        var ok = await _chatModes.TakeOverAsync(sessionId, humanAgent);
         if (!ok)
         {
             return new ChatSessionTakeoverResult(
@@ -76,7 +76,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
                 ErrorMessage: "TakeOver başarısız.");
         }
 
-        _chatBridge.PublishSystemMessage(
+        await _chatBridge.PublishSystemMessageAsync(
             sessionId,
             $"Müşteri temsilcisi {humanAgent} sohbete katıldı.");
 
@@ -85,7 +85,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
         {
             if (escalation.SessionId == sessionId && escalation.Status == EscalationStatus.Open)
             {
-                if (_escalations.Decide(
+                if (await _escalations.DecideAsync(
                     escalation.Id,
                     WellKnown.EscalationActions.Acknowledge,
                     assignedTo: agentId ?? humanAgent))
@@ -103,12 +103,12 @@ public sealed class ChatSessionPortService : IChatSessionPort
         return new ChatSessionTakeoverResult(sessionId, humanAgent, acknowledged);
     }
 
-    public ChatSessionReleaseResult Release(string sessionId, string? agentId = null)
+    public async Task<ChatSessionReleaseResult> ReleaseAsync(string sessionId, string? agentId = null)
     {
         var state = _chatModes.GetState(sessionId);
         var resolvedBy = string.IsNullOrWhiteSpace(agentId) ? state?.HumanAgent : agentId;
 
-        var ok = _chatModes.Release(sessionId);
+        var ok = await _chatModes.ReleaseAsync(sessionId);
         if (!ok)
         {
             return new ChatSessionReleaseResult(
@@ -118,7 +118,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
                 ErrorMessage: "Session zaten Bot modda.");
         }
 
-        _chatBridge.PublishSystemMessage(
+        await _chatBridge.PublishSystemMessageAsync(
             sessionId,
             "Müşteri temsilcisi sohbeti sonlandırdı. Bot moduna dönüldü.");
 
@@ -127,7 +127,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
         {
             if (escalation.SessionId == sessionId)
             {
-                if (_escalations.Decide(
+                if (await _escalations.DecideAsync(
                     escalation.Id,
                     WellKnown.EscalationActions.Resolve,
                     assignedTo: resolvedBy,
@@ -166,7 +166,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
         }
 
         var trimmedText = text.Trim();
-        _chatBridge.PublishAdminMessage(sessionId, humanAgent, trimmedText);
+        await _chatBridge.PublishAdminMessageAsync(sessionId, humanAgent, trimmedText);
         var agentLabel = string.IsNullOrWhiteSpace(humanAgent) ? "Temsilci" : humanAgent;
 
         // ASISTAN rolü — kullanıcı rolü DEĞİL. İnsan modunda temsilci, konuşmada botun yerini
@@ -198,12 +198,12 @@ public sealed class ChatSessionPortService : IChatSessionPort
         ApplyReplanState(session, requestedBy, note);
         await _sessions.UpdateAsync(session, ct);
 
-        var resolved = ResolveOpenEscalationsForSession(sessionId, requestedBy, note);
-        var releasedFromHuman = ReleaseIfHumanMode(sessionId);
+        var resolved = await ResolveOpenEscalationsForSessionAsync(sessionId, requestedBy, note);
+        var releasedFromHuman = await ReleaseIfHumanModeAsync(sessionId);
 
         if (!string.IsNullOrWhiteSpace(note))
-            _chatBridge.PublishAdminOnlyMessage(sessionId, $"📋 Temsilci yeniden planlama notu: \"{note}\"");
-        _chatBridge.PublishSystemMessage(sessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
+            await _chatBridge.PublishAdminOnlyMessageAsync(sessionId, $"📋 Temsilci yeniden planlama notu: \"{note}\"");
+        await _chatBridge.PublishSystemMessageAsync(sessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
         _ = _replanService.ExecuteAsync(sessionId);
 
         return new ChatSessionReplanResult(
@@ -258,7 +258,7 @@ public sealed class ChatSessionPortService : IChatSessionPort
         ApplyReplanState(session, requestedBy, note);
         await _sessions.UpdateAsync(session, ct);
 
-        var resolved = _escalations.Decide(
+        var resolved = await _escalations.DecideAsync(
             escalationId,
             WellKnown.EscalationActions.Resolve,
             assignedTo: requestedBy,
@@ -266,11 +266,11 @@ public sealed class ChatSessionPortService : IChatSessionPort
             ? 1
             : 0;
 
-        var releasedFromHuman = ReleaseIfHumanMode(escalation.SessionId);
+        var releasedFromHuman = await ReleaseIfHumanModeAsync(escalation.SessionId);
 
         if (!string.IsNullOrWhiteSpace(note))
-            _chatBridge.PublishSystemMessage(escalation.SessionId, $"📋 Temsilci yeniden planlama notu: \"{note}\"");
-        _chatBridge.PublishSystemMessage(escalation.SessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
+            await _chatBridge.PublishSystemMessageAsync(escalation.SessionId, $"📋 Temsilci yeniden planlama notu: \"{note}\"");
+        await _chatBridge.PublishSystemMessageAsync(escalation.SessionId, WellKnown.FallbackMessages.ReplanCustomerNotice);
         _ = _replanService.ExecuteAsync(escalation.SessionId);
 
         return new ChatSessionReplanResult(
@@ -290,13 +290,13 @@ public sealed class ChatSessionPortService : IChatSessionPort
     public IReadOnlyList<EscalationRequest> GetOpenEscalations() =>
         _escalations.GetOpen();
 
-    public int DismissOrphanedEscalations(string sessionId)
+    public async Task<int> DismissOrphanedEscalationsAsync(string sessionId)
     {
         var count = 0;
         foreach (var esc in _escalations.GetOpen())
         {
             if (esc.SessionId != sessionId) continue;
-            if (_escalations.Decide(esc.Id, WellKnown.EscalationActions.Dismiss,
+            if (await _escalations.DecideAsync(esc.Id, WellKnown.EscalationActions.Dismiss,
                 resolution: "Müşteri bağlantıyı kesti."))
                 count++;
         }
@@ -311,14 +311,14 @@ public sealed class ChatSessionPortService : IChatSessionPort
         session.State.ReplanNote = note;
     }
 
-    private int ResolveOpenEscalationsForSession(string sessionId, string requestedBy, string? note)
+    private async Task<int> ResolveOpenEscalationsForSessionAsync(string sessionId, string requestedBy, string? note)
     {
         var resolved = 0;
         foreach (var escalation in _escalations.GetOpen())
         {
             if (escalation.SessionId == sessionId)
             {
-                if (_escalations.Decide(
+                if (await _escalations.DecideAsync(
                     escalation.Id,
                     WellKnown.EscalationActions.Resolve,
                     assignedTo: requestedBy,
@@ -332,11 +332,11 @@ public sealed class ChatSessionPortService : IChatSessionPort
         return resolved;
     }
 
-    private bool ReleaseIfHumanMode(string sessionId)
+    private async Task<bool> ReleaseIfHumanModeAsync(string sessionId)
     {
         if (_chatModes.GetMode(sessionId) == ChatMode.Human)
         {
-            return _chatModes.Release(sessionId);
+            return await _chatModes.ReleaseAsync(sessionId);
         }
 
         return false;

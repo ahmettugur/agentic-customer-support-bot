@@ -108,9 +108,9 @@ public static class AdminEndpoints
         });
 
         app.MapPost("/escalations/{id}/acknowledge",
-            (string id, EscalationDecisionInput? body, IEscalationPort escalations, IChatSessionPort chatSessions) =>
+            async (string id, EscalationDecisionInput? body, IEscalationPort escalations, IChatSessionPort chatSessions) =>
         {
-            var ok = escalations.Decide(id, WellKnown.EscalationActions.Acknowledge,
+            var ok = await escalations.DecideAsync(id, WellKnown.EscalationActions.Acknowledge,
                 assignedTo: body?.AssignedTo);
             if (!ok)
             {
@@ -124,7 +124,7 @@ public static class AdminEndpoints
                 var agentLabel = string.IsNullOrWhiteSpace(body?.AssignedTo)
                     ? "Bir temsilcimiz"
                     : $"Temsilcimiz {body!.AssignedTo}";
-                chatSessions.PublishSystemMessage(
+                await chatSessions.PublishSystemMessageAsync(
                     esc.SessionId!,
                     $"ℹ️ {agentLabel} talebinizi üstlendi ve sizinle daha sonra iletişime geçecek.");
             }
@@ -133,9 +133,9 @@ public static class AdminEndpoints
         });
 
         app.MapPost("/escalations/{id}/resolve",
-            (string id, EscalationDecisionInput? body, IEscalationPort escalations) =>
+            async (string id, EscalationDecisionInput? body, IEscalationPort escalations) =>
         {
-            var ok = escalations.Decide(id, WellKnown.EscalationActions.Resolve,
+            var ok = await escalations.DecideAsync(id, WellKnown.EscalationActions.Resolve,
                 assignedTo: body?.AssignedTo,
                 resolution: body?.Resolution);
             return ok
@@ -144,9 +144,9 @@ public static class AdminEndpoints
         });
 
         app.MapPost("/escalations/{id}/dismiss",
-            (string id, EscalationDecisionInput? body, IEscalationPort escalations) =>
+            async (string id, EscalationDecisionInput? body, IEscalationPort escalations) =>
         {
-            var ok = escalations.Decide(id, WellKnown.EscalationActions.Dismiss,
+            var ok = await escalations.DecideAsync(id, WellKnown.EscalationActions.Dismiss,
                 assignedTo: body?.AssignedTo,
                 resolution: body?.Resolution);
             return ok
@@ -221,8 +221,8 @@ public static class AdminEndpoints
             Results.Json(chatSessions.GetStateOrDefault(sid)));
 
         app.MapGet("/chat-sessions/{sid}/history",
-            (string sid, IChatSessionPort chatSessions, int take = 50) =>
-                Results.Json(chatSessions.GetHistory(sid, take)));
+            async (string sid, IChatSessionPort chatSessions, int take = 50) =>
+                Results.Json(await chatSessions.GetHistoryAsync(sid, take)));
 
         app.MapGet("/chat-sessions/{sid}/sentiment",
             async (string sid, IChatSessionPort chatSessions, CancellationToken ct) =>
@@ -239,12 +239,12 @@ public static class AdminEndpoints
         });
 
         app.MapPost("/chat-sessions/{sid}/takeover",
-            (string sid,
+            async (string sid,
              ChatTakeoverInput? body,
              IChatSessionPort chatSessions) =>
         {
             var agent = string.IsNullOrWhiteSpace(body?.HumanAgent) ? WellKnown.Defaults.Admin : body!.HumanAgent;
-            var result = chatSessions.TakeOver(sid, agent, agent);
+            var result = await chatSessions.TakeOverAsync(sid, agent, agent);
             if (!result.Success) return Results.BadRequest(new { error = result.ErrorMessage });
 
             return Results.Json(new
@@ -257,10 +257,10 @@ public static class AdminEndpoints
         });
 
         app.MapPost("/chat-sessions/{sid}/release",
-            (string sid,
+            async (string sid,
              IChatSessionPort chatSessions) =>
         {
-            var result = chatSessions.Release(sid);
+            var result = await chatSessions.ReleaseAsync(sid);
             if (!result.Success) return Results.NotFound(new { error = result.ErrorMessage });
 
             return Results.Json(new

@@ -41,7 +41,7 @@ public class CustomerProfileContextProviderTests
     public async Task EmptyProfile_ZeroTurns_ReturnsNull()
     {
         var store = new InMemoryCustomerProfileStore();
-        store.Upsert(new CustomerProfile { CustomerId = "1001", TotalTurns = 0 });
+        await store.UpsertAsync(new CustomerProfile { CustomerId = "1001", TotalTurns = 0 });
 
         var provider = Build(store);
         var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1001" } };
@@ -53,7 +53,7 @@ public class CustomerProfileContextProviderTests
     public async Task PopulatedProfile_ReturnsContextBlockWithKeyFields()
     {
         var store = new InMemoryCustomerProfileStore();
-        store.Upsert(new CustomerProfile
+        await store.UpsertAsync(new CustomerProfile
         {
             CustomerId = "1027",
             Summary = "Dell XPS 15 müşterisi",
@@ -91,7 +91,7 @@ public class CustomerProfileContextProviderTests
         // Profil bloğu admin notu ve geçmiş özeti gibi hassas alanlar taşır — kullanıcının
         // metinde iddia ettiği kimlik (State.CustomerId) ile ASLA çekilmemeli.
         var store = new InMemoryCustomerProfileStore();
-        store.Upsert(new CustomerProfile
+        await store.UpsertAsync(new CustomerProfile
         {
             CustomerId = "1008",
             Summary = "başka müşterinin özeti",
@@ -114,7 +114,7 @@ public class CustomerProfileContextProviderTests
     public async Task PopulatedProfile_WithTraits_IncludesConfidence()
     {
         var store = new InMemoryCustomerProfileStore();
-        store.Upsert(new CustomerProfile
+        await store.UpsertAsync(new CustomerProfile
         {
             CustomerId = "1027",
             TotalTurns = 5,
@@ -138,7 +138,7 @@ public class CustomerProfileContextProviderTests
     public async Task PopulatedProfile_NoTraits_OmitsTraitsSection()
     {
         var store = new InMemoryCustomerProfileStore();
-        store.Upsert(new CustomerProfile { CustomerId = "1027", TotalTurns = 5 });
+        await store.UpsertAsync(new CustomerProfile { CustomerId = "1027", TotalTurns = 5 });
 
         var provider = Build(store);
         var session = new AgentSession { SessionId = "s", State = new SessionState { AuthenticatedCustomerId = "1027" } };

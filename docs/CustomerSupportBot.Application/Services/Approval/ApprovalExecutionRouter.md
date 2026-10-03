@@ -47,8 +47,10 @@ bind etme) hem debug etmesi zor hem de bir parametre adı/tipi uyuşmazlığınd
 değil çalışma zamanında patlayan bir hata sınıfı açardı. Elle yazılmış `switch`, her tool'un
 parametre listesini derleme zamanında `ICustomerSupportToolsService` arayüzüne karşı doğrular.
 
-> 🐞 **`OrderCancel`/`ReturnRequest` için `customerId`, `Parameters` sözlüğünden değil
-> `request.CustomerId`'den okunur** — bu bilinçli bir tutarlılık kararı: `ApprovalRequest.CustomerId`,
+> 🐞 **Dört tool'un hepsi için `customerId` tek kaynaktan okunur (`CustomerIdOf`)**: önce
+> `request.CustomerId`, yalnızca o boşsa (eski kayıtlar) `Parameters["customerId"]` kopyası.
+> Eskiden sipariş ve şikayet kopyadan, iptal ve iade kanonik alandan okuyordu — aynı kavram için
+> iki kaynak. Bu bilinçli bir tutarlılık kararı: `ApprovalRequest.CustomerId`,
 > HITL kaydı oluşturulduğu anda JWT-doğrulanmış kimlikten yazılan **kanonik** alandır
 > (bkz. `ApprovalGateService.ExecuteWithApprovalGateAsync`, Adapters.Agents katmanı). Aynı
 > bilgiyi ayrıca `Parameters` sözlüğüne de yazıp oradan okumak, iki kopyanın birbirinden

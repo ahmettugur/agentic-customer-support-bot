@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresLessonStore : ILessonStore
+public sealed class PostgresLessonStore : ILessonStore, ICacheWarmup
 {
     private const string ChannelUpserted = "csbot:lesson:upserted";
 
@@ -24,7 +24,7 @@ public sealed class PostgresLessonStore : ILessonStore
     private readonly ILogger<PostgresLessonStore> _logger;
     private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, Lesson> _cache = new();
-    private readonly object _hydrationLock = new();
+    private readonly SemaphoreSlim _hydrationGate = new(1, 1);
     private volatile bool _hydrated;
 
     private static readonly JsonSerializerOptions _json = new();
@@ -40,11 +40,11 @@ public sealed class PostgresLessonStore : ILessonStore
         _messageBus.Subscribe(ChannelUpserted, OnRemoteUpserted);
     }
 
-    public void Add(Lesson lesson)
-    {
+    public async Task AddAsync(Lesson lesson)
+{
         try
         {
-            UpsertAsync(lesson).GetAwaiter().GetResult();
+            await UpsertAsync(lesson).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -61,11 +61,11 @@ public sealed class PostgresLessonStore : ILessonStore
         return _cache.TryGetValue(id, out var l) ? l : null;
     }
 
-    public void Update(Lesson lesson)
-    {
+    public async Task UpdateAsync(Lesson lesson)
+{
         try
         {
-            UpsertAsync(lesson).GetAwaiter().GetResult();
+            await UpsertAsync(lesson).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -124,21 +124,37 @@ public sealed class PostgresLessonStore : ILessonStore
         await ctx.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public Task WarmUpAsync(CancellationToken ct = default) => EnsureHydratedAsync();
+
+    /// <summary>
+    /// Senkron okuma yolları için YEDEK. Normalde cache açılışta <see cref="WarmUpAsync"/> ile
+    /// doldurulmuştur ve bu çağrı bayrağı okuyup hemen döner; yalnızca ısıtma başarısız
+    /// olduysa ilk okuma hydrate'i senkron bekler.
+    /// </summary>
     private void EnsureHydrated()
     {
         if (_hydrated) return;
-        lock (_hydrationLock)
+        EnsureHydratedAsync().GetAwaiter().GetResult();
+    }
+
+    private async Task EnsureHydratedAsync()
+    {
+        if (_hydrated) return;
+        await _hydrationGate.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_hydrated) return;
-            try
-            {
-                HydrateAsync().GetAwaiter().GetResult();
-                _hydrated = true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[Lesson] Cache hydrate başarısız.");
-            }
+            await HydrateAsync().ConfigureAwait(false);
+            _hydrated = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Lesson] Cache hydrate başarısız.");
+        }
+        finally
+        {
+            _hydrationGate.Release();
         }
     }
 

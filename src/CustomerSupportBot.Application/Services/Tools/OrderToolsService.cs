@@ -309,7 +309,7 @@ public sealed class OrderToolsService : IOrderToolsService
     }
 
     [Description("Teslim edilmiş bir sipariş için iade talebi oluşturur. Sadece 'Teslim Edildi' durumundaki " +
-                 "ve 14 gün içindeki siparişler iade edilebilir. Sonuç ToolResult olarak döner.")]
+                 "ve teslimden itibaren 14 gün içindeki siparişler iade edilebilir. Sonuç ToolResult olarak döner.")]
     public ToolResult ReturnRequestTool(
         [Description("İade talep edilecek sipariş numarası (zorunlu, ör. '1042')")] string orderId,
         [Description("İade sebebi (zorunlu, en az 5 karakter)")] string reason,
@@ -337,7 +337,7 @@ public sealed class OrderToolsService : IOrderToolsService
         {
             var detail = order.Status != WellKnown.OrderStatuses.Delivered
                 ? $"Sipariş durumu '{order.Status}' — sadece 'Teslim Edildi' durumundaki siparişler iade edilebilir."
-                : "14 günlük iade süresi dolmuş olabilir.";
+                : "Teslimden itibaren 14 günlük iade süresi dolmuş olabilir.";
             return ToolResult.Conflict(
                 WellKnown.ToolErrorCodes.ReturnNotEligible,
                 $"'{orderId}' numaralı sipariş iade edilemez. {detail}");

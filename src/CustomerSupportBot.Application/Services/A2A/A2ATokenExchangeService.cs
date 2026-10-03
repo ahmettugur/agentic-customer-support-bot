@@ -82,6 +82,14 @@ public sealed class A2ATokenExchangeService
         if (string.IsNullOrWhiteSpace(partnerId) || string.IsNullOrWhiteSpace(customerId))
             return null;
 
+        // Biçimi bozacak bir partner kimliği (ayraç içeren) token'a hiç girmemeli — bkz.
+        // A2ASubjectIdentity.IsValidPartnerId. Diğer retlerle aynı şekilde sessizce null.
+        if (!A2ASubjectIdentity.IsValidPartnerId(partnerId))
+        {
+            _logger.LogWarning("[A2A] Geçersiz partner kimliği biçimi; değişim reddedildi.");
+            return null;
+        }
+
         if (!await _authorizer.CanActForCustomerAsync(partnerId, customerId, ct).ConfigureAwait(false))
             return null;
 

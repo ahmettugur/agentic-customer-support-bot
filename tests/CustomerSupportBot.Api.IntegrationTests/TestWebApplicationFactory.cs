@@ -7,6 +7,7 @@ using CustomerSupportBot.Adapters.Persistence.EfCore.Auth;
 using CustomerSupportBot.Adapters.Persistence.InMemory;
 using CustomerSupportBot.Adapters.Redis;
 using CustomerSupportBot.Application.Ports.Outbound.Messaging;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Tests.Shared;
 using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using Microsoft.AspNetCore.Hosting;
@@ -98,6 +99,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
             // hepsi IMessageBusPort ister). Süreç-içi InMemory ikizine geçiyoruz.
             services.Replace(ServiceDescriptor
                 .Singleton<IMessageBusPort, InMemoryMessageBusAdapter>());
+
+            // Aynı sebeple Redis'e bağlı dağıtık idempotency kaydı da kaldırılır; tek süreçli
+            // testte bellek içi katman (SideEffectIdempotencyCache) zaten yeterli.
+            services.RemoveAll<IDistributedIdempotencyStore>();
         });
 
         builder.UseEnvironment("Development");

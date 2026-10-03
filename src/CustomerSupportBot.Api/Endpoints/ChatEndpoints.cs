@@ -39,6 +39,10 @@ public static class ChatEndpoints
     {
         var logger = loggerFactory.CreateLogger("ChatEndpoints");
 
+        // Biçim kontrolü oturuma dokunmadan ÖNCE — geçersiz id ne cache'e ne DB'ye ulaşmalı.
+        if (request.SessionId is not null && !SessionIdPolicy.IsValid(request.SessionId))
+            return InvalidSessionId();
+
         if (!await IsSessionAccessibleAsync(request.SessionId, httpContext, sessions))
         {
             logger.LogWarning("Oturum sahiplik ihlali reddedildi | session={Session}", request.SessionId);
@@ -94,6 +98,20 @@ public static class ChatEndpoints
         SseWriter.WriteHeaders(response);
         var logger = loggerFactory.CreateLogger("ChatEndpoints");
 
+        // SSE'de durum kodu artık değiştirilemez; ihlal akış içinde bir olay olarak bildirilir.
+        // Geçersiz id olay akışına da YAZILMAZ — oturum olayı "unknown" taşır.
+        if (request.SessionId is not null && !SessionIdPolicy.IsValid(request.SessionId))
+        {
+            using var invalidSse = new SseForwarder(response, httpContext.RequestAborted);
+            await invalidSse.WriteSessionAsync("unknown");
+            await SseWriter.WriteEventAsync(
+                response,
+                "response_complete",
+                new { content = SessionIdPolicy.ErrorMessage, blocked = true, error = SessionIdPolicy.ErrorCode },
+                httpContext.RequestAborted);
+            return;
+        }
+
         // SSE'de header'lar yazıldıktan sonra HTTP durum kodu değiştirilemez; bu yüzden
         // ihlal, akışın içinde bir hata olayı olarak bildirilir ve tur hiç başlamaz.
         if (!await IsSessionAccessibleAsync(request.SessionId, httpContext, sessions))
@@ -138,7 +156,7 @@ public static class ChatEndpoints
             request.SessionId,
             CustomerId: ResolveAuthenticatedCustomerId(httpContext));
 
-        using var sse = new SseForwarder(response, httpContext.RequestAborted);
+        using var sse = new SseForwarder(response, httpContext.RequestAborted, logger);
 
         // Session ID is resolved by IChatPort and carried in the first Session event.
         // HITL subscription is wired up when that event arrives (before workflow begins).
@@ -160,6 +178,16 @@ public static class ChatEndpoints
                         (eventType, eventData) => sse.WriteAsync(eventType, eventData));
                 }
             }
+        }
+        catch (Exception ex) when (response.HasStarted && !httpContext.RequestAborted.IsCancellationRequested)
+        {
+            // Akış başladıktan sonra durum kodu/ProblemDetails yazılamaz (DomainExceptionHandler
+            // HasStarted'da devreden çıkar). Exception'ı yukarı fırlatmak yalnızca bağlantıyı
+            // koparır: istemci "done" görmeden yarım bir balonla kalır. Hata akışın içinde bir
+            // olay olarak bildirilir, ardından normal kapanış (done) yazılır. Yanıt henüz
+            // başlamadıysa filtre eşleşmez ve exception global handler'a gider (doğru HTTP kodu).
+            logger.LogError(ex, "Chat stream turn failed | session={Session}", resolvedSessionId);
+            await sse.WriteErrorAsync(DomainExceptionHandler.ClientMessage(ex));
         }
         finally
         {
@@ -192,6 +220,13 @@ public static class ChatEndpoints
         string? sessionId, HttpContext httpContext, ISessionManager sessions) =>
         SessionIdentityBinder.IsAccessibleAsync(
             sessionId, ResolveAuthenticatedCustomerId(httpContext), sessions, httpContext.RequestAborted);
+
+    private static IResult InvalidSessionId() =>
+        Results.Json(new
+        {
+            error = SessionIdPolicy.ErrorCode,
+            message = SessionIdPolicy.ErrorMessage
+        }, statusCode: StatusCodes.Status400BadRequest);
 
     private static IResult SessionForbidden() =>
         Results.Json(new
@@ -227,6 +262,12 @@ public static class ChatEndpoints
         // Bu uç, oturumun TÜM canlı olaylarını yayınlar (bot yanıtları, onay sonuçları,
         // temsilci mesajları). Sahiplik kontrolü olmadan başka bir müşterinin konuşması
         // canlı olarak dinlenebilirdi.
+        if (!SessionIdPolicy.IsValid(sessionId))
+        {
+            httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
         if (!await IsSessionAccessibleAsync(sessionId, httpContext, sessions))
         {
             httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -256,6 +297,7 @@ public static class ChatEndpoints
         string sessionId, HttpContext httpContext, IApprovalQueue approvals, ISessionManager sessions,
         CancellationToken ct)
     {
+        if (!SessionIdPolicy.IsValid(sessionId)) return InvalidSessionId();
         if (!await IsSessionAccessibleAsync(sessionId, httpContext, sessions)) return SessionForbidden();
 
         var customerId = ResolveAuthenticatedCustomerId(httpContext);
@@ -279,6 +321,7 @@ public static class ChatEndpoints
         string sessionId, string id, HttpContext httpContext,
         IApprovalQueue approvals, ISessionManager sessions, CancellationToken ct)
     {
+        if (!SessionIdPolicy.IsValid(sessionId)) return InvalidSessionId();
         if (!await IsSessionAccessibleAsync(sessionId, httpContext, sessions)) return SessionForbidden();
 
         // Get() DEĞİL: unseen listesi kalıcı depodan cevaplanıyor, bu yüzden orada görünen bir

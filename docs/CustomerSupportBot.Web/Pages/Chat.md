@@ -92,6 +92,32 @@ Düzeltme, `AuthorizedHttpClientHandler`'daki mantığın buraya da taşınması
 
 `isRetry`/`isAuthRetry` bayrakları olmadan bu mekanizma sonsuz bir JS↔C# döngüsüne girebilirdi: refresh "başarılı" ama sunucu yeni token'ı da reddederse (ör. hesap devre dışı bırakıldıysa), her retry yeni bir 401 üretir ve her 401 yeni bir refresh dener.
 
+### Native sesli mod balonları — Blazor'un render ağacına ham DOM yazılmaz
+
+`#messages` kabı Blazor'un render ağacıdır (`@foreach (var msg in _messages)`). Native sesli mod
+(`realtime-ui.js`, `/chat/realtime-native`) eskiden balonları `chat-bridge.js`'teki `chatApp.ui`
+üzerinden bu kaba **ham DOM düğümleri** olarak ekliyordu. Blazor bu düğümleri bilmediği için:
+"yeni sohbet" `_messages`'ı temizlese de sesli balonlar ekranda kalıyor, sonraki render'larda
+Blazor'un kendi düğümleriyle sıraları karışıyordu.
+
+Artık JS yalnızca bir **tutamaç** (`{ id }`) üretir ve değişiklikleri .NET'e iletir; balonlar
+`_messages` listesinde yaşar ve Blazor tarafından çizilir:
+
+| JS (`chatApp.ui`) | C# (JSInvokable) | Etki |
+|---|---|---|
+| `addMessage(role, text, { placeholder, before })` | `VoiceNativeAdd(id, role, text, placeholder, beforeId)` | Balon ekler (`before` verilirse o balonun önüne). |
+| `setMessageText(h, text, placeholder)` | `VoiceNativeSetText` | Metni/yer tutucu durumunu günceller. |
+| `startStreamingMessage()` / `appendResponseChunk(h, text)` | `VoiceNativeAdd(..., "assistant")` / `VoiceNativeAppend` | Akan asistan balonu. |
+| `setAgentStatus(h, label, state)` | `VoiceNativeStatus` | Tool durum etiketi (`.voice-agent-chip`). |
+| `finalizeStreamingMessage(h)` / `removeMessage(h)` | `VoiceNativeFinalize` / `VoiceNativeRemove` | Akışı bitirir / boş balonu kaldırır. |
+
+`ChatMsg` bu iş için `VoiceId`, `IsPlaceholder` ve `VoiceStatus` alanlarını taşır. JS → .NET
+çağrıları sırayla işlenir. Ayrıca `NewChatFromVoice` artık `StateHasChanged` çağırır — JS'ten
+gelen çağrılar event handler'ların aksine otomatik render tetiklemez; durum temizlense bile eski
+balonlar ekranda kalıyordu. (Köprü modu zaten `VoiceTranscript`/`OnStreamEvent` ile Blazor
+üzerinden gidiyordu.) Gerçek mikrofonla uçtan uca test edilmedi; tutamaç köprüsü tarayıcıda
+`chatApp.ui` doğrudan çağrılarak doğrulandı.
+
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 SSE tercih edilmesinin nedeni tek yönlü streaming için WebSocket'ten daha basit olmasıdır. Mesajlar önce `localStorage`'da tutulur (offline erişim), sonra API ile senkronize edilir. `IAsyncDisposable` uygulanır çünkü SSE bağlantısının temizlenmesi gerekir.
 

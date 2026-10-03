@@ -3,7 +3,11 @@
 // bir restart'ın arkada bıraktığı "hiç bitmeyen" kayıtları temizler:
 //   1. ReasoningTraceStore: CompletedAt=null olan in-flight trace'leri
 //      Error="terminated_by_restart" olarak kapat.
-// İşlemler idempotent. Hata olursa uygulama durmaz, sadece loglanır.
+//   2. Hibrit cache'leri (ICacheWarmup) ASENKRON ısıt. Isıtılmamış bir cache'in ilk senkron
+//      okuması hydrate'i GetAwaiter().GetResult() ile bekler ve o isteğin thread'ini DB okuması
+//      boyunca bloklar. Isıtma 1. adımdan SONRA yapılır ki trace cache'i kapatılmış hâli görsün.
+// İşlemler idempotent. Hata olursa uygulama durmaz, sadece loglanır — ısıtılamayan cache ilk
+// okumada eskisi gibi senkron hydrate eder.
 //
 // BURADA ARTIK APPROVAL TEMİZLİĞİ YOK. Eskiden 10 saniyeden eski Pending onaylar
 // startup'ta Expired'a çekiliyordu; bu, onayın tool çağrısını BLOKLADIĞI modelde
@@ -56,7 +60,38 @@ public sealed class PersistenceHydrator : IHostedService
             _logger.LogError(ex, "[Hydrator] Trace recovery başarısız.");
         }
 
+        await WarmUpCachesAsync(cancellationToken);
+
         _logger.LogInformation("[Hydrator] Startup recovery tamam.");
+    }
+
+    /// <summary>Isıtılacak port'lar — implementasyon <see cref="ICacheWarmup"/> ise ısıtılır.</summary>
+    private static readonly Type[] WarmablePorts =
+    [
+        typeof(IApprovalQueue),
+        typeof(IEscalationSink),
+        typeof(IChatModeRegistry),
+        typeof(IRatingStore),
+        typeof(ICustomerProfileStore),
+        typeof(ILessonStore),
+        typeof(ISlaEventSink),
+        typeof(IReasoningTraceStore),
+    ];
+
+    private async Task WarmUpCachesAsync(CancellationToken ct)
+    {
+        foreach (var port in WarmablePorts)
+        {
+            if (_services.GetService(port) is not ICacheWarmup warmup) continue;
+            try
+            {
+                await warmup.WarmUpAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Hydrator] Cache ısıtma başarısız: {Port}. İlk okuma senkron hydrate edecek.", port.Name);
+            }
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

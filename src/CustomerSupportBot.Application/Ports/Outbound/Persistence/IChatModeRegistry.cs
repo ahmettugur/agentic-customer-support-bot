@@ -9,8 +9,9 @@ public interface IChatModeRegistry
 {
     ChatMode GetMode(string sessionId);
     ChatSessionState? GetState(string sessionId);
-    bool TakeOver(string sessionId, string? humanAgent);
-    bool Release(string sessionId);
+    /// <summary>Yazma bilinçli olarak CancellationToken almaz: istemci bağlantıyı kesse bile cache ile DB tutarlı kalmalı.</summary>
+    Task<bool> TakeOverAsync(string sessionId, string? humanAgent);
+    Task<bool> ReleaseAsync(string sessionId);
     IReadOnlyList<ChatSessionState> GetActive();
 
     event EventHandler<ChatSessionState>? ModeChanged;

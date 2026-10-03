@@ -31,6 +31,6 @@ public sealed class ImprovementsPortService : IImprovementsPort
     public Task<bool> ApproveAsync(string id, string decidedBy, string? reason, CancellationToken ct = default)
         => _miner.ApproveAsync(id, decidedBy, reason, ct);
 
-    public bool Reject(string id, string decidedBy, string? reason)
-        => _miner.Reject(id, decidedBy, reason);
+    public Task<bool> RejectAsync(string id, string decidedBy, string? reason)
+        => _miner.RejectAsync(id, decidedBy, reason);
 }

@@ -34,9 +34,57 @@ services:
 | **OTel Collector gRPC** | 4327 | 4317 | OTLP receiver (opsiyonel, `otel` profili) |
 | **OTel Collector HTTP** | 4328 | 4318 | OTLP receiver (opsiyonel, `otel` profili) |
 
+> **Tüm host portları yalnızca `127.0.0.1`'e bağlıdır** (ör. `"127.0.0.1:5433:5432"`). Redis,
+> Elasticsearch/Kibana ve Qdrant bu yığında kimlik doğrulamasız çalışır; `0.0.0.0`'a açık olmaları
+> aynı ağdaki herkese (kafe Wi-Fi'ı dahil) erişim veriyordu. Uygulama host'ta çalıştığı için
+> `localhost` üzerinden erişim değişmez.
+
+> **Bu compose dosyası yerel geliştirme içindir, üretim için değil.** Paylaşımlı/uzak bir ortamda
+> en az: Redis `requirepass` (+ bağlantı dizesinde parola), Qdrant `QDRANT__SERVICE__API_KEY`,
+> Elasticsearch/Kibana `xpack.security.enabled=true` açılmalıdır.
+
+### Gizli değerler — `deploy/.env`
+
+Postgres parolası artık compose dosyasında değil, git'e girmeyen `deploy/.env` dosyasındadır
+(`.gitignore`'da `.env`; şablon `deploy/.env.example`):
+
+```bash
+cp deploy/.env.example deploy/.env   # sonra POSTGRES_PASSWORD'ü doldurun
+docker compose -f deploy/docker-compose.yml up -d
+```
+
+`POSTGRES_PASSWORD` tanımlı değilse compose açık bir hata mesajıyla durur
+(`${POSTGRES_PASSWORD:?...}`). Değer, API'nin `ConnectionStrings:PostgreSQL` parolasıyla
+(user-secrets / ortam değişkeni) aynı olmalıdır.
+
+> ⚠️ Daha önce parola `docker-compose.yml` içinde açık metin olarak commit edilmişti — git
+> geçmişinde duruyor. Dosyadan kaldırmak geçmişten silmez; o parola **değiştirilmelidir**.
+
+### İmaj sürümleri sabit
+
+`postgres:18`, `redis:8.2`, `qdrant/qdrant:v1.15.5`, `otel/opentelemetry-collector-contrib:0.138.0`
+(Elasticsearch/Kibana `9.2.0`, Jaeger `2.17.0` zaten sabitti). Eskiden `latest`/etiketsiz imajlar
+bir sonraki `pull`'da ana sürüm atlatabiliyordu — Postgres'te bu, veri dizininin yeni sürümle
+açılamaması demektir. Postgres yalnızca ana sürüme (18) sabitlenir; küçük güncellemeler veri
+uyumluluğunu bozmaz.
+
 ### OTel Collector (Opsiyonel)
 
 Jaeger v2 doğrudan OTLP alabildiği için OTel Collector artık opsiyoneldir. `docker compose --profile otel up` ile ayrıca açılabilir. Port çakışması oluşmaması için OTel Collector host portları 4327/4328 olarak ayarlanmıştır.
+
+`deploy/otel-collector-config.yaml`:
+
+- **`debug` exporter pipeline'a bağlı değildir.** `verbosity: detailed` ile her span'in tüm
+  niteliklerini (kullanıcı sorguları, tool parametreleri) collector stdout'una döküyordu; log bu
+  verilerin saklanması için tasarlanmış bir yüzey değildir. Hata ayıklarken geçici olarak
+  `traces.exporters` listesine eklenebilir (tanım `verbosity: basic` ile duruyor).
+- **`resource` işlemcisi, `insert` ile:** eskiden `attributes` işlemcisi `service.name`'i
+  `upsert` ediyordu — o işlemci **span** niteliklerine yazar, resource'a değil; her span'e
+  uygulamanın gerçek adıyla (`CustomerSupportBot`) çelişen `AI.Api` değerini basıyordu. `insert`
+  mevcut değeri korur, yalnızca adını bildirmeyen bir kaynak için varsayılan sağlar.
+- İşlemci sırası: `memory_limiter` (ilk) → `resource` → `batch` (son).
+- Yapılandırma `otelcol-contrib validate` ile doğrulanabilir:
+  `docker run --rm -v "$PWD/deploy/otel-collector-config.yaml:/c.yaml:ro" otel/opentelemetry-collector-contrib:0.138.0 validate --config=/c.yaml`
 
 ---
 
@@ -71,11 +119,11 @@ dotnet run
 
 ```yaml
 postgres:
-  image: postgres
-  ports: ["5433:5432"]
+  image: postgres:18
+  ports: ["127.0.0.1:5433:5432"]
   environment:
     POSTGRES_USER: postgres
-    POSTGRES_PASSWORD: <password>
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?...}   # deploy/.env
     PGDATA: /var/lib/postgresql/data
   volumes:
     - postgres_data:/var/lib/postgresql
@@ -89,10 +137,10 @@ Uygulama varsayılan olarak PostgreSQL kullanır (`Persistence:Provider = "Postg
 
 ```yaml
 qdrant:
-  image: qdrant/qdrant:latest
+  image: qdrant/qdrant:v1.15.5
   ports:
-    - "7333:6333"  # HTTP API
-    - "7334:6334"  # gRPC (uygulama bunu kullanır)
+    - "127.0.0.1:7333:6333"  # HTTP API
+    - "127.0.0.1:7334:6334"  # gRPC (uygulama bunu kullanır)
   volumes:
     - qdrant_storage:/qdrant/storage:z
 ```
@@ -103,8 +151,8 @@ qdrant:
 
 ```yaml
 redis:
-  image: redis
-  ports: ["6380:6379"]
+  image: redis:8.2
+  ports: ["127.0.0.1:6380:6379"]
 ```
 
 Connection string `appsettings.json`'da tanımlı (`localhost:6379`). **Not**: Docker Compose host portu **6380**, appsettings portu **6379** — farklı. Docker dışında çalıştırıyorsanız port uyumunu kontrol edin.
@@ -149,7 +197,8 @@ volumes:
 - [ ] PostgreSQL parolasını environment variable'a taşı
 - [ ] API key'leri environment variable veya Azure Key Vault kullanarak sakla
 - [ ] `appsettings.Development.json` production'a deploy etme
-- [ ] CORS policy'sini kısıtla (sadece bilinen origin'ler)
+- [ ] `Cors:AllowedOrigins`'e panel/chat istemcisinin origin'ini ekle (boş liste Development dışında tüm cross-origin istekleri reddeder)
+- [ ] Load balancer / ters proxy arkasındaysan `ForwardedHeaders:KnownProxies` (IP) veya `ForwardedHeaders:KnownNetworks` (CIDR) ayarla — aksi hâlde IP tabanlı hız sınırları (`auth`, `general`) tüm kullanıcıları tek proxy adresi altında toplar
 - [ ] Qdrant API key etkinleştir (`QDRANT__SERVICE__API_KEY`)
 
 ### Uygulama

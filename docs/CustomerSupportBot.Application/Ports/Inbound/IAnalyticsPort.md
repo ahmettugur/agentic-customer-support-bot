@@ -30,7 +30,7 @@ Hexagonal mimaride "primary/driving port" deseni: dış dünya (Api) Application
 
 | Metot | Açıklama |
 |---|---|
-| `ConversationRating Rate(string sessionId, int stars, string? comment = null)` | Belirtilen oturum için derecelendirme kaydeder. |
+| `Task<ConversationRating> RateAsync(string sessionId, int stars, string? comment = null)` | Belirtilen oturum için derecelendirme kaydeder. |
 | `ConversationRating? GetRating(string sessionId)` | Tek bir oturumun derecelendirmesini döner. |
 | `IReadOnlyList<ConversationRating> GetRecentRatings(int count = 20)` | Son N derecelendirmeyi döner. |
 | `IReadOnlyList<ConversationRating> GetAllRatings()` | Tüm derecelendirmeleri döner. |

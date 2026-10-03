@@ -36,8 +36,8 @@ kullanıcıya "bu oturum zaten X tarafından devralınmış" gibi anlamlı bir m
 |---|---|
 | `ChatMode GetMode(string sessionId)` | Oturumun mevcut modu (Bot/Human). |
 | `ChatSessionState? GetState(string sessionId)` | Oturumun tam durumu (kim devraldı, ne zaman). |
-| `bool TakeOver(string sessionId, string? humanAgent)` | Oturumu devralır. Zaten devralınmışsa `false`. |
-| `bool Release(string sessionId)` | Devri bırakır, bot moduna döner. |
+| `Task<bool> TakeOverAsync(string sessionId, string? humanAgent)` | Oturumu devralır. Zaten devralınmışsa `false`. |
+| `Task<bool> ReleaseAsync(string sessionId)` | Devri bırakır, bot moduna döner. |
 | `IReadOnlyList<ChatSessionState> GetActive()` | Şu an insan tarafından yönetilen tüm oturumlar. |
 | `event EventHandler<ChatSessionState>? ModeChanged` | Mod değiştiğinde fırlar. |
 

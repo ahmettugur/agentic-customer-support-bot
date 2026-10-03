@@ -24,11 +24,11 @@ public class PostgresCustomerProfileStoreHydrationTests
         => new(dbFactory, new NoopMessageBus(), NullLogger<PostgresCustomerProfileStore>.Instance);
 
     [Fact]
-    public void Get_TransientHydrationFailure_RetriesOnNextCall()
+    public async Task Get_TransientHydrationFailure_RetriesOnNextCall()
     {
         var writer = NewStore(_fixture.DbFactory);
         var customerId = $"cust-{Guid.NewGuid():N}"[..16];
-        writer.Upsert(new CustomerProfile { CustomerId = customerId, PreferredTone = "concise" });
+        await writer.UpsertAsync(new CustomerProfile { CustomerId = customerId, PreferredTone = "concise" });
 
         var flaky = new FlakyDbContextFactory(_fixture.DbFactory, failuresRemaining: 1);
         var reader = NewStore(flaky);
@@ -44,7 +44,7 @@ public class PostgresCustomerProfileStoreHydrationTests
     }
 
     [Fact]
-    public void Upsert_PublishesProfile_VisibleOnOtherPodWithoutDbAccess()
+    public async Task Upsert_PublishesProfile_VisibleOnOtherPodWithoutDbAccess()
     {
         var hub = new InMemoryMessageBusHub();
         var writer = new PostgresCustomerProfileStore(
@@ -55,7 +55,7 @@ public class PostgresCustomerProfileStoreHydrationTests
             neverReachesDb, hub.CreateNode(), NullLogger<PostgresCustomerProfileStore>.Instance);
 
         var customerId = $"cust-{Guid.NewGuid():N}"[..16];
-        writer.Upsert(new CustomerProfile { CustomerId = customerId, PreferredTone = "formal", Summary = "VIP müşteri" });
+        await writer.UpsertAsync(new CustomerProfile { CustomerId = customerId, PreferredTone = "formal", Summary = "VIP müşteri" });
 
         var seenByReader = reader.Get(customerId);
 
@@ -71,13 +71,13 @@ public class PostgresCustomerProfileStoreHydrationTests
     /// serialize/deserialize round-trip'inin bozulmadığını Postgres'e karşı doğrular.
     /// </summary>
     [Fact]
-    public void Upsert_RoundTripsTraits_ThroughRealDatabase()
+    public async Task Upsert_RoundTripsTraits_ThroughRealDatabase()
     {
         var store = NewStore(_fixture.DbFactory);
         var customerId = $"cust-{Guid.NewGuid():N}"[..16];
         var inferredAt = new DateTime(2026, 1, 15, 10, 30, 0, DateTimeKind.Utc);
 
-        store.Upsert(new CustomerProfile
+        await store.UpsertAsync(new CustomerProfile
         {
             CustomerId = customerId,
             TotalTurns = 7,
@@ -100,7 +100,7 @@ public class PostgresCustomerProfileStoreHydrationTests
     }
 
     [Fact]
-    public void Delete_PublishesRemoval_VisibleOnOtherPodWithoutFurtherDbAccess()
+    public async Task Delete_PublishesRemoval_VisibleOnOtherPodWithoutFurtherDbAccess()
     {
         var hub = new InMemoryMessageBusHub();
         var writer = new PostgresCustomerProfileStore(
@@ -109,10 +109,10 @@ public class PostgresCustomerProfileStoreHydrationTests
             _fixture.DbFactory, hub.CreateNode(), NullLogger<PostgresCustomerProfileStore>.Instance);
 
         var customerId = $"cust-{Guid.NewGuid():N}"[..16];
-        writer.Upsert(new CustomerProfile { CustomerId = customerId });
+        await writer.UpsertAsync(new CustomerProfile { CustomerId = customerId });
         reader.Get(customerId).Should().NotBeNull(); // reader kendi DB'sinden hydrate eder
 
-        writer.Delete(customerId);
+        await writer.DeleteAsync(customerId);
 
         reader.Get(customerId).Should().BeNull(
             "silme Redis üzerinden yayınlanmalı, reader'ın cache'inde kayıt kalmamalı");

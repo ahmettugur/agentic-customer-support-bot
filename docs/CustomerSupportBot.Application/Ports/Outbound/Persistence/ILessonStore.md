@@ -35,11 +35,11 @@ insan gözden geçirmesi zorunludur.
 
 | Metot | Açıklama |
 |---|---|
-| `void Add(Lesson lesson)` | Yeni ders adayı ekler. |
+| `Task AddAsync(Lesson lesson)` | Yeni ders adayı ekler. |
 | `Lesson? Get(string id)` | Tekil sorgu. |
 | `IReadOnlyList<Lesson> GetByStatus(LessonStatus status)` | Duruma göre filtreler (örn. `PendingApproval`). |
 | `IReadOnlyList<Lesson> GetAll(int limit = 200)` | Tüm dersler. |
-| `void Update(Lesson lesson)` | Ders durumunu/içeriğini günceller (örn. onay sonrası). |
+| `Task UpdateAsync(Lesson lesson)` | Ders durumunu/içeriğini günceller (örn. onay sonrası). |
 
 ## 7. Bağımlılıklar
 

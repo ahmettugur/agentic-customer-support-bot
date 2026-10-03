@@ -30,9 +30,9 @@ Self-improvement döngüsü kötü bir turdan sonra bir `Lesson` taslağı üret
 
 | Üye | Açıklama |
 |---|---|
-| `void Add(Lesson lesson)` | Cache + DB INSERT + Redis yayını. |
+| `Task AddAsync(Lesson lesson)` | Cache + DB INSERT + Redis yayını. |
 | `Lesson? Get(string id)` | Cache'ten tek kayıt. |
-| `void Update(Lesson lesson)` | Cache + DB UPDATE + Redis yayını (örn. admin onay/red durumu). |
+| `Task UpdateAsync(Lesson lesson)` | Cache + DB UPDATE + Redis yayını (örn. admin onay/red durumu). |
 | `IReadOnlyList<Lesson> GetByStatus(LessonStatus status)` | Cache'ten filtreli liste (örn. yalnızca onaylı dersler). |
 | `IReadOnlyList<Lesson> GetAll(int limit = 200)` | Cache'ten tüm dersler, sınırlı. |
 

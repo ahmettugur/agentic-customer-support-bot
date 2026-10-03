@@ -59,7 +59,7 @@ public async Task<string> RunAsync(
 - **İç Mantığı:**
   1. `_guards.TimeoutSeconds` süresiyle zaman aşımı `CancellationTokenSource`'u oluşturulur ve `ct` ile bağlanır (`effectiveCt`).
   2. `_messageBuilder.BuildWorkflowMessagesAsync` çağrılarak sistem, kullanıcı ve reasoning mesajları derlenir. Bu adım için `catch` artık yalnızca timeout'a değil (eski davranış), genel bir hataya da karşı korumalıdır — `ExceptionTranslator.Translate` ile çevrilip fırlatılır (bkz. `ExceptionTranslator.md`'deki 🐞 notu).
-  3. `_traceProcessor.StartTraceState` ile yeni bir `TraceState` başlatılır; tahmini token sayısı ve bağlam parçaları trace'e yazılır.
+  3. `_traceProcessor.StartTraceStateAsync` ile yeni bir `TraceState` başlatılır ve hemen ardından `BindToAmbientContext` ile onay bağlamına bağlanır (AsyncLocal ataması async metot içinde yapılamadığı için ayrı adım); tahmini token sayısı ve bağlam parçaları trace'e yazılır.
   4. `_factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent)` ile taze iş akışı oluşturulur.
   5. `InProcessExecution.RunStreamingAsync` başlatılır ve ilk tur tetikleme belirteci (`TurnToken(emitEvents: true)`) gönderilir.
   6. `EnumerateWorkflowEventsSafely` döngüsü ile workflow olayları dinlenir; `RequestInfoEvent` veya `WorkflowErrorEvent` durumları yönetilir, her olay `_traceProcessor.ApplyTraceEvent` ile işlenir.

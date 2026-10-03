@@ -66,7 +66,7 @@ geçersizdir — bir kanalın token'ı diğer kanalda asla kullanılamaz.
 | `A2ARoles.Partner` (`const string = "Partner"`) | Partner makine kimliğinin rolü. |
 | `A2ARoles.Subject` (`const string = "A2ASubject"`) | Değişimle üretilen, tek müşteriye kilitli özne token'ının rolü. |
 | `A2ATokenResult(string AccessToken, DateTime ExpiresAt, string CustomerId)` | Değişim sonucu — üretilen token, son kullanma zamanı ve hangi müşteri için üretildiği. |
-| `ExchangeAsync(string partnerId, string customerId, CancellationToken ct = default): Task<A2ATokenResult?>` | Yetki kontrolü yapar, geçerse özne token'ı üretir; yetkisizse veya girdi boşsa `null` döner. |
+| `ExchangeAsync(string partnerId, string customerId, CancellationToken ct = default): Task<A2ATokenResult?>` | Yetki kontrolü yapar, geçerse özne token'ı üretir; yetkisizse, girdi boşsa veya partner kimliği biçimi bozacaksa (`:` içeriyorsa, bkz. [A2ASubjectIdentity](A2ASubjectIdentity.md)) `null` döner. |
 
 ## 7. Bağımlılıklar (Constructor Injection)
 

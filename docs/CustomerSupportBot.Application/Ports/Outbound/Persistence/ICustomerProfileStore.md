@@ -33,9 +33,9 @@ olanı okumak isteyen nadir durumlar (örn. "profili var mı diye bak, yoksa hi�
 | Metot | Açıklama |
 |---|---|
 | `CustomerProfile? Get(string customerId)` | Var olan profili döner, yoksa `null`. |
-| `CustomerProfile GetOrCreate(string customerId)` | Var olan profili döner, yoksa boş bir tane oluşturup ekler. |
-| `void Upsert(CustomerProfile profile)` | Profili tamamen replace eder. |
-| `bool Delete(string customerId)` | Profili siler. |
+| `Task<CustomerProfile> GetOrCreateAsync(string customerId)` | Var olan profili döner, yoksa boş bir tane oluşturup ekler. |
+| `Task UpsertAsync(CustomerProfile profile)` | Profili tamamen replace eder. |
+| `Task<bool> DeleteAsync(string customerId)` | Profili siler. |
 | `IReadOnlyList<CustomerProfile> List(int take = 100)` | Tüm profilleri son etkileşime göre azalan sırada listeler (admin UI). |
 | `int Count { get; }` | Toplam profil sayısı. |
 

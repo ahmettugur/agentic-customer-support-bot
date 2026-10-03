@@ -107,6 +107,14 @@ public class SessionState
     /// One-shot — hint kullanıldığında temizlenir.
     /// </summary>
     public string? ReplanNote { get; set; }
+
+    /// <summary>
+    /// Her kalıcı yazmada bir artan sürüm sayacı. Pod'lar arası yayılan state snapshot'larının
+    /// sırasız (eski) olanını tanımak için kullanılır: alıcı, elindekinden DÜŞÜK revizyonlu bir
+    /// snapshot'ı uygulamaz. Duvar saati yerine sayaç kullanılır — pod saatleri arasındaki
+    /// kayma, yeni bir güncellemeyi "eski" sanıp düşürmeye yol açardı.
+    /// </summary>
+    public long Revision { get; set; }
 }
 
 /// <summary>Tek bir tur için duygu kaydı.</summary>

@@ -35,11 +35,13 @@ Bir admin bir sohbeti devraldığında ([`PostgresChatModeRegistry.TakeOver`](Po
 
 | Üye | Açıklama |
 |---|---|
-| `void PublishUserMessage/PublishAdminMessage/PublishSystemMessage/PublishAdminOnlyMessage/PublishBotMessage(...)` | Gönderen/hedef kombinasyonuna göre `Append` (kalıcılık) + `Broadcast` (canlı dağıtım) + Redis yayını yapan varyantlar. `PublishAdminOnlyMessage` müşteriye gitmez (örn. sistem notu). |
+| `Task PublishUserMessageAsync(...)` / `void PublishAdminMessage/PublishSystemMessage/PublishAdminOnlyMessage/PublishBotMessage(...)` | Gönderen/hedef kombinasyonuna göre `Append` (kalıcılık) + `Broadcast` (canlı dağıtım) + Redis yayını yapan varyantlar. `PublishAdminOnlyMessage` müşteriye gitmez (örn. sistem notu). |
 | `void PublishBotTyping(string sessionId, bool on)` | Geçici "yazıyor…" göstergesi — kalıcı değildir. |
-| `void RecordBotExchange(string sessionId, string userQuery, string botResponse)` | Bot modunda geçen bir turu (canlı yayın yapmadan) yalnızca geçmişe ekler — admin devraldığında konuşmanın öncesini görebilsin diye. |
+| `Task RecordBotExchangeAsync(string sessionId, string userQuery, string botResponse)` | Bot modunda geçen bir turu (canlı yayın yapmadan) yalnızca geçmişe ekler — admin devraldığında konuşmanın öncesini görebilsin diye. |
+
+> **Async durumu:** Tüm yazma yolları (`Publish*Async`, `RecordBotExchangeAsync`) ve geçmiş okuması (`GetHistoryAsync`) gerçek async'tir — adaptörde hiç `GetAwaiter().GetResult()` kalmadı. Oturum başına hydrate `Lazy<Task>` ile yapılır: eşzamanlı çağıranlar aynı yüklemeyi bekler (eskiden bayrak DB okumasından önce konduğu için ikinci çağıran boş geçmiş görüyor ve mesajı iki kez yazılabiliyordu). `GetHistoryAsync` listeyi kilit altında kopyalar.
 | `IAsyncEnumerable<ChatBridgeMessage> SubscribeToAdminAsync/SubscribeToUserAsync(string sessionId, CancellationToken ct)` | Yeni bir `Channel` oluşturup kaydeder, tüketici döngüsü bitince (bağlantı kapanınca) `Unregister` ile temizler. |
-| `IReadOnlyList<ChatBridgeMessage> GetHistory(string sessionId, int take = 50)` | Bellek halkasından (veya gerekirse DB'den hydrate ederek) son N mesaj. |
+| `Task<IReadOnlyList<ChatBridgeMessage>> GetHistoryAsync(string sessionId, int take = 50)` | Bellek halkasından (veya gerekirse DB'den hydrate ederek) son N mesaj. |
 | `void Reset(string sessionId)` | Bellek state'ini temizler, tüm açık kanalları `TryComplete` ile kapatır; DB'ye dokunmaz. |
 
 ## 7. Bağımlılıklar

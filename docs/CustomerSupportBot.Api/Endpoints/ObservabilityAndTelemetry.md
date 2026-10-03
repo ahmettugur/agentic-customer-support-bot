@@ -64,7 +64,10 @@ sohbet akışının kendisini etkilemez — hepsi **izleme/yönetim** amaçlıd�
   yüzünden, kod tarafında hâlâ ayrıdır.
 - **Rating uçları kasıtlı olarak public (auth gerektirmez):** bir müşteri konuşma bitince oturum
   açmadan puan bırakabilmeli — zorunlu login, geri bildirim oranını düşürürdü. Buna karşılık
-  `general` rate limit'e tabidir (kötüye kullanımı sınırlamak için).
+  `general` rate limit'e tabidir (kötüye kullanımı sınırlamak için). Kimliksiz uç olduğu için yorum
+  `ConversationRating.MaxFeedbackLength` (2000 karakter) ile sınırlıdır — eskiden tek bir istekle
+  megabaytlarca metin DB'ye ve her pod'un belleğine yazılabiliyordu. Ucuz girdi doğrulaması
+  (yıldız aralığı, yorum uzunluğu) oturum aramasından (DB) önce yapılır.
 - **Evaluation senaryo dosyası iki farklı yoldan aranır:** geliştirme ortamında (`dotnet run`,
   `ContentRootPath` = proje kökü) ve konteynerde/yayınlanmış binary'de (`ContentRootPath` farklı
   olabilir) aynı kodun çalışabilmesi için.
@@ -88,7 +91,7 @@ sohbet akışının kendisini etkilemez — hepsi **izleme/yönetim** amaçlıd�
 |---|---|
 | `GET /analytics/dashboard` *(Admin)* | Genel istatistik özeti. |
 | `GET /analytics/session/{sid}` *(Admin)* | Tek oturum için detaylı analiz. |
-| `POST /sessions/{sid}/rating` | Konuşma değerlendirmesi gönderir (`RatingInput { Stars, Feedback }`, `Stars` 1-5 aralığında doğrulanır). |
+| `POST /sessions/{sid}/rating` | Konuşma değerlendirmesi gönderir (`RatingInput { Stars, Feedback }`; `Stars` 1-5, `Feedback` ≤ 2000 karakter — aksi hâlde 400; ardından oturum yoksa 404). |
 | `GET /sessions/{sid}/rating` | Bir oturumun mevcut rating'ini döner. |
 | `GET /analytics/ratings/recent` *(Admin)* | Son N rating. |
 

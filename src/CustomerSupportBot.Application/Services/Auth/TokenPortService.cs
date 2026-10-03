@@ -7,6 +7,8 @@ using CustomerSupportBot.Application.Ports.Outbound.Auth;
 using CustomerSupportBot.Application.Ports.Inbound.Auth;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model.Auth;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Application.Services.Auth;
@@ -18,19 +20,29 @@ public sealed class TokenPortService : ITokenService
     private readonly IJwtAccessTokenProvider _jwt;
     private readonly ICustomerRepository? _customers;
     private readonly JwtOptions _options;
+    private readonly ILogger<TokenPortService> _logger;
+
+    /// <summary>
+    /// Rotasyonla iptal edilmiş bir token'ın bu süre içinde yeniden sunulması meşru bir yarış
+    /// sayılır (aynı localStorage'ı paylaşan iki sekme aynı anda yeniler): yalnızca reddedilir.
+    /// Bu süreden SONRA sunulursa token kopyalanmıştır — kullanıcının tüm oturumları kapatılır.
+    /// </summary>
+    internal static readonly TimeSpan ReuseGracePeriod = TimeSpan.FromSeconds(30);
 
     public TokenPortService(
         IUserAuthRepository users,
         IRefreshTokenRepository tokens,
         IJwtAccessTokenProvider jwt,
         IOptions<JwtOptions> options,
-        ICustomerRepository? customers = null)
+        ICustomerRepository? customers = null,
+        ILogger<TokenPortService>? logger = null)
     {
         _users = users;
         _tokens = tokens;
         _jwt = jwt;
         _customers = customers;
         _options = options.Value;
+        _logger = logger ?? NullLogger<TokenPortService>.Instance;
     }
 
     public async Task<AuthResponse> IssueAsync(UserInfo user, CancellationToken ct = default)
@@ -55,8 +67,15 @@ public sealed class TokenPortService : ITokenService
         var hash = HashToken(refreshToken);
 
         var existing = await _tokens.FindByHashAsync(hash, ct);
-        if (existing is null || existing.RevokedAt is not null || existing.ExpiresAt <= DateTime.UtcNow)
+        if (existing is null) return null;
+
+        if (existing.RevokedAt is not null)
+        {
+            await HandleRevokedTokenPresentedAsync(existing, ct);
             return null;
+        }
+
+        if (existing.ExpiresAt <= DateTime.UtcNow) return null;
 
         var user = await _users.FindByIdAsync(existing.UserId, ct);
         if (user is null || !user.IsActive) return null;
@@ -79,6 +98,31 @@ public sealed class TokenPortService : ITokenService
         return new AuthResponse(access, newPlain, accessExpiry, newExpiry,
             user.Username, user.Role, user.LinkedAgentId,
             await ResolveFullNameAsync(user, ct));
+    }
+
+    /// <summary>
+    /// İptal edilmiş bir refresh token sunuldu. Rotasyonla iptal edilmiş (yerine yenisi
+    /// verilmiş) bir token'ın tekrar gelmesi, token'ın iki farklı tarafın elinde olduğunu
+    /// gösterir: ya saldırgan çalıp kullandı ve meşru kullanıcı eski kopyayla geliyor, ya da
+    /// tersi. Hangisinin meşru olduğu bilinemediği için kullanıcının tüm aktif refresh
+    /// token'ları iptal edilir (OAuth 2.0 Security BCP, refresh token rotation).
+    ///
+    /// <para>
+    /// İstisnalar: logout ile iptal edilmiş token (yerine yenisi verilmemiş) yalnızca
+    /// reddedilir; rotasyondan kısa süre sonra gelen tekrar (<see cref="ReuseGracePeriod"/>)
+    /// eşzamanlı yenileme yarışıdır ve yine yalnızca reddedilir.
+    /// </para>
+    /// </summary>
+    private async Task HandleRevokedTokenPresentedAsync(RefreshTokenInfo token, CancellationToken ct)
+    {
+        if (token.ReplacedByTokenHash is null) return;
+        if (DateTime.UtcNow - token.RevokedAt!.Value <= ReuseGracePeriod) return;
+
+        var revoked = await _tokens.RevokeAllActiveForUserAsync(token.UserId, DateTime.UtcNow, ct);
+        _logger.LogWarning(
+            "[Security] Refresh token yeniden kullanımı tespit edildi — kullanıcının tüm aktif " +
+            "refresh token'ları iptal edildi. userId={UserId} tokenId={TokenId} rotatedAt={RotatedAt} revokedCount={Count}",
+            token.UserId, token.Id, token.RevokedAt, revoked);
     }
 
     /// <summary>
@@ -108,8 +152,10 @@ public sealed class TokenPortService : ITokenService
         var existing = await _tokens.FindByHashAsync(hash, ct);
         if (existing is null || existing.RevokedAt is not null) return false;
 
-        await _tokens.RevokeAsync(existing.Id, DateTime.UtcNow, null, ct);
-        return true;
+        // Koşullu iptal: aynı anda gelen bir refresh bu token'ı rotasyonla iptal etmiş olabilir.
+        // Koşulsuz yazmak onun ReplacedByTokenHash kaydını silip yeniden kullanım tespitini
+        // kör ederdi.
+        return await _tokens.TryRevokeAsync(existing.Id, DateTime.UtcNow, null, ct);
     }
 
     private static (string Plain, string Hash) GenerateRefreshToken()

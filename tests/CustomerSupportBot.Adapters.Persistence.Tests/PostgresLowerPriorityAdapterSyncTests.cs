@@ -23,7 +23,7 @@ public class PostgresLowerPriorityAdapterSyncTests
     // ─── RatingStore ────────────────────────────────────────────────────────
 
     [Fact]
-    public void RatingStore_Submit_PublishesRating_VisibleOnOtherPodWithoutDbAccess()
+    public async Task RatingStore_Submit_PublishesRating_VisibleOnOtherPodWithoutDbAccess()
     {
         var hub = new InMemoryMessageBusHub();
         var writer = new PostgresRatingStore(_fixture.DbFactory, hub.CreateNode(), NullLogger<PostgresRatingStore>.Instance);
@@ -31,7 +31,7 @@ public class PostgresLowerPriorityAdapterSyncTests
         var reader = new PostgresRatingStore(neverReachesDb, hub.CreateNode(), NullLogger<PostgresRatingStore>.Instance);
 
         var sessionId = $"rate-{Guid.NewGuid():N}";
-        writer.Submit(sessionId, 5, "harika");
+        await writer.SubmitAsync(sessionId, 5, "harika");
 
         var seenByReader = reader.GetBySession(sessionId);
 
@@ -44,7 +44,7 @@ public class PostgresLowerPriorityAdapterSyncTests
     // ─── LessonStore ────────────────────────────────────────────────────────
 
     [Fact]
-    public void LessonStore_Add_PublishesLesson_VisibleOnOtherPodWithoutDbAccess()
+    public async Task LessonStore_Add_PublishesLesson_VisibleOnOtherPodWithoutDbAccess()
     {
         var hub = new InMemoryMessageBusHub();
         var writer = new PostgresLessonStore(_fixture.DbFactory, hub.CreateNode(), NullLogger<PostgresLessonStore>.Instance);
@@ -52,7 +52,7 @@ public class PostgresLowerPriorityAdapterSyncTests
         var reader = new PostgresLessonStore(neverReachesDb, hub.CreateNode(), NullLogger<PostgresLessonStore>.Instance);
 
         var lesson = new Lesson { Title = "Test dersi", LessonText = "X durumunda Y yap", Observation = "gözlem" };
-        writer.Add(lesson);
+        await writer.AddAsync(lesson);
 
         var seenByReader = reader.Get(lesson.Id);
 
@@ -64,7 +64,7 @@ public class PostgresLowerPriorityAdapterSyncTests
     // ─── SlaEventSink ───────────────────────────────────────────────────────
 
     [Fact]
-    public void SlaEventSink_Record_PublishesEvent_VisibleOnOtherPodWithoutDbAccess()
+    public async Task SlaEventSink_Record_PublishesEvent_VisibleOnOtherPodWithoutDbAccess()
     {
         var hub = new InMemoryMessageBusHub();
         var writer = new PostgresSlaEventSink(_fixture.DbFactory, hub.CreateNode(), NullLogger<PostgresSlaEventSink>.Instance);
@@ -72,7 +72,7 @@ public class PostgresLowerPriorityAdapterSyncTests
         var reader = new PostgresSlaEventSink(neverReachesDb, hub.CreateNode(), NullLogger<PostgresSlaEventSink>.Instance);
 
         var targetId = $"target-{Guid.NewGuid():N}";
-        writer.Record(new SlaEvent { Kind = "approval", Severity = "breach", TargetId = targetId, AgeSeconds = 120 });
+        await writer.RecordAsync(new SlaEvent { Kind = "approval", Severity = "breach", TargetId = targetId, AgeSeconds = 120 });
 
         var seenByReader = reader.LastEmittedAt("approval", targetId, "breach");
 
@@ -83,7 +83,7 @@ public class PostgresLowerPriorityAdapterSyncTests
     // ─── ReasoningTraceStore ────────────────────────────────────────────────
 
     [Fact]
-    public void ReasoningTraceStore_StartTrace_PublishesSkeleton_VisibleOnOtherPodWithoutDbAccess()
+    public async Task ReasoningTraceStore_StartTrace_PublishesSkeleton_VisibleOnOtherPodWithoutDbAccess()
     {
         var hub = new InMemoryMessageBusHub();
         var writer = new PostgresReasoningTraceStore(_fixture.DbFactory, hub.CreateNode(), NullLogger<PostgresReasoningTraceStore>.Instance);
@@ -91,7 +91,7 @@ public class PostgresLowerPriorityAdapterSyncTests
         var reader = new PostgresReasoningTraceStore(neverReachesDb, hub.CreateNode(), NullLogger<PostgresReasoningTraceStore>.Instance);
 
         var sessionId = $"trace-{Guid.NewGuid():N}";
-        var trace = writer.StartTrace(sessionId, "sipariş durumu nedir?");
+        var trace = await writer.StartTraceAsync(sessionId, "sipariş durumu nedir?");
 
         var seenByReader = reader.Get(trace.TraceId);
 
@@ -101,7 +101,7 @@ public class PostgresLowerPriorityAdapterSyncTests
     }
 
     [Fact]
-    public void ReasoningTraceStore_Complete_PublishesFinalSnapshot_VisibleOnOtherPodWithoutDbAccess()
+    public async Task ReasoningTraceStore_Complete_PublishesFinalSnapshot_VisibleOnOtherPodWithoutDbAccess()
     {
         var hub = new InMemoryMessageBusHub();
         var writer = new PostgresReasoningTraceStore(_fixture.DbFactory, hub.CreateNode(), NullLogger<PostgresReasoningTraceStore>.Instance);
@@ -109,8 +109,8 @@ public class PostgresLowerPriorityAdapterSyncTests
         var reader = new PostgresReasoningTraceStore(neverReachesDb, hub.CreateNode(), NullLogger<PostgresReasoningTraceStore>.Instance);
 
         var sessionId = $"trace-{Guid.NewGuid():N}";
-        var trace = writer.StartTrace(sessionId, "sipariş durumu nedir?");
-        writer.Complete(trace.TraceId, terminationReason: "completed", finalResponse: "Siparişiniz kargoda.");
+        var trace = await writer.StartTraceAsync(sessionId, "sipariş durumu nedir?");
+        await writer.CompleteAsync(trace.TraceId, terminationReason: "completed", finalResponse: "Siparişiniz kargoda.");
 
         var seenByReader = reader.Get(trace.TraceId);
 
@@ -121,7 +121,7 @@ public class PostgresLowerPriorityAdapterSyncTests
     }
 
     [Fact]
-    public void ReasoningTraceStore_Update_DoesNotPublish_ByDesign()
+    public async Task ReasoningTraceStore_Update_DoesNotPublish_ByDesign()
     {
         // Update() yüksek frekansta çağrılır ve BİLİNÇLİ olarak DB'ye yazmaz (write-storm
         // önlemi) — aynı gerekçeyle Redis'e de yayınlamamalı. Bu test, gelecekte birinin
@@ -134,7 +134,7 @@ public class PostgresLowerPriorityAdapterSyncTests
         var reader = new PostgresReasoningTraceStore(neverReachesDb, hub.CreateNode(), NullLogger<PostgresReasoningTraceStore>.Instance);
 
         var sessionId = $"trace-{Guid.NewGuid():N}";
-        var trace = writer.StartTrace(sessionId, "ilk sorgu");
+        var trace = await writer.StartTraceAsync(sessionId, "ilk sorgu");
         reader.Get(trace.TraceId).Should().NotBeNull(); // StartTrace'ten geldi
 
         trace.IterationCount = 3;

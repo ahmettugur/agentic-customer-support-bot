@@ -247,7 +247,7 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
 
     // ─── Private helpers ───
 
-    private static RealtimeServerEvent? ParseEvent(string json)
+    internal static RealtimeServerEvent? ParseEvent(string json)
     {
         JsonNode? node;
         try { node = JsonNode.Parse(json); }
@@ -262,12 +262,26 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
             "input_audio_buffer.speech_stopped" =>
                 new RealtimeServerEvent(RealtimeServerEventType.SpeechStopped),
 
+            "input_audio_buffer.committed" =>
+                new RealtimeServerEvent(RealtimeServerEventType.InputAudioCommitted)
+                { ItemId = node["item_id"]?.GetValue<string>() },
+
             "response.created" =>
                 new RealtimeServerEvent(RealtimeServerEventType.ResponseCreated),
 
             "conversation.item.input_audio_transcription.completed" =>
                 new RealtimeServerEvent(RealtimeServerEventType.InputTranscriptCompleted)
-                { Transcript = node["transcript"]?.GetValue<string>() },
+                {
+                    Transcript = node["transcript"]?.GetValue<string>(),
+                    ItemId = node["item_id"]?.GetValue<string>()
+                },
+
+            "conversation.item.input_audio_transcription.failed" =>
+                new RealtimeServerEvent(RealtimeServerEventType.InputTranscriptFailed)
+                {
+                    ItemId = node["item_id"]?.GetValue<string>(),
+                    ErrorMessage = node["error"]?["message"]?.GetValue<string>()
+                },
 
             "response.output_audio.delta" =>
                 new RealtimeServerEvent(RealtimeServerEventType.AudioDelta)

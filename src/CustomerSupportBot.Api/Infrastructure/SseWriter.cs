@@ -3,7 +3,6 @@
 // "event: TYPE\ndata: JSON\n\n" formatını üretir ve response body'yi flush eder.
 
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace CustomerSupportBot.Api.Infrastructure;
@@ -13,7 +12,7 @@ internal static class SseWriter
     private static readonly JsonSerializerOptions SseJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        Encoder = ApiJsonEncoder.Instance
     };
 
     /// <summary>

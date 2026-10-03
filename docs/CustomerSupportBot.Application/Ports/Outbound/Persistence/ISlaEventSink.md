@@ -36,7 +36,7 @@ en son ne zaman uyardık" bilgisini vererek tekrar-yayını önler.
 
 | Metot | Açıklama |
 |---|---|
-| `void Record(SlaEvent evt)` | Yeni SLA olayı kaydeder ve event yayar. |
+| `Task RecordAsync(SlaEvent evt)` | Yeni SLA olayı kaydeder ve event yayar. |
 | `IReadOnlyList<SlaEvent> GetRecent(int count = 100)` | Son N olay. |
 | `DateTime? LastEmittedAt(string kind, string targetId, string severity)` | Belirli hedef+önem derecesi için en son ne zaman event yayınlandı. |
 | `event EventHandler<SlaEvent>? EventRecorded` | Yeni event eklendiğinde fırlar (UI canlı bildirim). |

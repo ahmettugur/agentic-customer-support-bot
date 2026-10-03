@@ -1,5 +1,6 @@
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Services.Chat;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -48,6 +49,15 @@ public static class RealtimeEndpoints
             return;
         }
 
+        // Soket AÇILMADAN önce: kabul edildikten sonra durum kodu yoktur ve her bağlantı
+        // gerçek bir OpenAI Realtime oturumu açar.
+        if (sessionId is not null && !SessionIdPolicy.IsValid(sessionId))
+        {
+            httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await httpContext.Response.WriteAsync(SessionIdPolicy.ErrorMessage);
+            return;
+        }
+
         var logger = loggerFactory.CreateLogger("RealtimeEndpoints");
         var ws = await httpContext.WebSockets.AcceptWebSocketAsync();
         var sid = sessionId ?? Guid.NewGuid().ToString();
@@ -78,6 +88,15 @@ public static class RealtimeEndpoints
         {
             httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
             await httpContext.Response.WriteAsync("WebSocket bağlantısı bekleniyor.");
+            return;
+        }
+
+        // Soket AÇILMADAN önce: kabul edildikten sonra durum kodu yoktur ve her bağlantı
+        // gerçek bir OpenAI Realtime oturumu açar.
+        if (sessionId is not null && !SessionIdPolicy.IsValid(sessionId))
+        {
+            httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await httpContext.Response.WriteAsync(SessionIdPolicy.ErrorMessage);
             return;
         }
 

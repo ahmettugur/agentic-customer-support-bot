@@ -10,7 +10,7 @@ Bir ajan turunun tüm akıl yürütme izini (`ReasoningTrace`: planlama, uzman a
 
 ## 2. Hangi Amaçla Kullanılır
 
-`WorkflowRunner` bir tur başladığında `StartTrace`, akış boyunca onlarca kez `Update`, tur bitince `Complete` çağırır. Admin/debug panelindeki "bu turda model ne düşündü" ekranları `Get`/`GetRecent`/`GetBySession`'ı kullanır.
+`WorkflowRunner` bir tur başladığında `StartTraceAsync`, akış boyunca onlarca kez `Update`, tur bitince `CompleteAsync` çağırır. Admin/debug panelindeki "bu turda model ne düşündü" ekranları `Get`/`GetRecent`/`GetBySession`'ı kullanır.
 
 ## 3. Sorumlulukları
 
@@ -35,9 +35,9 @@ Cache, `ConcurrentQueue<string>` ile tutulan ekleme sırasına göre `_maxCacheC
 
 | Üye | Açıklama |
 |---|---|
-| `ReasoningTrace StartTrace(string sessionId, string userQuery)` | Yeni trace oluşturur, cache'e ekler, DB'ye iskelet INSERT, Redis'e tam yayın. |
+| `Task<ReasoningTrace> StartTraceAsync(string sessionId, string userQuery)` | Yeni trace oluşturur, cache'e ekler, DB'ye iskelet INSERT (await — eskiden `GetAwaiter().GetResult()` ile her turda bir thread bloklanıyordu), Redis'e tam yayın. |
 | `void Update(ReasoningTrace trace)` | Yalnızca cache günceller (DB/Redis'e yazmaz). |
-| `void Complete(string traceId, string? terminationReason, string? finalResponse, string? error)` | `FinalResponse`'u 2000 karakterde kırpar, DB'ye tam UPDATE, Redis'e tam yayın. |
+| `Task CompleteAsync(string traceId, string? terminationReason, string? finalResponse, string? error)` | `FinalResponse`'u 2000 karakterde kırpar, DB'ye tam UPDATE (await), Redis'e tam yayın. |
 | `ReasoningTrace? Get(string traceId)` | Önce cache, yoksa DB fallback (eski trace'ler için). |
 | `IReadOnlyList<ReasoningTrace> GetRecent(int count = 50)` | Cache'ten en yeni N trace. |
 | `IReadOnlyList<ReasoningTrace> GetBySession(string sessionId)` | Cache'ten bir oturuma ait tüm trace'ler. |

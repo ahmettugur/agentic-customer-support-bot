@@ -17,7 +17,7 @@
 ## Sorumlulukları
 
 - **Üstlendiği:**
-  - `StartTraceState` ile yeni bir izleme durumu oluşturmak.
+  - `StartTraceStateAsync` ile yeni bir izleme durumu oluşturmak ve `BindToAmbientContext` ile onay bağlamına bağlamak.
   - `ApplyTraceEvent` ile MAF olaylarını `TraceState` ve `StreamEvent` formatına çevirmek.
   - Ajan başlangıç/bitiş olaylarında `AgentVisit` sürelerini kaydetmek; ara durumdan (`ExecutorCompletedEvent`) ve final durumdan (`WorkflowOutputEvent`) plan/uzman-reasoning verisini çıkarıp trace'e işlemek.
   - `ResponseStreamFilter` ile token akışını filtrelemek.
@@ -54,12 +54,14 @@ public WorkflowTraceEventProcessor(
 
 ## Metotlar ve İç Çalışma Mantıkları
 
-### 1. `StartTraceState`
+### 1. `StartTraceStateAsync` + `BindToAmbientContext`
 ```csharp
-public TraceState StartTraceState(AgentSession? session, string query, ReasoningResult? reasoning)
+public async Task<TraceState> StartTraceStateAsync(AgentSession? session, string query, ReasoningResult? reasoning)
+public void BindToAmbientContext(TraceState st)
 ```
-- **Ne işe yarar?:** Yeni bir trace kaydı açar ve `TraceState` nesnesini başlatır.
-- **İç Mantığı:** `_traceStore.StartTrace` çağrılır, `_approvalContext.SetTraceId` ile bağlama enjekte edilir, varsa `reasoning` verisi eklenir ve `TraceState` döndürülür.
+- **Ne işe yarar?:** Yeni bir trace kaydı açar ve `TraceState` nesnesini başlatır; ardından trace'i ambient onay bağlamına bağlar.
+- **İç Mantığı:** `_traceStore.StartTraceAsync` beklenir, varsa `reasoning` verisi eklenir ve `TraceState` döndürülür. Bağlama (`_approvalContext.SetTraceId`) **ayrı, senkron** bir adımdır ve çağıran onu kendi gövdesinde, workflow başlamadan çağırmalıdır.
+- **🐞 Neden iki adım:** `SetTraceId` bir `AsyncLocal` değerini yeniden atar. Async bir metodun içinde `AsyncLocal`'a yapılan atama çağırana geri akmaz (ExecutionContext yalnızca aşağı akar). Trace açılışı async'e taşındığında bağlama içeride kalsaydı tool'lar `TraceId=null` görür, onay kayıtları trace'siz oluşurdu. Bu ölçüldü: `SingletonTeam_ConcurrentSessionsKeepToolIdentityAndHistorySeparate` testi bu durumda kırılıyordu.
 
 ### 2. `ApplyTraceEvent`
 ```csharp

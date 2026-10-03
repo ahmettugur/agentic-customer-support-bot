@@ -22,7 +22,13 @@ public class InMemorySlaEventSink : ISlaEventSink
         _logger = logger;
     }
 
-    public void Record(SlaEvent evt)
+    public Task RecordAsync(SlaEvent evt)
+    {
+        Record(evt);
+        return Task.CompletedTask;
+    }
+
+    private void Record(SlaEvent evt)
     {
         _events.Enqueue(evt);
         while (_events.Count > Capacity && _events.TryDequeue(out _)) { /* trim */ }

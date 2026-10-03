@@ -34,16 +34,25 @@ verilir.
 > pencerenin gerisinde kalabilir. Filtreyi cache üzerinde uygulamak sınırı ötelemekten
 > ibarettir — hem daraltma hem limit veri kaynağında yapılmalıdır.
 
+**Eşzamanlılık sözleşmesi (tüm implementasyonlar):**
+
+- `CreateAsync`, aynı session + ajan için açık (`Open`/`Acknowledged`) kayıt varsa yenisini
+  oluşturmaz, **mevcut kaydı** döndürür. Çağıran, dönen `Id`'yi kendi isteğinin `Id`'siyle
+  karşılaştırarak kaydın yeni oluşup oluşmadığını anlar (bkz.
+  [`EscalationPolicyService`](../../../Services/Escalation/EscalationPolicyService.md)).
+- `DecideAsync`, aynı kaydı yarışan iki karardan yalnızca birini uygular; kaybeden — ya da kaydı
+  bu arada başkası değiştirmişse — `false` alır.
+
 ## 6. Metotlar / Üyeler
 
 | Metot | Açıklama |
 |---|---|
-| `EscalationRequest Create(EscalationRequest request)` | Yeni eskalasyon oluşturur. |
+| `Task<EscalationRequest> CreateAsync(EscalationRequest request)` | Yeni eskalasyon oluşturur; aynı session + ajan için açık kayıt varsa onu döndürür. |
 | `IReadOnlyList<EscalationRequest> GetOpen()` | Açık (kapanmamış) tüm eskalasyonlar. |
 | `IReadOnlyList<EscalationRequest> GetRecent(int count = 50)` | Son N eskalasyon (cache). |
 | `EscalationRequest? Get(string id)` | Tekil sorgu. |
 | `Task<IReadOnlyList<EscalationRequest>> GetRecentForAgentAsync(string agentId, int count = 50, CancellationToken ct = default)` | Bir agent'ın görebileceği son N eskalasyon (kalıcı, doğru daraltma). |
-| `bool Decide(string id, string action, string? assignedTo = null, string? resolution = null)` | Atama/kabul/çözüm kararı işler. |
+| `Task<bool> DecideAsync(string id, string action, string? assignedTo = null, string? resolution = null)` | Atama/kabul/çözüm kararı işler; geçiş geçersizse ya da kayıt bu arada değiştiyse `false`. |
 | `event EventHandler<EscalationRequest>? RequestCreated` | Yeni kayıt olduğunda fırlar. |
 | `event EventHandler<EscalationRequest>? RequestDecided` | Karar verildiğinde fırlar. |
 

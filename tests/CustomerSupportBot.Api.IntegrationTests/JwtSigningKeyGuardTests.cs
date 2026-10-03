@@ -118,4 +118,36 @@ public class JwtSigningKeyGuardTests
 
         act.Should().NotThrow();
     }
+
+    /// <summary>
+    /// Anahtar hiç verilmemişse uygulama HİÇBİR ortamda açılmamalı. Eskiden JwtBearer'a sabit
+    /// bir yedek ('x' × 32) veriliyordu; hata ancak ilk login'de çıkıyor, o ana kadar herkesin
+    /// bildiği o anahtarla imzalanmış token'lar geçerli sayılıyordu.
+    /// </summary>
+    [Theory]
+    [InlineData("Development")]
+    [InlineData("Production")]
+    public void Startup_Fails_WhenKeyIsMissing(string environment)
+    {
+        using var factory = new GuardFactory { Environment = environment, SigningKey = "" };
+
+        var act = () => factory.CreateClient();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Jwt:SigningKey*");
+    }
+
+    /// <summary>Uzunluk kuralını geçen ama tahmin edilebilir anahtar reddedilir.</summary>
+    [Fact]
+    public void Startup_Fails_ForLowVarietyKey()
+    {
+        using var factory = new GuardFactory
+        {
+            Environment = "Development",
+            SigningKey = new string('a', 64),
+        };
+
+        var act = () => factory.CreateClient();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*zayıf*");
+    }
 }

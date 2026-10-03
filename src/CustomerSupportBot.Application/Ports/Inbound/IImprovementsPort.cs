@@ -12,5 +12,5 @@ public interface IImprovementsPort
     IReadOnlyList<Lesson> GetLessons(LessonStatus? status = null);
     Lesson? GetLesson(string id);
     Task<bool> ApproveAsync(string id, string decidedBy, string? reason, CancellationToken ct = default);
-    bool Reject(string id, string decidedBy, string? reason);
+    Task<bool> RejectAsync(string id, string decidedBy, string? reason);
 }

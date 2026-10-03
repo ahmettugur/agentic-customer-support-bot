@@ -366,7 +366,14 @@ public sealed class RealtimeBridgeService : IRealtimeBridge
             {
                 await _sessionManager.AddExchangeAsync(
                     sessionId, safeQuery, responseText, TurnSignals.From(finalReasoning), ct);
-                _chatBridge.RecordBotExchange(sessionId, safeQuery, responseText);
+                await _chatBridge.RecordBotExchangeAsync(sessionId, safeQuery, responseText);
+            }
+            else
+            {
+                // Yanıtsız biten turda (hata/timeout) kullanıcının söylediği yine yazılır —
+                // yazılı kanalla aynı kural (bkz. SessionStateService.PersistExchangeAsync).
+                await _sessionManager.AppendUserMessageAsync(sessionId, safeQuery, ct);
+                await _chatBridge.RecordBotExchangeAsync(sessionId, safeQuery, botResponse: "");
             }
 
             await channel.SendJsonAsync(new { type = "workflow_done" }, ct);

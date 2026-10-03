@@ -56,6 +56,7 @@ Her konuşma turunda `SessionStateExtractor` bu nesneyi günceller. Ajanlar aras
 | `SentimentScore` | `double` | Duygu skoru (0.0 = çok olumsuz, 1.0 = çok olumlu) |
 | `SentimentHistory` | `List<SentimentEntry>` | Son N tur için duygu geçmişi |
 | `ConsecutiveNegativeTurns` | `int` | Ardışık negatif tur sayısı (otomatik eskalasyon tetikleyici) |
+| `Revision` | `long` | Her kalıcı yazmada bir artan sürüm sayacı. Pod'lar arası yayında geç gelen eski bir anlık görüntünün yenisini ezmesini engeller (duvar saati değil — pod saat kayması sıralamayı bozmasın). Bkz. [PostgresSessionManager](../../CustomerSupportBot.Adapters.Persistence/Postgres/PostgresSessionManager.md). |
 | `ForceReplanNextTurn` | `bool` | Admin "Yeniden Planla" tetiklediğinde true olur (one-shot) |
 | `ReplanRequestedBy` | `string?` | Replan'ı tetikleyen admin adı |
 | `ReplanRequestedAt` | `DateTime?` | Replan işaretlenme anı |

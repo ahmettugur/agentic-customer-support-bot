@@ -30,10 +30,13 @@ eskalasyonlar" listesi buradan beslenir; bir temsilci kaydı sahiplendiğinde
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-> 🐞 **`ix_escalations_session_open` neden filtreli:** Bir oturumda zaten açık bir eskalasyon
-> varken ikinci bir tane oluşturulmasını önlemek (dedup) için sık sorgulanan "bu session'da açık
-> escalation var mı" sorgusu — sadece `Open`/`Acknowledged` durumundaki satırları kapsayan
-> partial index, çözülmüş/reddedilmiş eski kayıtları taramadan hızlı cevap verir.
+> 🐞 **`ux_escalations_open_session_agent` neden unique VE filtreli:** Aynı oturumda aynı
+> ajandan ikinci bir açık eskalasyon oluşmasını DB seviyesinde engeller. Eskiden burada yalnızca
+> `session_id` üzerinde UNIQUE OLMAYAN bir index vardı (`ix_escalations_session_open`) ve dedup
+> uygulama tarafındaki atomik olmayan bir "önce kontrol, sonra ekle" adımına dayanıyordu. Filtre
+> (`Open`/`Acknowledged`) çözülmüş/reddedilmiş eski kayıtları kapsam dışı bırakır — aynı oturumda
+> önceki eskalasyon kapandıktan sonra yenisi açılabilir. Bkz.
+> [EscalationConfiguration](../../Configurations/Hitl/EscalationConfiguration.md).
 
 ## 6. Metotlar / Üyeler
 

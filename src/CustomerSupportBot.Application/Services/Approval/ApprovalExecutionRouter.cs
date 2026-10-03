@@ -22,31 +22,28 @@ public sealed class ApprovalExecutionRouter : IApprovalExecutionRouter
     public Task<ApprovalExecutionOutcome> ExecuteAsync(ApprovalRequest request, CancellationToken ct = default)
     {
         var p = request.Parameters;
+        var customerId = CustomerIdOf(request);
 
         ToolResult result = request.ToolName switch
         {
             WellKnown.ToolNames.OrderPlacement => _tools.OrderPlacementTool(
                 GetLines(p, "lines"),
-                GetString(p, "customerId") ?? ""),
+                customerId),
 
             WellKnown.ToolNames.ComplaintRegistration => _tools.ComplaintRegistrationTool(
                 GetString(p, "orderId") ?? "",
                 GetString(p, "complaintText") ?? "",
-                GetString(p, "customerId")),
+                customerId),
 
-            // customerId, Parameters sözlüğü yerine ApprovalRequest.CustomerId'den okunur —
-            // bu, HITL kaydını oluşturan JWT-doğrulanmış kimliğin AYNI kanonik alanı (bkz.
-            // ApprovalGateService.ExecuteWithApprovalGateAsync); Parameters'a ayrıca yazılmasına
-            // gerek yok.
             WellKnown.ToolNames.OrderCancel => _tools.OrderCancelTool(
                 GetString(p, "orderId") ?? "",
                 GetString(p, "reason") ?? "",
-                request.CustomerId ?? ""),
+                customerId),
 
             WellKnown.ToolNames.ReturnRequest => _tools.ReturnRequestTool(
                 GetString(p, "orderId") ?? "",
                 GetString(p, "reason") ?? "",
-                request.CustomerId ?? ""),
+                customerId),
 
             _ => ToolResult.SystemError(
                 "UNKNOWN_APPROVAL_TOOL",
@@ -55,6 +52,22 @@ public sealed class ApprovalExecutionRouter : IApprovalExecutionRouter
 
         return Task.FromResult(new ApprovalExecutionOutcome(result.Success, result.Message));
     }
+
+    /// <summary>
+    /// İşlemin yapılacağı müşteri — dört tool için TEK kaynak.
+    ///
+    /// <para>
+    /// Kanonik alan kaydın <see cref="ApprovalRequest.CustomerId"/>'sidir: HITL kaydını oluşturan
+    /// JWT-doğrulanmış kimlik (bkz. ApprovalGateService.ExecuteWithApprovalGateAsync). Eskiden
+    /// sipariş ve şikayet bunu Parameters sözlüğündeki kopyadan, iptal ve iade ise bu alandan
+    /// okuyordu; aynı kavram için iki kaynak, biri değiştiğinde sessizce ayrışır. Parameters'taki
+    /// kopya yalnızca bu alanın boş olduğu eski kayıtlar için yedektir.
+    /// </para>
+    /// </summary>
+    private static string CustomerIdOf(ApprovalRequest request) =>
+        !string.IsNullOrWhiteSpace(request.CustomerId)
+            ? request.CustomerId
+            : GetString(request.Parameters, "customerId") ?? "";
 
     private static string? GetString(IReadOnlyDictionary<string, object?> parameters, string key)
     {

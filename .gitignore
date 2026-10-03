@@ -449,3 +449,6 @@ FodyWeavers.xsd
 # Sensitive configuration files (real credentials)
 **/appsettings.Development.json
 **/appsettings.Production.json
+# docker compose gizli değerleri (şablon: deploy/.env.example)
+.env
+!.env.example

@@ -40,6 +40,14 @@ public class TokenServiceTests(PostgresCatalogFixture fixture)
     }
 
     [Fact]
+    public void Ctor_LowVarietySigningKey_Throws()
+    {
+        var opts = Options.Create(new JwtOptions { SigningKey = string.Concat(Enumerable.Repeat("abc", 20)) });
+        Action act = () => _ = new JwtAccessTokenProvider(opts);
+        act.Should().Throw<InvalidOperationException>().WithMessage("*zayıf*");
+    }
+
+    [Fact]
     public void Ctor_EmptySigningKey_Throws()
     {
         var opts = Options.Create(new JwtOptions { SigningKey = "" });
@@ -112,8 +120,10 @@ public class TokenServiceTests(PostgresCatalogFixture fixture)
     [Fact]
     public async Task RefreshAsync_RevokedToken_ReturnsNull()
     {
-        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build();
-        var user = Seed(dbf);
+        // Logout da artık koşullu iptal (TryRevokeAsync → ExecuteUpdateAsync) kullanır —
+        // EF InMemory'de desteklenmez, gerçek veritabanı gerekir.
+        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build(dbFactory: fixture.DbFactory);
+        var user = Seed(dbf, username: $"alice-{Guid.NewGuid():N}");
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
         (await tokens.RevokeAsync(first.RefreshToken, TestContext.Current.CancellationToken)).Should().BeTrue();
@@ -179,8 +189,10 @@ public class TokenServiceTests(PostgresCatalogFixture fixture)
     [Fact]
     public async Task RevokeAsync_AlreadyRevoked_ReturnsFalse()
     {
-        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build();
-        var user = Seed(dbf);
+        // Logout da artık koşullu iptal (TryRevokeAsync → ExecuteUpdateAsync) kullanır —
+        // EF InMemory'de desteklenmez, gerçek veritabanı gerekir.
+        var (tokens, _, _, dbf, _, _) = AuthTestFactory.Build(dbFactory: fixture.DbFactory);
+        var user = Seed(dbf, username: $"alice-{Guid.NewGuid():N}");
         var first = await tokens.IssueAsync(user, TestContext.Current.CancellationToken);
 
         (await tokens.RevokeAsync(first.RefreshToken, TestContext.Current.CancellationToken)).Should().BeTrue();

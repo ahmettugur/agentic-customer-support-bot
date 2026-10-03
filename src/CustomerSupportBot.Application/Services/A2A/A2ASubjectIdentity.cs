@@ -19,9 +19,23 @@ public static class A2ASubjectIdentity
     private const string Prefix = "a2a";
     private const char Separator = ':';
 
+    /// <summary>
+    /// Partner kimliği bu biçimde kullanılabilir mi? Ayraç içeren bir partner kimliği
+    /// (<c>acme:x</c>) üretilen kimlikte <c>a2a:acme:x:{müşteri}</c> olur ve
+    /// <see cref="TryGetPartnerId"/> onu <c>acme</c> olarak çözer: rate limit iki partneri
+    /// AYNI kovada sayar, denetim kaydı yanlış partneri gösterir.
+    /// </summary>
+    public static bool IsValidPartnerId(string? partnerId)
+        => !string.IsNullOrWhiteSpace(partnerId) && !partnerId.Contains(Separator);
+
     /// <summary>Özne token'ının kimliği: <c>a2a:{partnerId}:{customerId}</c>.</summary>
     public static string BuildId(string partnerId, string customerId)
-        => $"{Prefix}{Separator}{partnerId}{Separator}{customerId}";
+    {
+        if (!IsValidPartnerId(partnerId))
+            throw new ArgumentException(
+                $"A2A partner kimliği boş olamaz ve '{Separator}' içeremez.", nameof(partnerId));
+        return $"{Prefix}{Separator}{partnerId}{Separator}{customerId}";
+    }
 
     /// <summary>
     /// Kimlikten partner'ı çıkarır. Biçim beklenenden farklıysa <c>null</c> döner —

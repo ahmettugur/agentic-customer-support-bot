@@ -174,22 +174,66 @@ public sealed class OrderRepository : IOrderRepository
         return e is null ? null : (e.Code.ToString(), MapToModel(e));
     }
 
+    /// <remarks>
+    /// İptal, siparişin düştüğü stoğu geri verir. Eskiden yalnızca durum değişiyordu: stok
+    /// <see cref="PlaceOrder"/>'da düşülüyor ama hiçbir yolda iade edilmiyordu, yani iptal
+    /// edilen her siparişin adedi kalıcı olarak kayboluyordu.
+    ///
+    /// <para>
+    /// İade TAM OLARAK BİR KEZ yapılmalı. Durum geçişi bu yüzden "oku → kontrol et → yaz"
+    /// değil, koşullu tek bir <c>UPDATE ... WHERE status IN (İşleniyor, Kargolandı)</c>'dir:
+    /// aynı iptal eşzamanlı yürütülürse (iki pod, tekrarlanan onay) Postgres ikinci
+    /// UPDATE'i satır kilidinde bekletir, ilk commit'ten sonra koşulu yeniden değerlendirir ve
+    /// 0 satır döner. Geçişi kazanamayan çağıran stoğa hiç dokunmaz. Geçiş ile iade aynı
+    /// transaction'dadır; biri başarısız olursa ikisi de geri alınır.
+    /// </para>
+    ///
+    /// <para>
+    /// Kargolanmış bir siparişin iptalinde de stok iade edilir: iptal edilen gönderi
+    /// göndericiye döner. Stok satırları, <see cref="StockDeduction"/> ile aynı sırada (ürün
+    /// adına göre) güncellenir — eşzamanlı bir sipariş aynı ürünleri ters sırada kilitleyip
+    /// deadlock üretmesin diye.
+    /// </para>
+    /// </remarks>
     public bool Cancel(string orderId, string reason)
     {
         if (!long.TryParse(orderId, out var id)) return false;
-        using var ctx = _dbFactory.CreateDbContext();
-        var e = ctx.Orders.FirstOrDefault(o => o.Code == id);
-        if (e is null) return false;
 
-        if (e.Status != WellKnown.OrderStatuses.Processing &&
-            e.Status != WellKnown.OrderStatuses.Shipped)
-            return false;
+        using var probe = _dbFactory.CreateDbContext();
+        var strategy = probe.Database.CreateExecutionStrategy();
 
-        e.Status = WellKnown.OrderStatuses.Cancelled;
-        e.CancelledAt = DateTime.UtcNow;
-        e.CancelReason = reason;
-        ctx.SaveChanges();
-        return true;
+        return strategy.Execute(() =>
+        {
+            using var ctx = _dbFactory.CreateDbContext();
+            using var tx = ctx.Database.BeginTransaction();
+
+            var cancelledAt = DateTime.UtcNow;
+            var claimed = ctx.Orders
+                .Where(o => o.Code == id
+                    && (o.Status == WellKnown.OrderStatuses.Processing
+                        || o.Status == WellKnown.OrderStatuses.Shipped))
+                .ExecuteUpdate(s => s
+                    .SetProperty(o => o.Status, WellKnown.OrderStatuses.Cancelled)
+                    .SetProperty(o => o.CancelledAt, cancelledAt)
+                    .SetProperty(o => o.CancelReason, reason));
+
+            if (claimed == 0) return false;
+
+            var lines = ctx.OrderDetails
+                .Where(d => d.OrderCode == id)
+                .Select(d => new { d.ProductId, d.Product.Name, d.Quantity })
+                .ToList();
+
+            foreach (var line in lines.OrderBy(l => l.Name, StringComparer.Ordinal))
+            {
+                ctx.Products
+                    .Where(p => p.Id == line.ProductId)
+                    .ExecuteUpdate(s => s.SetProperty(p => p.Stock, p => p.Stock + line.Quantity));
+            }
+
+            tx.Commit();
+            return true;
+        });
     }
 
     public bool RequestReturn(string orderId, string reason)
@@ -202,7 +246,12 @@ public sealed class OrderRepository : IOrderRepository
         if (e.Status != WellKnown.OrderStatuses.Delivered)
             return false;
 
-        if ((DateTime.UtcNow - e.OrderDate).TotalDays > 14)
+        // Politika "aldıkları ürünleri 14 gün içinde" der: süre TESLİMDEN başlar. Eskiden
+        // sipariş tarihinden sayılıyordu; geç teslim edilen bir siparişin müşterisine fiilen
+        // birkaç gün kalıyordu. Teslim tarihi olmayan eski kayıtlar sipariş tarihine düşer —
+        // bilinen en erken, dolayısıyla en tutucu tarih.
+        var windowStart = e.DeliveredAt ?? e.OrderDate;
+        if ((DateTime.UtcNow - windowStart).TotalDays > 14)
             return false;
 
         e.Status = WellKnown.OrderStatuses.ReturnRequested;
@@ -230,6 +279,7 @@ public sealed class OrderRepository : IOrderRepository
             OrderDate = e.OrderDate,
             CancelledAt = e.CancelledAt,
             CancelReason = e.CancelReason,
+            DeliveredAt = e.DeliveredAt,
             ReturnRequestedAt = e.ReturnRequestedAt,
             ReturnReason = e.ReturnReason
         };

@@ -24,15 +24,20 @@ processors:
     limit_mib: 512
     spike_limit_mib: 128
 
-  # Attributes processor to add resource attributes
-  attributes:
-    actions:
+  # Resource processor — kaynak (resource) niteliklerini YALNIZCA eksikse ekler.
+  #
+  # Eskiden "attributes" işlemcisi service.name'i "upsert" ediyordu: o işlemci span
+  # niteliklerine yazar, resource'a değil; her span'e uygulamanın gerçek adıyla
+  # (CustomerSupportBot) çelişen "AI.Api" değerini zorla basıyordu. "insert" mevcut değeri
+  # korur, yalnızca adını bildirmeyen bir kaynak için varsayılan sağlar.
+  resource:
+    attributes:
       - key: service.name
-        value: AI.Api
-        action: upsert
-      - key: environment
+        value: CustomerSupportBot
+        action: insert
+      - key: deployment.environment.name
         value: development
-        action: upsert
+        action: insert
 
 exporters:
   # OTLP gRPC exporter to send traces to Jaeger
@@ -41,17 +46,21 @@ exporters:
     tls:
       insecure: true
 
-  # Debug exporter for console output (replaces deprecated logging)
+  # Debug exporter — pipeline'a VARSAYILAN OLARAK BAĞLI DEĞİL. "detailed" ayrıntı düzeyi her
+  # span'in tüm niteliklerini (kullanıcı sorguları, tool parametreleri) collector stdout'una
+  # döküyordu; loglar bu verilerin saklanması için tasarlanmamış bir yüzeydir. Hata ayıklarken
+  # geçici olarak traces.exporters listesine eklenebilir.
   debug:
-    verbosity: detailed
+    verbosity: basic
 
 service:
   pipelines:
     # Traces pipeline configuration
+    # Sıra: memory_limiter ilk (aşırı yükte veriyi en erken reddetmek için), batch son.
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch, attributes]
-      exporters: [otlp, debug]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp]
 
   # Extensions for health checks
   extensions: [health_check]

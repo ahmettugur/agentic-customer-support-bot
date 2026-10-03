@@ -109,7 +109,19 @@ public class EscalationPolicyService
                 };
 
                 await ApplyRoutingDecisionAsync(newRequest, trace, sr.AgentName, ct);
-                _escalationSink.Create(newRequest);
+                var stored = await _escalationSink.CreateAsync(newRequest);
+
+                // Yukarıdaki GetOpen kontrolü ile CreateAsync atomik değil: bileşik sorgunun
+                // paralel alt görevleri (ya da başka bir pod) aynı anda kontrolden geçebilir.
+                // Asıl dedup sink'te yapılır ve yarışı kaybeden çağrı MEVCUT kaydı geri alır —
+                // o durumda yeni bir atama olmadığı için temsilci yükü artırılmaz.
+                if (stored.Id != newRequest.Id)
+                {
+                    _logger.LogDebug(
+                        "[HITL] Session {SessionId} / {AgentName} için eşzamanlı eskalasyon; mevcut kayıt " +
+                        "(id={Id}) kullanıldı.", trace.SessionId, sr.AgentName, stored.Id);
+                    continue;
+                }
 
                 if (!string.IsNullOrWhiteSpace(newRequest.SuggestedAgentId))
                     _agentRegistry?.IncrementLoad(newRequest.SuggestedAgentId);

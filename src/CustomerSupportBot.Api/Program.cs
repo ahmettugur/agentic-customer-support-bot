@@ -4,14 +4,13 @@ using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.A2A;
 using Microsoft.Extensions.Options;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(o =>
 {
-    o.SerializerOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
+    o.SerializerOptions.Encoder = ApiJsonEncoder.Instance;
 });
 
 builder.Services.AddOpenApi();
@@ -25,6 +24,7 @@ builder.Services.AddPersistenceServices(builder.Configuration);
 builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddAuthenticationServices(builder.Configuration);
 builder.Services.AddAppHealthChecks(builder.Configuration);
+builder.Services.AddForwardedHeadersSupport();
 
 // A2A (Agent2Agent) — dış sistemlere açılan kanal. Kapalıysa ajanlar hiç kaydedilmez ve
 // endpoint hiç map edilmez: kapalı bir kanalın yayında olmaması, yetkiyle engellenmesinden
@@ -72,6 +72,17 @@ if (!app.Environment.IsDevelopment())
     }
 }
 
+// CORS guard: Development dışında boş origin listesi artık "herkese açık" değil, "kimseye açık
+// değil" demektir (bkz. ApplicationServicesExtensions). Tarayıcı istemcisi ayrı origin'den
+// çalışıyorsa bu sessiz bir kırılma olurdu — açıkça uyar.
+if (!app.Environment.IsDevelopment()
+    && (app.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? []).Length == 0)
+{
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Startup").LogWarning(
+        "[CORS] Cors:AllowedOrigins boş — tüm cross-origin tarayıcı istekleri reddedilecek. "
+      + "Panel/chat istemcisi ayrı bir origin'den çalışıyorsa adresini buraya ekleyin.");
+}
+
 // A2A guard: kanal açıkken kart adresleri dış istemcilerin okuyacağı adreslerdir.
 // PublicBaseUrl yalnızca Development'ta boş kalabilir; bu durumda kartlarda GÖRELİ URL'ler
 // yayınlanır. Dış ortamda boşluk da göreli değer kadar hatalıdır ve startup'ı durdurur.
@@ -108,6 +119,11 @@ if (a2aEnabled)
 }
 
 await app.MigrateIfDevelopmentAsync();
+
+// Ters proxy arkasında gerçek istemci adresi — IP tabanlı hız sınırları ve HTTPS yönlendirmesi
+// bunu görmeli, bu yüzden EN BAŞTA. Yalnızca ForwardedHeaders:KnownProxies/KnownNetworks
+// yapılandırılmışsa devreye girer (bkz. ForwardedHeadersExtensions).
+app.UseConfiguredForwardedHeaders();
 
 // Inbound boundary — domain exception → HTTP status/ProblemDetails çevirisi
 app.UseExceptionHandler();

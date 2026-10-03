@@ -39,6 +39,14 @@ public sealed class SessionStateService
     /// ürettikleri <see cref="TurnSignals"/> olarak GİRDİ biçiminde taşınır; türetilmiş
     /// alanların tek yazarı <c>SessionStateExtractor.ExtractAndApply</c>'dır.
     /// </para>
+    ///
+    /// <para>
+    /// <b>Yanıt boşsa kullanıcının mesajı yine yazılır.</b> Tur, ResponseAgent hiç konuşmadan
+    /// bir hata/timeout ile kesildiğinde elde metin kalmaz; eskiden bu durumda hiçbir şey
+    /// yazılmıyordu — kullanıcının sorusu geçmişten ve admin panelinden kayboluyor, sonraki tur
+    /// bağlamsız başlıyordu. Yanıtsız kalan kullanıcı mesajı, insan modundaki mesajlarla aynı
+    /// biçimdedir (yalnızca kullanıcı rolü).
+    /// </para>
     /// </summary>
     /// <param name="signals">
     /// Bu tur için LLM sinyalleri; <c>null</c> ise kural tabanlı çıkarım kullanılır.
@@ -54,7 +62,12 @@ public sealed class SessionStateService
         if (!string.IsNullOrWhiteSpace(response))
         {
             await _sessionManager.AddExchangeAsync(sessionId, query, response, signals, ct);
-            chatBridge.RecordBotExchange(sessionId, query, response);
+            await chatBridge.RecordBotExchangeAsync(sessionId, query, response);
+        }
+        else if (!string.IsNullOrWhiteSpace(query))
+        {
+            await _sessionManager.AppendUserMessageAsync(sessionId, query, ct);
+            await chatBridge.RecordBotExchangeAsync(sessionId, query, botResponse: "");
         }
     }
 

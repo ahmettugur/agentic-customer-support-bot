@@ -126,7 +126,7 @@ public sealed class LessonMiner
 
             // Parse aşamasında SourceTraceIds'e 1-tabanlı numaralar konmuştu; gerçek ID'lere çevir.
             l.SourceTraceIds = ResolveSourceTraces(l.SourceTraceIds, picked);
-            _lessonStore.Add(l);
+            await _lessonStore.AddAsync(l);
             added.Add(l);
         }
 
@@ -188,11 +188,11 @@ public sealed class LessonMiner
                 _logger.LogWarning(ex, "Lesson VectorStore'a yazılamadı (lessonId={Id}); status Approved ama yalnızca DB'de.", lessonId);
             }
         }
-        _lessonStore.Update(lesson);
+        await _lessonStore.UpdateAsync(lesson);
         return true;
     }
 
-    public bool Reject(string lessonId, string decidedBy, string? reason)
+    public async Task<bool> RejectAsync(string lessonId, string decidedBy, string? reason)
     {
         var lesson = _lessonStore.Get(lessonId);
         if (lesson is null || lesson.Status != LessonStatus.Proposed) return false;
@@ -201,7 +201,7 @@ public sealed class LessonMiner
         lesson.DecidedBy = decidedBy;
         lesson.DecidedAt = DateTime.UtcNow;
         lesson.DecisionReason = reason;
-        _lessonStore.Update(lesson);
+        await _lessonStore.UpdateAsync(lesson);
         return true;
     }
 

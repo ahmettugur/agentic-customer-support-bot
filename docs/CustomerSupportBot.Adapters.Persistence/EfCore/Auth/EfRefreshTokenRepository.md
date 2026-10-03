@@ -27,7 +27,11 @@ JWT yenileme (refresh) token'larının veritabanı karşılığı: oluşturma, h
 
 > 🐞 **`TryRevokeAsync` neden `RevokeAsync`'ten AYRI, koşullu bir metot olarak eklendi:** `RevokeAsync` klasik oku-değiştir-kaydet yapar (`FirstAsync` + alan ata + `SaveChangesAsync`) — iki eşzamanlı `/auth/refresh` isteği AYNI eski token'ı kullanmaya çalışırsa (örn. çift-tıklama, ağ retry'ı), her ikisi de token'ı "hâlâ geçerli" olarak okuyup ikisi de yeni bir refresh token üretebilir; bu, aynı eski token'ın İKİ KEZ "başarıyla" kullanılmasına (rotasyonun çift kullanım koruması delinmesine) yol açardı. `TryRevokeAsync`, tek bir `WHERE Id=@id AND RevokedAt IS NULL` koşullu `ExecuteUpdateAsync` ile bunu önler: yalnızca token GERÇEKTEN hâlâ aktifse (`RevokedAt == null`) iptal edilir ve `affected > 0` (yani `true`) döner; ikinci eşzamanlı çağrı `false` alır ve `TokenPortService.RefreshAsync` bu durumda yeni token ÜRETMEZ — projede approval kuyruğu ve stok düşümünde de kullanılan aynı "koşullu atomik sahiplenme" deseni (bkz. [PostgresApprovalQueue](../../Postgres/PostgresApprovalQueue.md), [StockDeduction](../../Postgres/StockDeduction.md)).
 
-`RevokeAsync` (koşulsuz versiyon) hâlâ kodda duruyor — örn. bir kullanıcının TÜM token'larını kesin olarak iptal etmek gereken (şifre değişikliği, hesap kilitleme) senaryolarda, çift-kullanım riski olmayan tekil bir işlemde kullanılabilir.
+`RevokeAsync` (koşulsuz versiyon) hâlâ kodda duruyor ama `TokenPortService` artık onu kullanmıyor — logout da koşullu `TryRevokeAsync`'e geçti (koşulsuz yazma, araya giren bir rotasyonun `ReplacedByTokenHash` kaydını silip yeniden kullanım tespitini kör ediyordu).
+
+`RevokeAllActiveForUserAsync`, refresh token yeniden kullanımı tespit edildiğinde kullanıcının tüm aktif token'larını `WHERE UserId = @id AND RevokedAt IS NULL` koşullu `ExecuteUpdateAsync` ile tek seferde iptal eder (bkz. [TokenPortService](../../../CustomerSupportBot.Application/Services/Auth/TokenPortService.md)).
+
+> `ExecuteUpdateAsync` EF InMemory sağlayıcısında desteklenmez; bu metotları kullanan testler gerçek Postgres (Testcontainers) ya da `InMemoryRefreshTokenRepository` test ikizi kullanır.
 
 ## 6. Metotlar / Üyeler
 
@@ -37,6 +41,7 @@ JWT yenileme (refresh) token'larının veritabanı karşılığı: oluşturma, h
 | `Task<RefreshTokenInfo?> FindByHashAsync(string tokenHash, CancellationToken ct)` | Hash'e göre arar (token'ın kendisi DEĞİL, hash'i saklanır/aranır — DB sızıntısına karşı). |
 | `Task RevokeAsync(string id, DateTime revokedAt, string? replacedByTokenHash, CancellationToken ct)` | Koşulsuz iptal — oku-değiştir-kaydet. |
 | `Task<bool> TryRevokeAsync(string id, DateTime revokedAt, string? replacedByTokenHash, CancellationToken ct)` | Koşullu atomik iptal (`RevokedAt IS NULL` iken); rotasyonun çift-kullanım koruması budur. |
+| `Task<int> RevokeAllActiveForUserAsync(string userId, DateTime revokedAt, CancellationToken ct)` | Kullanıcının aktif tüm token'larını koşullu toplu iptal; iptal edilen sayı. |
 | `private static RefreshTokenInfo Map(RefreshTokenEntity e)` | Entity → Domain modeli. |
 
 ## 7. Bağımlılıklar

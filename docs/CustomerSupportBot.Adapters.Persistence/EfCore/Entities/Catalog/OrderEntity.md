@@ -50,6 +50,7 @@ kalır (denetim/rapor kolaylığı).
 | `OrderDate` | `DateTime` | Sipariş tarihi, `timestamptz` kolon tipi. |
 | `CancelledAt` | `DateTime?` | İptal edildiyse zaman damgası. |
 | `CancelReason` | `string?` | İptal nedeni, ≤512 karakter. |
+| `DeliveredAt` | `DateTime?` | Teslim anı; iade süresi buradan sayılır. Siparişi "Teslim Edildi"ye geçiren yazar doldurmalı; boşsa (eski kayıtlar) iade kuralı `OrderDate`'e düşer. |
 | `ReturnRequestedAt` | `DateTime?` | İade talep edildiyse zaman damgası. |
 | `ReturnReason` | `string?` | İade nedeni, ≤512 karakter. |
 | `Details` | `ICollection<OrderDetailEntity>` | Sipariş kalemleri (ürün + adet). |

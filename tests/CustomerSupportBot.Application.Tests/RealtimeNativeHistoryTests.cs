@@ -118,7 +118,7 @@ public class RealtimeNativeHistoryTests
     {
         var (_, bridge) = await RunOneTurnAsync();
 
-        bridge.Received(1).RecordBotExchange(
+        await bridge.Received(1).RecordBotExchangeAsync(
             SessionId,
             Arg.Is<string>(t => t.Contains(UserSaid)),
             Arg.Is<string>(t => t.Contains(BotSaid)));

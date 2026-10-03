@@ -25,7 +25,7 @@ damgalarının saat dilimi bilgisini korumak.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-Tüm zaman damgaları (`OrderDate`, `CancelledAt`, `ReturnRequestedAt`) `timestamptz` (timestamp
+Tüm zaman damgaları (`OrderDate`, `CancelledAt`, `DeliveredAt`, `ReturnRequestedAt`) `timestamptz` (timestamp
 with time zone) olarak eşlenir — sunucu/istemci farklı saat dilimlerinde çalışsa bile UTC'ye
 göre tutarlı karşılaştırma yapılabilir; `timestamp` (saat dilimsiz) kullanılsaydı çoklu bölgeli
 deployment'ta zaman kayması riski olurdu.
@@ -34,7 +34,7 @@ deployment'ta zaman kayması riski olurdu.
 
 | Üye | Açıklama |
 |---|---|
-| `Configure(EntityTypeBuilder<OrderEntity>)` | `Code` PK (identity); `CustomerId` zorunlu + index; `Status` zorunlu/≤64; `OrderDate` zorunlu/`timestamptz`; `CancelledAt`/`CancelReason`/`ReturnRequestedAt`/`ReturnReason` opsiyonel. |
+| `Configure(EntityTypeBuilder<OrderEntity>)` | `Code` PK (identity); `CustomerId` zorunlu + index; `Status` zorunlu/≤64; `OrderDate` zorunlu/`timestamptz`; `CancelledAt`/`CancelReason`/`DeliveredAt`/`ReturnRequestedAt`/`ReturnReason` opsiyonel. |
 
 ## 7. Bağımlılıklar
 

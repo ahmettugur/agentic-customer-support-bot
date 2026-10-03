@@ -6,6 +6,8 @@ namespace CustomerSupportBot.Api.Infrastructure;
 
 using CustomerSupportBot.Application.Ports.Inbound;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 /// <summary>
 /// Thread-safe SSE event writer that manages concurrent access to the HTTP response.
@@ -15,13 +17,15 @@ public sealed class SseForwarder : IDisposable
 {
     private readonly HttpResponse _response;
     private readonly CancellationToken _cancellationToken;
+    private readonly ILogger _logger;
     private readonly SemaphoreSlim _lock = new(1, 1);
     private bool _disposed;
 
-    public SseForwarder(HttpResponse response, CancellationToken cancellationToken)
+    public SseForwarder(HttpResponse response, CancellationToken cancellationToken, ILogger? logger = null)
     {
         _response = response ?? throw new ArgumentNullException(nameof(response));
         _cancellationToken = cancellationToken;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -45,10 +49,13 @@ public sealed class SseForwarder : IDisposable
         {
             // Client disconnected - expected, no action needed
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // Write failures (client closed connection) are expected in SSE
-            // Swallow to avoid breaking the stream processing
+            // Swallow to avoid breaking the stream processing — but leave a trace: a write
+            // that fails for any OTHER reason (e.g. a payload that cannot be serialized)
+            // would otherwise silently drop events.
+            _logger.LogDebug(ex, "SSE write failed | event={EventType}", eventType);
         }
         finally
         {

@@ -32,6 +32,8 @@ pipeline'ını beklemeden cevap üretebilir.
 - 60 saniyelik kullanıcı hareketsizliği sonrası görüşmeyi otomatik sonlandırmak (`WatchInactivityAsync`).
 - Sesli turu hem admin panelinin izleyebilmesi için `IChatBridge`'e hem ajan bağlamı için
   `ISessionManager`'a yazmak.
+- Tur kaydından sonra duygu durumunu değerlendirmek (`sentiment_update` / `sentiment_alert`
+  olayları) ve uyarı eşiği aşıldığında eskalasyon açmak (`EvaluateSentimentAsync`).
 
 **Üstlenmediği:** Reasoning/routing (bu modda hiç çalışmaz), yan etkili işlemler (yazılı
 sohbete veya bridge moduna yönlendirilir).
@@ -61,11 +63,32 @@ başka bir müşterinin sipariş geçmişini isteyebilirdi (impersonation açı�
 
 ### Kullanıcı transkriptinin geçmişe yazılması neden gerekli
 
-`_chatBridge.RecordBotExchange` yalnızca admin panelini besler; ajanın bağlamı
+`_chatBridge.RecordBotExchangeAsync` yalnızca admin panelini besler; ajanın bağlamı
 `ISessionManager`'dan gelir. Bu yazma olmadan sesli turlar konuşma geçmişinde hiç görünmüyordu
 — bot moduna geçildiğinde ajan önceki isteği bilmiyordu, temsilci devraldığında panelde
 müşterinin ne dediği görünmüyordu. Geçmişe "(sesli)" gibi bir placeholder yazmak yerine gerçek
-transkript (`lastUserTranscript`) kullanılır.
+transkript kullanılır.
+
+### Transkript ↔ yanıt eşleştirmesi (`VoiceTurnPairer`)
+
+OpenAI Realtime'da kullanıcı sesinin transkripsiyonu yanıt üretimiyle paralel çalışır; transkript
+yanıt olaylarından önce, ortasında ya da `response.done`'dan sonra gelebilir. Servis eskiden yanıtı
+"o ana kadarki son transkript"le eşliyordu: transkript geç geldiğinde tur bir önceki kullanıcı
+cümlesiyle (ya da `(sesli)` ile) kaydediliyor, kural tabanlı duygu çıkarımı da yanlış metin
+üzerinde çalışıyordu. Ayrıca transkript yanıtın ortasında gelirse o ana kadarki asistan metni
+kayıttan siliniyordu (`"Siparişiniz kargoda."` → `"kargoda."`).
+
+Artık eşleştirme protokolün kendi bağıyla yapılır ([VoiceTurnPairer](VoiceTurnPairer.md)):
+transkript ait olduğu kullanıcı ses öğesinin `item_id`'sini taşır; bir yanıt, başladığı anda son
+commit edilmiş (`input_audio_buffer.committed`) kullanıcı öğesine aittir; tool sonucu üzerine gelen
+takip yanıtı aynı tura aittir. Turlar geçmişe konuşma sırasıyla yazılır. Transkripsiyon başarısız
+olursa (`…transcription.failed` ya da boş transkript) tur yer tutucuyla yazılır; girdi
+güvenliğince reddedilen transkriptin turu hiç yazılmaz. Bağlantı kapanırken transkripti gelmemiş
+turlar ve tool çağrısıyla biten son yanıtın metni (ör. `end_conversation` ile söylenen veda) de
+kaydedilir. Kimlik taşımayan bir olay akışında eski davranış (son transkript) korunur.
+
+Tool sonrası takip yanıtı, transkript zaten gönderildiyse tarayıcıya akmaya devam eder ve tool
+öncesi söylenen cümlenin tamponlanmış metni atılmaz (eskiden ekranda hiç çıkmıyordu).
 
 ### Asistan metninin buffer'lanması
 
@@ -73,6 +96,27 @@ transkript (`lastUserTranscript`) kullanılır.
 `bufferedAssistantDeltas`'ta tutulur — transkript event'inden önce gelen delta'lar hemen
 gönderilmez, transkript gönderildiğinde toplu olarak flush edilir. Bu, tarayıcı tarafında
 asistan metninin kullanıcı balonundan önce görünmesini engeller.
+
+### Duygu uyarısı ve eskalasyon — metin kanalıyla eşdeğerlik
+
+Metin kanalında tur sonunda duygu uyarısı değerlendirilir (bkz.
+[ChatPortService](../Chat/ChatPortService.md)) ve eskalasyon, workflow'daki uzman ajanın
+`needs_escalation` kararından gelir ([EscalationPolicyService](../Escalation/EscalationPolicyService.md)).
+Native modda workflow yoktur; bu yüzden ne uyarı değerlendiriliyor ne de eskalasyona giden
+**hiçbir yol** vardı — art arda olumsuz turlar yaşayan sesli bir müşteri yazılı kanala geçmedikçe
+insana ulaşamıyordu.
+
+Artık her kaydedilen turdan sonra (duygu, `AddExchangeAsync`'in kural tabanlı çıkarımıyla
+güncellenir — bu modda LLM `TurnSignals`'ı yok) `SessionStateService.CheckSentimentAlert` çağrılır,
+tarayıcıya metin kanalıyla aynı `sentiment_update` / `sentiment_alert` olayları gönderilir. Bu
+kanalda elimizdeki tek sinyal ardışık olumsuz duygu olduğu için uyarı eşiği
+(`AutoEscalationConsecutiveNegative`) aşıldığında `RealtimeVoiceAgent` adına, `High` öncelikli bir
+eskalasyon açılır. Sink'in session + ajan dedup'ı oturum başına tek açık kayıt tutar; eşik sonraki
+turlarda yeniden aşılsa da ikinci kayıt oluşmaz. Değerlendirme/eskalasyon hatası görüşmeyi
+kesmez (loglanır).
+
+Duygu değerlendirmesi her tur [eşleştirilip](#transkript--yanıt-eşleştirmesi-voiceturnpairer)
+geçmişe yazıldıktan sonra çalışır, yani doğru kullanıcı cümlesi üzerinde yapılır.
 
 ### Inactivity timeout neden 60sn
 
@@ -96,7 +140,9 @@ transport hem tarayıcı kanalı kapatılır.
 
 Constructor injection ile: `IRealtimeVoiceTransport`, `ISessionManager`,
 `CustomerSupportToolsService`, `IInputGuard`, `IChatBridge`, `CustomerIdentityHintBuilder`,
-`IAppDistributedLock`, `ILogger<RealtimeNativeService>`.
+`IAppDistributedLock`, `ILogger<RealtimeNativeService>`, ve opsiyonel olarak
+`SessionStateService?` (duygu uyarısı) ile `IEscalationSink?` (eskalasyon) — verilmezse ilgili
+adım atlanır.
 
 ## Bağlantılar
 

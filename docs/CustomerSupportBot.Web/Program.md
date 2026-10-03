@@ -19,7 +19,7 @@ Uygulamanın bootstrap aşamasında bir kez çalışır. Auth altyapısı, HTTP 
 ## Diğer Katman ve Bileşenlerle İlişkileri
 - **Kaydedilen servisler**: Tüm `Services/` altındaki sınıflar burada DI'a eklenir.
 - **Root bileşen**: [App.razor](App.md) — `Router` ve `CascadingAuthenticationState` içerir.
-- **Backend adresi**: `https://localhost:7095` (development) hard-coded olarak `HttpClient.BaseAddress`'e atanır.
+- **Backend adresi**: `wwwroot/appsettings.json` → `Api:BaseUrl` (varsayılan `https://localhost:7095`). Blazor WASM bu dosyayı ve `appsettings.{Environment}.json`'u otomatik yükler; ortam başına farklı adres için yeniden derleme gerekmez. Değer boşsa uygulamanın kendi origin'i (`HostEnvironment.BaseAddress`) kullanılır — API ile aynı host'tan, ters vekil arkasında sunulduğunda. `wwwroot` altındaki yapılandırma tarayıcıya açıktır; gizli değer konmaz.
 
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 Blazor WASM'da `Startup` sınıfı yoktur; tüm yapılandırma `Program.cs` üzerinden yapılır. İki ayrı `HttpClient` kaydı tasarım gereğidir: `AuthorizedHttpClientHandler` 401 aldığında `AuthService.TryRefreshAsync()` çağırır — eğer `AuthService` de aynı handler'dan geçseydi sonsuz döngü oluşurdu.
@@ -33,7 +33,7 @@ Bu dosya bir sınıf değil, top-level statements ile yazılmış giriş noktas�
 | `AddScoped<AuthTokenStore>()` | `localStorage` tabanlı JWT depolama. |
 | `AddScoped<AppAuthStateProvider>()` | JWT → `ClaimsPrincipal` dönüştürücü. |
 | `AddScoped<AuthorizedHttpClientHandler>()` | Bearer token + 401 retry handler. |
-| `AddScoped<HttpClient>(...)` | Handler zincirli, base address'li HttpClient. |
+| `AddScoped<HttpClient>(...)` | Handler zincirli HttpClient; base address `Api:BaseUrl`'den. |
 | `AddScoped<AuthService>(...)` | Ham HttpClient'li auth servisi (döngü koruması). |
 
 ## Bağımlılıklar

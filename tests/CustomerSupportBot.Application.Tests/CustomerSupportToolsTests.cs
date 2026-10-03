@@ -1,4 +1,5 @@
 using CustomerSupportBot.Tests.Shared;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Tools;
 using CustomerSupportBot.Domain.Model;
 
@@ -203,6 +204,71 @@ public class CustomerSupportToolsTests
         r1.Success.Should().BeTrue();
         r2.Success.Should().BeTrue();
         _fixture.OrderRepo.GetByCustomer(customerId).Count.Should().Be(2);
+    }
+
+    [Fact]
+    public void OrderPlacement_DuplicateLandsOnAnotherPod_DoesNotCreateSecondOrder()
+    {
+        // Yinelenen istek yük dengeleyici tarafından BAŞKA bir pod'a düşer: o pod'un bellek
+        // içi cache'i boştur. Ortak (dağıtık) katman olmadan ikinci sipariş yazılıyordu.
+        var shared = new FakeDistributedIdempotencyStore();
+        var podA = TestFactory.CreateToolsService(_fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo,
+            idempotency: new SideEffectIdempotencyCache(distributed: shared));
+        var podB = TestFactory.CreateToolsService(_fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo,
+            idempotency: new SideEffectIdempotencyCache(distributed: shared));
+
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var customerId = "9006";
+        var ordersBefore = _fixture.OrderRepo.GetByCustomer(customerId).Count;
+
+        var r1 = podA.OrderPlacementTool(Line(product, 1), customerId);
+        var r2 = podB.OrderPlacementTool(Line(product, 1), customerId);
+
+        r1.Success.Should().BeTrue();
+        r2.Success.Should().BeTrue();
+        _fixture.OrderRepo.GetByCustomer(customerId).Count
+            .Should().Be(ordersBefore + 1, "başka pod'a düşen mükerrer çağrı ikinci sipariş yazmamalı");
+
+        var firstOrderId = r1.Data!.GetType().GetProperty("orderId")!.GetValue(r1.Data)!.ToString();
+        r2.Message.Should().Contain(firstOrderId);
+    }
+
+    [Fact]
+    public void OrderPlacement_DistributedStoreUnavailable_FallsBackToLocalCache()
+    {
+        // Dağıtık katman en-iyi-çabadır: Redis erişilemezse sipariş akışı durmamalı.
+        var cache = new SideEffectIdempotencyCache(distributed: new FakeDistributedIdempotencyStore(failing: true));
+        var svc = TestFactory.CreateToolsService(
+            _fixture.ProductRepo, _fixture.OrderRepo, _fixture.ComplaintRepo, idempotency: cache);
+
+        var product = _fixture.ProductRepo.GetAll().First().Name;
+        var customerId = "9007";
+        var ordersBefore = _fixture.OrderRepo.GetByCustomer(customerId).Count;
+
+        var r1 = svc.OrderPlacementTool(Line(product, 1), customerId);
+        var r2 = svc.OrderPlacementTool(Line(product, 1), customerId);
+
+        r1.Success.Should().BeTrue();
+        r2.Success.Should().BeTrue();
+        _fixture.OrderRepo.GetByCustomer(customerId).Count
+            .Should().Be(ordersBefore + 1, "aynı pod'daki mükerrer çağrı yerel cache ile yine yakalanmalı");
+    }
+
+    private sealed class FakeDistributedIdempotencyStore(bool failing = false) : IDistributedIdempotencyStore
+    {
+        private readonly Dictionary<string, string> _entries = new();
+
+        public string? Get(string key)
+        {
+            if (failing) throw new InvalidOperationException("redis unavailable (simulated)");
+            lock (_entries) return _entries.TryGetValue(key, out var v) ? v : null;
+        }
+
+        public void Set(string key, string entityId, TimeSpan ttl)
+        {
+            if (failing) throw new InvalidOperationException("redis unavailable (simulated)");
+            lock (_entries) _entries.TryAdd(key, entityId);
+        }
     }
 
     [Fact]

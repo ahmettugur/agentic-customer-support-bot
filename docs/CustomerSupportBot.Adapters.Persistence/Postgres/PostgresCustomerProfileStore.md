@@ -32,9 +32,9 @@ Müşterinin uzun ömürlü kişiselleştirme profilini (etkileşim sayısı, te
 | Üye | Açıklama |
 |---|---|
 | `CustomerProfile? Get(string customerId)` | Cache'ten, yoksa `null`. |
-| `CustomerProfile GetOrCreate(string customerId)` | Yoksa yeni boş profil oluşturup kaydeder, döner. |
-| `void Upsert(CustomerProfile profile)` | Cache + DB UPSERT + Redis yayını. |
-| `bool Delete(string customerId)` | Profili siler (örn. KVKK/GDPR silme talebi). |
+| `Task<CustomerProfile> GetOrCreateAsync(string customerId)` | Yoksa yeni boş profil oluşturup kaydeder, döner. |
+| `Task UpsertAsync(CustomerProfile profile)` | Cache + DB UPSERT + Redis yayını. |
+| `Task<bool> DeleteAsync(string customerId)` | Profili siler (örn. KVKK/GDPR silme talebi). |
 | `IReadOnlyList<CustomerProfile> List(int take = 100)` | Cache'ten sınırlı liste (admin görünümü). |
 | `int Count { get; }` | Cache'teki toplam profil sayısı. |
 

@@ -33,7 +33,7 @@ manipülasyonunu önler.
 
 | Metot | Açıklama |
 |---|---|
-| `ConversationRating Submit(string sessionId, int stars, string? feedback)` | Yeni değerlendirme kaydeder. |
+| `Task<ConversationRating> SubmitAsync(string sessionId, int stars, string? feedback)` | Yeni değerlendirme kaydeder. |
 | `ConversationRating? GetBySession(string sessionId)` | Oturumun rating'i, yoksa `null`. |
 | `IReadOnlyList<ConversationRating> GetAll()` | Tüm rating'ler (analytics). |
 | `IReadOnlyList<ConversationRating> GetRecent(int count = 20)` | Son N rating. |

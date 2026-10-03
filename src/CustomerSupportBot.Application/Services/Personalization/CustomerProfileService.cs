@@ -76,10 +76,10 @@ public sealed partial class CustomerProfileService : ICustomerProfileService
             .AcquireAsync($"profile:{customerId}", ct: ct)
             .ConfigureAwait(false);
 
-        return RecordInteractionCore(customerId, userQuery, botResponse, intent, rating, isNewSession);
+        return await RecordInteractionCoreAsync(customerId, userQuery, botResponse, intent, rating, isNewSession);
     }
 
-    private CustomerProfile? RecordInteractionCore(
+    private async Task<CustomerProfile?> RecordInteractionCoreAsync(
         string customerId,
         string userQuery,
         string botResponse,
@@ -87,7 +87,7 @@ public sealed partial class CustomerProfileService : ICustomerProfileService
         int? rating,
         bool isNewSession)
     {
-        var profile = _store.GetOrCreate(customerId);
+        var profile = await _store.GetOrCreateAsync(customerId);
 
         profile.TotalTurns++;
         if (isNewSession) profile.TotalSessions++;
@@ -127,7 +127,7 @@ public sealed partial class CustomerProfileService : ICustomerProfileService
                 profile.RecentRatings.RemoveAt(0);
         }
 
-        _store.Upsert(profile);
+        await _store.UpsertAsync(profile);
         return profile;
     }
 

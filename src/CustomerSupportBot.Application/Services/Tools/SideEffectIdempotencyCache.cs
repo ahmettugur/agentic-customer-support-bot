@@ -18,7 +18,10 @@
 
 using System.Security.Cryptography;
 using System.Text;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Domain.Model;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Application.Services.Tools;
 
@@ -45,18 +48,29 @@ public sealed class SideEffectIdempotencyCache
     private readonly TimeSpan _window;
     private readonly int _maxEntries;
     private readonly TimeProvider _clock;
+    private readonly IDistributedIdempotencyStore? _distributed;
+    private readonly ILogger<SideEffectIdempotencyCache> _logger;
 
     private readonly object _gate = new();
     private readonly Dictionary<string, IdempotentCall> _entries = new(StringComparer.Ordinal);
 
+    /// <param name="distributed">
+    /// Pod'lar arası ikinci katman (Redis). Bellek içi cache yalnızca kendi pod'unu görür;
+    /// yinelenen istek başka bir pod'a düşerse kayıt iki kez oluşurdu. Verilmezse (testler)
+    /// yalnızca bellek içi katman çalışır.
+    /// </param>
     public SideEffectIdempotencyCache(
         TimeSpan? window = null,
         int maxEntries = DefaultMaxEntries,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        IDistributedIdempotencyStore? distributed = null,
+        ILogger<SideEffectIdempotencyCache>? logger = null)
     {
         _window = window ?? DefaultWindow;
         _maxEntries = maxEntries > 0 ? maxEntries : DefaultMaxEntries;
         _clock = clock ?? TimeProvider.System;
+        _distributed = distributed;
+        _logger = logger ?? NullLogger<SideEffectIdempotencyCache>.Instance;
     }
 
     /// <summary>
@@ -81,8 +95,34 @@ public sealed class SideEffectIdempotencyCache
             }
         }
 
+        var remoteEntityId = TryReadDistributed(key);
+        if (remoteEntityId is not null)
+        {
+            // Kayıt başka bir pod'da oluşturuldu: o pod'un ToolResult'ı elimizde yok, ama
+            // tüketiciler mükerrer yanıtı yalnızca varlık kimliğiyle kurar.
+            recent = new IdempotentCall(
+                ToolResult.Ok($"Kayıt zaten oluşturulmuş: {remoteEntityId}."),
+                remoteEntityId,
+                now);
+            return true;
+        }
+
         recent = null!;
         return false;
+    }
+
+    // Dağıtık katman en-iyi-çaba korumadır: Redis erişilemezse sipariş/şikayet akışı
+    // DURMAZ, yalnızca bellek içi katmana düşülür (fail-open). Tersi — Redis kesintisinde hiç
+    // sipariş alamamak — daha büyük bir zarardır.
+    private string? TryReadDistributed(string key)
+    {
+        if (_distributed is null) return null;
+        try { return _distributed.Get(key); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Idempotency] Dağıtık kayıt okunamadı; yalnızca yerel cache kullanılıyor.");
+            return null;
+        }
     }
 
     /// <summary>
@@ -117,6 +157,15 @@ public sealed class SideEffectIdempotencyCache
                 {
                     _entries.Remove(stale);
                 }
+            }
+        }
+
+        if (_distributed is not null && entityId is not null)
+        {
+            try { _distributed.Set(key, entityId, _window); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Idempotency] Dağıtık kayıt yazılamadı; koruma bu pod'la sınırlı.");
             }
         }
     }

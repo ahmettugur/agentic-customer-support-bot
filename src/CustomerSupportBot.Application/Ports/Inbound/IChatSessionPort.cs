@@ -55,16 +55,16 @@ public interface IChatSessionPort
 {
     IReadOnlyList<ChatSessionState> GetActive();
     ChatSessionState GetStateOrDefault(string sessionId);
-    IReadOnlyList<ChatBridgeMessage> GetHistory(string sessionId, int take = 50);
+    Task<IReadOnlyList<ChatBridgeMessage>> GetHistoryAsync(string sessionId, int take = 50);
     Task<ChatSessionSentimentSnapshot?> GetSentimentAsync(string sessionId, CancellationToken ct = default);
-    void PublishSystemMessage(string sessionId, string text);
-    ChatSessionTakeoverResult TakeOver(string sessionId, string humanAgent, string? agentId = null);
-    ChatSessionReleaseResult Release(string sessionId, string? agentId = null);
+    Task PublishSystemMessageAsync(string sessionId, string text);
+    Task<ChatSessionTakeoverResult> TakeOverAsync(string sessionId, string humanAgent, string? agentId = null);
+    Task<ChatSessionReleaseResult> ReleaseAsync(string sessionId, string? agentId = null);
     Task<ChatSessionMessageResult> SendAdminMessageAsync(string sessionId, string humanAgent, string text, CancellationToken ct = default);
     Task<ChatSessionReplanResult> ReplanSessionAsync(string sessionId, string requestedBy, string? note, CancellationToken ct = default);
     Task<ChatSessionReplanResult> ReplanEscalationAsync(string escalationId, string requestedBy, string? note, CancellationToken ct = default);
     IAsyncEnumerable<ChatBridgeMessage> SubscribeToAdminAsync(string sessionId, CancellationToken ct);
     IAsyncEnumerable<ChatBridgeMessage> SubscribeToUserAsync(string sessionId, CancellationToken ct);
     IReadOnlyList<EscalationRequest> GetOpenEscalations();
-    int DismissOrphanedEscalations(string sessionId);
+    Task<int> DismissOrphanedEscalationsAsync(string sessionId);
 }

@@ -14,7 +14,7 @@ Her sohbet turunun akıl yürütme izini (`ReasoningTrace` — hangi ajan, hangi
 
 ## 3. Sorumlulukları
 
-- `StartTrace` — yeni trace başlatır, `_insertionOrder` kuyruğuna ekler, kapasite aşımında en eski trace'i düşürür.
+- `StartTraceAsync` — yeni trace başlatır (senkron tamamlanmış Task döner), `_insertionOrder` kuyruğuna ekler, kapasite aşımında en eski trace'i düşürür.
 - `Update` — trace zaten referans olarak sözlükte tutulduğundan pratikte no-op'a yakındır (yine de üzerine yazar).
 - `Complete` — bitiş zamanı, sonlanma nedeni, nihai yanıt (2000 karakterden uzunsa kırpılır) ve hata bilgisini doldurur.
 - `Get`, `GetRecent(count)`, `GetBySession(sessionId)`.
@@ -33,7 +33,7 @@ Her sohbet turunun akıl yürütme izini (`ReasoningTrace` — hangi ajan, hangi
 | Üye | Açıklama |
 |---|---|
 | `InMemoryReasoningTraceStore(maxCapacity = 500)` | Kapasiteyi ayarlayan constructor parametresi. |
-| `StartTrace(sessionId, userQuery)` | Yeni `ReasoningTrace` oluşturur ve kaydeder. |
+| `StartTraceAsync(sessionId, userQuery)` | Yeni `ReasoningTrace` oluşturur ve kaydeder. |
 | `Update(trace)` | Trace'i günceller (referans zaten paylaşılıyor). |
 | `Complete(traceId, terminationReason, finalResponse, error)` | Trace'i sonlandırır. |
 | `Get(traceId)` | Tek trace. |

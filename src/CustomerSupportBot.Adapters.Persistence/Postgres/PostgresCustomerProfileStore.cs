@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
+public sealed class PostgresCustomerProfileStore : ICustomerProfileStore, ICacheWarmup
 {
     private const string ChannelUpserted = "csbot:customerprofile:upserted";
     private const string ChannelDeleted = "csbot:customerprofile:deleted";
@@ -26,7 +26,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
     private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentDictionary<string, CustomerProfile> _cache =
         new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _hydrationLock = new();
+    private readonly SemaphoreSlim _hydrationGate = new(1, 1);
     private volatile bool _hydrated;
 
     private static readonly JsonSerializerOptions _json = new();
@@ -50,22 +50,22 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
         return _cache.TryGetValue(customerId, out var p) ? p : null;
     }
 
-    public CustomerProfile GetOrCreate(string customerId)
-    {
+    public async Task<CustomerProfile> GetOrCreateAsync(string customerId)
+{
         if (string.IsNullOrWhiteSpace(customerId))
             throw new ArgumentException("customerId boş olamaz", nameof(customerId));
 
-        EnsureHydrated();
+        await EnsureHydratedAsync().ConfigureAwait(false);
 
         if (_cache.TryGetValue(customerId, out var existing)) return existing;
 
         var profile = new CustomerProfile { CustomerId = customerId };
-        Upsert(profile);
+        await UpsertAsync(profile).ConfigureAwait(false);
         return profile;
     }
 
-    public void Upsert(CustomerProfile profile)
-    {
+    public async Task UpsertAsync(CustomerProfile profile)
+{
         if (string.IsNullOrWhiteSpace(profile.CustomerId))
             throw new ArgumentException("CustomerId boş olamaz", nameof(profile));
 
@@ -74,7 +74,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
 
         try
         {
-            UpsertAsync(profile).GetAwaiter().GetResult();
+            await UpsertRowAsync(profile).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -87,14 +87,14 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
         PublishUpserted(profile);
     }
 
-    public bool Delete(string customerId)
-    {
+    public async Task<bool> DeleteAsync(string customerId)
+{
         if (string.IsNullOrWhiteSpace(customerId)) return false;
-        EnsureHydrated();
+        await EnsureHydratedAsync().ConfigureAwait(false);
 
         try
         {
-            DeleteAsync(customerId).GetAwaiter().GetResult();
+            await DeleteRowAsync(customerId).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -150,7 +150,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
 
     // ─────────────────────────────────────────────────────────────────────────
 
-    private async Task UpsertAsync(CustomerProfile p)
+    private async Task UpsertRowAsync(CustomerProfile p)
     {
         await using var ctx = await _dbFactory.CreateDbContextAsync();
 
@@ -182,7 +182,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
         await ctx.SaveChangesAsync();
     }
 
-    private async Task DeleteAsync(string customerId)
+    private async Task DeleteRowAsync(string customerId)
     {
         await using var ctx = await _dbFactory.CreateDbContextAsync();
         var entity = await ctx.CustomerProfiles
@@ -194,21 +194,37 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore
         }
     }
 
+    /// <inheritdoc />
+    public Task WarmUpAsync(CancellationToken ct = default) => EnsureHydratedAsync();
+
+    /// <summary>
+    /// Senkron okuma yolları için YEDEK. Normalde cache açılışta <see cref="WarmUpAsync"/> ile
+    /// doldurulmuştur ve bu çağrı bayrağı okuyup hemen döner; yalnızca ısıtma başarısız
+    /// olduysa ilk okuma hydrate'i senkron bekler.
+    /// </summary>
     private void EnsureHydrated()
     {
         if (_hydrated) return;
-        lock (_hydrationLock)
+        EnsureHydratedAsync().GetAwaiter().GetResult();
+    }
+
+    private async Task EnsureHydratedAsync()
+    {
+        if (_hydrated) return;
+        await _hydrationGate.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_hydrated) return;
-            try
-            {
-                HydrateAsync().GetAwaiter().GetResult();
-                _hydrated = true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[CustomerProfile] Cache hydrate başarısız.");
-            }
+            await HydrateAsync().ConfigureAwait(false);
+            _hydrated = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CustomerProfile] Cache hydrate başarısız.");
+        }
+        finally
+        {
+            _hydrationGate.Release();
         }
     }
 

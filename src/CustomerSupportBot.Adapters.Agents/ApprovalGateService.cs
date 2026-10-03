@@ -140,7 +140,7 @@ public class ApprovalGateService
             name: WellKnown.ToolNames.ReturnRequest,
             description:
                 "Teslim edilmiş bir sipariş için iade talebi oluşturur. Sadece 'Teslim Edildi' durumundaki " +
-                "ve 14 gün içindeki siparişler iade edilebilir; sadece login'li müşterinin kendi siparişleri iade " +
+                "ve teslimden itibaren 14 gün içindeki siparişler iade edilebilir; sadece login'li müşterinin kendi siparişleri iade " +
                 "edilebilir, müşteri kimliği login'den otomatik alınır. " +
                 "Bu tool HITL approval gate'inden geçer — admin onaya gönderilir, sonucu bildirim olarak dönülür.");
 
@@ -298,6 +298,9 @@ public class ApprovalGateService
         var req = new ApprovalRequest
         {
             SessionId = ctx?.SessionId,
+            // ExecuteWithApprovalGateAsync ile aynı alan — kayıt müşterisiz kalırsa müşterinin
+            // geçmiş/okunmamış bildirim uçları (CustomerId'ye göre filtreler) onu göstermez.
+            CustomerId = ctx?.CustomerId,
             TraceId = ctx?.TraceId,
             UserQuery = ctx?.UserQuery,
             ToolName = toolName,

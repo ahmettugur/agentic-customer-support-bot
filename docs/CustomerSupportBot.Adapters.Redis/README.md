@@ -5,6 +5,7 @@ Bu klasör, hexagonal mimaride **Driven Adapter (Çıkış Adaptörü)** rolün�
 ## Dizin Yapısı
 
 - [Locking/RedisDistributedLockAdapter](Locking/RedisDistributedLockAdapter.md) — [IAppDistributedLock](../CustomerSupportBot.Application/Ports/Outbound/Locking/IAppDistributedLock.md) portunu uygulayan; `Medallion.Threading.Redis` tabanlı dağıtık kilit adaptörü.
+- [Idempotency/RedisIdempotencyStore](Idempotency/RedisIdempotencyStore.md) — [IDistributedIdempotencyStore](../CustomerSupportBot.Application/Ports/Outbound/Persistence/IDistributedIdempotencyStore.md) portunu uygulayan; yan etkili tool çağrılarının pod'lar arası mükerrer tespit kaydı (`SET NX PX`).
 - [Messaging/RedisMessageBusAdapter](Messaging/RedisMessageBusAdapter.md) — [IMessageBusPort](../CustomerSupportBot.Application/Ports/Outbound/Messaging/IMessageBusPort.md) portunu uygulayan; Redis Pub/Sub üzerinden pod'lar arası asenkron olay yayını ve abonelik adaptörü.
 - [HealthChecks/RedisHealthCheck](HealthChecks/RedisHealthCheck.md) — ASP.NET Core Health Checks için `IHealthCheck` uygulayıcısı.
 - [Options/RedisOptions](Options/RedisOptions.md) — `RedisOptions` strongly-typed yapılandırma modeli.

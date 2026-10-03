@@ -43,9 +43,9 @@ public static class ImprovementsEndpoints
         });
 
         group.MapPost("/{id}/reject",
-            (string id, ImprovementDecision? body, IImprovementsPort port) =>
+            async (string id, ImprovementDecision? body, IImprovementsPort port) =>
         {
-            var ok = port.Reject(id, body?.DecidedBy ?? WellKnown.Defaults.Admin, body?.Reason);
+            var ok = await port.RejectAsync(id, body?.DecidedBy ?? WellKnown.Defaults.Admin, body?.Reason);
             return ok
                 ? Results.Json(new { id, status = "rejected" })
                 : Results.NotFound(new { error = "Lesson bulunamadı veya zaten karara bağlanmış." });

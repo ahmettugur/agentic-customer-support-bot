@@ -530,7 +530,7 @@ app.MapAdminEndpoints();  // ← yeni
 
 ### Dikkat edilecekler
 
-- **CORS**: `Program.cs:15-21` zaten `AllowAnyOrigin` — production'da kısıtlamak gerekir.
+- **CORS**: `Cors:AllowedOrigins` boşsa yalnızca Development'ta her origin'e izin verilir; diğer ortamlarda istemcinin origin'ini listeye eklemek gerekir (bkz. `docs/security.md`).
 - **Auth**: Şu an yok; admin endpoint'leri için en azından API key / basic auth eklenmeli.
 - **SSE**: Streaming endpoint için `SseWriter` helper'ını kullanın.
 

@@ -108,10 +108,13 @@ internal sealed class WorkflowTraceEventProcessor
         }
     }
 
-    public TraceState StartTraceState(AgentSession? session, string query, ReasoningResult? reasoning)
+    /// <summary>
+    /// Turun trace'ini açar. Ambient onay bağlamına BAĞLAMAZ — çağıran, dönüşten hemen sonra
+    /// kendi gövdesinde <see cref="BindToAmbientContext"/>'i çağırmalıdır.
+    /// </summary>
+    public async Task<TraceState> StartTraceStateAsync(AgentSession? session, string query, ReasoningResult? reasoning)
     {
-        var trace = _traceStore.StartTrace(session?.SessionId ?? "anonymous", query);
-        _approvalContext.SetTraceId(trace.TraceId);
+        var trace = await _traceStore.StartTraceAsync(session?.SessionId ?? "anonymous", query);
         if (reasoning != null)
         {
             trace.Reasoning = reasoning;
@@ -119,6 +122,20 @@ internal sealed class WorkflowTraceEventProcessor
         }
         return new TraceState { Trace = trace };
     }
+
+    /// <summary>
+    /// Trace'i ambient onay bağlamına (<c>AsyncLocal</c>) bağlar; tool'ların oluşturduğu onay
+    /// kayıtları <c>TraceId</c>'yi buradan okur.
+    ///
+    /// <para>
+    /// <see cref="StartTraceStateAsync"/>'in İÇİNDE yapılamaz: async bir metodun içinde
+    /// <c>AsyncLocal</c>'a yapılan atama çağırana geri akmaz (ExecutionContext yalnızca aşağı
+    /// akar). Trace açılışı async'e taşındığında bağ tam bu yüzden sessizce kopmuştu — tool'lar
+    /// <c>TraceId=null</c> görüyordu. Bu metot senkrondur ve workflow başlamadan, çağıranın kendi
+    /// gövdesinde çağrılmalıdır.
+    /// </para>
+    /// </summary>
+    public void BindToAmbientContext(TraceState st) => _approvalContext.SetTraceId(st.Trace.TraceId);
 
     // Bulgu 3.6: eskiden `List<StreamEvent>` idi — paylaşılan (tek örnek, tüm çağrılar arası
     // ortak) mutable bir liste. ApplyTraceEvent'in dönüş tipi de List<StreamEvent> olduğu için

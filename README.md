@@ -102,8 +102,8 @@ Temel yetenekler:
     │                                     │
     │              ┌──────────────────────┴───────────┐
     │              ▼                                  ▼
-    │     CustomerContext                  ConversationSummary
-    │     (repository port'ları)        (LLM summary)
+    │     SemanticMemory (RAG) ·           ConversationSummary
+    │     CustomerProfile · Recommendation (LLM summary)
     │
     │  ┌─────────────────────────────────────────────────────────┐
     └─▶│         Deterministic Reasoning Helpers                 │
@@ -115,7 +115,7 @@ Temel yetenekler:
 ┌─────────────────────────────────────────────────────────────────┐
 │                      ALTYAPI                                    │
 │  OpenAI Chat Client (gpt-5.4) │ ReasoningChatClient (gpt-5.4-nano)│
-│  PostgreSQL + Qdrant + InMemory adapters       │  IdExtractor (regex) │
+│  PostgreSQL + Redis + Qdrant adapters                            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -155,7 +155,7 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 | OpenAPI | `Microsoft.AspNetCore.OpenApi` 10.0.12 |
 | Serileştirme | System.Text.Json (camelCase enum string'leri) |
 | YAML Ayrıştırma | YamlDotNet 18.1.0 |
-| Arayüz | Vanilla HTML/JS/CSS (SSE streaming chat UI) |
+| Arayüz | Blazor WebAssembly (`CustomerSupportBot.Web`) — SSE streaming chat + admin/agent paneli |
 
 ---
 
@@ -164,36 +164,57 @@ Her uzman ajan, aşağıdaki **4 adımlı alt-bileşen zincirini** izler:
 ### Gereksinimler
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- **Docker** — PostgreSQL + Qdrant container'ları için (`docker compose -f deploy/docker-compose.yml up -d`)
+- **Docker** — PostgreSQL, Redis ve Qdrant container'ları için (önce `cp deploy/.env.example deploy/.env` ile Postgres parolasını verin, sonra `docker compose -f deploy/docker-compose.yml up -d`; ayrıntı: [docs/deployment.md](docs/deployment.md)); entegrasyon testleri de Testcontainers ile Docker ister
 - **OpenAI API key** (chat + embedding) veya Azure OpenAI
 
 ### Yapılandırma
 
-`src/CustomerSupportBot.Api/appsettings.json` dosyasını düzenlleyin:
+Gizli değerleri takip edilen `appsettings.json`'a değil, git'e girmeyen `src/CustomerSupportBot.Api/appsettings.Development.json`'a (ya da ortam değişkenlerine) yazın:
 
 ```json
 {
-  "OpenAI": {
-    "ApiKey": "sk-...",
-    "Model": "gpt-5.4",
-    "ReasoningModel": "gpt-5.4-nano",
-    "ReasoningEffort": "medium"
+  "AI": {
+    "Provider": "OpenAI",
+    "OpenAI": {
+      "ApiKey": "sk-...",
+      "Model": "gpt-5.4",
+      "ReasoningModel": "gpt-5.4-nano",
+      "ReasoningEffort": "medium"
+    }
+  },
+  "ConnectionStrings": {
+    "PostgreSQL": "Host=localhost;Port=5433;Database=CustomerSupportDb;Username=...;Password=...",
+    "Redis": "localhost:6380,abortConnect=false"
+  },
+  "Auth": {
+    "DefaultAdminUsername": "admin",
+    "DefaultAdminPassword": "..."
   }
 }
 ```
 
+Development ortamında migration'lar otomatik uygulanır ve demo veri (admin, temsilciler, katalog, örnek müşteri hesabı) seed edilir.
+
 ### Çalıştırma
 
 ```bash
-dotnet run --project src/CustomerSupportBot.Api
+dotnet run --project src/CustomerSupportBot.Api   # API — http://localhost:5021
+dotnet run --project src/CustomerSupportBot.Web   # Blazor arayüz — http://localhost:5288
 ```
 
-API `http://localhost:5021` adresinde başlar ve chat arayüzü `src/CustomerSupportBot.Api/wwwroot/index.html` üzerinden sunulur.
+Chat arayüzü ve admin/agent paneli Blazor uygulamasından (`:5288`) sunulur; API ayrı bir host'tur.
 
 ### Hızlı API Testi
 
+Chat uçları `Customer` rolünde bir JWT ister. Önce seed edilen örnek müşteriyle giriş yapın (`Auth:DefaultCustomerEmail` / `Auth:DefaultCustomerPassword`), dönen `accessToken`'ı kullanın:
+
 ```bash
+TOKEN=$(curl -s -X POST http://localhost:5021/auth/customer/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "<musteri-eposta>", "password": "<parola>"}' | jq -r .accessToken)
+
 curl -X POST http://localhost:5021/chat/ \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"query": "sipariş 1030 nerede?", "sessionId": null}'
 ```
@@ -206,10 +227,15 @@ curl -X POST http://localhost:5021/chat/ \
 |----------|-------|----------|
 | `/chat/` | `POST` | Non-streaming chat |
 | `/chat/stream` | `POST` | SSE streaming chat |
-| `/sessions/{sessionId}` | `GET` | Oturum durumu ve mesajlar |
+| `/sessions/` | `GET` | Oturum listesi (müşteri yalnızca kendi oturumlarını görür) |
+| `/sessions/{sessionId}/state` | `GET` | Oturum durumu |
+| `/sessions/{sessionId}/messages` | `GET` | Oturum mesajları |
 | `/traces/{traceId}` | `GET` | Bir çalıştırma için reasoning trace'i |
-| `/traces/latest/{sessionId}` | `GET` | Oturumun en son trace'i |
-| `/evaluation/run` | `POST` | YAML senaryo testlerini çalıştır |
+| `/traces/by-session/{sessionId}` | `GET` | Oturumun trace'leri |
+| `/traces/recent` | `GET` | Son trace'ler |
+| `/eval/scenarios` | `GET` | YAML senaryolarını listele (admin) |
+| `/eval/run` | `POST` | Tüm YAML senaryo testlerini çalıştır (admin) |
+| `/eval/run/{id}` | `POST` | Tek senaryoyu çalıştır (admin) |
 | `/approvals/pending` | `GET` | Bekleyen HITL onaylarını listele |
 | `/approvals/{id}/approve` | `POST` | Bir tool çağrısını onayla |
 | `/approvals/{id}/reject` | `POST` | Bir tool çağrısını reddet |
@@ -246,9 +272,6 @@ curl -X POST http://localhost:5021/chat/ \
 | `/agent/chat-sessions/{sid}/release` | `POST` | Session'ı Bot moduna bırak (agent) |
 | `/agent/chat-sessions/{sid}/messages` | `POST` | Müşteriye mesaj gönder (agent) |
 | `/agent/profile` | `GET` | Kendi HumanAgent profilini getir (agent) |
-| `/workflows` | `GET`/`POST` | Low-code workflow tanımları listele / oluştur (admin) |
-| `/workflows/{id}` | `GET`/`PUT`/`DELETE` | Tanım detay / upsert / sil (admin) |
-| `/workflows/{id}/test` | `POST` | Verilen input ile workflow'u dry-run çalıştırır ve trace döner (admin) |
 | `/sla/status` | `GET` | SLA Guardian güncel durum: pending/open sayı, en eski yaş, ihlal sayısı (admin) |
 | `/sla/events` | `GET` | Son SLA warn/breach olayları (admin) |
 
@@ -258,9 +281,9 @@ Tam API referansı için [`docs/CustomerSupportBot.Api/`](docs/CustomerSupportBo
 
 ## Human-in-the-Loop (HITL)
 
-Bot iki HITL modunu destekler:
+Bot üç HITL mekanizması sunar:
 
-1. **Onay Kuyruğu** — Yan etkili tool'lar (sipariş oluşturma, şikayet kaydı) çalıştırılmadan önce açık admin onayı gerektirir. Zaman aşımı ve otomatik onay politikaları `appsettings.json` üzerinden yapılandırılabilir.
+1. **Onay Kuyruğu (bloklamaz)** — Yan etkili dört tool (sipariş oluşturma, iptal, iade, şikayet kaydı) doğrudan çalışmaz: bir onay kaydı oluşturulur ve tur "onaya gönderildi" yanıtıyla hemen biter. Admin karar verdiğinde işlem yürütülür ve sonuç müşteriye bildirim olarak ulaşır (`/chat-sessions/{sid}/approvals/unseen`). Bekleyen onaylar SLA Guardian tarafından izlenir (`Sla:Approvals`); tool listesi `HumanInTheLoop:ToolsRequiringApproval`'dan gelir.
 2. **Canlı Devralma** — Admin veya agent, herhangi bir aktif oturumu gerçek zamanlı olarak **Bot** modundan **İnsan** moduna geçirebilir, son kullanıcıyla doğrudan konuşabilir ve tekrar bot'a devredebilir.
 3. **Eskalasyon Yönetimi** — Skill-based routing ile eskalasyonlar uygun temsilciye otomatik önerilir veya admin dropdown'dan manuel atama yapar.
 
@@ -275,7 +298,7 @@ Bot iki HITL modunu destekler:
 Senaryo tabanlı değerlendirme, `EvaluationRunner` tarafından yürütülür. Her senaryo canlı iş akışına karşı çalıştırılır ve her kriter için geçti/kaldı raporu sunulur.
 
 ```bash
-curl -X POST http://localhost:5021/evaluation/run
+curl -X POST http://localhost:5021/eval/run -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
 ---
@@ -313,27 +336,29 @@ Detay için: [`docs/intelligence.md`](docs/intelligence.md).
 
 ## Proje Yapısı
 
-Proje **hexagonal (ports & adapters) mimarisi** ile 7 katmana ayrılmıştır:
+Proje **hexagonal (ports & adapters) mimarisi** ile 9 projeye ayrılmıştır:
 
 ```
 agentic-customer-support-bot/
 ├── src/
 │   ├── CustomerSupportBot.Domain/            # Domain modelleri + saf iş kuralları
 │   │   ├── Model/                           # Entity POCO'lar, VO'lar, senaryo modelleri
-│   │   └── Services/                        # Domain servisleri (IdExtractor, vb.)
+│   │   └── Services/                        # Saf domain servisleri (parser'lar, SessionStateExtractor, ...)
 │   │
 │   ├── CustomerSupportBot.Application/       # Port tanımları + uygulama servisleri
 │   │   ├── Ports/
-│   │   │   ├── Driving/                     # CustomerSupportToolsService, vb.
-│   │   │   └── Driven/                      # ISessionManager, IPromptRepository, IMessageBusPort, ...
-│   │   ├── Services/                        # ReasoningService, EntityVerifier, ContextPipeline, ...
+│   │   │   ├── Inbound/                     # IChatPort, IApprovalPort, IInputGuard, ...
+│   │   │   └── Outbound/                    # ISessionManager, IPromptRepository, IMessageBusPort, ...
+│   │   ├── Services/                        # Chat, Reasoning, Approval, Tools, Memory, Sla, ...
 │   │   └── DependencyInjection/
 │   │
 │   ├── CustomerSupportBot.Adapters.Agents/   # MAF ajan orkestrasyon adaptörü
-│   │   ├── CustomerSupportTeam.cs           # 7 MAF ajanı + workflow builder
+│   │   ├── CustomerSupportTeam.cs           # 6 MAF ajanı; tekil/bileşik sorgu yönlendirmesi
 │   │   ├── CustomerSupportChatManager.cs    # GroupChatManager (seçim + sonlandırma)
 │   │   ├── ApprovalGateService.cs
 │   │   └── Routing/
+│   │
+│   ├── CustomerSupportBot.Adapters.AI/       # OpenAI/Azure chat, embedding, Qdrant, Realtime ses
 │   │
 │   ├── CustomerSupportBot.Adapters.Persistence/ # Kalıcı veri adaptörleri
 │   │   ├── EfCore/                          # CustomerSupportDbContext + migrations
@@ -343,7 +368,7 @@ agentic-customer-support-bot/
 │   │   └── DependencyInjection/
 │   │
 │   ├── CustomerSupportBot.Adapters.Redis/    # Redis adaptörleri (locking, pub/sub)
-│   │   ├── Locking/                         # RedisLockAdapter
+│   │   ├── Locking/                         # RedisDistributedLockAdapter
 │   │   ├── Messaging/                       # RedisMessageBusAdapter (IMessageBusPort)
 │   │   └── DependencyInjection/
 │   │
@@ -357,20 +382,23 @@ agentic-customer-support-bot/
 │   │   ├── appsettings.json                 # AI, WorkflowGuards, HITL, Persistence config
 │   │   ├── Endpoints/                       # ChatEndpoints, AdminEndpoints, TraceEndpoints, ...
 │   │   ├── Prompts/                         # Ajan + servis prompt MD dosyaları
-│   │   │   ├── agents/                      # planning-agent.md, product-inquiry-agent.md, ...
-│   │   │   └── services/                    # reasoning-system.md, entity-hints.md, ...
+│   │   │   ├── agents/                      # planning-agent.md, product-agent.md, order-agent.md, ...
+│   │   │   └── services/                    # reasoning-system.md, routing-rewrite-*.md, ...
 │   │   └── KnowledgeBase/                   # RAG dökümanı: iade politikası, kargo, SSS
 │   │
 │   └── CustomerSupportBot.Web/                # Blazor WASM admin paneli + chat arayüzü
 │
-├── tests/
-│   └── CustomerSupportBot.Api.Tests/          # Entegrasyon + değerlendirme testleri
-│       ├── Evaluation/
-│       ├── Endpoints/
-│       └── ...
+├── tests/                                      # Katman başına test projesi (xUnit v3, MTP)
+│   ├── CustomerSupportBot.Domain.Tests/
+│   ├── CustomerSupportBot.Application.Tests/
+│   ├── CustomerSupportBot.Adapters.*.Tests/    # Agents, AI, Persistence, Redis, Telemetry
+│   ├── CustomerSupportBot.Api.IntegrationTests/ # WebApplicationFactory
+│   ├── CustomerSupportBot.Web.Tests/           # Blazor istemci servisleri (AuthService refresh)
+│   └── CustomerSupportBot.Tests.Shared/        # Testcontainers Postgres fixture, fake'ler
 │
 ├── deploy/
 │   ├── docker-compose.yml                     # Postgres, Redis, Qdrant, Elasticsearch, Kibana, OTel, Jaeger
+│   ├── .env.example                           # Gizli değer şablonu (deploy/.env olarak kopyalanır, git'e girmez)
 │   ├── jaeger-v2-config.yaml
 │   └── otel-collector-config.yaml
 │

@@ -22,14 +22,14 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresChatModeRegistry : IChatModeRegistry
+public sealed class PostgresChatModeRegistry : IChatModeRegistry, ICacheWarmup
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresChatModeRegistry> _logger;
     private readonly IMessageBusPort _messageBus;
     private readonly IAppDistributedLock _distributedLock;
     private readonly ConcurrentDictionary<string, ChatSessionState> _states = new();
-    private readonly object _hydrationLock = new();
+    private readonly SemaphoreSlim _hydrationGate = new(1, 1);
     private volatile bool _hydrated;
 
     public event EventHandler<ChatSessionState>? ModeChanged;
@@ -59,16 +59,16 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
         return _states.TryGetValue(sessionId, out var s) ? s : null;
     }
 
-    public bool TakeOver(string sessionId, string? humanAgent)
-    {
+    public async Task<bool> TakeOverAsync(string sessionId, string? humanAgent)
+{
         if (string.IsNullOrWhiteSpace(sessionId)) return false;
-        EnsureHydrated();
+        await EnsureHydratedAsync().ConfigureAwait(false);
 
         var agent = humanAgent ?? WellKnown.Defaults.Admin;
 
-        // Distributed lock: farklı pod'lardan eş zamanlı TakeOver() çağrılarını serialize eder.
+        // Distributed lock: farklı pod'lardan eş zamanlı await TakeOver() çağrılarını serialize eder.
         // Aynı session için yalnızca bir admin devralabilir.
-        var handle = _distributedLock.TryAcquireAsync($"takeover:{sessionId}").GetAwaiter().GetResult();
+        var handle = await _distributedLock.TryAcquireAsync($"takeover:{sessionId}").ConfigureAwait(false);
         if (handle is null)
         {
             _logger.LogWarning(
@@ -85,7 +85,7 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
             // devralmayı kabul eder ve koşulsuz UPSERT ile mevcut admin'i EZER. Kilit bunu
             // engellemez — kilit yalnızca eş zamanlı çağrıları sıraya sokar, sonradan gelen
             // bayat bir kararı değil.
-            var current = ReadStateFromDb(sessionId);
+            var current = await ReadStateFromDbAsync(sessionId).ConfigureAwait(false);
             if (current is not null
                 && current.Mode == ChatMode.Human
                 && !string.Equals(current.HumanAgent, agent, StringComparison.OrdinalIgnoreCase))
@@ -115,7 +115,7 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
                     return existing;
                 });
 
-            try { UpsertAsync(state).GetAwaiter().GetResult(); }
+            try { await UpsertAsync(state).ConfigureAwait(false); }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[HITL] TakeOver DB UPSERT başarısız. Session={Session}", sessionId);
@@ -132,7 +132,7 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
         }
         finally
         {
-            handle.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            await handle.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -140,17 +140,17 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
     /// Oturumu insan modundan çıkarır.
     /// </summary>
     /// <remarks>
-    /// <see cref="TakeOver"/> ile AYNI kilidi alır ve kararını DB'den okunan durumla verir.
+    /// <see cref="TakeOverAsync"/> ile AYNI kilidi alır ve kararını DB'den okunan durumla verir.
     /// Eskiden ikisini de yapmıyordu: kilitsiz olduğu için bir devralma ile yarışabiliyor,
     /// bayat cache'ten karar verdiği için de Redis mesajını kaçırmış bir pod'da başka bir
     /// admin'in aktif oturumunu serbest bırakabiliyordu.
     /// </remarks>
-    public bool Release(string sessionId)
-    {
+    public async Task<bool> ReleaseAsync(string sessionId)
+{
         if (string.IsNullOrWhiteSpace(sessionId)) return false;
-        EnsureHydrated();
+        await EnsureHydratedAsync().ConfigureAwait(false);
 
-        var handle = _distributedLock.TryAcquireAsync($"takeover:{sessionId}").GetAwaiter().GetResult();
+        var handle = await _distributedLock.TryAcquireAsync($"takeover:{sessionId}").ConfigureAwait(false);
         if (handle is null)
         {
             _logger.LogWarning(
@@ -160,7 +160,7 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
 
         try
         {
-            var state = ReadStateFromDb(sessionId);
+            var state = await ReadStateFromDbAsync(sessionId).ConfigureAwait(false);
             if (state is null || state.Mode == ChatMode.Bot) return false;
 
             state.Mode = ChatMode.Bot;
@@ -169,7 +169,7 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
             state.LastActivityAt = DateTime.UtcNow;
             _states[sessionId] = state;
 
-            try { UpsertAsync(state).GetAwaiter().GetResult(); }
+            try { await UpsertAsync(state).ConfigureAwait(false); }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[HITL] Release DB UPSERT başarısız. Session={Session}", sessionId);
@@ -183,7 +183,7 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
         }
         finally
         {
-            handle.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            await handle.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -191,13 +191,13 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
     /// Oturum durumunu <b>kayıtların gerçek kaynağından</b> okur ve yerel cache'i tazeler.
     /// Satır yoksa <c>null</c> döner. Sahiplik kararları bunun üzerinden verilmelidir.
     /// </summary>
-    private ChatSessionState? ReadStateFromDb(string sessionId)
+    private async Task<ChatSessionState?> ReadStateFromDbAsync(string sessionId)
     {
         try
         {
-            using var ctx = _dbFactory.CreateDbContext();
-            var row = ctx.ChatSessionModes.AsNoTracking()
-                .FirstOrDefault(m => m.SessionId == sessionId);
+            await using var ctx = await _dbFactory.CreateDbContextAsync().ConfigureAwait(false);
+            var row = await ctx.ChatSessionModes.AsNoTracking()
+                .FirstOrDefaultAsync(m => m.SessionId == sessionId).ConfigureAwait(false);
             if (row is null) return null;
 
             var state = new ChatSessionState
@@ -265,21 +265,37 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry
         await ctx.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public Task WarmUpAsync(CancellationToken ct = default) => EnsureHydratedAsync();
+
+    /// <summary>
+    /// Senkron okuma yolları için YEDEK. Normalde cache açılışta <see cref="WarmUpAsync"/> ile
+    /// doldurulmuştur ve bu çağrı bayrağı okuyup hemen döner; yalnızca ısıtma başarısız
+    /// olduysa ilk okuma hydrate'i senkron bekler.
+    /// </summary>
     private void EnsureHydrated()
     {
         if (_hydrated) return;
-        lock (_hydrationLock)
+        EnsureHydratedAsync().GetAwaiter().GetResult();
+    }
+
+    private async Task EnsureHydratedAsync()
+    {
+        if (_hydrated) return;
+        await _hydrationGate.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_hydrated) return;
-            try
-            {
-                HydrateAsync().GetAwaiter().GetResult();
-                _hydrated = true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[HITL] ChatMode cache hydrate başarısız.");
-            }
+            await HydrateAsync().ConfigureAwait(false);
+            _hydrated = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[HITL] ChatMode cache hydrate başarısız.");
+        }
+        finally
+        {
+            _hydrationGate.Release();
         }
     }
 

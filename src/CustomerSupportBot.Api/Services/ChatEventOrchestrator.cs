@@ -67,7 +67,7 @@ public sealed class ChatEventOrchestrator(
 
         if (!appLifetime.ApplicationStopping.IsCancellationRequested)
         {
-            var dismissed = chatSession.DismissOrphanedEscalations(sessionId);
+            var dismissed = await chatSession.DismissOrphanedEscalationsAsync(sessionId);
             if (dismissed > 0)
                 logger.LogInformation(
                     "[Escalation] Müşteri ayrıldı, {Count} eskalasyon otomatik kapatıldı. session={Session}",

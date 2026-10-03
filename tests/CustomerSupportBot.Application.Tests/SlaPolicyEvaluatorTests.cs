@@ -79,7 +79,7 @@ public class SlaPolicyEvaluatorTests
     }
 
     [Fact]
-    public void Approval_Breach_NotReEmitted_Once_Recorded()
+    public async Task Approval_Breach_NotReEmitted_Once_Recorded()
     {
         var sink = NewSink();
         var opts = new ApprovalSlaOptions { BreachAfterSeconds = 10 };
@@ -87,7 +87,7 @@ public class SlaPolicyEvaluatorTests
 
         var first = SlaPolicyEvaluator.EvaluateApproval(req, opts, sink, DateTime.UtcNow);
         first.BreachEvent.Should().NotBeNull();
-        sink.Record(first.BreachEvent!);
+        await sink.RecordAsync(first.BreachEvent!);
 
         var second = SlaPolicyEvaluator.EvaluateApproval(req, opts, sink, DateTime.UtcNow);
         second.BreachEvent.Should().BeNull();
@@ -143,7 +143,7 @@ public class SlaPolicyEvaluatorTests
     }
 
     [Fact]
-    public void Sink_Records_And_DeDupes_By_Key()
+    public async Task Sink_Records_And_DeDupes_By_Key()
     {
         var sink = NewSink();
         var evt = new SlaEvent
@@ -154,7 +154,7 @@ public class SlaPolicyEvaluatorTests
             AgeSeconds = 25
         };
 
-        sink.Record(evt);
+        await sink.RecordAsync(evt);
 
         sink.LastEmittedAt(SlaPolicyEvaluator.KindApproval, "appr-1", SlaPolicyEvaluator.SeverityWarn)
             .Should().NotBeNull();
@@ -164,12 +164,12 @@ public class SlaPolicyEvaluatorTests
     }
 
     [Fact]
-    public void Sink_Caps_At_500_Items()
+    public async Task Sink_Caps_At_500_Items()
     {
         var sink = NewSink();
         for (var i = 0; i < 600; i++)
         {
-            sink.Record(new SlaEvent { Kind = "k", Severity = "warn", TargetId = $"t-{i}" });
+            await sink.RecordAsync(new SlaEvent { Kind = "k", Severity = "warn", TargetId = $"t-{i}" });
         }
 
         sink.GetRecent(1000).Count.Should().BeLessThanOrEqualTo(500);

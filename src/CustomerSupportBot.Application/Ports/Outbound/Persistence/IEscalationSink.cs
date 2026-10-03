@@ -7,7 +7,13 @@ namespace CustomerSupportBot.Application.Ports.Outbound.Persistence;
 ///</summary>
 public interface IEscalationSink
 {
-    EscalationRequest Create(EscalationRequest request);
+    /// <summary>
+    /// Eskalasyonu kaydeder. Aynı session + ajan için zaten açık (Open/Acknowledged) bir kayıt
+    /// varsa YENİ kayıt oluşturulmaz, mevcut kayıt döner — çağıran dönen <c>Id</c>'yi kendi
+    /// isteğinin <c>Id</c>'siyle karşılaştırarak kaydın yeni oluşup oluşmadığını anlar.
+    /// Yazma bilinçli olarak CancellationToken almaz: istemci bağlantıyı kesse bile cache ile DB tutarlı kalmalı.
+    /// </summary>
+    Task<EscalationRequest> CreateAsync(EscalationRequest request);
     IReadOnlyList<EscalationRequest> GetOpen();
     IReadOnlyList<EscalationRequest> GetRecent(int count = 50);
     EscalationRequest? Get(string id);
@@ -26,7 +32,13 @@ public interface IEscalationSink
     /// </summary>
     Task<IReadOnlyList<EscalationRequest>> GetRecentForAgentAsync(
         string agentId, int count = 50, CancellationToken ct = default);
-    bool Decide(string id, string action, string? assignedTo = null, string? resolution = null);
+
+    /// <summary>
+    /// Karar (acknowledge/resolve/dismiss) uygular. Geçiş geçersizse ya da kayıt bu arada başka
+    /// bir çağrı tarafından değiştirildiyse <c>false</c> döner — aynı kaydı yarışan iki karardan
+    /// yalnızca biri uygulanır.
+    /// </summary>
+    Task<bool> DecideAsync(string id, string action, string? assignedTo = null, string? resolution = null);
 
     event EventHandler<EscalationRequest>? RequestCreated;
     event EventHandler<EscalationRequest>? RequestDecided;

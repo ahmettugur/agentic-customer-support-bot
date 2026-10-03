@@ -50,18 +50,18 @@ Admin'in "bu oturumu yeniden planla" talebinin sonucu; `ReleasedFromHuman` true 
 |---|---|
 | `IReadOnlyList<ChatSessionState> GetActive()` | Aktif tüm oturumlar. |
 | `ChatSessionState GetStateOrDefault(string sessionId)` | Tek oturumun durumu (yoksa varsayılan). |
-| `IReadOnlyList<ChatBridgeMessage> GetHistory(string sessionId, int take = 50)` | Oturumun köprü mesaj geçmişi. |
+| `Task<IReadOnlyList<ChatBridgeMessage>> GetHistoryAsync(string sessionId, int take = 50)` | Oturumun köprü mesaj geçmişi. |
 | `Task<ChatSessionSentimentSnapshot?> GetSentimentAsync(string sessionId, CancellationToken ct = default)` | Duygu durumu anlık görüntüsü. |
-| `void PublishSystemMessage(string sessionId, string text)` | Sisteme ait bir bilgi mesajı yayınlar. |
-| `ChatSessionTakeoverResult TakeOver(string sessionId, string humanAgent, string? agentId = null)` | İnsan temsilci oturumu devralır. |
-| `ChatSessionReleaseResult Release(string sessionId, string? agentId = null)` | Devir bırakılır, oturum bota döner. |
+| `Task PublishSystemMessageAsync(string sessionId, string text)` | Sisteme ait bir bilgi mesajı yayınlar. |
+| `Task<ChatSessionTakeoverResult> TakeOverAsync(string sessionId, string humanAgent, string? agentId = null)` | İnsan temsilci oturumu devralır. |
+| `Task<ChatSessionReleaseResult> ReleaseAsync(string sessionId, string? agentId = null)` | Devir bırakılır, oturum bota döner. |
 | `Task<ChatSessionMessageResult> SendAdminMessageAsync(string sessionId, string humanAgent, string text, CancellationToken ct = default)` | Admin kullanıcıya mesaj gönderir. |
 | `Task<ChatSessionReplanResult> ReplanSessionAsync(string sessionId, string requestedBy, string? note, CancellationToken ct = default)` | Oturum bazlı replan talebi. |
 | `Task<ChatSessionReplanResult> ReplanEscalationAsync(string escalationId, string requestedBy, string? note, CancellationToken ct = default)` | Eskalasyon bazlı replan talebi. |
 | `IAsyncEnumerable<ChatBridgeMessage> SubscribeToAdminAsync(string sessionId, CancellationToken ct)` | Admin tarafının canlı mesaj akışına abone olur. |
 | `IAsyncEnumerable<ChatBridgeMessage> SubscribeToUserAsync(string sessionId, CancellationToken ct)` | Kullanıcı tarafının canlı mesaj akışına abone olur. |
 | `IReadOnlyList<EscalationRequest> GetOpenEscalations()` | Açık eskalasyonlar. |
-| `int DismissOrphanedEscalations(string sessionId)` | Sahipsiz kalmış eskalasyonları temizler; kaç tanesinin temizlendiğini döner. |
+| `Task<int> DismissOrphanedEscalationsAsync(string sessionId)` | Sahipsiz kalmış eskalasyonları temizler; kaç tanesinin temizlendiğini döner. |
 
 ## 7. Bağımlılıklar
 

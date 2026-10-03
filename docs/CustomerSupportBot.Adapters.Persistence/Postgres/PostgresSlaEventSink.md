@@ -31,7 +31,7 @@ Yanıt gecikmesi, eskalasyon süresi gibi SLA (hizmet seviyesi) olaylarını (`S
 
 | Üye | Açıklama |
 |---|---|
-| `void Record(SlaEvent evt)` | Cache + DB + Redis yayını + `EventRecorded` event'i. |
+| `Task RecordAsync(SlaEvent evt)` | Cache + DB + Redis yayını + `EventRecorded` event'i. |
 | `IReadOnlyList<SlaEvent> GetRecent(int count = 100)` | Cache'ten en son N olay. |
 | `DateTime? LastEmittedAt(string kind, string targetId, string severity)` | Aynı (tür, hedef, önem derecesi) kombinasyonunun en son tetiklendiği zaman; hiç yoksa `null`. |
 | `event EventHandler<SlaEvent>? EventRecorded` | Yeni olay kaydında tetiklenir. |

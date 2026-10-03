@@ -16,7 +16,7 @@ HITL "Live Takeover" (admin devralması) sırasında müşteri ↔ admin arasın
 
 - Her session için, her admin/kullanıcı aboneliğine ayrı bir `Channel<ChatBridgeMessage>` açma (`SubscribeToAdminAsync`/`SubscribeToUserAsync`) — aynı session'a birden fazla admin veya sayfa yenilemesi sonrası tekrar bağlanan kullanıcı olabilir.
 - Mesaj yayınlama yönü mesajın türüne göre değişir: kullanıcı mesajı → admin'e, admin mesajı → kullanıcıya, sistem mesajı → her ikisine, "admin-only" mesajı (ör. sistem uyarısı) → sadece admin'e, bot mesajı → her ikisine.
-- `RecordBotExchange` — bot moddaki (admin devretmemiş) konuşmaları sadece geçmişe yazar, broadcast ETMEZ (kullanıcı zaten kendi ekranında görüyor); admin bağlam için `GetHistory` ile çeker.
+- `RecordBotExchangeAsync` — bot moddaki (admin devretmemiş) konuşmaları sadece geçmişe yazar, broadcast ETMEZ (kullanıcı zaten kendi ekranında görüyor); admin bağlam için `GetHistory` ile çeker.
 - Abonelik sonlandığında (`finally` bloğu) kaydı **gerçekten** kayıttan çıkarma (`Unregister`) — aksi halde artık dinlemeyen ölü kanallar biriktirir (bellek sızıntısı).
 - `Reset(sessionId)` — session kapandığında geçmişi siler ve tüm açık kanalları `TryComplete()` ile kapatır (abonelerin `await foreach` döngüsü düzgün sonlanır).
 
@@ -35,13 +35,13 @@ HITL "Live Takeover" (admin devralması) sırasında müşteri ↔ admin arasın
 
 | Üye | Açıklama |
 |---|---|
-| `PublishUserMessage(sessionId, text)` | Kullanıcı mesajını geçmişe ekler ve admin'e broadcast eder. |
-| `PublishAdminMessage(sessionId, humanAgent, text)` | Admin mesajını geçmişe ekler ve kullanıcıya broadcast eder. |
-| `PublishSystemMessage(sessionId, text)` | Her iki tarafa da giden sistem mesajı. |
-| `PublishAdminOnlyMessage(sessionId, text)` | Sadece admin'e giden sistem mesajı (müşteri görmez). |
-| `PublishBotMessage(sessionId, text)` | Bot yanıtını hem kullanıcıya hem admin paneline (bağlam takibi için) yayınlar. |
+| `PublishUserMessageAsync(sessionId, text)` | Kullanıcı mesajını geçmişe ekler ve admin'e broadcast eder. |
+| `PublishAdminMessageAsync(sessionId, humanAgent, text)` | Admin mesajını geçmişe ekler ve kullanıcıya broadcast eder. |
+| `PublishSystemMessageAsync(sessionId, text)` | Her iki tarafa da giden sistem mesajı. |
+| `PublishAdminOnlyMessageAsync(sessionId, text)` | Sadece admin'e giden sistem mesajı (müşteri görmez). |
+| `PublishBotMessageAsync(sessionId, text)` | Bot yanıtını hem kullanıcıya hem admin paneline (bağlam takibi için) yayınlar. |
 | `PublishBotTyping(sessionId, on)` | Geçici "yazıyor" sinyali — geçmişe yazılmaz, sadece kullanıcıya gider. |
-| `RecordBotExchange(sessionId, userQuery, botResponse)` | Bot modundaki değişimi sadece geçmişe kaydeder, broadcast etmez. |
+| `RecordBotExchangeAsync(sessionId, userQuery, botResponse)` | Bot modundaki değişimi sadece geçmişe kaydeder, broadcast etmez. |
 | `SubscribeToAdminAsync(sessionId, ct)` / `SubscribeToUserAsync(sessionId, ct)` | Yeni bir `Channel` açar, kaydeder, `IAsyncEnumerable` olarak mesajları akıtır; `finally`'de kanalı tamamlar ve kayıttan çıkarır. |
 | `GetHistory(sessionId, take)` | Son `take` mesajı döner. |
 | `Reset(sessionId)` | Geçmişi siler, tüm açık kanalları kapatır. |

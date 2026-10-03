@@ -27,6 +27,14 @@ uygular.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 
+**İmzalama anahtarı kuralı tek yerde (`ValidateSigningKey`).** Token ÜRETEN
+(`JwtAccessTokenProvider`) ve DOĞRULAYAN (JwtBearer, `AuthServicesExtensions`) taraf aynı kuralı
+kullanır — biri anahtarı reddederken diğerinin sessizce kabul etmesi mümkün olmasın. Kural:
+boş değil, en az `MinSigningKeyBytes` (32) bayt (UTF-8) ve en az `MinSigningKeyDistinctChars`
+(12) farklı karakter. Sonuncusu gerçek bir entropi ölçümü değildir; `aaaa…`/`abcabc…` gibi
+uzunluk kuralını geçip tahmin edilebilir kalan anahtarları reddeder. Rastgele üretilmiş bir
+anahtar (`openssl rand -base64 48`) rahatça geçer.
+
 `AuthRateLimitPerMinute`'ün ayrı bir konfigürasyon alanı olmasının nedeni: `/auth/*` uçları
 kimliksizdir (`AllowAnonymous`) — A2A'daki gibi bir partner claim'i yoktur, tek ayırt edici
 çağıranın IP'sidir. Bu limit sabit kodlanmak yerine appsettings'ten okunabilir olmalıdır ki
@@ -40,6 +48,9 @@ prod'da farklı değerlerle çalışılabilsin.
 | `string Issuer` | `"CustomerSupportBot.Api"` | JWT `iss` claim'i. |
 | `string Audience` | `"CustomerSupportBot.Api"` | JWT `aud` claim'i. |
 | `string SigningKey` | `""` | HMAC-SHA256 imzalama anahtarı (UTF-8). Üretimde rotate edilmelidir. |
+| `const int MinSigningKeyBytes` | `32` | Asgari anahtar uzunluğu (bayt). |
+| `const int MinSigningKeyDistinctChars` | `12` | Asgari farklı karakter sayısı. |
+| `static string? ValidateSigningKey(string? key)` | — | Geçersizse nedeni, geçerliyse `null`. |
 | `int AccessTokenMinutes` | `30` | Access token ömrü. |
 | `int RefreshTokenDays` | `14` | Refresh token ömrü. |
 | `int AuthRateLimitPerMinute` | `10` | `/auth/*` uçlarının IP başına dakikalık hız sınırı. |

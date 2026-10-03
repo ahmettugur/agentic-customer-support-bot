@@ -94,14 +94,16 @@ metoduna taşınmıştır.
 | `ReceiveEventsAsync` | `IAsyncEnumerable<RealtimeServerEvent> ReceiveEventsAsync(CancellationToken ct)` | WebSocket'ten gelen JSON frame'leri okur, `ParseEvent` ile domain event'ine çevirip `yield return` eder; bağlantı kapanınca `ConnectionClosed` verip döngüden çıkar. |
 | `DisposeAsync` | `ValueTask DisposeAsync()` | Açık bağlantıyı `NormalClosure` ile kapatmaya çalışır (best-effort), `ClientWebSocket`'i dispose eder. |
 
-### `ParseEvent` — sunucu event eşlemesi (private static)
+### `ParseEvent` — sunucu event eşlemesi (internal static — `OpenAiRealtimeEventParsingTests` doğrudan sınar)
 
 | OpenAI event tipi | `RealtimeServerEventType` |
 |---|---|
 | `input_audio_buffer.speech_started` | `SpeechStarted` |
 | `input_audio_buffer.speech_stopped` | `SpeechStopped` |
+| `input_audio_buffer.committed` | `InputAudioCommitted` (+ `ItemId`) |
 | `response.created` | `ResponseCreated` |
-| `conversation.item.input_audio_transcription.completed` | `InputTranscriptCompleted` (+ `Transcript`) |
+| `conversation.item.input_audio_transcription.completed` | `InputTranscriptCompleted` (+ `Transcript`, `ItemId`) |
+| `conversation.item.input_audio_transcription.failed` | `InputTranscriptFailed` (+ `ItemId`, `ErrorMessage`) |
 | `response.output_audio.delta` | `AudioDelta` (+ Base64 çözülmüş `AudioDelta` baytları) |
 | `response.output_audio_transcript.delta` | `AssistantTextDelta` (+ `TextDelta`) |
 | `response.output_audio_transcript.done` | `AssistantTextDone` (+ `FullText`) |

@@ -39,6 +39,10 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<OrderEntity>
             .HasColumnName("cancel_reason")
             .HasMaxLength(512);
 
+        builder.Property(e => e.DeliveredAt)
+            .HasColumnName("delivered_at")
+            .HasColumnType("timestamptz");
+
         builder.Property(e => e.ReturnRequestedAt)
             .HasColumnName("return_requested_at")
             .HasColumnType("timestamptz");

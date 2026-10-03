@@ -8,7 +8,7 @@ namespace CustomerSupportBot.Application.Ports.Inbound;
 public interface IAnalyticsPort
 {
     /// <summary>Belirtilen sessionId için derecelendirme kaydeder.</summary>
-    ConversationRating Rate(string sessionId, int stars, string? comment = null);
+    Task<ConversationRating> RateAsync(string sessionId, int stars, string? comment = null);
 
     /// <summary>Tek bir session için derecelendirmeyi döner.</summary>
     ConversationRating? GetRating(string sessionId);

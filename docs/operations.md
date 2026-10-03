@@ -430,7 +430,7 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
   │◀── response_delta × N           ───┤   │   ├─ TERMINATE detection
   │◀── response_complete            ───┤   │   └─ TERMINATE detection + temizleme
   │                                    │   │
-  │                                    │   ├─ Phase 4: AddExchange + RecordBotExchange
+  │                                    │   ├─ Phase 4: AddExchange + RecordBotExchangeAsync
   │◀── sentiment_update             ───┤   ├─ Phase 5: sentiment SSE
   │◀── done                         ───┘   └─ orchestrator.Done
 ```
@@ -448,7 +448,7 @@ ResponseAgent `TERMINATE: reason=escalation_needed` üretirse:
 
 ```
 ADMIN ──takeover──▶ /chat-sessions/{sid}/takeover
-                       └─ registry.TakeOver(sid, agent)
+                       └─ registry.TakeOverAsync(sid, agent)
                           └─ ModeChanged → persistent SSE'ye human_joined
                                                └─ müşteri ekranı yeşil banner + input enabled
 ADMIN ── text ─────▶ /chat-sessions/{sid}/messages
@@ -456,7 +456,7 @@ ADMIN ── text ─────▶ /chat-sessions/{sid}/messages
                        └─ sessions.AppendAssistantMessage (LLM history'sine yaz!)
 USER  ── text ─────▶ /chat/stream
                        └─ orchestrator: mode==Human → workflow atla
-                          └─ bridge.PublishUserMessage (admin paneline akar)
+                          └─ bridge.PublishUserMessageAsync (admin paneline akar)
 ADMIN ──release ───▶ /chat-sessions/{sid}/release
                        └─ registry.Release(sid)
                           └─ ModeChanged → human_left

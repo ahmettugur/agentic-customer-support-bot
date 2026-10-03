@@ -44,6 +44,15 @@ Bir workflow turu bittikten sonra (agent takımı çalışıp `ReasoningTrace` �
 > oysa ikisi farklı, birbirinden bağımsız sorunlardı. Dedup anahtarı `(SessionId, AgentName)`
 > ikilisine genişletildi.
 
+> 🐞 **`GetOpen()` kontrolü dedup'ın garantisi DEĞİL, yalnızca ucuz bir ön elemedir.** Kontrol ile
+> `CreateAsync` atomik değildir: bileşik sorgunun paralel alt görevleri (TurnFinalizer eskalasyonu
+> alt koşularda da işler) ya da farklı pod'lar aynı anda kontrolden geçip aynı ajan için iki
+> eskalasyon açabiliyordu. Asıl garanti sink'tedir — Postgres'te `(session_id, agent_name)`
+> üzerindeki unique filtered index. Yarışı kaybeden çağrıya sink MEVCUT kaydı döndürür; servis
+> dönen `Id` kendi isteğininkinden farklıysa bunu "yeni kayıt yok" olarak ele alır ve önerilen
+> temsilcinin yükünü (`IHumanAgentRegistry.IncrementLoad`) **artırmaz** — aksi hâlde tek bir
+> eskalasyon için yük iki kez sayılırdı.
+
 **Çoklu aday çakışması:** Bir turda birden fazla specialist agent aynı anda eskalasyon
 isteyebilir (nadir ama mümkün). Bu durumda TÜMÜ değil, **tek bir** eskalasyon açılır — Complaint
 agent'ı varsa o öncelikli (şikayetler tipik olarak daha kritik), yoksa listedeki son aday. Bu,

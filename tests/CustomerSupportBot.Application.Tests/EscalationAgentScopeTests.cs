@@ -29,13 +29,13 @@ public class EscalationAgentScopeTests
         var service = NewService(out var sink);
 
         // Çağıranın kaydı EN ESKİ olsun — sonra 60 tane başkasına ait kayıt gelsin.
-        var mine = sink.Create(new EscalationRequest
+        var mine = await sink.CreateAsync(new EscalationRequest
         {
             SessionId = "s-mine", Reason = "benim kaydım", AssignedTo = "agent-1"
         });
 
         for (var i = 0; i < 60; i++)
-            sink.Create(new EscalationRequest
+            await sink.CreateAsync(new EscalationRequest
             {
                 SessionId = $"s-other-{i}", Reason = "başkasının", AssignedTo = "agent-2"
             });
@@ -54,8 +54,8 @@ public class EscalationAgentScopeTests
     {
         var service = NewService(out var sink);
 
-        var unassigned = sink.Create(new EscalationRequest { SessionId = "s-free", Reason = "atanmamış" });
-        var others = sink.Create(new EscalationRequest
+        var unassigned = await sink.CreateAsync(new EscalationRequest { SessionId = "s-free", Reason = "atanmamış" });
+        var others = await sink.CreateAsync(new EscalationRequest
         {
             SessionId = "s-other", Reason = "başkasının", AssignedTo = "agent-9"
         });
@@ -71,7 +71,7 @@ public class EscalationAgentScopeTests
     {
         var service = NewService(out var sink);
         for (var i = 0; i < 10; i++)
-            sink.Create(new EscalationRequest { SessionId = $"s-{i}", Reason = "x", AssignedTo = "agent-1" });
+            await sink.CreateAsync(new EscalationRequest { SessionId = $"s-{i}", Reason = "x", AssignedTo = "agent-1" });
 
         (await service.GetRecentForAgentAsync("agent-1", count: 3, TestContext.Current.CancellationToken))
             .Should().HaveCount(3);

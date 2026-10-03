@@ -31,15 +31,15 @@ public static class PersonalizationEndpoints
                 : Results.Ok(profile);
         });
 
-        group.MapPut("/{id}/profile/note", (string id, AdminNoteInput input, IPersonalizationPort port) =>
+        group.MapPut("/{id}/profile/note", async (string id, AdminNoteInput input, IPersonalizationPort port) =>
         {
-            var p = port.SetAdminNote(id, input?.Note);
+            var p = await port.SetAdminNoteAsync(id, input?.Note);
             return Results.Ok(p);
         });
 
-        group.MapDelete("/{id}/profile", (string id, IPersonalizationPort port) =>
+        group.MapDelete("/{id}/profile", async (string id, IPersonalizationPort port) =>
         {
-            return port.DeleteProfile(id) ? Results.NoContent() : Results.NotFound();
+            return await port.DeleteProfileAsync(id) ? Results.NoContent() : Results.NotFound();
         });
 
         return app;

@@ -17,7 +17,7 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -357,6 +357,10 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     b.Property<long>("CustomerId")
                         .HasColumnType("bigint")
                         .HasColumnName("customer_id");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("delivered_at");
 
                     b.Property<DateTime>("OrderDate")
                         .HasColumnType("timestamptz")
@@ -774,8 +778,9 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SessionId")
-                        .HasDatabaseName("ix_escalations_session_open")
+                    b.HasIndex("SessionId", "AgentName")
+                        .IsUnique()
+                        .HasDatabaseName("ux_escalations_open_session_agent")
                         .HasFilter("status IN ('Open', 'Acknowledged')");
 
                     b.HasIndex("Status", "CreatedAt")

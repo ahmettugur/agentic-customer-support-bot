@@ -15,7 +15,7 @@ public class ProfileConsolidationPersistenceTests(PostgresCatalogFixture fixture
         var id = Guid.NewGuid().ToString();
         var store = new PostgresCustomerProfileStore(fixture.DbFactory, new InMemoryMessageBusHub().CreateNode(),
             NullLogger<PostgresCustomerProfileStore>.Instance);
-        store.Upsert(new CustomerProfile { CustomerId = id, TotalTurns = 1 });
+        await store.UpsertAsync(new CustomerProfile { CustomerId = id, TotalTurns = 1 });
         await using var db = await fixture.DbFactory.CreateDbContextAsync(TestContext.Current.CancellationToken);
         await db.CustomerProfiles.Where(p => p.CustomerId == id).ExecuteUpdateAsync(s => s
             .SetProperty(p => p.TotalTurns, 3).SetProperty(p => p.AdminNote, "new note"), TestContext.Current.CancellationToken);

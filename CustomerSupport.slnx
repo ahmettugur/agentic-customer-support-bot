@@ -25,8 +25,10 @@
     <Project Path="tests/CustomerSupportBot.Adapters.Agents.Tests/CustomerSupportBot.Adapters.Agents.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Adapters.AI.Tests/CustomerSupportBot.Adapters.AI.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Adapters.Persistence.Tests/CustomerSupportBot.Adapters.Persistence.Tests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Adapters.Redis.Tests/CustomerSupportBot.Adapters.Redis.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Adapters.Telemetry.Tests/CustomerSupportBot.Adapters.Telemetry.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Api.IntegrationTests/CustomerSupportBot.Api.IntegrationTests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Web.Tests/CustomerSupportBot.Web.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Tests.Shared/CustomerSupportBot.Tests.Shared.csproj" />
   </Folder>
 </Solution>

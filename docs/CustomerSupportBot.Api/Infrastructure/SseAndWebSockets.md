@@ -59,6 +59,21 @@ biçimini (Server-Sent Events ve WebSocket) düşük seviyeli protokol detaylar�
   tüketebilirdi. Sınır aşıldığında döngü **hemen** kırılır ve soket kapatılır — parçaların
   bitmesini beklemek, sınırı aşan bir istemcinin bağlantıyı süresiz açık tutmasına izin verirdi
   (bu, geliştirme sürecinde test yazılırken yakalanıp düzeltilmiş gerçek bir hataydı).
+- **JSON kodlayıcı (`ApiJsonEncoder`):** SSE olayları ve HTTP JSON yanıtları
+  `JavaScriptEncoder.Create(UnicodeRanges.All)` ile yazılır — Türkçe karakterler (ı, ş, ğ…) olduğu
+  gibi kalır, ama HTML'e duyarlı karakterler (`< > & ' "`) kaçırılır. Eskiden
+  `UnsafeRelaxedJsonEscaping` kullanılıyordu; adındaki "Unsafe" tam bu farktır: yanıtlar LLM çıktısı
+  ve müşteri metni taşıyor, bir istemci JSON'u bir gün HTML bağlamına (ör. `<script>` bloğu,
+  `innerHTML`) koyarsa kaçırılmamış `</script>` enjeksiyona dönüşür. Türkçe okunabilirlik için
+  yalnızca Unicode aralıklarına izin vermek yeterliydi.
+  Not: bu kodlayıcı `+` ve `'` karakterlerini de kaçırır (ör. A2A kartındaki `HTTP+JSON` telde
+  `HTTP\u002BJSON` olur). Geçerli JSON'dur, ayrıştıran her istemci aynı değeri görür; yalnızca
+  ham metin üzerinde arama yapan araçlar/testler etkilenir — testler değerleri ayrıştırarak
+  karşılaştırır.
+- **Yazma hataları yutulur ama izi kalır:** `SseForwarder.WriteAsync` istemci bağlantısı
+  koptuğunda oluşan yazma hatalarını akışı bozmamak için yutar; isteğe bağlı `ILogger` verilirse
+  bunları `Debug` seviyesinde loglar — başka bir nedenle (ör. serileştirilemeyen bir yük) düşen
+  olaylar artık tamamen sessiz kaybolmaz.
 - **4 MB sınırı seçimi:** gerçek ses akışı parçaları (mikrofon chunk'ları) birkaç KB'lik ayrık
   mesajlardır; 4 MB bu akışı hiçbir zaman sınırlamaz ama kötüye kullanımı engeller.
 
@@ -75,7 +90,7 @@ biçimini (Server-Sent Events ve WebSocket) düşük seviyeli protokol detaylar�
 
 | Üye | Açıklama |
 |---|---|
-| `SseForwarder(HttpResponse, CancellationToken)` | Constructor. |
+| `SseForwarder(HttpResponse, CancellationToken, ILogger? logger = null)` | Constructor; logger yazma hatalarını `Debug` seviyesinde kaydetmek için. |
 | `WriteAsync(string eventType, object? data)` | Thread-safe SSE yazımı; iptal/hata durumlarını sessizce yutar. |
 | `WriteDoneAsync(string sessionId)` | `done` event'i yazar. |
 | `WriteErrorAsync(string message)` | `error` event'i yazar. |

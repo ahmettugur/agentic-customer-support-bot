@@ -90,7 +90,8 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         }
         var messages = prompt.Messages;
 
-        var st = _traceProcessor.StartTraceState(session, query, reasoning);
+        var st = await _traceProcessor.StartTraceStateAsync(session, query, reasoning);
+        _traceProcessor.BindToAmbientContext(st);
         st.Trace.EstimatedTokens = TokenEstimator.Estimate(messages.Select(m => m.Text));
         st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
@@ -161,7 +162,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
-            _traceStore.Complete(st.Trace.TraceId,
+            await _traceStore.CompleteAsync(st.Trace.TraceId,
                 terminationReason: WellKnown.Termination.ReasonTimeout,
                 error: $"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı during finalization");
             throw ExceptionTranslator.Translate(
@@ -180,7 +181,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
             // iptali (ct.IsCancellationRequested, yukarıdaki timeout dalına girmeyen) bu dala
             // hiç girmez — streaming'deki simetrik davranışla tutarlı olarak ham
             // OperationCanceledException olarak yukarı yayılmaya devam eder.
-            _traceStore.Complete(st.Trace.TraceId,
+            await _traceStore.CompleteAsync(st.Trace.TraceId,
                 terminationReason: WellKnown.Termination.ReasonError,
                 error: ex.Message);
             throw ExceptionTranslator.Translate(ex, "RunAsync workflow finalizasyon hatası.");
@@ -227,7 +228,8 @@ internal sealed class WorkflowRunner : IWorkflowRunner
 
         var messages = prompt!.Messages;
 
-        var st = _traceProcessor.StartTraceState(session, query, reasoning);
+        var st = await _traceProcessor.StartTraceStateAsync(session, query, reasoning);
+        _traceProcessor.BindToAmbientContext(st);
         st.Trace.EstimatedTokens = TokenEstimator.Estimate(messages.Select(m => m.Text));
         st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
@@ -325,7 +327,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
                 ? traceMessage
                 : ExceptionTranslator.Translate(
                     finalizationError, "RunStreamingAsync finalizasyon hatası.").Message;
-            _traceStore.Complete(st.Trace.TraceId,
+            await _traceStore.CompleteAsync(st.Trace.TraceId,
                 terminationReason: timedOut
                     ? WellKnown.Termination.ReasonTimeout
                     : WellKnown.Termination.ReasonError,
@@ -487,7 +489,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         {
             await StopRunGracefullyAsync(run);
             await _approvalGate.ProcessPendingEscalationsAsync(st.Trace, query, "");
-            _traceStore.Complete(st.Trace.TraceId,
+            await _traceStore.CompleteAsync(st.Trace.TraceId,
                 terminationReason: WellKnown.Termination.ReasonTimeout,
                 error: $"Workflow {_guards.TimeoutSeconds}s timeout'a takıldı");
             return new RunOutcome(RunOutcomeKind.TimedOut, null);
@@ -497,7 +499,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         {
             await StopRunGracefullyAsync(run);
             await _approvalGate.ProcessPendingEscalationsAsync(st.Trace, query, "");
-            _traceStore.Complete(st.Trace.TraceId,
+            await _traceStore.CompleteAsync(st.Trace.TraceId,
                 terminationReason: "cancelled",
                 error: "İstek çağıran tarafından iptal edildi.");
             return new RunOutcome(RunOutcomeKind.Cancelled, null);
@@ -509,7 +511,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
             // Trace'e (admin/debug amaçlı) HAM hata metni yazılır — istemciye giden metin
             // ayrı, sanitize edilmiş bir yoldan gelir (bkz. RunAsync/RunStreamingAsync'te
             // ExceptionTranslator.Translate çağrıları).
-            _traceStore.Complete(st.Trace.TraceId, terminationReason: "error", error: workflowError.Message);
+            await _traceStore.CompleteAsync(st.Trace.TraceId, terminationReason: "error", error: workflowError.Message);
             return new RunOutcome(RunOutcomeKind.Error, workflowError);
         }
 

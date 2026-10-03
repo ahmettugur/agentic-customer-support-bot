@@ -151,7 +151,7 @@ public class SlaGuardianServiceTests
         };
         var (slaPort, _, escalations, sink) = BuildHarness(opts);
 
-        var esc = escalations.Create(new EscalationRequest
+        var esc = await escalations.CreateAsync(new EscalationRequest
         {
             CreatedAt = DateTime.UtcNow.AddSeconds(-5),
             Priority = EscalationPriority.Normal,

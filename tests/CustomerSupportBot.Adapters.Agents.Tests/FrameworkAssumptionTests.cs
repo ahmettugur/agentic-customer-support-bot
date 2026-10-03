@@ -60,10 +60,10 @@ public class FrameworkAssumptionTests
     /// Seçilen konuşmacı: Data == TurnToken → gerçek ajan ziyareti sayılmalı.
     /// </summary>
     [Fact]
-    public void ExecutorInvoked_WithTurnToken_CountsAsRealAgentTurn()
+    public async Task ExecutorInvoked_WithTurnToken_CountsAsRealAgentTurn()
     {
         var sut = CreateProcessor();
-        var st = sut.StartTraceState(session: null, query: "test", reasoning: null);
+        var st = await sut.StartTraceStateAsync(session: null, query: "test", reasoning: null);
 
         sut.ApplyTraceEvent(st, new ExecutorInvokedEvent(
             WellKnown.AgentNames.Product, new TurnToken(emitEvents: true)));
@@ -78,10 +78,10 @@ public class FrameworkAssumptionTests
     /// ayrım sinyali geçersizdir ve IterationCount/UI rozetleri güvenilmez hale gelir.
     /// </summary>
     [Fact]
-    public void ExecutorInvoked_WithoutTurnToken_IsIgnoredAsBroadcast()
+    public async Task ExecutorInvoked_WithoutTurnToken_IsIgnoredAsBroadcast()
     {
         var sut = CreateProcessor();
-        var st = sut.StartTraceState(session: null, query: "test", reasoning: null);
+        var st = await sut.StartTraceStateAsync(session: null, query: "test", reasoning: null);
 
         sut.ApplyTraceEvent(st, new ExecutorInvokedEvent(
             WellKnown.AgentNames.Product,
@@ -95,10 +95,10 @@ public class FrameworkAssumptionTests
     /// canlı akışta olan tam olarak budur.
     /// </summary>
     [Fact]
-    public void ExecutorInvoked_MixedBroadcastAndRealTurn_CountsOnlyRealTurn()
+    public async Task ExecutorInvoked_MixedBroadcastAndRealTurn_CountsOnlyRealTurn()
     {
         var sut = CreateProcessor();
-        var st = sut.StartTraceState(session: null, query: "test", reasoning: null);
+        var st = await sut.StartTraceStateAsync(session: null, query: "test", reasoning: null);
 
         sut.ApplyTraceEvent(st, new ExecutorInvokedEvent(
             WellKnown.AgentNames.Order, new List<ChatMessage>()));

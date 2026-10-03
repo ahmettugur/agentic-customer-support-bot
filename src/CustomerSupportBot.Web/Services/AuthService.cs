@@ -71,46 +71,74 @@ public sealed class AuthService(HttpClient http, AuthTokenStore store)
     }
 
     // Scope başına en fazla bir refresh çağrısı — paralel istekler aynı Task'e biner.
-    private readonly Dictionary<AuthScope, Task?> _refreshTasks = new();
+    //
+    // Kayıt İLK await'ten ÖNCE ve senkron yapılır. Eskiden önce localStorage okunuyor, kayıt
+    // ancak ondan sonra yapılıyordu: okuması uçuştaki refresh'ten ÖNCE başlayıp SONRA biten
+    // ikinci bir çağrı, kayıt temizlenmiş olduğu için eski (artık döndürülmüş) refresh
+    // token'la ikinci bir istek atıyordu. Sunucu bunu reddedip (token yeniden kullanımı)
+    // oturumu düşürüyordu.
+    private readonly Dictionary<AuthScope, Task<AuthTokenData?>> _refreshTasks = new();
+    private readonly object _refreshGate = new();
 
-    public async Task<AuthTokenData?> TryRefreshAsync(AuthScope scope)
+    public Task<AuthTokenData?> TryRefreshAsync(AuthScope scope)
+    {
+        lock (_refreshGate)
+        {
+            if (_refreshTasks.TryGetValue(scope, out var inFlight)) return inFlight;
+
+            var flight = new TaskCompletionSource<AuthTokenData?>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _refreshTasks[scope] = flight.Task;
+            _ = RunRefreshAsync(scope, flight);
+            return flight.Task;
+        }
+    }
+
+    private async Task RunRefreshAsync(AuthScope scope, TaskCompletionSource<AuthTokenData?> flight)
+    {
+        AuthTokenData? result = null;
+        try
+        {
+            result = await RefreshCoreAsync(scope);
+        }
+        catch
+        {
+            result = null;
+        }
+        finally
+        {
+            // Önce kayıt kaldırılır, sonra sonuç yayınlanır: sonuçtan SONRA gelen bir çağrı
+            // (ör. yeni access token da süresini doldurduğunda) bitmiş uçuşa binmez, yeni
+            // bir refresh başlatır.
+            lock (_refreshGate) _refreshTasks.Remove(scope);
+            flight.TrySetResult(result);
+        }
+    }
+
+    private async Task<AuthTokenData?> RefreshCoreAsync(AuthScope scope)
     {
         var current = await store.ReadAsync(scope);
         if (current?.RefreshToken is null) return null;
 
-        if (_refreshTasks.TryGetValue(scope, out var inFlight) && inFlight is not null)
+        var response = await http.PostAsJsonAsync("/auth/refresh",
+            new { current.RefreshToken });
+
+        if (!response.IsSuccessStatusCode)
         {
-            await inFlight;
-            return await store.ReadAsync(scope);
-        }
+            // Aynı localStorage'ı paylaşan başka bir sekme bu arada yenilemiş olabilir: o
+            // sekme token'ı döndürdü, bizimki reddedildi. Depoyu silmek diğer sekmenin yeni
+            // oturumunu da düşürürdü — depodaki token değiştiyse onu kullan.
+            var latest = await store.ReadAsync(scope);
+            if (latest?.RefreshToken is not null && latest.RefreshToken != current.RefreshToken)
+                return latest;
 
-        var tcs = new TaskCompletionSource();
-        _refreshTasks[scope] = tcs.Task;
-
-        try
-        {
-            var response = await http.PostAsJsonAsync("/auth/refresh",
-                new { current.RefreshToken });
-
-            if (!response.IsSuccessStatusCode)
-            {
-                await store.WriteAsync(scope, null);
-                return null;
-            }
-
-            var next = await response.Content.ReadFromJsonAsync<AuthTokenData>();
-            await store.WriteAsync(scope, next);
-            return next;
-        }
-        catch
-        {
+            await store.WriteAsync(scope, null);
             return null;
         }
-        finally
-        {
-            _refreshTasks[scope] = null;
-            tcs.SetResult();
-        }
+
+        var next = await response.Content.ReadFromJsonAsync<AuthTokenData>();
+        await store.WriteAsync(scope, next);
+        return next;
     }
 
     private sealed record ErrorBody(string? Error);

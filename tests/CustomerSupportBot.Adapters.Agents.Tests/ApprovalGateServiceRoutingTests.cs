@@ -125,7 +125,7 @@ public class ApprovalGateServiceRoutingTests
         var session = await sessions.GetOrCreateAsync("s2", TestContext.Current.CancellationToken);
         session.State.AuthenticatedCustomerId = "9011";
 
-        profiles.Upsert(new Domain.Model.Memory.CustomerProfile
+        await profiles.UpsertAsync(new Domain.Model.Memory.CustomerProfile
         {
             CustomerId = "9011",
             PreferredLanguage = "tr",

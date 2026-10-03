@@ -9,6 +9,7 @@ using System.Security.Claims;
 
 using CustomerSupportBot.Application.Services.A2A;
 
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Extensions;
@@ -20,19 +21,28 @@ public static class ApplicationServicesExtensions
         // ─── Hexagonal: Application katmanı servisleri ───
         services.AddApplicationDrivingPorts(configuration);
 
-        var allowedOrigins = configuration
-            .GetSection("Cors:AllowedOrigins")
-            .Get<string[]>();
-
-        services.AddCors(options =>
-            options.AddDefaultPolicy(p =>
+        // Boş origin listesi eskiden HER ortamda AllowAnyOrigin'e düşüyordu — depodaki varsayılan
+        // appsettings.json'da liste boş, yani üretim override'ı unutulduğunda her site API'yi
+        // tarayıcıdan çağırabiliyordu. Artık yalnızca Development'ta serbest (Blazor :5288 ↔
+        // API :5021 kolaylığı); başka ortamda boş liste hiçbir cross-origin çağırana izin vermez
+        // (başlatma uyarısı: Program.cs). Liste options oluşturulurken okunur, eager değil.
+        services.AddCors();
+        services.AddOptions<CorsOptions>()
+            .Configure<IConfiguration, IHostEnvironment>((options, config, env) =>
             {
-                if (allowedOrigins is { Length: > 0 })
-                    p.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader();
-                else
-                    p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
-                p.WithExposedHeaders("Retry-After");
-            }));
+                var allowedOrigins = config.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+                options.AddDefaultPolicy(p =>
+                {
+                    if (allowedOrigins.Length > 0)
+                        p.WithOrigins(allowedOrigins);
+                    else if (env.IsDevelopment())
+                        p.AllowAnyOrigin();
+                    else
+                        p.SetIsOriginAllowed(_ => false);
+
+                    p.AllowAnyMethod().AllowAnyHeader().WithExposedHeaders("Retry-After");
+                });
+            });
 
         // Enum'ları camelCase string olarak serialize et (ör. IssueSeverity.Warn → "warn")
         services.ConfigureHttpJsonOptions(o =>
@@ -74,9 +84,17 @@ public static class ApplicationServicesExtensions
                     });
             });
 
+            // "chat" MÜŞTERİ başına bölümlenir, IP başına değil. Korunan şey her turdaki LLM
+            // maliyetidir: IP anahtarında aynı NAT/kurumsal çıkış arkasındaki müşteriler tek
+            // kotayı paylaşıyor, IP değiştirebilen tek bir hesap ise sınırı dolaşıyordu. Uçlar
+            // Customer token'ı istediği için claim her zaman vardır; yoksa (kimliksiz istek,
+            // zaten yetkilendirmede reddedilecek) IP'ye düşülür. Önekler iki anahtar alanının
+            // çakışmasını önler. Limiter UseAuthentication'dan SONRA çalışır (bkz. Program.cs).
             options.AddPolicy("chat", httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    partitionKey: httpContext.User.FindFirst("linked_customer_id")?.Value is { Length: > 0 } customerId
+                        ? $"customer:{customerId}"
+                        : $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = 20,

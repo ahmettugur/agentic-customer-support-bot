@@ -9,80 +9,80 @@ public class InMemoryChatBridgeTests
     private readonly InMemoryChatBridge _bridge = new(NullLogger<InMemoryChatBridge>.Instance);
 
     [Fact]
-    public void PublishUserMessage_AppendsToHistory()
+    public async Task PublishUserMessage_AppendsToHistory()
     {
-        _bridge.PublishUserMessage("s1", "merhaba");
-        var history = _bridge.GetHistory("s1");
+        await _bridge.PublishUserMessageAsync("s1", "merhaba");
+        var history = await _bridge.GetHistoryAsync("s1");
         history.Should().ContainSingle();
         history[0].Sender.Should().Be(ChatBridgeSender.User);
         history[0].Text.Should().Be("merhaba");
     }
 
     [Fact]
-    public void PublishAdminMessage_AppendsWithHumanAgent()
+    public async Task PublishAdminMessage_AppendsWithHumanAgent()
     {
-        _bridge.PublishAdminMessage("s1", "Ali", "destek geldi");
-        var history = _bridge.GetHistory("s1");
+        await _bridge.PublishAdminMessageAsync("s1", "Ali", "destek geldi");
+        var history = await _bridge.GetHistoryAsync("s1");
         history[0].Sender.Should().Be(ChatBridgeSender.Admin);
         history[0].HumanAgent.Should().Be("Ali");
     }
 
     [Fact]
-    public void PublishSystemMessage_AppendsToHistory()
+    public async Task PublishSystemMessage_AppendsToHistory()
     {
-        _bridge.PublishSystemMessage("s1", "info");
-        _bridge.GetHistory("s1").Should().HaveCount(1)
+        await _bridge.PublishSystemMessageAsync("s1", "info");
+        (await _bridge.GetHistoryAsync("s1")).Should().HaveCount(1)
             .And.ContainSingle(m => m.Sender == ChatBridgeSender.System);
     }
 
     [Fact]
-    public void PublishBotMessage_AppendsToHistory()
+    public async Task PublishBotMessage_AppendsToHistory()
     {
-        _bridge.PublishBotMessage("s1", "merhaba ben bot");
-        _bridge.GetHistory("s1").Should().ContainSingle(m => m.Sender == ChatBridgeSender.Bot);
+        await _bridge.PublishBotMessageAsync("s1", "merhaba ben bot");
+        (await _bridge.GetHistoryAsync("s1")).Should().ContainSingle(m => m.Sender == ChatBridgeSender.Bot);
     }
 
     [Fact]
-    public void PublishBotTyping_DoesNotAppendToHistory()
+    public async Task PublishBotTyping_DoesNotAppendToHistory()
     {
         _bridge.PublishBotTyping("s1", on: true);
-        _bridge.GetHistory("s1").Should().BeEmpty();
+        (await _bridge.GetHistoryAsync("s1")).Should().BeEmpty();
     }
 
     [Fact]
-    public void RecordBotExchange_BothMessagesAppended()
+    public async Task RecordBotExchange_BothMessagesAppended()
     {
-        _bridge.RecordBotExchange("s1", "soru", "cevap");
-        _bridge.GetHistory("s1").Should().HaveCount(2);
+        await _bridge.RecordBotExchangeAsync("s1", "soru", "cevap");
+        (await _bridge.GetHistoryAsync("s1")).Should().HaveCount(2);
     }
 
     [Fact]
-    public void RecordBotExchange_SkipsBlankParts()
+    public async Task RecordBotExchange_SkipsBlankParts()
     {
-        _bridge.RecordBotExchange("s1", "  ", "cevap");
-        _bridge.GetHistory("s1").Should().ContainSingle();
+        await _bridge.RecordBotExchangeAsync("s1", "  ", "cevap");
+        (await _bridge.GetHistoryAsync("s1")).Should().ContainSingle();
     }
 
     [Fact]
-    public void GetHistory_TakeLimits()
+    public async Task GetHistory_TakeLimits()
     {
         for (var i = 0; i < 10; i++)
-            _bridge.PublishUserMessage("s1", $"m{i}");
-        _bridge.GetHistory("s1", take: 3).Should().HaveCount(3);
+            await _bridge.PublishUserMessageAsync("s1", $"m{i}");
+        (await _bridge.GetHistoryAsync("s1", take: 3)).Should().HaveCount(3);
     }
 
     [Fact]
-    public void GetHistory_UnknownSession_Empty()
+    public async Task GetHistory_UnknownSession_Empty()
     {
-        _bridge.GetHistory("missing").Should().BeEmpty();
+        (await _bridge.GetHistoryAsync("missing")).Should().BeEmpty();
     }
 
     [Fact]
-    public void Reset_ClearsHistory()
+    public async Task Reset_ClearsHistory()
     {
-        _bridge.PublishUserMessage("s1", "x");
+        await _bridge.PublishUserMessageAsync("s1", "x");
         _bridge.Reset("s1");
-        _bridge.GetHistory("s1").Should().BeEmpty();
+        (await _bridge.GetHistoryAsync("s1")).Should().BeEmpty();
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class InMemoryChatBridgeTests
 
         // Aboneliğin oluşması için kısa bekleme
         await Task.Delay(100, cts.Token);
-        _bridge.PublishAdminMessage("s1", "Ali", "merhaba");
+        await _bridge.PublishAdminMessageAsync("s1", "Ali", "merhaba");
 
         var msg = await task;
         msg.Should().NotBeNull();
@@ -121,7 +121,7 @@ public class InMemoryChatBridgeTests
         }, cts.Token);
 
         await Task.Delay(100, cts.Token);
-        _bridge.PublishUserMessage("s1", "merhaba");
+        await _bridge.PublishUserMessageAsync("s1", "merhaba");
 
         var msg = await task;
         msg.Should().NotBeNull();

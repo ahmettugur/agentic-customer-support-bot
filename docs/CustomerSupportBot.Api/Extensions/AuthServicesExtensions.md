@@ -47,6 +47,12 @@ ve uygulama genelindeki tüm authorization policy'lerini (`Admin`, `Agent`, `Cus
 - **A2A için iki ayrı rol (`Partner`/`A2ASubject`):** partner token'ı müşteri-bağımsız işlemler
   (ürün sorgulama, token değişimi) için, özne token'ı tek bir müşteriye kilitli veri erişimi
   için — birbirinin yerine geçemez.
+- **İmzalama anahtarı kayıt anında, tüm ortamlarda doğrulanır** (`JwtOptions.ValidateSigningKey`):
+  boş, 32 bayttan kısa ya da çok az farklı karakter içeren anahtarla uygulama başlamaz. Eskiden
+  boş anahtarda JwtBearer'a sabit bir yedek (`'x' × 32`) veriliyordu ve hata ancak ilk login'de
+  (scoped `JwtAccessTokenProvider` ilk kez oluşturulduğunda) çıkıyordu — o ana kadar API, herkesin
+  bildiği bu anahtarla imzalanmış token'ları geçerli sayıyordu. Yer tutucu anahtar kontrolü
+  (yalnızca Development dışı) ayrıca `Program.cs`'tedir.
 - **`RequireHttpsMetadata = false` yorumla açıkça "Development için" işaretli:** production'da
   HTTPS zorunluluğunun kaldırılmadığından emin olmak için okuyanın dikkatini çeker.
 

@@ -8,7 +8,8 @@ namespace CustomerSupportBot.Application.Ports.Outbound.Persistence;
 public interface IRatingStore
 {
     /// <summary>Yeni bir değerlendirme kaydeder. Session başına tek rating.</summary>
-    ConversationRating Submit(string sessionId, int stars, string? feedback);
+    /// <summary>Yazma bilinçli olarak CancellationToken almaz: istemci bağlantıyı kesse bile cache ile DB tutarlı kalmalı.</summary>
+    Task<ConversationRating> SubmitAsync(string sessionId, int stars, string? feedback);
 
     /// <summary>Belirtilen oturumun rating'ini döndürür. Yoksa null.</summary>
     ConversationRating? GetBySession(string sessionId);

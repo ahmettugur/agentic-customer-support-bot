@@ -15,6 +15,12 @@ public class ConversationRating
     /// <summary>1–5 arası yıldız puanı.</summary>
     public int Stars { get; set; }
 
+    /// <summary>
+    /// <see cref="Feedback"/> için azami uzunluk. Puanlama ucu kimliksizdir; sınır olmadan
+    /// tek bir istekle megabaytlarca metin DB'ye ve her pod'un belleğine yazılabiliyordu.
+    /// </summary>
+    public const int MaxFeedbackLength = 2000;
+
     /// <summary>Opsiyonel kullanıcı yorumu.</summary>
     public string? Feedback { get; set; }
 

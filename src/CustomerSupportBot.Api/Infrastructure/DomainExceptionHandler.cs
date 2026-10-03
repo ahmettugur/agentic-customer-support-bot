@@ -75,6 +75,16 @@ internal sealed class DomainExceptionHandler : IExceptionHandler
     }
 
     /// <summary>
+    /// Yanıtı zaten başlamış bir akışta (SSE) istemciye gösterilecek mesaj. HTTP yanıtıyla aynı
+    /// ifşa kuralı uygulanır: 4xx domain mesajı gösterilir; 5xx ve domain-dışı hatalarda iç
+    /// bağlam sızdırılmaz, genel mesaj döner.
+    /// </summary>
+    internal static string ClientMessage(Exception exception) =>
+        exception is DomainException domain && Map(domain).ExposeDetail
+            ? domain.Message
+            : GenericServerDetail;
+
+    /// <summary>
     /// 4xx hatalarda mesaj istemciye gösterilir; 5xx'te iç bağlam (infra context) sızdırılmaz.
     /// </summary>
     private static (int Status, LogLevel Level, bool ExposeDetail) Map(DomainException ex) => ex switch

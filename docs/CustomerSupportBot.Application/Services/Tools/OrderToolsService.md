@@ -94,7 +94,7 @@ TOCTOU (time-of-check to time-of-use) riskine karşı savunma.
 | `GetLastOrderTool(customerId)` | Müşterinin en son siparişini döner; hiç yoksa `NoOrdersForCustomer`. |
 | `GetAllOrdersTool(customerId)` | Müşterinin **tüm** siparişlerini (kapasitesiz) listeler. |
 | `OrderCancelTool(orderId, reason, customerId)` | `reason` en az 5 karakter (trim edilmiş) olmalı; sahiplik kontrolü; zaten iptalse `OrderAlreadyCancelled`; yalnızca "İşleniyor"/"Kargolandı" durumundaki siparişler iptal edilebilir. |
-| `ReturnRequestTool(orderId, reason, customerId)` | Aynı doğrulama deseni; yalnızca "Teslim Edildi" ve 14 gün içindeki siparişler iade edilebilir; zaten iade talebi varsa `ReturnAlreadyRequested`. |
+| `ReturnRequestTool(orderId, reason, customerId)` | Aynı doğrulama deseni; yalnızca "Teslim Edildi" ve teslimden itibaren 14 gün içindeki siparişler iade edilebilir; zaten iade talebi varsa `ReturnAlreadyRequested`. |
 | `FormatLines(lines)` *(private static)* | `"Kahve x2, Çay x1"` biçiminde insan-okunur özet. |
 | `ToLineData(lines)` *(private static)* | `ToolResult.Data` içinde taşınan makine-okunur satır listesi. |
 | `OrderNotAccessibleMessage(orderId)` *(private static)* | Enumeration oracle'a karşı tekilleştirilmiş "bulunamadı" mesajı — bkz. madde 5. |

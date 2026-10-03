@@ -72,6 +72,12 @@ ayrı token türü vardır:
 - **`create-response` / body boyutu sınırlaması endpoint filtresi değil ayrı bir middleware**
   (`UseA2AProtocolGuards`) çünkü HTTP+JSON handler'ı istek gövdesini endpoint filtresi
   çalışmadan ÖNCE bind eder; sınırlama daha erken, middleware seviyesinde yapılmak zorunda.
+- **Gövde okumanın toplam süre sınırı (15 sn, `BodyReadTimeout`):** Kestrel'in
+  `MinRequestBodyDataRate`'i (varsayılan 240 B/sn) yalnızca hız alt sınırıdır; o hızda 64 KB'lık
+  gövde sınırına kadar damla damla gönderen bir istemci bağlantıyı ~4.5 dakika tutabilir. Gövde 15
+  saniyede tamamlanmazsa `408 Request Timeout` döner. Meşru bir A2A isteği birkaç KB'lık JSON'dur.
+  (Not: TestServer chunked istek içeriğini uygulamaya vermeden önce tamamen beklediği için bu yol
+  `BufferBodyWithinLimitAsync` doğrudan çağrılarak test edilir.)
 
 ## 6. Metotlar / Üyeler
 
@@ -80,7 +86,8 @@ ayrı token türü vardır:
 | Üye | Açıklama |
 |---|---|
 | `MapA2AAgentEndpoints(IEndpointRouteBuilder)` | Üç ajanın JSON-RPC + HTTP+JSON uç noktalarını, `AgentCard`'larını ve kök keşif belgesini map eder. |
-| `UseA2AProtocolGuards(IApplicationBuilder)` | A2A sürüm kontrolü + istek gövdesi boyut sınırlamasını uygulayan middleware. |
+| `UseA2AProtocolGuards(IApplicationBuilder)` | A2A sürüm kontrolü + istek gövdesi boyut (413) ve toplam okuma süresi (408) sınırlamasını uygulayan middleware. |
+| `BufferBodyWithinLimitAsync(HttpContext, long maxBytes, TimeSpan? readTimeout = null)` *(internal)* | Gövdeyi sınır ve süre içinde belleğe alır; aşımda durum kodunu yazıp `null` döner. |
 | `UseA2ARejectionLogging(IApplicationBuilder)` | Yetkilendirme katmanında (401/403/429) reddedilen `/a2a/*` isteklerini loglar — endpoint hiç çalışmadığı için filtre bazlı loglamanın yakalayamadığı olayları yakalar. |
 | `A2ASubjectScopeFilter` (private) | Sipariş/şikayet ajanları için: token'daki `linked_customer_id` claim'ini `IApprovalContextAccessor` scope'una yazar, claim yoksa `403 Forbid` döner. |
 | `A2ALogFilter` (private) | Ürün ajanı için: sadece istek/yanıt loglar, ambient kimlik kurmaz (müşteri kimliği gerekmediği için). |

@@ -109,4 +109,70 @@ public class ApprovalExecutionRouterTests
         tools.Received(1).OrderPlacementTool(
             Arg.Is<IReadOnlyList<OrderLineRequest>>(l => l.Count == 0), "1027");
     }
+
+    // ─── Müşteri kimliğinin KAYNAĞI ───
+    //
+    // Yürütücü eskiden sipariş ve şikayet için müşteri kimliğini Parameters sözlüğünden,
+    // iptal ve iade için ApprovalRequest.CustomerId'den okuyordu. İkisi bugün aynı yerden
+    // yazılıyor, ama aynı kavram için iki kaynak, biri değiştiğinde sessizce ayrışır. Kanonik
+    // kaynak kaydın kendi CustomerId alanıdır (JWT'den gelen kimlik); Parameters yalnızca bu
+    // alanın boş olduğu eski kayıtlar için yedektir.
+
+    [Fact]
+    public async Task OrderPlacement_UsesTheRequestsCustomerId_NotTheParameterCopy()
+    {
+        var (router, tools) = Build();
+
+        await router.ExecuteAsync(new ApprovalRequest
+        {
+            ToolName = WellKnown.ToolNames.OrderPlacement,
+            CustomerId = "1027",
+            Parameters = new Dictionary<string, object?>
+            {
+                ["lines"] = new[] { new OrderLineRequest("Kahve", 1) },
+                ["customerId"] = "9999"
+            }
+        }, TestContext.Current.CancellationToken);
+
+        tools.Received(1).OrderPlacementTool(Arg.Any<IReadOnlyList<OrderLineRequest>>(), "1027");
+    }
+
+    [Fact]
+    public async Task ComplaintRegistration_UsesTheRequestsCustomerId_NotTheParameterCopy()
+    {
+        var tools = Substitute.For<ICustomerSupportToolsService>();
+        tools.ComplaintRegistrationTool(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>())
+            .Returns(ToolResult.Ok("kaydedildi"));
+
+        await new ApprovalExecutionRouter(tools).ExecuteAsync(new ApprovalRequest
+        {
+            ToolName = WellKnown.ToolNames.ComplaintRegistration,
+            CustomerId = "1027",
+            Parameters = new Dictionary<string, object?>
+            {
+                ["orderId"] = "1030", ["complaintText"] = "ürün hasarlı geldi", ["customerId"] = "9999"
+            }
+        }, TestContext.Current.CancellationToken);
+
+        tools.Received(1).ComplaintRegistrationTool("1030", "ürün hasarlı geldi", "1027");
+    }
+
+    [Fact]
+    public async Task LegacyRecordWithoutCustomerId_FallsBackToTheParameterCopy()
+    {
+        var (router, tools) = Build();
+
+        await router.ExecuteAsync(new ApprovalRequest
+        {
+            ToolName = WellKnown.ToolNames.OrderPlacement,
+            CustomerId = null,
+            Parameters = new Dictionary<string, object?>
+            {
+                ["lines"] = new[] { new OrderLineRequest("Kahve", 1) },
+                ["customerId"] = "1027"
+            }
+        }, TestContext.Current.CancellationToken);
+
+        tools.Received(1).OrderPlacementTool(Arg.Any<IReadOnlyList<OrderLineRequest>>(), "1027");
+    }
 }

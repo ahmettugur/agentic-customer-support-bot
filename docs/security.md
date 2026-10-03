@@ -42,6 +42,29 @@ Token süresi dolunca → POST /auth/refresh { refreshToken }
 
 **Uyarı**: Production ortamında `SigningKey` mutlaka değiştirilmeli ve environment variable / user secrets üzerinden verilmelidir.
 
+**Başlangıç kapıları** (uygulama açılmaz):
+
+- **Tüm ortamlarda:** anahtar boş, 32 bayttan kısa ya da 12'den az farklı karakter içeriyorsa
+  (`JwtOptions.ValidateSigningKey`; üreten ve doğrulayan taraf aynı kuralı kullanır). Eskiden boş
+  anahtarda JwtBearer sabit bir yedekle (`'x' × 32`) doğrulama yapıyor, hata ancak ilk login'de
+  çıkıyordu — o ana kadar herkesin bildiği o anahtarla imzalanmış token'lar geçerliydi.
+- **Development dışında:** anahtar depodaki yer tutucuyu (`DEV_ONLY`, `REPLACE_IN_PRODUCTION`,
+  `CHANGE_ME`, `PLACEHOLDER`) içeriyorsa.
+
+### Refresh token rotasyonu ve yeniden kullanım tespiti
+
+Her `/auth/refresh` çağrısı eski refresh token'ı **koşullu** iptal eder (`WHERE RevokedAt IS NULL`)
+ve yenisini verir; eşzamanlı ikinci kullanım yeni token alamaz. Rotasyonla iptal edilmiş bir token
+`ReuseGracePeriod`'dan (30 sn) sonra tekrar sunulursa bu bir **kopyalanma işaretidir** —
+kullanıcının tüm aktif refresh token'ları iptal edilir ve `[Security]` uyarısı loglanır. Logout ile
+iptal edilmiş token'lar ve 30 sn içindeki tekrarlar (aynı localStorage'ı paylaşan sekmelerin
+eşzamanlı yenilemesi) yalnızca reddedilir. Logout da koşullu iptal kullanır. Ayrıntı:
+[TokenPortService](CustomerSupportBot.Application/Services/Auth/TokenPortService.md).
+
+İstemci tarafında (`AuthService`) aynı scope için yalnızca bir refresh uçuşta olabilir (kayıt ilk
+`await`'ten önce) ve reddedilen bir refresh, başka sekmenin yeni token'ı depodaysa onu kullanır —
+istemci kendi eski token'ını ikinci kez sunup yeniden kullanım tespitini tetiklemez.
+
 ### SSE / EventSource Token Desteği
 
 SSE bağlantıları HTTP header gönderemediği için, `access_token` query string parametresi olarak kabul edilir:
@@ -50,7 +73,7 @@ SSE bağlantıları HTTP header gönderemediği için, `access_token` query stri
 GET /chat/events/{sessionId}?access_token=<jwt>
 ```
 
-Bu davranış `AuthServicesExtensions.cs` içinde `OnMessageReceived` event handler'ı ile sağlanır.
+Bu davranış `AuthServicesExtensions.cs` içinde `OnMessageReceived` event handler'ı ile sağlanır ve **yalnızca header taşıyamayan istemcilerin uçlarında** geçerlidir (`AcceptsQueryStringToken`): `/chat/events/*`, `…/chat-sessions/{sid}/subscribe` ve `/chat/realtime*`. Diğer tüm uçlar URL'deki token'ı yok sayar (401). Eskiden bu kabul tüm uçlara açıktı; yeni bir SSE/WS ucu eklenirse listeye de eklenmeli (bkz. `QueryStringTokenScopeTests`).
 
 ### Password Hashing
 
@@ -146,6 +169,18 @@ Salt-okunur uçlar (`IsAccessibleAsync`) oturumu **oluşturmaz ve değiştirmez*
 rastgele `sessionId` veren biri sınırsız boş oturum üretebilirdi. Yazma yolları
 (`TryBindAsync`) ise oturum sahipsizse onu çağırana bağlar.
 
+### `sessionId` biçimi
+
+Oturuma dokunmadan önce biçim doğrulanır (`SessionIdPolicy`): 1–64 karakter (DB kolonu
+`varchar(64)`), yalnızca ASCII harf, rakam, `-` ve `_`. Sunucunun ürettiği `Guid` biçimi her
+zaman geçerlidir. İhlal **400** `invalid_session_id` döner (SSE'de akış içinde olay; WS'de
+soket kabul edilmeden önce 400). Eskiden doğrulama yoktu: 64 karakterden uzun bir id önce
+cache'e ekleniyor, ardından DB yazması patlıyordu — tur ham bir DB hatasıyla bitiyor, cache'te
+kaydedilmemiş bir oturum kalıyordu (derinlemesine savunma olarak `PostgresSessionManager`
+başarısız oluşturmada nesneyi cache'ten de çıkarır). Kural oturum oluşturan/bağlayan uçlarda
+uygulanır: `POST /chat/`, `POST /chat/stream`, `GET /chat/events/{sid}`, onay bildirim uçları ve
+iki realtime WS ucu (bkz. `SessionIdValidationTests`).
+
 ### Korunan uçlar
 
 | Uç | Kontrol |
@@ -169,13 +204,14 @@ bunu bearer token olarak okur. Aynı mekanizmayı SSE (`EventSource`) de kullan�
 
 > Token'ın URL'de taşınması sunucu erişim loglarına düşebilir. Kabul edilmesinin sebebi
 > alternatifin (kısa ömürlü tek kullanımlık bilet ucu) ek bir uç ve durum yönetimi
-> gerektirmesi; token ömrü zaten kısadır ve refresh akışı mevcuttur.
+> gerektirmesi; token ömrü zaten kısadır ve refresh akışı mevcuttur. Riski daraltmak için URL
+> token'ı yalnızca bu SSE/WS uçlarında kabul edilir, header taşıyabilen uçlarda yok sayılır.
 
 ### Rate Limiting
 
 | Policy | Limit | Kapsam |
 |--------|-------|--------|
-| `chat` | IP başına 20/dk | `POST /chat/`, `POST /chat/stream`, `WS /chat/realtime/{sid?}`, `WS /chat/realtime-native/{sid?}` |
+| `chat` | **Müşteri başına** 20/dk (`linked_customer_id`; claim yoksa IP) | `POST /chat/`, `POST /chat/stream`, `WS /chat/realtime/{sid?}`, `WS /chat/realtime-native/{sid?}` |
 | `general` | IP başına 60/dk | Tüm `Admin`/`AdminOrAgent` scope'ları (`adminScope`, `agentScope` — Program.cs) + `/analytics/*` (ayrı map edildiği için **kendi başına** `RequireRateLimiting` taşır, `admin`/`agentScope` grubuna dahil DEĞİL) + `GET /sessions/*` + `GET /chat/events/{sid}`, `.../approvals/unseen`, `.../approvals/{id}/seen`, `GET /customer/approvals/history` |
 | `a2a` | **Partner başına** `A2A:RequestsPerMinute` | `/a2a/*` |
 | `auth` | IP başına `Jwt:AuthRateLimitPerMinute` (varsayılan 10/dk) | `/auth/*` (login, customer/login, customer/register, refresh, logout) |
@@ -196,11 +232,22 @@ var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRa
 >
 > **Bilinen sınır:** tüm policy'ler `FixedWindowLimiter` kullanır (sliding window değil) — bir istemci pencerenin son saniyesinde N istek, hemen ardından yeni pencerenin ilk saniyesinde bir N istek daha göndererek kısa bir aralıkta ~2N isteğe kadar çıkabilir. Bypass değil ama sınırı gevşetir; bilinçli bir trade-off (basitlik/performans), sıkılaştırma istenirse `SlidingWindowLimiter`'a geçilebilir.
 
+> **`chat` neden müşteri başına?** Korunan şey her turdaki LLM maliyetidir. IP anahtarında aynı NAT/kurumsal çıkış arkasındaki müşteriler tek 20/dk kotasını paylaşıyor (biri diğerlerini kilitliyor), IP değiştirebilen tek bir hesap ise sınırı dolaşıyordu. Uçlar zaten Customer token'ı istediği için anahtar `customer:{linked_customer_id}` olur; aynı `a2a` gerekçesiyle limiter kimlik doğrulamadan SONRA çalışır.
+
+> **Ters proxy arkasında IP tabanlı politikalar:** `auth` ve `general` `Connection.RemoteIpAddress`'e bakar; load balancer arkasında bu her istek için proxy'nin adresidir. `ForwardedHeaders:KnownProxies` (IP listesi) veya `ForwardedHeaders:KnownNetworks` (CIDR listesi) yapılandırıldığında boru hattının en başında `UseForwardedHeaders` devreye girer ve `X-Forwarded-For`/`X-Forwarded-Proto` **yalnızca bu karşı uçlardan** kabul edilir. Hiçbiri yapılandırılmamışsa middleware eklenmez. `ASPNETCORE_FORWARDEDHEADERS_ENABLED` bilinçli olarak kullanılmıyor: o yol güvenilir proxy listesini temizler ve her karşı ucun başlığına güvenir, dolayısıyla her istekte farklı değer gönderen bir istemci IP sınırını dolaşabilirdi.
+
 > `/auth/*` önceden TAMAMEN sınırsızdı — bu uçlar AllowAnonymous olduğu için kimlik bilgisi tahmin etme (credential stuffing/brute force) ve kayıt spam'i tek istemciden ucu bucaksız denenebiliyordu. IP tabanlı: bu uçlarda henüz doğrulanmış bir kimlik yok, `a2a`'daki gibi bir claim mevcut değil.
 
 ### CORS
 
-Default CORS policy tüm origin, method ve header'lara izin verir (`AllowAnyOrigin`). Production ortamında kısıtlanmalıdır.
+Default politika `Cors:AllowedOrigins` listesinden kurulur. Liste boşsa davranış ortama bağlıdır:
+
+| Ortam | Boş liste |
+|---|---|
+| Development | `AllowAnyOrigin` (Blazor :5288 ↔ API :5021 kolaylığı) |
+| Diğer | Hiçbir cross-origin çağırana izin verilmez; başlatmada `[CORS]` uyarısı loglanır |
+
+Eskiden boş liste her ortamda `AllowAnyOrigin`'e düşüyordu. Depodaki varsayılan `appsettings.json`'da liste boş olduğu için üretim override'ı unutulduğunda API her siteden tarayıcı üzerinden çağrılabiliyordu.
 
 ---
 
@@ -368,6 +415,11 @@ appsettings.Production.json
 
 - `appsettings.json` içindeki `Jwt:SigningKey` ve `Auth:DefaultAdminPassword` **development-only** değerlerdir — production'da mutlaka değiştirilmelidir
 - `ConnectionStrings` içindeki veritabanı parolaları environment variable ile override edilmelidir
+- Yerel Docker yığınının gizli değerleri `deploy/.env`'dedir (`.gitignore`'da `.env`; şablon
+  `deploy/.env.example`). Postgres parolası eskiden `deploy/docker-compose.yml`'de açık metin
+  olarak commit edilmişti; git geçmişinde durduğu için o parola değiştirilmelidir.
+- Yerel yığının portları yalnızca `127.0.0.1`'e açıktır; Redis/Qdrant/Elasticsearch orada
+  kimlik doğrulamasızdır (bkz. [deployment.md](deployment.md))
 - API key'ler **asla** kaynak kodda tutulmamalı — `dotnet user-secrets` veya environment variable kullanılmalıdır
 
 ---

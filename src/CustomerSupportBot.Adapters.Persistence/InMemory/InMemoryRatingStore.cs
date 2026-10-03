@@ -18,7 +18,10 @@ public class InMemoryRatingStore : IRatingStore
         _logger = logger;
     }
 
-    public ConversationRating Submit(string sessionId, int stars, string? feedback)
+    public Task<ConversationRating> SubmitAsync(string sessionId, int stars, string? feedback)
+        => Task.FromResult(Submit(sessionId, stars, feedback));
+
+    private ConversationRating Submit(string sessionId, int stars, string? feedback)
     {
         var rating = new ConversationRating
         {

@@ -94,7 +94,7 @@ public class HitlEventPortServiceTests
 
         using var sub = port.Subscribe("s1", (eventType, data) => fwd.WriteAsync(eventType, data));
 
-        sink.Create(new EscalationRequest { SessionId = "s1", AgentName = "a", Reason = "r" });
+        await sink.CreateAsync(new EscalationRequest { SessionId = "s1", AgentName = "a", Reason = "r" });
 
         await Task.Delay(50, TestContext.Current.CancellationToken);
         var text = Encoding.UTF8.GetString(body.ToArray());

@@ -7,10 +7,12 @@
 //   2) ConnectionStrings:Redis
 //   3) Yoksa → InvalidOperationException
 
+using CustomerSupportBot.Adapters.Redis.Idempotency;
 using CustomerSupportBot.Adapters.Redis.Locking;
 using CustomerSupportBot.Adapters.Redis.Messaging;
 using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Messaging;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -68,6 +70,9 @@ public static class RedisAdapterServiceCollectionExtensions
 
         // Message bus — Redis pub/sub (yatay ölçeklendirme)
         services.AddSingleton<IMessageBusPort, RedisMessageBusAdapter>();
+
+        // Yan etkili tool'ların mükerrer çağrı kaydı — pod'lar arası ortak pencere
+        services.AddSingleton<IDistributedIdempotencyStore, RedisIdempotencyStore>();
 
         return services;
     }

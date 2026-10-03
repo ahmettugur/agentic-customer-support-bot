@@ -96,7 +96,7 @@ public static class AgentPanelEndpoints
 
         // ─── Üstlen (herhangi bir agent herhangi bir açık eskalasyonu üstlenebilir) ───
         group.MapPost("/escalations/{id}/acknowledge",
-            (string id, HttpContext ctx, IEscalationPort escalations, IHumanAgentPort agents,
+            async (string id, HttpContext ctx, IEscalationPort escalations, IHumanAgentPort agents,
              IChatSessionPort chatSessions) =>
         {
             var agentId = GetLinkedAgentId(ctx);
@@ -107,7 +107,7 @@ public static class AgentPanelEndpoints
             if (esc is null)
                 return Results.NotFound(new { error = "Escalation bulunamadı." });
 
-            var ok = escalations.Decide(id, WellKnown.EscalationActions.Acknowledge, assignedTo: agentId);
+            var ok = await escalations.DecideAsync(id, WellKnown.EscalationActions.Acknowledge, assignedTo: agentId);
             if (!ok)
                 return Results.Conflict(new { error = "Escalation zaten karara bağlanmış." });
 
@@ -117,7 +117,7 @@ public static class AgentPanelEndpoints
             var agent = agents.GetAgent(agentId);
             if (!string.IsNullOrEmpty(esc.SessionId))
             {
-                chatSessions.PublishSystemMessage(esc.SessionId,
+                await chatSessions.PublishSystemMessageAsync(esc.SessionId,
                     $"ℹ️ {agent?.DisplayName ?? agentId} talebinizi üstlendi.");
             }
 
@@ -126,14 +126,14 @@ public static class AgentPanelEndpoints
 
         // ─── Çöz ───
         group.MapPost("/escalations/{id}/resolve",
-            (string id, EscalationDecisionInput? body, HttpContext ctx,
+            async (string id, EscalationDecisionInput? body, HttpContext ctx,
              IEscalationPort escalations, IHumanAgentPort agents) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             if (agentId is null)
                 return Results.BadRequest(new { error = "Kullanıcıya bağlı agent kaydı yok." });
 
-            var ok = escalations.Decide(id, WellKnown.EscalationActions.Resolve,
+            var ok = await escalations.DecideAsync(id, WellKnown.EscalationActions.Resolve,
                 assignedTo: agentId,
                 resolution: body?.Resolution);
             if (!ok)
@@ -177,14 +177,14 @@ public static class AgentPanelEndpoints
 
         // ─── Reddet ───
         group.MapPost("/escalations/{id}/dismiss",
-            (string id, EscalationDecisionInput? body, HttpContext ctx,
+            async (string id, EscalationDecisionInput? body, HttpContext ctx,
              IEscalationPort escalations) =>
         {
             var agentId = GetLinkedAgentId(ctx);
             if (agentId is null)
                 return Results.BadRequest(new { error = "Kullanıcıya bağlı agent kaydı yok." });
 
-            var ok = escalations.Decide(id, WellKnown.EscalationActions.Dismiss,
+            var ok = await escalations.DecideAsync(id, WellKnown.EscalationActions.Dismiss,
                 assignedTo: agentId,
                 resolution: body?.Resolution);
             return ok
@@ -260,7 +260,7 @@ public static class AgentPanelEndpoints
 
         // ─── Sohbete katıl (takeover) ───
         group.MapPost("/chat-sessions/{sid}/takeover",
-            (string sid, HttpContext ctx,
+            async (string sid, HttpContext ctx,
              IChatSessionPort chatSessions, IHumanAgentPort agents) =>
         {
             var agentId = GetLinkedAgentId(ctx);
@@ -268,7 +268,7 @@ public static class AgentPanelEndpoints
                 ? (agents.GetAgent(agentId)?.DisplayName ?? agentId)
                 : (ctx.User.FindFirstValue(ClaimTypes.Name) ?? "Agent");
 
-            var result = chatSessions.TakeOver(sid, agentLabel, agentId);
+            var result = await chatSessions.TakeOverAsync(sid, agentLabel, agentId);
             if (!result.Success) return Results.BadRequest(new { error = result.ErrorMessage });
 
             return Results.Ok(new
@@ -282,11 +282,11 @@ public static class AgentPanelEndpoints
 
         // ─── Sohbeti bırak (release → Bot moda dön) ───
         group.MapPost("/chat-sessions/{sid}/release",
-            (string sid, HttpContext ctx,
+            async (string sid, HttpContext ctx,
              IChatSessionPort chatSessions) =>
         {
             var agentId = GetLinkedAgentId(ctx);
-            var result = chatSessions.Release(sid, agentId);
+            var result = await chatSessions.ReleaseAsync(sid, agentId);
             if (!result.Success) return Results.NotFound(new { error = result.ErrorMessage });
 
             return Results.Ok(new
@@ -320,8 +320,8 @@ public static class AgentPanelEndpoints
 
         // ─── Sohbet geçmişi ───
         group.MapGet("/chat-sessions/{sid}/history",
-            (string sid, IChatSessionPort chatSessions, int take = 50) =>
-                Results.Json(chatSessions.GetHistory(sid, take)));
+            async (string sid, IChatSessionPort chatSessions, int take = 50) =>
+                Results.Json(await chatSessions.GetHistoryAsync(sid, take)));
 
         // ─── Session sentiment (read-only) ───
         group.MapGet("/chat-sessions/{sid}/sentiment",

@@ -62,6 +62,16 @@ public sealed class EfRefreshTokenRepository : IRefreshTokenRepository
         return affected > 0;
     }
 
+    /// <inheritdoc />
+    public async Task<int> RevokeAllActiveForUserAsync(string userId, DateTime revokedAt,
+        CancellationToken ct = default)
+    {
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        return await ctx.RefreshTokens
+            .Where(t => t.UserId == userId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, revokedAt), ct);
+    }
+
     private static RefreshTokenInfo Map(RefreshTokenEntity e) =>
         new(e.Id, e.UserId, e.TokenHash, e.ExpiresAt, e.CreatedAt, e.RevokedAt, e.ReplacedByTokenHash);
 }

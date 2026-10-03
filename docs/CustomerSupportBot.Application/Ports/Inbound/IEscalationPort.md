@@ -35,12 +35,12 @@ Event tabanlı bildirim (`RequestCreated`/`RequestDecided`) tercih edilmiştir �
 
 | Metot | Açıklama |
 |---|---|
-| `EscalationRequest Create(EscalationRequest request)` | Yeni eskalasyon kaydı oluşturur. |
+| `Task<EscalationRequest> CreateAsync(EscalationRequest request)` | Yeni eskalasyon kaydı oluşturur. |
 | `IReadOnlyList<EscalationRequest> GetOpen()` | Açık eskalasyonlar. |
 | `IReadOnlyList<EscalationRequest> GetRecent(int count = 50)` | Son N eskalasyon (tümü). |
 | `Task<IReadOnlyList<EscalationRequest>> GetRecentForAgentAsync(string agentId, int count = 50, CancellationToken ct = default)` | Bir agent'ın görebileceği son N eskalasyon: atanmamış veya ona atanmış olanlar; daraltma veri kaynağında yapılır. |
 | `EscalationRequest? Get(string id)` | Tek eskalasyon kaydı. |
-| `bool Decide(string id, string action, string? assignedTo = null, string? resolution = null)` | Admin kararı: `"acknowledge"`, `"resolve"`, `"dismiss"`. |
+| `Task<bool> DecideAsync(string id, string action, string? assignedTo = null, string? resolution = null)` | Admin kararı: `"acknowledge"`, `"resolve"`, `"dismiss"`. |
 | `event EventHandler<EscalationRequest>? RequestCreated` | Yeni eskalasyon oluştuğunda tetiklenir. |
 | `event EventHandler<EscalationRequest>? RequestDecided` | Bir karar uygulandığında tetiklenir. |
 

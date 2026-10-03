@@ -11,17 +11,19 @@ public interface ICustomerProfileStore
     CustomerProfile? Get(string customerId);
 
     /// <summary>Var olan profili döner, yoksa boş bir tane oluşturup ekler.</summary>
-    CustomerProfile GetOrCreate(string customerId);
+    /// <summary>Yoksa oluşturur ve kalıcılaştırır.</summary>
+    Task<CustomerProfile> GetOrCreateAsync(string customerId);
 
     /// <summary>Profili upsert eder (tüm alanlar replace).</summary>
-    void Upsert(CustomerProfile profile);
+    /// <summary>Yazma bilinçli olarak CancellationToken almaz: istemci bağlantıyı kesse bile cache ile DB tutarlı kalmalı.</summary>
+    Task UpsertAsync(CustomerProfile profile);
 
     /// <summary>Updates only LLM-derived fields on an existing durable profile; never replaces counters or admin notes.</summary>
     Task<CustomerProfile?> UpdateConsolidationAsync(string customerId, string? summary, string? preferredTone,
         IReadOnlyList<InferredTrait> traits, CancellationToken ct = default);
 
     /// <summary>Profili tamamen siler.</summary>
-    bool Delete(string customerId);
+    Task<bool> DeleteAsync(string customerId);
 
     /// <summary>Tüm profilleri lastInteraction azalan sırada listeler (admin UI).</summary>
     IReadOnlyList<CustomerProfile> List(int take = 100);

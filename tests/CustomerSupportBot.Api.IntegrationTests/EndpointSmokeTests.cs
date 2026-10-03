@@ -56,6 +56,16 @@ public class EndpointSmokeTests : IClassFixture<TestWebApplicationFactory>
         resp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    // ─── Rating (kimliksiz uç) ───
+    [Fact]
+    public async Task Post_Rating_OverlongFeedback_BadRequest()
+    {
+        var resp = await NewClient().PostAsJsonAsync("/sessions/any-session/rating",
+            new { Stars = 4, Feedback = new string('x', 2001) },
+            cancellationToken: TestContext.Current.CancellationToken);
+        resp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     // ─── Auth endpoints (login is anonymous) ───
     [Fact]
     public async Task Post_AuthLogin_InvalidCreds_Unauthorized()

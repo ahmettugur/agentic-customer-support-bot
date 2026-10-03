@@ -42,13 +42,21 @@ yazım hatası sessizce yanlış token'ı okurdu. `AuthScopeRouter.Resolve`'un r
 bilinçlidir: yeni bir staff sayfası eklendiğinde bu router'ın güncellenmesi gerekmez, sadece
 yeni bir müşteri route'u eklenirse burası dokunulur.
 
+> 🐞 **Karar yalnızca yol bölümüne bakılarak verilir.** Girdi genellikle
+> `NavigationManager.ToBaseRelativePath(Uri)`'dir ve sorgu dizesini/parçayı (`?…`, `#…`) içerir.
+> Eskiden `"?session=…"` boş yol sayılmıyordu: sohbet sayfası sorgu parametresiyle açıldığında
+> staff alanı seçiliyor, müşteri isteğine personel token'ı ekleniyor, 401'de müşteri personel
+> giriş sayfasına (`/login`) yönleniyordu. Karşılaştırma da artık önek değil, ilk yol
+> segmentinin tam eşleşmesidir (`customer-loginx` müşteri alanı değildir). Testler:
+> `tests/CustomerSupportBot.Web.Tests/AuthScopeRouterTests.cs`.
+
 ## Metotlar / Üyeler
 
 | Üye | Açıklama |
 |---|---|
 | `AuthScope.Staff` | Admin/Agent kimlik alanı. |
 | `AuthScope.Customer` | Müşteri kimlik alanı. |
-| `AuthScopeRouter.Resolve(string relativePath)` | Verilen path'in baştaki `/`'ı atılır; `""` (kök) veya `customer-login` ile başlıyorsa `Customer`, aksi halde `Staff` döner. |
+| `AuthScopeRouter.Resolve(string relativePath)` | Sorgu dizesi ve parça (`?`, `#` sonrası) atılır; ilk yol segmenti boşsa (kök) veya tam olarak `customer-login` ise (büyük/küçük harf duyarsız) `Customer`, aksi halde `Staff` döner. |
 
 ## Bağımlılıklar
 Yok — statik, durumsuz bir yardımcı sınıf.

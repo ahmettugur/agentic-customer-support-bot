@@ -6,6 +6,7 @@
 //   - GET  /analytics/ratings/recent  : Son N rating
 
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -37,13 +38,21 @@ public static class AnalyticsEndpoints
         app.MapPost("/sessions/{sid}/rating",
             async (string sid, RatingInput body, IAnalyticsPort analytics, CancellationToken ct) =>
             {
-                if (await analytics.GetSessionAnalyticsAsync(sid, ct) == null)
-                    return Results.NotFound(new { error = "Session bulunamadı." });
-
+                // Ucuz girdi doğrulaması oturum aramasından (DB) ÖNCE — kimliksiz bir uçta
+                // geçersiz istek veritabanına hiç dokunmamalı.
                 if (body.Stars < 1 || body.Stars > 5)
                     return Results.BadRequest(new { error = "Yıldız puanı 1–5 arasında olmalıdır." });
 
-                var rating = analytics.Rate(sid, body.Stars, body.Feedback);
+                if (body.Feedback is { Length: > ConversationRating.MaxFeedbackLength })
+                    return Results.BadRequest(new
+                    {
+                        error = $"Yorum en fazla {ConversationRating.MaxFeedbackLength} karakter olabilir."
+                    });
+
+                if (await analytics.GetSessionAnalyticsAsync(sid, ct) == null)
+                    return Results.NotFound(new { error = "Session bulunamadı." });
+
+                var rating = await analytics.RateAsync(sid, body.Stars, body.Feedback);
                 return Results.Json(rating);
             })
             .RequireRateLimiting("general");

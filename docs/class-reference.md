@@ -218,7 +218,7 @@ README/NOTES adlı .md dosyaları atlanır (insanlara yönelik dokümantasyon ol
 
 **Interface `IReasoningTraceStore`** — trace kaydı:
 
-- `StartTrace(sessionId, userQuery)` → `ReasoningTrace`
+- `StartTraceAsync(sessionId, userQuery)` → `Task<ReasoningTrace>`
 - `Update(trace)` — mutable ref update
 - `Complete(traceId, terminationReason?, finalResponse?, error?)`
 - `Get(traceId)` → `ReasoningTrace?`
@@ -579,7 +579,7 @@ ChatManager `ShouldTerminateAsync` bu ayarları kullanır.
 - `ProductListTool` — `category` opsiyonel; boş gelirse tüm katalog döner, doluysa kategori adı `LOWER()` karşılaştırmasıyla filtrelenir.
 - `OrderPlacementTool` — **çok ürünlü**: tek çağrıda N satır alır, tek sipariş oluşturur. Aynı ürünün satırları birleştirilir (`order_details` PK'sı `(order_code, product_id)`). Stok düşümü **tek transaction**'da ya hep ya hiç yapılır — bir satır yetmezse hiçbiri düşülmez. Eksik alan → `ValidationError`, ürün yok → `NotFound(WellKnown.ToolErrorCodes.ProductNotFound)` (bulunamayanların hepsi tek mesajda), stok yetersiz → `Conflict(WellKnown.ToolErrorCodes.StockInsufficient)`. Ayrıntı: [OrderToolsService](CustomerSupportBot.Application/Services/Tools/OrderToolsService.md).
 - `OrderCancelTool` — yalnızca `"İşleniyor"` veya `"Kargolandı"` durumundaki siparişler iptal edilebilir. Diğer durumlarda → `Conflict(WellKnown.ToolErrorCodes.OrderNotCancellable)`.
-- `ReturnRequestTool` — yalnızca `"Teslim Edildi"` durumundaki ve 14 gün içindeki siparişler için iade talebi açılabilir. Zaten iade talebi varsa → `Conflict(WellKnown.ToolErrorCodes.ReturnAlreadyRequested)`.
+- `ReturnRequestTool` — yalnızca `"Teslim Edildi"` durumundaki ve teslimden itibaren 14 gün içindeki siparişler için iade talebi açılabilir. Zaten iade talebi varsa → `Conflict(WellKnown.ToolErrorCodes.ReturnAlreadyRequested)`.
 - `ComplaintRegistrationTool` — `customerId` opsiyonel; boşsa `OrdersDb[orderId].CustomerId`'den türetir. Verilen customerId order sahibiyle uyuşmuyorsa → `Conflict(WellKnown.ToolErrorCodes.CustomerIdMismatch)`.
 - Tool çıktıları her zaman `ToolResult` → LLM düz metin değil, yapılandırılmış sinyal görür.
 

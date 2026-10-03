@@ -41,7 +41,7 @@ public class PostgresChatModeRegistryOwnershipTests
     /// sessizce elinden alınır ve iki admin aynı müşteriye yazmaya başlar.
     /// </summary>
     [Fact]
-    public void TakeOverOnAStalePod_DoesNotStealAnActiveSession()
+    public async Task TakeOverOnAStalePod_DoesNotStealAnActiveSession()
     {
         var sessionId = $"takeover-{Guid.NewGuid():N}";
         var podA = NewPod(new InMemoryMessageBusHub().CreateNode());
@@ -51,9 +51,9 @@ public class PostgresChatModeRegistryOwnershipTests
         // hydrate bir kez çalışır, sonrasında cache yalnızca pub/sub ile güncellenir.
         podB.GetMode(sessionId);
 
-        podA.TakeOver(sessionId, "alice").Should().BeTrue();
+        (await podA.TakeOverAsync(sessionId, "alice")).Should().BeTrue();
 
-        podB.TakeOver(sessionId, "bob").Should().BeFalse(
+        (await podB.TakeOverAsync(sessionId, "bob")).Should().BeFalse(
             "B'nin cache'i bayat olsa da sahiplik kararı kayıtların gerçek kaynağından verilmeli");
 
         podA.GetState(sessionId)!.HumanAgent.Should().Be("alice");
@@ -64,18 +64,18 @@ public class PostgresChatModeRegistryOwnershipTests
     /// ama onu serbest bırakabilmemelidir — bırakırsa müşteri, admin hâlâ konuşurken bota döner.
     /// </summary>
     [Fact]
-    public void ReleaseOnAStalePod_ReflectsTheRealOwnershipState()
+    public async Task ReleaseOnAStalePod_ReflectsTheRealOwnershipState()
     {
         var sessionId = $"release-{Guid.NewGuid():N}";
         var podA = NewPod(new InMemoryMessageBusHub().CreateNode());
         var podB = NewPod(new InMemoryMessageBusHub().CreateNode());
 
         podB.GetMode(sessionId);   // B bayatlar: devralmadan önceki dünyayı gördü
-        podA.TakeOver(sessionId, "alice").Should().BeTrue();
+        (await podA.TakeOverAsync(sessionId, "alice")).Should().BeTrue();
 
         // B'nin cache'i bu oturumu hiç bilmiyor. Eskiden bu, "kayıt yok → false" ile
         // sessizce geçiliyordu; artık karar DB'den okunuyor.
-        podB.Release(sessionId).Should().BeTrue("oturum gerçekte insan modunda");
+        (await podB.ReleaseAsync(sessionId)).Should().BeTrue("oturum gerçekte insan modunda");
 
         // Ve serbest bırakma gerçekten kalıcı oldu.
         NewPod(new InMemoryMessageBusHub().CreateNode())
@@ -84,28 +84,28 @@ public class PostgresChatModeRegistryOwnershipTests
 
     /// <summary>Aynı admin'in kendi oturumunu yeniden devralması engellenmemeli.</summary>
     [Fact]
-    public void TheSameAgentCanReacquireItsOwnSession()
+    public async Task TheSameAgentCanReacquireItsOwnSession()
     {
         var sessionId = $"reacquire-{Guid.NewGuid():N}";
         var pod = NewPod(new InMemoryMessageBusHub().CreateNode());
 
-        pod.TakeOver(sessionId, "alice").Should().BeTrue();
-        pod.TakeOver(sessionId, "alice").Should().BeTrue();
+        (await pod.TakeOverAsync(sessionId, "alice")).Should().BeTrue();
+        (await pod.TakeOverAsync(sessionId, "alice")).Should().BeTrue();
     }
 
     /// <summary>Serbest bırakıldıktan sonra başka bir admin devralabilmeli.</summary>
     [Fact]
-    public void AfterRelease_AnotherAgentCanTakeOver()
+    public async Task AfterRelease_AnotherAgentCanTakeOver()
     {
         var sessionId = $"handoff-{Guid.NewGuid():N}";
         var podA = NewPod(new InMemoryMessageBusHub().CreateNode());
         var podB = NewPod(new InMemoryMessageBusHub().CreateNode());
 
         podB.GetMode(sessionId);   // B bayatlar
-        podA.TakeOver(sessionId, "alice").Should().BeTrue();
-        podA.Release(sessionId).Should().BeTrue();
+        (await podA.TakeOverAsync(sessionId, "alice")).Should().BeTrue();
+        (await podA.ReleaseAsync(sessionId)).Should().BeTrue();
 
-        podB.TakeOver(sessionId, "bob").Should().BeTrue();
+        (await podB.TakeOverAsync(sessionId, "bob")).Should().BeTrue();
         podB.GetState(sessionId)!.HumanAgent.Should().Be("bob");
     }
 }

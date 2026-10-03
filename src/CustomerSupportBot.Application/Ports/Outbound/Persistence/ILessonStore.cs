@@ -7,9 +7,11 @@ namespace CustomerSupportBot.Application.Ports.Outbound.Persistence;
 ///</summary>
 public interface ILessonStore
 {
-    void Add(Lesson lesson);
+    /// <summary>Yazma bilinçli olarak CancellationToken almaz: istemci bağlantıyı kesse bile cache ile DB tutarlı kalmalı.</summary>
+    Task AddAsync(Lesson lesson);
     Lesson? Get(string id);
     IReadOnlyList<Lesson> GetByStatus(LessonStatus status);
     IReadOnlyList<Lesson> GetAll(int limit = 200);
-    void Update(Lesson lesson);
+    /// <summary>Yazma bilinçli olarak CancellationToken almaz: istemci bağlantıyı kesse bile cache ile DB tutarlı kalmalı.</summary>
+    Task UpdateAsync(Lesson lesson);
 }

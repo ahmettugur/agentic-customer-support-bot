@@ -26,11 +26,15 @@ Sohbet sonunda kullanıcıya sunulan "bu görüşmeyi puanla" ekranının backen
 
 Diğer küçük-kayıt depoları (`PostgresLessonStore`, `PostgresHumanAgentRegistry`) ile aynı "hibrit cache + tam kayıt Redis yayını" deseni.
 
+> 🐞 **Eşzamanlı ilk puanlama.** Oturum başına tek puan vardır (`session_id` birincil anahtar) ve upsert oku-sonra-yaz'dır. Aynı oturuma eşzamanlı İLK iki puanlamanın ikisi de "kayıt yok" görüp INSERT ediyor, kaybeden birincil anahtar ihlaliyle 500 alıyordu. Kaybeden artık (`23505`) bir kez, kazananın satırını güncelleyerek tekrar dener — son yazan kazanır, tekrar puanlamayla aynı anlam.
+
+> 🐞 **Yorum metni loglanmaz.** Eskiden `Information` seviyesinde yorumun kendisi loglanıyordu; yorum serbest metindir (müşteri telefon/adres yazabilir) ve log kişisel verinin saklanması için tasarlanmış bir yüzey değildir. Log artık yalnızca puanı ve yorum uzunluğunu (`FeedbackLength`) taşır.
+
 ## 6. Metotlar / Üyeler
 
 | Üye | Açıklama |
 |---|---|
-| `ConversationRating Submit(string sessionId, int stars, string? feedback)` | Yeni puan kaydı oluşturur, cache + DB + Redis. |
+| `Task<ConversationRating> SubmitAsync(string sessionId, int stars, string? feedback)` | Puanı kaydeder (upsert; eşzamanlı ilk kayıtta PK yarışını bir yeniden denemeyle çözer), cache + DB + Redis. |
 | `ConversationRating? GetBySession(string sessionId)` | Bir oturumun puanı (varsa). |
 | `IReadOnlyList<ConversationRating> GetAll()` | Cache'ten tüm puanlar. |
 | `IReadOnlyList<ConversationRating> GetRecent(int count = 20)` | Cache'ten en son N puan. |

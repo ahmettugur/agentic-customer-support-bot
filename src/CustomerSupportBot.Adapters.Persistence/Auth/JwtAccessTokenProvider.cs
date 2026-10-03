@@ -19,9 +19,8 @@ public sealed class JwtAccessTokenProvider : IJwtAccessTokenProvider
     public JwtAccessTokenProvider(IOptions<JwtOptions> options)
     {
         _options = options.Value;
-        if (string.IsNullOrWhiteSpace(_options.SigningKey) || _options.SigningKey.Length < 32)
-            throw new InvalidOperationException(
-                "Jwt:SigningKey en az 32 karakter olmalı (HMAC-SHA256). appsettings içine ekleyin.");
+        if (JwtOptions.ValidateSigningKey(_options.SigningKey) is { } error)
+            throw new InvalidOperationException(error);
     }
 
     public (string Token, DateTime ExpiresAt) GenerateAccessToken(UserInfo user, DateTime nowUtc, int? lifetimeMinutes = null)

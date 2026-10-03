@@ -29,19 +29,28 @@ builder.Services.AddScoped<AuthenticationStateProvider>(
 // AuthService kendi içinde ham HttpClient kullandığı için ayrı kayıt gerekiyor.
 builder.Services.AddScoped<AuthorizedHttpClientHandler>();
 
+// API adresi wwwroot/appsettings{.Environment}.json'dan (Api:BaseUrl) okunur — eskiden koda
+// gömülüydü ve her ortam için yeniden derleme gerektiriyordu. Boş bırakılırsa uygulamanın
+// kendi origin'i kullanılır (API ile aynı host'tan, ters vekil arkasında sunulduğunda).
+// NOT: wwwroot altındaki yapılandırma tarayıcıya açıktır; buraya gizli değer konmaz.
+var apiBaseUrl = builder.Configuration["Api:BaseUrl"];
+var apiBase = new Uri(string.IsNullOrWhiteSpace(apiBaseUrl)
+    ? builder.HostEnvironment.BaseAddress
+    : apiBaseUrl);
+
 builder.Services.AddScoped(sp =>
 {
     var handler = sp.GetRequiredService<AuthorizedHttpClientHandler>();
     handler.InnerHandler = new HttpClientHandler();
     return new HttpClient(handler)
     {
-        BaseAddress = new Uri("https://localhost:7095")
+        BaseAddress = apiBase
     };
 });
 
 // AuthService ham HttpClient'e ihtiyaç duyar (refresh döngüsünü önlemek için)
 builder.Services.AddScoped(sp => new AuthService(
-    new HttpClient { BaseAddress = new Uri("https://localhost:7095") },
+    new HttpClient { BaseAddress = apiBase },
     sp.GetRequiredService<AuthTokenStore>()
 ));
 

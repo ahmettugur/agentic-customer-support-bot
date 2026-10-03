@@ -18,7 +18,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresSlaEventSink : ISlaEventSink
+public sealed class PostgresSlaEventSink : ISlaEventSink, ICacheWarmup
 {
     private const string ChannelRecorded = "csbot:sla:recorded";
 
@@ -27,7 +27,7 @@ public sealed class PostgresSlaEventSink : ISlaEventSink
     private readonly IMessageBusPort _messageBus;
     private readonly ConcurrentQueue<SlaEvent> _events = new();
     private readonly ConcurrentDictionary<string, DateTime> _lastEmittedAt = new();
-    private readonly object _hydrationLock = new();
+    private readonly SemaphoreSlim _hydrationGate = new(1, 1);
     private volatile bool _hydrated;
     private const int Capacity = 500;
 
@@ -44,8 +44,8 @@ public sealed class PostgresSlaEventSink : ISlaEventSink
         _messageBus.Subscribe(ChannelRecorded, OnRemoteRecorded);
     }
 
-    public void Record(SlaEvent evt)
-    {
+    public async Task RecordAsync(SlaEvent evt)
+{
         _events.Enqueue(evt);
         while (_events.Count > Capacity && _events.TryDequeue(out _)) { }
 
@@ -58,7 +58,7 @@ public sealed class PostgresSlaEventSink : ISlaEventSink
 
         try
         {
-            InsertAsync(evt).GetAwaiter().GetResult();
+            await InsertAsync(evt).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -102,21 +102,37 @@ public sealed class PostgresSlaEventSink : ISlaEventSink
         await ctx.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public Task WarmUpAsync(CancellationToken ct = default) => EnsureHydratedAsync();
+
+    /// <summary>
+    /// Senkron okuma yolları için YEDEK. Normalde cache açılışta <see cref="WarmUpAsync"/> ile
+    /// doldurulmuştur ve bu çağrı bayrağı okuyup hemen döner; yalnızca ısıtma başarısız
+    /// olduysa ilk okuma hydrate'i senkron bekler.
+    /// </summary>
     private void EnsureHydrated()
     {
         if (_hydrated) return;
-        lock (_hydrationLock)
+        EnsureHydratedAsync().GetAwaiter().GetResult();
+    }
+
+    private async Task EnsureHydratedAsync()
+    {
+        if (_hydrated) return;
+        await _hydrationGate.WaitAsync().ConfigureAwait(false);
+        try
         {
             if (_hydrated) return;
-            try
-            {
-                HydrateAsync().GetAwaiter().GetResult();
-                _hydrated = true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[SLA] Cache hydrate başarısız.");
-            }
+            await HydrateAsync().ConfigureAwait(false);
+            _hydrated = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SLA] Cache hydrate başarısız.");
+        }
+        finally
+        {
+            _hydrationGate.Release();
         }
     }
 

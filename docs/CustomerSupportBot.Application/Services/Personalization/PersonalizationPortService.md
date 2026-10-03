@@ -47,8 +47,8 @@ gerçekleştiren "driving adapter"dır. İçinde iş kuralı yoktur, bilerek: ku
 | `GetProfiles(take = 100)` | `_profiles.Count` ve `_profiles.List(take)`'i birlikte döner — admin panelindeki profil listesi sayfası için. |
 | `GetProfile(customerId)` | Tek bir müşterinin profilini döner, yoksa `null`. |
 | `RefreshProfileAsync(customerId, ct)` | `CustomerProfileService.ConsolidateAsync`'e delege eder — admin panelden "profili yeniden özetle" butonunun arkasındaki çağrı. |
-| `SetAdminNote(customerId, note)` | Profile serbest metin bir admin notu ekler/temizler (`note` boşsa `null`'a çevrilir); profil yoksa `GetOrCreate` ile oluşturulur. |
-| `DeleteProfile(customerId)` | Profili store'dan siler, başarılıysa `true` döner. |
+| `SetAdminNoteAsync(customerId, note)` | Profile serbest metin bir admin notu ekler/temizler (`note` boşsa `null`'a çevrilir); profil yoksa `GetOrCreate` ile oluşturulur. |
+| `DeleteProfileAsync(customerId)` | Profili store'dan siler, başarılıysa `true` döner. |
 
 ## 7. Bağımlılıklar
 

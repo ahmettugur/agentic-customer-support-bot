@@ -27,12 +27,12 @@ public class LessonMinerApprovalTests
     private sealed class FakeLessonStore : ILessonStore
     {
         private readonly Dictionary<string, Lesson> _items = new(StringComparer.Ordinal);
-        public void Add(Lesson lesson) => _items[lesson.Id] = lesson;
+        public Task AddAsync(Lesson lesson) { _items[lesson.Id] = lesson; return Task.CompletedTask; }
         public Lesson? Get(string id) => _items.GetValueOrDefault(id);
         public IReadOnlyList<Lesson> GetByStatus(LessonStatus status) =>
             _items.Values.Where(l => l.Status == status).ToList();
         public IReadOnlyList<Lesson> GetAll(int limit = 200) => _items.Values.Take(limit).ToList();
-        public void Update(Lesson lesson) => _items[lesson.Id] = lesson;
+        public Task UpdateAsync(Lesson lesson) { _items[lesson.Id] = lesson; return Task.CompletedTask; }
         public int UpdateCount { get; private set; }
     }
 
@@ -50,7 +50,7 @@ public class LessonMinerApprovalTests
         return (miner, store);
     }
 
-    private static Lesson Seed(FakeLessonStore store, LessonStatus status, string? vectorId = null)
+    private static async Task<Lesson> SeedAsync(FakeLessonStore store, LessonStatus status, string? vectorId = null)
     {
         var lesson = new Lesson
         {
@@ -59,7 +59,7 @@ public class LessonMinerApprovalTests
             Status = status,
             VectorMemoryId = vectorId
         };
-        store.Add(lesson);
+        await store.AddAsync(lesson);
         return lesson;
     }
 
@@ -67,7 +67,7 @@ public class LessonMinerApprovalTests
     public async Task ApproveAsync_ProposedLesson_BecomesApproved()
     {
         var (miner, store) = Build();
-        var lesson = Seed(store, LessonStatus.Proposed);
+        var lesson = await SeedAsync(store, LessonStatus.Proposed);
 
         var ok = await miner.ApproveAsync(lesson.Id, "admin", "gerekçe", TestContext.Current.CancellationToken);
 
@@ -81,7 +81,7 @@ public class LessonMinerApprovalTests
     {
         // "Onaylı ama etkisiz" ders — yeniden yazım denemesi kabul edilmeli.
         var (miner, store) = Build();
-        var lesson = Seed(store, LessonStatus.Approved, vectorId: null);
+        var lesson = await SeedAsync(store, LessonStatus.Approved, vectorId: null);
 
         var ok = await miner.ApproveAsync(lesson.Id, "admin", reason: null, TestContext.Current.CancellationToken);
 
@@ -93,9 +93,9 @@ public class LessonMinerApprovalTests
     {
         // Yeniden deneme bir "yeni karar" değil — ilk onaydaki gerekçe korunmalı.
         var (miner, store) = Build();
-        var lesson = Seed(store, LessonStatus.Approved, vectorId: null);
+        var lesson = await SeedAsync(store, LessonStatus.Approved, vectorId: null);
         lesson.DecisionReason = "ilk onay gerekçesi";
-        store.Update(lesson);
+        await store.UpdateAsync(lesson);
 
         await miner.ApproveAsync(lesson.Id, "admin2", reason: null, TestContext.Current.CancellationToken);
 
@@ -107,7 +107,7 @@ public class LessonMinerApprovalTests
     {
         // Hafızaya yazılmış ders zaten etkin — tekrar onaylanmamalı (mükerrer yazım önlenir).
         var (miner, store) = Build();
-        var lesson = Seed(store, LessonStatus.Approved, vectorId: "vec-1");
+        var lesson = await SeedAsync(store, LessonStatus.Approved, vectorId: "vec-1");
 
         var ok = await miner.ApproveAsync(lesson.Id, "admin", "tekrar", TestContext.Current.CancellationToken);
 
@@ -118,7 +118,7 @@ public class LessonMinerApprovalTests
     public async Task ApproveAsync_RejectedLesson_IsNotResurrected()
     {
         var (miner, store) = Build();
-        var lesson = Seed(store, LessonStatus.Rejected);
+        var lesson = await SeedAsync(store, LessonStatus.Rejected);
 
         var ok = await miner.ApproveAsync(lesson.Id, "admin", "fikrimi değiştirdim", TestContext.Current.CancellationToken);
 

@@ -8,7 +8,7 @@ namespace CustomerSupportBot.Application.Ports.Inbound;
 public interface IEscalationPort
 {
     /// <summary>Yeni eskalasyon kaydı oluşturur.</summary>
-    EscalationRequest Create(EscalationRequest request);
+    Task<EscalationRequest> CreateAsync(EscalationRequest request);
 
     /// <summary>Açık eskalasyonlar.</summary>
     IReadOnlyList<EscalationRequest> GetOpen();
@@ -34,7 +34,7 @@ public interface IEscalationPort
     EscalationRequest? Get(string id);
 
     /// <summary>Admin kararı: "acknowledge", "resolve", "dismiss".</summary>
-    bool Decide(string id, string action, string? assignedTo = null, string? resolution = null);
+    Task<bool> DecideAsync(string id, string action, string? assignedTo = null, string? resolution = null);
 
     event EventHandler<EscalationRequest>? RequestCreated;
     event EventHandler<EscalationRequest>? RequestDecided;

@@ -40,16 +40,16 @@ history'ye yazılır ama müşteri kanalına gönderilmez — bu ayrım metot se
 
 | Metot | Açıklama |
 |---|---|
-| `void PublishUserMessage(string sessionId, string text)` | Kullanıcıdan gelen mesajı yayınlar. |
-| `void PublishAdminMessage(string sessionId, string humanAgent, string text)` | Admin'den gelen mesajı yayınlar (her iki kanala da). |
-| `void PublishSystemMessage(string sessionId, string text)` | Sistem bildirimini yayınlar. |
-| `void PublishAdminOnlyMessage(string sessionId, string text)` | History'ye yazar, yalnızca admin kanalına gönderir — müşteri görmez. |
-| `void PublishBotMessage(string sessionId, string text)` | Bot cevabını yayınlar. |
+| `Task PublishUserMessageAsync(string sessionId, string text)` | Kullanıcıdan gelen mesajı yayınlar (her insan-modu mesajında çalışır — async). |
+| `Task PublishAdminMessageAsync(string sessionId, string humanAgent, string text)` | Admin'den gelen mesajı yayınlar (her iki kanala da). |
+| `Task PublishSystemMessageAsync(string sessionId, string text)` | Sistem bildirimini yayınlar. |
+| `Task PublishAdminOnlyMessageAsync(string sessionId, string text)` | History'ye yazar, yalnızca admin kanalına gönderir — müşteri görmez. |
+| `Task PublishBotMessageAsync(string sessionId, string text)` | Bot cevabını yayınlar. |
 | `void PublishBotTyping(string sessionId, bool on)` | "Bot yazıyor" göstergesi. |
-| `void RecordBotExchange(string sessionId, string userQuery, string botResponse)` | Bir bot turunu geçmişe kaydeder. |
+| `Task RecordBotExchangeAsync(string sessionId, string userQuery, string botResponse)` | Bir bot turunu geçmişe kaydeder (her turda çalışır — async). |
 | `IAsyncEnumerable<ChatBridgeMessage> SubscribeToAdminAsync(string sessionId, CancellationToken ct)` | Admin kanalına abone olur. |
 | `IAsyncEnumerable<ChatBridgeMessage> SubscribeToUserAsync(string sessionId, CancellationToken ct)` | Kullanıcı kanalına abone olur. |
-| `IReadOnlyList<ChatBridgeMessage> GetHistory(string sessionId, int take = 50)` | Oturum mesaj geçmişi. |
+| `Task<IReadOnlyList<ChatBridgeMessage>> GetHistoryAsync(string sessionId, int take = 50)` | Oturum mesaj geçmişi. |
 | `void Reset(string sessionId)` | Oturumun köprü durumunu temizler. |
 
 ## 7. Bağımlılıklar
