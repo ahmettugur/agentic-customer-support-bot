@@ -176,6 +176,7 @@ if (a2aEnabled)
     app.MapA2AAgentEndpoints();
 }
 app.MapChatEndpoints();
+app.MapChatAttachmentEndpoints();
 app.MapRealtimeEndpoints();
 app.MapSessionEndpoints();
 

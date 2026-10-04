@@ -1,0 +1,44 @@
+@* Onay kaydına bağlı müşteri fotoğrafları (Parameters["attachmentIds"]). Tıklanan fotoğraf büyür. *@
+@inject AdminApiService AdminApi
+
+@if (_urls.Count > 0)
+{
+    <div class="approval-photos">
+        <span class="approval-photos-label">Müşterinin eklediği fotoğraflar</span>
+        <div class="approval-photos-grid">
+            @foreach (var (id, url) in _urls)
+            {
+                var photoId = id;
+                <button type="button" class="approval-photo @(_expanded == photoId ? "expanded" : "")"
+                        aria-label="Fotoğrafı büyüt/küçült" @onclick="() => Toggle(photoId)">
+                    <img src="@url" alt="Müşteri fotoğrafı" />
+                </button>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<string> Ids { get; set; } = [];
+
+    private readonly List<(string Id, string Url)> _urls = new();
+    private string _loadedKey = "";
+    private string? _expanded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Kart yoklamada yeniden çizilir; aynı kimlik listesi için yeniden yüklenmez.
+        var key = string.Join(",", Ids);
+        if (key == _loadedKey) return;
+        _loadedKey = key;
+
+        _urls.Clear();
+        foreach (var id in Ids)
+        {
+            if (await AdminApi.GetAttachmentDataUrlAsync(id) is { } url)
+                _urls.Add((id, url));
+        }
+    }
+
+    private void Toggle(string id) => _expanded = _expanded == id ? null : id;
+}

@@ -99,7 +99,9 @@ window.__chatSetup = function (ref, apiBase, authToken) {
     // düşer. Bu, refresh edilmiş ama yine de geçersiz olan bir token'ın (ör. sunucu tarafında
     // ayrıca reddedilmesi) sonsuz refresh döngüsüne girmesini engeller; her mesaj için en
     // fazla bir kez otomatik retry yapılır.
-    window.__streamChat = function (ref, apiBase, query, sessionId, isRetry) {
+    // attachmentIds: POST /chat/attachments ile yüklenmiş fotoğrafların kimlikleri (boş olabilir).
+    window.__streamChat = function (ref, apiBase, query, sessionId, isRetry, attachmentIds) {
+        var ids = Array.isArray(attachmentIds) && attachmentIds.length > 0 ? attachmentIds : null;
         var ctrl = new AbortController();
         window._chatStreamAbort = ctrl;
         (async function () {
@@ -110,14 +112,14 @@ window.__chatSetup = function (ref, apiBase, authToken) {
                 var r = await fetch(url, {
                     method: 'POST',
                     headers: headers,
-                    body: JSON.stringify({ query: query, sessionId: sessionId || null }),
+                    body: JSON.stringify({ query: query, sessionId: sessionId || null, attachmentIds: ids }),
                     signal: ctrl.signal
                 });
                 if (!r.ok) {
                     if (r.status === 401 && !isRetry) {
                         // C# tarafı refresh dener; başarılıysa __streamChat'i isRetry=true ile
                         // tekrar çağırır, başarısızsa login'e yönlendirir. Bu fetch burada biter.
-                        ref.invokeMethodAsync('OnStreamUnauthorized', query, sessionId || null).catch(function () { });
+                        ref.invokeMethodAsync('OnStreamUnauthorized', query, sessionId || null, ids).catch(function () { });
                         return;
                     }
                     ref.invokeMethodAsync('OnStreamError', 'HTTP ' + r.status).catch(function () { });

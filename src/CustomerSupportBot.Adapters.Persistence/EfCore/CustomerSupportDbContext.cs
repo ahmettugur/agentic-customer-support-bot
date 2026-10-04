@@ -27,6 +27,7 @@ public sealed class CustomerSupportDbContext : DbContext
     public DbSet<MessageEntity> Messages => Set<MessageEntity>();
     public DbSet<ChatSessionModeEntity> ChatSessionModes => Set<ChatSessionModeEntity>();
     public DbSet<ChatBridgeMessageEntity> ChatBridgeMessages => Set<ChatBridgeMessageEntity>();
+    public DbSet<AttachmentEntity> Attachments => Set<AttachmentEntity>();
 
     // ─── hitl schema ───
     public DbSet<ApprovalRequestEntity> Approvals => Set<ApprovalRequestEntity>();

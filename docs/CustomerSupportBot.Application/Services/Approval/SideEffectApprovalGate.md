@@ -48,6 +48,14 @@ kapıyı kullanır: **hangi kanaldan gelirse gelsin yan etkili her işlem aynı 
   aynı olduğu için aynı talebin yazılı ve sesli kopyaları tek kayıtta birleşir.
 - **İmza:** sıradan bağımsız JSON (kaçışlı, kültürden bağımsız); serileştirilemeyen ya da kolon
   sınırını (1000) aşan parametre kümesi benzersiz imza alır (dedup'tan çıkar, yanlış birleşmez).
+- **Fotoğraflar:** `IAttachmentStore` verilmişse, oturumun müşterinin bir mesajla **gönderdiği**
+  (`SentAt` dolu) ve henüz bir onaya bağlanmamış fotoğrafları `Parameters["attachmentIds"]`'e eklenir
+  ve yeni kayda bağlanır. Fotoğraf bir turda, sipariş numarası sonraki turda gelse de talep fotoğrafı
+  taşır; bir onaya bağlanan fotoğraf sonraki ilgisiz onaya taşınmaz; yüklenip gönderilmeyen fotoğraf
+  hiçbir onaya girmez. **İmza fotoğraflar eklenmeden önce** hesaplanır — arada yeni fotoğraf yüklendi
+  diye aynı talep mükerrer kayıt açmaz. Dedup mevcut kaydı döndürdüyse fotoğraflar bağlanmaz (o
+  kaydın parametrelerinde yoklar) ve sıradaki onaya kalır. Yürütücü bu anahtarı yok sayar; okuma/
+  bağlama hatası onayı engellemez.
 
 ## 6. Metotlar / Üyeler
 
@@ -60,7 +68,7 @@ kapıyı kullanır: **hangi kanaldan gelirse gelsin yan etkili her işlem aynı 
 
 ## 7. Bağımlılıklar
 
-`IApprovalQueue`, `IOptions<ApprovalOptions>`, `ILogger?`.
+`IApprovalQueue`, `IOptions<ApprovalOptions>`, `ILogger?`, `IAttachmentStore?` (fotoğraf bağlama; yoksa devre dışı).
 
 ## Bağlantılar
 

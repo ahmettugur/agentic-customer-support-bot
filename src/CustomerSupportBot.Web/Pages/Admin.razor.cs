@@ -786,6 +786,22 @@ public partial class Admin
     }
 
     /// <summary>
+    /// Onay kaydına bağlanmış müşteri fotoğraflarının kimlikleri (<c>Parameters["attachmentIds"]</c>,
+    /// bkz. SideEffectApprovalGate). Yoksa boş liste.
+    /// </summary>
+    private static List<string> AttachmentIds(object? parameters)
+    {
+        if (parameters is not JsonElement root || root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("attachmentIds", out var ids) || ids.ValueKind != JsonValueKind.Array)
+            return [];
+        return ids.EnumerateArray()
+            .Where(e => e.ValueKind == JsonValueKind.String)
+            .Select(e => e.GetString()!)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToList();
+    }
+
+    /// <summary>
     /// Onay kartındaki tool argümanlarını (ApprovalRequest.Parameters) alan-alan gösterilebilir
     /// hale getirir. Sunucu <c>Dictionary&lt;string, object?&gt;</c> gönderiyor; DTO'da
     /// <c>object?</c> olduğu için istemcide <see cref="JsonElement"/> olarak çözülür.

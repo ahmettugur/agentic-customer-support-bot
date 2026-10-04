@@ -2,6 +2,7 @@
 
 - **Kaynaklar:**
   - `CustomerSupportBot.Api/Endpoints/ChatEndpoints.cs`
+  - `CustomerSupportBot.Api/Endpoints/ChatAttachmentEndpoints.cs`
   - `CustomerSupportBot.Api/Endpoints/RealtimeEndpoints.cs`
   - `CustomerSupportBot.Api/Endpoints/SessionEndpoints.cs`
 - **Namespace:** `CustomerSupportBot.Api.Endpoints`
@@ -144,3 +145,19 @@ Constructor injection yok — her endpoint lambda'sı ilgili port'u (`IChatPort`
 - [../README.md](../README.md) — Katman indeksi
 - [Infrastructure/SseAndWebSockets](../Infrastructure/SseAndWebSockets.md)
 - [Services/ChatEventOrchestrator](../Services/ChatEventOrchestrator.md)
+
+## Fotoğraf ekleme (`ChatAttachmentEndpoints`)
+
+| Uç | Yetki | Açıklama |
+|---|---|---|
+| `POST /chat/attachments` | Customer, `chat` hız sınırı, 12 MB gövde | multipart: `file`, isteğe bağlı `sessionId`. Oturum yoksa açılır. Yanıt `{ attachmentId, sessionId, description }`. Hatalar: 400 `empty` / `too_large` / `unsupported_type` / `too_many_in_session` / `attachments_disabled` / `invalid_session_id`, 403 `session_forbidden`. |
+| `GET /chat/attachments/{id}` | Customer | Yalnızca kendi fotoğrafı; başkasınınki 404. |
+| `DELETE /chat/attachments/{id}` | Customer | Henüz gönderilmemiş kendi fotoğrafı (önizlemeden kaldırma) → 204; aksi 404. |
+| `GET /attachments/{id}` | Admin | Onay kartındaki fotoğraf. |
+| `GET /agent/attachments/{id}` | AdminOrAgent | Aynısı, temsilci paneli (onaylar gibi temsilcinin tüm kapsamına açık). |
+
+- Form elle okunur (`IFormFile` bağlama antiforgery meta verisi ister; uç Bearer token kullanır).
+- Görüntü yanıtları `X-Content-Type-Options: nosniff` ve `Cache-Control: private, max-age=300`
+  taşır; içerik türü kayıttan gelir (dosya imzasıyla belirlenmiş: yalnızca JPEG/PNG).
+- `POST /chat/` ve `/chat/stream` gövdesi `attachmentIds` alır; sunucu yalnızca bu oturuma ve bu
+  müşteriye ait olanları kullanır.

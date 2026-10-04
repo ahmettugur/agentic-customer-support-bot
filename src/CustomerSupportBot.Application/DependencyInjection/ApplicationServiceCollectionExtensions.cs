@@ -81,6 +81,7 @@ public static class ApplicationServiceCollectionExtensions
             .ValidateOnStart();
 
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
+        services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
 
         services.Configure<EvaluationQualityOptions>(configuration.GetSection(EvaluationQualityOptions.SectionName));
     }
@@ -127,6 +128,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ReasoningService>();
         services.AddSingleton<IReasoningPort>(sp => sp.GetRequiredService<ReasoningService>());
         services.AddSingleton<ChatPortService>();
+        services.AddSingleton<IChatAttachmentPort, Services.Attachments.ChatAttachmentService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
         services.AddSingleton<IApprovalExecutionRouter, ApprovalExecutionRouter>();
@@ -135,7 +137,8 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton(sp => new SideEffectApprovalGate(
             sp.GetRequiredService<Ports.Outbound.Persistence.IApprovalQueue>(),
             sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ApprovalOptions>>(),
-            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SideEffectApprovalGate>>()));
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SideEffectApprovalGate>>(),
+            sp.GetService<Ports.Outbound.Persistence.IAttachmentStore>()));
         services.AddSingleton<IUiHintEmitter, UiHintEmitter>();
         services.AddSingleton<IReplanService, ReplanService>();
         services.AddSingleton<SessionStateService>();

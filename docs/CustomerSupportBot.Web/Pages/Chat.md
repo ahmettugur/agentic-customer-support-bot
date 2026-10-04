@@ -133,6 +133,19 @@ Giriş satırında tek bir mikrofon butonu (`#voiceBtn`) vardır; sesli görüş
 `window.App` üzerinden `VoiceTranscript`/`VoiceSendMessage`/`NewChatFromVoice` çağırıyordu).
 Köprü modu kaldırılınca bu buton, `window.App` ve ilgili JSInvokable'lar da kaldırıldı.
 
+### Fotoğraf ekleme (📎)
+
+- Fotoğraf **seçildiği anda** yüklenir (`ChatApiService.UploadAttachmentAsync`) — görsel analiz,
+  kullanıcı mesajını yazarken çalışır; küçük resim "Analiz ediliyor…" ile gösterilir.
+- Yüklemeler **sırayla** yapılır: oturum yoksa ilk yükleme onu sunucuda açar ve sayfa bu oturumu
+  benimser (`VoiceSetSession` ile aynı yol); paralel olsalar her biri ayrı oturum açardı.
+- İstemci sınırları (JPEG/PNG, 5 MB, mesaj başına 3) yalnızca erken geri bildirimdir; asıl kontrol
+  sunucudadır.
+- Önizlemeden kaldırılan fotoğraf sunucuda da silinir (`DELETE /chat/attachments/{id}`).
+- Gönderimde kimlikler `__streamChat`'in son parametresiyle gövdeye (`attachmentIds`) eklenir; 401
+  sonrası yeniden denemede de korunur. Yalnızca fotoğraf gönderilirse metin "Fotoğraf ekledim." olur.
+  Kullanıcı balonunda fotoğrafların küçük resimleri görünür.
+
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 SSE tercih edilmesinin nedeni tek yönlü streaming için WebSocket'ten daha basit olmasıdır. Mesajlar önce `localStorage`'da tutulur (offline erişim), sonra API ile senkronize edilir. `IAsyncDisposable` uygulanır çünkü SSE bağlantısının temizlenmesi gerekir.
 

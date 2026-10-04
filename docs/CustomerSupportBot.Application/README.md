@@ -22,6 +22,10 @@ Bu klasör, Onion / Hexagonal Mimari'de **Use Cases & Application Core (İş Ak�
   - [ChatSessionPortService](Services/Chat/ChatSessionPortService.md) — Canlı devralma (human takeover) ve yeniden planlama orkestrasyonu.
   - [SessionPortService](Services/Chat/SessionPortService.md) — Genel amaçlı oturum CRUD'unu `ISessionPort`'a bağlayan servis.
   - [SessionStateService](Services/Chat/SessionStateService.md) & [SessionIdentityBinder](Services/Chat/SessionIdentityBinder.md) — Oturum durumu ve müşteri kimliği bağlayıcısı.
+- [Attachments/](Services/Attachments/README.md) — Sohbete Fotoğraf Ekleme:
+  - [ChatAttachmentService](Services/Attachments/ChatAttachmentService.md) — `IChatAttachmentPort` uygulayıcısı; doğrulama, meta veri silme, görsel açıklama, kayıt.
+  - [ImageSanitizer](Services/Attachments/ImageSanitizer.md) — Dosya imzasıyla tür tespiti ve EXIF/metin meta verisi silme (yön bilgisi korunur).
+  - [AttachmentTurnContext](Services/Attachments/AttachmentTurnContext.md) — Fotoğraf açıklamalarını sohbet turunun metnine ekler.
 - [Auth/](Services/Auth/TokenPortService.md) — Kimlik Doğrulama ve JWT/Refresh Token Yaşam Döngüsü:
   - [TokenPortService](Services/Auth/TokenPortService.md) — JWT+refresh token üretimi/rotasyonu (koşullu atomik iptal ile).
   - [UserService](Services/Auth/UserService.md) — Staff (Admin/Agent) login.

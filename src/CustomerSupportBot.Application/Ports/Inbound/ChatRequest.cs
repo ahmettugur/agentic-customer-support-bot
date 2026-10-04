@@ -11,4 +11,12 @@ namespace CustomerSupportBot.Application.Ports.Inbound;
 /// asla client body'sinden GÜVENİLİR olarak alınmaz (endpoint bu alanı isteğin geldiği
 /// body'den değil, kimlik doğrulanmış HttpContext.User'dan set eder).
 /// </param>
-public record ChatRequest(string Query, string? SessionId = null, string? CustomerId = null);
+/// <param name="AttachmentIds">
+/// Mesaja eklenen fotoğrafların kimlikleri (<c>POST /chat/attachments</c> yanıtından). İstemci
+/// verisidir: yalnızca bu oturuma ve bu müşteriye ait olanlar kabul edilir.
+/// </param>
+public record ChatRequest(
+    string Query,
+    string? SessionId = null,
+    string? CustomerId = null,
+    IReadOnlyList<string>? AttachmentIds = null);

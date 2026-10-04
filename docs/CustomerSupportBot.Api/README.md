@@ -6,7 +6,7 @@ Bu klasör, hexagonal mimaride **Driving Adapter (Giriş Adaptörü)** ve **Comp
 
 - [Program](Program.md) — WebApplication builder yapılandırması, middleware hattı, açılış güvenlik guard'ları ve uç nokta haritalaması.
 - **Endpoints/** — Minimal API uç noktaları:
-  - [ChatAndRealtime](Endpoints/ChatAndRealtime.md) — `/chat/`, `/chat/stream`, `/chat/events/{id}` (yazılı sohbet + kalıcı SSE), `/chat/realtime-native/{id}` (WebSocket ses akışı), `/sessions/*` oturum yönetimi. **Login zorunlu.**
+  - [ChatAndRealtime](Endpoints/ChatAndRealtime.md) — `/chat/`, `/chat/stream`, `/chat/events/{id}` (yazılı sohbet + kalıcı SSE), `/chat/realtime-native/{id}` (WebSocket ses akışı), `/chat/attachments` (fotoğraf ekleme), `/sessions/*` oturum yönetimi. **Login zorunlu.**
   - [AdminAndHitl](Endpoints/AdminAndHitl.md) — `/approvals/*` (HITL onay/red kararları), `/escalations/*`, `/chat-sessions/*` (Live Takeover), `/agent/*` (Agent-kapsamlı görünüm).
   - [A2A](Endpoints/A2A.md) — `/a2a/*` (Agent-to-Agent protokolü) ve `/auth/a2a/token-exchange`.
   - [ObservabilityAndTelemetry](Endpoints/ObservabilityAndTelemetry.md) — `/agents`, `/analytics/*`, `/eval/*`, `/sla/*`, `/telemetry/*`, `/traces/*`.

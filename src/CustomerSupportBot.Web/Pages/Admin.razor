@@ -196,7 +196,9 @@
                                 else
                                 {
                                     // Tanınmayan tool — ham anahtar/değer listesine düş.
-                                    var paramFields = ParseJsonFields(a.Parameters);
+                                    // Fotoğraf kimlikleri yukarıda resim olarak gösterilir; metin listesinde tekrarlanmaz.
+                                    var paramFields = ParseJsonFields(a.Parameters)?.Where(f => f.Key != "attachmentIds").ToList();
+                                    if (paramFields is { Count: 0 }) paramFields = null;
                                     if (paramFields is not null)
                                     {
                                         <div class="param-list">
@@ -206,6 +208,12 @@
                                             }
                                         </div>
                                     }
+                                }
+
+                                @{ var photoIds = AttachmentIds(a.Parameters); }
+                                @if (photoIds.Count > 0)
+                                {
+                                    <ApprovalPhotos Ids="photoIds" />
                                 }
 
                                 @if (!string.IsNullOrWhiteSpace(a.UserQuery))

@@ -23,6 +23,11 @@ akıl yürütme → agent takımı → kalıcılık) tek giriş noktasıdır.
   (`BindAuthenticatedCustomerAsync`), akıl yürütme + agent takımını çağırmak, human-mode (HITL
   canlı devralma) sırasında bot'u bypass etmek, sonucu geçmişe yazmak, sentiment olaylarını
   yaymak (streaming yolda).
+- **Fotoğraflar:** `ChatRequest.AttachmentIds` varsa, bağlamadan SONRA (sahiplik oturumun
+  doğrulanmış müşterisine göre) [AttachmentTurnContext](../Attachments/AttachmentTurnContext.md) ile
+  yalnızca bu oturuma ve müşteriye ait olanları kabul eder, açıklamalarını sorguya ekler ve
+  fotoğrafları "gönderildi" işaretler (onay kapısı yalnızca gönderilmiş fotoğrafı bağlar). Human
+  modda da uygulanır — temsilci fotoğraf notunu görür. `IAttachmentStore` verilmemişse devre dışı.
 - **Üstlenmediği:** Akıl yürütmenin kendisi (`IReasoningPort`), agent orkestrasyonunun kendisi
   (`IAgentTeamPort`/[`WorkflowRunner`](../../../CustomerSupportBot.Adapters.Agents/WorkflowRunner.md)),
   bağlam toplama ([`ContextPipeline`](ContextPipeline.md) — bu, reasoning/agent takımı içinde

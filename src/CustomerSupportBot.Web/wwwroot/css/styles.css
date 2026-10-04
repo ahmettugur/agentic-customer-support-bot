@@ -1615,6 +1615,116 @@ body {
     background: #dc2626;
 }
 
+/* ── Fotoğraf ekleme ── */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.input-wrapper .btn-attach {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border-radius: var(--radius-md, 8px);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: background var(--transition), color var(--transition);
+}
+
+.input-wrapper .btn-attach:hover:not(.disabled),
+.input-wrapper .btn-attach:focus-within {
+    background: var(--color-border);
+    color: var(--color-primary);
+}
+
+.input-wrapper .btn-attach.disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.pending-photos {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
+.pending-photo {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-md, 8px);
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-alt);
+}
+
+.pending-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.pending-photo.uploading img { opacity: .5; }
+
+.pending-photo-status {
+    position: absolute;
+    inset: auto 0 0 0;
+    font-size: 10px;
+    text-align: center;
+    padding: 2px;
+    background: rgba(15, 23, 42, .6);
+    color: #fff;
+}
+
+.pending-photo-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, .7);
+    color: #fff;
+    font-size: 14px;
+    line-height: 20px;
+    padding: 0;
+    cursor: pointer;
+}
+
+.pending-photo-error {
+    font-size: 12px;
+    color: #dc2626;
+}
+
+.message-photos {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-1);
+    margin-bottom: var(--space-1);
+}
+
+.message-photos img {
+    width: 120px;
+    max-width: 40vw;
+    height: 120px;
+    object-fit: cover;
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid var(--color-border);
+}
+
 @keyframes voicePulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, .55); }
     50%      { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }

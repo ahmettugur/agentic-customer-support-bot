@@ -45,6 +45,11 @@ public static class AiServicesExtensions
         services.AddSingleton<IGeneralChatClient>(sp =>
             new GeneralChatClientAdapter(sp.GetRequiredService<IChatClient>()));
 
+        // Fotoğraf eklerinin açıklaması — standart sohbet modeli görüntü içeriğiyle çağrılır.
+        services.AddSingleton<IImageAnalysisPort>(sp => new ChatClientImageAnalysisAdapter(
+            sp.GetRequiredService<IChatClient>(),
+            sp.GetRequiredService<CustomerSupportBot.Application.Ports.Outbound.IPromptRepository>()));
+
         return services;
     }
 

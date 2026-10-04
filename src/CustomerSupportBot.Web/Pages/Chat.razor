@@ -184,6 +184,15 @@
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                             </div>
                             <div class="message-content">
+                                @if (msg.Images is { Count: > 0 })
+                                {
+                                    <div class="message-photos">
+                                        @foreach (var img in msg.Images)
+                                        {
+                                            <img src="@img" alt="Eklenen fotoğraf" />
+                                        }
+                                    </div>
+                                }
                                 <div class="message-bubble">@msg.Content</div>
                             </div>
                         </div>
@@ -441,6 +450,28 @@
 
         <!-- INPUT ALANI -->
         <footer class="input-area">
+            @if (_pendingPhotos.Count > 0 || _photoError is not null)
+            {
+                <div class="pending-photos" aria-live="polite">
+                    @foreach (var photo in _pendingPhotos)
+                    {
+                        var p = photo;
+                        <div class="pending-photo @(p.Uploading ? "uploading" : "")" title="@(p.Description ?? "")">
+                            <img src="@p.PreviewUrl" alt="Seçilen fotoğraf" />
+                            @if (p.Uploading)
+                            {
+                                <span class="pending-photo-status">Analiz ediliyor…</span>
+                            }
+                            <button type="button" class="pending-photo-remove" aria-label="Fotoğrafı kaldır"
+                                    @onclick="() => RemovePendingPhotoAsync(p)">×</button>
+                        </div>
+                    }
+                    @if (_photoError is not null)
+                    {
+                        <span class="pending-photo-error">@_photoError</span>
+                    }
+                </div>
+            }
             <div class="input-wrapper">
                 <input type="text"
                        id="userInput"
@@ -450,6 +481,14 @@
                        @bind:event="oninput"
                        @onkeydown="HandleKeyDown"
                        disabled="@(_isStreaming || (_pendingHandoff && !_humanMode))" />
+                <label class="btn-attach @(CanAttachPhoto ? "" : "disabled")" title="Fotoğraf ekle (JPEG/PNG, en fazla @MaxPhotosPerMessage)"
+                       aria-label="Fotoğraf ekle">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                    </svg>
+                    <InputFile id="photoInput" class="visually-hidden" accept="image/jpeg,image/png" multiple
+                               OnChange="OnPhotosSelectedAsync" disabled="@(!CanAttachPhoto)" />
+                </label>
                 <button id="voiceBtn" title="Sesli konuşma" aria-label="Sesli konuşmayı başlat" class="btn-voice">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="9" y="2" width="6" height="12" rx="3"/>
@@ -520,6 +559,18 @@
 
         /// <summary>Sesli modda çalışan tool'un durum etiketi ("Sipariş sorgulanıyor…").</summary>
         public string? VoiceStatus { get; set; }
+
+        /// <summary>Kullanıcının bu mesajla gönderdiği fotoğrafların önizlemeleri (data URL).</summary>
+        public List<string>? Images { get; set; }
+    }
+
+    /// <summary>Mesaj kutusunda seçilmiş, henüz gönderilmemiş fotoğraf.</summary>
+    private sealed class PendingPhoto
+    {
+        public required string PreviewUrl { get; init; }
+        public string? AttachmentId { get; set; }
+        public string? Description { get; set; }
+        public bool Uploading { get; set; } = true;
     }
 
     /// <summary>
@@ -753,13 +804,103 @@
 
     private async Task ToggleThemeAsync() => await ThemeSvc.ToggleAsync();
 
+    // ── Fotoğraf ekleme ───────────────────────────────────────────────────────
+    // Sunucu sınırlarıyla aynı (Attachments ayarları); burada yalnızca erken geri bildirim içindir —
+    // asıl kontrol sunucudadır.
+    private const int  MaxPhotosPerMessage = 3;
+    private const long MaxPhotoBytes       = 5 * 1024 * 1024;
+
+    private readonly List<PendingPhoto> _pendingPhotos = new();
+    private string? _photoError;
+
+    private bool CanAttachPhoto =>
+        !_isStreaming && !(_pendingHandoff && !_humanMode) && _pendingPhotos.Count < MaxPhotosPerMessage;
+
+    /// <summary>
+    /// Fotoğraflar seçildiği anda yüklenir: görsel analiz kullanıcı mesajını yazarken çalışır.
+    /// Yüklemeler SIRAYLA yapılır — oturum yoksa ilk yükleme onu açar, sonrakiler aynı oturuma gider
+    /// (paralel olsalar her biri ayrı bir oturum açardı).
+    /// </summary>
+    private async Task OnPhotosSelectedAsync(InputFileChangeEventArgs e)
+    {
+        _photoError = null;
+        var room = MaxPhotosPerMessage - _pendingPhotos.Count;
+        var files = e.GetMultipleFiles(MaxPhotosPerMessage);
+        if (files.Count > room) _photoError = $"Bir mesaja en fazla {MaxPhotosPerMessage} fotoğraf eklenebilir.";
+
+        foreach (var file in files.Take(room))
+        {
+            if (file.ContentType is not ("image/jpeg" or "image/png"))
+            {
+                _photoError = "Yalnızca JPEG ve PNG fotoğraflar eklenebilir.";
+                continue;
+            }
+            if (file.Size > MaxPhotoBytes)
+            {
+                _photoError = $"Fotoğraf en fazla {MaxPhotoBytes / (1024 * 1024)} MB olabilir.";
+                continue;
+            }
+
+            byte[] data;
+            try
+            {
+                await using var stream = file.OpenReadStream(MaxPhotoBytes);
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer);
+                data = buffer.ToArray();
+            }
+            catch
+            {
+                _photoError = "Fotoğraf okunamadı.";
+                continue;
+            }
+
+            var photo = new PendingPhoto { PreviewUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(data)}" };
+            _pendingPhotos.Add(photo);
+            StateHasChanged();
+
+            var result = await ChatApi.UploadAttachmentAsync(data, file.Name, file.ContentType, _sessionId);
+            if (result.AttachmentId is null)
+            {
+                _pendingPhotos.Remove(photo);
+                _photoError = result.Error;
+            }
+            else
+            {
+                photo.AttachmentId = result.AttachmentId;
+                photo.Description = result.Description;
+                photo.Uploading = false;
+                // İlk mesajdan önce eklenen fotoğraf oturumu sunucuda açtı — sesli kanaldaki gibi benimse.
+                if (!string.IsNullOrEmpty(result.SessionId)) VoiceSetSession(result.SessionId);
+            }
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemovePendingPhotoAsync(PendingPhoto photo)
+    {
+        _pendingPhotos.Remove(photo);
+        _photoError = null;
+        if (photo.AttachmentId is not null) await ChatApi.DeleteAttachmentAsync(photo.AttachmentId);
+    }
+
     // ── Send ──────────────────────────────────────────────────────────────────
     private async Task HandleSendAsync()
     {
+        if (_isStreaming || _pendingPhotos.Any(p => p.Uploading)) return;
+
+        var photos = _pendingPhotos.Where(p => p.AttachmentId is not null).ToList();
         var text = _input.Trim();
-        if (string.IsNullOrEmpty(text) || _isStreaming) return;
+        if (string.IsNullOrEmpty(text))
+        {
+            if (photos.Count == 0) return;
+            text = "Fotoğraf ekledim.";
+        }
+
         _input = string.Empty;
-        await SendAsync(text);
+        _pendingPhotos.Clear();
+        _photoError = null;
+        await SendAsync(text, photos);
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
@@ -879,10 +1020,15 @@
             if (FindVoiceMsg(id) is { } msg) _messages.Remove(msg);
         });
 
-    private async Task SendAsync(string text)
+    private async Task SendAsync(string text, IReadOnlyList<PendingPhoto>? photos = null)
     {
         ClearRatingDelayTimer();
-        _messages.Add(new ChatMsg { Role = "user", Content = text });
+        _messages.Add(new ChatMsg
+        {
+            Role = "user",
+            Content = text,
+            Images = photos is { Count: > 0 } ? photos.Select(p => p.PreviewUrl).ToList() : null
+        });
         if (!_humanMode)
         {
             _currentBot = new ChatMsg { Role = "assistant", IsStreaming = true };
@@ -893,7 +1039,8 @@
         StateHasChanged();
         await ScrollBottomAsync();
         // Streaming is handled by JS fetch → OnStreamEvent / OnStreamComplete / OnStreamError callbacks
-        await JS.InvokeVoidAsync("__streamChat", _dotNetRef, _apiBase, text, _sessionId, false);
+        var attachmentIds = photos?.Select(p => p.AttachmentId!).ToArray() ?? [];
+        await JS.InvokeVoidAsync("__streamChat", _dotNetRef, _apiBase, text, _sessionId, false, attachmentIds);
     }
 
     /// <summary>
@@ -903,7 +1050,7 @@
     /// chat-bridge.js kendi ham fetch/EventSource'unu kullanıyor.
     /// </summary>
     [JSInvokable]
-    public async Task OnStreamUnauthorized(string query, string? sessionId)
+    public async Task OnStreamUnauthorized(string query, string? sessionId, string[]? attachmentIds = null)
     {
         var refreshed = await AuthSvc.TryRefreshAsync(AuthScope.Customer);
         if (refreshed is null)
@@ -918,7 +1065,7 @@
         await JS.InvokeVoidAsync("__setAuthToken", refreshed.AccessToken);
         // isRetry=true — bu deneme de 401 alırsa JS doğrudan OnStreamError'a düşer,
         // ikinci bir refresh denemesi yapılmaz.
-        await JS.InvokeVoidAsync("__streamChat", _dotNetRef, _apiBase, query, sessionId, true);
+        await JS.InvokeVoidAsync("__streamChat", _dotNetRef, _apiBase, query, sessionId, true, attachmentIds ?? []);
     }
 
     /// <summary>
@@ -1281,6 +1428,8 @@
         _messages.Clear();
         _sessionId           = null;
         _input               = string.Empty;
+        _pendingPhotos.Clear();
+        _photoError          = null;
         _isStreaming         = false;
         _botTyping           = false;
         _humanMode           = false;

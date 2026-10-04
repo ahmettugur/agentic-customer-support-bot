@@ -37,6 +37,9 @@ public static class AdminEndpoints
     public static IEndpointRouteBuilder MapAdminEndpoints(this IEndpointRouteBuilder app)
     {
         // ─── APPROVALS ───
+        // Onay kartındaki fotoğraflar (Parameters["attachmentIds"]).
+        app.MapGet("/attachments/{id}", ChatAttachmentEndpoints.HandleStaffGetAsync);
+
         app.MapGet("/approvals/pending", async (IApprovalPort approvals, CancellationToken ct) =>
             Results.Json(await approvals.GetPendingAsync(ct)));
 

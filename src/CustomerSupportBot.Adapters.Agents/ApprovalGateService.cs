@@ -48,7 +48,8 @@ public class ApprovalGateService
         IApprovalContextAccessor contextAccessor,
         ICustomerSupportToolsService tools,
         EscalationPolicyService escalationPolicy,
-        ILogger<ApprovalGateService>? logger = null)
+        ILogger<ApprovalGateService>? logger = null,
+        IAttachmentStore? attachments = null)
     {
         _approvalQueue = approvalQueue;
         _escalationSink = escalationSink;
@@ -57,7 +58,7 @@ public class ApprovalGateService
         _escalationPolicy = escalationPolicy;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ApprovalGateService>.Instance;
         // Kapı kuralı tek yerde (Application) — sesli kanal da aynı sınıfı kullanır.
-        _gate = new SideEffectApprovalGate(approvalQueue, approvalOptions, _logger);
+        _gate = new SideEffectApprovalGate(approvalQueue, approvalOptions, _logger, attachments);
     }
 
     /// <summary>

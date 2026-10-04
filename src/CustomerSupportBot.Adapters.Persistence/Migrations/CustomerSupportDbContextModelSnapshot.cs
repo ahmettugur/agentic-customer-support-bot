@@ -428,6 +428,67 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     b.ToTable("products", "catalog");
                 });
 
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat.AttachmentEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ApprovalId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("approval_id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CustomerId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("customer_id");
+
+                    b.Property<byte[]>("Data")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("data");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("session_id");
+
+                    b.Property<int>("SizeBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_bytes");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovalId")
+                        .HasDatabaseName("ix_attachments_approval");
+
+                    b.HasIndex("SessionId", "CreatedAt")
+                        .HasDatabaseName("ix_attachments_session");
+
+                    b.ToTable("attachments", "chat");
+                });
+
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat.ChatBridgeMessageEntity", b =>
                 {
                     b.Property<long>("Id")
@@ -1246,6 +1307,16 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat.AttachmentEntity", b =>
+                {
+                    b.HasOne("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat.SessionEntity", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_attachments_session");
                 });
 
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat.MessageEntity", b =>

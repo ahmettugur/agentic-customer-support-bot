@@ -197,6 +197,9 @@ public static class AgentPanelEndpoints
         // APPROVALS
         // ════════════════════════════════════════════════════════════════
 
+        // Onay kartındaki fotoğraflar — onaylar gibi temsilcinin tüm kapsamına açık.
+        group.MapGet("/attachments/{id}", ChatAttachmentEndpoints.HandleStaffGetAsync);
+
         group.MapGet("/approvals/pending", async (IApprovalPort approvals, CancellationToken ct) =>
             Results.Json(await approvals.GetPendingAsync(ct)));
 

@@ -402,6 +402,24 @@ Yan etkili tool'lar (`order_placement_tool`, `complaint_registration_tool`) içi
 
 ---
 
+## 5b. Müşteri Fotoğrafları
+
+Sohbete eklenen fotoğraflar (bkz. [Attachments](CustomerSupportBot.Application/Services/Attachments/README.md)):
+
+- **Tür dosya imzasından** belirlenir (yalnızca JPEG/PNG); uzantı ya da istemcinin bildirdiği tür
+  dikkate alınmaz. Görüntü yanıtları `nosniff` ve `Cache-Control: private` taşır.
+- **Meta veri saklamadan ve görsel modele göndermeden önce silinir** — EXIF GPS konumu, cihaz,
+  zaman, XMP, yorumlar, PNG metin parçaları. Yalnızca yön bilgisi korunur.
+- Görsel modelin açıklaması kullanıcının yazdığı metinle aynı `InputGuard`'dan geçer: kişisel veri
+  maskelenir, enjeksiyon olarak reddedilirse açıklama kullanılmaz. Talimat ayrıca kişisel veriyi
+  yazıya dökmemeyi ve fotoğraftaki yazıları talimat saymamayı ister. Açıklama ajanlara kullanıcı
+  rolünde gider — kullanıcının kendi yazdığıyla aynı güven düzeyi.
+- Yükleme sohbetle aynı kurallara tabidir: Customer yetkisi, oturum sahipliği, `chat` hız sınırı;
+  uçta gövde sınırı (12 MB), serviste dosya (5 MB) ve oturum (10) sınırı.
+- Mesajdaki başka oturuma/müşteriye ait kimlikler yok sayılır; müşteri yalnızca kendi fotoğrafını
+  okur. Onay kaydına yalnızca müşterinin **gönderdiği** fotoğraflar bağlanır.
+- Fotoğraflar oturumla birlikte silinir (FK cascade); gönderilmemiş fotoğrafı müşteri silebilir.
+
 ## 6. Hassas Dosya Yönetimi
 
 ### `.gitignore`'da Korunan Dosyalar

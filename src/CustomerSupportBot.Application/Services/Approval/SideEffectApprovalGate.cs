@@ -40,15 +40,21 @@ public sealed class SideEffectApprovalGate
     private readonly IApprovalQueue _approvalQueue;
     private readonly ApprovalOptions _options;
     private readonly ILogger _logger;
+    private readonly IAttachmentStore? _attachments;
+
+    /// <summary>Onay kaydına eklenen fotoğraf kimliklerinin parametre anahtarı (yürütücü yok sayar).</summary>
+    public const string AttachmentIdsParameter = "attachmentIds";
 
     public SideEffectApprovalGate(
         IApprovalQueue approvalQueue,
         IOptions<ApprovalOptions> options,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        IAttachmentStore? attachments = null)
     {
         _approvalQueue = approvalQueue;
         _options = options.Value;
         _logger = logger ?? NullLogger.Instance;
+        _attachments = attachments;
     }
 
     /// <summary>Bu tool için insan onayı gerekiyor mu (yapılandırmaya göre)?</summary>
@@ -93,7 +99,14 @@ public sealed class SideEffectApprovalGate
         }
 
         var agentName = ResolveAgentName(toolName);
-        var request = new ApprovalRequest
+        // İmza fotoğraflar eklenmeden ÖNCE hesaplanır: aynı talep, arada yeni bir fotoğraf
+        // yüklendi diye "farklı" sayılıp mükerrer onay kaydı açmamalı.
+        var signature = BuildParamSignature(parameters);
+        var attachmentIds = await UnlinkedAttachmentIdsAsync(context);
+        if (attachmentIds.Count > 0)
+            parameters = new Dictionary<string, object?>(parameters) { [AttachmentIdsParameter] = attachmentIds };
+
+        var created = new ApprovalRequest
         {
             SessionId = context?.SessionId,
             CustomerId = context?.CustomerId,
@@ -102,13 +115,53 @@ public sealed class SideEffectApprovalGate
             ToolName = toolName,
             AgentName = agentName,
             Parameters = parameters,
-            ParamSignature = BuildParamSignature(parameters),
+            ParamSignature = signature,
             Justification = string.Format(WellKnown.ApprovalReasons.AgentWantsToCall, agentName),
             TimeoutSeconds = _options.TimeoutSeconds
         };
-        request = await _approvalQueue.CreateAsync(request);
+        var request = await _approvalQueue.CreateAsync(created);
+
+        // Mükerrer talep mevcut kaydı döndürdüyse fotoğraflar bağlanmaz — o kaydın parametrelerinde
+        // yoklar; bağlanmamış kalırlar ve bu oturumun sıradaki onayına eklenirler.
+        if (attachmentIds.Count > 0 && request.Id == created.Id)
+            await LinkAttachmentsAsync(attachmentIds, request.Id);
 
         return ToolResult.Pending(string.Format(WellKnown.FallbackMessages.ApprovalPending, request.Id));
+    }
+
+    /// <summary>
+    /// Oturumun, müşterinin bir mesajla GÖNDERDİĞİ ve henüz bir onaya bağlanmamış fotoğrafları
+    /// (yüklenip gönderilmeyen fotoğraf hiçbir onaya girmez). Fotoğraf bir
+    /// turda, sipariş numarası sonraki turda gelse de talep fotoğrafı taşır; bir onaya bağlanan
+    /// fotoğraf sonraki ilgisiz onaya taşınmaz. Fotoğraflar ek bilgidir: okuma hatası onayı
+    /// engellemez.
+    /// </summary>
+    private async Task<List<string>> UnlinkedAttachmentIdsAsync(ApprovalContext? context)
+    {
+        if (_attachments is null || string.IsNullOrEmpty(context?.SessionId)) return [];
+        try
+        {
+            return (await _attachments.ListForSessionAsync(context.SessionId))
+                .Where(a => a.ApprovalId is null
+                            && a.SentAt is not null
+                            && string.Equals(a.CustomerId, context.CustomerId, StringComparison.Ordinal))
+                .Select(a => a.Id)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Oturum fotoğrafları okunamadı session={SessionId}", context.SessionId);
+            return [];
+        }
+    }
+
+    private async Task LinkAttachmentsAsync(IReadOnlyCollection<string> ids, string approvalId)
+    {
+        try { await _attachments!.LinkToApprovalAsync(ids, approvalId); }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[HITL] Fotoğraflar onaya bağlanamadı approval={ApprovalId}", approvalId);
+        }
     }
 
     /// <summary>

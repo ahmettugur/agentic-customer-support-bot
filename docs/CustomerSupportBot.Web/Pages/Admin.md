@@ -99,6 +99,15 @@ Son satır bilinçli bir emniyet ağıdır: Web projesi Domain'e referans **verm
 sunucu tiplerini taşımasın diye), yani tool adları burada string sabittir. Sunucuyla senkron
 kayarsa sonuç veri kaybı değil, yalnızca daha ham bir görünümdür.
 
+### Müşteri fotoğrafları
+
+`Parameters["attachmentIds"]` varsa kartta "Müşterinin eklediği fotoğraflar" bölümü çizilir
+(`Components/ApprovalPhotos.razor`); tıklanan fotoğraf büyür. Uç yetki istediği için fotoğraf
+`<img src>` ile doğrudan alınamaz (tarayıcı Bearer başlığı eklemez): `AdminApiService.GetAttachmentDataUrlAsync`
+rol önekiyle (`/attachments/{id}` ya da `/agent/attachments/{id}`) indirir ve data URL'e çevirir;
+sonuç oturum boyunca önbellekte tutulur (kart her yoklamada yeniden çizilir). Kimlikler metin
+parametre listesinde tekrarlanmaz.
+
 ### Müşteri adı nereden gelir?
 
 `ApprovalRequest.CustomerName` **kalıcı değildir**. Liste panele gönderilmeden hemen önce

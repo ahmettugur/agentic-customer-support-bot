@@ -3,9 +3,11 @@ using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Services.Attachments;
 using CustomerSupportBot.Domain.Exceptions;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Application.Services.Chat;
 
@@ -24,6 +26,8 @@ public sealed class ChatPortService : IChatPort
     private readonly IApprovalContextAccessor _approvalContext;
     private readonly IAppDistributedLock _turnLock;
     private readonly ILogger<ChatPortService> _logger;
+    private readonly IAttachmentStore? _attachments;
+    private readonly AttachmentOptions _attachmentOptions;
 
     /// <summary>
     /// Bir turun kilidi bekleyebileceği azami süre. Bir tur LLM çağrıları yüzünden onlarca
@@ -42,7 +46,9 @@ public sealed class ChatPortService : IChatPort
         SessionStateService sessionState,
         IApprovalContextAccessor approvalContext,
         IAppDistributedLock turnLock,
-        ILogger<ChatPortService> logger)
+        ILogger<ChatPortService> logger,
+        IAttachmentStore? attachments = null,
+        IOptions<AttachmentOptions>? attachmentOptions = null)
     {
         _team = team;
         _reasoning = reasoning;
@@ -53,6 +59,8 @@ public sealed class ChatPortService : IChatPort
         _approvalContext = approvalContext;
         _turnLock = turnLock;
         _logger = logger;
+        _attachments = attachments;
+        _attachmentOptions = attachmentOptions?.Value ?? new AttachmentOptions();
     }
 
     /// <summary>
@@ -109,6 +117,7 @@ public sealed class ChatPortService : IChatPort
         session = await _sessions.ReloadAsync(sessionId, ct);
 
         await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
+        query = await AppendAttachmentsAsync(query, request, sessionId, ct);
 
         if (_modeRepo.GetMode(sessionId) == ChatMode.Human)
         {
@@ -166,6 +175,29 @@ public sealed class ChatPortService : IChatPort
             throw new UnauthorizedSessionAccessException(session.SessionId);
     }
 
+    /// <summary>
+    /// Mesaja eklenen fotoğrafların analizini sorguya ekler (bkz. <see cref="AttachmentTurnContext"/>).
+    /// Bağlamadan SONRA çağrılır: sahiplik kontrolü oturumun doğrulanmış müşterisine göre yapılır.
+    /// Temsilci modunda da uygulanır — temsilci de fotoğraf notunu görür.
+    /// </summary>
+    private async Task<string> AppendAttachmentsAsync(string query, ChatRequest request, string sessionId, CancellationToken ct)
+    {
+        if (_attachments is null || request.AttachmentIds is not { Count: > 0 } ids) return query;
+
+        var resolved = await AttachmentTurnContext.ResolveAsync(
+            _attachments, ids, sessionId, request.CustomerId, _attachmentOptions.MaxPerMessage, ct);
+        if (resolved.Count < ids.Distinct(StringComparer.Ordinal).Count())
+            _logger.LogWarning(
+                "Session {SessionId}: {Ignored} attachment id(s) ignored (unknown, foreign or over the per-message limit)",
+                sessionId, ids.Distinct(StringComparer.Ordinal).Count() - resolved.Count);
+
+        // Onay kapısı yalnızca gönderilmiş fotoğrafları bağlar; işaret turdan (ve olası onaydan) önce.
+        if (resolved.Count > 0)
+            await _attachments.MarkSentAsync(resolved.Select(a => a.Id).ToList(), DateTime.UtcNow, ct);
+
+        return AttachmentTurnContext.Compose(query, resolved);
+    }
+
     private async Task ForwardHumanMessageAsync(string sessionId, string query, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(query)) return;
@@ -191,6 +223,7 @@ public sealed class ChatPortService : IChatPort
         session = await _sessions.ReloadAsync(sessionId, ct);
 
         await BindAuthenticatedCustomerAsync(session, request.CustomerId, ct);
+        query = await AppendAttachmentsAsync(query, request, sessionId, ct);
 
         yield return new StreamEvent(StreamEventTypes.Session, new SessionEventPayload(sessionId));
 

@@ -30,6 +30,7 @@ Role-aware prefix (`PrefixAsync()`) sayesinde aynı servis hem Admin hem Agent r
 | `PrefixAsync()` | Kullanıcı rolünden endpoint prefix'i üretir. |
 | `GetPendingApprovalsAsync()` | Bekleyen onay isteklerini listeler. |
 | `GetRecentApprovalsAsync(count)` | Son N onay kaydını listeler. |
+| `GetAttachmentDataUrlAsync(attachmentId)` | Onay kartındaki müşteri fotoğrafını rol önekiyle indirir, data URL döner; oturum boyunca önbellekte tutulur. Bulunamazsa `null`. |
 | `ApproveAsync(id, reason, decidedBy)` | Bir onay isteğini onaylar. |
 | `RejectAsync(id, reason, decidedBy)` | Bir onay isteğini reddeder. |
 | `GetOpenEscalationsAsync()` | Açık escalation'ları listeler. |

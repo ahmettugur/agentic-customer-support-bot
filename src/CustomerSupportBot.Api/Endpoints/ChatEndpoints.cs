@@ -73,7 +73,8 @@ public static class ChatEndpoints
         var safeRequest = new ChatRequest(
             guardResult.SanitizedInput,
             request.SessionId,
-            CustomerId: ResolveAuthenticatedCustomerId(httpContext));
+            CustomerId: ResolveAuthenticatedCustomerId(httpContext),
+            AttachmentIds: request.AttachmentIds);
         // İstemci bağlantıyı keserse reasoning/workflow zinciri de iptal edilir —
         // aksi halde LLM çağrısı WorkflowGuards:TimeoutSeconds süresince boşa çalışır.
         var response = await chatPort.HandleAsync(safeRequest, httpContext.RequestAborted);
@@ -154,7 +155,8 @@ public static class ChatEndpoints
         var safeRequest = new ChatRequest(
             guardResult.SanitizedInput,
             request.SessionId,
-            CustomerId: ResolveAuthenticatedCustomerId(httpContext));
+            CustomerId: ResolveAuthenticatedCustomerId(httpContext),
+            AttachmentIds: request.AttachmentIds);
 
         using var sse = new SseForwarder(response, httpContext.RequestAborted, logger);
 

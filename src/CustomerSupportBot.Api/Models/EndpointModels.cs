@@ -31,4 +31,8 @@ public sealed record RatingInput(int Stars, string? Feedback);
 /// Swagger/OpenAPI şemasında görünür ve istemciye "bunu ben doldurabilirim" izlenimi verirdi —
 /// oysa gönderilen değer sunucu tarafında her zaman sessizce göz ardı edilir.
 /// </summary>
-public sealed record ChatRequestBody(string Query, string? SessionId = null);
+/// <param name="AttachmentIds">
+/// <c>POST /chat/attachments</c> ile yüklenmiş fotoğrafların kimlikleri. Sunucu yalnızca bu oturuma ve
+/// bu müşteriye ait olanları kullanır.
+/// </param>
+public sealed record ChatRequestBody(string Query, string? SessionId = null, IReadOnlyList<string>? AttachmentIds = null);

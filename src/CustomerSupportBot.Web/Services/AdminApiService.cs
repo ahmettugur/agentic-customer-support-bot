@@ -20,6 +20,47 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
 
     // ─── Approvals ───────────────────────────────────────────────────────────
 
+    // Onay kartı her yoklamada yeniden çizilir; fotoğraf bir kez indirilir. Kayıt değişmez
+    // (fotoğraf düzenlenmez), dolayısıyla önbellek geçersizleşmez — oturum (scope) boyunca yaşar.
+    private readonly Dictionary<string, Task<string?>> _attachmentCache = new();
+
+    /// <summary>
+    /// Onay kaydına bağlı fotoğraf, <c>&lt;img&gt;</c>'de gösterilecek data URL olarak. Uç yetki
+    /// istediği için doğrudan <c>src</c> verilemez (tarayıcı Bearer başlığı eklemez). Bulunamazsa null.
+    /// </summary>
+    public Task<string?> GetAttachmentDataUrlAsync(string attachmentId)
+    {
+        if (!_attachmentCache.TryGetValue(attachmentId, out var task))
+        {
+            task = LoadAttachmentDataUrlAsync(attachmentId);
+            _attachmentCache[attachmentId] = task;
+        }
+        return task;
+    }
+
+    private async Task<string?> LoadAttachmentDataUrlAsync(string attachmentId)
+    {
+        try
+        {
+            var prefix = await PrefixAsync();
+            using var response = await http.GetAsync($"{prefix}/attachments/{Uri.EscapeDataString(attachmentId)}");
+            if (!response.IsSuccessStatusCode)
+            {
+                _attachmentCache.Remove(attachmentId);   // geçici hata kalıcı olmasın
+                return null;
+            }
+            var contentType = response.Content.Headers.ContentType?.MediaType;
+            if (contentType is not ("image/jpeg" or "image/png")) return null;
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            return $"data:{contentType};base64,{Convert.ToBase64String(bytes)}";
+        }
+        catch
+        {
+            _attachmentCache.Remove(attachmentId);
+            return null;
+        }
+    }
+
     public async Task<List<ApprovalRequest>> GetPendingApprovalsAsync()
     {
         var prefix = await PrefixAsync();
