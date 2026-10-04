@@ -152,8 +152,13 @@ asistan konuşurken küreye dokunmak sözünü keser.
   `localStorage["csb-voice-captions"]`.
 - **Sesle söz kesme yok:** asistan konuşurken istemci yankıyı önlemek için mikrofonu kaynağında kapatır;
   söz kesme küreye dokunarak yapılır.
-- Mikrofon izni reddinde ekran açık kalır ("Tekrar dene" / "Kapat"); bağlantı koparsa kısa hata ve 2 sn
-  sonra kapanış; temsilci katılınca (`__stopVoice`) ekran kapanır.
+- **Hatalar:** bağlantı açıkken gelen sunucu hatası (ör. girdi reddedildi) görüşmeyi bitirmez, "⚠ …" çipi
+  olarak görünür. Ölümcül hatada istemci **mutlaka durdurulur** (mikrofon serbest kalır): bağlantı hiç
+  kurulamadıysa (özellik kapalı, OpenAI'ye ulaşılamadı, yetki) ve mikrofon izni reddinde ekran
+  "Tekrar dene" / "Kapat" ile açık kalır; bağlıyken koparsa kısa hata ve 2 sn sonra kapanış. Temsilci
+  katılınca (`__stopVoice`) ekran kapanır.
+- Bitirilmiş ya da yerine yenisi açılmış bir istemcinin geç olayları yok sayılır; izin penceresi açıkken
+  bitirilen görüşme izin verilse de bağlanmaz. Ekran açıkken Tab odağı ekrandaki düğmelerde tutar.
 
 ### Fotoğraf ekleme (📎)
 

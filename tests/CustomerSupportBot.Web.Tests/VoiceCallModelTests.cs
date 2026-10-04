@@ -195,4 +195,31 @@ public class VoiceCallModelTests
         act.Should().NotThrow();
         m.Orb.Should().Be(VoiceOrbState.Connecting);
     }
+
+    [Theory]
+    [InlineData("error")]
+    [InlineData("idle")]
+    public void ClientErrorOrIdleState_DoesNotPretendToBeListening(string clientState)
+    {
+        var m = Opened();
+        m.Apply("state", "speaking", null, T0);
+
+        m.Apply("state", clientState, null, T0);
+
+        m.Orb.Should().Be(VoiceOrbState.Speaking,
+            "istemcinin error/idle durumu bir dinleme durumu değildir; hata ayrıca 'error' olayıyla gelir");
+    }
+
+    [Fact]
+    public void Notice_ShowsAsChip_WithoutEndingTheCall()
+    {
+        var m = Opened();
+        m.Apply("state", "listening", null, T0);
+
+        m.Apply("notice", "Mesaj işlenemedi.", null, T0);
+
+        m.Chip.Should().Be("⚠ Mesaj işlenemedi.");
+        m.Error.Should().BeNull();
+        m.Orb.Should().Be(VoiceOrbState.Listening);
+    }
 }

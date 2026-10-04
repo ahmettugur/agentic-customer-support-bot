@@ -14,6 +14,7 @@
         let overlayOpen = false;
         let connectedOnce = false;
         let closeTimer = null;
+        let starting = false;   // c.start() sürerken — atılan hatayı launchClient gösterir
 
         const call = (type, a, b) => { try { window.chatApp?.voiceCall?.(type, a, b); } catch { } };
 
@@ -173,165 +174,186 @@
             openOverlay();
             let me = null;   // bu çağrının istemcisi — eski istemcinin geç olayları yenisini silmesin
 
+            const callbacks = {
+                state: ({ state }) => setStatus(state),
+                connected: ({ sessionId: sid, tools }) => {
+                    connectedOnce = true;
+                    call('connected');
+                    playTone('connect');
+                    if (sid && app?.api && !app.api.sessionId) {
+                        app.api.setSession(sid);
+                        try { app.refreshSessionList?.(); } catch { }
+                    }
+                    console.info('[RealtimeNative] connected, tools:', tools);
+                },
+
+                muted: ({ muted }) => call('muted', muted ? 'true' : 'false'),
+                speech_started: () => call('speech_started'),
+
+                // ── Kullanıcı konuşmayı bitirdi ──
+                // Transcript daha gelmeden placeholder user bubble açıyoruz.
+                // Bot bubble'ı daha sonra (assistant_text_delta ile) oluşacağı
+                // için DOM sırası: user placeholder → bot bubble. Doğru.
+                speech_stopped: ({ itemId }) => {
+                    call('speech_stopped');
+                    if (!app?.ui) return;
+                    if (itemId) {
+                        // Hiç metin almamış önceki yer tutucular gürültü/sessizlikten kalan
+                        // hayaletlerdir — silinir. Metni olanlar KALIR: son transkriptleri
+                        // kendi kimlikleriyle sonradan gelebilir.
+                        for (const [id, entry] of [...userBubbles]) {
+                            if (id !== itemId && !entry.text) settleUserBubble(id, entry);
+                        }
+                        ensureUserBubble(itemId);   // canlı parçalarla zaten açıldıysa aynısı
+                        return;
+                    }
+                    // Önceki tur transcript gelmeden yeni tur başladıysa eski
+                    // placeholder'ı temizle (gürültü/sessizlikten kalan hayalet).
+                    removePendingUserBubble();
+                    pendingUserBubble = app.ui.addMessage('user', '…', { placeholder: true });
+                },
+
+                // ── Canlı altyazı parçası ──
+                user_transcript_delta: ({ itemId, text }) => {
+                    if (!itemId || !text || !app?.ui) return;
+                    call('user_delta', itemId, text);
+                    const entry = ensureUserBubble(itemId);
+                    entry.text += text;
+                    if (!entry.timer) entry.timer = setTimeout(() => flushLive(entry), LIVE_FLUSH_MS);
+                },
+
+                // ── Kullanıcı transcript'i geldi ──
+                user_transcript: ({ itemId, text }) => {
+                    if (!text || !app?.ui) return;
+                    call('user_final', itemId || null, text);
+
+                    // 0) Kimlikli balon (canlı altyazı ya da speech_stopped yer tutucusu):
+                    //    SON METİNLE doldur — parçaların birleşimiyle değil.
+                    const live = itemId ? userBubbles.get(itemId) : null;
+                    if (live) {
+                        if (live.timer) { clearTimeout(live.timer); live.timer = null; }
+                        try { app.ui.setMessageText(live.handle, text, false); } catch { }
+                        userBubbles.delete(itemId);
+                        app.ui.scrollToBottom();
+                        return;
+                    }
+
+                    // 1) Placeholder var → metnini doldur. Sıralama zaten doğru.
+                    if (fillPendingUserBubble(text)) {
+                        if (app?.ui) app.ui.scrollToBottom();
+                        return;
+                    }
+
+                    // 2) Placeholder yok (beklenmedik durum). Yeni user bubble oluştur.
+                    //    Bot bubble varsa onun ÖNÜNE yerleştir; yoksa normale ekle.
+                    app.ui.addMessage('user', text, { before: assistantBubble });
+                },
+
+                // ── Tool call ──
+                tool_call: ({ name, arguments: args }) => {
+                    call('tool_call', name, TOOL_LABELS[name] || name);
+                    ensureAssistantBubble();
+                    showToolChip(name);
+                },
+                tool_result: ({ name }) => { call('tool_result', name); completeToolChip(name); },
+
+                // ── Asistan metin delta ──
+                assistant_text_delta: ({ text }) => {
+                    if (!text) return;
+                    call('assistant_delta', text);
+                    ensureAssistantBubble();
+                    assistantText += text;
+                    if (app?.ui?.appendResponseChunk) {
+                        try { app.ui.appendResponseChunk(assistantBubble, text); } catch { }
+                    }
+                },
+
+                // Tam metin fallback
+                assistant_text: ({ text }) => {
+                    if (text && !assistantText) call('assistant_delta', text);
+                    if (text && !assistantText && assistantBubble && app?.ui?.appendResponseChunk) {
+                        try { app.ui.appendResponseChunk(assistantBubble, text); } catch { }
+                    }
+                },
+
+                // ── Response bitti ──
+                // DİKKAT: response_done, user transcript'ten HER ZAMAN ÖNCE gelir.
+                // Bu yüzden burada pendingUserBubble'a DOKUNMUYORUZ.
+                response_done: () => {
+                    call('response_done');
+                    finalizeAssistantBubble();
+                },
+
+                // ── Görüşme nazikçe sonlandırıldı (end_conversation tool veya idle timeout) ──
+                conversation_ended: ({ reason }) => {
+                    removePendingUserBubble();
+                    settleAllUserBubbles();
+                    finalizeAssistantBubble();
+                    const label = reason === 'idle_timeout'
+                        ? 'Görüşme sessizlik nedeniyle sonlandırıldı.'
+                        : 'Görüşme sonlandırıldı.';
+                    call('ended', label);
+                    playTone('end');
+                    setStatus('idle');
+                    closeSoon(1500);
+                    // client.stop() zaten realtime-client.js tarafında çağrılıyor
+                    client = null;
+                },
+
+                error: ({ message }) => {
+                    console.warn('RealtimeNative error:', message);
+                    // start() içinde atılan hata (mikrofon izni vb.) — launchClient gösterir.
+                    if (starting) return;
+                    // Bağlantı açıksa sunucu görüşmeyi sürdürüyordur (ör. girdi reddedildi):
+                    // görüşme bitmez, uyarı çip olarak görünür.
+                    const open = me.ws && me.ws.readyState === WebSocket.OPEN;
+                    if (connectedOnce && open) {
+                        call('notice', message || 'Mesaj işlenemedi.');
+                        return;
+                    }
+                    // Ölümcül: istemci MUTLAKA durdurulur — yoksa mikrofon kayıtta kalırdı.
+                    removePendingUserBubble();
+                    settleAllUserBubbles();
+                    finalizeAssistantBubble();
+                    try { me.stop(); } catch { }
+                    client = null;
+                    setStatus('idle');
+                    call('error', '⚠ ' + (message || 'Bağlantı koptu.'));
+                    // Bağlantı hiç kurulamadıysa "Tekrar dene / Kapat" ekranı açık kalır.
+                    if (connectedOnce) closeSoon(2000);
+                },
+                close: () => {
+                    removePendingUserBubble();
+                    settleAllUserBubbles();
+                    finalizeAssistantBubble();
+                    if (client !== me) return;   // kullanıcı bitirdi ya da yeni görüşme başladı
+                    setStatus('idle');
+                    // Bağlantı beklenmedik kapandıysa (bitir/hata/sonlandırma dışında) ekranı kapat.
+                    if (overlayOpen && !closeTimer) { playTone('end'); closeOverlay(); }
+                    client = null;
+                }
+            };
+
+            // Bu istemcinin olayları yalnızca o hâlâ geçerli istemciyse işlenir: bitirilmiş ya da
+            // yerine yenisi açılmış bir istemcinin geç gelen olayları (ör. kapanan soketin
+            // onerror'ı) yeni görüşmenin ekranını bozmamalı.
+            for (const name of Object.keys(callbacks)) {
+                const handler = callbacks[name];
+                callbacks[name] = (data) => { if (client === me) handler(data); };
+            }
+
             client = me = new RealtimeClient({
                 baseUrl: app?.api?.baseUrl || '',
                 sessionId,
                 endpoint: '/chat/realtime-native',
-                callbacks: {
-                    state: ({ state }) => setStatus(state),
-                    connected: ({ sessionId: sid, tools }) => {
-                        connectedOnce = true;
-                        call('connected');
-                        playTone('connect');
-                        if (sid && app?.api && !app.api.sessionId) {
-                            app.api.setSession(sid);
-                            try { app.refreshSessionList?.(); } catch { }
-                        }
-                        console.info('[RealtimeNative] connected, tools:', tools);
-                    },
-
-                    muted: ({ muted }) => call('muted', muted ? 'true' : 'false'),
-                    speech_started: () => call('speech_started'),
-
-                    // ── Kullanıcı konuşmayı bitirdi ──
-                    // Transcript daha gelmeden placeholder user bubble açıyoruz.
-                    // Bot bubble'ı daha sonra (assistant_text_delta ile) oluşacağı
-                    // için DOM sırası: user placeholder → bot bubble. Doğru.
-                    speech_stopped: ({ itemId }) => {
-                        call('speech_stopped');
-                        if (!app?.ui) return;
-                        if (itemId) {
-                            // Hiç metin almamış önceki yer tutucular gürültü/sessizlikten kalan
-                            // hayaletlerdir — silinir. Metni olanlar KALIR: son transkriptleri
-                            // kendi kimlikleriyle sonradan gelebilir.
-                            for (const [id, entry] of [...userBubbles]) {
-                                if (id !== itemId && !entry.text) settleUserBubble(id, entry);
-                            }
-                            ensureUserBubble(itemId);   // canlı parçalarla zaten açıldıysa aynısı
-                            return;
-                        }
-                        // Önceki tur transcript gelmeden yeni tur başladıysa eski
-                        // placeholder'ı temizle (gürültü/sessizlikten kalan hayalet).
-                        removePendingUserBubble();
-                        pendingUserBubble = app.ui.addMessage('user', '…', { placeholder: true });
-                    },
-
-                    // ── Canlı altyazı parçası ──
-                    user_transcript_delta: ({ itemId, text }) => {
-                        if (!itemId || !text || !app?.ui) return;
-                        call('user_delta', itemId, text);
-                        const entry = ensureUserBubble(itemId);
-                        entry.text += text;
-                        if (!entry.timer) entry.timer = setTimeout(() => flushLive(entry), LIVE_FLUSH_MS);
-                    },
-
-                    // ── Kullanıcı transcript'i geldi ──
-                    user_transcript: ({ itemId, text }) => {
-                        if (!text || !app?.ui) return;
-                        call('user_final', itemId || null, text);
-
-                        // 0) Kimlikli balon (canlı altyazı ya da speech_stopped yer tutucusu):
-                        //    SON METİNLE doldur — parçaların birleşimiyle değil.
-                        const live = itemId ? userBubbles.get(itemId) : null;
-                        if (live) {
-                            if (live.timer) { clearTimeout(live.timer); live.timer = null; }
-                            try { app.ui.setMessageText(live.handle, text, false); } catch { }
-                            userBubbles.delete(itemId);
-                            app.ui.scrollToBottom();
-                            return;
-                        }
-
-                        // 1) Placeholder var → metnini doldur. Sıralama zaten doğru.
-                        if (fillPendingUserBubble(text)) {
-                            if (app?.ui) app.ui.scrollToBottom();
-                            return;
-                        }
-
-                        // 2) Placeholder yok (beklenmedik durum). Yeni user bubble oluştur.
-                        //    Bot bubble varsa onun ÖNÜNE yerleştir; yoksa normale ekle.
-                        app.ui.addMessage('user', text, { before: assistantBubble });
-                    },
-
-                    // ── Tool call ──
-                    tool_call: ({ name, arguments: args }) => {
-                        call('tool_call', name, TOOL_LABELS[name] || name);
-                        ensureAssistantBubble();
-                        showToolChip(name);
-                    },
-                    tool_result: ({ name }) => { call('tool_result', name); completeToolChip(name); },
-
-                    // ── Asistan metin delta ──
-                    assistant_text_delta: ({ text }) => {
-                        if (!text) return;
-                        call('assistant_delta', text);
-                        ensureAssistantBubble();
-                        assistantText += text;
-                        if (app?.ui?.appendResponseChunk) {
-                            try { app.ui.appendResponseChunk(assistantBubble, text); } catch { }
-                        }
-                    },
-
-                    // Tam metin fallback
-                    assistant_text: ({ text }) => {
-                        if (text && !assistantText) call('assistant_delta', text);
-                        if (text && !assistantText && assistantBubble && app?.ui?.appendResponseChunk) {
-                            try { app.ui.appendResponseChunk(assistantBubble, text); } catch { }
-                        }
-                    },
-
-                    // ── Response bitti ──
-                    // DİKKAT: response_done, user transcript'ten HER ZAMAN ÖNCE gelir.
-                    // Bu yüzden burada pendingUserBubble'a DOKUNMUYORUZ.
-                    response_done: () => {
-                        call('response_done');
-                        finalizeAssistantBubble();
-                    },
-
-                    // ── Görüşme nazikçe sonlandırıldı (end_conversation tool veya idle timeout) ──
-                    conversation_ended: ({ reason }) => {
-                        removePendingUserBubble();
-                        settleAllUserBubbles();
-                        finalizeAssistantBubble();
-                        const label = reason === 'idle_timeout'
-                            ? 'Görüşme sessizlik nedeniyle sonlandırıldı.'
-                            : 'Görüşme sonlandırıldı.';
-                        call('ended', label);
-                        playTone('end');
-                        setStatus('idle');
-                        closeSoon(1500);
-                        // client.stop() zaten realtime-client.js tarafında çağrılıyor
-                        client = null;
-                    },
-
-                    error: ({ message }) => {
-                        console.warn('RealtimeNative error:', message);
-                        removePendingUserBubble();
-                        settleAllUserBubbles();
-                        finalizeAssistantBubble();
-                        // Başlatma hatasını launchClient gösterir — burada kapanış zamanlanmaz.
-                        if (!connectedOnce || client !== me) return;
-                        call('error', '⚠ ' + (message || 'Bağlantı koptu.'));
-                        setStatus('idle');
-                        client = null;
-                        closeSoon(2000);
-                    },
-                    close: () => {
-                        removePendingUserBubble();
-                        settleAllUserBubbles();
-                        finalizeAssistantBubble();
-                        if (client !== me) return;   // kullanıcı bitirdi ya da yeni görüşme başladı
-                        setStatus('idle');
-                        // Bağlantı beklenmedik kapandıysa (bitir/hata/sonlandırma dışında) ekranı kapat.
-                        if (overlayOpen && !closeTimer) { playTone('end'); closeOverlay(); }
-                        client = null;
-                    }
-                }
+                callbacks
             });
 
             await launchClient(client);
         };
 
         const launchClient = async (c) => {
+            starting = true;
             try {
                 await c.start();
             } catch (err) {
@@ -341,6 +363,8 @@
                     : (err?.message || 'Sesli konuşma başlatılamadı.');
                 call('error', '⚠ ' + msg);
                 setStatus('idle');
+            } finally {
+                starting = false;
             }
         };
 
@@ -372,7 +396,19 @@
         // tetiklenirdi.
         const isTyping = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
         document.addEventListener('keydown', (e) => {
-            if (!overlayOpen || isTyping(e.target)) return;
+            if (!overlayOpen) return;
+            // Odak tuzağı: ekran açıkken Tab yalnızca ekrandaki düğmeler arasında döner; arkadaki
+            // (görünmeyen) sohbet alanlarına odak kaçmaz.
+            if (e.key === 'Tab') {
+                const items = [...document.querySelectorAll('.vc-overlay button:not(:disabled)')];
+                if (items.length === 0) return;
+                const i = items.indexOf(document.activeElement);
+                const next = e.shiftKey ? (i <= 0 ? items.length - 1 : i - 1) : (i === -1 || i === items.length - 1 ? 0 : i + 1);
+                e.preventDefault();
+                items[next].focus();
+                return;
+            }
+            if (isTyping(e.target)) return;
             if (e.key === 'Escape') { e.preventDefault(); stop(); }
             else if (e.key === ' ' || e.code === 'Space') {
                 e.preventDefault();

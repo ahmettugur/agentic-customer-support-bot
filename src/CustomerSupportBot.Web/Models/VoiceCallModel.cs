@@ -85,7 +85,10 @@ public sealed class VoiceCallModel
                 _connectedAt ??= now;
                 break;
             case "state":
-                _clientState = a ?? _clientState;
+                // İstemcinin "error"/"idle" durumu bir görünüm değildir: hata ayrıca 'error' ya da
+                // 'notice' olayıyla gelir, kapanış 'close' ile. Yoksa küre düşüp "Dinliyor" derdi.
+                if (a is null or "error" or "idle") break;
+                _clientState = a;
                 if (_clientState == "speaking") _thinking = false;
                 if (_clientState == "listening") _connectedAt ??= now;
                 break;
@@ -135,6 +138,10 @@ public sealed class VoiceCallModel
                 Chip = a == HandoffTool ? "👤 Temsilci talebi oluşturuldu"
                     : a is not null && SideEffectTools.Contains(a) ? "⏳ Talebiniz onaya gönderildi"
                     : null;
+                break;
+            case "notice":
+                // Görüşmeyi bitirmeyen sunucu uyarısı (ör. girdi reddedildi) — çip olarak gösterilir.
+                Chip = "⚠ " + (string.IsNullOrWhiteSpace(a) ? "Mesaj işlenemedi." : a);
                 break;
             case "muted":
                 Muted = a == "true";

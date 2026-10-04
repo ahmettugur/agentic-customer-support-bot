@@ -53,7 +53,11 @@
 
             try {
                 await this._initAudio();
+                // Kullanıcı izin penceresi açıkken ya da bağlanırken bitirdiyse (stop) yarım kalan
+                // kaynaklar kapatılır; yoksa ekransız bir oturum mikrofonu sunucuya akıtırdı.
+                if (this._disposed) { this.stop(); return; }
                 await this._connectWs();
+                if (this._disposed) { this.stop(); return; }
             } catch (err) {
                 console.error('Realtime start hatası:', err);
                 this._setState('error');
@@ -146,6 +150,8 @@
             // alıp hoparlör→mikrofon echo loop'unu kaynakında keseriz. Backend
             // half-duplex gating ile birlikte iki katmanlı koruma.
             this._micTrack = this.mediaStream.getAudioTracks()[0] || null;
+            // Bağlanırken sessize alındıysa mikrofon ilk andan kapalı başlar.
+            if (this._micTrack && this._muted) this._micTrack.enabled = false;
 
             // Capture context — 24kHz
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)({
