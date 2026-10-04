@@ -1730,51 +1730,6 @@ body {
     50%      { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
 }
 
-.voice-status {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--space-2);
-    justify-content: center;
-}
-
-/* Görünürlüğü realtime-ui.js `hidden` özniteliğiyle yönetir (boşta/hatada gizli). Yukarıdaki
-   `display: flex`, tarayıcının [hidden] → display:none kuralından daha özgül olduğu için onu
-   eziyordu; durum satırı sayfa açıldığından beri "Sesli konuşma ⏸" olarak görünüyordu. */
-.voice-status[hidden] {
-    display: none;
-}
-
-.voice-pulse {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #ef4444;
-    animation: voicePulseDot 1.2s ease-in-out infinite;
-}
-
-@keyframes voicePulseDot {
-    0%, 100% { opacity: 1;   transform: scale(1); }
-    50%      { opacity: .35; transform: scale(.7); }
-}
-
-.voice-mini {
-    background: transparent;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    padding: 2px 8px;
-    font-size: var(--font-size-xs);
-    cursor: pointer;
-    color: var(--color-text-muted);
-}
-
-.voice-mini:hover {
-    background: var(--color-border);
-    color: var(--color-text);
-}
-
 /* ═══════════════════════════════════════════════
    WELCOME SCREEN
    ═══════════════════════════════════════════════ */

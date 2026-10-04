@@ -1,0 +1,124 @@
+@* Tam sayfa sesli görüşme ekranı. Durum VoiceCallModel'den okunur; düğmeler olayları üst
+   bileşene bildirir (asıl iş realtime-ui.js'te — tek doğruluk kaynağı istemci). Küre boyutu ve
+   parlaması voice-orb.js'in kare başı yazdığı --level CSS değişkeninden gelir; Blazor her karede
+   yeniden çizilmez (style özniteliği burada çizilmediği için JS'in yazdığı değer korunur). *@
+@using CustomerSupportBot.Web.Models
+@implements IDisposable
+
+@if (Model.Open)
+{
+    <div class="vc-overlay" role="dialog" aria-modal="true" aria-label="Sesli görüşme">
+        <header class="vc-top">
+            <div class="vc-title">
+                <span class="vc-rec" aria-hidden="true"></span>
+                <strong>Destek Asistanı</strong>
+                <span class="vc-time">@Model.Elapsed(DateTimeOffset.UtcNow)</span>
+            </div>
+            <span class="vc-ai">Yapay zekâ ile konuşuyorsunuz</span>
+        </header>
+
+        <main class="vc-center">
+            @if (Model.Error is not null)
+            {
+                <div class="vc-error" role="alert">
+                    <p>@Model.Error</p>
+                    <div class="vc-error-actions">
+                        <button type="button" class="vc-text-btn" @onclick="OnRetry">Tekrar dene</button>
+                        <button type="button" class="vc-text-btn" @onclick="OnEnd">Kapat</button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                var speaking = Model.Orb == VoiceOrbState.Speaking;
+                <button id="voiceOrb" type="button"
+                        class="vc-orb vc-orb--@Model.OrbCssClass"
+                        disabled="@(!speaking)"
+                        title="@(speaking ? "Sözünü kesmek için dokunun" : null)"
+                        aria-label="@(speaking ? "Asistanın sözünü kes" : Model.StateLabel)"
+                        @onclick="OnInterrupt">
+                    @if (Model.Muted)
+                    {
+                        <span class="vc-muted-badge" aria-hidden="true">🔇</span>
+                    }
+                </button>
+                <div class="vc-state" aria-live="polite">@(Model.EndedMessage ?? Model.StateLabel)</div>
+                @if (Model.Chip is not null)
+                {
+                    <div class="vc-chip">@Model.Chip</div>
+                }
+            }
+        </main>
+
+        @if (CaptionsOn && Model.Error is null)
+        {
+            <section class="vc-captions">
+                @if (!string.IsNullOrEmpty(Model.UserCaption))
+                {
+                    <p class="vc-cap-user @(Model.UserCaptionLive ? "live" : "")">Sen: @Model.UserCaption</p>
+                }
+                @if (!string.IsNullOrEmpty(Model.AssistantCaption))
+                {
+                    <p class="vc-cap-bot">@Model.AssistantCaption</p>
+                }
+            </section>
+        }
+
+        <footer class="vc-controls">
+            <div class="vc-ctl">
+                <button type="button" class="vc-btn" aria-pressed="@(Model.Muted ? "true" : "false")"
+                        aria-label="@(Model.Muted ? "Mikrofonu aç" : "Sessize al")" @onclick="OnToggleMute">
+                    @if (Model.Muted)
+                    {
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M18.89 13.23A7 7 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+                    }
+                    else
+                    {
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+                    }
+                </button>
+                <span class="vc-ctl-label">@(Model.Muted ? "Sesi aç" : "Sessize al")</span>
+            </div>
+            <div class="vc-ctl">
+                <button type="button" class="vc-btn vc-btn--end" aria-label="Görüşmeyi bitir" @onclick="OnEnd">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+                </button>
+                <span class="vc-ctl-label">Bitir</span>
+            </div>
+            <div class="vc-ctl">
+                <button type="button" class="vc-btn vc-btn--cc" aria-pressed="@(CaptionsOn ? "true" : "false")"
+                        aria-label="@(CaptionsOn ? "Altyazıyı kapat" : "Altyazıyı aç")" @onclick="OnToggleCaptions">CC</button>
+                <span class="vc-ctl-label">Altyazı</span>
+            </div>
+        </footer>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public VoiceCallModel Model { get; set; } = default!;
+    [Parameter] public bool CaptionsOn { get; set; } = true;
+    [Parameter] public EventCallback OnToggleMute { get; set; }
+    [Parameter] public EventCallback OnEnd { get; set; }
+    [Parameter] public EventCallback OnToggleCaptions { get; set; }
+    [Parameter] public EventCallback OnInterrupt { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    // Süre göstergesi için saniyede bir yeniden çizim — yalnızca ekran açıkken çalışır.
+    private Timer? _clock;
+
+    protected override void OnParametersSet()
+    {
+        if (Model.Open && _clock is null)
+            _clock = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+        else if (!Model.Open)
+            StopClock();
+    }
+
+    private void StopClock()
+    {
+        _clock?.Dispose();
+        _clock = null;
+    }
+
+    public void Dispose() => StopClock();
+}

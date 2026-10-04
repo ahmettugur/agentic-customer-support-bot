@@ -514,11 +514,6 @@
                     </button>
                 }
             </div>
-            <div id="voiceStatus" class="voice-status" hidden="">
-                <span class="voice-pulse"></span>
-                <span id="voiceStatusText">Bağlanıyor…</span>
-                <button id="voiceInterruptBtn" class="voice-mini" title="Asistanı kes">⏸</button>
-            </div>
             @* Kalıcı yapay zekâ bildirimi. Composer'ın hemen altı, sektörde yerleşik konum:
                kullanıcı mesaj yazarken göz hizasında ama sohbeti bölmüyor. Metin yalnızca
                "bilgilendirme amaçlıdır" demiyor — asıl söylenmesi gereken YANILABİLİRLİK ve
@@ -528,6 +523,14 @@
                 önemli işlemlerde bilgileri doğrulayın.
             </p>
         </footer>
+
+        <VoiceCallOverlay Model="_voiceCall"
+                          CaptionsOn="_voiceCaptionsOn"
+                          OnToggleMute="VoiceCallToggleMuteAsync"
+                          OnEnd="VoiceCallEndAsync"
+                          OnToggleCaptions="VoiceCallToggleCaptionsAsync"
+                          OnInterrupt="VoiceCallInterruptAsync"
+                          OnRetry="VoiceCallRetryAsync" />
 
     </div>
 </div>
@@ -798,6 +801,9 @@
         await JS.InvokeVoidAsync("loadScript", "/js/chat-bridge.js", "js-chat-bridge");
         await JS.InvokeVoidAsync("__chatSetup", _dotNetRef, _apiBase, authToken);
 
+        try { _voiceCaptionsOn = await JS.InvokeAsync<string?>("localStorage.getItem", VoiceCaptionsKey) != "0"; }
+        catch { _voiceCaptionsOn = true; }
+        await JS.InvokeVoidAsync("loadScript", "/js/voice-orb.js", "js-voice-orb");
         await JS.InvokeVoidAsync("loadScript", "/js/realtime-client.js", "js-realtime-client");
         await JS.InvokeVoidAsync("loadScript", "/js/realtime-ui.js", "js-realtime-ui");
     }
@@ -936,6 +942,39 @@
     private async Task StopStreamAsync()
     {
         try { await JS.InvokeVoidAsync("__stopStream"); } catch { }
+    }
+
+    // ── Sesli görüşme ekranı ─────────────────────────────────────────────────
+    // realtime-ui.js her olayı VoiceCallEvent ile bildirir; durum VoiceCallModel'de. Düğmeler işi
+    // JS'e bırakır (__voiceCall.*): istemci tek doğruluk kaynağıdır, sonuç yine olay olarak döner.
+
+    private readonly VoiceCallModel _voiceCall = new();
+    private bool _voiceCaptionsOn = true;
+    private const string VoiceCaptionsKey = "csb-voice-captions";
+
+    [JSInvokable]
+    public void VoiceCallEvent(string type, string? a, string? b) =>
+        _ = InvokeAsync(() =>
+        {
+            _voiceCall.Apply(type, a, b, DateTimeOffset.UtcNow);
+            StateHasChanged();
+        });
+
+    private async Task VoiceCallToggleMuteAsync() => await JsSafeAsync("__voiceCall.toggleMute");
+    private async Task VoiceCallEndAsync() => await JsSafeAsync("__voiceCall.end");
+    private async Task VoiceCallInterruptAsync() => await JsSafeAsync("__voiceCall.interrupt");
+    private async Task VoiceCallRetryAsync() => await JsSafeAsync("__voiceCall.retry");
+
+    private async Task VoiceCallToggleCaptionsAsync()
+    {
+        _voiceCaptionsOn = !_voiceCaptionsOn;
+        // Tercih yalnızca bu tarayıcıda; depolama kapalıysa (gizli pencere vb.) sessizce yok sayılır.
+        try { await JS.InvokeVoidAsync("localStorage.setItem", VoiceCaptionsKey, _voiceCaptionsOn ? "1" : "0"); } catch { }
+    }
+
+    private async Task JsSafeAsync(string identifier)
+    {
+        try { await JS.InvokeVoidAsync(identifier); } catch (JSException) { }
     }
 
     [JSInvokable]

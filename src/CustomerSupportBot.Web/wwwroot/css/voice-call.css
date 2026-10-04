@@ -1,0 +1,195 @@
+/* Sesli görüşme ekranı — tam sayfa, her temada koyu. Küre boyutu/parlaması --level'dan (0–1)
+   gelir; voice-orb.js her karede yazar. Hareket azaltmada animasyonlar kapalıdır. */
+
+.vc-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: radial-gradient(120% 80% at 50% 0%, #1e293b 0%, #0b1020 70%);
+    color: #e2e8f0;
+    font-family: Inter, system-ui, sans-serif;
+    animation: vcFadeIn .2s ease-out;
+}
+
+@keyframes vcFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.vc-top {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+.vc-title { display: flex; align-items: center; gap: 10px; }
+.vc-time { opacity: .65; font-variant-numeric: tabular-nums; }
+.vc-ai { font-size: 12px; opacity: .55; text-align: right; }
+
+.vc-rec {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #ef4444;
+    animation: vcBlink 1.4s ease-in-out infinite;
+}
+
+@keyframes vcBlink { 50% { opacity: .3; } }
+
+.vc-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-height: 0;
+}
+
+.vc-orb {
+    --level: 0;
+    position: relative;
+    width: clamp(120px, 24vmin, 180px);
+    aspect-ratio: 1;
+    border: 0;
+    padding: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #bfdbfe 0%, #60a5fa 30%, #2563eb 60%, #1e3a8a 100%);
+    box-shadow: 0 0 calc(40px + 50px * var(--level)) rgba(59, 130, 246, calc(.4 + .4 * var(--level))),
+                inset 0 -12px 30px rgba(15, 23, 42, .45);
+    transform: scale(calc(1 + .18 * var(--level)));
+    transition: background .4s ease, filter .4s ease, opacity .4s ease;
+    cursor: default;
+}
+
+.vc-orb:not(:disabled) { cursor: pointer; }
+.vc-orb:focus-visible, .vc-btn:focus-visible, .vc-text-btn:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 4px;
+}
+
+.vc-orb--connecting { opacity: .35; animation: vcBreathe 2.4s ease-in-out infinite; }
+
+.vc-orb--listening {
+    background: radial-gradient(circle at 35% 30%, #e0f2fe 0%, #7dd3fc 30%, #0ea5e9 60%, #0c4a6e 100%);
+    box-shadow: 0 0 calc(40px + 50px * var(--level)) rgba(14, 165, 233, calc(.4 + .4 * var(--level))),
+                inset 0 -12px 30px rgba(15, 23, 42, .45);
+}
+
+.vc-orb--thinking {
+    background: conic-gradient(from 0deg, #1e3a8a, #60a5fa, #a78bfa, #1e3a8a);
+    animation: vcSpin 2.2s linear infinite;
+}
+
+.vc-orb--muted { filter: grayscale(1); opacity: .45; }
+
+.vc-orb--handoff {
+    background: radial-gradient(circle at 35% 30%, #dcfce7 0%, #4ade80 30%, #16a34a 60%, #14532d 100%);
+    box-shadow: 0 0 50px rgba(34, 197, 94, .5), inset 0 -12px 30px rgba(15, 23, 42, .45);
+}
+
+@keyframes vcBreathe {
+    0%, 100% { opacity: .25; transform: scale(.92); }
+    50%      { opacity: .5;  transform: scale(1); }
+}
+
+@keyframes vcSpin { to { transform: rotate(360deg); } }
+
+.vc-muted-badge {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 34px;
+    filter: grayscale(0);
+}
+
+.vc-state { font-size: 15px; opacity: .85; min-height: 1.4em; text-align: center; }
+
+.vc-chip {
+    font-size: 13px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: rgba(96, 165, 250, .15);
+    color: #93c5fd;
+}
+
+.vc-captions {
+    width: min(680px, 88%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.vc-captions p { margin: 0; }
+.vc-cap-user { font-size: 14px; opacity: .55; }
+.vc-cap-user.live { font-style: italic; }
+.vc-cap-bot { font-size: 18px; line-height: 1.5; }
+
+.vc-controls {
+    display: flex;
+    gap: 28px;
+    align-items: flex-start;
+    padding: 18px 0 calc(28px + env(safe-area-inset-bottom));
+}
+
+.vc-ctl { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.vc-ctl-label { font-size: 12px; opacity: .6; }
+
+.vc-btn {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    border: 0;
+    background: rgba(255, 255, 255, .1);
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background .15s ease;
+}
+
+.vc-btn:hover { background: rgba(255, 255, 255, .18); }
+.vc-btn[aria-pressed="true"] { background: rgba(96, 165, 250, .28); }
+.vc-btn--end { width: 70px; height: 70px; background: #ef4444; color: #fff; }
+.vc-btn--end:hover { background: #dc2626; }
+
+.vc-error { text-align: center; max-width: 420px; padding: 0 16px; }
+.vc-error p { font-size: 16px; margin: 0 0 16px; }
+.vc-error-actions { display: flex; gap: 12px; justify-content: center; }
+
+.vc-text-btn {
+    border: 1px solid rgba(255, 255, 255, .25);
+    background: transparent;
+    color: #e2e8f0;
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.vc-text-btn:hover { background: rgba(255, 255, 255, .1); }
+
+@media (max-width: 640px) {
+    .vc-top { padding: 12px 16px; font-size: 13px; }
+    .vc-ai { font-size: 11px; }
+    .vc-cap-bot { font-size: 15px; }
+    .vc-cap-user { font-size: 12.5px; }
+    .vc-controls { gap: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .vc-overlay, .vc-rec, .vc-orb { animation: none !important; }
+    .vc-orb { transform: none !important; transition: none; }
+}
