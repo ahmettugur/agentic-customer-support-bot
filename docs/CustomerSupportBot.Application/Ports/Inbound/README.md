@@ -15,6 +15,7 @@ Bu klasör, dış dünyanın (Api katmanı — HTTP endpoint'leri, WebSocket kö
 
 - [IApprovalPort](IApprovalPort.md) / [ApprovalDecisionInput](ApprovalDecisionInput.md) — Onay akışı.
 - [IEscalationPort](IEscalationPort.md) — Eskalasyon (insan temsilciye devir) yönetimi.
+- [IAgentAssistPort](IAgentAssistPort.md) — Temsilci asistanı: özet, bağlam, yanıt taslağı.
 - [IHumanAgentPort](IHumanAgentPort.md) — İnsan temsilci CRUD + reroute.
 - [IChatSessionPort](IChatSessionPort.md) — Admin/agent'ın canlı oturum devralma/bırakma/replan akışları.
 - [IHitlEventPort](IHitlEventPort.md) — Onay/eskalasyon event aboneliği (SSE/WebSocket köprüsü için).

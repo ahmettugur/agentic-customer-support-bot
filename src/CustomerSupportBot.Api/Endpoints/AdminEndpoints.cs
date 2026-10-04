@@ -21,6 +21,7 @@
 //   - POST  /chat-sessions/{sid}/release      : Bot moda döndür
 //   - POST  /chat-sessions/{sid}/messages     : (body: { text, humanAgent? }) admin yanıtı
 //   - GET   /chat-sessions/{sid}/subscribe    : SSE — bu session'a gelen user mesajları
+//   - GET   /chat-sessions/{sid}/assist       : Temsilci asistanı — özet, bağlam, yanıt taslağı
 //
 // Production'da bu endpoint'lerin önüne auth (admin role) gelmelidir.
 
@@ -223,6 +224,14 @@ public static class AdminEndpoints
         app.MapGet("/chat-sessions/{sid}/history",
             async (string sid, IChatSessionPort chatSessions, int take = 50) =>
                 Results.Json(await chatSessions.GetHistoryAsync(sid, take)));
+
+        // Temsilci asistanı — agent paneliyle aynı uç (bkz. AgentPanelEndpoints).
+        app.MapGet("/chat-sessions/{sid}/assist",
+            async (string sid, IAgentAssistPort assist, CancellationToken ct) =>
+            {
+                var result = await assist.GetAssistAsync(sid, ct);
+                return result is null ? Results.NotFound() : Results.Json(result);
+            });
 
         app.MapGet("/chat-sessions/{sid}/sentiment",
             async (string sid, IChatSessionPort chatSessions, CancellationToken ct) =>

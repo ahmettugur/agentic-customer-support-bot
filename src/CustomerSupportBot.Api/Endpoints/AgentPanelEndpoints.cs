@@ -27,6 +27,7 @@
 //   POST /agent/chat-sessions/{sid}/messages      → Müşteriye mesaj gönder
 //   GET  /agent/chat-sessions/{sid}/history       → Sohbet geçmişi
 //   GET  /agent/chat-sessions/{sid}/subscribe     → SSE — müşteri mesajlarını dinle
+//   GET  /agent/chat-sessions/{sid}/assist        → Temsilci asistanı: özet, bağlam, yanıt taslağı
 //
 // Profil:
 //   GET  /agent/profile                           → Kendi agent profilim
@@ -324,6 +325,15 @@ public static class AgentPanelEndpoints
                 Results.Json(await chatSessions.GetHistoryAsync(sid, take)));
 
         // ─── Session sentiment (read-only) ───
+        // ─── Temsilci asistanı — özet, bağlam ve düzenlenebilir yanıt taslağı ───
+        // Taslak otomatik GÖNDERİLMEZ; temsilci mesaj kutusuna alıp düzenler.
+        group.MapGet("/chat-sessions/{sid}/assist",
+            async (string sid, IAgentAssistPort assist, CancellationToken ct) =>
+            {
+                var result = await assist.GetAssistAsync(sid, ct);
+                return result is null ? Results.NotFound() : Results.Json(result);
+            });
+
         group.MapGet("/chat-sessions/{sid}/sentiment",
             async (string sid, IChatSessionPort chatSessions, CancellationToken ct) =>
         {

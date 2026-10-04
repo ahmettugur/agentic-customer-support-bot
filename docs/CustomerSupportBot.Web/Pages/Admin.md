@@ -115,6 +115,18 @@ kayarsa sonuç veri kaybı değil, yalnızca daha ham bir görünümdür.
 `ReasonRequired` ile aynı ruh: panelin ihtiyacı olan türetilmiş bilgi sunucuda hesaplanır, panel
 kendi kopyasını tutmaz.
 
+## Temsilci asistanı (canlı sohbet paneli)
+
+Panel başlığındaki **🤖 Asistan** butonu, mesajların üstünde bir kart açar
+(`AdminApiService.GetAgentAssistAsync` → `…/chat-sessions/{sid}/assist`; rol önekine göre admin ya da
+agent ucu). Kart **istek üzerine** yüklenir — LLM çağrısı her panel açılışında değil, butona basıldığında
+ve "Yenile" ile yapılır. İçerik: özet ve müşterinin talebi, önerilen yanıt, duygu durumu, müşteri
+profili, açık işler (eskalasyon/bekleyen onay), ilgili bilgi tabanı makaleleri.
+
+**"Taslağı kullan"** taslağı yalnızca mesaj kutusuna alır; **göndermez** — temsilci düzenleyip kendisi
+gönderir. Başka bir sohbete geçilir ya da sohbet bitirilirse kart sıfırlanır; geç gelen bir yanıt yanlış
+sohbete yazılmaz. LLM bölümü üretilemezse kart hatayı gösterir, diğer bölümler yine görünür.
+
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 Tüm yönetim işlemleri tek sayfada toplanmıştır (SPA yaklaşımı). Code-behind pattern'i (`Admin.razor.cs`) kullanılır çünkü sayfa çok büyüktür (~60K+ satır markup + ~28K logic).
 

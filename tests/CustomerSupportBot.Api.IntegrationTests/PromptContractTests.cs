@@ -485,4 +485,22 @@ public class PromptContractTests
         prompt.Should().Contain("selectedAgent",
             "gerçekte yönlendirmeyi belirleyen alan adıyla anılmalı");
     }
+
+    // ─── Temsilci asistanı: kodun ürettiği blok etiketleri ve beklenen JSON alanları ─────────
+
+    [Theory]
+    [InlineData("KONUŞMA")]
+    [InlineData("MÜŞTERİ PROFİLİ")]
+    [InlineData("AÇIK İŞLER")]
+    [InlineData("BİLGİ TABANI")]
+    [InlineData("\"summary\"")]
+    [InlineData("\"customerRequest\"")]
+    [InlineData("\"suggestedReply\"")]
+    [InlineData("<retrieved_data>")]
+    public void AgentAssistPrompt_NamesTheBlocksAndFieldsTheServiceUses(string token)
+    {
+        // AgentAssistService bu etiketlerle blok üretir ve bu alanları ayrıştırır; prompt aynı
+        // adları kullanmazsa model yanlış biçimde yanıt verir ve kart sessizce boş kalır.
+        Prompt(CustomerSupportBot.Application.Services.Escalation.AgentAssistService.PromptKey).Should().Contain(token);
+    }
 }

@@ -18,6 +18,7 @@ Sürücü adaptörlerin (ASP.NET Core Minimal API, Blazor Web, Arkaplan servisle
 | `IReasoningPort` | [Ports/Inbound/IReasoningPort.md](Ports/Inbound/IReasoningPort.md) | 2 aşamalı niyet analizi, varlık doğrulama ve muhakeme. |
 | `IApprovalPort` | [Ports/Inbound/IApprovalPort.md](Ports/Inbound/IApprovalPort.md) | HITL onay kuyruğu listeleme ve karar verme. |
 | `IEscalationPort` | [Ports/Inbound/IEscalationPort.md](Ports/Inbound/IEscalationPort.md) | İnsan temsilciye eskalasyon yönetimi. |
+| `IAgentAssistPort` | [Ports/Inbound/IAgentAssistPort.md](Ports/Inbound/IAgentAssistPort.md) | Temsilci asistanı — özet, bağlam, yanıt taslağı. |
 | `IHumanAgentPort` | [Ports/Inbound/IHumanAgentPort.md](Ports/Inbound/IHumanAgentPort.md) | Temsilci havuzu ve durum yönetimi. |
 | `IHitlEventPort` | [Ports/Inbound/IHitlEventPort.md](Ports/Inbound/IHitlEventPort.md) | Canlı temsilci olay akışı. |
 | `IEvaluationPort` | [Ports/Inbound/IEvaluationPort.md](Ports/Inbound/IEvaluationPort.md) | Kalite ve regresyon test senaryolarını çalıştırma. |

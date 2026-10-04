@@ -404,9 +404,102 @@
                                         @_sentimentLabel (@_sentimentScore.ToString("F1"))
                                     </span>
                                 }
+                                <button class="btn-secondary @(_assistOpen ? "active" : "")" @onclick="ToggleAssistAsync" aria-pressed="@_assistOpen" title="Özet, müşteri bağlamı ve yanıt taslağı">🤖 Asistan</button>
                                 <button class="btn-secondary" @onclick='() => ShowPrompt(PromptKind.ReplanChat, _openChatSession.SessionId, "Yeniden Planla", "Not (isteğe bağlı)")'>🔄 Yeniden Planla</button>
                                 <button class="btn-danger" @onclick="ReleaseChatAsync">Sohbeti Bitir</button>
                             </header>
+                            @if (_assistOpen)
+                            {
+                                <aside class="assist-card" aria-label="Temsilci asistanı" aria-busy="@_assistLoading">
+                                    <div class="assist-card-header">
+                                        <strong>🤖 Temsilci asistanı</strong>
+                                        <button class="btn-secondary btn-sm" @onclick="LoadAssistAsync" disabled="@_assistLoading">@(_assistLoading ? "Hazırlanıyor…" : "Yenile")</button>
+                                    </div>
+                                    @if (_assistLoading && _assist is null)
+                                    {
+                                        <p class="muted">Konuşma özetleniyor ve taslak hazırlanıyor…</p>
+                                    }
+                                    else if (_assistLoadError is not null)
+                                    {
+                                        <p class="assist-error">@_assistLoadError</p>
+                                    }
+                                    else if (_assist is not null)
+                                    {
+                                        @if (_assist.AssistError is not null)
+                                        {
+                                            <p class="assist-error">@_assist.AssistError</p>
+                                        }
+                                        @if (_assist.Summary is not null)
+                                        {
+                                            <div class="assist-section">
+                                                <h4>Özet</h4>
+                                                <p>@_assist.Summary</p>
+                                                @if (_assist.CustomerRequest is not null)
+                                                {
+                                                    <p><strong>Müşterinin talebi:</strong> @_assist.CustomerRequest</p>
+                                                }
+                                            </div>
+                                        }
+                                        @if (_assist.SuggestedReply is not null)
+                                        {
+                                            <div class="assist-section">
+                                                <h4>Önerilen yanıt</h4>
+                                                <p class="assist-draft">@_assist.SuggestedReply</p>
+                                                <button class="btn-primary btn-sm" @onclick="UseAssistDraft">Taslağı kullan</button>
+                                                <span class="muted assist-hint">Mesaj kutusuna alınır; göndermeden önce düzenleyebilirsiniz.</span>
+                                            </div>
+                                        }
+                                        <div class="assist-section">
+                                            <h4>Müşteri</h4>
+                                            <p>
+                                                Duygu: <strong>@(_assist.Sentiment.Label ?? "-")</strong> (@_assist.Sentiment.Score.ToString("F1"))
+                                                @if (_assist.Sentiment.ConsecutiveNegativeTurns > 0)
+                                                {
+                                                    <span> · @_assist.Sentiment.ConsecutiveNegativeTurns ardışık olumsuz tur</span>
+                                                }
+                                            </p>
+                                            @if (_assist.Profile is { } p)
+                                            {
+                                                @if (!string.IsNullOrWhiteSpace(p.Summary)) { <p>@p.Summary</p> }
+                                                <p class="muted">
+                                                    Ton: @p.PreferredTone · @p.TotalSessions oturum
+                                                    @if (p.AverageRating is not null) { <span> · ort. puan @p.AverageRating.Value.ToString("0.0")/5</span> }
+                                                    @if (p.ProductInterests.Count > 0) { <span> · ilgi: @string.Join(", ", p.ProductInterests)</span> }
+                                                </p>
+                                            }
+                                            else
+                                            {
+                                                <p class="muted">Kayıtlı müşteri profili yok.</p>
+                                            }
+                                        </div>
+                                        @if (_assist.OpenItems.Count > 0)
+                                        {
+                                            <div class="assist-section">
+                                                <h4>Açık işler</h4>
+                                                <ul>
+                                                    @foreach (var item in _assist.OpenItems)
+                                                    {
+                                                        <li>@AssistItemLabel(item) <span class="muted">(@item.Status)</span></li>
+                                                    }
+                                                </ul>
+                                            </div>
+                                        }
+                                        @if (_assist.Articles.Count > 0)
+                                        {
+                                            <div class="assist-section">
+                                                <h4>İlgili bilgi tabanı</h4>
+                                                @foreach (var a in _assist.Articles)
+                                                {
+                                                    <details class="assist-article">
+                                                        <summary>@a.Title</summary>
+                                                        <p>@a.Snippet</p>
+                                                    </details>
+                                                }
+                                            </div>
+                                        }
+                                    }
+                                </aside>
+                            }
                             <div class="chat-panel-messages" id="adminChatMessages">
                                 @if (_chatMessages.Count == 0) { <div class="empty-state">Henüz mesaj yok.</div> }
                                 @foreach (var m in _chatMessages)

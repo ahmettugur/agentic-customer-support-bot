@@ -74,6 +74,36 @@ public sealed record ChatHistoryMessage(
     DateTimeOffset Timestamp
 );
 
+// ─── Temsilci asistanı (GET …/chat-sessions/{sid}/assist) ─────────────────────
+
+public sealed record AgentAssistResult(
+    string SessionId,
+    string? Summary,
+    string? CustomerRequest,
+    string? SuggestedReply,
+    string? AssistError,
+    AgentAssistSentiment Sentiment,
+    AgentAssistProfile? Profile,
+    List<AgentAssistArticle> Articles,
+    List<AgentAssistOpenItem> OpenItems
+);
+
+public sealed record AgentAssistSentiment(string? Label, double Score, int ConsecutiveNegativeTurns);
+
+public sealed record AgentAssistProfile(
+    string CustomerId,
+    string? Summary,
+    string PreferredTone,
+    List<string> ProductInterests,
+    List<string> TopIntents,
+    double? AverageRating,
+    int TotalSessions
+);
+
+public sealed record AgentAssistArticle(string Title, string Snippet, string? Source, double Score);
+
+public sealed record AgentAssistOpenItem(string Kind, string Id, string Description, string Status, DateTimeOffset CreatedAt);
+
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
 public sealed record AnalyticsDashboard(

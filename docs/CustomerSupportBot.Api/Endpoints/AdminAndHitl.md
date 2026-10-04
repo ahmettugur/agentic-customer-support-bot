@@ -88,6 +88,7 @@ sohbeti devralması (Live Takeover). `AdminEndpoints` **Admin** rolü için, `Ag
 | `POST /chat-sessions/{sid}/replan` | Aynı replan akışı, eskalasyonsuz doğrudan session üzerinden. |
 | `GET /chat-sessions/active` | Şu an Human modda olan session'lar. |
 | `GET /chat-sessions/{sid}/state` \| `/history` \| `/sentiment` | Session kip/geçmiş/duygu durumu. |
+| `GET /chat-sessions/{sid}/assist` | Temsilci asistanı ([AgentAssistService](../../CustomerSupportBot.Application/Services/Escalation/AgentAssistService.md)): özet, müşteri talebi, yanıt taslağı (LLM, istek üzerine), duygu, profil, ilgili makaleler, açık işler. Oturum yoksa 404. Taslak gönderilmez. |
 | `POST /chat-sessions/{sid}/takeover` | Session'ı Human moda alır. |
 | `POST /chat-sessions/{sid}/release` | Session'ı Bot moduna döndürür. |
 | `POST /chat-sessions/{sid}/messages` | Admin'in müşteriye yazdığı mesaj. |
@@ -106,6 +107,7 @@ Yukarıdakiyle aynı işlerin agent-kapsamlı hâli — route'lar `/agent/...` a
 | `POST /agent/escalations/{id}/acknowledge` | Üstlenen agent'ın yükünü (`IHumanAgentPort.IncrementLoad`) artırır. |
 | `POST /agent/escalations/{id}/resolve` | Agent'ın yükünü azaltır (`DecrementLoad`). |
 | `GET /agent/profile` | Çağıran kullanıcının bağlı olduğu `HumanAgentEntity` profilini döner. |
+| `GET /agent/chat-sessions/{sid}/assist` | Temsilci asistanı — admin ucuyla aynı. |
 | *(approvals, chat-sessions uçları)* | `AdminEndpoints` ile aynı davranış, `decidedBy`/`humanAgent` alanı JWT'deki `linked_agent_id`'den türetilir. |
 
 | Yardımcı üye | Açıklama |

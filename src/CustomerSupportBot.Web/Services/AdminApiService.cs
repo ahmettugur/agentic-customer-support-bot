@@ -127,6 +127,16 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         return result ?? [];
     }
 
+    /// <summary>Temsilci asistanı — özet, bağlam ve yanıt taslağı (LLM çağrısı içerir; istek üzerine).</summary>
+    public async Task<AgentAssistResult?> GetAgentAssistAsync(string sessionId)
+    {
+        var prefix = await PrefixAsync();
+        var response = await http.GetAsync($"{prefix}/chat-sessions/{sessionId}/assist");
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AgentAssistResult>();
+    }
+
     public async Task TakeoverAsync(string sessionId, string humanAgent)
     {
         var prefix = await PrefixAsync();

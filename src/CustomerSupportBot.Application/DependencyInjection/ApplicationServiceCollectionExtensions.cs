@@ -96,6 +96,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ISessionPort, SessionPortService>();
         services.AddSingleton<IApprovalPort, ApprovalPortService>();
         services.AddSingleton<IEscalationPort, EscalationPortService>();
+        services.AddSingleton<IAgentAssistPort, AgentAssistService>();
         services.AddSingleton<IAnalyticsPort, AnalyticsPortService>();
         services.AddSingleton<IChatSessionPort, ChatSessionPortService>();
         services.AddSingleton<IHitlEventPort, HitlEventPortService>();

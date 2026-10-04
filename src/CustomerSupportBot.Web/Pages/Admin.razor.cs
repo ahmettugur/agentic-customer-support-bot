@@ -32,6 +32,13 @@ public partial class Admin
     private ActiveChatSession?       _openChatSession;
     private List<ChatHistoryMessage> _chatMessages       = [];
     private string                   _chatInput          = string.Empty;
+
+    // ── Temsilci asistanı (canlı sohbet paneli) ─────────────────────────────────
+    // İstek üzerine yüklenir — her panel açılışında LLM çağrısı yapılmaz.
+    private bool               _assistOpen;
+    private bool               _assistLoading;
+    private AgentAssistResult? _assist;
+    private string?            _assistLoadError;
     private AnalyticsDashboard?      _analytics;
     private List<SessionSummary>     _analyticsSessions          = [];
     private string?                  _analyticsSelectedSessionId;
@@ -326,6 +333,7 @@ public partial class Admin
     {
         StopChatPanel();
         _openChatSession = s;
+        ResetAssist();
         _chatMessages    = await AdminApi.GetChatHistoryAsync(s.SessionId);
         try { await JS.InvokeVoidAsync("__adminSubscribeChat", _dotNetRef, s.SessionId); } catch { }
         await RefreshSentimentAsync();
@@ -348,11 +356,63 @@ public partial class Admin
         await AdminApi.ReleaseAsync(_openChatSession.SessionId);
         StopChatPanel();
         _openChatSession = null;
+        ResetAssist();
         _chatMessages    = [];
         _sentimentLabel  = null;
         _activeChats     = await AdminApi.GetActiveChatsAsync();
         Toast.ShowInfo("Sohbet sonlandırıldı.");
     }
+
+    // ── Temsilci asistanı ──────────────────────────────────────────────────────
+    private async Task ToggleAssistAsync()
+    {
+        _assistOpen = !_assistOpen;
+        if (_assistOpen && _assist is null && !_assistLoading)
+            await LoadAssistAsync();
+    }
+
+    private async Task LoadAssistAsync()
+    {
+        if (_openChatSession is null) return;
+        var sessionId = _openChatSession.SessionId;
+        _assistLoading   = true;
+        _assistLoadError = null;
+        StateHasChanged();
+        try
+        {
+            var result = await AdminApi.GetAgentAssistAsync(sessionId);
+            if (_openChatSession?.SessionId != sessionId) return;   // bu arada başka sohbete geçildi
+            _assist = result;
+            if (result is null) _assistLoadError = "Oturum bulunamadı.";
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[AgentAssist] {ex}");
+            _assistLoadError = "Asistan yüklenemedi; tekrar deneyin.";
+        }
+        finally
+        {
+            _assistLoading = false;
+        }
+    }
+
+    /// <summary>Taslağı mesaj kutusuna alır — GÖNDERMEZ; temsilci düzenleyip kendisi gönderir.</summary>
+    private void UseAssistDraft()
+    {
+        if (!string.IsNullOrWhiteSpace(_assist?.SuggestedReply))
+            _chatInput = _assist.SuggestedReply!;
+    }
+
+    private void ResetAssist()
+    {
+        _assistOpen      = false;
+        _assistLoading   = false;
+        _assist          = null;
+        _assistLoadError = null;
+    }
+
+    private static string AssistItemLabel(AgentAssistOpenItem item) =>
+        item.Kind == "approval" ? $"Onay bekliyor: {item.Description}" : $"Eskalasyon: {item.Description}";
 
     private void StopChatPanel()
     {
