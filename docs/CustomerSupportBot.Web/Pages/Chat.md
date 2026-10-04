@@ -133,6 +133,28 @@ Giriş satırında tek bir mikrofon butonu (`#voiceBtn`) vardır; sesli görüş
 `window.App` üzerinden `VoiceTranscript`/`VoiceSendMessage`/`NewChatFromVoice` çağırıyordu).
 Köprü modu kaldırılınca bu buton, `window.App` ve ilgili JSInvokable'lar da kaldırıldı.
 
+### Sesli görüşme ekranı
+
+🎙'ye basınca tam sayfa, koyu bir görüşme ekranı (`Components/VoiceCallOverlay.razor`) açılır:
+üstte süre ve "Yapay zekâ ile konuşuyorsunuz", ortada sesle canlanan küre ve durum etiketi, altta
+son turun altyazısı, en altta Sessize al · Bitir · Altyazı. `Space` sessize alır, `Esc` bitirir;
+asistan konuşurken küreye dokunmak sözünü keser.
+
+- **Durum** saf bir modelde tutulur (`Models/VoiceCallModel.cs`, birim testli); `realtime-ui.js` her
+  olayı `VoiceCallEvent(type, a, b)` ile iletir. Küre önceliği: hata > temsilciye aktarım > konuşuyor >
+  sessiz > bağlanıyor > düşünüyor > dinliyor.
+- **Küre** gerçek ses seviyesine tepki verir: `realtime-client.js`'in `AnalyserNode`'ları
+  (`getLevels()`), `voice-orb.js` her karede `--level`'ı yazar — Blazor yeniden çizilmez. Hareket
+  azaltma tercihinde döngü başlamaz.
+- **Sessize alma** istemcide kalıcıdır (`setMuted`): asistan konuşmayı bitirip dinlemeye dönüldüğünde
+  de mikrofon kapalı kalır.
+- **Altyazı** yalnızca son tur; dökümün tamamı sohbete balon olarak yazılmaya devam eder. Tercih
+  `localStorage["csb-voice-captions"]`.
+- **Sesle söz kesme yok:** asistan konuşurken istemci yankıyı önlemek için mikrofonu kaynağında kapatır;
+  söz kesme küreye dokunarak yapılır.
+- Mikrofon izni reddinde ekran açık kalır ("Tekrar dene" / "Kapat"); bağlantı koparsa kısa hata ve 2 sn
+  sonra kapanış; temsilci katılınca (`__stopVoice`) ekran kapanır.
+
 ### Fotoğraf ekleme (📎)
 
 - Fotoğraf **seçildiği anda** yüklenir (`ChatApiService.UploadAttachmentAsync`) — görsel analiz,
