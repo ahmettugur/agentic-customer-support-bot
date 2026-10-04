@@ -10,6 +10,8 @@
 //   const client = new RealtimeClient({ baseUrl, sessionId, callbacks });
 //   await client.start();
 //   client.interrupt();
+//   client.setMuted(true);
+//   client.getLevels();   // { input, output } 0–1 — görüşme ekranındaki küre için
 //   client.stop();
 
 (function () {
@@ -37,6 +39,10 @@
             this.state = 'idle'; // idle | connecting | listening | speaking | error
             this._disposed = false;
             this._micTrack = null;
+            this._muted = false;       // kullanıcı sessize aldı — dinlemeye dönüşte de kapalı kalır
+            this._inAnalyser = null;   // mikrofon seviyesi (küre)
+            this._outAnalyser = null;  // asistan sesi seviyesi (küre)
+            this._levelBuf = null;
         }
 
         // ─── Public ───
@@ -57,6 +63,22 @@
             }
         }
 
+        get muted() { return this._muted; }
+
+        /** Kalıcı sessize alma: asistan konuşmayı bitirip dinlemeye dönüldüğünde de mikrofon kapalı kalır. */
+        setMuted(muted) {
+            this._muted = !!muted;
+            if (this._micTrack) {
+                try { this._micTrack.enabled = !this._muted && this.state !== 'speaking'; } catch { }
+            }
+            this._emit('muted', { muted: this._muted });
+        }
+
+        /** Kürenin anlık seviyeleri (0–1): mikrofon ve asistan sesi. Ses yoksa 0. */
+        getLevels() {
+            return { input: this._rms(this._inAnalyser), output: this._rms(this._outAnalyser) };
+        }
+
         interrupt() {
             // Mikrofon gecikmeli açma timer'ını iptal et — kullanıcı müdahale etti.
             clearTimeout(this._micReopenTimer);
@@ -73,6 +95,8 @@
             // Mod geçişlerinde (köprü → native veya tersi) hayalet baloncukları önler.
             this._disposed = true;
             this._micTrack = null;
+            this._inAnalyser = null;
+            this._outAnalyser = null;
 
             try { this._sendControl({ type: 'stop' }); } catch { /* ignore */ }
 
@@ -134,6 +158,10 @@
             this.workletNode = new AudioWorkletNode(this.audioCtx, 'pcm-capture-processor');
             this.workletNode.port.onmessage = (e) => this._onAudioChunk(e.data);
             this.sourceNode.connect(this.workletNode);
+            // Küre için mikrofon seviyesi — analizör hiçbir yere bağlanmaz (yalnızca ölçer).
+            this._inAnalyser = this.audioCtx.createAnalyser();
+            this._inAnalyser.fftSize = 512;
+            this.sourceNode.connect(this._inAnalyser);
             // Worklet'i destination'a bağlamıyoruz — kullanıcı kendi sesini duymasın
 
             // Playback context (asistanı çalmak için) — aynı sample rate
@@ -141,6 +169,10 @@
                 sampleRate: SAMPLE_RATE
             });
             this._playCursor = this.playCtx.currentTime;
+            // Asistan sesi tek bir analizörden geçip hoparlöre gider (küre seviyesi).
+            this._outAnalyser = this.playCtx.createAnalyser();
+            this._outAnalyser.fftSize = 512;
+            this._outAnalyser.connect(this.playCtx.destination);
         }
 
         _onAudioChunk(arrayBuffer) {
@@ -293,7 +325,7 @@
 
             const src = this.playCtx.createBufferSource();
             src.buffer = buffer;
-            src.connect(this.playCtx.destination);
+            src.connect(this._outAnalyser || this.playCtx.destination);
 
             const now = this.playCtx.currentTime;
             const startAt = Math.max(now, this._playCursor);
@@ -326,6 +358,16 @@
 
         // ─── Helpers ───
 
+        _rms(analyser) {
+            if (!analyser) return 0;
+            if (!this._levelBuf || this._levelBuf.length !== analyser.fftSize)
+                this._levelBuf = new Float32Array(analyser.fftSize);
+            analyser.getFloatTimeDomainData(this._levelBuf);
+            let sum = 0;
+            for (let i = 0; i < this._levelBuf.length; i++) sum += this._levelBuf[i] * this._levelBuf[i];
+            return Math.min(1, Math.sqrt(sum / this._levelBuf.length) * 4);
+        }
+
         _setState(s) {
             this.state = s;
             // Mikrofon gating: bot konuşurken track'i kapatıp echo'yu kaynaktan kes.
@@ -334,7 +376,7 @@
                 if (s === 'speaking') {
                     try { this._micTrack.enabled = false; } catch { }
                 } else if (s === 'listening' || s === 'idle') {
-                    try { this._micTrack.enabled = true; } catch { }
+                    try { this._micTrack.enabled = !this._muted; } catch { }
                 }
             }
             this._emit('state', { state: s });
