@@ -1630,6 +1630,13 @@ body {
     justify-content: center;
 }
 
+/* Görünürlüğü realtime-ui.js `hidden` özniteliğiyle yönetir (boşta/hatada gizli). Yukarıdaki
+   `display: flex`, tarayıcının [hidden] → display:none kuralından daha özgül olduğu için onu
+   eziyordu; durum satırı sayfa açıldığından beri "Sesli konuşma ⏸" olarak görünüyordu. */
+.voice-status[hidden] {
+    display: none;
+}
+
 .voice-pulse {
     width: 8px;
     height: 8px;
