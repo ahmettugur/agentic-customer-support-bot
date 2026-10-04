@@ -86,7 +86,11 @@
     animation: vcSpin 2.2s linear infinite;
 }
 
-.vc-orb--muted { filter: grayscale(1); opacity: .45; }
+/* Gri tonlar arka planla verilir (filter/opacity değil): filtre içteki 🔇 rozetini de soldururdu. */
+.vc-orb--muted {
+    background: radial-gradient(circle at 35% 30%, #94a3b8 0%, #64748b 35%, #334155 70%, #1e293b 100%);
+    box-shadow: 0 0 30px rgba(148, 163, 184, .18), inset 0 -12px 30px rgba(15, 23, 42, .45);
+}
 
 .vc-orb--handoff {
     background: radial-gradient(circle at 35% 30%, #dcfce7 0%, #4ade80 30%, #16a34a 60%, #14532d 100%);
@@ -107,7 +111,6 @@
     align-items: center;
     justify-content: center;
     font-size: 34px;
-    filter: grayscale(0);
 }
 
 .vc-state { font-size: 15px; opacity: .85; min-height: 1.4em; text-align: center; }
@@ -137,7 +140,7 @@
 .vc-controls {
     display: flex;
     gap: 28px;
-    align-items: flex-start;
+    align-items: flex-end;   /* farklı boyuttaki düğmelerin etiketleri aynı çizgide */
     padding: 18px 0 calc(28px + env(safe-area-inset-bottom));
 }
 

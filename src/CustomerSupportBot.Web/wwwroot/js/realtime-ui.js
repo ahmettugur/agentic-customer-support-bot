@@ -6,29 +6,47 @@
 (function () {
     'use strict';
 
-    const STATE_LABELS = {
-        idle: 'Sesli konuşma',
-        connecting: 'Bağlanıyor…',
-        listening: '🎤 Dinliyor',
-        thinking: '💭 Düşünüyor',
-        speaking: '🔊 Konuşuyor',
-        error: 'Hata'
-    };
-
     function init() {
         const voiceBtn = document.getElementById('voiceBtn');
-        const statusEl = document.getElementById('voiceStatus');
-        const statusText = document.getElementById('voiceStatusText');
-        const interruptBtn = document.getElementById('voiceInterruptBtn');
-        if (!voiceBtn || !statusEl || !statusText) return;
+        if (!voiceBtn) return;
 
         let client = null;
+        let overlayOpen = false;
+        let connectedOnce = false;
+        let closeTimer = null;
 
-        const setStatus = (state, msg) => {
-            statusEl.hidden = (state === 'idle' || state === 'error');
-            statusText.textContent = msg || (STATE_LABELS[state] || state);
+        const call = (type, a, b) => { try { window.chatApp?.voiceCall?.(type, a, b); } catch { } };
+
+        const setStatus = (state) => {
             const isActive = state !== 'idle' && state !== 'error';
             voiceBtn.classList.toggle('active', isActive && client !== null);
+            call('state', state);
+        };
+
+        const openOverlay = () => {
+            clearTimeout(closeTimer);
+            closeTimer = null;
+            overlayOpen = true;
+            connectedOnce = false;
+            call('open');
+            window.voiceOrb?.start(() => client?.getLevels?.() || { input: 0, output: 0 });
+            // Erişilebilirlik: odak diyaloğa taşınır (Bitir düğmesi), kapanınca 🎙'ye döner.
+            setTimeout(() => document.querySelector('.vc-btn--end')?.focus(), 60);
+        };
+
+        const closeOverlay = () => {
+            clearTimeout(closeTimer);
+            closeTimer = null;
+            if (!overlayOpen) return;
+            overlayOpen = false;
+            window.voiceOrb?.stop();
+            call('close');
+            try { voiceBtn.focus(); } catch { }
+        };
+
+        const closeSoon = (ms) => {
+            clearTimeout(closeTimer);
+            closeTimer = setTimeout(closeOverlay, ms);
         };
 
         // ─── Sesli görüşme — gpt-realtime modeli doğrudan konuşur, yalnızca okuma tool'ları ───
@@ -152,13 +170,19 @@
 
             // ── Client ──
 
-            client = new RealtimeClient({
+            openOverlay();
+            let me = null;   // bu çağrının istemcisi — eski istemcinin geç olayları yenisini silmesin
+
+            client = me = new RealtimeClient({
                 baseUrl: app?.api?.baseUrl || '',
                 sessionId,
                 endpoint: '/chat/realtime-native',
                 callbacks: {
                     state: ({ state }) => setStatus(state),
                     connected: ({ sessionId: sid, tools }) => {
+                        connectedOnce = true;
+                        call('connected');
+                        playTone('connect');
                         if (sid && app?.api && !app.api.sessionId) {
                             app.api.setSession(sid);
                             try { app.refreshSessionList?.(); } catch { }
@@ -166,11 +190,15 @@
                         console.info('[RealtimeNative] connected, tools:', tools);
                     },
 
+                    muted: ({ muted }) => call('muted', muted ? 'true' : 'false'),
+                    speech_started: () => call('speech_started'),
+
                     // ── Kullanıcı konuşmayı bitirdi ──
                     // Transcript daha gelmeden placeholder user bubble açıyoruz.
                     // Bot bubble'ı daha sonra (assistant_text_delta ile) oluşacağı
                     // için DOM sırası: user placeholder → bot bubble. Doğru.
                     speech_stopped: ({ itemId }) => {
+                        call('speech_stopped');
                         if (!app?.ui) return;
                         if (itemId) {
                             // Hiç metin almamış önceki yer tutucular gürültü/sessizlikten kalan
@@ -191,6 +219,7 @@
                     // ── Canlı altyazı parçası ──
                     user_transcript_delta: ({ itemId, text }) => {
                         if (!itemId || !text || !app?.ui) return;
+                        call('user_delta', itemId, text);
                         const entry = ensureUserBubble(itemId);
                         entry.text += text;
                         if (!entry.timer) entry.timer = setTimeout(() => flushLive(entry), LIVE_FLUSH_MS);
@@ -199,6 +228,7 @@
                     // ── Kullanıcı transcript'i geldi ──
                     user_transcript: ({ itemId, text }) => {
                         if (!text || !app?.ui) return;
+                        call('user_final', itemId || null, text);
 
                         // 0) Kimlikli balon (canlı altyazı ya da speech_stopped yer tutucusu):
                         //    SON METİNLE doldur — parçaların birleşimiyle değil.
@@ -224,14 +254,16 @@
 
                     // ── Tool call ──
                     tool_call: ({ name, arguments: args }) => {
+                        call('tool_call', name, TOOL_LABELS[name] || name);
                         ensureAssistantBubble();
                         showToolChip(name);
                     },
-                    tool_result: ({ name }) => completeToolChip(name),
+                    tool_result: ({ name }) => { call('tool_result', name); completeToolChip(name); },
 
                     // ── Asistan metin delta ──
                     assistant_text_delta: ({ text }) => {
                         if (!text) return;
+                        call('assistant_delta', text);
                         ensureAssistantBubble();
                         assistantText += text;
                         if (app?.ui?.appendResponseChunk) {
@@ -241,6 +273,7 @@
 
                     // Tam metin fallback
                     assistant_text: ({ text }) => {
+                        if (text && !assistantText) call('assistant_delta', text);
                         if (text && !assistantText && assistantBubble && app?.ui?.appendResponseChunk) {
                             try { app.ui.appendResponseChunk(assistantBubble, text); } catch { }
                         }
@@ -250,6 +283,7 @@
                     // DİKKAT: response_done, user transcript'ten HER ZAMAN ÖNCE gelir.
                     // Bu yüzden burada pendingUserBubble'a DOKUNMUYORUZ.
                     response_done: () => {
+                        call('response_done');
                         finalizeAssistantBubble();
                     },
 
@@ -261,25 +295,35 @@
                         const label = reason === 'idle_timeout'
                             ? 'Görüşme sessizlik nedeniyle sonlandırıldı.'
                             : 'Görüşme sonlandırıldı.';
-                        setStatus('idle', label);
-                        setTimeout(() => setStatus('idle'), 3000);
+                        call('ended', label);
+                        playTone('end');
+                        setStatus('idle');
+                        closeSoon(1500);
                         // client.stop() zaten realtime-client.js tarafında çağrılıyor
                         client = null;
                     },
 
                     error: ({ message }) => {
                         console.warn('RealtimeNative error:', message);
-                        setStatus('error', '⚠ ' + (message || 'Hata'));
-                        setTimeout(() => setStatus('idle'), 3000);
                         removePendingUserBubble();
                         settleAllUserBubbles();
                         finalizeAssistantBubble();
+                        // Başlatma hatasını launchClient gösterir — burada kapanış zamanlanmaz.
+                        if (!connectedOnce || client !== me) return;
+                        call('error', '⚠ ' + (message || 'Bağlantı koptu.'));
+                        setStatus('idle');
+                        client = null;
+                        closeSoon(2000);
                     },
                     close: () => {
                         removePendingUserBubble();
                         settleAllUserBubbles();
                         finalizeAssistantBubble();
+                        if (client !== me) return;   // kullanıcı bitirdi ya da yeni görüşme başladı
                         setStatus('idle');
+                        // Bağlantı beklenmedik kapandıysa (bitir/hata/sonlandırma dışında) ekranı kapat.
+                        if (overlayOpen && !closeTimer) { playTone('end'); closeOverlay(); }
+                        client = null;
                     }
                 }
             });
@@ -293,23 +337,51 @@
             } catch (err) {
                 client = null;
                 const msg = (err?.name === 'NotAllowedError')
-                    ? 'Mikrofon izni reddedildi.'
+                    ? 'Mikrofon izni reddedildi. Tarayıcı ayarlarından izin verip tekrar deneyin.'
                     : (err?.message || 'Sesli konuşma başlatılamadı.');
-                setStatus('error', '⚠ ' + msg);
-                setTimeout(() => setStatus('idle'), 3000);
+                call('error', '⚠ ' + msg);
+                setStatus('idle');
             }
         };
 
         const stop = () => {
+            const wasActive = client !== null;
             if (client) {
                 client.stop();
                 client = null;
             }
             setStatus('idle');
+            if (wasActive) playTone('end');
+            closeOverlay();
         };
 
         // Blazor tarafından çağrılabilir (ör. human_joined → sesli kanalı kapat)
         window.__stopVoice = stop;
+
+        // VoiceCallOverlay düğmeleri (Chat.razor → JS). İstemci tek doğruluk kaynağı: sessiz durumu
+        // istemciden 'muted' olayıyla geri döner.
+        window.__voiceCall = {
+            toggleMute: () => { if (client) client.setMuted(!client.muted); },
+            end: () => stop(),
+            interrupt: () => { if (client) client.interrupt(); },
+            retry: () => { if (client) return; startVoice(); }
+        };
+
+        // Klavye: ekran açıkken Space sessize al, Esc bitir. Space'in varsayılanı (odaktaki düğmeyi
+        // tıklama) hem keydown hem keyup'ta engellenir — aksi hâlde odak bir düğmedeyken iki kez
+        // tetiklenirdi.
+        const isTyping = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+        document.addEventListener('keydown', (e) => {
+            if (!overlayOpen || isTyping(e.target)) return;
+            if (e.key === 'Escape') { e.preventDefault(); stop(); }
+            else if (e.key === ' ' || e.code === 'Space') {
+                e.preventDefault();
+                if (!e.repeat) window.__voiceCall.toggleMute();
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            if (overlayOpen && (e.key === ' ' || e.code === 'Space') && !isTyping(e.target)) e.preventDefault();
+        });
 
         // Sesli butonu — açıksa kapatır, kapalıysa başlatır
         voiceBtn.addEventListener('click', () => {
@@ -317,14 +389,7 @@
             else startVoice();
         });
 
-        if (interruptBtn) {
-            interruptBtn.addEventListener('click', () => {
-                if (client) client.interrupt();
-            });
-        }
-
         window.addEventListener('beforeunload', stop);
-        setStatus('idle');
     }
 
     // Sesli modda chip etiketleri — kullanıcıya teknik isim yerine dostça gösterilir
@@ -343,6 +408,29 @@
         complaint_registration_tool: 'Şikayet kaydı onaya gönderiliyor',
         human_handoff_tool: 'Temsilci talebi oluşturuluyor'
     };
+
+    // Kısa görüşme sesleri — dosya yok, Web Audio ile üretilir. Kısık seviye; tarayıcı engellerse sessizce geçer.
+    let toneCtx = null;
+    function playTone(kind) {
+        try {
+            toneCtx = toneCtx || new (window.AudioContext || window.webkitAudioContext)();
+            const notes = kind === 'connect' ? [660, 880] : [660, 440];
+            const t0 = toneCtx.currentTime;
+            notes.forEach((freq, i) => {
+                const osc = toneCtx.createOscillator();
+                const gain = toneCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                const start = t0 + i * 0.12;
+                gain.gain.setValueAtTime(0.0001, start);
+                gain.gain.exponentialRampToValueAtTime(0.06, start + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.11);
+                osc.connect(gain).connect(toneCtx.destination);
+                osc.start(start);
+                osc.stop(start + 0.12);
+            });
+        } catch { /* ses çalınamazsa görüşme etkilenmez */ }
+    }
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

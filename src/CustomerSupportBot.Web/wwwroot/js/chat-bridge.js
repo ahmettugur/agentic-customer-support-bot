@@ -32,6 +32,11 @@ window.__chatSetup = function (ref, apiBase, authToken) {
             },
             resetSession: function () { this.sessionId = null; }
         },
+        // Sesli görüşme ekranı (VoiceCallOverlay) — olaylar sırayla .NET'e gider.
+        voiceCall: function (type, a, b) {
+            ref.invokeMethodAsync('VoiceCallEvent', type,
+                a === undefined ? null : a, b === undefined ? null : b).catch(function () { });
+        },
         // Native sesli modun (realtime-native) balonları. #messages Blazor'un render
         // ağacıdır: eskiden buraya ham DOM düğümleri ekleniyordu — Blazor onları bilmediği için
         // "yeni sohbet"te silinmiyor, sonraki render'larda Blazor'un kendi düğümleriyle sırası
