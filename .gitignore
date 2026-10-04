@@ -452,3 +452,5 @@ FodyWeavers.xsd
 # docker compose gizli değerleri (şablon: deploy/.env.example)
 .env
 !.env.example
+# superpowers çalışma alanı (tasarım maketleri, plan defterleri) — yerel
+.superpowers/
