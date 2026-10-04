@@ -56,7 +56,15 @@
             //  - response_done'da SİLMİYORUZ (transcript henüz gelmemiş olabilir!)
             //  - Yalnızca user_transcript ile doldurulur
             //  - Yalnızca yeni bir speech_stopped (yeni tur) veya error/close silebilir
+            //
+            // CANLI ALTYAZI: sunucu olayları konuşma kimliği (itemId) taşır. Balonlar bu kimliğe
+            // göre tutulur (userBubbles); gpt-live-transcribe'da parçalar konuşma SÜRERKEN
+            // gelir, balon konuşma bitmeden açılır ve metin akar. Son transkript gelince balon
+            // birleşik parçalarla değil son metinle doldurulur — sağlayıcı parçaları sonradan
+            // düzeltebilir. Kimlik taşımayan olaylar için pendingUserBubble (eski yol) kalır.
             let pendingUserBubble = null;
+            const userBubbles = new Map();   // itemId → { handle, text, timer }
+            const LIVE_FLUSH_MS = 100;       // parçaları toplayıp tek seferde Blazor'a gönder
 
             // ── Helpers ──
 
@@ -65,6 +73,37 @@
                 if (!pendingUserBubble) return;
                 try { app?.ui?.removeMessage(pendingUserBubble); } catch { }
                 pendingUserBubble = null;
+            };
+
+            // itemId'ye ait balonu döndürür; yoksa yer tutucu olarak açar.
+            const ensureUserBubble = (itemId) => {
+                let entry = userBubbles.get(itemId);
+                if (!entry) {
+                    entry = { handle: app.ui.addMessage('user', '…', { placeholder: true }), text: '', timer: null };
+                    userBubbles.set(itemId, entry);
+                }
+                return entry;
+            };
+
+            const flushLive = (entry) => {
+                entry.timer = null;
+                if (!entry.text) return;
+                try { app?.ui?.setMessageText(entry.handle, entry.text, true); } catch { }
+            };
+
+            // Konuşma bitti ama son transkript gelmeyecek (hata/kapanış): metni olan balon
+            // canlı stilinden çıkarılır, boş yer tutucu silinir.
+            const settleUserBubble = (itemId, entry) => {
+                if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
+                try {
+                    if (entry.text) app?.ui?.setMessageText(entry.handle, entry.text, false);
+                    else app?.ui?.removeMessage(entry.handle);
+                } catch { }
+                userBubbles.delete(itemId);
+            };
+
+            const settleAllUserBubbles = () => {
+                for (const [id, entry] of [...userBubbles]) settleUserBubble(id, entry);
             };
 
             const fillPendingUserBubble = (text) => {
@@ -131,17 +170,46 @@
                     // Transcript daha gelmeden placeholder user bubble açıyoruz.
                     // Bot bubble'ı daha sonra (assistant_text_delta ile) oluşacağı
                     // için DOM sırası: user placeholder → bot bubble. Doğru.
-                    speech_stopped: () => {
+                    speech_stopped: ({ itemId }) => {
                         if (!app?.ui) return;
+                        if (itemId) {
+                            // Hiç metin almamış önceki yer tutucular gürültü/sessizlikten kalan
+                            // hayaletlerdir — silinir. Metni olanlar KALIR: son transkriptleri
+                            // kendi kimlikleriyle sonradan gelebilir.
+                            for (const [id, entry] of [...userBubbles]) {
+                                if (id !== itemId && !entry.text) settleUserBubble(id, entry);
+                            }
+                            ensureUserBubble(itemId);   // canlı parçalarla zaten açıldıysa aynısı
+                            return;
+                        }
                         // Önceki tur transcript gelmeden yeni tur başladıysa eski
                         // placeholder'ı temizle (gürültü/sessizlikten kalan hayalet).
                         removePendingUserBubble();
                         pendingUserBubble = app.ui.addMessage('user', '…', { placeholder: true });
                     },
 
+                    // ── Canlı altyazı parçası ──
+                    user_transcript_delta: ({ itemId, text }) => {
+                        if (!itemId || !text || !app?.ui) return;
+                        const entry = ensureUserBubble(itemId);
+                        entry.text += text;
+                        if (!entry.timer) entry.timer = setTimeout(() => flushLive(entry), LIVE_FLUSH_MS);
+                    },
+
                     // ── Kullanıcı transcript'i geldi ──
-                    user_transcript: ({ text }) => {
+                    user_transcript: ({ itemId, text }) => {
                         if (!text || !app?.ui) return;
+
+                        // 0) Kimlikli balon (canlı altyazı ya da speech_stopped yer tutucusu):
+                        //    SON METİNLE doldur — parçaların birleşimiyle değil.
+                        const live = itemId ? userBubbles.get(itemId) : null;
+                        if (live) {
+                            if (live.timer) { clearTimeout(live.timer); live.timer = null; }
+                            try { app.ui.setMessageText(live.handle, text, false); } catch { }
+                            userBubbles.delete(itemId);
+                            app.ui.scrollToBottom();
+                            return;
+                        }
 
                         // 1) Placeholder var → metnini doldur. Sıralama zaten doğru.
                         if (fillPendingUserBubble(text)) {
@@ -188,6 +256,7 @@
                     // ── Görüşme nazikçe sonlandırıldı (end_conversation tool veya idle timeout) ──
                     conversation_ended: ({ reason }) => {
                         removePendingUserBubble();
+                        settleAllUserBubbles();
                         finalizeAssistantBubble();
                         const label = reason === 'idle_timeout'
                             ? 'Görüşme sessizlik nedeniyle sonlandırıldı.'
@@ -203,10 +272,12 @@
                         setStatus('error', '⚠ ' + (message || 'Hata'));
                         setTimeout(() => setStatus('idle'), 3000);
                         removePendingUserBubble();
+                        settleAllUserBubbles();
                         finalizeAssistantBubble();
                     },
                     close: () => {
                         removePendingUserBubble();
+                        settleAllUserBubbles();
                         finalizeAssistantBubble();
                         setStatus('idle');
                     }

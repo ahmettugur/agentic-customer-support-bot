@@ -115,6 +115,16 @@ Artık JS yalnızca bir **tutamaç** (`{ id }`) üretir ve değişiklikleri .NET
 çağrıları sırayla işlenir. Gerçek mikrofonla uçtan uca test edilmedi; tutamaç köprüsü tarayıcıda
 `chatApp.ui` doğrudan çağrılarak doğrulandı.
 
+### Canlı altyazı (kullanıcı balonu)
+
+`realtime-ui.js` kullanıcı balonlarını konuşma kimliğine (`itemId`) göre tutar. `user_transcript_delta`
+parçaları geldikçe balon — konuşma bitmeden — yer tutucu stilinde açılır ve metin akar (güncellemeler
+~100 ms'lik pencerede toplanıp tek seferde Blazor'a gönderilir). Son transkript (`user_transcript`)
+gelince balon birleşik parçalarla değil **son metinle** doldurulur. Hiç metin almamış yer tutucular
+yeni bir konuşma başlayınca silinir (gürültü); metni olanlar kendi son transkriptlerini bekler.
+Hata/kapanışta metni olan balon canlı stilinden çıkarılır, boş olan silinir. Kimlik taşımayan
+olaylarda eski tek yer tutucu davranışı sürer.
+
 ### Tek sesli buton
 
 Giriş satırında tek bir mikrofon butonu (`#voiceBtn`) vardır; sesli görüşmeyi

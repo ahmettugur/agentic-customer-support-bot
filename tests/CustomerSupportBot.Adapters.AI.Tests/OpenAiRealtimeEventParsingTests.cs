@@ -42,4 +42,26 @@ public class OpenAiRealtimeEventParsingTests
         evt.ItemId.Should().Be("item_U1");
         evt.ErrorMessage.Should().Be("audio unintelligible");
     }
+
+    [Fact]
+    public void TranscriptionDelta_CarriesItemIdAndText()
+    {
+        var evt = OpenAiRealtimeClientAdapter.ParseEvent(
+            """{"type":"conversation.item.input_audio_transcription.delta","item_id":"item_U1","content_index":0,"delta":"Siparişim "}""");
+
+        evt!.EventType.Should().Be(RealtimeServerEventType.InputTranscriptDelta);
+        evt.ItemId.Should().Be("item_U1");
+        evt.TextDelta.Should().Be("Siparişim ");
+    }
+
+    [Theory]
+    [InlineData("input_audio_buffer.speech_started")]
+    [InlineData("input_audio_buffer.speech_stopped")]
+    public void SpeechBoundaries_CarryItemId(string type)
+    {
+        var evt = OpenAiRealtimeClientAdapter.ParseEvent(
+            $$"""{"type":"{{type}}","audio_start_ms":1000,"item_id":"item_U1"}""");
+
+        evt!.ItemId.Should().Be("item_U1");
+    }
 }

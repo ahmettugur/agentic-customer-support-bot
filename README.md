@@ -209,7 +209,7 @@ destekler; OpenAI'ye gönderilecek alanları adaptör model adından kendisi se�
 |---|---|---|---|
 | `gpt-4o-transcribe` *(varsayılan)* | Önceki nesil, kanıtlanmış | — | — |
 | `gpt-transcribe` | **Önerilen aday:** tamamlanmış turu yüksek doğrulukla yazar; sayılar ve kısa cümlelerde daha iyi olduğu belirtiliyor | `TranscriptionKeywords` | 0,0045 $ |
-| `gpt-live-transcribe` | Konuşurken anlık yazar (canlı altyazı). Kod anlık parçaları henüz işlemiyor — bugün `gpt-transcribe`'dan fazlasını vermez | `TranscriptionKeywords`, `TranscriptionDelay` (`minimal`…`xhigh`) | 0,017 $ |
+| `gpt-live-transcribe` | Konuşurken anlık yazar: kullanıcı balonunda **canlı altyazı** (diğer modellerde metin konuşma bittikten sonra görünür) | `TranscriptionKeywords`, `TranscriptionDelay` (`minimal`…`xhigh`) | 0,017 $ |
 
 - Yeni modellerin (`gpt-transcribe`, `gpt-live-transcribe`) Türkçe kalitesi canlı bir sesli görüşmede
   doğrulanmadı; geçmeden önce kısa bir deneme yapın.

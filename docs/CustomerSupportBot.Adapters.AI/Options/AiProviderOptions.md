@@ -88,7 +88,7 @@ büyük/küçük harf farkı tanınır):
 |---|---|---|---|---|---|
 | `gpt-4o-transcribe` (+ `gpt-4o-mini-transcribe`, `whisper-1`) | `language: "tr"` | ✓ | — | — | Varsayılan; önceki nesil |
 | `gpt-transcribe` | `languages: ["tr"]` | ✓ | ✓ | — | Tamamlanmış turu yüksek doğrulukla yazar; sayılar/kısa cümleler/gürültüde daha iyi olduğu belirtiliyor |
-| `gpt-live-transcribe` | `languages: ["tr"]` | ✓ | ✓ | ✓ | Konuşurken anlık yazar (canlı altyazı). Not: kod bugün yalnızca "tamamlandı" olayını işler, anlık parçaları kullanmaz |
+| `gpt-live-transcribe` | `languages: ["tr"]` | ✓ | ✓ | ✓ | Konuşurken anlık yazar — kullanıcı balonunda canlı altyazı. Diğer modeller de parça gönderir ama konuşma bittikten sonra |
 
 Yeni nesil modellere `language` gönderilmez — sağlayıcı `language` ile `languages`'ın birlikte
 gönderilmesini reddeder. Bilinmeyen bir model adı eski nesil biçimine düşer. Modele uymayan bir

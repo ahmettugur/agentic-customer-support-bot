@@ -18,7 +18,9 @@ public sealed record RealtimeServerEvent(RealtimeServerEventType EventType)
     public string? ToolArguments { get; init; }
 
     /// <summary>
-    /// Olayın ait olduğu kullanıcı ses öğesinin kimliği (<see cref="RealtimeServerEventType.InputAudioCommitted"/>,
+    /// Olayın ait olduğu kullanıcı ses öğesinin kimliği (<see cref="RealtimeServerEventType.SpeechStarted"/>,
+    /// <see cref="RealtimeServerEventType.SpeechStopped"/>, <see cref="RealtimeServerEventType.InputAudioCommitted"/>,
+    /// <see cref="RealtimeServerEventType.InputTranscriptDelta"/>,
     /// <see cref="RealtimeServerEventType.InputTranscriptCompleted"/>,
     /// <see cref="RealtimeServerEventType.InputTranscriptFailed"/>). Transkript yanıt olaylarından
     /// önce de sonra da gelebildiği için turu eşleştirmenin tek güvenilir anahtarı budur.
@@ -33,6 +35,12 @@ public enum RealtimeServerEventType
     /// <summary>Kullanıcı sesi bir konuşma öğesi olarak işlendi (<c>ItemId</c> taşır).</summary>
     InputAudioCommitted,
     InputTranscriptCompleted,
+    /// <summary>
+    /// Kullanıcı konuşmasının anlık transkript parçası (<c>ItemId</c> + <c>TextDelta</c>). Yalnızca
+    /// ekranda canlı altyazı içindir; parçaların birleşimi son metne eşit olmak zorunda değildir —
+    /// kalıcı kayıt her zaman <see cref="InputTranscriptCompleted"/>'tan yapılır.
+    /// </summary>
+    InputTranscriptDelta,
     /// <summary>Kullanıcı sesinin transkripsiyonu başarısız oldu (<c>ItemId</c> taşır).</summary>
     InputTranscriptFailed,
     ResponseCreated,

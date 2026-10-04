@@ -217,6 +217,10 @@
                 case 'user_transcript':
                     this._emit('user_transcript', msg);
                     break;
+                case 'user_transcript_delta':
+                    // Canlı altyazı — kullanıcı konuşurken gelen transkript parçası (yalnızca ekran)
+                    this._emit('user_transcript_delta', msg);
+                    break;
                 case 'assistant_text':
                     this._setState('speaking');
                     this._emit('assistant_text', msg);

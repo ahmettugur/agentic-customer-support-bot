@@ -53,8 +53,9 @@ model kendi başına dinler, düşünür, function-call yapar ve sesle cevap ür
 `gpt-4o-transcribe` (eski nesil, `language`), `gpt-transcribe` ve `gpt-live-transcribe` (yeni nesil,
 `languages` + `keywords`; canlı modelde `delay`). Model appsettings'ten değiştirilir; uygulanamayan
 ayarlar için uyarı, adaptör her bağlantıda yeniden oluşturulduğu hâlde süreç başına bir kez loglanır.
-Canlı modelin anlık parça olayları (`…input_audio_transcription.delta`) `ParseEvent`'te yok sayılır;
-yalnızca "tamamlandı" olayı işlenir.
+Anlık parça olayları (`…input_audio_transcription.delta`) `InputTranscriptDelta` olarak iletilir —
+yalnızca ekrandaki canlı altyazı içindir; kalıcı kayıt "tamamlandı" olayından yapılır (parçaların
+birleşimi son metne eşit olmak zorunda değil).
 
 **Sistem talimatı bir prompt dosyasıdır:** `Prompts/services/realtime-voice.md`
 (`IPromptRepository`, anahtar `services/realtime-voice`). Eskiden bu sınıfta gömülü bir sabitti
@@ -115,8 +116,9 @@ metoduna taşınmıştır.
 
 | OpenAI event tipi | `RealtimeServerEventType` |
 |---|---|
-| `input_audio_buffer.speech_started` | `SpeechStarted` |
-| `input_audio_buffer.speech_stopped` | `SpeechStopped` |
+| `input_audio_buffer.speech_started` | `SpeechStarted` (+ `ItemId`) |
+| `input_audio_buffer.speech_stopped` | `SpeechStopped` (+ `ItemId`) |
+| `conversation.item.input_audio_transcription.delta` | `InputTranscriptDelta` (+ `ItemId`, `TextDelta`) — canlı altyazı |
 | `input_audio_buffer.committed` | `InputAudioCommitted` (+ `ItemId`) |
 | `response.created` | `ResponseCreated` |
 | `conversation.item.input_audio_transcription.completed` | `InputTranscriptCompleted` (+ `Transcript`, `ItemId`) — üç transkripsiyon ailesi de aynı olayı gönderir |

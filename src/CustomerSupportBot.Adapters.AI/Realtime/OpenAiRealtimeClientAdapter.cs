@@ -210,10 +210,12 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
         return node["type"]?.GetValue<string>() switch
         {
             "input_audio_buffer.speech_started" =>
-                new RealtimeServerEvent(RealtimeServerEventType.SpeechStarted),
+                new RealtimeServerEvent(RealtimeServerEventType.SpeechStarted)
+                { ItemId = node["item_id"]?.GetValue<string>() },
 
             "input_audio_buffer.speech_stopped" =>
-                new RealtimeServerEvent(RealtimeServerEventType.SpeechStopped),
+                new RealtimeServerEvent(RealtimeServerEventType.SpeechStopped)
+                { ItemId = node["item_id"]?.GetValue<string>() },
 
             "input_audio_buffer.committed" =>
                 new RealtimeServerEvent(RealtimeServerEventType.InputAudioCommitted)
@@ -227,6 +229,15 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
                 {
                     Transcript = node["transcript"]?.GetValue<string>(),
                     ItemId = node["item_id"]?.GetValue<string>()
+                },
+
+            // Canlı altyazı: konuşma sürerken (gpt-live-transcribe) ya da tur bitince (diğer
+            // modeller) gelen parça. Yalnızca ekranda gösterilir, geçmişe yazılmaz.
+            "conversation.item.input_audio_transcription.delta" =>
+                new RealtimeServerEvent(RealtimeServerEventType.InputTranscriptDelta)
+                {
+                    ItemId = node["item_id"]?.GetValue<string>(),
+                    TextDelta = node["delta"]?.GetValue<string>()
                 },
 
             "conversation.item.input_audio_transcription.failed" =>

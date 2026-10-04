@@ -76,6 +76,17 @@ başka bir müşterinin sipariş geçmişini isteyebilirdi (impersonation açı�
 müşterinin ne dediği görünmüyordu. Geçmişe "(sesli)" gibi bir placeholder yazmak yerine gerçek
 transkript kullanılır.
 
+### Canlı altyazı
+
+Sağlayıcının anlık transkript parçaları (`InputTranscriptDelta`) tarayıcıya
+`user_transcript_delta { itemId, text }` olarak iletilir. Parçalar **yalnızca konuşan kişinin
+ekranı içindir**: geçmişe, duygu analizine, eşleştiriciye, girdi filtresine ya da onay kaydına
+girmez. Sağlayıcı parçaları sonradan düzeltebileceği için birleşimleri son metne eşit olmak zorunda
+değildir; kalıcı kayıt her zaman tamamlanmış transkriptten yapılır. `speech_started`,
+`speech_stopped` ve `user_transcript` olayları da konuşma kimliğini (`itemId`) taşır; arayüz
+balonları bu kimliğe göre tutar. Gerçek "konuşurken yazı" `gpt-live-transcribe` ile görülür; diğer
+modeller parçaları konuşma bittikten sonra gönderir.
+
 ### Transkript ↔ yanıt eşleştirmesi (`VoiceTurnPairer`)
 
 OpenAI Realtime'da kullanıcı sesinin transkripsiyonu yanıt üretimiyle paralel çalışır; transkript

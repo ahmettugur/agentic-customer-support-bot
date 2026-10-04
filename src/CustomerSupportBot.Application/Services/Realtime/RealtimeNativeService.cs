@@ -266,11 +266,22 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                         break;
 
                     case RealtimeServerEventType.SpeechStarted:
-                        await channel.SendJsonAsync(new { type = "speech_started" }, ct);
+                        await channel.SendJsonAsync(new { type = "speech_started", itemId = evt.ItemId }, ct);
                         break;
 
                     case RealtimeServerEventType.SpeechStopped:
-                        await channel.SendJsonAsync(new { type = "speech_stopped" }, ct);
+                        await channel.SendJsonAsync(new { type = "speech_stopped", itemId = evt.ItemId }, ct);
+                        break;
+
+                    case RealtimeServerEventType.InputTranscriptDelta:
+                        // Canlı altyazı: yalnızca konuşan kişinin ekranına gider. Geçmişe, duygu
+                        // analizine, eşleştiriciye ya da onay kaydına GİRMEZ — parçaların birleşimi
+                        // son metne eşit olmak zorunda değil; kalıcı kayıt tamamlanmış transkriptten.
+                        if (!string.IsNullOrEmpty(evt.TextDelta))
+                        {
+                            await channel.SendJsonAsync(
+                                new { type = "user_transcript_delta", itemId = evt.ItemId, text = evt.TextDelta }, ct);
+                        }
                         break;
 
                     case RealtimeServerEventType.InputTranscriptCompleted:
@@ -289,7 +300,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                         {
                             _logger.LogInformation("RealtimeNative: input guard reject session={Sid}", session.SessionId);
                             await _client.SendInterruptAsync(ct);
-                            await channel.SendJsonAsync(new { type = "user_transcript", text = transcript }, ct);
+                            await channel.SendJsonAsync(new { type = "user_transcript", itemId = evt.ItemId, text = transcript }, ct);
                             await channel.SendJsonAsync(
                                 new { type = "error", message = guard.RejectionReason ?? "Mesaj işlenemedi." }, ct);
                             await PersistTurnsAsync(channel, session, turns.TranscriptRejected(evt.ItemId), ct);
@@ -297,7 +308,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                         }
 
                         Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
-                        await channel.SendJsonAsync(new { type = "user_transcript", text = transcript }, ct);
+                        await channel.SendJsonAsync(new { type = "user_transcript", itemId = evt.ItemId, text = transcript }, ct);
                         userTranscriptSent = true;
                         lastUserTranscript = transcript;
                         foreach (var delta in bufferedAssistantDeltas)
