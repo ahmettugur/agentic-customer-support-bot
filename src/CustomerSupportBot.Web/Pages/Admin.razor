@@ -848,6 +848,13 @@
                                 @RenderDist("Faz Dağılımı", _analytics.PhaseDistribution)
                             </div>
 
+                            <!-- Konuşma kapanışı: temsilcinin kapattığı canlı sohbetler -->
+                            <div class="analytics-charts">
+                                @RenderDist("Kapanış Nedenleri", _analytics.ClosingReasons?
+                                    .GroupBy(r => r.Label).ToDictionary(g => g.Key, g => g.Sum(r => r.Count)))
+                                @RenderDist("Sık Etiketler", _analytics.TopTags?.ToDictionary(t => t.Tag, t => t.Count))
+                            </div>
+
                             <!-- Charts Row 3: Recent ratings -->
                             <div class="analytics-charts">
                                 @RenderRecentRatings(_analytics.RecentRatings)
@@ -1171,6 +1178,60 @@
                 <button type="button" class="btn-secondary" @onclick="CancelPrompt">İptal</button>
                 <button type="button" class="btn-primary"   @onclick="ConfirmPromptAsync"
                         disabled="@(_promptRequired && string.IsNullOrWhiteSpace(_promptInput))">Onayla</button>
+            </footer>
+        </div>
+    </div>
+}
+
+<!-- CLOSE CHAT MODAL (kapanış nedeni / etiketler / not) -->
+@if (_showCloseModal)
+{
+    var requireReason = _closeOptions?.RequireReason ?? false;
+    <div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="close-modal-title"
+         @onclick="() => { if (!_closing) _showCloseModal = false; }" @onkeydown="OnModalKeyDown">
+        <div class="modal modal-prompt" @onclick:stopPropagation>
+            <header class="modal-header">
+                <h3 id="close-modal-title">Sohbeti Bitir</h3>
+                <button type="button" class="btn-icon" @onclick="() => _showCloseModal = false" disabled="@_closing" aria-label="Kapat">✕</button>
+            </header>
+            <div class="modal-body modal-prompt-body close-chat-form">
+                <label class="form-label" for="close-reason">Kapanış nedeni@(requireReason ? " *" : "")</label>
+                <select id="close-reason" class="form-control" @bind="_closeReason" aria-required="@(requireReason ? "true" : "false")">
+                    <option value="">— Seçin —</option>
+                    @foreach (var r in _closeOptions?.Reasons ?? [])
+                    {
+                        <option value="@r.Code">@r.Label</option>
+                    }
+                </select>
+
+                <label class="form-label" for="close-tags">Etiketler <span class="muted small">(virgülle ayırın, en fazla 10)</span></label>
+                <input id="close-tags" type="text" class="form-control" placeholder="ör. kargo, iade"
+                       @bind="_closeTags" @bind:event="oninput" />
+                @if (_closeOptions is { SuggestedTags.Length: > 0 })
+                {
+                    <div class="close-tag-suggestions" aria-label="Sık kullanılan etiketler">
+                        @foreach (var t in _closeOptions.SuggestedTags)
+                        {
+                            <button type="button" class="tag-chip" @onclick="() => AddSuggestedTag(t)">+ @t</button>
+                        }
+                    </div>
+                }
+
+                <label class="form-label" for="close-note">Not <span class="muted small">(isteğe bağlı)</span></label>
+                <textarea id="close-note" class="form-control" rows="3" maxlength="1000"
+                          @bind="_closeNote" @bind:event="oninput"></textarea>
+
+                @if (_closeError is not null)
+                {
+                    <p class="form-error" role="alert">@_closeError</p>
+                }
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn-secondary" @onclick="() => _showCloseModal = false" disabled="@_closing">İptal</button>
+                <button type="button" class="btn-danger" @onclick="ConfirmCloseAsync"
+                        disabled="@(_closing || (requireReason && string.IsNullOrEmpty(_closeReason)))">
+                    @(_closing ? "Kapatılıyor…" : "Sohbeti Bitir")
+                </button>
             </footer>
         </div>
     </div>

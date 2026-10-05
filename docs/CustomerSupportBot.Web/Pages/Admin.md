@@ -144,6 +144,15 @@ profili, açık işler (eskalasyon/bekleyen onay), ilgili bilgi tabanı makalele
 gönderir. Başka bir sohbete geçilir ya da sohbet bitirilirse kart sıfırlanır; geç gelen bir yanıt yanlış
 sohbete yazılmaz. LLM bölümü üretilemezse kart hatayı gösterir, diğer bölümler yine görünür.
 
+## Sohbeti bitir (kapanış nedeni ve etiketler)
+
+Canlı sohbet panelindeki **Sohbeti Bitir** artık doğrudan kapatmaz; bir pencere açar
+(`…/conversation-closing/options`): kapanış nedeni (zorunluysa `*`; seçilmeden düğme pasif), etiketler
+(virgülle; sık kullanılanlar tıklanarak eklenir) ve not. Onay `…/chat-sessions/{sid}/close`'a gider.
+Sunucu doğrulamada reddederse pencere açık kalır ve hata gösterilir — sohbet kapanmamıştır. Kapandıysa
+panel sıfırlanır; kayıt yazılamadıysa uyarı bildirimi çıkar. Analitik sekmesinde **Kapanış Nedenleri**
+ve **Sık Etiketler** kartları.
+
 ## Temsilci durumu
 
 **Temsilci:** başlıkta durum seçici (Çevrimiçi / Uzakta / Çevrimdışı; nokta rengi geçerli durumu

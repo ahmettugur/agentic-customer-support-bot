@@ -2093,3 +2093,19 @@ code.at-val {
 .presence-load { color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
 .presence-strip-note { color: #b45309; }
 [data-theme="dark"] .presence-strip-note { color: #fcd34d; }
+
+/* ── Sohbeti bitir: kapanış nedeni / etiketler / not ─────────────────────── */
+.close-chat-form { display: flex; flex-direction: column; gap: 6px; }
+.close-chat-form .form-label { margin-top: 8px; }
+.close-chat-form .form-label:first-child { margin-top: 0; }
+.close-tag-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-chip {
+    padding: 2px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+}
+.tag-chip:hover, .tag-chip:focus-visible { color: var(--color-text); border-color: var(--color-primary); }

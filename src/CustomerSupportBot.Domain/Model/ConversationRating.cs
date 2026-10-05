@@ -86,5 +86,10 @@ public class AnalyticsDashboard
     public int SessionsWithCost { get; set; }
     public decimal AverageCostPerConversationUsd { get; set; }
     public decimal MedianCostPerConversationUsd { get; set; }
+
+    // ─── Konuşma kapanışı (temsilcinin kapattığı canlı sohbetler) ───
+    /// <summary>Çoktan aza; eşitlikte yapılandırılmış sıra, listeden kaldırılmış nedenler en sonda.</summary>
+    public List<ClosingReasonCount> ClosingReasons { get; set; } = new();
+    public List<TagUsage> TopTags { get; set; } = new();
 }
 

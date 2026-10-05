@@ -158,6 +158,21 @@ kullanıcının turu biter. Bu yüzden "approval bekleme süresi" diye bir kavra
 
 `Enabled = false` yaparsanız **tüm HITL mekanizması** bypass edilir (klasik bot davranışı). Detay → [CustomerSupportBot.Api/Endpoints/AdminAndHitl.md](CustomerSupportBot.Api/Endpoints/AdminAndHitl.md).
 
+### `ConversationClosing`
+
+Temsilcinin canlı sohbeti kapatırken seçtiği nedenler. `Reasons` boş bırakılırsa varsayılan liste kullanılır; yazılırsa varsayılanların **yerine** geçer (birleşmez). Listeden kaldırılan neden eski kayıtlarda kalır, analitikte kod adıyla görünür. Tasarım: [superpowers/specs/2026-10-05-conversation-disposition-design.md](superpowers/specs/2026-10-05-conversation-disposition-design.md).
+
+```jsonc
+"ConversationClosing": {
+  "RequireReason": true,        // panelden kapatırken neden zorunlu
+  "Reasons": [
+    { "Code": "resolved", "Label": "Çözüldü" },
+    { "Code": "follow_up_required", "Label": "Takip gerekiyor" }
+    // …
+  ]
+}
+```
+
 ### `Routing`
 
 Smart Routing & Skills-Based Escalation konfigürasyonu. Bir eskalasyon (`needs_escalation`) oluşturulduğunda `SkillsBasedRouter` reasoning trace + müşteri profili → skill tag çıkarımı yapar ve `IHumanAgentRegistry`'deki adaylar arasında en iyi match'i seçer.

@@ -20,6 +20,7 @@ Tasarım: [docs/superpowers/specs/2026-10-05-data-retention-design.md](../../../
 | `ratings` | Puan ve yorum | Yorum serbest metindir. |
 | `escalations` | Kapanmış eskalasyonlar silinir | **Açık** olanlar silinmez (kuyruk ve yük sayaçları); müşteri metni temizlenir. |
 | `reasoning-traces` | Akıl yürütme izleri | Soru/yanıt metni içerir. |
+| `conversation-dispositions` | Temsilcinin kapanış kayıtları (neden, etiket, not) | Not serbest metindir. Dışa aktarmada oturumun altında yer alır (kapatan temsilcinin adı hariç). |
 | `episodic-memory` | Qdrant episodik kayıtları | Bellek kapalıyken kayıtlı değil. |
 
 Önbellekli depolar silmeden sonra `csbot:privacy:sessions-erased` kanalına yayın yapar; her depo bu

@@ -45,6 +45,19 @@ public class AnalyticsDashboardContractTests
     }
 
     [Fact]
+    public void ClosingReasonsAndTags_ReachThePanel()
+    {
+        var web = RoundTrip(new ServerDashboard
+        {
+            ClosingReasons = [new("resolved", "Çözüldü", 3)],
+            TopTags = [new("kargo", 2)]
+        });
+
+        web.ClosingReasons.Should().ContainSingle().Which.Should().Be(new CustomerSupportBot.Web.Models.ClosingReasonCountItem("resolved", "Çözüldü", 3));
+        web.TopTags.Should().ContainSingle().Which.Should().Be(new CustomerSupportBot.Web.Models.TagUsageItem("kargo", 2));
+    }
+
+    [Fact]
     public void EveryServerField_HasAPanelCounterpart()
     {
         var webNames = typeof(WebDashboard).GetProperties().Select(p => p.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);

@@ -51,7 +51,11 @@ public sealed record ExportedSession(
     DateTime CreatedAt,
     DateTime LastActivity,
     IReadOnlyList<ConversationMessage> Messages,
-    IReadOnlyList<ExportedAttachment> Attachments);
+    IReadOnlyList<ExportedAttachment> Attachments,
+    IReadOnlyList<ExportedDisposition>? Dispositions = null);
+
+/// <summary>Temsilcinin sohbeti kapatırken kaydettiği neden/etiket/not (kapatan temsilcinin adı hariç).</summary>
+public sealed record ExportedDisposition(string ReasonCode, IReadOnlyList<string> Tags, string? Note, DateTime ClosedAt);
 
 /// <summary>Fotoğrafın bilgileri — görüntü verisi dışa aktarmaya konmaz (müşteri sohbette görebilir).</summary>
 public sealed record ExportedAttachment(string Id, string ContentType, string? Description, DateTime CreatedAt, DateTime? SentAt);

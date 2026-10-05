@@ -16,6 +16,7 @@ Bu klasör, Application katmanındaki giden (Outbound) kalıcılık portlarını
 - [PostgresEscalationSink](PostgresEscalationSink.md) ➔ [IEscalationSink](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IEscalationSink.md)
 - [PostgresHumanAgentRegistry](PostgresHumanAgentRegistry.md) ➔ [IHumanAgentRegistry](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IHumanAgentRegistry.md)
 - [PostgresChatBridge](PostgresChatBridge.md) ➔ [IChatBridge](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IChatBridge.md) — Canlı devralma mesaj köprüsü.
+- `PostgresConversationDispositionStore` ➔ `IConversationDispositionStore` + `ISessionDataEraser` (`chat.conversation_dispositions`; etiketler `text[]`, en sık etiketler `unnest` ile sayılır; önbellek yok)
 - `PostgresSavedReplyStore` ➔ `ISavedReplyStore` (`hitl.saved_replies`; önbellek yok, kısayol benzersizliği `ux_saved_replies_shortcut` ile — yarışta `SavedReplyShortcutConflictException`)
 - [PostgresChatModeRegistry](PostgresChatModeRegistry.md) ➔ [IChatModeRegistry](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IChatModeRegistry.md) — Canlı devralma mod (Bot/Human) yönetimi.
 - [PostgresSessionManager](PostgresSessionManager.md) ➔ [ISessionManager](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/ISessionManager.md) — Oturum durumu ve konuşma geçmişi.

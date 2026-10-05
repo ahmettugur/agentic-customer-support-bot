@@ -143,7 +143,9 @@ public sealed record AnalyticsDashboard(
     decimal UnattributedLlmCostUsd,
     int SessionsWithCost,
     decimal AverageCostPerConversationUsd,
-    decimal MedianCostPerConversationUsd
+    decimal MedianCostPerConversationUsd,
+    ClosingReasonCountItem[]? ClosingReasons,
+    TagUsageItem[]? TopTags
 )
 {
     public ApprovalStats ApprovalStats => new(TotalApprovals, ApprovedCount, RejectedCount, ExpiredCount);
@@ -250,6 +252,15 @@ public sealed record LessonProposal(
     // pratikte etkisizdir (LessonMiner.ApproveAsync vektör yazım hatasını yutar).
     string? VectorMemoryId = null
 );
+
+// ─── Konuşma kapanışı ────────────────────────────────────────────────────────
+
+public sealed record ClosingReasonCountItem(string Code, string Label, int Count);
+public sealed record TagUsageItem(string Tag, int Count);
+public sealed record ClosingReasonItem(string Code, string Label);
+
+/// <summary><c>GET …/conversation-closing/options</c>.</summary>
+public sealed record ConversationClosingOptions(bool RequireReason, ClosingReasonItem[] Reasons, string[] SuggestedTags);
 
 // ─── Temsilci durumu ─────────────────────────────────────────────────────────
 

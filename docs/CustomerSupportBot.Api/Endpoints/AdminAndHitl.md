@@ -92,7 +92,9 @@ sohbeti devralması (Live Takeover). `AdminEndpoints` **Admin** rolü için, `Ag
 | `GET /saved-replies?q=` | Hazır yanıtlar (başlığa göre Türkçe sıralı; `q` başlık/metin/kısayolda arar). |
 | `POST /saved-replies` \| `PUT /saved-replies/{id}` \| `DELETE /saved-replies/{id}` | Hazır yanıt yönetimi (`SavedReplyEndpoints`). `body: { title, body, shortcut? }`. Doğrulama hatası 400, aynı kısayol 409, bulunamadı 404. |
 | `POST /chat-sessions/{sid}/takeover` | Session'ı Human moda alır. |
-| `POST /chat-sessions/{sid}/release` | Session'ı Bot moduna döndürür. |
+| `POST /chat-sessions/{sid}/release` | Session'ı Bot moduna döndürür (kapanış kaydı oluşturmaz — programatik bırakma). |
+| `POST /chat-sessions/{sid}/close` | Panelin "Sohbeti Bitir"i (`ConversationClosingEndpoints`): `body: { reason, tags?, note? }` doğrulanır, sonra release akışı çalışır ve kapanış kaydı yazılır. Geçersiz 400 (sohbet kapanmaz), sohbet canlı değilse 404. Kayıt yazılamazsa 200 + `warning`. |
+| `GET /conversation-closing/options` | Kapanış penceresi: `requireReason`, `reasons[{code,label}]`, `suggestedTags` (en sık 10). |
 | `POST /chat-sessions/{sid}/messages` | Admin'in müşteriye yazdığı mesaj. |
 | `GET /chat-sessions/{sid}/subscribe` | SSE — bu session'a gelen müşteri mesajlarını canlı dinler. |
 | `GET /admin` | `/admin.html`'e yönlendirme. |
@@ -113,6 +115,7 @@ Yukarıdakiyle aynı işlerin agent-kapsamlı hâli — route'lar `/agent/...` a
 | `GET /agent/presence` \| `PUT /agent/presence` | Kendi durumum; `body: { presence: "online" \| "away" \| "offline" }`, geçersiz değer 400. |
 | `POST /agent/presence/connect` | Panel açılışı: seçilen durum çevrimdışıysa çevrimiçi yapılır, uzakta ise korunur. |
 | `POST /agent/presence/heartbeat` | Panel açıkken 30 sn'de bir; seçimi değiştirmez. Durum uçlarında bağlı temsilci yoksa 400, temsilci kaydı yoksa 404. |
+| `POST /agent/chat-sessions/{sid}/close` \| `GET /agent/conversation-closing/options` | Admin uçlarıyla aynı; kapatan temsilcinin yükü düşürülür (`linked_agent_id`). |
 | `GET /agent/saved-replies?q=` | Hazır yanıtlar — yalnız okuma (yönetim yalnız Admin). |
 | *(approvals, chat-sessions uçları)* | `AdminEndpoints` ile aynı davranış, `decidedBy`/`humanAgent` alanı JWT'deki `linked_agent_id`'den türetilir. |
 

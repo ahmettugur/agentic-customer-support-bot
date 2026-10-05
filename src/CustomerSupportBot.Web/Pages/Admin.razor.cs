@@ -84,6 +84,15 @@ public partial class Admin
     private Timer?                  _presenceTimer;
     private List<AgentPresenceItem> _agentPresence = [];
 
+    // ── Sohbeti bitir (kapanış nedeni / etiketler / not) ───────────────────────
+    private bool                        _showCloseModal;
+    private bool                        _closing;
+    private ConversationClosingOptions? _closeOptions;
+    private string                      _closeReason = string.Empty;
+    private string                      _closeTags   = string.Empty;
+    private string                      _closeNote   = string.Empty;
+    private string?                     _closeError;
+
     // ── Transcript modal ───────────────────────────────────────────────────────
     private bool                     _showTranscriptModal;
     private string                   _transcriptSubtitle = string.Empty;
@@ -231,6 +240,7 @@ public partial class Admin
             _showPromptModal     = false;
             _showAssignModal     = false;
             _showTranscriptModal = false;
+            if (!_closing) _showCloseModal = false;
         }
     }
 
@@ -363,17 +373,60 @@ public partial class Admin
         await ScrollChatToBottomAsync();
     }
 
+    /// <summary>"Sohbeti Bitir": kapanış penceresini açar — sohbet ancak pencere onaylanınca kapanır.</summary>
     private async Task ReleaseChatAsync()
     {
         if (_openChatSession is null) return;
-        await AdminApi.ReleaseAsync(_openChatSession.SessionId);
+        _closeOptions = await AdminApi.GetClosingOptionsAsync();
+        _closeReason  = string.Empty;
+        _closeTags    = string.Empty;
+        _closeNote    = string.Empty;
+        _closeError   = _closeOptions is null ? "Kapanış seçenekleri yüklenemedi; neden seçmeden kapatmayı deneyebilirsiniz." : null;
+        _showCloseModal = true;
+    }
+
+    private static List<string> SplitTags(string raw) =>
+        raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    private void AddSuggestedTag(string tag)
+    {
+        var tags = SplitTags(_closeTags);
+        if (tags.Contains(tag, StringComparer.OrdinalIgnoreCase)) return;
+        tags.Add(tag);
+        _closeTags = string.Join(", ", tags);
+    }
+
+    private async Task ConfirmCloseAsync()
+    {
+        if (_openChatSession is null || _closing) return;
+        _closing    = true;
+        _closeError = null;
+        try
+        {
+            var (closed, error, warning) = await AdminApi.CloseChatAsync(_openChatSession.SessionId,
+                string.IsNullOrWhiteSpace(_closeReason) ? null : _closeReason, SplitTags(_closeTags),
+                string.IsNullOrWhiteSpace(_closeNote) ? null : _closeNote);
+            if (!closed)
+            {
+                _closeError = error;   // pencere açık kalır, sohbet kapanmadı
+                return;
+            }
+            _showCloseModal = false;
+            await AfterChatClosedAsync();
+            if (warning is not null) Toast.ShowError(warning);
+            else Toast.ShowInfo("Sohbet sonlandırıldı.");
+        }
+        finally { _closing = false; }
+    }
+
+    private async Task AfterChatClosedAsync()
+    {
         StopChatPanel();
         _openChatSession = null;
         ResetAssist();
         _chatMessages    = [];
         _sentimentLabel  = null;
         _activeChats     = await AdminApi.GetActiveChatsAsync();
-        Toast.ShowInfo("Sohbet sonlandırıldı.");
     }
 
     // ── Temsilci asistanı ──────────────────────────────────────────────────────

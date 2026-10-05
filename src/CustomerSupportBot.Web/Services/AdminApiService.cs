@@ -245,13 +245,42 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task ReleaseAsync(string sessionId)
+    // ─── Konuşma kapanışı ───────────────────────────────────────────────────
+
+    public async Task<ConversationClosingOptions?> GetClosingOptionsAsync()
     {
-        var prefix = await PrefixAsync();
-        var response = await http.PostAsJsonAsync($"{prefix}/chat-sessions/{sessionId}/release",
-            new { });
-        response.EnsureSuccessStatusCode();
+        try
+        {
+            var prefix = await PrefixAsync();
+            return await http.GetFromJsonAsync<ConversationClosingOptions>($"{prefix}/conversation-closing/options");
+        }
+        catch { return null; }
     }
+
+    /// <summary>
+    /// Sohbeti kapanış nedeni/etiket/notla kapatır. <c>Error</c> doluysa sohbet kapanmadı (doğrulama ya da
+    /// sohbet canlı değil); <c>Warning</c> doluysa kapandı ama kapanış kaydı yazılamadı.
+    /// </summary>
+    public async Task<(bool Closed, string? Error, string? Warning)> CloseChatAsync(
+        string sessionId, string? reason, IReadOnlyList<string> tags, string? note)
+    {
+        try
+        {
+            var prefix = await PrefixAsync();
+            using var response = await http.PostAsJsonAsync(
+                $"{prefix}/chat-sessions/{Uri.EscapeDataString(sessionId)}/close", new { reason, tags, note });
+            var body = await response.Content.ReadFromJsonAsync<CloseChatResponse>();
+            return response.IsSuccessStatusCode
+                ? (true, null, body?.Warning)
+                : (false, body?.Error ?? $"Sohbet kapatılamadı ({(int)response.StatusCode}).", null);
+        }
+        catch (Exception ex)
+        {
+            return (false, "Sohbet kapatılamadı: " + ex.Message, null);
+        }
+    }
+
+    private sealed record CloseChatResponse(string? Error, string? Warning);
 
     public async Task SendChatMessageAsync(string sessionId, string text)
     {

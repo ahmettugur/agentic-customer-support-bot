@@ -38,6 +38,7 @@ public sealed class DataPrivacyService : IDataPrivacyPort
     private readonly IComplaintRepository _complaints;
     private readonly DataRetentionOptions _options;
     private readonly ILogger<DataPrivacyService> _logger;
+    private readonly IConversationDispositionStore? _dispositions;
 
     /// <summary>Onay geçmişinden dışa aktarılacak en fazla kayıt.</summary>
     private const int MaxExportedApprovals = 1000;
@@ -53,8 +54,10 @@ public sealed class DataPrivacyService : IDataPrivacyPort
         IOrderRepository orders,
         IComplaintRepository complaints,
         IOptions<DataRetentionOptions> options,
-        ILogger<DataPrivacyService> logger)
+        ILogger<DataPrivacyService> logger,
+        IConversationDispositionStore? dispositions = null)
     {
+        _dispositions = dispositions;
         _sessions = sessions;
         _attachments = attachments;
         _sessionErasers = sessionErasers.ToList();
@@ -129,7 +132,13 @@ public sealed class DataPrivacyService : IDataPrivacyPort
                 .Select(a => new ExportedAttachment(a.Id, a.ContentType, a.Description, a.CreatedAt, a.SentAt))
                 .ToList();
 
-            sessions.Add(new ExportedSession(session.SessionId, session.CreatedAt, session.LastActivity, history, attachments));
+            var dispositions = _dispositions is null
+                ? null
+                : (await _dispositions.ListForSessionAsync(info.SessionId, ct))
+                    .Select(d => new ExportedDisposition(d.ReasonCode, d.Tags, d.Note, d.ClosedAt))
+                    .ToList();
+
+            sessions.Add(new ExportedSession(session.SessionId, session.CreatedAt, session.LastActivity, history, attachments, dispositions));
             if (_ratings.GetBySession(info.SessionId) is { } rating) ratings.Add(rating);
         }
 

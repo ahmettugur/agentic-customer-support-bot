@@ -4,7 +4,9 @@
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Application.Services.Conversations;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Application.Services.Telemetry;
 
@@ -20,6 +22,11 @@ public sealed class AnalyticsPortService : IAnalyticsPort
     private readonly IEscalationSink _escalations;
     private readonly ILogger<AnalyticsPortService> _logger;
     private readonly Ports.Outbound.Observability.ILlmCallPersistencePort? _costs;
+    private readonly IConversationDispositionStore? _dispositions;
+    private readonly ConversationClosingOptions _closing;
+
+    /// <summary>Panelde gösterilen en sık etiket sayısı.</summary>
+    private const int TopTagCount = 10;
 
     /// <summary>
     /// Eski görüşmelerde <c>HumanInvolved</c> bayrağı yok (özellik öncesi); eskalasyon kaydı olan görüşme de
@@ -33,9 +40,13 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         IApprovalQueue approvals,
         IEscalationSink escalations,
         ILogger<AnalyticsPortService> logger,
-        Ports.Outbound.Observability.ILlmCallPersistencePort? costs = null)
+        Ports.Outbound.Observability.ILlmCallPersistencePort? costs = null,
+        IConversationDispositionStore? dispositions = null,
+        IOptions<ConversationClosingOptions>? closing = null)
     {
         _costs = costs;
+        _dispositions = dispositions;
+        _closing = closing?.Value ?? new ConversationClosingOptions();
         _ratings = ratings;
         _sessions = sessions;
         _approvals = approvals;
@@ -218,7 +229,45 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         dashboard.NegativeSessionCount = negativeCount;
         dashboard.SentimentAlertCount = alertCount;
 
+        if (_dispositions is not null)
+        {
+            try
+            {
+                await FillClosingAsync(dashboard, _dispositions, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "[Analytics] Kapanış nedenleri okunamadı");
+            }
+        }
+
         return dashboard;
+    }
+
+    /// <summary>
+    /// Neden dağılımı: çoktan aza; eşitlikte yapılandırılmış sıra. Listeden kaldırılmış nedenler kod adıyla
+    /// en sonda görünür (eski kayıtlar silinmez). Nedensiz kapanışlar (neden zorunlu değilken) sayılmaz.
+    /// </summary>
+    private async Task FillClosingAsync(AnalyticsDashboard dashboard, IConversationDispositionStore store, CancellationToken ct)
+    {
+        var reasons = _closing.EffectiveReasons;
+        var counts = await store.CountByReasonAsync(ct);
+        int Rank(string code)
+        {
+            for (var i = 0; i < reasons.Count; i++)
+                if (string.Equals(reasons[i].Code, code, StringComparison.OrdinalIgnoreCase)) return i;
+            return int.MaxValue;
+        }
+        dashboard.ClosingReasons = counts
+            .Where(c => c.Key.Length > 0 && c.Value > 0)
+            .Select(c => new ClosingReasonCount(c.Key,
+                reasons.FirstOrDefault(r => string.Equals(r.Code, c.Key, StringComparison.OrdinalIgnoreCase))?.Label ?? c.Key,
+                c.Value))
+            .OrderByDescending(c => c.Count)
+            .ThenBy(c => Rank(c.Code))
+            .ThenBy(c => c.Code, StringComparer.Ordinal)
+            .ToList();
+        dashboard.TopTags = [.. await store.TopTagsAsync(TopTagCount, ct)];
     }
 
     public async Task<SessionAnalytics?> GetSessionAnalyticsAsync(string sessionId, CancellationToken ct = default)
