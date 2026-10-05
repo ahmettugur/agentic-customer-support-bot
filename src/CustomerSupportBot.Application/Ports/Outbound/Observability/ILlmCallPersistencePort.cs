@@ -11,6 +11,12 @@ public interface ILlmCallPersistencePort
     /// Hata durumunda caller'a exception sızdırmaz.
     /// </summary>
     Task RecordAsync(LlmCallRecord record, CancellationToken ct = default);
+
+    /// <summary>
+    /// LLM maliyet özeti (<paramref name="sinceUtc"/>'den itibaren; null = tümü): toplam, görüşmeye atfedilen,
+    /// görüşme başına ortalama ve medyan.
+    /// </summary>
+    Task<LlmCostSummary> GetCostSummaryAsync(DateTime? sinceUtc = null, CancellationToken ct = default);
 }
 
 /// <summary>Persist edilen LLM çağrı kaydı.</summary>
@@ -21,4 +27,16 @@ public sealed record LlmCallRecord(
     long OutputTokens,
     decimal CostUsd,
     double DurationMs,
-    DateTime CalledAt);
+    DateTime CalledAt,
+    string? SessionId = null);
+
+/// <param name="AttributedCostUsd">Bir görüşmeye atfedilen maliyet; kalan (toplam − atfedilen) arka plan işleridir.</param>
+public sealed record LlmCostSummary(
+    decimal TotalCostUsd,
+    decimal AttributedCostUsd,
+    int SessionsWithCost,
+    decimal AverageCostPerSessionUsd,
+    decimal MedianCostPerSessionUsd)
+{
+    public static LlmCostSummary Empty { get; } = new(0, 0, 0, 0, 0);
+}

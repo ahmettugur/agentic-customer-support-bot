@@ -63,6 +63,18 @@ bu kabul edilebilir bir trade-off'tur.
 burada "kaç oturum otomatik eskalasyon sınırına yakın/ulaşmış" bilgisini ayrı bir sabit
 tanımlamadan, tek doğruluk kaynağından okuyarak gösterir.
 
+### Yapay zekâ çözüm oranı ve görüşme başı maliyet
+
+`GetDashboardAsync` ayrıca şunları hesaplar (bkz. [tasarım](../../../superpowers/specs/2026-10-05-containment-metrics-design.md)):
+
+- `EligibleSessions` (en az bir mesajı olan görüşme), `HumanInvolvedSessions` (`SessionState.HumanInvolved`
+  ya da eskalasyon kaydı), `ContainedSessions`, `ContainmentRate` (0–1).
+- `TotalLlmCostUsd`, `UnattributedLlmCostUsd`, `SessionsWithCost`, `AverageCostPerConversationUsd`,
+  `MedianCostPerConversationUsd` — `ILlmCallPersistencePort.GetCostSummaryAsync`'ten. Maliyet özeti okunamazsa
+  panelin geri kalanı yine döner (loglanır).
+
+Panelin modeli bu alan adlarıyla birebir aynı olmalı — `AnalyticsDashboardContractTests`.
+
 ## 6. Metotlar / Üyeler
 
 | Üye | Açıklama |

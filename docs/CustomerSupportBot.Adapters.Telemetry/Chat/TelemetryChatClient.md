@@ -96,3 +96,9 @@ private void RecordFailure(Activity? activity, Exception ex)
 - [CostUsageStore](../OpenTelemetry/CostUsageStore.md)
 - [CustomerSupportTelemetry](../OpenTelemetry/CustomerSupportTelemetry.md)
 - `CustomerSupportBot.Application.Ports.Outbound.Observability.ILlmCallPersistencePort`
+
+## Görüşmeye atfetme
+
+İsteğe bağlı `ILlmCallAttribution` verilirse, kalıcı kayda (`LlmCallRecord.SessionId`) çağrı anında etkin
+görüşmenin kimliği yazılır — görüşme başına maliyet için. Kimlik kayıt arka plana (`Task.Run`) atılmadan
+önce okunur; kapsam dışındaki çağrılar (arka plan işleri) oturumsuz kalır.

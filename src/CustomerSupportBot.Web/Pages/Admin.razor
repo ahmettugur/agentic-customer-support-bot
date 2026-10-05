@@ -639,8 +639,48 @@
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
                                     </div>
                                     <div class="analytics-card-data">
-                                        <div class="analytics-card-value">@_analytics.AverageMessagesPerSession.ToString("F1")</div>
+                                        <div class="analytics-card-value">@_analytics.AverageSessionMessages.ToString("F1")</div>
                                         <div class="analytics-card-label">Ort. Mesaj/Oturum</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Yapay zekâ çözüm oranı + görüşme başı maliyet -->
+                            <div class="analytics-summary">
+                                <div class="analytics-card" title="İnsan dahil olmadan (eskalasyon/devralma olmadan) biten görüşmelerin oranı">
+                                    <div class="analytics-card-icon containment">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@(_analytics.EligibleSessions > 0 ? $"%{_analytics.ContainmentRate * 100:0}" : "—")</div>
+                                        <div class="analytics-card-label">Yapay Zekâ Çözüm Oranı (@_analytics.ContainedSessions / @_analytics.EligibleSessions görüşme)</div>
+                                    </div>
+                                </div>
+                                <div class="analytics-card">
+                                    <div class="analytics-card-icon handoff">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@_analytics.HumanInvolvedSessions</div>
+                                        <div class="analytics-card-label">İnsana Aktarılan Görüşme</div>
+                                    </div>
+                                </div>
+                                <div class="analytics-card" title="Ortalama; medyan: @FormatUsd(_analytics.MedianCostPerConversationUsd) (@_analytics.SessionsWithCost görüşme)">
+                                    <div class="analytics-card-icon cost">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@(_analytics.SessionsWithCost > 0 ? FormatUsd(_analytics.AverageCostPerConversationUsd) : "—")</div>
+                                        <div class="analytics-card-label">Görüşme Başı LLM Maliyeti (medyan @FormatUsd(_analytics.MedianCostPerConversationUsd))</div>
+                                    </div>
+                                </div>
+                                <div class="analytics-card" title="Görüşmeye atfedilemeyen (arka plan işleri): @FormatUsd(_analytics.UnattributedLlmCostUsd)">
+                                    <div class="analytics-card-icon cost-total">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                                    </div>
+                                    <div class="analytics-card-data">
+                                        <div class="analytics-card-value">@FormatUsd(_analytics.TotalLlmCostUsd)</div>
+                                        <div class="analytics-card-label">Toplam LLM Maliyeti</div>
                                     </div>
                                 </div>
                             </div>
@@ -668,7 +708,7 @@
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>
                                     </div>
                                     <div class="analytics-card-data">
-                                        <div class="analytics-card-value">@_analytics.NegativeSessions</div>
+                                        <div class="analytics-card-value">@_analytics.NegativeSessionCount</div>
                                         <div class="analytics-card-label">Olumsuz Oturum</div>
                                     </div>
                                 </div>
@@ -677,7 +717,7 @@
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
                                     </div>
                                     <div class="analytics-card-data">
-                                        <div class="analytics-card-value">@_analytics.SentimentAlerts</div>
+                                        <div class="analytics-card-value">@_analytics.SentimentAlertCount</div>
                                         <div class="analytics-card-label">Duygu Uyarısı</div>
                                     </div>
                                 </div>
@@ -1156,6 +1196,11 @@
             }
         </div>;
     }
+
+    /// <summary>Dolar tutarı: 1$ altı (görüşme başı maliyet) 4 ondalık, üstü 2 ondalık.</summary>
+    private static string FormatUsd(decimal usd) =>
+        usd >= 1m ? usd.ToString("$#,0.00", System.Globalization.CultureInfo.InvariantCulture)
+                   : usd.ToString("$0.0000", System.Globalization.CultureInfo.InvariantCulture);
 
     private static RenderFragment RenderApprovalStats(ApprovalStats? stats)
     {

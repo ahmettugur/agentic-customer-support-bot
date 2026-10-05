@@ -68,5 +68,23 @@ public class AnalyticsDashboard
     public Dictionary<string, int> SentimentDistribution { get; set; } = new();
     public int NegativeSessionCount { get; set; }
     public int SentimentAlertCount { get; set; }
+
+    // ─── Yapay zekâ çözüm oranı (containment) ───
+    /// <summary>En az bir turu olan görüşmeler — oranın paydası.</summary>
+    public int EligibleSessions { get; set; }
+    /// <summary>İnsan dahil olmadan biten görüşmeler.</summary>
+    public int ContainedSessions { get; set; }
+    /// <summary>Eskalasyon açılan ya da temsilcinin devraldığı görüşmeler.</summary>
+    public int HumanInvolvedSessions { get; set; }
+    /// <summary>0–1 arası; görüşme yoksa 0.</summary>
+    public double ContainmentRate { get; set; }
+
+    // ─── LLM maliyeti ───
+    public decimal TotalLlmCostUsd { get; set; }
+    /// <summary>Bir görüşmeye atfedilemeyen maliyet (arka plan işleri: ders çıkarma, profil birleştirme…).</summary>
+    public decimal UnattributedLlmCostUsd { get; set; }
+    public int SessionsWithCost { get; set; }
+    public decimal AverageCostPerConversationUsd { get; set; }
+    public decimal MedianCostPerConversationUsd { get; set; }
 }
 

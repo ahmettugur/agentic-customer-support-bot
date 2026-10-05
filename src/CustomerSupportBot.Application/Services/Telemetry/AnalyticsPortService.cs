@@ -19,14 +19,23 @@ public sealed class AnalyticsPortService : IAnalyticsPort
     private readonly IApprovalQueue _approvals;
     private readonly IEscalationSink _escalations;
     private readonly ILogger<AnalyticsPortService> _logger;
+    private readonly Ports.Outbound.Observability.ILlmCallPersistencePort? _costs;
+
+    /// <summary>
+    /// Eski görüşmelerde <c>HumanInvolved</c> bayrağı yok (özellik öncesi); eskalasyon kaydı olan görüşme de
+    /// insan dahil sayılır. Eskalasyon deposu son N kaydı önbellekte tuttuğu için bu geri dönüş en iyi çabadır.
+    /// </summary>
+    private const int EscalationLookback = 5000;
 
     public AnalyticsPortService(
         IRatingStore ratings,
         ISessionManager sessions,
         IApprovalQueue approvals,
         IEscalationSink escalations,
-        ILogger<AnalyticsPortService> logger)
+        ILogger<AnalyticsPortService> logger,
+        Ports.Outbound.Observability.ILlmCallPersistencePort? costs = null)
     {
+        _costs = costs;
         _ratings = ratings;
         _sessions = sessions;
         _approvals = approvals;
@@ -144,6 +153,9 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         var sentimentScores = new List<double>();
         int negativeCount = 0;
         int alertCount = 0;
+        int eligible = 0, humanInvolved = 0;
+        var escalatedSessions = _escalations.GetRecent(EscalationLookback)
+            .Select(e => e.SessionId).Where(id => id is not null).ToHashSet(StringComparer.Ordinal);
 
         foreach (var s in allSessions)
         {
@@ -165,6 +177,36 @@ public sealed class AnalyticsPortService : IAnalyticsPort
                 negativeCount++;
             if (state.ConsecutiveNegativeTurns >= WellKnown.SentimentThresholds.AutoEscalationConsecutiveNegative)
                 alertCount++;
+
+            // Yapay zekâ çözüm oranı: yalnızca en az bir turu olan görüşmeler.
+            if (s.MessageCount > 0)
+            {
+                eligible++;
+                if (state.HumanInvolved || escalatedSessions.Contains(s.SessionId)) humanInvolved++;
+            }
+        }
+
+        dashboard.EligibleSessions = eligible;
+        dashboard.HumanInvolvedSessions = humanInvolved;
+        dashboard.ContainedSessions = eligible - humanInvolved;
+        dashboard.ContainmentRate = eligible > 0 ? Math.Round((double)(eligible - humanInvolved) / eligible, 3) : 0;
+
+        if (_costs is not null)
+        {
+            try
+            {
+                var cost = await _costs.GetCostSummaryAsync(ct: ct);
+                dashboard.TotalLlmCostUsd = cost.TotalCostUsd;
+                dashboard.UnattributedLlmCostUsd = cost.TotalCostUsd - cost.AttributedCostUsd;
+                dashboard.SessionsWithCost = cost.SessionsWithCost;
+                dashboard.AverageCostPerConversationUsd = Math.Round(cost.AverageCostPerSessionUsd, 6);
+                dashboard.MedianCostPerConversationUsd = Math.Round(cost.MedianCostPerSessionUsd, 6);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Maliyet özeti panelin geri kalanını düşürmemeli.
+                _logger.LogWarning(ex, "[Analytics] LLM maliyet özeti okunamadı");
+            }
         }
 
         dashboard.IntentDistribution = intentCounts;

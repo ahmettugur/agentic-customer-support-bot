@@ -32,6 +32,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CustomerSupportBot.Web\CustomerSupportBot.Web.csproj" />
+    <!-- Sunucu↔panel sözleşme testleri için sunucunun gönderdiği model (bkz. AnalyticsDashboardContractTests). -->
+    <ProjectReference Include="..\..\src\CustomerSupportBot.Domain\CustomerSupportBot.Domain.csproj" />
   </ItemGroup>
 
 </Project>

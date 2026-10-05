@@ -28,6 +28,7 @@ public sealed class ChatPortService : IChatPort
     private readonly ILogger<ChatPortService> _logger;
     private readonly IAttachmentStore? _attachments;
     private readonly AttachmentOptions _attachmentOptions;
+    private readonly Ports.Outbound.Observability.ILlmCallAttribution? _attribution;
 
     /// <summary>
     /// Bir turun kilidi bekleyebileceği azami süre. Bir tur LLM çağrıları yüzünden onlarca
@@ -48,8 +49,10 @@ public sealed class ChatPortService : IChatPort
         IAppDistributedLock turnLock,
         ILogger<ChatPortService> logger,
         IAttachmentStore? attachments = null,
-        IOptions<AttachmentOptions>? attachmentOptions = null)
+        IOptions<AttachmentOptions>? attachmentOptions = null,
+        Ports.Outbound.Observability.ILlmCallAttribution? attribution = null)
     {
+        _attribution = attribution;
         _team = team;
         _reasoning = reasoning;
         _sessions = sessions;
@@ -102,6 +105,8 @@ public sealed class ChatPortService : IChatPort
         var query = request.Query;
         var session = await _sessions.GetOrCreateAsync(request.SessionId, ct);
         var sessionId = session.SessionId;
+        // Görüşme başına maliyet: bu turdaki tüm LLM çağrıları (akıl yürütme + ajanlar) bu görüşmeye atfedilir.
+        using var costScope = _attribution?.BeginSession(sessionId);
         // Kilit BİNDDEN ÖNCE alınır. Bind bir "oku-karar ver-yaz" dizisidir: oturum henüz
         // kimseye bağlı değilse çağıranı bağlar. Kilidin dışında kalırsa, sahipsiz aynı
         // oturuma eşzamanlı gelen iki farklı müşteri de "bağlı değil" görüp ikisi de
@@ -176,6 +181,35 @@ public sealed class ChatPortService : IChatPort
     }
 
     /// <summary>
+    /// Akan bir alt adımı (akıl yürütme, ajan takımı) görüşmenin maliyet kapsamında numaralandırır.
+    ///
+    /// <para>
+    /// Async iterator içinde AsyncLocal'a verilen değer <c>yield</c>'i aşmaz: her sonraki öğe isteği
+    /// TÜKETİCİNİN bağlamında çalışır. Bu metot ilk <c>yield</c>'den (oturum olayı) sonra çalıştığı için
+    /// tepedeki kapsam alt adımlara ulaşmıyordu. Burada kapsam her <c>MoveNextAsync</c> çağrısının
+    /// etrafında yeniden açılır; alt adımın o çağrıda yaptığı (ve başlattığı) LLM çağrıları görüşmeye atfedilir.
+    /// </para>
+    /// </summary>
+    private async IAsyncEnumerable<T> WithCostScope<T>(
+        IAsyncEnumerable<T> source, string sessionId, [EnumeratorCancellation] CancellationToken ct)
+    {
+        if (_attribution is null)
+        {
+            await foreach (var item in source.WithCancellation(ct)) yield return item;
+            yield break;
+        }
+
+        await using var e = source.GetAsyncEnumerator(ct);
+        while (true)
+        {
+            bool hasNext;
+            using (_attribution.BeginSession(sessionId)) hasNext = await e.MoveNextAsync();
+            if (!hasNext) yield break;
+            yield return e.Current;
+        }
+    }
+
+    /// <summary>
     /// Mesaja eklenen fotoğrafların analizini sorguya ekler (bkz. <see cref="AttachmentTurnContext"/>).
     /// Bağlamadan SONRA çağrılır: sahiplik kontrolü oturumun doğrulanmış müşterisine göre yapılır.
     /// Temsilci modunda da uygulanır — temsilci de fotoğraf notunu görür.
@@ -213,6 +247,8 @@ public sealed class ChatPortService : IChatPort
         var query = request.Query;
         var session = await _sessions.GetOrCreateAsync(request.SessionId, ct);
         var sessionId = session.SessionId;
+        // Görüşme başına maliyet: bu turdaki tüm LLM çağrıları (akıl yürütme + ajanlar) bu görüşmeye atfedilir.
+        using var costScope = _attribution?.BeginSession(sessionId);
 
         // Kilit BİNDDEN ÖNCE (gerekçe için bkz. HandleAsync). Human-mode dalı da kilit
         // altındadır: orada bot turu yok ama geçmişe yazma var, dolayısıyla sıraya girmesi
@@ -252,7 +288,7 @@ public sealed class ChatPortService : IChatPort
 
         // Reasoning stream
         ReasoningResult? reasoningResult = null;
-        await foreach (var evt in _reasoning.ReasonStreamingAsync(query, session, history, ct))
+        await foreach (var evt in WithCostScope(_reasoning.ReasonStreamingAsync(query, session, history, ct), sessionId, ct))
         {
             yield return evt;
             if (evt.Type == StreamEventTypes.ReasoningComplete && evt.Data is ReasoningResult rr)
@@ -272,7 +308,7 @@ public sealed class ChatPortService : IChatPort
         // delta'lar birleştirildiği için geçmişe ham metin yazılıyordu (bkz. ResponseCompletePayload).
         var responseBuilder = new System.Text.StringBuilder();
         string? canonicalResponse = null;
-        await foreach (var evt in _team.RunStreamingAsync(query, history, session, reasoningResult, ct))
+        await foreach (var evt in WithCostScope(_team.RunStreamingAsync(query, history, session, reasoningResult, ct), sessionId, ct))
         {
             yield return evt;
             if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is TextDeltaPayload { Text.Length: > 0 } delta)

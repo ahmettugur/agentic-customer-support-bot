@@ -21,6 +21,7 @@ public sealed class TelemetryChatClient : DelegatingChatClient
     private readonly ICostCalculatorPort _costCalculator;
     private readonly CostUsageStore _usageStore;
     private readonly ILlmCallPersistencePort? _persistence;
+    private readonly ILlmCallAttribution? _attribution;
     private readonly string _modelHint;
     private readonly string _provider;
     private readonly ILogger<TelemetryChatClient> _logger;
@@ -32,8 +33,10 @@ public sealed class TelemetryChatClient : DelegatingChatClient
         string modelHint,
         string provider,
         ILogger<TelemetryChatClient> logger,
-        ILlmCallPersistencePort? persistence = null) : base(inner)
+        ILlmCallPersistencePort? persistence = null,
+        ILlmCallAttribution? attribution = null) : base(inner)
     {
+        _attribution = attribution;
         _costCalculator = costCalculator;
         _usageStore = usageStore;
         _persistence = persistence;
@@ -147,7 +150,9 @@ public sealed class TelemetryChatClient : DelegatingChatClient
     private void PersistAsync(string model, long input, long output, decimal cost, double durationMs)
     {
         if (_persistence == null) return;
-        var record = new LlmCallRecord(model, _provider, input, output, cost, durationMs, DateTime.UtcNow);
+        // Görüşme kimliği çağrı anında, bu async akışın kapsamından okunur (Task.Run'dan ÖNCE).
+        var record = new LlmCallRecord(model, _provider, input, output, cost, durationMs, DateTime.UtcNow,
+            _attribution?.CurrentSessionId);
         _ = Task.Run(async () =>
         {
             try { await _persistence.RecordAsync(record); }

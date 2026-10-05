@@ -52,6 +52,13 @@ internal sealed class LlmCallUsageConfiguration : IEntityTypeConfiguration<LlmCa
             .HasColumnType("timestamptz")
             .IsRequired();
 
+        builder.Property(e => e.SessionId)
+            .HasColumnName("session_id")
+            .HasMaxLength(64);
+
+        builder.HasIndex(e => e.SessionId)
+            .HasDatabaseName("ix_llm_call_usage_session");
+
         builder.HasIndex(e => e.CalledAt)
             .HasDatabaseName("ix_llm_call_usage_called_at")
             .IsDescending();

@@ -44,6 +44,7 @@ public sealed partial class AgentAssistService : IAgentAssistPort
     private readonly IPromptRepository _prompts;
     private readonly IContextSanitizer _sanitizer;
     private readonly ILogger<AgentAssistService> _logger;
+    private readonly Ports.Outbound.Observability.ILlmCallAttribution? _attribution;
 
     public AgentAssistService(
         ISessionManager sessions,
@@ -54,8 +55,10 @@ public sealed partial class AgentAssistService : IAgentAssistPort
         IGeneralChatClient llm,
         IPromptRepository prompts,
         IContextSanitizer sanitizer,
-        ILogger<AgentAssistService> logger)
+        ILogger<AgentAssistService> logger,
+        Ports.Outbound.Observability.ILlmCallAttribution? attribution = null)
     {
+        _attribution = attribution;
         _sessions = sessions;
         _profiles = profiles;
         _memory = memory;
@@ -69,6 +72,8 @@ public sealed partial class AgentAssistService : IAgentAssistPort
 
     public async Task<AgentAssistResult?> GetAssistAsync(string sessionId, CancellationToken ct = default)
     {
+        // Görüşme başına maliyet: temsilci asistanının LLM çağrısı o görüşmenin destek maliyetidir.
+        using var costScope = _attribution?.BeginSession(sessionId);
         var session = await _sessions.GetAsync(sessionId, ct);
         if (session is null) return null;
 

@@ -106,23 +106,49 @@ public sealed record AgentAssistOpenItem(string Kind, string Id, string Descript
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
+/// <summary>
+/// <c>GET /analytics/dashboard</c> — alan adları sunucunun <c>Domain.Model.AnalyticsDashboard</c>'ı ile BİREBİR
+/// aynı olmalı (bkz. AnalyticsDashboardContractTests). Eskiden farklıydı (<c>AverageMessagesPerSession</c>,
+/// iç içe <c>ApprovalStats</c>…): değerler sessizce 0/null geliyor, panel "Henüz onay işlemi yok" yazıyordu.
+/// </summary>
 public sealed record AnalyticsDashboard(
     int TotalSessions,
     int TotalMessages,
+    double AverageSessionMessages,
     double AverageRating,
     int TotalRatings,
-    double AverageMessagesPerSession,
-    double AverageSentimentScore,
-    int NegativeSessions,
-    int SentimentAlerts,
     Dictionary<string, int>? RatingDistribution,
-    Dictionary<string, int>? SentimentDistribution,
+    RecentRating[]? RecentRatings,
+    int TotalApprovals,
+    int ApprovedCount,
+    int RejectedCount,
+    int ExpiredCount,
+    int PendingCount,
+    int TotalEscalations,
+    int OpenEscalations,
+    int AcknowledgedEscalations,
+    int ResolvedEscalations,
+    int DismissedEscalations,
     Dictionary<string, int>? IntentDistribution,
     Dictionary<string, int>? PhaseDistribution,
-    ApprovalStats? ApprovalStats,
-    EscalationStats? EscalationStats,
-    RecentRating[]? RecentRatings
-);
+    double AverageSentimentScore,
+    Dictionary<string, int>? SentimentDistribution,
+    int NegativeSessionCount,
+    int SentimentAlertCount,
+    int EligibleSessions,
+    int ContainedSessions,
+    int HumanInvolvedSessions,
+    double ContainmentRate,
+    decimal TotalLlmCostUsd,
+    decimal UnattributedLlmCostUsd,
+    int SessionsWithCost,
+    decimal AverageCostPerConversationUsd,
+    decimal MedianCostPerConversationUsd
+)
+{
+    public ApprovalStats ApprovalStats => new(TotalApprovals, ApprovedCount, RejectedCount, ExpiredCount);
+    public EscalationStats EscalationStats => new(TotalEscalations, ResolvedEscalations, DismissedEscalations);
+}
 
 public sealed record ApprovalStats(int Total, int Approved, int Rejected, int TimedOut);
 public sealed record EscalationStats(int Total, int Resolved, int Dismissed);

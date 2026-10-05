@@ -24,6 +24,7 @@ public sealed class ReplanService : IReplanService
     private readonly IReasoningPort _reasoning;
     private readonly IApprovalContextAccessor _approvalContext;
     private readonly ILogger<ReplanService> _logger;
+    private readonly Ports.Outbound.Observability.ILlmCallAttribution? _attribution;
 
     public ReplanService(
         ISessionManager sessions,
@@ -31,8 +32,10 @@ public sealed class ReplanService : IReplanService
         IAgentTeamPort team,
         IReasoningPort reasoning,
         IApprovalContextAccessor approvalContext,
-        ILogger<ReplanService> logger)
+        ILogger<ReplanService> logger,
+        Ports.Outbound.Observability.ILlmCallAttribution? attribution = null)
     {
+        _attribution = attribution;
         _sessions = sessions;
         _bridge = bridge;
         _team = team;
@@ -43,6 +46,8 @@ public sealed class ReplanService : IReplanService
 
     public async Task ExecuteAsync(string sessionId, CancellationToken ct = default)
     {
+        // Görüşme başına maliyet: yeniden planlanan turun LLM çağrıları bu görüşmeye atfedilir.
+        using var costScope = _attribution?.BeginSession(sessionId);
         try
         {
             var session = await _sessions.GetAsync(sessionId, ct);

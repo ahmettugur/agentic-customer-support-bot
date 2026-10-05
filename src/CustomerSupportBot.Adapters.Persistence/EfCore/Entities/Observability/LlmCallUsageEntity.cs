@@ -11,4 +11,7 @@ public sealed class LlmCallUsageEntity
     public decimal CostUsd { get; set; }
     public double DurationMs { get; set; }
     public DateTime CalledAt { get; set; }
+
+    /// <summary>Çağrının yapıldığı görüşme (görüşme başına maliyet); arka plan işlerinde null.</summary>
+    public string? SessionId { get; set; }
 }

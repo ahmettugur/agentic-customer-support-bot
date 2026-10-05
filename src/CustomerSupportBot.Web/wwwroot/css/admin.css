@@ -1260,6 +1260,10 @@ code.at-val {
 .analytics-card-icon.messages       { background: var(--color-primary-subtle); color: var(--color-primary); }
 .analytics-card-icon.rating         { background: #fef3c7; color: #b45309; }
 .analytics-card-icon.avg            { background: #dcfce7; color: #15803d; }
+.analytics-card-icon.containment    { background: #dbeafe; color: #1d4ed8; }
+.analytics-card-icon.handoff        { background: #fef3c7; color: #b45309; }
+.analytics-card-icon.cost           { background: #f3e8ff; color: #7e22ce; }
+.analytics-card-icon.cost-total     { background: #f1f5f9; color: #475569; }
 .analytics-card-icon.sentiment-icon { background: #dcfce7; color: #16a34a; }
 .analytics-card-icon.negative-icon  { background: var(--color-error-bg); color: var(--color-error-text); }
 .analytics-card-icon.alert-icon     { background: #ffedd5; color: #9a3412; }
@@ -1730,6 +1734,10 @@ code.at-val {
 /* Analytics card icons */
 [data-theme="dark"] .analytics-card-icon.rating         { background: #422006; color: #fbbf24; }
 [data-theme="dark"] .analytics-card-icon.avg            { background: #052e16; color: #86efac; }
+[data-theme="dark"] .analytics-card-icon.containment    { background: #172554; color: #93c5fd; }
+[data-theme="dark"] .analytics-card-icon.handoff        { background: #451a03; color: #fcd34d; }
+[data-theme="dark"] .analytics-card-icon.cost           { background: #3b0764; color: #d8b4fe; }
+[data-theme="dark"] .analytics-card-icon.cost-total     { background: #1e293b; color: #cbd5e1; }
 [data-theme="dark"] .analytics-card-icon.sentiment-icon { background: #052e16; color: #86efac; }
 [data-theme="dark"] .analytics-card-icon.alert-icon     { background: #431407; color: #fdba74; }
 

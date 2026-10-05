@@ -86,6 +86,15 @@ public class SessionState
     /// <summary>Ardışık negatif tur sayısı (otomatik eskalasyon tetikleyici).</summary>
     public int ConsecutiveNegativeTurns { get; set; }
 
+    /// <summary>
+    /// Görüşmeye bir insan dahil oldu mu (eskalasyon açıldı ya da temsilci devraldı)? Yapay zekâ çözüm
+    /// oranının (containment) temeli — bkz. HumanInvolvementTracker. Bir kez true olur, geri dönmez.
+    /// </summary>
+    public bool HumanInvolved { get; set; }
+
+    /// <summary>İnsanın ilk dahil olduğu an (UTC).</summary>
+    public DateTime? HumanInvolvedAt { get; set; }
+
     // ─── Admin Replan (manuel "yeniden planla" müdahalesi) ───
 
     /// <summary>

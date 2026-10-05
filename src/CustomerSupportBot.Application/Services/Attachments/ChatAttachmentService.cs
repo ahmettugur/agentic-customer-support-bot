@@ -37,6 +37,7 @@ public sealed class ChatAttachmentService : IChatAttachmentPort
     private readonly IInputGuard _guard;
     private readonly AttachmentOptions _options;
     private readonly ILogger<ChatAttachmentService> _logger;
+    private readonly Ports.Outbound.Observability.ILlmCallAttribution? _attribution;
 
     public ChatAttachmentService(
         IAttachmentStore store,
@@ -45,8 +46,10 @@ public sealed class ChatAttachmentService : IChatAttachmentPort
         IImageAnalysisPort analyzer,
         IInputGuard guard,
         IOptions<AttachmentOptions> options,
-        ILogger<ChatAttachmentService> logger)
+        ILogger<ChatAttachmentService> logger,
+        Ports.Outbound.Observability.ILlmCallAttribution? attribution = null)
     {
+        _attribution = attribution;
         _store = store;
         _sessions = sessions;
         _locks = locks;
@@ -85,7 +88,9 @@ public sealed class ChatAttachmentService : IChatAttachmentPort
                 Error: $"Bir sohbete en fazla {_options.MaxPerSession} fotoğraf eklenebilir.");
 
         var contentType = kind == ImageKind.Jpeg ? "image/jpeg" : "image/png";
-        var description = await DescribeAsync(clean, contentType, ct);
+        string? description;
+        // Görüşme başına maliyet: görsel analiz bu görüşmeye atfedilir.
+        using (_attribution?.BeginSession(sid)) description = await DescribeAsync(clean, contentType, ct);
 
         var attachment = new ChatAttachment
         {

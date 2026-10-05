@@ -124,4 +124,36 @@ public class TelemetryChatClientTests
 
         public void Dispose() { }
     }
+
+    /// <summary>
+    /// Görüşme başına maliyet: çağrı, o anda etkin görüşmeye (AsyncLocal kapsam) atfedilir ve kalıcı
+    /// kayda oturum kimliğiyle yazılır. Kapsam dışındaki çağrılar (arka plan işleri) oturumsuz kalır.
+    /// </summary>
+    [Fact]
+    public async Task PersistedRecord_CarriesTheConversationInScope()
+    {
+        var inner = new FakeChatClient
+        {
+            Response = new ChatResponse(new ChatMessage(ChatRole.Assistant, "ok"))
+            {
+                Usage = new UsageDetails { InputTokenCount = 10, OutputTokenCount = 5 }
+            }
+        };
+        var calculator = Substitute.For<ICostCalculatorPort>();
+        calculator.CalculateCost(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>()).Returns(0.002m);
+        var records = new System.Collections.Concurrent.ConcurrentQueue<LlmCallRecord>();
+        var persistence = Substitute.For<ILlmCallPersistencePort>();
+        persistence.RecordAsync(Arg.Do<LlmCallRecord>(records.Enqueue), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var attribution = new CustomerSupportBot.Application.Services.Telemetry.LlmCallAttribution();
+        var client = new TelemetryChatClient(inner, calculator, new CostUsageStore(), "gpt-x", "OpenAI",
+            NullLogger<TelemetryChatClient>.Instance, persistence, attribution);
+        var ct = TestContext.Current.CancellationToken;
+
+        using (attribution.BeginSession("sess-1"))
+            await client.GetResponseAsync([new ChatMessage(ChatRole.User, "hi")], cancellationToken: ct);
+        await client.GetResponseAsync([new ChatMessage(ChatRole.User, "arka plan")], cancellationToken: ct);
+
+        for (var i = 0; i < 50 && records.Count < 2; i++) await Task.Delay(20, ct);
+        records.Select(r => r.SessionId).Should().BeEquivalentTo(["sess-1", null]);
+    }
 }

@@ -156,6 +156,8 @@ public static class ApplicationServicesExtensions
         services.AddHostedService<DataRetentionService>();
         // Onay sonucu e-postası — Email ayarları (kapalıyken gönderim yok).
         services.AddHostedService<ApprovalEmailNotificationService>();
+        // Yapay zekâ çözüm oranı: eskalasyon/devralma görüşmeyi "insan dahil" işaretler.
+        services.AddHostedService<HumanInvolvementTrackingService>();
         // RoutingLoadTrackerService kaldırıldı — load-tracking HumanAgentPortService constructor'ında.
 
         // KnowledgeBase startup adapter — use-case mantığı Application katmanında; bu sadece startup tetikleyicisi

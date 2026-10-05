@@ -108,6 +108,14 @@ rol önekiyle (`/attachments/{id}` ya da `/agent/attachments/{id}`) indirir ve d
 sonuç oturum boyunca önbellekte tutulur (kart her yoklamada yeniden çizilir). Kimlikler metin
 parametre listesinde tekrarlanmaz.
 
+### Analitik panosu
+
+Özet kartlarının ikinci satırı: **Yapay Zekâ Çözüm Oranı** (insan dahil olmadan biten görüşmeler / en az bir
+mesajı olan görüşmeler), **İnsana Aktarılan Görüşme**, **Görüşme Başı LLM Maliyeti** (ortalama; medyan
+etikette) ve **Toplam LLM Maliyeti** (görüşmeye atfedilemeyen kısım ipucunda). Panelin
+`AnalyticsDashboard` modeli sunucunun alan adlarıyla birebir aynıdır; eskiden farklı olduğu için onay ve
+eskalasyon istatistikleri hiç görünmüyordu (`AnalyticsDashboardContractTests`).
+
 ### Müşteri adı nereden gelir?
 
 `ApprovalRequest.CustomerName` **kalıcı değildir**. Liste panele gönderilmeden hemen önce
