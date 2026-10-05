@@ -22,6 +22,7 @@ Bu klasör, Onion / Hexagonal Mimari'de **Use Cases & Application Core (İş Ak�
   - [ChatSessionPortService](Services/Chat/ChatSessionPortService.md) — Canlı devralma (human takeover) ve yeniden planlama orkestrasyonu.
   - [SessionPortService](Services/Chat/SessionPortService.md) — Genel amaçlı oturum CRUD'unu `ISessionPort`'a bağlayan servis.
   - [SessionStateService](Services/Chat/SessionStateService.md) & [SessionIdentityBinder](Services/Chat/SessionIdentityBinder.md) — Oturum durumu ve müşteri kimliği bağlayıcısı.
+- [Notifications/](Services/Notifications/README.md) — Onay sonucunun e-postayla bildirilmesi (`ApprovalResultEmailService`, `ApprovalEmailComposer`).
 - [Privacy/](Services/Privacy/README.md) — Kişisel Veri (KVKK):
   - [DataPrivacyService](Services/Privacy/DataPrivacyService.md) — Saklama süresi temizliği, müşteri verisini dışa aktarma ve silme.
 - [Attachments/](Services/Attachments/README.md) — Sohbete Fotoğraf Ekleme:

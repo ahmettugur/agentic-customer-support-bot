@@ -154,6 +154,8 @@ public static class ApplicationServicesExtensions
         services.AddHostedService<SlaGuardianService>();
         // Kişisel veri saklama süresi (KVKK) — DataRetention ayarları.
         services.AddHostedService<DataRetentionService>();
+        // Onay sonucu e-postası — Email ayarları (kapalıyken gönderim yok).
+        services.AddHostedService<ApprovalEmailNotificationService>();
         // RoutingLoadTrackerService kaldırıldı — load-tracking HumanAgentPortService constructor'ında.
 
         // KnowledgeBase startup adapter — use-case mantığı Application katmanında; bu sadece startup tetikleyicisi

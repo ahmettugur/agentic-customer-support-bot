@@ -12,6 +12,7 @@
     <Folder Name="/Adapters/Out/">
       <Project Path="src/CustomerSupportBot.Adapters.AI/CustomerSupportBot.Adapters.AI.csproj" />
       <Project Path="src/CustomerSupportBot.Adapters.Agents/CustomerSupportBot.Adapters.Agents.csproj" />
+      <Project Path="src/CustomerSupportBot.Adapters.Email/CustomerSupportBot.Adapters.Email.csproj" />
       <Project Path="src/CustomerSupportBot.Adapters.Persistence/CustomerSupportBot.Adapters.Persistence.csproj" />
       <Project Path="src/CustomerSupportBot.Adapters.Redis/CustomerSupportBot.Adapters.Redis.csproj" />
       <Project Path="src/CustomerSupportBot.Adapters.Telemetry/CustomerSupportBot.Adapters.Telemetry.csproj" />
@@ -24,6 +25,7 @@
     <Project Path="tests/CustomerSupportBot.Application.Tests/CustomerSupportBot.Application.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Adapters.Agents.Tests/CustomerSupportBot.Adapters.Agents.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Adapters.AI.Tests/CustomerSupportBot.Adapters.AI.Tests.csproj" />
+    <Project Path="tests/CustomerSupportBot.Adapters.Email.Tests/CustomerSupportBot.Adapters.Email.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Adapters.Persistence.Tests/CustomerSupportBot.Adapters.Persistence.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Adapters.Redis.Tests/CustomerSupportBot.Adapters.Redis.Tests.csproj" />
     <Project Path="tests/CustomerSupportBot.Adapters.Telemetry.Tests/CustomerSupportBot.Adapters.Telemetry.Tests.csproj" />

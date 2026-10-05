@@ -67,6 +67,7 @@
     <ProjectReference Include="..\CustomerSupportBot.Adapters.AI\CustomerSupportBot.Adapters.AI.csproj" />
     <ProjectReference Include="..\CustomerSupportBot.Adapters.Telemetry\CustomerSupportBot.Adapters.Telemetry.csproj" />
     <ProjectReference Include="..\CustomerSupportBot.Adapters.Agents\CustomerSupportBot.Adapters.Agents.csproj" />
+    <ProjectReference Include="..\CustomerSupportBot.Adapters.Email\CustomerSupportBot.Adapters.Email.csproj" />
   </ItemGroup>
 
   <!-- Prompt markdown dosyalarını build çıktısına kopyala.

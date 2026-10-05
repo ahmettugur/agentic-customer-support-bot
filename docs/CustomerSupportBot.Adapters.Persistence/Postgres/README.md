@@ -28,6 +28,7 @@ Bu klasör, Application katmanındaki giden (Outbound) kalıcılık portlarını
 - [PostgresCustomerProfileStore](PostgresCustomerProfileStore.md) ➔ [ICustomerProfileStore](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/ICustomerProfileStore.md)
 - [PostgresRatingStore](PostgresRatingStore.md) ➔ [IRatingStore](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/IRatingStore.md)
 - [PostgresAttachmentStore](PostgresAttachmentStore.md) ➔ `IAttachmentStore` (sohbet fotoğrafları; cache yok)
+- `PostgresNotificationLedger` ➔ `INotificationLedger` (`notifications.sent_log`; gönderilen bildirimlerin anahtarları — çok pod'da tek gönderim)
 - [PostgresSlaEventSink](PostgresSlaEventSink.md) ➔ [ISlaEventSink](../../CustomerSupportBot.Application/Ports/Outbound/Persistence/ISlaEventSink.md)
 
 ## Mimari Not: Neden Bu Kadar Çok Sınıfta Aynı "Hibrit" Desen Tekrarlanıyor

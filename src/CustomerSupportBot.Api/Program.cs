@@ -1,3 +1,4 @@
+using CustomerSupportBot.Adapters.Email.DependencyInjection;
 using CustomerSupportBot.Api.Endpoints;
 using CustomerSupportBot.Api.Extensions;
 using CustomerSupportBot.Api.Infrastructure;
@@ -21,6 +22,7 @@ builder.Services.AddTelemetryServices(builder.Configuration);
 builder.Services.AddAiServices(builder.Configuration);
 builder.Services.AddRedisServices(builder.Configuration);
 builder.Services.AddPersistenceServices(builder.Configuration);
+builder.Services.AddEmailAdapter();
 builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddAuthenticationServices(builder.Configuration);
 builder.Services.AddAppHealthChecks(builder.Configuration);

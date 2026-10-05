@@ -9,6 +9,7 @@ using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Chat;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Hitl;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Improvement;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Knowledge;
+using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Notifications;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Personalization;
 using Microsoft.EntityFrameworkCore;
@@ -56,6 +57,9 @@ public sealed class CustomerSupportDbContext : DbContext
 
     // ─── analytics schema (sla) ───
     public DbSet<SlaEventEntity> SlaEvents => Set<SlaEventEntity>();
+
+    // ─── notifications schema ───
+    public DbSet<NotificationLogEntity> NotificationLog => Set<NotificationLogEntity>();
 
     // ─── catalog schema ───
     public DbSet<CategoryEntity> Categories => Set<CategoryEntity>();

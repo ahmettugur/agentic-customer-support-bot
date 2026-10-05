@@ -433,6 +433,13 @@ Bkz. [Privacy](CustomerSupportBot.Application/Services/Privacy/README.md).
 - **Kalanlar:** sipariş, şikayet ve onay kayıtları yasal/işlemsel kayıt olarak tutulur; açık eskalasyonlar
   temsilci kuyruğu bozulmasın diye silinmez, müşteri metni temizlenir.
 
+## 5d. E-posta
+
+- SMTP parolası repoya yazılmaz: `appsettings.json`'da boştur; `Email__Smtp__Password` ortam değişkeni ya da
+  secret ile verilir. Mümkünse `StartTls`/`SslOnConnect` kullanılır (`None` yalnız yerel test sunucusu için).
+- E-posta gövdesine giren sonuç/gerekçe metinleri HTML-escape edilir; loglarda alıcı adresi maskelenir.
+- Bildirim defteri (`notifications.sent_log`) yalnızca anahtar tutar (`approval-result:{id}`), kişisel veri içermez.
+
 ## 6. Hassas Dosya Yönetimi
 
 ### `.gitignore`'da Korunan Dosyalar

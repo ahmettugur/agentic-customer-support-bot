@@ -15,4 +15,5 @@ internal static class Schemas
     public const string Improvement = "improvement";
     public const string Catalog = "catalog";
     public const string Knowledge = "knowledge";
+    public const string Notifications = "notifications";
 }

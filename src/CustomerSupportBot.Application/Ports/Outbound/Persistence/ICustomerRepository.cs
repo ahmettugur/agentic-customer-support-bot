@@ -20,6 +20,9 @@ public interface ICustomerRepository
 
     Task<string?> GetFullNameAsync(long customerId, CancellationToken ct = default);
 
+    /// <summary>Müşteri kaydındaki e-posta adresi (bildirimler için); kayıt ya da adres yoksa <c>null</c>.</summary>
+    Task<string?> GetEmailAsync(long customerId, CancellationToken ct = default);
+
     /// <summary>
     /// Birden çok müşterinin adını tek sorguda getirir; bulunamayan kimlikler sonuçta yer almaz.
     ///

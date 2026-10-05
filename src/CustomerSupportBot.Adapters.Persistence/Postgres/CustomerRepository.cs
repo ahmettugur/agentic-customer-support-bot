@@ -42,6 +42,16 @@ public sealed class CustomerRepository : ICustomerRepository
     }
 
     /// <inheritdoc />
+    public async Task<string?> GetEmailAsync(long customerId, CancellationToken ct = default)
+    {
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        return await ctx.Customers
+            .Where(c => c.Id == customerId)
+            .Select(c => c.Email)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyDictionary<long, string>> GetFullNamesAsync(
         IReadOnlyCollection<long> customerIds, CancellationToken ct = default)
     {

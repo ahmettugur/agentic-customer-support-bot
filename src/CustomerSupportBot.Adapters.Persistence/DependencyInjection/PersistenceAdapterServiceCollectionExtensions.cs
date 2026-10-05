@@ -51,6 +51,7 @@ public static class PersistenceAdapterServiceCollectionExtensions
         AddSessionDataStore<IRatingStore, PostgresRatingStore>(services);
         AddSessionDataStore<IAttachmentStore, PostgresAttachmentStore>(services);
 
+        services.AddSingleton<INotificationLedger, PostgresNotificationLedger>();
         services.AddSingleton<IOrderRepository, OrderRepository>();
         services.AddSingleton<ICustomerRepository, CustomerRepository>();
         services.AddSingleton<IProductCatalogRepository, ProductCatalogRepository>();

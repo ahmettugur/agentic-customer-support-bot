@@ -254,6 +254,11 @@ CustomerSupport.slnx
 │   └── DependencyInjection/
 │       └── RedisAdapterServiceCollectionExtensions.cs
 │
+├── CustomerSupportBot.Adapters.Email/   ← E-posta adaptörü (SMTP, MailKit)
+│   ├── SmtpEmailSender.cs               # IEmailSender → SMTP
+│   ├── (NullEmailSender)                # Email:Enabled=false
+│   └── DependencyInjection/
+│
 ├── CustomerSupportBot.Adapters.Telemetry/  ← Katman 3d: Telemetri adaptörü
 │   ├── OpenTelemetry/                   # OTLP exporter yapılandırması
 │   ├── Chat/                            # Maliyet takip entegrasyonu
@@ -695,6 +700,7 @@ appsettings.json → Prompts:RootPath (opsiyonel)
 - **Sesli konuşma (Realtime)** → [CustomerSupportBot.Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md](CustomerSupportBot.Adapters.AI/Realtime/OpenAiRealtimeClientAdapter.md)
 - **Güvenlik ve kimlik doğrulama** → [security.md](security.md)
 - **Telemetri ve maliyet takibi** → [CustomerSupportBot.Adapters.Telemetry/README.md](CustomerSupportBot.Adapters.Telemetry/README.md)
+- **E-posta bildirimleri** → [CustomerSupportBot.Adapters.Email/README.md](CustomerSupportBot.Adapters.Email/README.md)
 - **Veritabanı ve kalıcılık** → [CustomerSupportBot.Adapters.Persistence/README.md](CustomerSupportBot.Adapters.Persistence/README.md)
 - **Kurulum ve dağıtım** → [deployment.md](deployment.md)
 - **Çalıştırma ve operasyon** → [operations.md](operations.md)
