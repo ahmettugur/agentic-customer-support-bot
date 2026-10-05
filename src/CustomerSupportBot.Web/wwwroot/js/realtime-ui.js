@@ -200,7 +200,9 @@
                 // Bot bubble'ı daha sonra (assistant_text_delta ile) oluşacağı
                 // için DOM sırası: user placeholder → bot bubble. Doğru.
                 speech_stopped: ({ itemId }) => {
-                    call('speech_stopped');
+                    // Kimlik ekran modeline de gider: canlı parçası olmayan transkripsiyon modellerinde
+                    // turun kimliğini yalnızca bu olay taşır (altyazı bir tur geriden kalmasın).
+                    call('speech_stopped', itemId || null);
                     if (!app?.ui) return;
                     if (itemId) {
                         // Hiç metin almamış önceki yer tutucular gürültü/sessizlikten kalan
@@ -393,15 +395,18 @@
             toggleMute: () => { if (client) client.setMuted(!client.muted); },
             end: () => stop(),
             interrupt: () => { if (client) client.interrupt(); },
-            retry: () => { if (client) return; startVoice(); }
+            retry: () => { if (client) return; primeTones(); startVoice(); }
         };
 
         // Klavye: ekran açıkken Space sessize al, Esc bitir. Space'in varsayılanı (odaktaki düğmeyi
         // tıklama) hem keydown hem keyup'ta engellenir — aksi hâlde odak bir düğmedeyken iki kez
         // tetiklenirdi.
         const isTyping = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+        // Kısayollar yalnızca ekran GERÇEKTEN görünürken: sayfada görüşme ekranı yoksa (chatApp.voiceCall
+        // kayıtlı değil) overlayOpen yine true olur ve Space/Esc görünmeyen bir ekran için yutulurdu.
+        const overlayVisible = () => overlayOpen && !!document.querySelector('.vc-overlay');
         document.addEventListener('keydown', (e) => {
-            if (!overlayOpen) return;
+            if (!overlayVisible()) return;
             // Odak tuzağı: ekran açıkken Tab yalnızca ekrandaki düğmeler arasında döner; arkadaki
             // (görünmeyen) sohbet alanlarına odak kaçmaz.
             if (e.key === 'Tab') {
@@ -421,14 +426,14 @@
             }
         });
         document.addEventListener('keyup', (e) => {
-            if (overlayOpen && (e.key === ' ' || e.code === 'Space') && !isTyping(e.target)) e.preventDefault();
+            if (overlayVisible() && (e.key === ' ' || e.code === 'Space') && !isTyping(e.target)) e.preventDefault();
         });
 
         // Sesli butonu — açıksa kapatır, kapalıysa başlatır (belge düzeyinde; yukarıdaki nota bakın)
         document.addEventListener('click', (e) => {
             if (!e.target?.closest?.('#voiceBtn')) return;
             if (client) stop();
-            else startVoice();
+            else { primeTones(); startVoice(); }
         });
 
         window.addEventListener('beforeunload', stop);
@@ -452,10 +457,33 @@
     };
 
     // Kısa görüşme sesleri — dosya yok, Web Audio ile üretilir. Kısık seviye; tarayıcı engellerse sessizce geçer.
+    //
+    // Otomatik oynatma politikası: kullanıcı hareketi DIŞINDA oluşturulan AudioContext "suspended" başlar.
+    // Bağlam eskiden ilk sesle (bağlantı kurulunca, yani tıklamadan saniyeler sonra) oluşturuluyordu ve hiç
+    // devam ettirilmediği için sesler çalmıyordu. Artık 🎙 tıklamasında (hareketin içinde) açılır; askıdaysa
+    // her seste resume denenir.
     let toneCtx = null;
-    function playTone(kind) {
+    function primeTones() {
         try {
             toneCtx = toneCtx || new (window.AudioContext || window.webkitAudioContext)();
+            if (toneCtx.state === 'suspended') toneCtx.resume().catch(() => { });
+        } catch { /* ses yoksa görüşme etkilenmez */ }
+    }
+
+    function playTone(kind) {
+        try {
+            primeTones();
+            if (!toneCtx) return;
+            if (toneCtx.state === 'suspended') {
+                toneCtx.resume().then(() => scheduleTone(kind)).catch(() => { });
+                return;
+            }
+            scheduleTone(kind);
+        } catch { /* ses çalınamazsa görüşme etkilenmez */ }
+    }
+
+    function scheduleTone(kind) {
+        try {
             const notes = kind === 'connect' ? [660, 880] : [660, 440];
             const t0 = toneCtx.currentTime;
             notes.forEach((freq, i) => {

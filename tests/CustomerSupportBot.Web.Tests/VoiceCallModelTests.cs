@@ -222,4 +222,83 @@ public class VoiceCallModelTests
         m.Error.Should().BeNull();
         m.Orb.Should().Be(VoiceOrbState.Listening);
     }
+
+    // ─── Teknik borç: aktarım durumu takılı kalmamalı ───────────────────────
+
+    [Fact]
+    public void Handoff_EndsOnceTheRequestIsCreatedAndAnnounced()
+    {
+        var m = Opened();
+        m.Apply("state", "listening", null, T0);
+        m.Apply("tool_call", "human_handoff_tool", "Temsilci talebi oluşturuluyor", T0);
+        m.Apply("tool_result", "human_handoff_tool", null, T0);
+        m.Orb.Should().Be(VoiceOrbState.Handoff, "model aktarımı duyururken");
+
+        m.Apply("response_done", null, null, T0);
+
+        m.Orb.Should().Be(VoiceOrbState.Listening, "talep oluştu ve duyuruldu; görüşme sürüyor");
+        m.Chip.Should().Be("👤 Temsilci talebi oluşturuldu");
+    }
+
+    [Fact]
+    public void Handoff_EndsWhenTheCustomerSpeaksAgain()
+    {
+        var m = Opened();
+        m.Apply("state", "listening", null, T0);
+        m.Apply("tool_call", "human_handoff_tool", "Temsilci talebi oluşturuluyor", T0);
+        m.Apply("tool_result", "human_handoff_tool", null, T0);
+
+        m.Apply("speech_started", null, null, T0);
+
+        m.Orb.Should().Be(VoiceOrbState.Listening);
+    }
+
+    [Fact]
+    public void Handoff_StaysWhileTheRequestIsStillRunning()
+    {
+        var m = Opened();
+        m.Apply("state", "listening", null, T0);
+        m.Apply("tool_call", "human_handoff_tool", "Temsilci talebi oluşturuluyor", T0);
+
+        m.Apply("response_done", null, null, T0);   // araç sonucu henüz gelmedi
+
+        m.Orb.Should().Be(VoiceOrbState.Handoff);
+    }
+
+    // ─── Teknik borç: canlı olmayan transkripsiyon modellerinde altyazı ─────
+
+    [Fact]
+    public void NonLiveTranscription_TheCaptionFollowsTheCurrentTurn_NotThePreviousOne()
+    {
+        // gpt-4o-transcribe vb.: canlı parça yok; son transkript yanıttan SONRA gelir.
+        var m = Opened();
+        m.Apply("speech_stopped", "i1", null, T0);
+        m.Apply("assistant_delta", "Hangi sipariş?", null, T0);
+        m.Apply("response_done", null, null, T0);
+        m.Apply("user_final", "i1", "Siparişim nerede?", T0);
+        m.UserCaption.Should().Be("Siparişim nerede?");
+
+        m.Apply("speech_stopped", "i2", null, T0);
+
+        m.UserCaption.Should().BeNullOrEmpty("önceki turun cümlesi yeni turun altyazısında kalmamalı");
+        m.AssistantCaption.Should().BeEmpty();
+
+        m.Apply("assistant_delta", "1044 kargoda.", null, T0);
+        m.Apply("user_final", "i1", "Siparişim nerede?", T0);   // eski turun geç tekrarı
+        m.UserCaption.Should().BeNullOrEmpty();
+        m.Apply("user_final", "i2", "1044", T0);
+        m.UserCaption.Should().Be("1044");
+        m.AssistantCaption.Should().Be("1044 kargoda.");
+    }
+
+    [Fact]
+    public void LiveTranscription_SpeechStoppedOfTheSameItem_KeepsTheLiveCaption()
+    {
+        var m = Opened();
+        m.Apply("user_delta", "i1", "Siparişim nerede", T0);
+
+        m.Apply("speech_stopped", "i1", null, T0);
+
+        m.UserCaption.Should().Be("Siparişim nerede");
+    }
 }

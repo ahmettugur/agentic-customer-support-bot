@@ -14,8 +14,16 @@ public enum VoiceOrbState { Connecting, Listening, Thinking, Speaking, Muted, Ha
 /// <b>Altyazı yalnızca son tur:</b> dökümün tamamı zaten sohbete balon olarak yazılıyor. Yeni bir
 /// kullanıcı konuşması (yeni itemId) önceki yanıtı ekrandan kaldırır; canlı parçası olmayan
 /// modellerde ise biten bir yanıttan sonra gelen ilk asistan parçası eskisinin yerine geçer.
-/// Kullanıcının son transkripti asistan yanıtından SONRA gelir (sağlayıcı sırası); eski bir turun
-/// geç gelen son transkripti yeni turun altyazısının üzerine yazılmaz.
+/// Kullanıcının son transkripti asistan yanıtından SONRA gelebilir (sağlayıcı sırası); eski bir turun
+/// geç gelen son transkripti yeni turun altyazısının üzerine yazılmaz. Canlı parçası olmayan modellerde
+/// turun kimliği <c>speech_stopped</c>'tan gelir — eskiden yalnızca canlı parçadan geliyordu ve altyazı bir
+/// tur geriden (önceki cümleyle) kalıyordu.
+/// </para>
+///
+/// <para>
+/// <b>Aktarım durumu kalıcı değildir:</b> küre, temsilci talebi oluşturulup duyurulana (ya da müşteri yeniden
+/// konuşana) kadar "Temsilciye aktarılıyor" gösterir; görüşme sürerse normal durumlara döner (eskiden
+/// görüşmenin sonuna kadar takılı kalıyordu). Bilgi çipte kalır.
 /// </para>
 /// </summary>
 public sealed class VoiceCallModel
@@ -30,6 +38,7 @@ public sealed class VoiceCallModel
     private string _clientState = "connecting";
     private bool _thinking;
     private bool _handoff;
+    private bool _handoffCreated;
     private bool _assistantTurnDone;
     private string? _userItemId;
     private DateTimeOffset? _connectedAt;
@@ -94,18 +103,14 @@ public sealed class VoiceCallModel
                 break;
             case "speech_started":
                 _thinking = false;
+                if (_handoffCreated) _handoff = false;
                 break;
             case "speech_stopped":
                 _thinking = true;
+                if (a is not null && a != _userItemId) StartUserTurn(a);
                 break;
             case "user_delta":
-                if (a != _userItemId)
-                {
-                    _userItemId = a;
-                    UserCaption = "";
-                    AssistantCaption = "";
-                    _assistantTurnDone = false;
-                }
+                if (a != _userItemId) StartUserTurn(a);
                 UserCaption += b ?? "";
                 UserCaptionLive = true;
                 break;
@@ -128,6 +133,7 @@ public sealed class VoiceCallModel
             case "response_done":
                 _assistantTurnDone = true;
                 _thinking = false;
+                if (_handoffCreated) _handoff = false;
                 break;
             case "tool_call":
                 _thinking = true;
@@ -135,6 +141,7 @@ public sealed class VoiceCallModel
                 Chip = (a == HandoffTool || (a is not null && SideEffectTools.Contains(a)) ? "⏳ " : "🔎 ") + (b ?? a);
                 break;
             case "tool_result":
+                if (a == HandoffTool) _handoffCreated = true;
                 Chip = a == HandoffTool ? "👤 Temsilci talebi oluşturuldu"
                     : a is not null && SideEffectTools.Contains(a) ? "⏳ Talebiniz onaya gönderildi"
                     : null;
@@ -158,10 +165,20 @@ public sealed class VoiceCallModel
         }
     }
 
+    /// <summary>Yeni kullanıcı turu: önceki turun altyazıları ekrandan kalkar.</summary>
+    private void StartUserTurn(string? itemId)
+    {
+        _userItemId = itemId;
+        UserCaption = "";
+        UserCaptionLive = false;
+        AssistantCaption = "";
+        _assistantTurnDone = false;
+    }
+
     private void Reset()
     {
         _clientState = "connecting";
-        _thinking = _handoff = _assistantTurnDone = false;
+        _thinking = _handoff = _handoffCreated = _assistantTurnDone = false;
         _userItemId = null;
         _connectedAt = null;
         Muted = false;

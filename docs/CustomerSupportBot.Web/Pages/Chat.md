@@ -165,6 +165,14 @@ asistan konuşurken küreye dokunmak sözünü keser.
   katılınca (`__stopVoice`) ekran kapanır.
 - Bitirilmiş ya da yerine yenisi açılmış bir istemcinin geç olayları yok sayılır; izin penceresi açıkken
   bitirilen görüşme izin verilse de bağlanmaz. Ekran açıkken Tab odağı ekrandaki düğmelerde tutar.
+- **Kısayollar** (`Space`/`Esc`/Tab) yalnızca ekran gerçekten görünürken (`.vc-overlay` DOM'da) yakalanır —
+  ekran bileşeni kayıtlı değilse tuşlar sayfaya normal gider.
+- **Temsilciye aktarım** kalıcı değildir: küre talep oluşturulup duyurulana (ya da müşteri yeniden konuşana)
+  kadar "Temsilciye aktarılıyor" gösterir, görüşme sürerse normal durumlara döner; bilgi çipte kalır.
+- **Canlı olmayan transkripsiyon modelleri** (`gpt-4o-transcribe` vb.): turun kimliği `speech_stopped` ile
+  gelir; yeni tur önceki turun altyazısını kaldırır, eski turun geç gelen transkripti yenisinin üzerine yazılmaz.
+- **Bağlantı sesleri** (earcon) için ses bağlamı 🎙 tıklamasında (kullanıcı hareketi içinde) açılır; tarayıcının
+  otomatik oynatma kısıtı bağlamı askıya aldıysa her seste devam ettirilir.
 
 ### Kişisel verilerim (KVKK)
 
