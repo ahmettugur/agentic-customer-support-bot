@@ -39,6 +39,35 @@ public class HumanAgent
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? LastAssignedAt { get; set; }
+
+    /// <summary>
+    /// Temsilcinin seçtiği durum. Yönlendirme bunu doğrudan değil <see cref="EffectivePresence"/> ile
+    /// okur: paneli kapanan temsilci kalp atışı kesilince kendiliğinden çevrimdışı sayılır.
+    /// </summary>
+    public AgentPresence Presence { get; set; } = AgentPresence.Offline;
+
+    /// <summary>Seçilen durumun başladığı an (aynı durumu yeniden seçmek değiştirmez).</summary>
+    public DateTime? PresenceChangedAt { get; set; }
+
+    /// <summary>Panelden gelen son kalp atışı.</summary>
+    public DateTime? LastSeenAt { get; set; }
+
+    /// <summary>
+    /// Geçerli durum: seçilen durum çevrimdışı değilse ve son kalp atışı <paramref name="timeout"/>
+    /// süresinden yeniyse seçilen durum, aksi hâlde <see cref="AgentPresence.Offline"/>.
+    /// </summary>
+    public AgentPresence EffectivePresence(DateTime nowUtc, TimeSpan timeout) =>
+        Presence != AgentPresence.Offline && LastSeenAt is { } seen && nowUtc - seen <= timeout
+            ? Presence
+            : AgentPresence.Offline;
+}
+
+/// <summary>Temsilcinin çevrimiçi durumu.</summary>
+public enum AgentPresence
+{
+    Offline = 0,
+    Online = 1,
+    Away = 2
 }
 
 /// <summary>Admin endpoint'i için temsilci create/update input modeli.</summary>

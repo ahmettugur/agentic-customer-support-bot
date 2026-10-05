@@ -251,6 +251,16 @@ public sealed record LessonProposal(
     string? VectorMemoryId = null
 );
 
+// ─── Temsilci durumu ─────────────────────────────────────────────────────────
+
+/// <summary>
+/// <c>Presence</c> geçerli durumdur (sunucu zaman aşımını uygular), <c>ChosenPresence</c> temsilcinin
+/// seçimi. Değerler: "online", "away", "offline".
+/// </summary>
+public sealed record AgentPresenceItem(
+    string AgentId, string DisplayName, string Presence, string ChosenPresence,
+    DateTimeOffset? Since, DateTimeOffset? LastSeenAt, int CurrentLoad, int MaxConcurrentLoad);
+
 // ─── Hazır yanıtlar ──────────────────────────────────────────────────────────
 
 public sealed record SavedReplyItem(string Id, string Title, string Body, string? Shortcut, string? CreatedBy, DateTimeOffset UpdatedAt);

@@ -76,6 +76,14 @@ public partial class Admin
     private string           _assignSelected     = string.Empty;
     private string           _assignFallbackText = string.Empty;
 
+    // ── Temsilci durumu ────────────────────────────────────────────────────────
+    // Temsilci: kendi durumu + 30 sn'lik kalp atışı (sunucu 90 sn'de çevrimdışı sayar).
+    // Yönetici: Eskalasyonlar sekmesinde ve atama penceresinde herkesin durumu.
+    private static readonly TimeSpan PresenceHeartbeatInterval = TimeSpan.FromSeconds(30);
+    private AgentPresenceItem?      _myPresence;
+    private Timer?                  _presenceTimer;
+    private List<AgentPresenceItem> _agentPresence = [];
+
     // ── Transcript modal ───────────────────────────────────────────────────────
     private bool                     _showTranscriptModal;
     private string                   _transcriptSubtitle = string.Empty;
@@ -87,6 +95,7 @@ public partial class Admin
         var state = await AuthState.GetAuthenticationStateAsync();
         _isAgent = state.User.FindFirst(ClaimTypes.Role)?.Value == "Agent";
         if (_isAgent) _activeTab = "escalations";
+        if (_isAgent) await ConnectPresenceAsync();
 
         await RefreshBadgesAsync();
         await RefreshActiveTabAsync();
@@ -148,6 +157,7 @@ public partial class Admin
                     // yalnızca bu sekmeye özel olan kapanmış liste çekilir.
                     var recent         = await AdminApi.GetRecentEscalationsAsync(30);
                     _closedEscalations = recent.Where(e => e.Status is "resolved" or "dismissed").ToList();
+                    if (!_isAgent) _agentPresence = await AdminApi.GetAgentPresenceAsync();
                     break;
                 case "chats":
                     _activeChats = await AdminApi.GetActiveChatsAsync();
@@ -563,6 +573,7 @@ public partial class Admin
     {
         _assignEscalationId = escalationId;
         _assignAgents       = await AdminApi.GetAgentsAsync();
+        if (!_isAgent) _agentPresence = await AdminApi.GetAgentPresenceAsync();
         _assignSelected     = _assignAgents.FirstOrDefault(a => a.IsActive)?.Id ?? string.Empty;
         _assignFallbackText = string.Empty;
         _showAssignModal    = true;
@@ -688,7 +699,58 @@ public partial class Admin
         StopChatPanel();
         _dotNetRef?.Dispose();
         if (_refreshTimer is not null) await _refreshTimer.DisposeAsync();
+        // Ayrıca "çevrimdışı" gönderilmez: başka sekmede panel açık olabilir. Kalp atışı kesilince
+        // sunucu zaman aşımıyla çevrimdışı sayar.
+        if (_presenceTimer is not null) await _presenceTimer.DisposeAsync();
     }
+
+    // ── Temsilci durumu ───────────────────────────────────────────────────────
+    private async Task ConnectPresenceAsync()
+    {
+        _myPresence = await AdminApi.ConnectPresenceAsync();
+        if (_myPresence is null) return;   // hesap bir temsilci kaydına bağlı değil — seçici gösterilmez
+        _presenceTimer = new Timer(async _ =>
+        {
+            try
+            {
+                await InvokeAsync(async () =>
+                {
+                    if (await AdminApi.HeartbeatPresenceAsync() is { } fresh)
+                    {
+                        _myPresence = fresh;
+                        StateHasChanged();
+                    }
+                });
+            }
+            catch (ObjectDisposedException) { }
+            catch (TaskCanceledException) { }
+            catch (Exception ex) { Console.Error.WriteLine($"[PresenceHeartbeat] {ex}"); }
+        }, null, PresenceHeartbeatInterval, PresenceHeartbeatInterval);
+    }
+
+    private async Task OnMyPresenceChangedAsync(ChangeEventArgs e)
+    {
+        var chosen = e.Value?.ToString() ?? "online";
+        if (await AdminApi.SetPresenceAsync(chosen) is { } updated)
+        {
+            _myPresence = updated;
+            Toast.ShowSuccess($"Durumunuz: {PresenceLabel(updated.ChosenPresence)}.");
+        }
+        else
+        {
+            Toast.ShowError("Durum güncellenemedi.");
+        }
+    }
+
+    private static string PresenceLabel(string? presence) => presence switch
+    {
+        "online" => "Çevrimiçi",
+        "away"   => "Uzakta",
+        _        => "Çevrimdışı"
+    };
+
+    private AgentPresenceItem? PresenceOf(string agentId) =>
+        _agentPresence.FirstOrDefault(p => p.AgentId == agentId);
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private static string ShortId(string? id) =>

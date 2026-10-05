@@ -144,6 +144,19 @@ profili, açık işler (eskalasyon/bekleyen onay), ilgili bilgi tabanı makalele
 gönderir. Başka bir sohbete geçilir ya da sohbet bitirilirse kart sıfırlanır; geç gelen bir yanıt yanlış
 sohbete yazılmaz. LLM bölümü üretilemezse kart hatayı gösterir, diğer bölümler yine görünür.
 
+## Temsilci durumu
+
+**Temsilci:** başlıkta durum seçici (Çevrimiçi / Uzakta / Çevrimdışı; nokta rengi geçerli durumu
+gösterir). Panel açılırken `POST /agent/presence/connect` çağrılır — hesap bir temsilci kaydına bağlı
+değilse seçici gösterilmez. Panel açıkken 30 sn'de bir kalp atışı gider. Panel kapanırken ayrıca
+"çevrimdışı" gönderilmez (başka sekmede açık olabilir); sunucu kalp atışı kesilince zaman aşımıyla
+çevrimdışı sayar.
+
+**Yönetici:** Eskalasyonlar sekmesinin üstünde temsilci şeridi (`GET /agents/presence`; önce
+çevrimiçi, sonra uzakta, sonra çevrimdışı; yük `aktif/kapasite`). Kimse çevrimiçi değilse yeni
+eskalasyonların atanmadan kuyrukta bekleyeceği belirtilir. Atama penceresinde her temsilcinin durumu
+seçenek metninde görünür.
+
 ## Hazır yanıtlar
 
 **Canlı sohbet:** mesaj kutusunun solundaki **📋** düğmesi, kutunun üstünde aranabilir bir liste açar

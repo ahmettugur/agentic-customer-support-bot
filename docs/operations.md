@@ -168,6 +168,8 @@ Smart Routing & Skills-Based Escalation konfigürasyonu. Bir eskalasyon (`needs_
   "LoadBalancingEnabled": true,
   "LanguageWeight": 0.2,            // skor formülünde dil eşleşmesinin ağırlığı
   "MinMatchScore": 0.1,             // bu eşik altında SuggestedAgentId boş bırakılır
+  "RequireOnlineAgent": true,       // yalnızca çevrimiçi temsilciye öner; false = durum yok sayılır
+  "PresenceTimeoutSeconds": 90,     // panelden kalp atışı bu süre gelmezse temsilci çevrimdışı sayılır
   "IntentSkillMap": {
     "şikayet": ["complaint"],
     "sipariş_oluşturma": ["order"],
@@ -189,6 +191,8 @@ Smart Routing & Skills-Based Escalation konfigürasyonu. Bir eskalasyon (`needs_
   ]
 }
 ```
+
+**Temsilci durumu:** temsilci panelden Çevrimiçi / Uzakta / Çevrimdışı seçer; panel açıkken 30 sn'de bir kalp atışı gider. `RequireOnlineAgent = true` iken yeni eskalasyon yalnızca geçerli durumu çevrimiçi olan temsilciye önerilir; çevrimiçi kimse yoksa öneri boş kalır ve eskalasyon açık kuyrukta bekler (tüm temsilcilerin "açık" listesinde görünür). Paneli açık olmayan temsilci zaman aşımıyla çevrimdışı sayılır. Tasarım: [superpowers/specs/2026-10-05-agent-presence-design.md](superpowers/specs/2026-10-05-agent-presence-design.md).
 
 `Enabled = false` yaparsanız routing devre dışı kalır; eskalasyonlar admin manuel atayana kadar atanmamış kalır. `EscalationRequest`'in yeni alanları: `RequiredSkills`, `Priority`, `SuggestedAgentId`, `SuggestedAgentName`, `MatchScore`, `RoutingNote`. Detay → [CustomerSupportBot.Api/Endpoints/AdminAndHitl.md](CustomerSupportBot.Api/Endpoints/AdminAndHitl.md).
 

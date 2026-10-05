@@ -30,6 +30,15 @@ public interface IHumanAgentRegistry
     bool DecrementLoad(string id);
 
     /// <summary>
+    /// Temsilcinin seçtiği durumu yazar ve kalp atışı sayar. <c>PresenceChangedAt</c> yalnızca durum
+    /// değişince güncellenir. Yalnızca durum alanlarına dokunur (yük sayacına değil).
+    /// </summary>
+    bool SetPresence(string id, AgentPresence presence, DateTime nowUtc);
+
+    /// <summary>Kalp atışı: yalnızca <c>LastSeenAt</c>.</summary>
+    bool TouchPresence(string id, DateTime nowUtc);
+
+    /// <summary>
     /// Auth tablosundaki Agent rolü + LinkedAgentId'si olan kullanıcıları döner.
     /// Registry ile merge edilerek tam temsilci listesi oluşturulur.
     /// InMemory implementasyonu boş liste döner.

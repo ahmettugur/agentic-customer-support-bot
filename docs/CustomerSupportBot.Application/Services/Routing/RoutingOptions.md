@@ -37,6 +37,8 @@ tarafındaki değerlerin büyük/küçük harf farkından dolayı eşleşmemesi 
 | `Enabled` | `bool` | `true` | Smart routing açık mı? Kapalıysa `SkillsBasedRouter.Decide` no-op döner (`Note` ile birlikte boş `RoutingDecision`). |
 | `IntentSkillMap` | `Dictionary<string, List<string>>` | boş | Reasoning trace'inde tespit edilen `Intent`'e göre eklenecek skill etiketleri eşlemesi. |
 | `ProfileKeywordSkillMap` | `Dictionary<string, string>` | boş | Müşteri profilinin admin notunda geçen anahtar kelime → skill tag eşlemesi (ör. `"VIP"` → `"vip"`). |
+| `RequireOnlineAgent` | `bool` | `true` | Yeni eskalasyon yalnızca geçerli durumu `Online` olan temsilciye önerilir (`HumanAgent.EffectivePresence`). Çevrimiçi aday yoksa öneri boş kalır, not: "Çevrimiçi temsilci yok…". `false` = durum yok sayılır. |
+| `PresenceTimeoutSeconds` | `int` | `90` | Panelden kalp atışı bu süre gelmezse temsilci çevrimdışı sayılır. Router ve [AgentPresenceService](../Escalation/AgentPresenceService.md) aynı değeri kullanır (`PresenceTimeout`). |
 | `LoadBalancingEnabled` | `bool` | `true` | Açıksa, aynı skor aralığındaki temsilciler arasında `CurrentLoad`'u düşük olan hafif bir avantaj kazanır. |
 | `LanguageWeight` | `double` | `0.2` | Skor formülünde dil eşleşmesinin ağırlığı (0..1) — bkz. [SkillsBasedRouter.md](SkillsBasedRouter.md). |
 | `MinMatchScore` | `double` | `0.1` | Bu değerin altındaki en iyi skor "match yok" sayılır; eskalasyon yine kaydedilir ama `SuggestedAgentId` boş kalır. |

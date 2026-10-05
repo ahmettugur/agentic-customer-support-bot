@@ -111,6 +111,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ITelemetryPort, TelemetryPortService>();
         services.AddSingleton<ITracePort, TracePortService>();
         services.AddSingleton<IHumanAgentPort, HumanAgentPortService>();
+        services.AddSingleton<IAgentPresencePort, AgentPresenceService>();
         services.AddSingleton<IImprovementsPort, ImprovementsPortService>();
         services.AddSingleton<IPersonalizationPort, PersonalizationPortService>();
         services.AddSingleton<ISlaPort, SlaPortService>();

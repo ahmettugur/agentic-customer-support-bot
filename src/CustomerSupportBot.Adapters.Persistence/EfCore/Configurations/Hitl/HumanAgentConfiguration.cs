@@ -64,6 +64,20 @@ internal sealed class HumanAgentConfiguration : IEntityTypeConfiguration<HumanAg
             .HasColumnName("last_assigned_at")
             .HasColumnType("timestamptz");
 
+        builder.Property(e => e.Presence)
+            .HasColumnName("presence")
+            .HasMaxLength(16)
+            .HasDefaultValue("Offline")
+            .IsRequired();
+
+        builder.Property(e => e.PresenceChangedAt)
+            .HasColumnName("presence_changed_at")
+            .HasColumnType("timestamptz");
+
+        builder.Property(e => e.LastSeenAt)
+            .HasColumnName("last_seen_at")
+            .HasColumnType("timestamptz");
+
         builder.HasIndex(e => e.IsActive)
             .HasDatabaseName("ix_human_agents_active")
             .HasFilter("is_active = true");

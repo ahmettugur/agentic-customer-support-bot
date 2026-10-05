@@ -61,6 +61,40 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         }
     }
 
+    // ─── Temsilci durumu ─────────────────────────────────────────────────────
+
+    /// <summary>Panel açılışı: çevrimdışıysa çevrimiçi yapar, uzaktaysa korur. Bağlı temsilci yoksa null.</summary>
+    public Task<AgentPresenceItem?> ConnectPresenceAsync() => PostPresenceAsync("/agent/presence/connect");
+
+    public Task<AgentPresenceItem?> HeartbeatPresenceAsync() => PostPresenceAsync("/agent/presence/heartbeat");
+
+    public async Task<AgentPresenceItem?> SetPresenceAsync(string presence)
+    {
+        try
+        {
+            using var response = await http.PutAsJsonAsync("/agent/presence", new { presence });
+            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<AgentPresenceItem>() : null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Yalnız yönetici: aktif temsilcilerin geçerli durumu.</summary>
+    public async Task<List<AgentPresenceItem>> GetAgentPresenceAsync()
+    {
+        try { return await http.GetFromJsonAsync<List<AgentPresenceItem>>("/agents/presence") ?? []; }
+        catch { return []; }
+    }
+
+    private async Task<AgentPresenceItem?> PostPresenceAsync(string url)
+    {
+        try
+        {
+            using var response = await http.PostAsync(url, null);
+            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<AgentPresenceItem>() : null;
+        }
+        catch { return null; }
+    }
+
     // ─── Hazır yanıtlar ──────────────────────────────────────────────────────
 
     /// <summary>Arama sunucuda Türkçe kurallarla yapılır (başlık/metin/kısayol). Temsilci /agent önekiyle okur.</summary>

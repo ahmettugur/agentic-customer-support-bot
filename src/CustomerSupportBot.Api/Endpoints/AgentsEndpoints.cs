@@ -20,6 +20,9 @@ public static class AgentsEndpoints
             return Results.Ok(new { count = merged.Count, items });
         });
 
+        // ─── Durum: tüm aktif temsilciler (geçerli durum, zaman aşımı uygulanmış) ───
+        group.MapGet("/presence", (IAgentPresencePort presence) => Results.Ok(presence.GetAll()));
+
         // ─── Create ───
         group.MapPost("", (HumanAgentInput input, IHumanAgentPort port) =>
         {

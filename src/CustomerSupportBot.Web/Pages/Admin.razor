@@ -33,6 +33,18 @@
             </div>
         </div>
         <div class="admin-header-right">
+            @if (_myPresence is not null)
+            {
+                <label class="presence-picker presence-@_myPresence.Presence"
+                       title="@(_myPresence.ChosenPresence == "online" ? "Yeni eskalasyonlar size önerilebilir" : "Yeni eskalasyon önerilmez")">
+                    <span class="presence-dot" aria-hidden="true"></span>
+                    <select aria-label="Durumum" value="@_myPresence.ChosenPresence" @onchange="OnMyPresenceChangedAsync">
+                        <option value="online">Çevrimiçi</option>
+                        <option value="away">Uzakta</option>
+                        <option value="offline">Çevrimdışı</option>
+                    </select>
+                </label>
+            }
             <label class="auto-refresh-toggle">
                 <input type="checkbox" @bind="_autoRefresh" @bind:after="OnAutoRefreshChanged" />
                 <span>Auto-refresh (3sn)</span>
@@ -271,6 +283,26 @@
 
         <!-- TAB: ESCALATIONS -->
         <section id="panel-escalations" class="tab-content @ActiveCls("escalations")" role="tabpanel" aria-labelledby="tab-escalations">
+            @if (!_isAgent && _agentPresence.Count > 0)
+            {
+                <div class="presence-strip" role="status" aria-label="Temsilci durumları">
+                    <span class="presence-strip-title">Temsilciler</span>
+                    @foreach (var a in _agentPresence)
+                    {
+                        <span class="presence-chip presence-@a.Presence"
+                              title="@PresenceLabel(a.Presence) · yük @a.CurrentLoad/@a.MaxConcurrentLoad">
+                            <span class="presence-dot" aria-hidden="true"></span>
+                            @a.DisplayName
+                            <span class="presence-load">@a.CurrentLoad/@a.MaxConcurrentLoad</span>
+                            <span class="visually-hidden">@PresenceLabel(a.Presence)</span>
+                        </span>
+                    }
+                    @if (_agentPresence.All(a => a.Presence != "online"))
+                    {
+                        <span class="presence-strip-note">Çevrimiçi temsilci yok — yeni eskalasyonlar atanmadan kuyrukta bekler.</span>
+                    }
+                </div>
+            }
             <div class="escalations-layout">
                 <aside class="escalations-sidebar">
                     <h3>Kapanmış <span class="badge badge-muted">@_closedEscalations.Count</span></h3>
@@ -1161,8 +1193,9 @@
                     <select class="form-control" @bind="_assignSelected">
                         @foreach (var a in _assignAgents)
                         {
+                            var presence = PresenceOf(a.Id);
                             <option value="@a.Id" disabled="@(!a.IsActive)">
-                                @a.DisplayName — @a.Id@(!a.IsActive ? " (pasif)" : "")
+                                @a.DisplayName — @a.Id@(!a.IsActive ? " (pasif)" : "")@(presence is not null ? $" · {PresenceLabel(presence.Presence)}" : "")
                             </option>
                         }
                     </select>

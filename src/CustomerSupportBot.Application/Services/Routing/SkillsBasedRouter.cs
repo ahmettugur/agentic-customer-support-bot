@@ -27,11 +27,13 @@ public class SkillsBasedRouter : ISkillsBasedRouter
 {
     private readonly IHumanAgentRegistry _registry;
     private readonly RoutingOptions _options;
+    private readonly TimeProvider _clock;
 
-    public SkillsBasedRouter(IHumanAgentRegistry registry, IOptions<RoutingOptions> options)
+    public SkillsBasedRouter(IHumanAgentRegistry registry, IOptions<RoutingOptions> options, TimeProvider? clock = null)
     {
         _registry = registry;
         _options = options.Value;
+        _clock = clock ?? TimeProvider.System;
     }
 
     public RoutingDecision Decide(
@@ -48,9 +50,24 @@ public class SkillsBasedRouter : ISkillsBasedRouter
         var preferredLanguage = (customerProfile?.PreferredLanguage ?? "tr").Trim().ToLowerInvariant();
         var langWeight = Math.Clamp(_options.LanguageWeight, 0.0, 1.0);
 
-        var candidates = _registry.GetActive()
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var active = _registry.GetActive();
+        var reachable = _options.RequireOnlineAgent
+            ? active.Where(a => a.EffectivePresence(now, _options.PresenceTimeout) == AgentPresence.Online).ToList()
+            : active.ToList();
+        var candidates = reachable
             .Where(a => a.CurrentLoad < a.MaxConcurrentLoad)
             .ToList();
+
+        if (_options.RequireOnlineAgent && reachable.Count == 0)
+        {
+            return new RoutingDecision
+            {
+                MatchedSkills = new(),
+                MissingSkills = requiredSkills.ToList(),
+                Note = "Çevrimiçi temsilci yok; eskalasyon açık kuyrukta bekliyor."
+            };
+        }
 
         if (candidates.Count == 0)
         {

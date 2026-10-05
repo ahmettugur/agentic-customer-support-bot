@@ -23,6 +23,7 @@ public class EscalationPolicyDedupTests
     {
         var routing = Options.Create(new RoutingOptions
         {
+            RequireOnlineAgent = false,   // temsilci durumu bu testlerin konusu değil
             SeedAgents = new()
             {
                 new HumanAgent

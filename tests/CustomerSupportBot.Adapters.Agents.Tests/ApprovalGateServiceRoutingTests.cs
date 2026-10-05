@@ -34,6 +34,7 @@ public class ApprovalGateServiceRoutingTests
         var queue = new InMemoryApprovalQueue(Options.Create(_opts), new NoopApprovalExecutionRouter(), NullLogger<InMemoryApprovalQueue>.Instance);
         var routingWrapper = Options.Create(routingOpts ?? new RoutingOptions
         {
+            RequireOnlineAgent = false,   // temsilci durumu bu testlerin konusu değil
             IntentSkillMap = new(StringComparer.OrdinalIgnoreCase)
             {
                 ["şikayet"] = new() { "complaint" }
@@ -113,6 +114,7 @@ public class ApprovalGateServiceRoutingTests
     {
         var routingOpts = new RoutingOptions
         {
+            RequireOnlineAgent = false,
             IntentSkillMap = new(StringComparer.OrdinalIgnoreCase) { ["şikayet"] = new() { "complaint" } },
             ProfileKeywordSkillMap = new(StringComparer.OrdinalIgnoreCase) { ["VIP"] = "vip" },
             SeedAgents = new()

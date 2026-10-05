@@ -21,4 +21,9 @@ public sealed class HumanAgentEntity
     public int Priority { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastAssignedAt { get; set; }
+
+    /// <summary>Seçilen durum: Offline | Online | Away.</summary>
+    public string Presence { get; set; } = "Offline";
+    public DateTime? PresenceChangedAt { get; set; }
+    public DateTime? LastSeenAt { get; set; }
 }

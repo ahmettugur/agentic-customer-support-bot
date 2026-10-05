@@ -81,7 +81,7 @@ yapılamadı ama neden" bilgisini görebilmesi için (manuel atama gerektiğinde
 
 | Üye | Açıklama |
 |---|---|
-| `Decide(trace, agentName, customerProfile)` | `Enabled=false` ise no-op `RoutingDecision` döner. Aksi halde: gerekli skill'leri çıkarır → `CurrentLoad < MaxConcurrentLoad` olan aktif adayları filtreler (hiç yoksa "müsait temsilci yok" notuyla döner) → her adayı skorlar → en yüksek skorlu adayı seçer → skor `MinMatchScore`'un altındaysa `SuggestedAgentId` boş, üstündeyse dolu bir `RoutingDecision` döner. |
+| `Decide(trace, agentName, customerProfile)` | `Enabled=false` ise no-op `RoutingDecision` döner. Aksi halde: gerekli skill'leri çıkarır → `RequireOnlineAgent` açıksa yalnızca geçerli durumu çevrimiçi olan temsilcileri tutar (hiç yoksa "Çevrimiçi temsilci yok" notuyla döner; bkz. [AgentPresenceService](../Escalation/AgentPresenceService.md)) → `CurrentLoad < MaxConcurrentLoad` olan aktif adayları filtreler (hiç yoksa "müsait temsilci yok" notuyla döner) → her adayı skorlar → en yüksek skorlu adayı seçer → skor `MinMatchScore`'un altındaysa `SuggestedAgentId` boş, üstündeyse dolu bir `RoutingDecision` döner. |
 | `ExtractRequiredSkills(trace, agentName, customerProfile)` | Yukarıdaki 4 kaynaktan gerekli skill `HashSet`'ini (normalize edilmiş: trim + lowercase) üretir, `List<string>` olarak döner. |
 | `ScoreSkillMatch(agentSkills, requiredSkills)` *(private static)* | Eşleşen/eksik skill listelerini ve oranı hesaplar. |
 | `AgentSpeaksLanguage(agent, preferredLanguage)` *(private static)* | Temsilcinin tercih edilen dili konuşup konuşmadığını kontrol eder (boş dil listesi → "tr" varsayımı). |

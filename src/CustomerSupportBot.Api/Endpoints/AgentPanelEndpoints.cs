@@ -31,6 +31,12 @@
 //
 // Profil:
 //   GET  /agent/profile                           → Kendi agent profilim
+//
+// Durum (çevrimiçi/uzakta):
+//   GET  /agent/presence                          → Kendi durumum
+//   PUT  /agent/presence                          → { presence: "online" | "away" | "offline" }
+//   POST /agent/presence/connect                  → Panel açılışı (çevrimdışıysa çevrimiçi)
+//   POST /agent/presence/heartbeat                → Panel açıkken periyodik
 
 using System.Security.Claims;
 using CustomerSupportBot.Api.Infrastructure;
@@ -406,6 +412,30 @@ public static class AgentPanelEndpoints
         });
 
         // ════════════════════════════════════════════════════════════════
+        // PRESENCE
+        // ════════════════════════════════════════════════════════════════
+
+        group.MapGet("/presence", (HttpContext ctx, IAgentPresencePort presence) =>
+            WithLinkedAgent(ctx, id => presence.Get(id)));
+
+        group.MapPut("/presence", (PresenceInput body, HttpContext ctx, IAgentPresencePort presence) =>
+        {
+            var chosen = Enum.GetValues<AgentPresence>()
+                .Where(p => string.Equals(p.ToString(), body.Presence?.Trim(), StringComparison.OrdinalIgnoreCase))
+                .Select(p => (AgentPresence?)p)
+                .FirstOrDefault();
+            return chosen is { } p
+                ? WithLinkedAgent(ctx, id => presence.Set(id, p))
+                : Results.BadRequest(new { error = "presence: online, away ya da offline olmalı." });
+        });
+
+        group.MapPost("/presence/connect", (HttpContext ctx, IAgentPresencePort presence) =>
+            WithLinkedAgent(ctx, id => presence.Connect(id)));
+
+        group.MapPost("/presence/heartbeat", (HttpContext ctx, IAgentPresencePort presence) =>
+            WithLinkedAgent(ctx, id => presence.Heartbeat(id)));
+
+        // ════════════════════════════════════════════════════════════════
         // PROFILE
         // ════════════════════════════════════════════════════════════════
 
@@ -422,6 +452,19 @@ public static class AgentPanelEndpoints
         });
 
         return app;
+    }
+
+    public sealed record PresenceInput(string? Presence);
+
+    /// <summary>Durum uçlarının ortak kuralı: bağlı temsilci yoksa 400, temsilci kaydı yoksa 404.</summary>
+    private static IResult WithLinkedAgent(HttpContext ctx, Func<string, AgentPresenceInfo?> action)
+    {
+        var agentId = GetLinkedAgentId(ctx);
+        if (agentId is null)
+            return Results.BadRequest(new { error = "Kullanıcıya bağlı agent kaydı yok." });
+        return action(agentId) is { } info
+            ? Results.Ok(info)
+            : Results.NotFound(new { error = "Agent kaydı bulunamadı." });
     }
 
     /// <summary>JWT claim'den linked_agent_id'yi çözer.</summary>

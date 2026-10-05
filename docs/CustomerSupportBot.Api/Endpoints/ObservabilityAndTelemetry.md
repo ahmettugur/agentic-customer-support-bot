@@ -79,6 +79,7 @@ sohbet akışının kendisini etkilemez — hepsi **izleme/yönetim** amaçlıd�
 | Route | Açıklama |
 |---|---|
 | `GET /agents` | Tüm temsilcileri (registry + auth-linked kullanıcılar birleşik) listeler. |
+| `GET /agents/presence` | Aktif temsilcilerin geçerli durumu (çevrimiçi/uzakta/çevrimdışı; zaman aşımı uygulanmış) ve yükü — önce çevrimiçi. `AgentPresenceInfo` listesi. |
 | `POST /agents` | Yeni temsilci kaydı oluşturur (`HumanAgentInput`). |
 | `GET /agents/{id}` | Tek temsilci. |
 | `PUT /agents/{id}` | Temsilciyi günceller. |

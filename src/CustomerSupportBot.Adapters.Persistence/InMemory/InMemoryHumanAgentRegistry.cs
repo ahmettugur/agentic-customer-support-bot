@@ -30,7 +30,10 @@ public class InMemoryHumanAgentRegistry : IHumanAgentRegistry
                 MaxConcurrentLoad = seed.MaxConcurrentLoad <= 0 ? 5 : seed.MaxConcurrentLoad,
                 CurrentLoad = Math.Max(0, seed.CurrentLoad),
                 Priority = seed.Priority,
-                CreatedAt = seed.CreatedAt == default ? DateTime.UtcNow : seed.CreatedAt
+                CreatedAt = seed.CreatedAt == default ? DateTime.UtcNow : seed.CreatedAt,
+                Presence = seed.Presence,
+                PresenceChangedAt = seed.PresenceChangedAt,
+                LastSeenAt = seed.LastSeenAt
             };
             _agents[agent.Id] = agent;
         }
@@ -100,6 +103,25 @@ public class InMemoryHumanAgentRegistry : IHumanAgentRegistry
         {
             a.CurrentLoad = Math.Max(a.CurrentLoad - 1, 0);
         }
+        return true;
+    }
+
+    public bool SetPresence(string id, AgentPresence presence, DateTime nowUtc)
+    {
+        if (!_agents.TryGetValue(id, out var a)) return false;
+        lock (a)
+        {
+            if (a.Presence != presence || a.PresenceChangedAt is null) a.PresenceChangedAt = nowUtc;
+            a.Presence = presence;
+            a.LastSeenAt = nowUtc;
+        }
+        return true;
+    }
+
+    public bool TouchPresence(string id, DateTime nowUtc)
+    {
+        if (!_agents.TryGetValue(id, out var a)) return false;
+        lock (a) a.LastSeenAt = nowUtc;
         return true;
     }
 

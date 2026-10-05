@@ -61,6 +61,7 @@ Bu klasör, Onion / Hexagonal Mimari'de **Use Cases & Application Core (İş Ak�
   - [EscalationPortService](Services/Escalation/EscalationPortService.md) — [IEscalationPort](Ports.md) uygulayıcısı (admin panel CRUD).
   - [AgentAssistService](Services/Escalation/AgentAssistService.md) — Temsilci asistanı: devralınan sohbet için özet, bağlam ve yanıt taslağı.
   - [HitlEventPortService](Services/Escalation/HitlEventPortService.md) — Oturuma özel HITL olaylarının (onay/eskalasyon/insan devri) canlı yayını.
+  - [AgentPresenceService](Services/Escalation/AgentPresenceService.md) — Temsilci çevrimiçi/uzakta durumu: seçim, panel açılışı, kalp atışı, yönetici görünümü.
   - [HumanAgentPortService](Services/Escalation/HumanAgentPortService.md) — Temsilci CRUD'u, otomatik yük takibi, manuel yeniden atama.
 - [A2A/](Services/A2A/A2ATokenExchangeService.md) — Agent-to-Agent Protokolü ve Güvenlik (`A2ATokenExchangeService`, `A2ASubjectIdentity`, `ConfiguredA2ASubjectAuthorizer`).
 - [Sla/](Services/Sla/SlaPortService.md) — SLA Politikası ve Performans Değerlendirmesi (`SlaPolicyEvaluator`).

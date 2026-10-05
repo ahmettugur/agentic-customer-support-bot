@@ -39,6 +39,17 @@ public class RoutingOptions
     /// </summary>
     public double MinMatchScore { get; set; } = 0.1;
 
+    /// <summary>
+    /// Yeni eskalasyon yalnızca geçerli durumu çevrimiçi olan temsilciye önerilir. Çevrimiçi aday yoksa
+    /// öneri boş kalır ve eskalasyon açık kuyrukta bekler. <c>false</c> = durum yok sayılır.
+    /// </summary>
+    public bool RequireOnlineAgent { get; set; } = true;
+
+    /// <summary>Panelden kalp atışı bu süre (sn) gelmezse temsilci çevrimdışı sayılır.</summary>
+    public int PresenceTimeoutSeconds { get; set; } = 90;
+
+    public TimeSpan PresenceTimeout => TimeSpan.FromSeconds(Math.Max(1, PresenceTimeoutSeconds));
+
     /// <summary>Seed temsilciler (ilk başlatmada InMemoryHumanAgentRegistry'e eklenir).</summary>
     public List<HumanAgent> SeedAgents { get; set; } = new();
 }

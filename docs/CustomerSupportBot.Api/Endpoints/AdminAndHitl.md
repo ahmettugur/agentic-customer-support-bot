@@ -110,6 +110,9 @@ Yukarıdakiyle aynı işlerin agent-kapsamlı hâli — route'lar `/agent/...` a
 | `POST /agent/escalations/{id}/resolve` | Agent'ın yükünü azaltır (`DecrementLoad`). |
 | `GET /agent/profile` | Çağıran kullanıcının bağlı olduğu `HumanAgentEntity` profilini döner. |
 | `GET /agent/chat-sessions/{sid}/assist` | Temsilci asistanı — admin ucuyla aynı. |
+| `GET /agent/presence` \| `PUT /agent/presence` | Kendi durumum; `body: { presence: "online" \| "away" \| "offline" }`, geçersiz değer 400. |
+| `POST /agent/presence/connect` | Panel açılışı: seçilen durum çevrimdışıysa çevrimiçi yapılır, uzakta ise korunur. |
+| `POST /agent/presence/heartbeat` | Panel açıkken 30 sn'de bir; seçimi değiştirmez. Durum uçlarında bağlı temsilci yoksa 400, temsilci kaydı yoksa 404. |
 | `GET /agent/saved-replies?q=` | Hazır yanıtlar — yalnız okuma (yönetim yalnız Admin). |
 | *(approvals, chat-sessions uçları)* | `AdminEndpoints` ile aynı davranış, `decidedBy`/`humanAgent` alanı JWT'deki `linked_agent_id`'den türetilir. |
 

@@ -26,7 +26,9 @@ public class SkillsBasedRouterTests
             ProfileKeywordSkillMap = new(StringComparer.OrdinalIgnoreCase)
             {
                 ["VIP"] = "vip"
-            }
+            },
+            // Puanlama testleri durumdan bağımsız; durum testleri bunu açıkça açar.
+            RequireOnlineAgent = false
         };
         configure?.Invoke(opts);
         var optsWrapper = Options.Create(opts);
@@ -218,5 +220,63 @@ public class SkillsBasedRouterTests
 
         decision.SuggestedAgentId.Should().Be("vip-expert");
         decision.MatchedSkills.Should().Contain("vip");
+    }
+
+    // ─── Çevrimiçi/uzakta durumu ─────────────────────────────────────────────
+
+    private static HumanAgent ComplaintAgent(string id, AgentPresence presence, DateTime? lastSeen) => new()
+    {
+        Id = id, DisplayName = id, Skills = new() { "complaint" }, Languages = new() { "tr" },
+        IsActive = true, MaxConcurrentLoad = 5, Presence = presence, LastSeenAt = lastSeen
+    };
+
+    [Fact]
+    public void RequireOnline_SkipsAwayOfflineAndStaleAgents_EvenWithABetterSkillMatch()
+    {
+        var now = DateTime.UtcNow;
+        var away = ComplaintAgent("away", AgentPresence.Away, now);
+        var offline = ComplaintAgent("offline", AgentPresence.Offline, now);
+        var stale = ComplaintAgent("stale", AgentPresence.Online, now.AddMinutes(-10));
+        var online = new HumanAgent
+        {
+            Id = "online", DisplayName = "Online", Skills = new() { "order" }, Languages = new() { "tr" },
+            IsActive = true, MaxConcurrentLoad = 5, Presence = AgentPresence.Online, LastSeenAt = now
+        };
+        var (router, _) = Build(o => o.RequireOnlineAgent = true, away, offline, stale, online);
+
+        var decision = router.Decide(TraceWithIntent("şikayet"), "ComplaintAgent", null);
+
+        decision.SuggestedAgentId.Should().Be("online", "yalnız çevrimiçi temsilci aday");
+    }
+
+    [Fact]
+    public void RequireOnline_NoOnlineAgent_LeavesTheEscalationInTheQueue()
+    {
+        var (router, _) = Build(o => o.RequireOnlineAgent = true,
+            ComplaintAgent("away", AgentPresence.Away, DateTime.UtcNow));
+
+        var decision = router.Decide(TraceWithIntent("şikayet"), "ComplaintAgent", null);
+
+        decision.SuggestedAgentId.Should().BeNull();
+        decision.Note.Should().Contain("Çevrimiçi temsilci yok");
+    }
+
+    [Fact]
+    public void RequireOnline_UsesTheConfiguredHeartbeatTimeout()
+    {
+        var seenTwoMinutesAgo = ComplaintAgent("a", AgentPresence.Online, DateTime.UtcNow.AddMinutes(-2));
+        var (strict, _) = Build(o => { o.RequireOnlineAgent = true; o.PresenceTimeoutSeconds = 90; }, seenTwoMinutesAgo);
+        var (lenient, _) = Build(o => { o.RequireOnlineAgent = true; o.PresenceTimeoutSeconds = 300; },
+            ComplaintAgent("a", AgentPresence.Online, DateTime.UtcNow.AddMinutes(-2)));
+
+        strict.Decide(TraceWithIntent("şikayet"), "ComplaintAgent", null).SuggestedAgentId.Should().BeNull();
+        lenient.Decide(TraceWithIntent("şikayet"), "ComplaintAgent", null).SuggestedAgentId.Should().Be("a");
+    }
+
+    [Fact]
+    public void RequireOnline_IsTheDefault()
+    {
+        new RoutingOptions().RequireOnlineAgent.Should().BeTrue();
+        new RoutingOptions().PresenceTimeoutSeconds.Should().Be(90);
     }
 }

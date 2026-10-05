@@ -12,6 +12,10 @@
 //     değişiklikte TAM kayıt yayınlanır — delta gerekmiyor.
 //   - Create/Update/IncrementLoad/DecrementLoad → csbot:humanagent:upserted.
 //   - Delete → csbot:humanagent:deleted.
+//   - SetPresence/TouchPresence → csbot:humanagent:presence — YALNIZCA durum alanları. Tam kayıt
+//     yayınlansaydı her 30 sn'lik kalp atışı, yayınlayan pod'un (mesaj kaçırmışsa eski) yük sayacını
+//     tüm pod'lara yayardı. Aynı nedenle durum yazımı DB'de yalnızca durum sütunlarını günceller ve
+//     tam kayıt yayını (upserted) alınırken daha yeni durum bilgisi korunur.
 
 using System.Collections.Concurrent;
 using System.Text.Json;
@@ -28,6 +32,7 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
 {
     private const string ChannelUpserted = "csbot:humanagent:upserted";
     private const string ChannelDeleted = "csbot:humanagent:deleted";
+    private const string ChannelPresence = "csbot:humanagent:presence";
 
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresHumanAgentRegistry> _logger;
@@ -46,6 +51,7 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
         _logger = logger;
         _messageBus.Subscribe(ChannelUpserted, OnRemoteUpserted);
         _messageBus.Subscribe(ChannelDeleted, OnRemoteDeleted);
+        _messageBus.Subscribe(ChannelPresence, OnRemotePresence);
     }
 
     // ─── IHumanAgentRegistry ───
@@ -164,6 +170,29 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
         return true;
     }
 
+    public bool SetPresence(string id, AgentPresence presence, DateTime nowUtc)
+    {
+        EnsureHydrated();
+        if (!_agents.TryGetValue(id, out var a)) return false;
+        lock (a)
+        {
+            if (a.Presence != presence || a.PresenceChangedAt is null) a.PresenceChangedAt = nowUtc;
+            a.Presence = presence;
+            a.LastSeenAt = nowUtc;
+        }
+        WritePresence(a);
+        return true;
+    }
+
+    public bool TouchPresence(string id, DateTime nowUtc)
+    {
+        EnsureHydrated();
+        if (!_agents.TryGetValue(id, out var a)) return false;
+        lock (a) a.LastSeenAt = nowUtc;
+        WritePresence(a);
+        return true;
+    }
+
     public async Task<IReadOnlyList<HumanAgent>> GetLinkedUsersAsync(CancellationToken ct = default)
     {
         try
@@ -235,6 +264,8 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
                 existing.Priority = agent.Priority;
                 existing.CreatedAt = agent.CreatedAt;
                 existing.LastAssignedAt = agent.LastAssignedAt;
+                // Durum sütunları burada yazılmaz: yönetici güncellemesi, bu pod'un önbelleğindeki
+                // (eski olabilecek) durumla temsilcinin güncel seçimini ezmesin. Bkz. WritePresence.
             }
             else
             {
@@ -265,6 +296,28 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
         }
     }
 
+    private void WritePresence(HumanAgent a)
+    {
+        AgentPresence presence; DateTime? since, lastSeen;
+        lock (a) (presence, since, lastSeen) = (a.Presence, a.PresenceChangedAt, a.LastSeenAt);
+        try
+        {
+            using var ctx = _dbFactory.CreateDbContext();
+            ctx.HumanAgents
+                .Where(e => e.Id == a.Id)
+                .ExecuteUpdate(s => s
+                    .SetProperty(e => e.Presence, presence.ToString())
+                    .SetProperty(e => e.PresenceChangedAt, since)
+                    .SetProperty(e => e.LastSeenAt, lastSeen));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Routing] HumanAgent presence UPDATE başarısız. Id={Id}", a.Id);
+        }
+        var payload = new { nodeId = _messageBus.NodeId, id = a.Id, presence, since, lastSeen };
+        _messageBus.Publish(ChannelPresence, JsonSerializer.Serialize(payload));
+    }
+
     // ─── Mapping ───
 
     private static HumanAgent MapToModel(HumanAgentEntity e) => new()
@@ -279,7 +332,10 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
         CurrentLoad = e.CurrentLoad,
         Priority = e.Priority,
         CreatedAt = e.CreatedAt,
-        LastAssignedAt = e.LastAssignedAt
+        LastAssignedAt = e.LastAssignedAt,
+        Presence = Enum.TryParse<AgentPresence>(e.Presence, ignoreCase: true, out var p) ? p : AgentPresence.Offline,
+        PresenceChangedAt = e.PresenceChangedAt,
+        LastSeenAt = e.LastSeenAt
     };
 
     private static HumanAgentEntity MapToEntity(HumanAgent a) => new()
@@ -294,7 +350,10 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
         CurrentLoad = a.CurrentLoad,
         Priority = a.Priority,
         CreatedAt = a.CreatedAt,
-        LastAssignedAt = a.LastAssignedAt
+        LastAssignedAt = a.LastAssignedAt,
+        Presence = a.Presence.ToString(),
+        PresenceChangedAt = a.PresenceChangedAt,
+        LastSeenAt = a.LastSeenAt
     };
 
     private static List<string> DeserializeList(string json)
@@ -332,11 +391,52 @@ public sealed class PostgresHumanAgentRegistry : IHumanAgentRegistry
             var agent = JsonSerializer.Deserialize<HumanAgent>(root.GetProperty("agent").GetRawText());
             if (agent is null) return;
 
+            // Durum ayrı kanalla yayılır; yayınlayan pod'un durum bilgisi eskiyse yereldeki korunur.
+            if (_agents.TryGetValue(agent.Id, out var local))
+            {
+                lock (local)
+                {
+                    if (Newer(local.PresenceChangedAt, agent.PresenceChangedAt))
+                        (agent.Presence, agent.PresenceChangedAt) = (local.Presence, local.PresenceChangedAt);
+                    if (Newer(local.LastSeenAt, agent.LastSeenAt))
+                        agent.LastSeenAt = local.LastSeenAt;
+                }
+            }
             _agents[agent.Id] = agent;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[Routing] Redis OnRemoteUpserted parse hatası");
+        }
+    }
+
+    private static bool Newer(DateTime? a, DateTime? b) => a is { } x && (b is not { } y || x > y);
+
+    private void OnRemotePresence(string val)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(val);
+            var root = doc.RootElement;
+            if (root.GetProperty("nodeId").GetString() == _messageBus.NodeId) return;
+
+            var id = root.GetProperty("id").GetString();
+            if (id is null || !_agents.TryGetValue(id, out var a)) return;
+
+            var presence = root.GetProperty("presence").Deserialize<AgentPresence>();
+            var since = root.GetProperty("since").Deserialize<DateTime?>();
+            var lastSeen = root.GetProperty("lastSeen").Deserialize<DateTime?>();
+            lock (a)
+            {
+                // İki sekme/pod'dan neredeyse aynı anda gelen seçimlerde sıra karışabilir: yalnızca daha
+                // eski olmayan bilgi uygulanır.
+                if (!Newer(a.PresenceChangedAt, since)) (a.Presence, a.PresenceChangedAt) = (presence, since);
+                if (!Newer(a.LastSeenAt, lastSeen)) a.LastSeenAt = lastSeen;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Routing] Redis OnRemotePresence parse hatası");
         }
     }
 

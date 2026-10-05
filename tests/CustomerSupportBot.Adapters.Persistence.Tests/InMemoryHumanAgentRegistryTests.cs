@@ -138,4 +138,58 @@ public class InMemoryHumanAgentRegistryTests
         var sut = Build();
         sut.IncrementLoad("does-not-exist").Should().BeFalse();
     }
+
+    // ─── Çevrimiçi/uzakta durumu ─────────────────────────────────────────────
+
+    [Fact]
+    public void SetPresence_StampsSince_OnlyWhenThePresenceChanges()
+    {
+        var sut = Build();
+        var a = sut.Create(new HumanAgent { DisplayName = "X" });
+        var t0 = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
+
+        sut.SetPresence(a.Id, AgentPresence.Online, t0).Should().BeTrue();
+        sut.SetPresence(a.Id, AgentPresence.Online, t0.AddMinutes(1)).Should().BeTrue();
+
+        var fresh = sut.Get(a.Id)!;
+        fresh.Presence.Should().Be(AgentPresence.Online);
+        fresh.PresenceChangedAt.Should().Be(t0);
+        fresh.LastSeenAt.Should().Be(t0.AddMinutes(1));
+    }
+
+    [Fact]
+    public void TouchPresence_UpdatesOnlyLastSeen()
+    {
+        var sut = Build();
+        var a = sut.Create(new HumanAgent { DisplayName = "X" });
+        var t0 = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
+        sut.SetPresence(a.Id, AgentPresence.Away, t0);
+
+        sut.TouchPresence(a.Id, t0.AddSeconds(30)).Should().BeTrue();
+
+        var fresh = sut.Get(a.Id)!;
+        fresh.Presence.Should().Be(AgentPresence.Away);
+        fresh.PresenceChangedAt.Should().Be(t0);
+        fresh.LastSeenAt.Should().Be(t0.AddSeconds(30));
+    }
+
+    [Fact]
+    public void Presence_OnUnknownId_ReturnsFalse()
+    {
+        var sut = Build();
+        sut.SetPresence("yok", AgentPresence.Online, DateTime.UtcNow).Should().BeFalse();
+        sut.TouchPresence("yok", DateTime.UtcNow).Should().BeFalse();
+    }
+
+    [Fact]
+    public void AdminUpdate_DoesNotTouchPresence()
+    {
+        var sut = Build();
+        var a = sut.Create(new HumanAgent { DisplayName = "X" });
+        sut.SetPresence(a.Id, AgentPresence.Online, DateTime.UtcNow);
+
+        sut.Update(a.Id, new HumanAgentInput { DisplayName = "Y", IsActive = true });
+
+        sut.Get(a.Id)!.Presence.Should().Be(AgentPresence.Online);
+    }
 }
