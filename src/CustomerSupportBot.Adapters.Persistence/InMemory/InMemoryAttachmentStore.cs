@@ -7,7 +7,7 @@ using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Adapters.Persistence.InMemory;
 
-public sealed class InMemoryAttachmentStore : IAttachmentStore
+public sealed class InMemoryAttachmentStore : IAttachmentStore, ISessionDataEraser
 {
     private readonly ConcurrentDictionary<string, ChatAttachment> _byId = new();
     private readonly object _linkGate = new();
@@ -49,6 +49,25 @@ public sealed class InMemoryAttachmentStore : IAttachmentStore
         {
             return Task.FromResult(_byId.TryGetValue(id, out var a) && a.SentAt is null && _byId.TryRemove(id, out _));
         }
+    }
+
+    public Task<int> DeleteCreatedBeforeAsync(DateTime cutoffUtc, CancellationToken ct = default)
+    {
+        var count = 0;
+        foreach (var a in _byId.Values.Where(a => a.CreatedAt < cutoffUtc).ToList())
+            if (_byId.TryRemove(a.Id, out _)) count++;
+        return Task.FromResult(count);
+    }
+
+    public string Name => "attachments";
+
+    public Task<int> EraseSessionsAsync(IReadOnlyCollection<string> sessionIds, CancellationToken ct = default)
+    {
+        var ids = sessionIds.ToHashSet(StringComparer.Ordinal);
+        var count = 0;
+        foreach (var a in _byId.Values.Where(a => ids.Contains(a.SessionId)).ToList())
+            if (_byId.TryRemove(a.Id, out _)) count++;
+        return Task.FromResult(count);
     }
 
     public Task LinkToApprovalAsync(IReadOnlyCollection<string> ids, string approvalId, CancellationToken ct = default)

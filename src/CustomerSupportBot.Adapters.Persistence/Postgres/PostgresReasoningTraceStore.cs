@@ -30,7 +30,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresReasoningTraceStore : IReasoningTraceStore, ICacheWarmup
+public sealed class PostgresReasoningTraceStore : IReasoningTraceStore, ICacheWarmup, ISessionDataEraser
 {
     private const string ChannelStarted = "csbot:trace:started";
     private const string ChannelCompleted = "csbot:trace:completed";
@@ -56,6 +56,29 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore, ICacheWa
         _maxCacheCapacity = maxCacheCapacity;
         _messageBus.Subscribe(ChannelStarted, OnRemoteStarted);
         _messageBus.Subscribe(ChannelCompleted, OnRemoteCompleted);
+        PrivacyChannels.SubscribeSessionsErased(_messageBus, EvictSessions, _logger);
+    }
+
+    // ─── Kişisel veri silme (ISessionDataEraser) ───
+
+    public string Name => "reasoning-traces";
+
+    /// <summary>Akıl yürütme izleri kullanıcı sorusunu ve yanıtı metin olarak taşır — oturumla birlikte silinir.</summary>
+    public async Task<int> EraseSessionsAsync(IReadOnlyCollection<string> sessionIds, CancellationToken ct = default)
+    {
+        if (sessionIds.Count == 0) return 0;
+        var ids = sessionIds.ToList();
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var deleted = await db.ReasoningTraces.Where(t => ids.Contains(t.SessionId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        EvictSessions(ids.ToHashSet(StringComparer.Ordinal));
+        PrivacyChannels.PublishSessionsErased(_messageBus, ids);
+        return deleted;
+    }
+
+    private void EvictSessions(IReadOnlySet<string> sessionIds)
+    {
+        foreach (var trace in _byId.Values)
+            if (sessionIds.Contains(trace.SessionId)) _byId.TryRemove(trace.TraceId, out _);
     }
 
     /// <remarks>

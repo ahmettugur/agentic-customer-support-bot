@@ -22,7 +22,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresChatModeRegistry : IChatModeRegistry, ICacheWarmup
+public sealed class PostgresChatModeRegistry : IChatModeRegistry, ICacheWarmup, ISessionDataEraser
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresChatModeRegistry> _logger;
@@ -45,6 +45,27 @@ public sealed class PostgresChatModeRegistry : IChatModeRegistry, ICacheWarmup
         _messageBus = messageBus;
         _logger = logger;
         _messageBus.Subscribe("csbot:chatmode", OnRemoteModeChanged);
+        PrivacyChannels.SubscribeSessionsErased(_messageBus, EvictSessions, _logger);
+    }
+
+    // ─── Kişisel veri silme (ISessionDataEraser) ───
+
+    public string Name => "chat-modes";
+
+    public async Task<int> EraseSessionsAsync(IReadOnlyCollection<string> sessionIds, CancellationToken ct = default)
+    {
+        if (sessionIds.Count == 0) return 0;
+        var ids = sessionIds.ToList();
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var deleted = await db.ChatSessionModes.Where(m => ids.Contains(m.SessionId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        EvictSessions(ids.ToHashSet(StringComparer.Ordinal));
+        PrivacyChannels.PublishSessionsErased(_messageBus, ids);
+        return deleted;
+    }
+
+    private void EvictSessions(IReadOnlySet<string> sessionIds)
+    {
+        foreach (var id in sessionIds) _states.TryRemove(id, out _);
     }
 
     public ChatMode GetMode(string sessionId)

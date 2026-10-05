@@ -3,6 +3,7 @@
 
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Services.Approval;
 using CustomerSupportBot.Application.Services.Chat;
@@ -82,6 +83,7 @@ public static class ApplicationServiceCollectionExtensions
 
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
         services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
+        services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
 
         services.Configure<EvaluationQualityOptions>(configuration.GetSection(EvaluationQualityOptions.SectionName));
     }
@@ -129,6 +131,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IReasoningPort>(sp => sp.GetRequiredService<ReasoningService>());
         services.AddSingleton<ChatPortService>();
         services.AddSingleton<IChatAttachmentPort, Services.Attachments.ChatAttachmentService>();
+        services.AddSingleton<IDataPrivacyPort, Services.Privacy.DataPrivacyService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
         services.AddSingleton<IApprovalExecutionRouter, ApprovalExecutionRouter>();
@@ -191,6 +194,10 @@ public static class ApplicationServiceCollectionExtensions
             services.AddSingleton<SemanticMemoryService>();
             services.AddSingleton<ISemanticMemoryIngestor>(sp => sp.GetRequiredService<SemanticMemoryService>());
             services.AddSingleton<ISemanticMemoryWriter>(sp => sp.GetRequiredService<SemanticMemoryService>());
+            // Kişisel veri silme: episodik bellekteki oturum ve müşteri kayıtları (bellek açıkken).
+            services.AddSingleton<Services.Privacy.EpisodicMemoryEraser>();
+            services.AddSingleton<ISessionDataEraser>(sp => sp.GetRequiredService<Services.Privacy.EpisodicMemoryEraser>());
+            services.AddSingleton<ICustomerDataEraser>(sp => sp.GetRequiredService<Services.Privacy.EpisodicMemoryEraser>());
             services.AddSingleton<KnowledgeBaseIngestionService>();
             services.AddSingleton<IKnowledgeBaseIngestor>(sp => sp.GetRequiredService<KnowledgeBaseIngestionService>());
             services.AddSingleton<IMemoryPort, MemoryPortService>();

@@ -166,6 +166,13 @@ asistan konuşurken küreye dokunmak sözünü keser.
 - Bitirilmiş ya da yerine yenisi açılmış bir istemcinin geç olayları yok sayılır; izin penceresi açıkken
   bitirilen görüşme izin verilse de bağlanmaz. Ekran açıkken Tab odağı ekrandaki düğmelerde tutar.
 
+### Kişisel verilerim (KVKK)
+
+Başlıktaki kalkan düğmesi küçük bir panel açar: **Verilerimi indir** (`GET /customer/data/export`, tarayıcıda
+dosya olarak — `__downloadFile`) ve **Verilerimi sil**. Silme önce neyin silineceğini ve neyin yasal kayıt
+olarak kalacağını gösterip onay ister; başarılı olursa ekrandaki sohbet de temizlenir (yeni sohbet). Kısmi
+hatada sunucunun mesajı gösterilir ve tekrar denenebilir.
+
 ### Fotoğraf ekleme (📎)
 
 - Fotoğraf **seçildiği anda** yüklenir (`ChatApiService.UploadAttachmentAsync`) — görsel analiz,

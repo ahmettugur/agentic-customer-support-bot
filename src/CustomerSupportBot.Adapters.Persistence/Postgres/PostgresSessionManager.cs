@@ -415,6 +415,19 @@ public sealed class PostgresSessionManager : ISessionManager
         PublishHistoryAppended(sessionId, [new ConversationMessage(ConversationRoles.User, text)]);
     }
 
+    public async Task<IReadOnlyList<string>> GetInactiveSessionIdsAsync(
+        DateTime lastActivityBeforeUtc, int limit, CancellationToken ct = default)
+    {
+        // Kalıcı depodan: önbellekte olmayan (çoktan çıkarılmış) eski oturumlar da bulunmalı.
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return await ctx.Sessions.AsNoTracking()
+            .Where(s => s.LastActivity < lastActivityBeforeUtc)
+            .OrderBy(s => s.LastActivity)
+            .Take(Math.Max(0, limit))
+            .Select(s => s.SessionId)
+            .ToListAsync(ct).ConfigureAwait(false);
+    }
+
     public async Task ClearSessionAsync(string sessionId, CancellationToken ct = default)
     {
         Evict(sessionId);

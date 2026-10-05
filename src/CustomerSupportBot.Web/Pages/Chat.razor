@@ -95,6 +95,53 @@
                         </div>
                     }
                 </div>
+                <div class="privacy-menu">
+                    <button type="button" class="btn-theme-toggle" @onclick="TogglePrivacyPanel"
+                            aria-label="Kişisel verilerim" title="Kişisel verilerim" aria-expanded="@(_showPrivacyPanel ? "true" : "false")">
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </button>
+                    @if (_showPrivacyPanel)
+                    {
+                        <div class="approval-panel privacy-panel" role="dialog" aria-label="Kişisel verilerim">
+                            <div class="privacy-title">Kişisel verilerim</div>
+                            @if (!_privacyConfirm)
+                            {
+                                <p class="privacy-text">
+                                    Sohbetleriniz ve eklediğiniz fotoğraflar belirli bir süre sonra otomatik silinir.
+                                    Dilediğiniz an verilerinizi indirebilir ya da silebilirsiniz.
+                                </p>
+                                <button type="button" class="privacy-action" @onclick="DownloadMyDataAsync" disabled="@_privacyBusy">
+                                    ⬇ Verilerimi indir
+                                </button>
+                                <button type="button" class="privacy-action danger" @onclick="AskEraseConfirmation" disabled="@_privacyBusy">
+                                    🗑 Verilerimi sil
+                                </button>
+                            }
+                            else
+                            {
+                                <p class="privacy-text">
+                                    <strong>Silinecek:</strong> tüm sohbetleriniz, fotoğraflarınız, puan ve yorumlarınız,
+                                    kişiselleştirme profiliniz. Bu işlem geri alınamaz.
+                                </p>
+                                <p class="privacy-text muted">
+                                    Siparişleriniz, şikayet kayıtlarınız ve onay işlemleriniz yasal kayıt olarak saklanır.
+                                </p>
+                                <div class="privacy-confirm-actions">
+                                    <button type="button" class="privacy-action" @onclick="() => _privacyConfirm = false" disabled="@_privacyBusy">Vazgeç</button>
+                                    <button type="button" class="privacy-action danger" @onclick="EraseMyDataAsync" disabled="@_privacyBusy">
+                                        @(_privacyBusy ? "Siliniyor…" : "Evet, sil")
+                                    </button>
+                                </div>
+                            }
+                            @if (_privacyMessage is not null)
+                            {
+                                <p class="privacy-status @(_privacyMessageIsError ? "error" : "")" role="status">@_privacyMessage</p>
+                            }
+                        </div>
+                    }
+                </div>
                 <button type="button" class="btn-theme-toggle" @onclick="ToggleThemeAsync"
                         aria-label="@(ThemeSvc.IsDark ? "Aydınlık moda geç" : "Karanlık moda geç")"
                         title="@(ThemeSvc.IsDark ? "Aydınlık mod" : "Karanlık mod")">
@@ -809,6 +856,73 @@
     }
 
     private async Task ToggleThemeAsync() => await ThemeSvc.ToggleAsync();
+
+    // ── Kişisel verilerim (KVKK) ──────────────────────────────────────────────
+    private bool _showPrivacyPanel;
+    private bool _privacyConfirm;
+    private bool _privacyBusy;
+    private string? _privacyMessage;
+    private bool _privacyMessageIsError;
+
+    private void TogglePrivacyPanel()
+    {
+        _showPrivacyPanel = !_showPrivacyPanel;
+        _privacyConfirm = false;
+        _privacyMessage = null;
+    }
+
+    private void AskEraseConfirmation()
+    {
+        _privacyConfirm = true;
+        _privacyMessage = null;
+    }
+
+    private async Task DownloadMyDataAsync()
+    {
+        _privacyBusy = true;
+        _privacyMessage = null;
+        try
+        {
+            var json = await ChatApi.ExportMyDataAsync();
+            if (json is null)
+            {
+                SetPrivacyMessage("Verileriniz indirilemedi; lütfen tekrar deneyin.", isError: true);
+                return;
+            }
+            await JS.InvokeVoidAsync("__downloadFile", $"kisisel-verilerim-{DateTime.Now:yyyyMMdd}.json", json, "application/json");
+            SetPrivacyMessage("Verileriniz indirildi.", isError: false);
+        }
+        finally { _privacyBusy = false; }
+    }
+
+    /// <summary>
+    /// Silme sunucuda tüm sohbetleri kaldırır; ekrandaki sohbet de temizlenir (yeni sohbet). Hata olursa
+    /// sohbet olduğu gibi kalır — sunucu kısmi silmede tekrar denemeye izin verir.
+    /// </summary>
+    private async Task EraseMyDataAsync()
+    {
+        _privacyBusy = true;
+        try
+        {
+            var error = await ChatApi.EraseMyDataAsync();
+            if (error is not null)
+            {
+                SetPrivacyMessage(error, isError: true);
+                return;
+            }
+            await NewChatAsync();
+            _approvalNotifications.Clear();
+            _privacyConfirm = false;
+            SetPrivacyMessage("Verileriniz silindi.", isError: false);
+        }
+        finally { _privacyBusy = false; }
+    }
+
+    private void SetPrivacyMessage(string message, bool isError)
+    {
+        _privacyMessage = message;
+        _privacyMessageIsError = isError;
+    }
 
     // ── Fotoğraf ekleme ───────────────────────────────────────────────────────
     // Sunucu sınırlarıyla aynı (Attachments ayarları); burada yalnızca erken geri bildirim içindir —

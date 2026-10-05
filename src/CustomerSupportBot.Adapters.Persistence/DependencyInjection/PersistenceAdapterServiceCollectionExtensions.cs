@@ -31,21 +31,25 @@ public static class PersistenceAdapterServiceCollectionExtensions
         services.AddScoped<IUserAuthRepository, EfUserAuthRepository>();
         services.AddScoped<IRefreshTokenRepository, EfRefreshTokenRepository>();
 
-        services.AddSingleton<IReasoningTraceStore, PostgresReasoningTraceStore>();
         services.AddSingleton<ILlmCallPersistencePort, PostgresLlmCallUsageSink>();
         services.AddSingleton<IApprovalQueue, PostgresApprovalQueue>();
-        services.AddSingleton<IEscalationSink, PostgresEscalationSink>();
-        services.AddSingleton<IChatModeRegistry, PostgresChatModeRegistry>();
-        services.AddSingleton<IChatBridge, PostgresChatBridge>();
         services.AddSingleton<PostgresSessionManager>();
         services.AddSingleton<ISessionManager>(sp => sp.GetRequiredService<PostgresSessionManager>());
-        services.AddSingleton<IRatingStore, PostgresRatingStore>();
         services.AddSingleton<IHumanAgentRegistry, PostgresHumanAgentRegistry>();
         services.AddSingleton<ICustomerProfileStore, PostgresCustomerProfileStore>();
         services.AddSingleton<ILessonStore, PostgresLessonStore>();
         services.AddSingleton<ISlaEventSink, PostgresSlaEventSink>();
         services.AddSingleton<IKnowledgeArticleStore, PostgresKnowledgeArticleStore>();
-        services.AddSingleton<IAttachmentStore, PostgresAttachmentStore>();
+
+        // Oturuma bağlı kişisel veri tutan depolar: aynı tekil örnek hem kendi portu hem de
+        // ISessionDataEraser olarak çözülür (KVKK silmesi — bkz. DataPrivacyService). Önbellek ısıtma
+        // (PersistenceHydrator) portu çözdüğü için örnek tek kalmalı.
+        AddSessionDataStore<IReasoningTraceStore, PostgresReasoningTraceStore>(services);
+        AddSessionDataStore<IEscalationSink, PostgresEscalationSink>(services);
+        AddSessionDataStore<IChatModeRegistry, PostgresChatModeRegistry>(services);
+        AddSessionDataStore<IChatBridge, PostgresChatBridge>(services);
+        AddSessionDataStore<IRatingStore, PostgresRatingStore>(services);
+        AddSessionDataStore<IAttachmentStore, PostgresAttachmentStore>(services);
 
         services.AddSingleton<IOrderRepository, OrderRepository>();
         services.AddSingleton<ICustomerRepository, CustomerRepository>();
@@ -62,5 +66,14 @@ public static class PersistenceAdapterServiceCollectionExtensions
         services.AddSingleton<IKnowledgeBaseSource, FileSystemKnowledgeBaseSource>();
 
         return services;
+    }
+
+    private static void AddSessionDataStore<TPort, TImpl>(IServiceCollection services)
+        where TPort : class
+        where TImpl : class, TPort, ISessionDataEraser
+    {
+        services.AddSingleton<TImpl>();
+        services.AddSingleton<TPort>(sp => sp.GetRequiredService<TImpl>());
+        services.AddSingleton<ISessionDataEraser>(sp => sp.GetRequiredService<TImpl>());
     }
 }

@@ -420,6 +420,19 @@ Sohbete eklenen fotoğraflar (bkz. [Attachments](CustomerSupportBot.Application/
   okur. Onay kaydına yalnızca müşterinin **gönderdiği** fotoğraflar bağlanır.
 - Fotoğraflar oturumla birlikte silinir (FK cascade); gönderilmemiş fotoğrafı müşteri silebilir.
 
+## 5c. Kişisel Veri Saklama ve Silme (KVKK)
+
+Bkz. [Privacy](CustomerSupportBot.Application/Services/Privacy/README.md).
+
+- **Saklama süresi:** son etkinliği 180 günü (varsayılan) geçen oturumlar ve 90 günden eski fotoğraflar
+  otomatik silinir (`DataRetention`). Silme oturuma bağlı tüm depoları kapsar: mesajlar, fotoğraflar, canlı
+  devralma mesajları, puan/yorum, eskalasyon metni, akıl yürütme izleri, episodik bellek.
+- **Önbellekler:** silinen veri tüm pod'ların bellek içi önbelleğinden de çıkarılır (`csbot:privacy:sessions-erased`).
+- **Müşteri hakları:** müşteri sohbet ekranından verisini indirir ve siler; yönetici aynısını KVKK başvurusu için
+  yapar (yalnız Admin). Silme `confirm=true` ister, denetim izi loglanır, içerik loglanmaz.
+- **Kalanlar:** sipariş, şikayet ve onay kayıtları yasal/işlemsel kayıt olarak tutulur; açık eskalasyonlar
+  temsilci kuyruğu bozulmasın diye silinmez, müşteri metni temizlenir.
+
 ## 6. Hassas Dosya Yönetimi
 
 ### `.gitignore`'da Korunan Dosyalar

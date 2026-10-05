@@ -27,6 +27,7 @@ Bu klasör, hexagonal mimaride **Driving Adapter (Giriş Adaptörü)** ve **Comp
 - [Workers/](Workers/) — Arkaplan servisleri:
   - [KnowledgeBaseStartupService](Workers/KnowledgeBaseIngestor.md) — Markdown bilgi bankasını açılışta Qdrant vektör ambarına aktaran `IHostedService`.
   - [SlaGuardianService](Workers/SlaGuardianService.md) — Yanıtsız kalan veya aşırı uzayan sohbetlerde SLA ihlallerini periyodik denetleyen `BackgroundService` (cross-pod kilit destekli).
+  - [DataRetentionService](Workers/DataRetentionService.md) — Kişisel veri saklama süresi taraması (KVKK); cross-pod kilit destekli.
 
 ## Mimari Rolü ve Yetenekleri
 

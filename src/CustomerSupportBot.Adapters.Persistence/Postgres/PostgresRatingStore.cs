@@ -24,7 +24,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresRatingStore : IRatingStore, ICacheWarmup
+public sealed class PostgresRatingStore : IRatingStore, ICacheWarmup, ISessionDataEraser
 {
     private const string ChannelSubmitted = "csbot:rating:submitted";
 
@@ -44,6 +44,28 @@ public sealed class PostgresRatingStore : IRatingStore, ICacheWarmup
         _messageBus = messageBus;
         _logger = logger;
         _messageBus.Subscribe(ChannelSubmitted, OnRemoteSubmitted);
+        PrivacyChannels.SubscribeSessionsErased(_messageBus, EvictSessions, _logger);
+    }
+
+    // ─── Kişisel veri silme (ISessionDataEraser) ───
+
+    public string Name => "ratings";
+
+    /// <summary>Oturumların puan ve yorumlarını siler (yorum serbest metindir, kişisel veri içerebilir).</summary>
+    public async Task<int> EraseSessionsAsync(IReadOnlyCollection<string> sessionIds, CancellationToken ct = default)
+    {
+        if (sessionIds.Count == 0) return 0;
+        var ids = sessionIds.ToList();
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var deleted = await db.Ratings.Where(r => ids.Contains(r.SessionId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        EvictSessions(ids.ToHashSet(StringComparer.Ordinal));
+        PrivacyChannels.PublishSessionsErased(_messageBus, ids);
+        return deleted;
+    }
+
+    private void EvictSessions(IReadOnlySet<string> sessionIds)
+    {
+        foreach (var id in sessionIds) _cache.TryRemove(id, out _);
     }
 
     public async Task<ConversationRating> SubmitAsync(string sessionId, int stars, string? feedback)

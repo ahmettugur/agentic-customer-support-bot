@@ -177,6 +177,7 @@ if (a2aEnabled)
 }
 app.MapChatEndpoints();
 app.MapChatAttachmentEndpoints();
+app.MapCustomerDataPrivacyEndpoints();
 app.MapRealtimeEndpoints();
 app.MapSessionEndpoints();
 
@@ -194,6 +195,7 @@ adminScope.MapTelemetryEndpoints();
 adminScope.MapPersonalizationEndpoints();
 adminScope.MapAgentsEndpoints();
 adminScope.MapSlaEndpoints();
+adminScope.MapAdminDataPrivacyEndpoints();
 
 var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRateLimiting("general");
 agentScope.MapAgentPanelEndpoints();

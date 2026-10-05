@@ -29,7 +29,7 @@ using Npgsql;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresEscalationSink : IEscalationSink, ICacheWarmup
+public sealed class PostgresEscalationSink : IEscalationSink, ICacheWarmup, ISessionDataEraser
 {
     private readonly IDbContextFactory<CustomerSupportDbContext> _dbFactory;
     private readonly ILogger<PostgresEscalationSink> _logger;
@@ -53,6 +53,63 @@ public sealed class PostgresEscalationSink : IEscalationSink, ICacheWarmup
         _messageBus = messageBus;
         _messageBus.Subscribe("csbot:escalation:created", OnRemoteCreated);
         _messageBus.Subscribe("csbot:escalation:decided", OnRemoteDecided);
+        PrivacyChannels.SubscribeSessionsErased(_messageBus, ScrubOrEvictSessions, _logger);
+    }
+
+    // ─── Kişisel veri silme (ISessionDataEraser) ───
+
+    public string Name => "escalations";
+
+    /// <summary>Açık eskalasyonda silinen müşteri metninin yerine konan not.</summary>
+    internal const string ErasedText = "[Kişisel veri silindi]";
+
+    /// <summary>
+    /// Kapanmış (çözülmüş/geçersiz) eskalasyonlar silinir. Açık ya da alınmış olanlar SİLİNMEZ: temsilci
+    /// kuyruğunda ve yük sayaçlarında yer alırlar; kayıt kalkarsa atanan temsilcinin yükü hiç düşmezdi.
+    /// Onların müşteri metni (soru, özet, çözüm notu, eksik bilgi listesi) temizlenir.
+    /// </summary>
+    public async Task<int> EraseSessionsAsync(IReadOnlyCollection<string> sessionIds, CancellationToken ct = default)
+    {
+        if (sessionIds.Count == 0) return 0;
+        var ids = sessionIds.ToList();
+        var closed = new[] { nameof(EscalationStatus.Resolved), nameof(EscalationStatus.Dismissed) };
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+
+        var deleted = await db.Escalations
+            .Where(e => e.SessionId != null && ids.Contains(e.SessionId) && closed.Contains(e.Status))
+            .ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        var scrubbed = await db.Escalations
+            .Where(e => e.SessionId != null && ids.Contains(e.SessionId) && !closed.Contains(e.Status))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.UserQuery, ErasedText)
+                .SetProperty(e => e.ResponseSummary, (string?)null)
+                .SetProperty(e => e.Resolution, (string?)null)
+                .SetProperty(e => e.MissingContextJson, "[]"), ct).ConfigureAwait(false);
+
+        ScrubOrEvictSessions(ids.ToHashSet(StringComparer.Ordinal));
+        PrivacyChannels.PublishSessionsErased(_messageBus, ids);
+        return deleted + scrubbed;
+    }
+
+    private void ScrubOrEvictSessions(IReadOnlySet<string> sessionIds)
+    {
+        foreach (var e in _byId.Values)
+        {
+            if (e.SessionId is null || !sessionIds.Contains(e.SessionId)) continue;
+            if (e.Status is EscalationStatus.Resolved or EscalationStatus.Dismissed)
+            {
+                _byId.TryRemove(e.Id, out _);
+                continue;
+            }
+            // Önbellekteki nesneyi yerinde değiştirmek yerine kopya konur: okuyucular eski nesneyi
+            // tutuyor olabilir (bkz. DecideAsync — durum makinesi de kopya üzerinde çalışır).
+            var scrubbed = Clone(e);
+            scrubbed.UserQuery = ErasedText;
+            scrubbed.ResponseSummary = null;
+            scrubbed.Resolution = null;
+            scrubbed.MissingContext = [];
+            _byId[e.Id] = scrubbed;
+        }
     }
 
     public async Task<EscalationRequest> CreateAsync(EscalationRequest request)

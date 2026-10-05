@@ -152,6 +152,8 @@ public static class ApplicationServicesExtensions
 
         // ─── Background Workers (hosting adapter) ───
         services.AddHostedService<SlaGuardianService>();
+        // Kişisel veri saklama süresi (KVKK) — DataRetention ayarları.
+        services.AddHostedService<DataRetentionService>();
         // RoutingLoadTrackerService kaldırıldı — load-tracking HumanAgentPortService constructor'ında.
 
         // KnowledgeBase startup adapter — use-case mantığı Application katmanında; bu sadece startup tetikleyicisi

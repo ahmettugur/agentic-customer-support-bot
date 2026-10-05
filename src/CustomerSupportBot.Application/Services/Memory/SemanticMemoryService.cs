@@ -21,6 +21,9 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
     private readonly SemanticMemoryOptions _options;
     private readonly ILogger<SemanticMemoryService> _logger;
 
+    /// <summary>Episodik kayıtta müşteri kimliğinin etiket adı — yazma ve silme aynı adı kullanır.</summary>
+    public const string CustomerIdTag = "customerId";
+
     public bool Enabled => _options.Enabled;
     public bool IsConfigured => _embedder.IsConfigured;
     public SemanticMemoryOptions Options => _options;
@@ -91,6 +94,20 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
         await _store.DeleteAsync(CollectionFor(kind), documentId, ct);
     }
 
+    /// <summary>Verilen oturumların episodik kayıtlarını siler (kişisel veri silme).</summary>
+    public async Task DeleteEpisodesForSessionsAsync(IReadOnlyCollection<string> sessionIds, CancellationToken ct = default)
+    {
+        if (!Enabled || sessionIds.Count == 0) return;
+        await _store.DeleteBySessionsAsync(CollectionFor(MemoryKind.Episodic), sessionIds, ct);
+    }
+
+    /// <summary>Müşteri etiketli tüm episodik kayıtları siler (bkz. <see cref="WriteEpisodeAsync"/> — customerId etiketi).</summary>
+    public async Task DeleteEpisodesForCustomerAsync(string customerId, CancellationToken ct = default)
+    {
+        if (!Enabled || string.IsNullOrWhiteSpace(customerId)) return;
+        await _store.DeleteWhereTagAsync(CollectionFor(MemoryKind.Episodic), CustomerIdTag, customerId, ct);
+    }
+
     /// <summary>Bir collection'da semantic search.</summary>
     public async Task<IReadOnlyList<MemorySearchHit>> SearchAsync(
         MemoryKind kind, string query, int? topK = null, float? minScore = null,
@@ -157,7 +174,7 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
         // customerId tag olarak yazılır — retrieval'ın sessionId sınırını aşıp aynı müşterinin
         // FARKLI oturumlardaki geçmişini de bulabilmesi için. Anonim turlarda boş kalır; o
         // episode yalnızca sessionId ile bulunabilir olarak kalmaya devam eder.
-        if (!string.IsNullOrWhiteSpace(customerId)) doc.Tags["customerId"] = customerId;
+        if (!string.IsNullOrWhiteSpace(customerId)) doc.Tags[CustomerIdTag] = customerId;
         return UpsertAsync(doc, ct);
     }
 

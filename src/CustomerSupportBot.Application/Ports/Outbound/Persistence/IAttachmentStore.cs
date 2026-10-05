@@ -22,6 +22,12 @@ public interface IAttachmentStore
     /// <summary>Kaydı siler — yalnızca henüz gönderilmemişse. Silindiyse <c>true</c>.</summary>
     Task<bool> DeleteUnsentAsync(string id, CancellationToken ct = default);
 
+    /// <summary>
+    /// <paramref name="cutoffUtc"/>'den önce yüklenmiş fotoğrafları siler (veri saklama süresi); silinen
+    /// sayıyı döner. Oturum daha yeni olsa da silinir — fotoğraf en hassas veridir.
+    /// </summary>
+    Task<int> DeleteCreatedBeforeAsync(DateTime cutoffUtc, CancellationToken ct = default);
+
     /// <summary>Henüz bir onaya bağlanmamış kayıtları <paramref name="approvalId"/>'ye bağlar.</summary>
     Task LinkToApprovalAsync(IReadOnlyCollection<string> ids, string approvalId, CancellationToken ct = default);
 }

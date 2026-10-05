@@ -140,6 +140,20 @@ public class InMemorySessionManager : ISessionManager
             .ConfigureAwait(false);
     }
 
+    public Task<IReadOnlyList<string>> GetInactiveSessionIdsAsync(
+        DateTime lastActivityBeforeUtc, int limit, CancellationToken ct = default)
+    {
+        IReadOnlyList<string> ids = _sessions.Values
+            .Where(s => ToUtc(s.LastActivity) < lastActivityBeforeUtc)
+            .OrderBy(s => ToUtc(s.LastActivity))
+            .Take(Math.Max(0, limit))
+            .Select(s => s.SessionId)
+            .ToList();
+        return Task.FromResult(ids);
+    }
+
+    private static DateTime ToUtc(DateTime t) => t.Kind == DateTimeKind.Utc ? t : t.ToUniversalTime();
+
     public Task ClearSessionAsync(string sessionId, CancellationToken ct = default)
     {
         _sessions.TryRemove(sessionId, out _);

@@ -77,6 +77,14 @@ public interface ISessionManager
     /// </summary>
     Task<List<SessionInfo>> GetAllSessionsAsync(string? forCustomerId = null, CancellationToken ct = default);
 
+    /// <summary>
+    /// Son etkinliği <paramref name="lastActivityBeforeUtc"/>'den eski oturumların kimlikleri, en eskiden
+    /// başlayarak en fazla <paramref name="limit"/> tane — veri saklama süresi temizliği için. Kalıcı
+    /// depodan okunur (önbellekte olmayan eski oturumlar da bulunmalı).
+    /// </summary>
+    Task<IReadOnlyList<string>> GetInactiveSessionIdsAsync(
+        DateTime lastActivityBeforeUtc, int limit, CancellationToken ct = default);
+
     // ─── State extraction ───
 
     Task ExtractAndUpdateStateAsync(string sessionId, string userMessage, string botResponse, CancellationToken ct = default);

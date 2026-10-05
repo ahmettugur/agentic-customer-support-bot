@@ -161,3 +161,14 @@ Constructor injection yok — her endpoint lambda'sı ilgili port'u (`IChatPort`
   taşır; içerik türü kayıttan gelir (dosya imzasıyla belirlenmiş: yalnızca JPEG/PNG).
 - `POST /chat/` ve `/chat/stream` gövdesi `attachmentIds` alır; sunucu yalnızca bu oturuma ve bu
   müşteriye ait olanları kullanır.
+
+## Kişisel veri (`DataPrivacyEndpoints`)
+
+| Uç | Yetki | Açıklama |
+|---|---|---|
+| `GET /customer/data/export` | Customer | Kendi verim, JSON dosyası olarak (`Content-Disposition: attachment`, `Cache-Control: no-store`). |
+| `DELETE /customer/data?confirm=true` | Customer | Kendi sohbet/profil verimi siler. `confirm` yoksa 400 `confirmation_required`; kısmi hatada 500 `erasure_incomplete` + `failedStores` (tekrar denenebilir). |
+| `GET /customers/{customerId}/data/export` | Admin | KVKK başvurusu için bir müşterinin verisi. |
+| `DELETE /customers/{customerId}/data?confirm=true` | Admin | Bir müşterinin verisini siler; kim sildi loglanır. |
+
+Müşteri uçlarında kimlik her zaman token'dan (`linked_customer_id`) gelir, yoldan/gövdeden alınmaz.

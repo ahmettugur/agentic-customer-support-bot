@@ -139,4 +139,47 @@ public class QdrantAdapterIntegrationTests : IClassFixture<QdrantFixture>
                 },
                 new[] { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f })],
             ct);
+
+    // ─── Kişisel veri silme ──────────────────────────────────────────────────
+
+    private static (MemoryDocument Doc, float[] Vector) Episode(string sessionId, string? customerId, int seed)
+    {
+        var doc = new MemoryDocument { Kind = MemoryKind.Episodic, SessionId = sessionId, Text = $"soru {seed}" };
+        if (customerId is not null) doc.Tags["customerId"] = customerId;
+        var v = new float[8];
+        v[seed % 8] = 1f;
+        return (doc, v);
+    }
+
+    [Fact]
+    public async Task DeleteBySessions_RemovesOnlyThoseSessionsDocuments()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var collection = NewCollection();
+        var adapter = Adapter(false);
+        await adapter.EnsureCollectionAsync(collection, 8, ct);
+        await adapter.UpsertAsync(collection, [Episode("s1", "1001", 1), Episode("s2", "1001", 2), Episode("s3", "2002", 3)], ct);
+
+        await adapter.DeleteBySessionsAsync(collection, ["s1", "s2"], ct);
+
+        (await adapter.CountAsync(collection, ct)).Should().Be(1);
+        var left = await adapter.SearchAsync(collection, Episode("x", null, 3).Vector, 10, 0f, null, ct);
+        left.Should().ContainSingle().Which.Document.SessionId.Should().Be("s3");
+    }
+
+    [Fact]
+    public async Task DeleteWhereTag_RemovesOnlyMatchingDocuments()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var collection = NewCollection();
+        var adapter = Adapter(false);
+        await adapter.EnsureCollectionAsync(collection, 8, ct);
+        await adapter.UpsertAsync(collection, [Episode("s1", "1001", 1), Episode("s2", "2002", 2), Episode("s3", null, 3)], ct);
+
+        await adapter.DeleteWhereTagAsync(collection, "customerId", "1001", ct);
+
+        (await adapter.CountAsync(collection, ct)).Should().Be(2);
+        var left = await adapter.SearchAsync(collection, Episode("x", null, 1).Vector, 10, -1f, null, ct);
+        left.Select(h => h.Document.SessionId).Should().BeEquivalentTo(["s2", "s3"]);
+    }
 }

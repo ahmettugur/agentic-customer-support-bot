@@ -110,6 +110,36 @@ public sealed class ChatApiService(HttpClient http)
         catch { /* önizlemeden zaten kalktı; gönderilmeyen fotoğraf hiçbir onaya bağlanmaz */ }
     }
 
+    /// <summary>Kişisel verilerimin tamamı (JSON metni) — indirilecek dosyanın içeriği. Hata/yetkisizse null.</summary>
+    public async Task<string?> ExportMyDataAsync()
+    {
+        try
+        {
+            var response = await http.GetAsync("/customer/data/export");
+            return response.IsSuccessStatusCode ? await response.Content.ReadAsStringAsync() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Sohbet ve profil verilerimi siler (geri alınamaz). Başarısızsa kullanıcıya gösterilecek metin döner.</summary>
+    public async Task<string?> EraseMyDataAsync()
+    {
+        try
+        {
+            var response = await http.DeleteAsync("/customer/data?confirm=true");
+            if (response.IsSuccessStatusCode) return null;
+            var error = await response.Content.ReadFromJsonAsync<ApiError>();
+            return error?.Message ?? "Verileriniz silinemedi; lütfen tekrar deneyin.";
+        }
+        catch
+        {
+            return "Verileriniz silinemedi; lütfen tekrar deneyin.";
+        }
+    }
+
     public async Task<List<ApprovalHistoryItem>> GetApprovalHistoryAsync()
     {
         try

@@ -105,6 +105,19 @@ window.__chatSetup = function (ref, apiBase, authToken) {
     // ayrıca reddedilmesi) sonsuz refresh döngüsüne girmesini engeller; her mesaj için en
     // fazla bir kez otomatik retry yapılır.
     // attachmentIds: POST /chat/attachments ile yüklenmiş fotoğrafların kimlikleri (boş olabilir).
+    // Metni dosya olarak indirir (kişisel veri dışa aktarma). Blob tarayıcıda oluşur; sunucuya tekrar gidilmez.
+    window.__downloadFile = function (fileName, text, mimeType) {
+        var blob = new Blob([text], { type: mimeType || 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    };
+
     window.__streamChat = function (ref, apiBase, query, sessionId, isRetry, attachmentIds) {
         var ids = Array.isArray(attachmentIds) && attachmentIds.length > 0 ? attachmentIds : null;
         var ctrl = new AbortController();

@@ -25,7 +25,7 @@ using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
-public sealed class PostgresChatBridge : IChatBridge
+public sealed class PostgresChatBridge : IChatBridge, ISessionDataEraser
 {
     private const int HistoryCapacity = 200;
 
@@ -48,6 +48,35 @@ public sealed class PostgresChatBridge : IChatBridge
         _messageBus = messageBus;
         _messageBus.Subscribe("csbot:bridge:touser", val => OnRemoteBridge(_toUser, val));
         _messageBus.Subscribe("csbot:bridge:toadmin", val => OnRemoteBridge(_toAdmin, val));
+        PrivacyChannels.SubscribeSessionsErased(_messageBus, EvictSessions, _logger);
+    }
+
+    // ─── Kişisel veri silme (ISessionDataEraser) ───
+
+    public string Name => "bridge-messages";
+
+    /// <summary>
+    /// Canlı devralma mesajlarını siler. Açık canlı abonelikler (SSE) kapatılmaz — müşteri kendi verisini
+    /// sohbet ekranındayken silebilir; bağlantı sürer, yalnızca geçmiş boşalır.
+    /// </summary>
+    public async Task<int> EraseSessionsAsync(IReadOnlyCollection<string> sessionIds, CancellationToken ct = default)
+    {
+        if (sessionIds.Count == 0) return 0;
+        var ids = sessionIds.ToList();
+        await using var db = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        var deleted = await db.ChatBridgeMessages.Where(m => ids.Contains(m.SessionId)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        EvictSessions(ids.ToHashSet(StringComparer.Ordinal));
+        PrivacyChannels.PublishSessionsErased(_messageBus, ids);
+        return deleted;
+    }
+
+    private void EvictSessions(IReadOnlySet<string> sessionIds)
+    {
+        foreach (var id in sessionIds)
+        {
+            _history.TryRemove(id, out _);
+            _hydratedSessions.TryRemove(id, out _);
+        }
     }
 
     // ─── Publish ───

@@ -42,5 +42,13 @@ public interface IVectorMemoryPort
         string collection, string tagKey, string tagValue, CancellationToken ct = default);
 
     /// <summary>Koleksiyondaki nokta sayısı (dashboard için).</summary>
+    /// <summary>Verilen oturumlara ait tüm dokümanları siler (kişisel veri silme).</summary>
+    Task DeleteBySessionsAsync(
+        string collection, IReadOnlyCollection<string> sessionIds, CancellationToken ct = default);
+
+    /// <summary>Etiketi <paramref name="tagValue"/>'ya EŞİT dokümanları siler (ör. customerId).</summary>
+    Task DeleteWhereTagAsync(
+        string collection, string tagKey, string tagValue, CancellationToken ct = default);
+
     Task<long> CountAsync(string collection, CancellationToken ct = default);
 }

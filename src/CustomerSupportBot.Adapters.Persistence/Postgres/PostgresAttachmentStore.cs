@@ -15,7 +15,8 @@ namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 /// (tur başına bir liste, temsilcinin açtığı her fotoğraf için bir kayıt). Listeleme görüntü
 /// verisini OKUMAZ — yalnızca meta sütunları seçilir.
 /// </summary>
-public sealed class PostgresAttachmentStore(IDbContextFactory<CustomerSupportDbContext> dbFactory) : IAttachmentStore
+public sealed class PostgresAttachmentStore(IDbContextFactory<CustomerSupportDbContext> dbFactory)
+    : IAttachmentStore, ISessionDataEraser
 {
     public async Task SaveAsync(ChatAttachment attachment, CancellationToken ct = default)
     {
@@ -88,6 +89,26 @@ public sealed class PostgresAttachmentStore(IDbContextFactory<CustomerSupportDbC
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         // Koşul DELETE'in içinde: gönderimle yarışan bir silme, gönderilmiş fotoğrafı silemez.
         return await db.Attachments.Where(a => a.Id == id && a.SentAt == null).ExecuteDeleteAsync(ct) > 0;
+    }
+
+    public async Task<int> DeleteCreatedBeforeAsync(DateTime cutoffUtc, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.Attachments.Where(a => a.CreatedAt < cutoffUtc).ExecuteDeleteAsync(ct);
+    }
+
+    public string Name => "attachments";
+
+    /// <summary>
+    /// Oturumların fotoğraflarını siler. Oturum silindiğinde FK cascade da siler; burada açıkça silinir ki
+    /// silme yalnızca bir veritabanı ayrıntısına (ve bellek içi depoda olmayan cascade'e) dayanmasın.
+    /// </summary>
+    public async Task<int> EraseSessionsAsync(IReadOnlyCollection<string> sessionIds, CancellationToken ct = default)
+    {
+        if (sessionIds.Count == 0) return 0;
+        var ids = sessionIds.ToList();
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.Attachments.Where(a => ids.Contains(a.SessionId)).ExecuteDeleteAsync(ct);
     }
 
     public async Task LinkToApprovalAsync(IReadOnlyCollection<string> ids, string approvalId, CancellationToken ct = default)

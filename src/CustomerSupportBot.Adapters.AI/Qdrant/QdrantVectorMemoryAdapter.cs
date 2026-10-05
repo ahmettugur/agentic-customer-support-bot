@@ -235,6 +235,49 @@ public sealed class QdrantVectorMemoryAdapter : IVectorMemoryPort
         }
     }
 
+    public async Task DeleteBySessionsAsync(
+        string collection, IReadOnlyCollection<string> sessionIds, CancellationToken ct = default)
+    {
+        if (sessionIds.Count == 0) return;
+        try
+        {
+            var any = new RepeatedStrings();
+            any.Strings.AddRange(sessionIds);
+            var filter = new Filter();
+            filter.Must.Add(new Condition
+            {
+                Field = new FieldCondition { Key = PayloadSessionId, Match = new Match { Keywords = any } }
+            });
+
+            await _client.DeleteAsync(collection, filter, cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw ExceptionTranslator.Translate(
+                ex, $"Qdrant oturum silme başarısız (collection={collection}, sessions={sessionIds.Count}).");
+        }
+    }
+
+    public async Task DeleteWhereTagAsync(
+        string collection, string tagKey, string tagValue, CancellationToken ct = default)
+    {
+        try
+        {
+            var filter = new Filter();
+            filter.Must.Add(new Condition
+            {
+                Field = new FieldCondition { Key = tagKey, Match = new Match { Keyword = tagValue } }
+            });
+
+            await _client.DeleteAsync(collection, filter, cancellationToken: ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw ExceptionTranslator.Translate(
+                ex, $"Qdrant etiketli silme başarısız (collection={collection}, tag={tagKey}).");
+        }
+    }
+
     public async Task<long> CountAsync(string collection, CancellationToken ct = default)
     {
         try
