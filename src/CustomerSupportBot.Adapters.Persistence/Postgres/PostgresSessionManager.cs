@@ -36,6 +36,7 @@ using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace CustomerSupportBot.Adapters.Persistence.Postgres;
 
@@ -211,12 +212,7 @@ public sealed class PostgresSessionManager : ISessionManager
         var session = await GetAsync(sessionId, ct).ConfigureAwait(false);
         if (session is null) return;
 
-        await using var handle = await _distributedLock
-            .AcquireAsync($"session:{sessionId}", ct: ct)
-            .ConfigureAwait(false);
-
-        mutator(session.State);
-        await UpdateAsync(session, ct).ConfigureAwait(false);
+        await WriteStateAsync(sessionId, mutator, ct).ConfigureAwait(false);
     }
 
     private async Task ExtractAndUpdateStateCoreAsync(
@@ -224,16 +220,145 @@ public sealed class PostgresSessionManager : ISessionManager
         IReadOnlyList<ConversationMessage>? priorHistory, CancellationToken ct,
         TurnSignals? signals = null)
     {
-        // ConsecutiveNegativeTurns oku-değiştir-yaz içerdiği için kilitli: aynı session'a
-        // çakışan iki eşzamanlı istek (çift-submit, çoklu sekme) birbirinin artışını ezerse
-        // otomatik eskalasyon eşiği bir tur geç tetiklenir. GetOrCreateAsync/GetAsync aynı
-        // sessionId için hep AYNI AgentSession referansını döndürdüğünden session nesnesi
-        // kilit anahtarı olarak güvenlidir (bkz. WorkflowMessageBuilder.ConsumeForceReplanHint).
+        // ConsecutiveNegativeTurns gibi oku-değiştir-yaz alanları içerir: çakışan iki tur (çift-submit,
+        // çoklu sekme, iki pod) birbirinin artışını ezmesin diye mutasyon olarak yazılır.
+        await WriteStateAsync(session.SessionId,
+            state => SessionStateExtractor.ExtractAndApply(state, userMessage, botResponse, priorHistory, signals),
+            ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Kilitsiz bir yazıcı araya girdiğinde mutasyonun yeniden deneme sayısı.</summary>
+    private const int MaxStateWriteAttempts = 5;
+
+    /// <summary>
+    /// Oturum durumunun mutasyon-tabanlı yazımı.
+    ///
+    /// <para>
+    /// 🐞 Eskiden yazma "son yazan kazanır"dı: her yazıcı önbelleğindeki TÜM state'i yazıyordu. Pub/sub mesajını
+    /// kaçırmış (en-fazla-bir-kez teslim) bayat bir pod, başka pod'un yaptığı değişikliği (ör. temsilci
+    /// devraldığında işaretlenen <c>HumanInvolved</c>, eskalasyon sayacı) tur sonunda sessizce siliyordu;
+    /// eşzamanlı artışlar da kayboluyordu.
+    /// </para>
+    ///
+    /// <para>
+    /// Artık: (1) <c>session:{id}</c> dağıtık kilidi altında, (2) veritabanındaki state önbellekten yeniyse önce
+    /// o alınır, (3) mutasyon onun üzerine uygulanır, (4) yazma koşulludur — okunan state değişmediyse
+    /// (<c>UPDATE … WHERE state = &lt;okunan&gt;</c>). Kilidi almayan bir yazıcı (eski <see cref="UpdateAsync"/>)
+    /// araya girerse koşul tutmaz: state yeniden okunur ve mutasyon yeniden uygulanır.
+    /// </para>
+    ///
+    /// <para>
+    /// Bilinen sınır: veritabanı daha yeniyse önbellekte yalnızca bellekte yapılmış, henüz yazılmamış
+    /// değişiklikler (ör. <c>WorkflowMessageBuilder.ConsumeForceReplanHint</c>'in temizlediği tek kullanımlık
+    /// bayrak) veritabanı state'iyle değişir — o bayrak bir tur daha uygulanabilir. Kaybolan bir başka pod'un
+    /// yazmasına göre zararsız tarafta kalır.
+    /// </para>
+    /// </summary>
+    private async Task WriteStateAsync(string sessionId, Action<SessionState> mutation, CancellationToken ct)
+    {
+        await using var handle = await _distributedLock
+            .AcquireAsync($"session:{sessionId}", ct: ct)
+            .ConfigureAwait(false);
+
+        var session = await GetOrCreateAsync(sessionId, ct).ConfigureAwait(false);
+        for (var attempt = 1; ; attempt++)
+        {
+            var stored = await ReadStoredStateJsonAsync(sessionId, ct).ConfigureAwait(false);
+            // İlk denemede yalnızca veritabanı daha yeniyse tazelenir (önbellekteki yazılmamış değişiklikler
+            // korunsun). Koşullu yazma tutmadıysa bellekteki state başarısız mutasyonu içerir: zorla tazelenir,
+            // aksi hâlde mutasyon iki kez uygulanırdı.
+            if (stored is not null) RefreshFromStored(session, stored, force: attempt > 1);
+
+            string json;
+            lock (session)
+            {
+                mutation(session.State);
+                session.State.Revision++;
+                session.LastActivity = DateTime.Now;
+                json = JsonSerializer.Serialize(session.State);
+            }
+
+            if (await TryWriteStateAsync(session, stored, json, ct).ConfigureAwait(false))
+            {
+                PublishSessionUpdated(session);
+                return;
+            }
+            if (attempt >= MaxStateWriteAttempts)
+                throw new InvalidOperationException(
+                    $"Oturum durumu {MaxStateWriteAttempts} denemede yazılamadı (eşzamanlı yazma): {sessionId}");
+
+            _logger.LogWarning(
+                "[Session] Eşzamanlı yazma algılandı — state yeniden okunup mutasyon yeniden uygulanıyor. Id={Id} deneme={Attempt}",
+                sessionId, attempt);
+        }
+    }
+
+    private async Task<string?> ReadStoredStateJsonAsync(string sessionId, CancellationToken ct)
+    {
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        return await ctx.Sessions.AsNoTracking()
+            .Where(s => s.SessionId == sessionId)
+            .Select(s => s.StateJson)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+    }
+
+    private static void RefreshFromStored(AgentSession session, string storedJson, bool force)
+    {
+        var stored = string.IsNullOrWhiteSpace(storedJson) || storedJson == "{}"
+            ? new SessionState()
+            : JsonSerializer.Deserialize<SessionState>(storedJson) ?? new SessionState();
         lock (session)
         {
-            SessionStateExtractor.ExtractAndApply(session.State, userMessage, botResponse, priorHistory, signals);
+            if (force || stored.Revision > session.State.Revision)
+                session.State = stored;
         }
-        await UpdateAsync(session, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Koşullu yazma: satır yoksa INSERT (aynı anda başkası eklediyse false), varsa okunan state hâlâ
+    /// duruyorsa UPDATE. <c>StateJson</c> eşzamanlılık belirteci olduğu için UPDATE <c>WHERE state = &lt;yüklenen&gt;</c>
+    /// ile gider (atomik karşılaştır-değiştir; jsonb eşitliği anlamsaldır). <c>ExecuteUpdate</c> yerine izlenen
+    /// varlık kullanılır: aynı yol EF InMemory sağlayıcısında (API entegrasyon testleri) da çalışır.
+    /// </summary>
+    private async Task<bool> TryWriteStateAsync(AgentSession session, string? storedJson, string json, CancellationToken ct)
+    {
+        var lastActivity = session.LastActivity.Kind == DateTimeKind.Utc ? session.LastActivity : session.LastActivity.ToUniversalTime();
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct).ConfigureAwait(false);
+        if (storedJson is null)
+        {
+            ctx.Sessions.Add(new SessionEntity
+            {
+                SessionId = session.SessionId,
+                CreatedAt = session.CreatedAt.Kind == DateTimeKind.Utc ? session.CreatedAt : session.CreatedAt.ToUniversalTime(),
+                LastActivity = lastActivity,
+                StateJson = json
+            });
+            try
+            {
+                await ctx.SaveChangesAsync(ct).ConfigureAwait(false);
+                return true;
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            {
+                return false;
+            }
+        }
+
+        var entity = await ctx.Sessions.FirstOrDefaultAsync(s => s.SessionId == session.SessionId, ct).ConfigureAwait(false);
+        // Mutasyonu uyguladığımız temel (storedJson) ile şimdiki satır aynı değilse araya biri girmiştir.
+        if (entity is null || entity.StateJson != storedJson) return false;
+
+        entity.StateJson = json;
+        entity.LastActivity = lastActivity;
+        try
+        {
+            await ctx.SaveChangesAsync(ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
     }
 
     // ─── Konuşma geçmişi ───
@@ -498,10 +623,10 @@ public sealed class PostgresSessionManager : ISessionManager
         }
         else
         {
-            // Yazma hâlâ "son yazan kazanır": tam StateJson üzerine yazılır. Cache tarafında eski
-            // snapshot'lar reddediliyor (bkz. ApplySnapshot), ama DB'de daha YENİ bir revizyonun
-            // üzerine yazılması — iki yazıcının aynı temelden başlaması — burada engellenmez,
-            // yalnızca görünür kılınır. Gerçek çözüm mutasyon-tabanlı yazma + koşullu UPDATE'tir.
+            // Bu yol (UpdateAsync) tüm StateJson'ı yazar — "son yazan kazanır". Uygulama içi state
+            // değişiklikleri artık mutasyon-tabanlı ve koşullu yazılır (bkz. WriteStateAsync); bu yol
+            // yalnızca mutasyonu bilinmeyen eski çağıranlar (ISessionPort.UpdateSessionAsync) içindir.
+            // DB'de daha yeni bir revizyonun üzerine yazılması burada engellenmez, yalnızca görünür kılınır.
             var storedRevision = ReadRevision(existing.StateJson);
             if (storedRevision >= session.State.Revision && session.State.Revision > 0)
             {

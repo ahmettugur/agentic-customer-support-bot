@@ -195,8 +195,8 @@ public sealed class ChatSessionPortService : IChatSessionPort
                 ErrorMessage: "Session bulunamadı.");
         }
 
-        ApplyReplanState(session, requestedBy, note);
-        await _sessions.UpdateAsync(session, ct);
+        // Mutasyon olarak yazılır: başka pod'un aynı anda yaptığı state değişikliğini ezmesin.
+        await _sessions.MutateStateAsync(session.SessionId, state => ApplyReplanState(state, requestedBy, note), ct);
 
         var resolved = await ResolveOpenEscalationsForSessionAsync(sessionId, requestedBy, note);
         var releasedFromHuman = await ReleaseIfHumanModeAsync(sessionId);
@@ -255,8 +255,8 @@ public sealed class ChatSessionPortService : IChatSessionPort
                 ErrorMessage: "Session bulunamadı.");
         }
 
-        ApplyReplanState(session, requestedBy, note);
-        await _sessions.UpdateAsync(session, ct);
+        // Mutasyon olarak yazılır: başka pod'un aynı anda yaptığı state değişikliğini ezmesin.
+        await _sessions.MutateStateAsync(session.SessionId, state => ApplyReplanState(state, requestedBy, note), ct);
 
         var resolved = await _escalations.DecideAsync(
             escalationId,
@@ -303,12 +303,12 @@ public sealed class ChatSessionPortService : IChatSessionPort
         return count;
     }
 
-    private static void ApplyReplanState(AgentSession session, string requestedBy, string? note)
+    private static void ApplyReplanState(SessionState state, string requestedBy, string? note)
     {
-        session.State.ForceReplanNextTurn = true;
-        session.State.ReplanRequestedBy = requestedBy;
-        session.State.ReplanRequestedAt = DateTime.UtcNow;
-        session.State.ReplanNote = note;
+        state.ForceReplanNextTurn = true;
+        state.ReplanRequestedBy = requestedBy;
+        state.ReplanRequestedAt = DateTime.UtcNow;
+        state.ReplanNote = note;
     }
 
     private async Task<int> ResolveOpenEscalationsForSessionAsync(string sessionId, string requestedBy, string? note)

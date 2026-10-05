@@ -107,7 +107,12 @@ public class ConversationSummaryProvider : IContextProvider
             // Prompt kurulurken geçmişin ilk bu kadar mesajı atlanacak — özet onların yerine
             // geçer. Bu sayı yazılmazsa özet tasarruf değil ek yük olur (bkz. SessionState).
             session.State.SummarizedMessageCount = boundary;
-            await _sessionRepository.UpdateAsync(session, ct);
+            // Kalıcı yazım mutasyon olarak: tüm state'i yazmak başka pod'un aynı anda yaptığı değişikliği ezerdi.
+            await _sessionRepository.MutateStateAsync(session.SessionId, state =>
+            {
+                state.ConversationSummary = summary;
+                state.SummarizedMessageCount = boundary;
+            }, ct);
 
             _logger.LogInformation(
                 "Konuşma özeti güncellendi: {NewCount} yeni mesaj katlandı → {SummaryLength} karakter",

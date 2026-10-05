@@ -30,10 +30,13 @@ internal sealed class SessionConfiguration : IEntityTypeConfiguration<SessionEnt
             .HasColumnType("timestamptz")
             .IsRequired();
 
+        // Eşzamanlılık belirteci: state güncellemesi "UPDATE … WHERE state = <okunan>" olur — araya başka bir
+        // yazıcı girdiyse 0 satır ve DbUpdateConcurrencyException (bkz. PostgresSessionManager.WriteStateAsync).
         builder.Property(s => s.StateJson)
             .HasColumnName("state")
             .HasColumnType("jsonb")
-            .IsRequired();
+            .IsRequired()
+            .IsConcurrencyToken();
 
         builder.HasIndex(s => s.LastActivity)
             .HasDatabaseName("ix_sessions_last_activity")

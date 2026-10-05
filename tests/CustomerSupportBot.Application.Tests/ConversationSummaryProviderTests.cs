@@ -32,7 +32,7 @@ public class ConversationSummaryProviderTests
         (await provider.GetContextAsync(session, "query", TestContext.Current.CancellationToken)).Should().BeNull();
         session.State.ConversationSummary.Should().Be(previous);
         session.State.SummarizedMessageCount.Should().Be(count);
-        await sessions.DidNotReceive().UpdateAsync(Arg.Any<AgentSession>(), Arg.Any<CancellationToken>());
+        await sessions.DidNotReceive().MutateStateAsync(Arg.Any<string>(), Arg.Any<Action<SessionState>>(), Arg.Any<CancellationToken>());
 
         sessions.GetHistoryAsync("s1", Arg.Any<CancellationToken>()).Returns(History(10));
         await provider.GetContextAsync(session, "next query", TestContext.Current.CancellationToken);
@@ -40,6 +40,16 @@ public class ConversationSummaryProviderTests
         await chat.Received().CompleteAsync(Arg.Is<IReadOnlyList<ConversationMessage>>(m =>
             m[1].Text.Contains($"mesaj-{firstUncovered}") && m[1].Text.Contains("mesaj-6")), Arg.Any<CancellationToken>());
         session.State.SummarizedMessageCount.Should().Be(6);
+    }
+
+    /// <summary>Kalıcı yazım mutasyon olarak yapılır (eşzamanlı yazmada başka pod'un değişikliğini ezmesin): tek
+    /// MutateStateAsync çağrısının mutasyonu boş bir state'e uygulanıp sonuç döner.</summary>
+    private static SessionState PersistedState(ISessionManager sessions)
+    {
+        var call = sessions.ReceivedCalls().Single(c => c.GetMethodInfo().Name == nameof(ISessionManager.MutateStateAsync));
+        var state = new SessionState();
+        ((Action<SessionState>)call.GetArguments()[1]!)(state);
+        return state;
     }
 
     private static List<ConversationMessage> History(int count) =>
@@ -101,9 +111,9 @@ public class ConversationSummaryProviderTests
             Arg.Is<IReadOnlyList<ConversationMessage>>(m =>
                 m[1].Text.Contains("mesaj-1") && m[1].Text.Contains("mesaj-4") && !m[1].Text.Contains("mesaj-5")),
             Arg.Any<CancellationToken>());
-        await sessions.Received(1).UpdateAsync(
-            Arg.Is<AgentSession>(s => s.State.SummarizedMessageCount == 4 && s.State.ConversationSummary == "yeni özet"),
-            Arg.Any<CancellationToken>());
+        var persisted = PersistedState(sessions);
+        persisted.SummarizedMessageCount.Should().Be(4);
+        persisted.ConversationSummary.Should().Be("yeni özet");
     }
 
     /// <summary>Asıl kazancın kanıtı: ikinci turda yalnızca DELTA gönderilir, tüm geçmiş değil.</summary>
@@ -127,9 +137,7 @@ public class ConversationSummaryProviderTests
                 m[1].Text.Contains("mesaj-13") && m[1].Text.Contains("mesaj-16") &&
                 !m[1].Text.Contains("mesaj-12") && !m[1].Text.Contains("mesaj-17")),
             Arg.Any<CancellationToken>());
-        await sessions.Received(1).UpdateAsync(
-            Arg.Is<AgentSession>(s => s.State.SummarizedMessageCount == 16),
-            Arg.Any<CancellationToken>());
+        PersistedState(sessions).SummarizedMessageCount.Should().Be(16);
     }
 
     [Fact]

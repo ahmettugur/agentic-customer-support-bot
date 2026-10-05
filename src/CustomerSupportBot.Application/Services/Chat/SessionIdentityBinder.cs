@@ -93,9 +93,22 @@ public static class SessionIdentityBinder
 
         if (string.IsNullOrWhiteSpace(bound))
         {
-            session.State.AuthenticatedCustomerId = authenticatedCustomerId;
-            await sessions.UpdateAsync(session, ct);
-            return true;
+            // Mutasyon olarak, oturum kilidi altında: bağlama başka pod'un aynı anda yaptığı state değişikliğini
+            // ezmez; iki pod aynı sahipsiz oturumu eşzamanlı bağlamaya kalkarsa kilitte ikinci gelen birincinin
+            // bağlamasını görür ve kendi müşterisini yazmaz.
+            await sessions.MutateStateAsync(session.SessionId, state =>
+            {
+                if (string.IsNullOrWhiteSpace(state.AuthenticatedCustomerId))
+                    state.AuthenticatedCustomerId = authenticatedCustomerId;
+            }, ct);
+
+            if (string.IsNullOrWhiteSpace(session.State.AuthenticatedCustomerId))
+            {
+                // Oturum yöneticide yoksa (mutasyon uygulanmadı) eski yol: bellekte bağla ve yaz.
+                session.State.AuthenticatedCustomerId = authenticatedCustomerId;
+                await sessions.UpdateAsync(session, ct);
+            }
+            return string.Equals(session.State.AuthenticatedCustomerId, authenticatedCustomerId, StringComparison.Ordinal);
         }
 
         return string.Equals(bound, authenticatedCustomerId, StringComparison.Ordinal);
