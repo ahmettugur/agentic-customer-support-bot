@@ -2136,3 +2136,11 @@ code.at-val {
 .tag-chip--static { cursor: default; }
 .conversation-search-more { display: block; margin: 12px auto 0; }
 [data-theme="dark"] .conversation-hit-snippet mark { background: #854d0e; }
+
+/* ── LLM harcama limiti ──────────────────────────────────────────────────── */
+.llm-budget-card .analytics-card-data { width: 100%; }
+.budget-track { height: 6px; margin-top: 8px; border-radius: 999px; background: var(--color-border); overflow: hidden; }
+.budget-fill { height: 100%; border-radius: 999px; background: #16a34a; }
+.budget-warn .budget-fill { background: #f59e0b; }
+.budget-full .budget-fill { background: #dc2626; }
+.budget-full .analytics-card-value { color: #dc2626; }

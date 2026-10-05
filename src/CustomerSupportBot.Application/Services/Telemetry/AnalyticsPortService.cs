@@ -23,6 +23,7 @@ public sealed class AnalyticsPortService : IAnalyticsPort
     private readonly ILogger<AnalyticsPortService> _logger;
     private readonly Ports.Outbound.Observability.ILlmCallPersistencePort? _costs;
     private readonly IConversationDispositionStore? _dispositions;
+    private readonly Ports.Outbound.Observability.ILlmSpendGuard? _spendGuard;
     private readonly ConversationClosingOptions _closing;
 
     /// <summary>Panelde gösterilen en sık etiket sayısı.</summary>
@@ -42,8 +43,10 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         ILogger<AnalyticsPortService> logger,
         Ports.Outbound.Observability.ILlmCallPersistencePort? costs = null,
         IConversationDispositionStore? dispositions = null,
-        IOptions<ConversationClosingOptions>? closing = null)
+        IOptions<ConversationClosingOptions>? closing = null,
+        Ports.Outbound.Observability.ILlmSpendGuard? spendGuard = null)
     {
+        _spendGuard = spendGuard;
         _costs = costs;
         _dispositions = dispositions;
         _closing = closing?.Value ?? new ConversationClosingOptions();
@@ -228,6 +231,17 @@ public sealed class AnalyticsPortService : IAnalyticsPort
             : 0.5;
         dashboard.NegativeSessionCount = negativeCount;
         dashboard.SentimentAlertCount = alertCount;
+
+        if (_spendGuard is not null)
+        {
+            // GetStatusAsync hata fırlatmaz (sayaç okunamazsa harcama 0 görünür).
+            var budget = await _spendGuard.GetStatusAsync(ct);
+            dashboard.LlmBudgetEnabled = budget.Enabled;
+            dashboard.DailyLlmLimitUsd = budget.DailyLimitUsd;
+            dashboard.DailyLlmSpentUsd = Math.Round(budget.DailySpentUsd, 4);
+            dashboard.MonthlyLlmLimitUsd = budget.MonthlyLimitUsd;
+            dashboard.MonthlyLlmSpentUsd = Math.Round(budget.MonthlySpentUsd, 4);
+        }
 
         if (_dispositions is not null)
         {

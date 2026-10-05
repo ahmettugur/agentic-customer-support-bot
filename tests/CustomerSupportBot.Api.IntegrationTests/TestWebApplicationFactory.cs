@@ -103,6 +103,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
             // Aynı sebeple Redis'e bağlı dağıtık idempotency kaydı da kaldırılır; tek süreçli
             // testte bellek içi katman (SideEffectIdempotencyCache) zaten yeterli.
             services.RemoveAll<IDistributedIdempotencyStore>();
+
+            // LLM harcama sayaçları da Redis'teydi — süreç içi ikiz.
+            services.Replace(ServiceDescriptor.Singleton<
+                CustomerSupportBot.Application.Ports.Outbound.Observability.ILlmSpendCounter, InMemoryLlmSpendCounter>());
         });
 
         builder.UseEnvironment("Development");

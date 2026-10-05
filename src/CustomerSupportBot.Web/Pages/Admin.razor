@@ -891,6 +891,15 @@
                                 </div>
                             </div>
 
+                            @if (_analytics.LlmBudgetEnabled)
+                            {
+                                <!-- LLM harcama limiti -->
+                                <div class="analytics-summary analytics-summary-tight llm-budget-row">
+                                    @RenderBudget("Bugünkü LLM Harcaması", _analytics.DailyLlmSpentUsd, _analytics.DailyLlmLimitUsd)
+                                    @RenderBudget("Bu Ayki LLM Harcaması", _analytics.MonthlyLlmSpentUsd, _analytics.MonthlyLlmLimitUsd)
+                                </div>
+                            }
+
                             <!-- Charts Row 1: Rating dist + Approval stats + Escalation stats -->
                             <div class="analytics-charts">
                                 @RenderRatingDistribution(_analytics.RatingDistribution, _analytics.TotalRatings)
@@ -1417,6 +1426,25 @@
 
 @code {
     // RenderFragment helpers — Razor template syntax requires these to live in .razor file
+
+    /// <summary>Harcama / limit; %80'de uyarı, %100'de dolu rengi. Limit 0 = sınırsız (çubuk yok).</summary>
+    private RenderFragment RenderBudget(string label, decimal spent, decimal limit)
+    {
+        var pct = limit > 0 ? (int)Math.Min(100, Math.Round(spent * 100 / limit)) : 0;
+        var level = limit <= 0 ? "" : pct >= 100 ? "budget-full" : pct >= 80 ? "budget-warn" : "budget-ok";
+        return @<div class="analytics-card llm-budget-card @level" title="@(limit > 0 ? $"%{pct}" : "Sınırsız")">
+            <div class="analytics-card-data">
+                <div class="analytics-card-value">@FormatUsd(spent)@(limit > 0 ? $" / {FormatUsd(limit)}" : "")</div>
+                <div class="analytics-card-label">@label@(limit > 0 ? "" : " (limit yok)")</div>
+                @if (limit > 0)
+                {
+                    <div class="budget-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@pct" aria-label="@label">
+                        <div class="budget-fill" style="width:@(pct)%"></div>
+                    </div>
+                }
+            </div>
+        </div>;
+    }
 
     private RenderFragment RenderDist(string title, Dictionary<string, int>? dist)
     {

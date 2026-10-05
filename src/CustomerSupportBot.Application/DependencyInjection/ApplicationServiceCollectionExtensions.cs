@@ -84,6 +84,7 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
         services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
+        services.Configure<Services.Budget.LlmBudgetOptions>(configuration.GetSection(Services.Budget.LlmBudgetOptions.SectionName));
         services.Configure<Services.Conversations.ConversationClosingOptions>(
             configuration.GetSection(Services.Conversations.ConversationClosingOptions.SectionName));
         // E-posta: açıkken eksik ayar başlangıçta hata verir (EmailOptionsValidator).
@@ -145,6 +146,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ISavedReplyPort, Services.SavedReplies.SavedReplyService>();
         services.AddSingleton<IConversationClosingPort, Services.Conversations.ConversationClosingService>();
         services.AddSingleton<IConversationSearchPort, Services.Conversations.ConversationSearchService>();
+        services.AddSingleton<Ports.Outbound.Observability.ILlmSpendGuard, Services.Budget.LlmSpendGuard>();
         services.AddSingleton<Services.Notifications.ApprovalResultEmailService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();

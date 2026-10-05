@@ -53,7 +53,22 @@ public static class AiServicesExtensions
         return services;
     }
 
+    /// <summary>
+    /// Harcama limiti en dışta: limit aşıldıysa çağrı telemetriye "başarısız LLM çağrısı" olarak da düşmez.
+    /// Limit telemetriden bağımsızdır (Telemetry:Enabled kapalıyken de uygulanır); LlmBudget:Enabled
+    /// kapalıyken sarmalayıcı yalnızca bir seçenek okumasıdır.
+    /// </summary>
     private static IChatClient WrapWithTelemetry(
+        IServiceProvider sp, IChatClient inner, string modelHint, string provider) =>
+        new SpendLimitChatClient(
+            WrapWithUsageTelemetry(sp, inner, modelHint, provider),
+            sp.GetRequiredService<ILlmSpendGuard>(),
+            sp.GetRequiredService<ICostCalculatorPort>(),
+            modelHint,
+            provider,
+            sp.GetService<ILlmCallAttribution>());
+
+    private static IChatClient WrapWithUsageTelemetry(
         IServiceProvider sp, IChatClient inner, string modelHint, string provider)
     {
         var telemetryOptions = sp.GetRequiredService<IOptions<TelemetryOptions>>().Value;

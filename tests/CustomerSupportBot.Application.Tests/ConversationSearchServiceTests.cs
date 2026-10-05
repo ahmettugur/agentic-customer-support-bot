@@ -69,7 +69,7 @@ public class ConversationSearchServiceTests
         var r = await service.SearchAsync(new ConversationSearchQuery(text, null, from, fromOffsetDays is null ? null : T0, null, null), Ct);
 
         r.Error.Should().Contain(error);
-        await store.DidNotReceiveWithAnyArgs().SearchAsync(default!, default);
+        await store.DidNotReceiveWithAnyArgs().SearchAsync(default!, Ct);
     }
 
     [Fact]

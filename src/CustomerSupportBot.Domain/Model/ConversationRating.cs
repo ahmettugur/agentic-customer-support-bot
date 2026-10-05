@@ -87,6 +87,14 @@ public class AnalyticsDashboard
     public decimal AverageCostPerConversationUsd { get; set; }
     public decimal MedianCostPerConversationUsd { get; set; }
 
+    // ─── LLM harcama limiti (LlmBudget) ───
+    public bool LlmBudgetEnabled { get; set; }
+    /// <summary>0 = sınırsız.</summary>
+    public decimal DailyLlmLimitUsd { get; set; }
+    public decimal DailyLlmSpentUsd { get; set; }
+    public decimal MonthlyLlmLimitUsd { get; set; }
+    public decimal MonthlyLlmSpentUsd { get; set; }
+
     // ─── Konuşma kapanışı (temsilcinin kapattığı canlı sohbetler) ───
     /// <summary>Çoktan aza; eşitlikte yapılandırılmış sıra, listeden kaldırılmış nedenler en sonda.</summary>
     public List<ClosingReasonCount> ClosingReasons { get; set; } = new();

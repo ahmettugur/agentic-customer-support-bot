@@ -46,6 +46,13 @@ public sealed class PostgresLlmCallUsageSink : ILlmCallPersistencePort
         }
     }
 
+    public async Task<decimal> GetTotalCostSinceAsync(DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var since = DateTime.SpecifyKind(sinceUtc, DateTimeKind.Utc);
+        await using var db = await _dbFactory.CreateDbContextAsync(ct);
+        return await db.LlmCallUsages.Where(r => r.CalledAt >= since).SumAsync(r => (decimal?)r.CostUsd, ct) ?? 0m;
+    }
+
     public async Task<LlmCostSummary> GetCostSummaryAsync(DateTime? sinceUtc = null, CancellationToken ct = default)
     {
         await using var db = await _dbFactory.CreateDbContextAsync(ct);

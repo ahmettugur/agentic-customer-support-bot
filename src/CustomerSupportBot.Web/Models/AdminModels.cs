@@ -145,7 +145,12 @@ public sealed record AnalyticsDashboard(
     decimal AverageCostPerConversationUsd,
     decimal MedianCostPerConversationUsd,
     ClosingReasonCountItem[]? ClosingReasons,
-    TagUsageItem[]? TopTags
+    TagUsageItem[]? TopTags,
+    bool LlmBudgetEnabled,
+    decimal DailyLlmLimitUsd,
+    decimal DailyLlmSpentUsd,
+    decimal MonthlyLlmLimitUsd,
+    decimal MonthlyLlmSpentUsd
 )
 {
     public ApprovalStats ApprovalStats => new(TotalApprovals, ApprovedCount, RejectedCount, ExpiredCount);

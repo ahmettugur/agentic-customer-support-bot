@@ -74,6 +74,10 @@ public static class RedisAdapterServiceCollectionExtensions
         // Yan etkili tool'ların mükerrer çağrı kaydı — pod'lar arası ortak pencere
         services.AddSingleton<IDistributedIdempotencyStore, RedisIdempotencyStore>();
 
+        // LLM harcama limiti sayaçları — pod'lar arası tek toplam
+        services.AddSingleton<CustomerSupportBot.Application.Ports.Outbound.Observability.ILlmSpendCounter,
+            Budget.RedisLlmSpendCounter>();
+
         return services;
     }
 }

@@ -17,6 +17,9 @@ public interface ILlmCallPersistencePort
     /// görüşme başına ortalama ve medyan.
     /// </summary>
     Task<LlmCostSummary> GetCostSummaryAsync(DateTime? sinceUtc = null, CancellationToken ct = default);
+
+    /// <summary><paramref name="sinceUtc"/>'den bu yana toplam maliyet (harcama sayacının tohumlanması için).</summary>
+    Task<decimal> GetTotalCostSinceAsync(DateTime sinceUtc, CancellationToken ct = default);
 }
 
 /// <summary>Persist edilen LLM çağrı kaydı.</summary>

@@ -1,9 +1,12 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Services.Attachments;
+using CustomerSupportBot.Application.Services.Budget;
 using CustomerSupportBot.Domain.Exceptions;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
@@ -29,6 +32,9 @@ public sealed class ChatPortService : IChatPort
     private readonly IAttachmentStore? _attachments;
     private readonly AttachmentOptions _attachmentOptions;
     private readonly Ports.Outbound.Observability.ILlmCallAttribution? _attribution;
+    private readonly ILlmSpendGuard? _spendGuard;
+    private readonly IEscalationSink? _escalations;
+    private readonly LlmBudgetOptions _budget;
 
     /// <summary>
     /// Bir turun kilidi bekleyebileceği azami süre. Bir tur LLM çağrıları yüzünden onlarca
@@ -50,9 +56,15 @@ public sealed class ChatPortService : IChatPort
         ILogger<ChatPortService> logger,
         IAttachmentStore? attachments = null,
         IOptions<AttachmentOptions>? attachmentOptions = null,
-        Ports.Outbound.Observability.ILlmCallAttribution? attribution = null)
+        Ports.Outbound.Observability.ILlmCallAttribution? attribution = null,
+        ILlmSpendGuard? spendGuard = null,
+        IEscalationSink? escalations = null,
+        IOptions<LlmBudgetOptions>? budgetOptions = null)
     {
         _attribution = attribution;
+        _spendGuard = spendGuard;
+        _escalations = escalations;
+        _budget = budgetOptions?.Value ?? new LlmBudgetOptions();
         _team = team;
         _reasoning = reasoning;
         _sessions = sessions;
@@ -128,6 +140,12 @@ public sealed class ChatPortService : IChatPort
         {
             await ForwardHumanMessageAsync(sessionId, query, ct);
             return new ChatResponse("Mesajınız müşteri temsilcisine iletildi.", sessionId);
+        }
+
+        if (await BudgetReplyAsync(sessionId, query, ct) is { } budgetReply)
+        {
+            await _sessions.AddExchangeAsync(sessionId, query, budgetReply, ct: ct);
+            return new ChatResponse(budgetReply, sessionId);
         }
 
         var history = await _sessions.GetHistoryAsync(sessionId, ct);
@@ -232,6 +250,40 @@ public sealed class ChatPortService : IChatPort
         return AttachmentTurnContext.Compose(query, resolved);
     }
 
+    /// <summary>
+    /// Tur başında harcama limiti: aşıldıysa müşteriye verilecek sabit yanıt, değilse <c>null</c>.
+    ///
+    /// <para>
+    /// Günlük/aylık limitte eskalasyon açılmaz — o anda gelen her görüşme için açılsaydı temsilci kuyruğu
+    /// dolardı. Görüşme başına limit ise tek bir görüşmeye özgüdür (kaçak döngü ya da kötüye kullanım): oturum
+    /// için açık eskalasyon yoksa bir tane açılır, görüşme insan gözüne gelir.
+    /// </para>
+    /// </summary>
+    private async Task<string?> BudgetReplyAsync(string sessionId, string query, CancellationToken ct)
+    {
+        if (_spendGuard is null) return null;
+        var exceeded = await _spendGuard.CheckAsync(sessionId, ct);
+        if (exceeded is null) return null;
+
+        _logger.LogWarning(
+            "[Budget] LLM bütçesi aşıldı, tur LLM'siz yanıtlandı | session={SessionId} scope={Scope} spent={Spent} limit={Limit}",
+            sessionId, exceeded.Scope, exceeded.SpentUsd, exceeded.LimitUsd);
+        if (exceeded.Scope != LlmBudgetScope.Conversation) return _budget.UnavailableMessage;
+
+        if (_escalations is not null && !_escalations.GetOpen().Any(e => e.SessionId == sessionId))
+        {
+            await _escalations.CreateAsync(new EscalationRequest
+            {
+                SessionId = sessionId,
+                AgentName = "LlmBudget",
+                UserQuery = query,
+                Reason = string.Create(CultureInfo.InvariantCulture,
+                    $"Görüşme başına LLM bütçesi aşıldı ({exceeded.SpentUsd:F2} / {exceeded.LimitUsd:F2} USD)")
+            });
+        }
+        return _budget.ConversationLimitMessage;
+    }
+
     private async Task ForwardHumanMessageAsync(string sessionId, string query, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(query)) return;
@@ -281,6 +333,17 @@ public sealed class ChatPortService : IChatPort
                 // kalıyor ve bot oturumu geri devraldığında bağlamı bozuyordu.
                 await ForwardHumanMessageAsync(sessionId, query, ct);
             }
+            yield break;
+        }
+
+        // Harcama limiti aşıldıysa LLM'e gidilmez; sabit metin normal bir yanıt gibi akar.
+        if (await BudgetReplyAsync(sessionId, query, ct) is { } budgetReply)
+        {
+            yield return new StreamEvent(StreamEventTypes.ResponseStart, new { terminationReason = LlmBudgetOptions.TerminationReason });
+            yield return new StreamEvent(StreamEventTypes.ResponseDelta, new TextDeltaPayload(budgetReply));
+            yield return new StreamEvent(StreamEventTypes.ResponseComplete,
+                new ResponseCompletePayload(budgetReply, TerminationReason: LlmBudgetOptions.TerminationReason));
+            await _sessionState.PersistExchangeAsync(sessionId, query, budgetReply, _chatBridge, null, ct);
             yield break;
         }
 

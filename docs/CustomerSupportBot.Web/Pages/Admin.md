@@ -144,6 +144,12 @@ profili, açık işler (eskalasyon/bekleyen onay), ilgili bilgi tabanı makalele
 gönderir. Başka bir sohbete geçilir ya da sohbet bitirilirse kart sıfırlanır; geç gelen bir yanıt yanlış
 sohbete yazılmaz. LLM bölümü üretilemezse kart hatayı gösterir, diğer bölümler yine görünür.
 
+## LLM harcama kartları (Analytics)
+
+`LlmBudget:Enabled` açıkken Analytics sekmesinde **Bugünkü** ve **Bu Ayki LLM Harcaması** kartları:
+`harcama / limit` ve ilerleme çubuğu (%80'de turuncu, %100'de kırmızı). Limit `0` ise "(limit yok)", çubuk
+gösterilmez. Değerler `/analytics/dashboard`'daki `DailyLlm*`/`MonthlyLlm*` alanlarından gelir.
+
 ## Konuşma arama (yalnız yönetici)
 
 **🔎 Konuşmalar** sekmesi: mesaj metni, müşteri no, başlangıç/bitiş tarihi, kapanış nedeni (liste

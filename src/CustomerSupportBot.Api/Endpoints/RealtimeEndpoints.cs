@@ -37,7 +37,8 @@ public static class RealtimeEndpoints
         HttpContext httpContext,
         string? sessionId,
         IRealtimeNativeBridge bridge,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        CustomerSupportBot.Application.Ports.Outbound.Observability.ILlmSpendGuard spendGuard)
     {
         if (!httpContext.WebSockets.IsWebSocketRequest)
         {
@@ -52,6 +53,17 @@ public static class RealtimeEndpoints
         {
             httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
             await httpContext.Response.WriteAsync(SessionIdPolicy.ErrorMessage);
+            return;
+        }
+
+        // Harcama limiti aşıldıysa yeni Realtime oturumu açılmaz. (Realtime ses maliyeti sayaçlara girmez —
+        // tokenlar IChatClient'tan geçmiyor — ama limit doluyken harcamayı büyütmemeli.)
+        if (await spendGuard.CheckAsync(sessionId, httpContext.RequestAborted) is { } exceeded)
+        {
+            loggerFactory.CreateLogger("RealtimeEndpoints").LogWarning(
+                "[Budget] Sesli bağlantı reddedildi — LLM bütçesi aşıldı | scope={Scope}", exceeded.Scope);
+            httpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await httpContext.Response.WriteAsync("Sesli asistan şu anda kullanılamıyor.");
             return;
         }
 

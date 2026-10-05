@@ -158,6 +158,30 @@ kullanıcının turu biter. Bu yüzden "approval bekleme süresi" diye bir kavra
 
 `Enabled = false` yaparsanız **tüm HITL mekanizması** bypass edilir (klasik bot davranışı). Detay → [CustomerSupportBot.Api/Endpoints/AdminAndHitl.md](CustomerSupportBot.Api/Endpoints/AdminAndHitl.md).
 
+### `LlmBudget`
+
+LLM harcama limiti. Tasarım: [superpowers/specs/2026-10-05-llm-spend-cap-design.md](superpowers/specs/2026-10-05-llm-spend-cap-design.md).
+
+```jsonc
+"LlmBudget": {
+  "Enabled": true,
+  "DailyLimitUsd": 50,             // UTC günü; 0 = sınırsız
+  "MonthlyLimitUsd": 1000,         // UTC ayı
+  "PerConversationLimitUsd": 1,    // bir görüşmeye atfedilen toplam
+  "WarningThresholdPercent": 80,   // günlük/aylık uyarı eşiği; %100'de ayrıca "limit doldu"
+  "AlertEmails": [],               // uyarı alıcıları (Email:Enabled gerekir); boşsa yalnızca log
+  "UnavailableMessage": "…",       // günlük/aylık aşımda müşteriye yanıt (isteğe bağlı)
+  "ConversationLimitMessage": "…"  // görüşme aşımında (görüşme temsilciye aktarılır)
+}
+```
+
+- **Yumuşak tavan:** kontrol çağrıdan önce, sayım yanıttan sonra; eşzamanlı çağrılar limiti biraz aşabilir.
+- **Sayaçlar Redis'te** (`csbot:llm-spend:*`); gün/ay sayacı yoksa `llm_call_usage` toplamıyla tohumlanır.
+  Redis/sayaç hatasında kontrol atlanır (fail-open) ve uyarı loglanır.
+- Limit aşılınca: sohbet turu LLM'siz yanıtlanır (`UnavailableMessage` / `ConversationLimitMessage`), arka plan
+  işleri `LlmBudgetExceededException` alır, yeni sesli bağlantı 503 ile reddedilir.
+- **Bilinen sınır:** Realtime ses maliyeti sayaçlara girmez (tokenlar `IChatClient`'tan geçmiyor).
+
 ### `ConversationClosing`
 
 Temsilcinin canlı sohbeti kapatırken seçtiği nedenler. `Reasons` boş bırakılırsa varsayılan liste kullanılır; yazılırsa varsayılanların **yerine** geçer (birleşmez). Listeden kaldırılan neden eski kayıtlarda kalır, analitikte kod adıyla görünür. Tasarım: [superpowers/specs/2026-10-05-conversation-disposition-design.md](superpowers/specs/2026-10-05-conversation-disposition-design.md).
