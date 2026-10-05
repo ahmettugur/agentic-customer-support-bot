@@ -21,6 +21,7 @@ Bu doküman geliştiricilerin en sık ihtiyaç duyacağı iş senaryolarını **
 10. [Compound query senaryosunu test etme](#compound-query-senaryosunu-test-etme)
 11. [Hata ayıklama rehberi](#hata-ayıklama-rehberi)
 12. [Yaygın tuzaklar](#yaygın-tuzaklar)
+13. [Testler ve CI](#testler-ve-ci)
 
 ---
 
@@ -68,6 +69,34 @@ dotnet build CustomerSupport.slnx -nologo -v q
 - `POST /chat/stream` → SSE streaming
 - `GET /traces/recent` → son trace'ler
 - `POST /eval/run` → senaryoları koştur (`GET /eval/scenarios` ile mevcut senaryolar listelenir)
+
+---
+
+## Testler ve CI
+
+**Yerelde tüm testler** (bir kısmı gerçek altyapıya karşıdır — Testcontainers ile PostgreSQL, Redis, Qdrant,
+Mailpit; **Docker çalışıyor olmalı**):
+
+```bash
+dotnet test --solution CustomerSupport.slnx
+```
+
+Docker kapalıysa altyapı testleri `DockerUnavailableException` ile düşer — bu bir kod hatası değildir.
+
+**CI** — `.github/workflows/ci.yml`: `develop`/`main`'e her push'ta ve her PR'da çalışır. Adımlar yerelde de
+aynen çalıştırılabilir:
+
+```bash
+dotnet restore CustomerSupport.slnx
+dotnet build CustomerSupport.slnx -c Release --no-restore
+dotnet test --solution CustomerSupport.slnx -c Release --no-build --report-xunit-trx --results-directory TestResults
+```
+
+- SDK sürümü `global.json`'dan gelir; test çalıştırıcısı Microsoft.Testing.Platform'dur (`global.json`'daki `test.runner`).
+- GitHub'ın ubuntu runner'larında Docker hazır gelir; container imajları test sırasında çekilir.
+- Test sonuçları (TRX) her çalışmada `test-results` artifact'ı olarak yüklenir (başarısız çalışmada da).
+- Aynı dal/PR için yeni bir çalışma başlarsa eskisi iptal edilir (`concurrency`).
+- İş akışı değişikliğini göndermeden önce doğrulamak için: `docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:latest`.
 
 ---
 

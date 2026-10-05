@@ -1,0 +1,68 @@
+# Sürekli entegrasyon: her push (develop/main) ve PR'da tüm çözüm derlenir ve TÜM testler çalışır.
+#
+# Testlerin bir kısmı gerçek altyapıya karşıdır (Testcontainers: PostgreSQL, Redis, Qdrant, Mailpit).
+# GitHub'ın ubuntu runner'larında Docker hazır geldiği için ek kurulum gerekmez; imajlar test sırasında çekilir.
+# Komutlar yerelde de aynen çalışır (bkz. docs/developer-guide.md — "CI").
+
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+  workflow_dispatch:
+
+# Aynı dal/PR için yeni bir çalışma başlarsa eskisi iptal edilir.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build-and-test:
+    name: Derleme ve testler
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Kodu al
+        uses: actions/checkout@v4
+
+      - name: .NET SDK (global.json)
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: NuGet önbelleği
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Bağımlılıkları yükle
+        run: dotnet restore CustomerSupport.slnx
+
+      - name: Derle (Release)
+        run: dotnet build CustomerSupport.slnx -c Release --no-restore
+
+      - name: Testler
+        run: >
+          dotnet test --solution CustomerSupport.slnx -c Release --no-build
+          --report-xunit-trx --results-directory ${{ github.workspace }}/TestResults
+
+      - name: Test sonuçlarını yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ${{ github.workspace }}/TestResults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
