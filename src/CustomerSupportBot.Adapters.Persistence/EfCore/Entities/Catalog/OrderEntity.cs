@@ -7,6 +7,10 @@ public sealed class OrderEntity
     public string Status { get; set; } = "";
     public DateTime OrderDate { get; set; }
 
+    public DateTime? ShippedAt { get; set; }
+    public string? Carrier { get; set; }
+    public string? TrackingNumber { get; set; }
+
     public DateTime? CancelledAt { get; set; }
     public string? CancelReason { get; set; }
 

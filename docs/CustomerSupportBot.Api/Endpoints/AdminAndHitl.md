@@ -94,6 +94,9 @@ sohbeti devralması (Live Takeover). `AdminEndpoints` **Admin** rolü için, `Ag
 | `POST /chat-sessions/{sid}/takeover` | Session'ı Human moda alır. |
 | `POST /chat-sessions/{sid}/release` | Session'ı Bot moduna döndürür (kapanış kaydı oluşturmaz — programatik bırakma). |
 | `POST /chat-sessions/{sid}/close` | Panelin "Sohbeti Bitir"i (`ConversationClosingEndpoints`): `body: { reason, tags?, note? }` doğrulanır, sonra release akışı çalışır ve kapanış kaydı yazılır. Geçersiz 400 (sohbet kapanmaz), sohbet canlı değilse 404. Kayıt yazılamazsa 200 + `warning`. |
+| `GET /orders/{id}` | Sipariş (`OrderFulfillmentEndpoints`, yalnız Admin): durum, ürünler, kargo bilgisi, teslim zamanı. |
+| `POST /orders/{id}/shipment` | `İşleniyor → Kargolandı`; `body: { carrier?, trackingNumber? }` (≤ 64). Geçişte müşteriye e-posta. 404 bulunamadı, 409 geçersiz geçiş (`currentStatus`), 400 geçersiz girdi; aynı duruma tekrar 200 + `changed=false` (e-posta tekrar gitmez). Depo/fulfillment sistemi bu ucu bir servis hesabıyla çağırır. |
+| `POST /orders/{id}/delivery` | `Kargolandı → Teslim Edildi` (`delivered_at` yazılır; iade süresi buradan sayılır). Kodlar shipment ile aynı. |
 | `GET /conversations/search?q=&customerId=&from=&to=&reason=&tag=&page=` | Konuşma arama (`ConversationSearchEndpoints`, yalnız Admin). `from` dahil / `to` hariç UTC anları (gün sınırlarını panel yerel saate göre hesaplar). 25'erli sayfa: `{ items, page, pageSize, hasMore }`; her öğede alıntı ve vurgu konumu (`highlightStart/Length`), mesaj sayısı, kapanış nedenleri, etiketler. Geçersiz girdi 400 (metin 2–200 karakter, başlangıç ≤ bitiş). |
 | `GET /conversation-closing/options` | Kapanış penceresi: `requireReason`, `reasons[{code,label}]`, `suggestedTags` (en sık 10). |
 | `POST /chat-sessions/{sid}/messages` | Admin'in müşteriye yazdığı mesaj. |

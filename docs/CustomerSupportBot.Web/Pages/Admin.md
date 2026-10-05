@@ -144,6 +144,13 @@ profili, açık işler (eskalasyon/bekleyen onay), ilgili bilgi tabanı makalele
 gönderir. Başka bir sohbete geçilir ya da sohbet bitirilirse kart sıfırlanır; geç gelen bir yanıt yanlış
 sohbete yazılmaz. LLM bölümü üretilemezse kart hatayı gösterir, diğer bölümler yine görünür.
 
+## Siparişler (yalnız yönetici)
+
+**📦 Siparişler** sekmesi: sipariş no ile bul (`GET /orders/{id}`); durum, ürünler, kargo/teslim bilgisi.
+İşleniyorsa kargo firması + takip no ile **Kargoya verildi**, kargodaysa **Teslim edildi**. Geçişte müşteriye
+e-posta gider; aynı durumu tekrar işaretlemek ikinci e-posta göndermez. Geçersiz geçişte (ör. iptal edilmiş
+sipariş) sunucunun mesajı mevcut durumla gösterilir.
+
 ## LLM harcama kartları (Analytics)
 
 `LlmBudget:Enabled` açıkken Analytics sekmesinde **Bugünkü** ve **Bu Ayki LLM Harcaması** kartları:

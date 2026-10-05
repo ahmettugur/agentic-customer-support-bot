@@ -15,6 +15,18 @@ olayı Api'deki `ApprovalEmailNotificationService` (`IHostedService`) tarafında
 - **Hata:** SMTP hatası loglanır ve defter talebi geri bırakılır (otomatik yeniden deneme yok; uygulama içi
   bildirim yine vardır). İşleyici karar akışını hiçbir zaman beklemez/bozmaz.
 
+## OrderStatusEmailService / OrderStatusEmailComposer
+
+Proaktif bildirim: sipariş **kargoya verildiğinde** ve **teslim edildiğinde** müşteriye e-posta
+(`Email:Notifications:OrderShipped`, `OrderDelivered`). `OrderFulfillmentService` yalnızca gerçek geçişte
+(`OrderStatusChange.Updated`) çağırır — tekrarlanan depo çağrısı ikinci e-posta göndermez.
+
+- **Bir kez gönderim:** `order-status:{sipariş}:{shipped|delivered}` anahtarı `INotificationLedger`'da talep edilir.
+- **Alıcı/hata:** onay e-postasıyla aynı — adres yoksa atlanır (talep tutulur), SMTP hatasında talep geri bırakılır.
+  Bildirim hatası durum güncellemesini geri almaz.
+- **İçerik:** konu "Siparişiniz kargoya verildi — #1044" / "… teslim edildi — #1044"; gövdede ürünler, kargo firması
+  ve takip numarası, (ayarlıysa) bağlantı. HTML'e giren her metin escape edilir.
+
 ## ApprovalEmailComposer
 
 Türkçe konu ve gövde (düz metin + HTML). Konu: "Talebiniz onaylandı — İade", "… reddedildi", "… zaman aşımına

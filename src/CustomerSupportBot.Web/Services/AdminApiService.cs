@@ -245,6 +245,48 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         response.EnsureSuccessStatusCode();
     }
 
+    // ─── Siparişler (yalnız yönetici) ────────────────────────────────────────
+
+    public async Task<OrderViewItem?> GetOrderAsync(string orderId)
+    {
+        try
+        {
+            using var response = await http.GetAsync($"/orders/{Uri.EscapeDataString(orderId.Trim())}");
+            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<OrderViewItem>() : null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary><c>Changed=false</c>: sipariş zaten bu durumdaydı (e-posta tekrar gitmez).</summary>
+    public Task<(OrderViewItem? Order, bool Changed, string? Error)> ShipOrderAsync(string orderId, string? carrier, string? trackingNumber) =>
+        UpdateOrderAsync($"/orders/{Uri.EscapeDataString(orderId)}/shipment", new { carrier, trackingNumber });
+
+    public Task<(OrderViewItem? Order, bool Changed, string? Error)> DeliverOrderAsync(string orderId) =>
+        UpdateOrderAsync($"/orders/{Uri.EscapeDataString(orderId)}/delivery", new { });
+
+    private async Task<(OrderViewItem? Order, bool Changed, string? Error)> UpdateOrderAsync(string url, object body)
+    {
+        try
+        {
+            using var response = await http.PostAsJsonAsync(url, body);
+            if (response.IsSuccessStatusCode)
+            {
+                var ok = await response.Content.ReadFromJsonAsync<OrderUpdateResponse>();
+                return (ok?.Order, ok?.Changed ?? false, null);
+            }
+            var error = await response.Content.ReadFromJsonAsync<OrderUpdateError>();
+            var message = error?.Error ?? $"Sipariş güncellenemedi ({(int)response.StatusCode}).";
+            return (null, false, error?.CurrentStatus is { } current ? $"{message} Mevcut durum: {current}." : message);
+        }
+        catch (Exception ex)
+        {
+            return (null, false, "Sipariş güncellenemedi: " + ex.Message);
+        }
+    }
+
+    private sealed record OrderUpdateResponse(string OrderId, bool Changed, OrderViewItem? Order);
+    private sealed record OrderUpdateError(string? Error, string? CurrentStatus);
+
     // ─── Konuşma arama (yalnız yönetici) ─────────────────────────────────────
 
     /// <summary><paramref name="fromUtc"/> dahil, <paramref name="toUtc"/> hariç.</summary>

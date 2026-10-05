@@ -195,6 +195,15 @@ public sealed class OrderToolsService : IOrderToolsService
         return null;
     }
 
+    /// <summary>Kargo firması ve takip numarası (varsa) — bot "kargom nerede?" sorusuna takip numarasıyla yanıt verebilsin.</summary>
+    private static string ShippingText(OrderInfo order)
+    {
+        var parts = new List<string>(2);
+        if (!string.IsNullOrWhiteSpace(order.Carrier)) parts.Add($"Kargo: {order.Carrier}");
+        if (!string.IsNullOrWhiteSpace(order.TrackingNumber)) parts.Add($"Takip No: {order.TrackingNumber}");
+        return parts.Count == 0 ? "" : ", " + string.Join(", ", parts);
+    }
+
     [Description("Sipariş durumunu sipariş numarasıyla sorgular. Sonuç ToolResult olarak döner.")]
     public ToolResult OrderStatusTool(
         [Description("Sorgulanacak sipariş numarası (örn: 1030)")] string orderId,
@@ -205,7 +214,7 @@ public sealed class OrderToolsService : IOrderToolsService
         var order = _orders.Get(orderId)!;
 
         return ToolResult.Ok(
-            message: $"Sipariş No: {orderId}, Ürünler: {order.LinesSummary()}, Durum: {order.Status}.",
+            message: $"Sipariş No: {orderId}, Ürünler: {order.LinesSummary()}, Durum: {order.Status}{ShippingText(order)}.",
             data: new
             {
                 orderId,
@@ -213,7 +222,9 @@ public sealed class OrderToolsService : IOrderToolsService
                 totalQuantity = order.TotalQuantity(),
                 status = order.Status,
                 customerId = order.CustomerId,
-                orderDate = order.OrderDate
+                orderDate = order.OrderDate,
+                carrier = order.Carrier,
+                trackingNumber = order.TrackingNumber
             });
     }
 
@@ -230,7 +241,7 @@ public sealed class OrderToolsService : IOrderToolsService
 
         var (orderId, order) = result.Value;
         return ToolResult.Ok(
-            message: $"Sipariş No: {orderId}, Ürünler: {order.LinesSummary()}, Durum: {order.Status}, Tarih: {order.OrderDate:g}",
+            message: $"Sipariş No: {orderId}, Ürünler: {order.LinesSummary()}, Durum: {order.Status}{ShippingText(order)}, Tarih: {order.OrderDate:g}",
             data: new
             {
                 orderId,
@@ -238,6 +249,8 @@ public sealed class OrderToolsService : IOrderToolsService
                 totalQuantity = order.TotalQuantity(),
                 status = order.Status,
                 orderDate = order.OrderDate,
+                carrier = order.Carrier,
+                trackingNumber = order.TrackingNumber,
                 customerId = order.CustomerId
             });
     }

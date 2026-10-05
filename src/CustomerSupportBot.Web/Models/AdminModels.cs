@@ -258,6 +258,13 @@ public sealed record LessonProposal(
     string? VectorMemoryId = null
 );
 
+// ─── Siparişler (fulfillment) ────────────────────────────────────────────────
+
+/// <summary><c>GET /orders/{id}</c> ve durum güncelleme yanıtındaki sipariş.</summary>
+public sealed record OrderViewItem(
+    string OrderId, string CustomerId, string Status, string LinesSummary, DateTimeOffset OrderDate,
+    DateTimeOffset? ShippedAt, string? Carrier, string? TrackingNumber, DateTimeOffset? DeliveredAt);
+
 // ─── Konuşma arama ───────────────────────────────────────────────────────────
 
 /// <summary><c>HighlightStart/Length</c>: alıntıda vurgulanacak eşleşme (metin aranmadıysa null).</summary>

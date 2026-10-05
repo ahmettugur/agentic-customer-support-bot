@@ -96,6 +96,11 @@
                 </svg>
                 Analytics
             </button>
+            <button class="tab-btn @ActiveCls("orders")" role="tab"
+                    aria-selected="@(_activeTab == "orders")" aria-controls="panel-orders"
+                    @onclick='() => SwitchTabAsync("orders")'>
+                📦 Siparişler
+            </button>
             <button class="tab-btn @ActiveCls("conversations")" role="tab"
                     aria-selected="@(_activeTab == "conversations")" aria-controls="panel-conversations"
                     @onclick='() => SwitchTabAsync("conversations")'>
@@ -620,6 +625,58 @@
                 </div>
             </div>
         </section>
+
+        <!-- TAB: SİPARİŞLER (yalnız yönetici) — kargo/teslim durumu, müşteriye proaktif e-posta -->
+        @if (!_isAgent)
+        {
+            <section id="panel-orders" class="tab-content @ActiveCls("orders")" role="tabpanel" aria-labelledby="tab-orders">
+                <form class="card order-lookup" @onsubmit="LookupOrderAsync" @onsubmit:preventDefault>
+                    <label>Sipariş no <input inputmode="numeric" maxlength="20" placeholder="ör. 1044" @bind="_orderLookupId" /></label>
+                    <button type="submit" class="btn-primary" disabled="@_orderBusy">Bul</button>
+                </form>
+                @if (_orderError is not null)
+                {
+                    <p class="form-error" role="alert">@_orderError</p>
+                }
+                @if (_orderView is { } o)
+                {
+                    <article class="card order-card">
+                        <header class="order-card-header">
+                            <h3>Sipariş #@o.OrderId</h3>
+                            <span class="status-tag">@o.Status</span>
+                        </header>
+                        <dl class="order-facts">
+                            <dt>Müşteri</dt><dd>@o.CustomerId</dd>
+                            <dt>Ürünler</dt><dd>@o.LinesSummary</dd>
+                            <dt>Sipariş tarihi</dt><dd>@o.OrderDate.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</dd>
+                            @if (o.ShippedAt is { } shippedAt)
+                            {
+                                <dt>Kargoya verildi</dt><dd>@shippedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") @(o.Carrier is null ? "" : $"· {o.Carrier}") @(o.TrackingNumber is null ? "" : $"· {o.TrackingNumber}")</dd>
+                            }
+                            @if (o.DeliveredAt is { } deliveredAt)
+                            {
+                                <dt>Teslim edildi</dt><dd>@deliveredAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</dd>
+                            }
+                        </dl>
+                        @if (o.Status == "İşleniyor")
+                        {
+                            <div class="order-actions">
+                                <label>Kargo firması <input maxlength="64" placeholder="ör. Yurtiçi Kargo" @bind="_orderCarrier" /></label>
+                                <label>Takip no <input maxlength="64" @bind="_orderTracking" /></label>
+                                <button type="button" class="btn-primary" @onclick="ShipOrderAsync" disabled="@_orderBusy">🚚 Kargoya verildi</button>
+                            </div>
+                        }
+                        else if (o.Status == "Kargolandı")
+                        {
+                            <div class="order-actions">
+                                <button type="button" class="btn-primary" @onclick="DeliverOrderAsync" disabled="@_orderBusy">✅ Teslim edildi</button>
+                            </div>
+                        }
+                        <p class="muted small">Durum değişikliğinde müşteriye e-posta gider (<code>Email:Notifications</code>). Aynı durumu tekrar işaretlemek ikinci e-posta göndermez.</p>
+                    </article>
+                }
+            </section>
+        }
 
         <!-- TAB: KONUŞMA ARAMA (yalnız yönetici) -->
         @if (!_isAgent)

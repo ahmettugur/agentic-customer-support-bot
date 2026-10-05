@@ -2144,3 +2144,18 @@ code.at-val {
 .budget-warn .budget-fill { background: #f59e0b; }
 .budget-full .budget-fill { background: #dc2626; }
 .budget-full .analytics-card-value { color: #dc2626; }
+
+/* ── Siparişler (kargo / teslim) ─────────────────────────────────────────── */
+.order-lookup { display: flex; gap: 10px; align-items: end; padding: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+.order-lookup label, .order-actions label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--color-text-secondary); }
+.order-lookup input, .order-actions input {
+    padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+    background: var(--color-surface); color: var(--color-text); font-family: inherit; font-size: 13px;
+}
+.order-card { padding: 16px; display: flex; flex-direction: column; gap: 12px; max-width: 720px; }
+.order-card-header { display: flex; align-items: center; gap: 12px; }
+.order-card-header h3 { margin: 0; font-size: 16px; }
+.order-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 14px; }
+.order-facts dt { color: var(--color-text-secondary); }
+.order-facts dd { margin: 0; overflow-wrap: anywhere; }
+.order-actions { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }

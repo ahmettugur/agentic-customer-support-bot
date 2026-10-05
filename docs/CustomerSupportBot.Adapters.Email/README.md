@@ -22,6 +22,8 @@
 | `Smtp:Username` / `Smtp:Password` | boş | Boşsa kimlik doğrulama yok. **Parola repoya yazılmaz**: `Email__Smtp__Password` ortam değişkeni ya da secret. |
 | `Smtp:TimeoutSeconds` | `30` | |
 | `Notifications:ApprovalResults` | `true` | Onay sonucu e-postası. |
+| `Notifications:OrderShipped` | `true` | Sipariş kargoya verildi (kargo firması + takip no). |
+| `Notifications:OrderDelivered` | `true` | Sipariş teslim edildi. |
 
 Açıkken eksik/geçersiz ayar uygulama başlangıcında `OptionsValidationException` verir (`EmailOptionsValidator`).
 

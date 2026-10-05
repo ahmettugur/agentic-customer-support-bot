@@ -41,6 +41,11 @@ public class OrderInfo
     public DateTime? CancelledAt { get; set; }
     public string? CancelReason { get; set; }
 
+    // ─── Kargo bilgisi (fulfillment) ───
+    public DateTime? ShippedAt { get; set; }
+    public string? Carrier { get; set; }
+    public string? TrackingNumber { get; set; }
+
     // ─── Teslim bilgisi ───
     /// <summary>Teslim anı; iade süresi buradan sayılır. Eski kayıtlarda boş olabilir.</summary>
     public DateTime? DeliveredAt { get; set; }

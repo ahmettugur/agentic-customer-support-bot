@@ -266,6 +266,56 @@ public sealed class OrderRepository : IOrderRepository
     /// şema baştan beri çok satırlıydı ama model tek satıra düşürdüğü için ikinci ve
     /// sonraki ürünler sessizce kayboluyordu.
     /// </remarks>
+    // ─── Fulfillment: durum geçişleri ───────────────────────────────────────
+
+    /// <remarks>
+    /// İptaldeki gibi "oku → kontrol et → yaz" değil, koşullu tek UPDATE: kargolama ile iptal eşzamanlı gelirse
+    /// Postgres ikincisini satır kilidinde bekletir ve koşulu yeniden değerlendirir — iptal edilmiş sipariş
+    /// kargolanmış görünmez, kargolanmış sipariş iptalde kaybolmaz. 0 satırda neden okunur (yok / zaten hedef
+    /// durumda / geçersiz geçiş).
+    /// </remarks>
+    public OrderStatusUpdateResult MarkShipped(string orderId, string? carrier, string? trackingNumber, DateTime shippedAtUtc)
+    {
+        if (!long.TryParse(orderId, out var id)) return new OrderStatusUpdateResult(OrderStatusChange.NotFound, null);
+        var at = DateTime.SpecifyKind(shippedAtUtc, DateTimeKind.Utc);
+        using (var ctx = _dbFactory.CreateDbContext())
+        {
+            var updated = ctx.Orders
+                .Where(o => o.Code == id && o.Status == WellKnown.OrderStatuses.Processing)
+                .ExecuteUpdate(s => s
+                    .SetProperty(o => o.Status, WellKnown.OrderStatuses.Shipped)
+                    .SetProperty(o => o.ShippedAt, at)
+                    .SetProperty(o => o.Carrier, carrier)
+                    .SetProperty(o => o.TrackingNumber, trackingNumber));
+            if (updated == 1) return new OrderStatusUpdateResult(OrderStatusChange.Updated, Get(orderId));
+        }
+        return Explain(orderId, WellKnown.OrderStatuses.Shipped);
+    }
+
+    public OrderStatusUpdateResult MarkDelivered(string orderId, DateTime deliveredAtUtc)
+    {
+        if (!long.TryParse(orderId, out var id)) return new OrderStatusUpdateResult(OrderStatusChange.NotFound, null);
+        var at = DateTime.SpecifyKind(deliveredAtUtc, DateTimeKind.Utc);
+        using (var ctx = _dbFactory.CreateDbContext())
+        {
+            var updated = ctx.Orders
+                .Where(o => o.Code == id && o.Status == WellKnown.OrderStatuses.Shipped)
+                .ExecuteUpdate(s => s
+                    .SetProperty(o => o.Status, WellKnown.OrderStatuses.Delivered)
+                    .SetProperty(o => o.DeliveredAt, at));
+            if (updated == 1) return new OrderStatusUpdateResult(OrderStatusChange.Updated, Get(orderId));
+        }
+        return Explain(orderId, WellKnown.OrderStatuses.Delivered);
+    }
+
+    private OrderStatusUpdateResult Explain(string orderId, string targetStatus)
+    {
+        var current = Get(orderId);
+        if (current is null) return new OrderStatusUpdateResult(OrderStatusChange.NotFound, null);
+        return new OrderStatusUpdateResult(
+            current.Status == targetStatus ? OrderStatusChange.Unchanged : OrderStatusChange.InvalidTransition, current);
+    }
+
     private static OrderInfo MapToModel(OrderEntity e)
     {
         return new OrderInfo
@@ -279,6 +329,9 @@ public sealed class OrderRepository : IOrderRepository
             OrderDate = e.OrderDate,
             CancelledAt = e.CancelledAt,
             CancelReason = e.CancelReason,
+            ShippedAt = e.ShippedAt,
+            Carrier = e.Carrier,
+            TrackingNumber = e.TrackingNumber,
             DeliveredAt = e.DeliveredAt,
             ReturnRequestedAt = e.ReturnRequestedAt,
             ReturnReason = e.ReturnReason

@@ -2,6 +2,20 @@ using CustomerSupportBot.Domain.Model;
 
 namespace CustomerSupportBot.Application.Ports.Outbound.Persistence;
 
+/// <summary>Durum geçişinin sonucu.</summary>
+public enum OrderStatusChange
+{
+    Updated,
+    /// <summary>Sipariş zaten hedef durumda — veri değişmedi (tekrarlanan çağrı).</summary>
+    Unchanged,
+    NotFound,
+    /// <summary>Mevcut durumdan bu duruma geçilemez (ör. iptal edilmiş sipariş kargolanamaz).</summary>
+    InvalidTransition
+}
+
+/// <param name="Order">Geçişten sonraki (ya da geçiş olmadıysa mevcut) sipariş; bulunamadıysa null.</param>
+public sealed record OrderStatusUpdateResult(OrderStatusChange Change, OrderInfo? Order);
+
 /// <summary>
 /// Sipariş yönetimi için secondary port.
 /// </summary>
@@ -36,4 +50,13 @@ public interface IOrderRepository
 
     /// <summary>Sipariş için iade talebi oluşturur. Başarılıysa true döner; iade uygun değilse false.</summary>
     bool RequestReturn(string orderId, string reason);
+
+    /// <summary>
+    /// <c>İşleniyor → Kargolandı</c> (kargo firması/takip no isteğe bağlı). Atomik koşullu güncelleme: eşzamanlı
+    /// iptal ile yarışta yalnızca biri kazanır.
+    /// </summary>
+    OrderStatusUpdateResult MarkShipped(string orderId, string? carrier, string? trackingNumber, DateTime shippedAtUtc);
+
+    /// <summary><c>Kargolandı → Teslim Edildi</c>; <c>DeliveredAt</c> yazılır (iade süresi buradan sayılır).</summary>
+    OrderStatusUpdateResult MarkDelivered(string orderId, DateTime deliveredAtUtc);
 }

@@ -148,6 +148,8 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IConversationSearchPort, Services.Conversations.ConversationSearchService>();
         services.AddSingleton<Ports.Outbound.Observability.ILlmSpendGuard, Services.Budget.LlmSpendGuard>();
         services.AddSingleton<Services.Notifications.ApprovalResultEmailService>();
+        services.AddSingleton<Services.Notifications.OrderStatusEmailService>();
+        services.AddSingleton<IOrderFulfillmentPort, Services.Orders.OrderFulfillmentService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
         services.AddSingleton<IApprovalExecutionRouter, ApprovalExecutionRouter>();

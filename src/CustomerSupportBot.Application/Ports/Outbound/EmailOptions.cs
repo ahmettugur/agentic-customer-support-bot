@@ -42,6 +42,12 @@ public sealed class EmailOptions
     {
         /// <summary>Onay sonucu (onaylandı/reddedildi/zaman aşımı) müşteriye e-postayla bildirilir.</summary>
         public bool ApprovalResults { get; set; } = true;
+
+        /// <summary>Sipariş kargoya verildiğinde (kargo firması ve takip numarasıyla) müşteriye e-posta.</summary>
+        public bool OrderShipped { get; set; } = true;
+
+        /// <summary>Sipariş teslim edildiğinde müşteriye e-posta.</summary>
+        public bool OrderDelivered { get; set; } = true;
     }
 }
 

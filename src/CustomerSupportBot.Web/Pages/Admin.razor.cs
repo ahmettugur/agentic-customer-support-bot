@@ -84,6 +84,14 @@ public partial class Admin
     private Timer?                  _presenceTimer;
     private List<AgentPresenceItem> _agentPresence = [];
 
+    // ── Siparişler (yalnız yönetici) ─────────────────────────────────────────────
+    private string         _orderLookupId = string.Empty;
+    private OrderViewItem? _orderView;
+    private string?        _orderError;
+    private string         _orderCarrier  = string.Empty;
+    private string         _orderTracking = string.Empty;
+    private bool           _orderBusy;
+
     // ── Konuşma arama (yalnız yönetici) ──────────────────────────────────────────
     private string                          _searchText     = string.Empty;
     private string                          _searchCustomer = string.Empty;
@@ -778,6 +786,47 @@ public partial class Admin
         // Ayrıca "çevrimdışı" gönderilmez: başka sekmede panel açık olabilir. Kalp atışı kesilince
         // sunucu zaman aşımıyla çevrimdışı sayar.
         if (_presenceTimer is not null) await _presenceTimer.DisposeAsync();
+    }
+
+    // ── Siparişler ────────────────────────────────────────────────────────────
+    private async Task LookupOrderAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_orderLookupId) || _orderBusy) return;
+        _orderBusy  = true;
+        _orderError = null;
+        try
+        {
+            _orderView = await AdminApi.GetOrderAsync(_orderLookupId);
+            if (_orderView is null) _orderError = $"#{_orderLookupId.Trim()} numaralı sipariş bulunamadı.";
+            _orderCarrier = _orderView?.Carrier ?? string.Empty;
+            _orderTracking = _orderView?.TrackingNumber ?? string.Empty;
+        }
+        finally { _orderBusy = false; }
+    }
+
+    private Task ShipOrderAsync() => UpdateOrderAsync(id => AdminApi.ShipOrderAsync(id,
+        string.IsNullOrWhiteSpace(_orderCarrier) ? null : _orderCarrier, string.IsNullOrWhiteSpace(_orderTracking) ? null : _orderTracking));
+
+    private Task DeliverOrderAsync() => UpdateOrderAsync(AdminApi.DeliverOrderAsync);
+
+    private async Task UpdateOrderAsync(Func<string, Task<(OrderViewItem? Order, bool Changed, string? Error)>> update)
+    {
+        if (_orderView is null || _orderBusy) return;
+        _orderBusy  = true;
+        _orderError = null;
+        try
+        {
+            var (order, changed, error) = await update(_orderView.OrderId);
+            if (error is not null)
+            {
+                _orderError = error;
+                return;
+            }
+            _orderView = order ?? _orderView;
+            if (changed) Toast.ShowSuccess($"Sipariş #{_orderView.OrderId}: {_orderView.Status}. Müşteri e-postayla bilgilendirilir (e-posta açıksa).");
+            else Toast.ShowInfo($"Sipariş zaten '{_orderView.Status}' durumunda — bildirim tekrar gönderilmedi.");
+        }
+        finally { _orderBusy = false; }
     }
 
     // ── Konuşma arama ─────────────────────────────────────────────────────────
