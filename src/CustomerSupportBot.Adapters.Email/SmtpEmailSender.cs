@@ -24,21 +24,25 @@ public sealed class SmtpEmailSender(IOptions<EmailOptions> options, ILogger<Smtp
 
     public async Task SendAsync(EmailMessage message, CancellationToken ct = default)
     {
+        // Açıkken zorunlu alanlar başlangıçta doğrulanır (EmailOptionsValidator); burada yalnız güvence.
+        var from = _options.FromAddress ?? throw new InvalidOperationException("Email:FromAddress tanımlı değil.");
+        var host = _options.Smtp.Host ?? throw new InvalidOperationException("Email:Smtp:Host tanımlı değil.");
+
         var mime = new MimeMessage();
-        mime.From.Add(new MailboxAddress(_options.FromName, _options.FromAddress));
+        mime.From.Add(new MailboxAddress(_options.FromName, from));
         mime.To.Add(new MailboxAddress(message.ToName ?? "", message.To));
         mime.Subject = message.Subject;
         mime.Body = new BodyBuilder { TextBody = message.TextBody, HtmlBody = message.HtmlBody }.ToMessageBody();
 
         var smtp = _options.Smtp;
         using var client = new SmtpClient { Timeout = (int)TimeSpan.FromSeconds(Math.Max(1, smtp.TimeoutSeconds)).TotalMilliseconds };
-        await client.ConnectAsync(smtp.Host, smtp.Port, ToSocketOptions(smtp.Security), ct);
+        await client.ConnectAsync(host, smtp.Port, ToSocketOptions(smtp.Security), ct);
         if (!string.IsNullOrEmpty(smtp.Username))
             await client.AuthenticateAsync(smtp.Username, smtp.Password ?? "", ct);
         await client.SendAsync(mime, ct);
         await client.DisconnectAsync(quit: true, ct);
 
-        logger.LogDebug("[Email] SMTP gönderimi tamam | host={Host}", smtp.Host);
+        logger.LogDebug("[Email] SMTP gönderimi tamam | host={Host}", host);
     }
 
     internal static SecureSocketOptions ToSocketOptions(SmtpSecurity security) => security switch

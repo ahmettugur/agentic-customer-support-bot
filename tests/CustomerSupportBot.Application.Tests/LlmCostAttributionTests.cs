@@ -78,7 +78,7 @@ public class LlmCostAttributionTests
         await sessions.AddExchangeAsync(session.SessionId, "iade istiyorum", "tamam");
         var seen = new List<string?>();
         var reasoning = Substitute.For<IReasoningPort>();
-        reasoning.ReasonAsync(Arg.Any<string>(), Arg.Any<AgentSession?>(), Arg.Any<List<ConversationMessage>?>(), Arg.Any<CancellationToken>())
+        reasoning.ReasonAsync(Arg.Any<string>(), Arg.Any<AgentSession>(), Arg.Any<List<ConversationMessage>?>(), Arg.Any<CancellationToken>())
             .Returns(_ => { seen.Add(attribution.CurrentSessionId); return new ReasoningResult(); });
         var team = Substitute.For<IAgentTeamPort>();
         team.RunAsync(Arg.Any<string>(), Arg.Any<List<ConversationMessage>?>(), Arg.Any<AgentSession?>(), Arg.Any<ReasoningResult?>(), Arg.Any<CancellationToken>())
