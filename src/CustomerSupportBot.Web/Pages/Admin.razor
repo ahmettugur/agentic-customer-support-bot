@@ -84,6 +84,11 @@
                 </svg>
                 Analytics
             </button>
+            <button class="tab-btn @ActiveCls("replies")" role="tab"
+                    aria-selected="@(_activeTab == "replies")" aria-controls="panel-replies"
+                    @onclick='() => SwitchTabAsync("replies")'>
+                📋 Hazır Yanıtlar
+            </button>
             <button class="tab-btn @ActiveCls("improvements")" role="tab"
                     aria-selected="@(_activeTab == "improvements")" aria-controls="panel-improvements"
                     @onclick='() => SwitchTabAsync("improvements")'>
@@ -539,7 +544,37 @@
                                     }
                                 }
                             </div>
+                            @if (_repliesOpen)
+                            {
+                                <div class="saved-reply-picker" role="dialog" aria-label="Hazır yanıtlar">
+                                    <input type="search" placeholder="Hazır yanıt ara (başlık, metin, kısayol)…" aria-label="Hazır yanıt ara"
+                                           @bind="_replyQuery" @bind:event="oninput" @bind:after="OnReplyQueryChangedAsync" />
+                                    @if (_replyResults.Count == 0)
+                                    {
+                                        <div class="saved-reply-empty">Eşleşen hazır yanıt yok.</div>
+                                    }
+                                    else
+                                    {
+                                        <ul class="saved-reply-list">
+                                            @foreach (var r in _replyResults)
+                                            {
+                                                var reply = r;
+                                                <li>
+                                                    <button type="button" class="saved-reply-item" @onclick="() => InsertReply(reply)">
+                                                        <span class="saved-reply-title">@reply.Title
+                                                            @if (!string.IsNullOrEmpty(reply.Shortcut)) { <code>@reply.Shortcut</code> }
+                                                        </span>
+                                                        <span class="saved-reply-body">@reply.Body</span>
+                                                    </button>
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                            }
                             <form class="chat-panel-composer" @onsubmit="SendChatMessageAsync" @onsubmit:preventDefault>
+                                <button type="button" class="btn-secondary btn-replies @(_repliesOpen ? "active" : "")" @onclick="ToggleRepliesAsync"
+                                        aria-pressed="@_repliesOpen" title="Hazır yanıt ekle">📋</button>
                                 <textarea rows="2" placeholder="Kullanıcıya yazın…" @bind="_chatInput"></textarea>
                                 <button type="submit" class="btn-primary">Gönder</button>
                             </form>
@@ -548,6 +583,57 @@
                 </div>
             </div>
         </section>
+
+        <!-- TAB: HAZIR YANITLAR (yalnız yönetici) -->
+        @if (!_isAgent)
+        {
+            <section id="panel-replies" class="tab-content @ActiveCls("replies")" role="tabpanel" aria-labelledby="tab-replies">
+                <div class="saved-replies-admin">
+                    <form class="card saved-reply-form" @onsubmit="SaveReplyAsync" @onsubmit:preventDefault>
+                        <h3>@(_replyEditId is null ? "Yeni hazır yanıt" : "Hazır yanıtı düzenle")</h3>
+                        <label>Başlık <input maxlength="100" @bind="_replyTitle" required /></label>
+                        <label>Kısayol <span class="muted">(isteğe bağlı, ör. kargo-gecikme)</span>
+                            <input maxlength="40" @bind="_replyShortcut" />
+                        </label>
+                        <label>Metin <textarea rows="5" maxlength="2000" @bind="_replyBody" required></textarea></label>
+                        @if (_replyFormError is not null)
+                        {
+                            <p class="saved-reply-error" role="alert">@_replyFormError</p>
+                        }
+                        <div class="saved-reply-form-actions">
+                            @if (_replyEditId is not null)
+                            {
+                                <button type="button" class="btn-secondary" @onclick="ResetReplyForm">Vazgeç</button>
+                            }
+                            <button type="submit" class="btn-primary">@(_replyEditId is null ? "Ekle" : "Kaydet")</button>
+                        </div>
+                    </form>
+                    <div class="saved-reply-table">
+                        @if (_savedReplies.Count == 0)
+                        {
+                            <div class="empty-state">Henüz hazır yanıt yok.</div>
+                        }
+                        else
+                        {
+                            @foreach (var r in _savedReplies)
+                            {
+                                var reply = r;
+                                <article class="card saved-reply-row">
+                                    <div class="saved-reply-row-head">
+                                        <strong>@reply.Title</strong>
+                                        @if (!string.IsNullOrEmpty(reply.Shortcut)) { <code>@reply.Shortcut</code> }
+                                        <span class="spacer"></span>
+                                        <button class="btn-secondary btn-sm" @onclick="() => EditReply(reply)">Düzenle</button>
+                                        <button class="btn-danger btn-sm" @onclick="() => DeleteReplyAsync(reply)">Sil</button>
+                                    </div>
+                                    <p class="saved-reply-row-body">@reply.Body</p>
+                                </article>
+                            }
+                        }
+                    </div>
+                </div>
+            </section>
+        }
 
         <!-- TAB: ANALYTICS -->
         <section id="panel-analytics" class="tab-content @ActiveCls("analytics")" role="tabpanel" aria-labelledby="tab-analytics">

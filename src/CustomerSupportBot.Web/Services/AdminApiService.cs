@@ -61,6 +61,31 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         }
     }
 
+    // ─── Hazır yanıtlar ──────────────────────────────────────────────────────
+
+    /// <summary>Arama sunucuda Türkçe kurallarla yapılır (başlık/metin/kısayol). Temsilci /agent önekiyle okur.</summary>
+    public async Task<List<SavedReplyItem>> GetSavedRepliesAsync(string? query = null)
+    {
+        var prefix = await PrefixAsync();
+        var url = $"{prefix}/saved-replies" + (string.IsNullOrWhiteSpace(query) ? "" : $"?q={Uri.EscapeDataString(query.Trim())}");
+        return await http.GetFromJsonAsync<List<SavedReplyItem>>(url) ?? [];
+    }
+
+    /// <summary>Ekler (<paramref name="id"/> null) ya da günceller — yalnız yönetici. Hata metni sunucudan gelir.</summary>
+    public async Task<(SavedReplyItem? Reply, string? Error)> SaveSavedReplyAsync(string? id, string title, string body, string? shortcut)
+    {
+        var payload = new { title, body, shortcut = string.IsNullOrWhiteSpace(shortcut) ? null : shortcut };
+        var response = id is null
+            ? await http.PostAsJsonAsync("/saved-replies", payload)
+            : await http.PutAsJsonAsync($"/saved-replies/{Uri.EscapeDataString(id)}", payload);
+        if (response.IsSuccessStatusCode) return (await response.Content.ReadFromJsonAsync<SavedReplyItem>(), null);
+        try { return (null, (await response.Content.ReadFromJsonAsync<ApiError>())?.Message ?? "Kaydedilemedi."); }
+        catch { return (null, "Kaydedilemedi."); }
+    }
+
+    public async Task<bool> DeleteSavedReplyAsync(string id) =>
+        (await http.DeleteAsync($"/saved-replies/{Uri.EscapeDataString(id)}")).IsSuccessStatusCode;
+
     public async Task<List<ApprovalRequest>> GetPendingApprovalsAsync()
     {
         var prefix = await PrefixAsync();

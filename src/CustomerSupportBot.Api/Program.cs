@@ -198,9 +198,11 @@ adminScope.MapPersonalizationEndpoints();
 adminScope.MapAgentsEndpoints();
 adminScope.MapSlaEndpoints();
 adminScope.MapAdminDataPrivacyEndpoints();
+adminScope.MapAdminSavedReplyEndpoints();
 
 var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRateLimiting("general");
 agentScope.MapAgentPanelEndpoints();
+agentScope.MapAgentSavedReplyEndpoints();
 
 app.MapAnalyticsEndpoints();
 

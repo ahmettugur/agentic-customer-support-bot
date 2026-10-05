@@ -250,3 +250,7 @@ public sealed record LessonProposal(
     // pratikte etkisizdir (LessonMiner.ApproveAsync vektör yazım hatasını yutar).
     string? VectorMemoryId = null
 );
+
+// ─── Hazır yanıtlar ──────────────────────────────────────────────────────────
+
+public sealed record SavedReplyItem(string Id, string Title, string Body, string? Shortcut, string? CreatedBy, DateTimeOffset UpdatedAt);

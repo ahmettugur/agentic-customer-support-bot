@@ -169,6 +169,9 @@ public partial class Admin
                     // Ayrı çağrı: askıda kalmış yürütmelerin "son 50" penceresinden düşmemesi gerekir.
                     _stuckApprovals     = await AdminApi.GetStuckApprovalsAsync();
                     break;
+                case "replies":
+                    _savedReplies = await AdminApi.GetSavedRepliesAsync();
+                    break;
                 case "improvements":
                     _proposedLessons = await AdminApi.GetLessonsAsync("Proposed");
                     _approvedLessons = await AdminApi.GetLessonsAsync("Approved");
@@ -397,6 +400,82 @@ public partial class Admin
     }
 
     /// <summary>Taslağı mesaj kutusuna alır — GÖNDERMEZ; temsilci düzenleyip kendisi gönderir.</summary>
+    // ── Hazır yanıtlar ────────────────────────────────────────────────────────
+    private bool                 _repliesOpen;
+    private string               _replyQuery = string.Empty;
+    private List<SavedReplyItem> _replyResults = [];
+    private CancellationTokenSource? _replySearchCts;
+
+    private async Task ToggleRepliesAsync()
+    {
+        _repliesOpen = !_repliesOpen;
+        if (!_repliesOpen) return;
+        _replyQuery = string.Empty;
+        await SearchRepliesAsync();
+    }
+
+    /// <summary>Yazarken her tuşta istek atılmaz: 250 ms durulunca aranır, önceki arama iptal edilir.</summary>
+    private async Task OnReplyQueryChangedAsync()
+    {
+        _replySearchCts?.Cancel();
+        var cts = _replySearchCts = new CancellationTokenSource();
+        try { await Task.Delay(250, cts.Token); }
+        catch (TaskCanceledException) { return; }
+        await SearchRepliesAsync();
+    }
+
+    private async Task SearchRepliesAsync()
+    {
+        try { _replyResults = await AdminApi.GetSavedRepliesAsync(_replyQuery); }
+        catch { _replyResults = []; }
+        StateHasChanged();
+    }
+
+    /// <summary>Mesaj kutusu boşsa yanıtla doldurulur, doluysa sonuna eklenir — göndermeden önce düzenlenebilir.</summary>
+    private void InsertReply(SavedReplyItem reply)
+    {
+        _chatInput = string.IsNullOrWhiteSpace(_chatInput) ? reply.Body : _chatInput.TrimEnd() + " " + reply.Body;
+        _repliesOpen = false;
+    }
+
+    // Yönetim sekmesi (yalnız yönetici)
+    private List<SavedReplyItem> _savedReplies = [];
+    private string? _replyEditId;
+    private string  _replyTitle = string.Empty, _replyBody = string.Empty, _replyShortcut = string.Empty;
+    private string? _replyFormError;
+
+    private void EditReply(SavedReplyItem r)
+    {
+        _replyEditId = r.Id; _replyTitle = r.Title; _replyBody = r.Body; _replyShortcut = r.Shortcut ?? "";
+        _replyFormError = null;
+    }
+
+    private void ResetReplyForm()
+    {
+        _replyEditId = null; _replyTitle = _replyBody = _replyShortcut = string.Empty; _replyFormError = null;
+    }
+
+    private async Task SaveReplyAsync()
+    {
+        var (saved, error) = await AdminApi.SaveSavedReplyAsync(_replyEditId, _replyTitle, _replyBody, _replyShortcut);
+        if (saved is null)
+        {
+            _replyFormError = error;
+            return;
+        }
+        Toast.ShowSuccess(_replyEditId is null ? "Hazır yanıt eklendi." : "Hazır yanıt güncellendi.");
+        ResetReplyForm();
+        _savedReplies = await AdminApi.GetSavedRepliesAsync();
+    }
+
+    private async Task DeleteReplyAsync(SavedReplyItem r)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"'{r.Title}' silinsin mi?")) return;
+        if (await AdminApi.DeleteSavedReplyAsync(r.Id)) Toast.ShowSuccess("Hazır yanıt silindi.");
+        if (_replyEditId == r.Id) ResetReplyForm();
+        _savedReplies = await AdminApi.GetSavedRepliesAsync();
+    }
+
     private void UseAssistDraft()
     {
         if (!string.IsNullOrWhiteSpace(_assist?.SuggestedReply))

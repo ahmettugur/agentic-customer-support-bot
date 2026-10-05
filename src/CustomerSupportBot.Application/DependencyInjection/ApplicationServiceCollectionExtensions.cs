@@ -139,6 +139,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IDataPrivacyPort, Services.Privacy.DataPrivacyService>();
         services.AddSingleton<Ports.Outbound.Observability.ILlmCallAttribution, Services.Telemetry.LlmCallAttribution>();
         services.AddSingleton<Services.Telemetry.HumanInvolvementTracker>();
+        services.AddSingleton<ISavedReplyPort, Services.SavedReplies.SavedReplyService>();
         services.AddSingleton<Services.Notifications.ApprovalResultEmailService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();

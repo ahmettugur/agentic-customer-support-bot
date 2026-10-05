@@ -144,6 +144,18 @@ profili, açık işler (eskalasyon/bekleyen onay), ilgili bilgi tabanı makalele
 gönderir. Başka bir sohbete geçilir ya da sohbet bitirilirse kart sıfırlanır; geç gelen bir yanıt yanlış
 sohbete yazılmaz. LLM bölümü üretilemezse kart hatayı gösterir, diğer bölümler yine görünür.
 
+## Hazır yanıtlar
+
+**Canlı sohbet:** mesaj kutusunun solundaki **📋** düğmesi, kutunun üstünde aranabilir bir liste açar
+(`AdminApiService.GetSavedRepliesAsync` → `…/saved-replies?q=`; rol önekine göre admin ya da agent ucu;
+arama 250 ms gecikmeyle sunucuya gider). Seçilen yanıt mesaj kutusuna eklenir — kutu boşsa yerine konur,
+doluysa sonuna eklenir — ve **gönderilmez**; temsilci düzenleyip kendisi gönderir. Seçimden sonra liste
+kapanır.
+
+**Yönetim:** yalnız yöneticinin gördüğü **📋 Hazır Yanıtlar** sekmesi: liste, ekle/düzenle/sil. Kısayol
+isteğe bağlıdır; küçük harfe çevrilir (Türkçe `I`/`İ` → `i`) ve benzersizdir — çakışmada sunucunun
+hata metni formda gösterilir.
+
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 Tüm yönetim işlemleri tek sayfada toplanmıştır (SPA yaklaşımı). Code-behind pattern'i (`Admin.razor.cs`) kullanılır çünkü sayfa çok büyüktür (~60K+ satır markup + ~28K logic).
 

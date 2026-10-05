@@ -34,6 +34,7 @@ public sealed class CustomerSupportDbContext : DbContext
     public DbSet<ApprovalRequestEntity> Approvals => Set<ApprovalRequestEntity>();
     public DbSet<EscalationEntity> Escalations => Set<EscalationEntity>();
     public DbSet<HumanAgentEntity> HumanAgents => Set<HumanAgentEntity>();
+    public DbSet<SavedReplyEntity> SavedReplies => Set<SavedReplyEntity>();
 
     // ─── observability schema ───
     public DbSet<ReasoningTraceEntity> ReasoningTraces => Set<ReasoningTraceEntity>();
