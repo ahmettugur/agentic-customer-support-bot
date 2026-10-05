@@ -18,9 +18,9 @@ public class HumanInvolvementTrackingServiceTests
     public async Task EscalationAndTakeover_MarkTheConversation()
     {
         var sessions = new InMemorySessionManager(new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 5 })));
-        var escalated = (await sessions.GetOrCreateAsync(null)).SessionId;
-        var takenOver = (await sessions.GetOrCreateAsync(null)).SessionId;
-        var botOnly = (await sessions.GetOrCreateAsync(null)).SessionId;
+        var escalated = (await sessions.GetOrCreateAsync(null, TestContext.Current.CancellationToken)).SessionId;
+        var takenOver = (await sessions.GetOrCreateAsync(null, TestContext.Current.CancellationToken)).SessionId;
+        var botOnly = (await sessions.GetOrCreateAsync(null, TestContext.Current.CancellationToken)).SessionId;
         var escalations = Substitute.For<IEscalationSink>();
         var modes = Substitute.For<IChatModeRegistry>();
         var service = new HumanInvolvementTrackingService(escalations, modes, new HumanInvolvementTracker(sessions),
@@ -32,7 +32,7 @@ public class HumanInvolvementTrackingServiceTests
         modes.ModeChanged += Raise.Event<EventHandler<ChatSessionState>>(modes, new ChatSessionState { SessionId = botOnly, Mode = ChatMode.Bot });
 
         async Task<bool> Involved(string id) => (await sessions.GetAsync(id))!.State.HumanInvolved;
-        for (var i = 0; i < 50 && !(await Involved(escalated) && await Involved(takenOver)); i++) await Task.Delay(20);
+        for (var i = 0; i < 50 && !(await Involved(escalated) && await Involved(takenOver)); i++) await Task.Delay(20, TestContext.Current.CancellationToken);
 
         (await Involved(escalated)).Should().BeTrue();
         (await Involved(takenOver)).Should().BeTrue();

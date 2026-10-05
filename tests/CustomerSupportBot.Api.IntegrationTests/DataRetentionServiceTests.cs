@@ -38,7 +38,7 @@ public class DataRetentionServiceTests
     public async Task RunOnce_WhenAnotherPodHoldsTheLock_Skips()
     {
         var (worker, port, locks) = Build();
-        await using var held = await locks.TryAcquireAsync(DataRetentionService.LockKey, TimeSpan.FromMinutes(1));
+        await using var held = await locks.TryAcquireAsync(DataRetentionService.LockKey, TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
         await worker.RunOnceAsync(CancellationToken.None);
 

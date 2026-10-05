@@ -46,13 +46,13 @@ public class ApprovalEmailNotificationServiceTests
 
         await service.StartAsync(CancellationToken.None);
         approvals.RequestDecided += Raise.Event<EventHandler<ApprovalRequest>>(approvals, Decided("a1"));
-        for (var i = 0; i < 50 && sender.Sent.Count == 0; i++) await Task.Delay(20);
+        for (var i = 0; i < 50 && sender.Sent.Count == 0; i++) await Task.Delay(20, TestContext.Current.CancellationToken);
 
         sender.Sent.Should().ContainSingle().Which.Subject.Should().Contain("reddedildi");
 
         await service.StopAsync(CancellationToken.None);
         approvals.RequestDecided += Raise.Event<EventHandler<ApprovalRequest>>(approvals, Decided("a2"));
-        await Task.Delay(200);
+        await Task.Delay(200, TestContext.Current.CancellationToken);
         sender.Sent.Should().ContainSingle("durduktan sonra olay işlenmez");
     }
 
