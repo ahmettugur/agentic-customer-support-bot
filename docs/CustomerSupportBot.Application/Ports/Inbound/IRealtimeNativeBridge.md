@@ -26,7 +26,7 @@ WebSocket (`/chat/realtime-native`) üzerinden gelen bir sesli oturumu düşük 
 
 `authenticatedCustomerId`, login'li müşterinin JWT claim'inden gelen kimliktir: oturuma bir kez bağlanır ve sipariş tool'ları bunu kullanır — bu değer olmadan her sipariş sorgusu sahiplik kontrolüne takılıp "bulunamadı" döner. Kimlik hiçbir zaman modelin ürettiği argümandan alınmaz. Bilinen bir kısıt vardır:
 
-> 🐞 **Bilinen kısıt (finding-12, bilinçli olarak ertelendi):** `OpenAiRealtimeClientAdapter.ConfigureNativeSessionAsync` içinde `create_response=true` ayarı, modelin `IInputGuard.Inspect` tamamlanmadan ses/tool çıktısı üretmeye başlamasına izin verebilir. Doğru çözüm `create_response=false` + manuel `response.create` tetiklemesi gerektirir ama bu native ses modunun gecikme karakteristiğini değiştireceğinden bilinçli olarak kullanıcı kararına bırakılmıştır, henüz düzeltilmedi.
+> **Girdi korumasını bekleme (finding-12, çözüldü):** `AI:Realtime:WaitForInputGuard` (varsayılan `true`) açıkken oturum `create_response=false` ile kurulur; `RealtimeNativeService` tamamlanan transkripti `IInputGuard.Inspect`'ten geçirir ve ancak geçerse `RequestResponseAsync` (`response.create`) çağırır — reddedilen girdiye model hiç ses/araç çıktısı üretmez. Önceki yanıt sürerken istek ertelenir (yanıt bitince/iptal edilince gönderilir; aksi hâlde sağlayıcı "aktif yanıt var" hatası verir). Boş transkript (gürültü) yanıtlanmaz; transkripsiyon hatasında model yine yanıtlar (fail-open). Bedeli: yanıt transkripsiyon süresi kadar geç başlar. `false` önceki davranıştır: model konuşma biter bitmez yanıtlar, red gelince yanıt kesilir.
 
 ## 6. Metotlar / Üyeler
 

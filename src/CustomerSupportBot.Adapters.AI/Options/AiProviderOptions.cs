@@ -37,6 +37,15 @@ public sealed class RealtimeOptions
     public string? ApiKey { get; set; }
     public string Voice { get; set; } = null!;
     public int VadSilenceMs { get; set; } = 600;
+
+    /// <summary>
+    /// Model, kullanıcının sözünü girdi koruması (<c>IInputGuard</c>) inceledikten sonra yanıtlasın. Açıkken oturum
+    /// <c>create_response=false</c> ile kurulur ve yanıt, tamamlanan transkript korumadan geçince elle istenir —
+    /// reddedilen (ör. prompt injection) girdiye model hiç ses/araç çıktısı üretmez. Bedeli: yanıt transkripsiyon
+    /// süresi kadar (tipik olarak birkaç yüz ms) geç başlar. Kapalıyken model konuşma biter bitmez yanıtlar, red
+    /// gelirse başlamış yanıt kesilir (önceki davranış; kesilene kadar söylenen/çağrılan geri alınamaz).
+    /// </summary>
+    public bool WaitForInputGuard { get; set; } = true;
     public string ReasoningEffort { get; set; } = "low";
     public int MaxResponseTokens { get; set; } = 4096;
     /// <summary>

@@ -34,6 +34,15 @@ public interface IRealtimeVoiceTransport : IAsyncDisposable
     /// <summary>Devam eden yanıtı iptal eder.</summary>
     Task SendInterruptAsync(CancellationToken ct);
 
+    /// <summary>
+    /// <c>true</c>: oturum yanıtı kendiliğinden başlatmaz; uygulama transkripti girdi korumasından geçirip
+    /// <see cref="RequestResponseAsync"/> çağırır (<c>Realtime:WaitForInputGuard</c>).
+    /// </summary>
+    bool WaitsForInputGuard { get; }
+
+    /// <summary>Model yanıtını başlatır (yalnızca <see cref="WaitsForInputGuard"/> modunda kullanılır).</summary>
+    Task RequestResponseAsync(CancellationToken ct);
+
     /// <summary>WS bağlantısını kapatır.</summary>
     Task CloseAsync(string reason, CancellationToken ct);
 

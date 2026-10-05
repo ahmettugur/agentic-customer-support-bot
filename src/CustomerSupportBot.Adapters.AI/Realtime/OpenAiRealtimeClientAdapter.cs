@@ -58,6 +58,7 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
     public string ModelName => _options.Model;
     public string Voice     => _options.Voice;
     public IReadOnlyList<string> NativeToolNames => _functionTools.GetToolNames();
+    public bool WaitsForInputGuard => _options.WaitForInputGuard;
 
     public async Task<bool> TryConnectAsync(CancellationToken ct)
     {
@@ -98,7 +99,8 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
                         {
                             type              = "semantic_vad",
                             eagerness         = "medium",
-                            create_response   = true,  // model kendisi cevaplar
+                            // WaitForInputGuard: yanıt, transkript girdi korumasından geçince elle istenir.
+                            create_response   = !_options.WaitForInputGuard,
                             interrupt_response = true
                         }
                     },
@@ -116,6 +118,9 @@ public sealed class OpenAiRealtimeClientAdapter : IRealtimeVoiceTransport
 
     public async Task SendInterruptAsync(CancellationToken ct)
         => await SendJsonAsync(new { type = "response.cancel" }, ct);
+
+    public async Task RequestResponseAsync(CancellationToken ct)
+        => await SendJsonAsync(new { type = "response.create" }, ct);
 
     public async Task CloseAsync(string reason, CancellationToken ct)
     {

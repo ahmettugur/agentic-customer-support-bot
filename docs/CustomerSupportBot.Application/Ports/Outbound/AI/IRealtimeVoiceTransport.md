@@ -28,12 +28,8 @@ event stream'ini (transkript, ses delta'ları, tool çağrıları) okur.
 - `Adapters.AI/Realtime/OpenAiRealtimeClientAdapter` implemente eder.
 - Döndürdüğü tipler [`RealtimeModels.cs`](RealtimeModels.md)'de tanımlıdır
   (`RealtimeServerEvent`, `RealtimeToolResult`).
-- 🐞 **Bilinen kısıt (finding-12, bilinçli olarak ertelendi):** native modda
-  `ConfigureNativeSessionAsync` sırasında `create_response=true` gönderilir; bu, modelin
-  `_inputGuard.Inspect` tamamlanmadan ses/salt-okunur-olmayan tool çıktısı üretmeye
-  başlayabilmesi anlamına gelir. Düzgün çözüm `create_response=false` + elle
-  `response.create` göndermek olurdu ama bu, native sesli modun gecikme karakteristiğini
-  değiştirir — bilinçli olarak kullanıcıya bırakılmış bir tasarım kararı.
+- **Girdi korumasını bekleme (finding-12, çözüldü):** `AI:Realtime:WaitForInputGuard` (varsayılan `true`) açıkken oturum `create_response=false` ile kurulur; `RealtimeNativeService` tamamlanan transkripti `IInputGuard.Inspect`'ten geçirir ve ancak geçerse `RequestResponseAsync` (`response.create`) çağırır — reddedilen girdiye model hiç ses/araç çıktısı üretmez. Önceki yanıt sürerken istek ertelenir (yanıt bitince/iptal edilince gönderilir; aksi hâlde sağlayıcı "aktif yanıt var" hatası verir). Boş transkript (gürültü) yanıtlanmaz; transkripsiyon hatasında model yine yanıtlar (fail-open). Bedeli: yanıt transkripsiyon süresi kadar geç başlar. `false` önceki davranıştır: model konuşma biter bitmez yanıtlar, red gelince yanıt kesilir.
+  Port üyeleri: `WaitsForInputGuard`, `RequestResponseAsync`.
 
 ## 5. Kullanılma Nedeni ve Tasarım Yaklaşımı
 

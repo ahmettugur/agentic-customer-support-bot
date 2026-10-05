@@ -243,6 +243,31 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
         // (bkz. VoiceTurnPairer). lastUserTranscript yalnızca kimliksiz akış için yedektir.
         var turns = new VoiceTurnPairer();
 
+        // Girdi korumasını bekleme modu (finding-12): yanıt elle istenir. Önceki yanıt (ör. araç sonrası takip)
+        // sürerken yeni istek gönderilirse sağlayıcı "aktif yanıt var" hatası verir ve istemcide görüşme koparıyordu —
+        // istek yanıt bitene (ya da iptal edilene) kadar ertelenir.
+        var responseActive = false;
+        var responseWanted = false;
+
+        async Task RequestResponseAsync()
+        {
+            if (responseActive)
+            {
+                responseWanted = true;
+                return;
+            }
+            responseActive = true;   // ResponseCreated gelene kadar ikinci istek gönderilmesin
+            await _client.RequestResponseAsync(ct);
+        }
+
+        async Task ReleaseDeferredResponseAsync()
+        {
+            responseActive = false;
+            if (!responseWanted) return;
+            responseWanted = false;
+            await RequestResponseAsync();
+        }
+
         try
         {
             await foreach (var evt in _client.ReceiveEventsAsync(ct))
@@ -255,6 +280,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
 
                     case RealtimeServerEventType.ResponseCreated:
                         _assistantSpeaking = true;
+                        responseActive = true;
                         // Tool sonucu üzerine gelen takip yanıtı aynı kullanıcı turudur: transkript
                         // zaten gönderildiyse akış devam eder; önceki yanıtın tamponlanmış metni de
                         // atılmaz (eskiden atılıyor, tool öncesi söylenen cümle ekranda hiç çıkmıyordu).
@@ -299,13 +325,17 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                         if (guard.Verdict == InputGuardVerdict.Reject)
                         {
                             _logger.LogInformation("RealtimeNative: input guard reject session={Sid}", session.SessionId);
-                            await _client.SendInterruptAsync(ct);
+                            // Bekleme modunda model bu girdiye yanıt başlatmadı — kesilecek bir şey yok.
+                            if (!_client.WaitsForInputGuard) await _client.SendInterruptAsync(ct);
                             await channel.SendJsonAsync(new { type = "user_transcript", itemId = evt.ItemId, text = transcript }, ct);
                             await channel.SendJsonAsync(
                                 new { type = "error", message = guard.RejectionReason ?? "Mesaj işlenemedi." }, ct);
                             await PersistTurnsAsync(channel, session, turns.TranscriptRejected(evt.ItemId), ct);
                             break;
                         }
+
+                        // Koruma geçti: yanıtı hemen iste (kanala yazmadan önce — gecikmeyi büyütmesin).
+                        if (_client.WaitsForInputGuard) await RequestResponseAsync();
 
                         Interlocked.Exchange(ref _lastUserActivityTicks, DateTime.UtcNow.Ticks);
                         await channel.SendJsonAsync(new { type = "user_transcript", itemId = evt.ItemId, text = transcript }, ct);
@@ -326,6 +356,9 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                             "RealtimeNative: transkripsiyon başarısız session={Sid} item={Item} hata={Error}",
                             session.SessionId, evt.ItemId, evt.ErrorMessage);
                         await PersistTurnsAsync(channel, session, turns.TranscriptFailed(evt.ItemId), ct);
+                        // Bekleme modunda transkripsiyon hatası (sağlayıcı arızası) müşteriyi sessiz bırakmasın:
+                        // model sesi doğrudan duyar ve yanıtlar (fail-open). Boş transkript (gürültü) yanıtlanmaz.
+                        if (_client.WaitsForInputGuard) await RequestResponseAsync();
                         break;
 
                     case RealtimeServerEventType.AudioDelta:
@@ -378,6 +411,7 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                         pendingCalls.Clear();
                         assistantTextBuilder.Clear();
                         turns.ResponseCancelled();
+                        await ReleaseDeferredResponseAsync();
                         break;
 
                     case RealtimeServerEventType.ResponseDone:
@@ -391,6 +425,8 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                             await DispatchToolCallsAsync(
                                 channel, pendingCalls, session, turns.CurrentTranscript(lastUserTranscript), ct);
                             pendingCalls.Clear();
+                            // Araç sonucu üzerine takip yanıtı istendi (görüşme bitmiyorsa) — yanıt sürüyor sayılır.
+                            responseActive = !_endRequested;
                             break;
                         }
 
@@ -416,11 +452,18 @@ public sealed class RealtimeNativeService : IRealtimeNativeBridge
                             try { await _client.CloseAsync("end_conversation", CancellationToken.None); } catch { }
                             try { await channel.CloseAsync("end_conversation", CancellationToken.None); } catch { }
                         }
+                        else
+                        {
+                            await ReleaseDeferredResponseAsync();
+                        }
                         break;
                     }
 
                     case RealtimeServerEventType.Error:
                         _logger.LogWarning("RealtimeNative: OpenAI error {Msg}", evt.ErrorMessage);
+                        // Reddedilmiş bir response.create yanıt olayı üretmez; bayrak takılı kalırsa sonraki
+                        // her istek sonsuza dek ertelenirdi.
+                        responseActive = false;
                         await channel.SendJsonAsync(new { type = "error", message = evt.ErrorMessage }, ct);
                         break;
 
