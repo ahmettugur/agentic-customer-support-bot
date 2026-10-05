@@ -133,6 +133,12 @@ Giriş satırında tek bir mikrofon butonu (`#voiceBtn`) vardır; sesli görüş
 `window.App` üzerinden `VoiceTranscript`/`VoiceSendMessage`/`NewChatFromVoice` çağırıyordu).
 Köprü modu kaldırılınca bu buton, `window.App` ve ilgili JSInvokable'lar da kaldırıldı.
 
+`realtime-ui.js` sayfa ömrü boyunca bir kez çalışır (`loadScript` aynı betiği yeniden yüklemez), ama
+sohbet sayfası uygulama içinde her açılışta `#voiceBtn`'i yeniden çizer. Bu yüzden tıklama belge
+düzeyinde dinlenir ve düğme her kullanımda yeniden bulunur — eskiden ilk düğmeye bağlanıldığı için
+sohbetten çıkıp dönünce 🎙 çalışmıyordu. Sayfadan çıkarken (`DisposeAsync`) süren görüşme
+`__stopVoice` ile bitirilir; yoksa ekran sayfayla birlikte kaybolup mikrofon açık kalırdı.
+
 ### Sesli görüşme ekranı
 
 🎙'ye basınca tam sayfa, koyu bir görüşme ekranı (`Components/VoiceCallOverlay.razor`) açılır:

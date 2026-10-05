@@ -7,8 +7,13 @@
     'use strict';
 
     function init() {
-        const voiceBtn = document.getElementById('voiceBtn');
-        if (!voiceBtn) return;
+        // Betik sayfa ömrü boyunca bir kez çalışır (loadScript aynı betiği yeniden yüklemez), ama
+        // sohbet sayfası uygulama içinde her açılışta #voiceBtn'i YENİDEN çizer. Bu yüzden düğmeye
+        // bir kez bağlanılmaz: tıklama belge düzeyinde dinlenir, düğme her kullanımda yeniden
+        // bulunur. Eskiden ilk düğmeye bağlanılıyordu; sohbetten çıkıp dönünce 🎙 çalışmıyordu.
+        if (window.__voiceUiReady) return;   // betik yeniden çalışırsa dinleyiciler çiftlenmesin
+        window.__voiceUiReady = true;
+        const voiceButton = () => document.getElementById('voiceBtn');
 
         let client = null;
         let overlayOpen = false;
@@ -20,7 +25,7 @@
 
         const setStatus = (state) => {
             const isActive = state !== 'idle' && state !== 'error';
-            voiceBtn.classList.toggle('active', isActive && client !== null);
+            voiceButton()?.classList.toggle('active', isActive && client !== null);
             call('state', state);
         };
 
@@ -42,7 +47,7 @@
             overlayOpen = false;
             window.voiceOrb?.stop();
             call('close');
-            try { voiceBtn.focus(); } catch { }
+            try { voiceButton()?.focus(); } catch { }
         };
 
         const closeSoon = (ms) => {
@@ -419,8 +424,9 @@
             if (overlayOpen && (e.key === ' ' || e.code === 'Space') && !isTyping(e.target)) e.preventDefault();
         });
 
-        // Sesli butonu — açıksa kapatır, kapalıysa başlatır
-        voiceBtn.addEventListener('click', () => {
+        // Sesli butonu — açıksa kapatır, kapalıysa başlatır (belge düzeyinde; yukarıdaki nota bakın)
+        document.addEventListener('click', (e) => {
+            if (!e.target?.closest?.('#voiceBtn')) return;
             if (client) stop();
             else startVoice();
         });

@@ -1736,6 +1736,9 @@
         ClearRatingAutoHideTimer();
         CancelCoalescedRender();
         try { await JS.InvokeVoidAsync("__stopStream"); } catch { }
+        // Sesli görüşme sayfadan çıkınca bitirilir: ekran bu sayfanın parçası olduğu için onunla
+        // birlikte kaybolur; görüşme sürseydi mikrofon arayüzsüz açık kalırdı.
+        try { await JS.InvokeVoidAsync("__stopVoice"); } catch { }
         if (_dotNetRef is not null)
         {
             try { await JS.InvokeVoidAsync("_stopPersistentEvents"); } catch { }
