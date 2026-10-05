@@ -54,6 +54,7 @@ public static class PersistenceAdapterServiceCollectionExtensions
 
         services.AddSingleton<INotificationLedger, PostgresNotificationLedger>();
         services.AddSingleton<ISavedReplyStore, PostgresSavedReplyStore>();
+        services.AddSingleton<IConversationSearchStore, PostgresConversationSearchStore>();
         services.AddSingleton<IOrderRepository, OrderRepository>();
         services.AddSingleton<ICustomerRepository, CustomerRepository>();
         services.AddSingleton<IProductCatalogRepository, ProductCatalogRepository>();

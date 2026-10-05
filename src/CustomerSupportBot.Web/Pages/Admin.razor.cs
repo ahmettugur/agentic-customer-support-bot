@@ -84,6 +84,21 @@ public partial class Admin
     private Timer?                  _presenceTimer;
     private List<AgentPresenceItem> _agentPresence = [];
 
+    // ── Konuşma arama (yalnız yönetici) ──────────────────────────────────────────
+    private string                          _searchText     = string.Empty;
+    private string                          _searchCustomer = string.Empty;
+    private DateOnly?                       _searchFrom;
+    private DateOnly?                       _searchTo;
+    private string                          _searchReason   = string.Empty;
+    private string                          _searchTag      = string.Empty;
+    private List<ConversationSearchHitItem> _searchResults  = [];
+    private int                             _searchPage     = 1;
+    private bool                            _searchHasMore;
+    private bool                            _searching;
+    private bool                            _searchedOnce;
+    private string?                         _searchError;
+    private ClosingReasonItem[]             _searchReasons  = [];
+
     // ── Sohbeti bitir (kapanış nedeni / etiketler / not) ───────────────────────
     private bool                        _showCloseModal;
     private bool                        _closing;
@@ -190,6 +205,14 @@ public partial class Admin
                     break;
                 case "replies":
                     _savedReplies = await AdminApi.GetSavedRepliesAsync();
+                    break;
+                case "conversations":
+                    // Otomatik yenilemede arama tekrarlanmaz: sonuçlar ve "daha fazla" sayfaları sıfırlanırdı.
+                    if (!_searchedOnce)
+                    {
+                        _searchReasons = (await AdminApi.GetClosingOptionsAsync())?.Reasons ?? [];
+                        await SearchConversationsAsync(append: false);
+                    }
                     break;
                 case "improvements":
                     _proposedLessons = await AdminApi.GetLessonsAsync("Proposed");
@@ -756,6 +779,48 @@ public partial class Admin
         // sunucu zaman aşımıyla çevrimdışı sayar.
         if (_presenceTimer is not null) await _presenceTimer.DisposeAsync();
     }
+
+    // ── Konuşma arama ─────────────────────────────────────────────────────────
+    /// <summary>
+    /// Gün sınırları tarayıcının yerel saatine göre: "5 Ekim" seçimi yerel 5 Ekim 00:00 – 6 Ekim 00:00
+    /// aralığıdır; sunucuya UTC anları gider (sunucu saat dilimi varsaymaz).
+    /// </summary>
+    private static DateTime? LocalDayStartUtc(DateOnly? day) =>
+        day is { } d ? DateTime.SpecifyKind(d.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local).ToUniversalTime() : null;
+
+    private async Task SearchConversationsAsync(bool append)
+    {
+        if (_searching) return;
+        _searching   = true;
+        _searchError = null;
+        try
+        {
+            var page = append ? _searchPage + 1 : 1;
+            var (result, error) = await AdminApi.SearchConversationsAsync(
+                _searchText, _searchCustomer, LocalDayStartUtc(_searchFrom), LocalDayStartUtc(_searchTo?.AddDays(1)),
+                _searchReason, _searchTag, page);
+            _searchedOnce = true;
+            if (result is null)
+            {
+                _searchError = error;
+                return;
+            }
+            _searchPage    = page;
+            _searchHasMore = result.HasMore;
+            _searchResults = append ? [.. _searchResults, .. result.Items] : [.. result.Items];
+        }
+        finally { _searching = false; }
+    }
+
+    private async Task ClearSearchAsync()
+    {
+        _searchText = _searchCustomer = _searchReason = _searchTag = string.Empty;
+        _searchFrom = _searchTo = null;
+        await SearchConversationsAsync(append: false);
+    }
+
+    private string ReasonLabel(string code) =>
+        _searchReasons.FirstOrDefault(r => r.Code == code)?.Label ?? code;
 
     // ── Temsilci durumu ───────────────────────────────────────────────────────
     private async Task ConnectPresenceAsync()

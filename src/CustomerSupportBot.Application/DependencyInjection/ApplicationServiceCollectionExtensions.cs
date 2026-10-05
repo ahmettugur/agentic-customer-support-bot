@@ -144,6 +144,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<Services.Telemetry.HumanInvolvementTracker>();
         services.AddSingleton<ISavedReplyPort, Services.SavedReplies.SavedReplyService>();
         services.AddSingleton<IConversationClosingPort, Services.Conversations.ConversationClosingService>();
+        services.AddSingleton<IConversationSearchPort, Services.Conversations.ConversationSearchService>();
         services.AddSingleton<Services.Notifications.ApprovalResultEmailService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();

@@ -253,6 +253,15 @@ public sealed record LessonProposal(
     string? VectorMemoryId = null
 );
 
+// ─── Konuşma arama ───────────────────────────────────────────────────────────
+
+/// <summary><c>HighlightStart/Length</c>: alıntıda vurgulanacak eşleşme (metin aranmadıysa null).</summary>
+public sealed record ConversationSearchHitItem(
+    string SessionId, string? CustomerId, DateTimeOffset CreatedAt, DateTimeOffset LastActivity, int MessageCount,
+    string? Snippet, int? HighlightStart, int? HighlightLength, string[] Reasons, string[] Tags);
+
+public sealed record ConversationSearchPageItem(ConversationSearchHitItem[] Items, int Page, int PageSize, bool HasMore);
+
 // ─── Konuşma kapanışı ────────────────────────────────────────────────────────
 
 public sealed record ClosingReasonCountItem(string Code, string Label, int Count);

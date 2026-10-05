@@ -144,6 +144,14 @@ profili, açık işler (eskalasyon/bekleyen onay), ilgili bilgi tabanı makalele
 gönderir. Başka bir sohbete geçilir ya da sohbet bitirilirse kart sıfırlanır; geç gelen bir yanıt yanlış
 sohbete yazılmaz. LLM bölümü üretilemezse kart hatayı gösterir, diğer bölümler yine görünür.
 
+## Konuşma arama (yalnız yönetici)
+
+**🔎 Konuşmalar** sekmesi: mesaj metni, müşteri no, başlangıç/bitiş tarihi, kapanış nedeni (liste
+`conversation-closing/options`'tan) ve etiket. Sekme ilk açılışta son konuşmaları listeler; otomatik
+yenileme aramayı tekrarlamaz (sonuçlar ve sayfalar sıfırlanmasın). Tarih seçimi tarayıcının yerel gününe
+göre UTC anlarına çevrilir (bitiş günü dahil). Sonuç kartında eşleşen kısım `<mark>` ile vurgulanır;
+**Görüntüle** mevcut döküm penceresini açar, **Daha fazla** sonraki 25'i ekler.
+
 ## Sohbeti bitir (kapanış nedeni ve etiketler)
 
 Canlı sohbet panelindeki **Sohbeti Bitir** artık doğrudan kapatmaz; bir pencere açar

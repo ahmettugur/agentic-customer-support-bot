@@ -21,6 +21,25 @@ kapanmış olur: sonuç `Ok` + `Error` (uçta `warning`).
   tekrarlar atılır.
 - Not ≤ 1000 karakter, kırpılır.
 
+## `ConversationSearchService` (`IConversationSearchPort`)
+
+Yönetici konuşma araması. Tasarım:
+[2026-10-05-conversation-search-design.md](../../../superpowers/specs/2026-10-05-conversation-search-design.md).
+
+- Doğrulama: metin 2–200 karakter; başlangıç ≤ bitiş. Etiket kapanıştaki kuralla normalleştirilir.
+- Sayfa 25; depodan bir fazlası istenir → `HasMore`.
+- Alıntı: eşleşmenin çevresinden en fazla 160 karakter, kesilen uçlara "…", vurgu konumu
+  (`HighlightStart/Length`). Metin aranmadıysa ilk müşteri mesajı.
+- Depo (`IConversationSearchStore` / `PostgresConversationSearchStore`) tek SQL sorgusu çalıştırır.
+
+## `TurkishText`
+
+- `Fold`: arama katlaması — `İ I ı → i`, sonra Türkçe küçük harf; uzunluk korunur (vurgu konumu özgün
+  metinde geçerli). SQL aynısını `lower(translate(text, 'İIıÇĞÖŞÜ', 'iiiçğöşü'))` ile yapar: `lower()`
+  veritabanının yerel ayarına bağlıdır ('C' yerelinde yalnız ASCII), Türkçe büyük harfler bu yüzden açıkça
+  çevrilir. "ı" ile "i" bilinçli olarak aynı sayılır.
+- `NormalizeTag`: kapanış etiketleri.
+
 ## `ConversationClosingOptions` (`ConversationClosing`)
 
 | Ayar | Varsayılan | Anlamı |

@@ -245,6 +245,39 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         response.EnsureSuccessStatusCode();
     }
 
+    // ─── Konuşma arama (yalnız yönetici) ─────────────────────────────────────
+
+    /// <summary><paramref name="fromUtc"/> dahil, <paramref name="toUtc"/> hariç.</summary>
+    public async Task<(ConversationSearchPageItem? Page, string? Error)> SearchConversationsAsync(
+        string? text, string? customerId, DateTime? fromUtc, DateTime? toUtc, string? reason, string? tag, int page)
+    {
+        var query = new List<string>();
+        void Add(string key, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) query.Add($"{key}={Uri.EscapeDataString(value.Trim())}");
+        }
+        Add("q", text);
+        Add("customerId", customerId);
+        Add("from", fromUtc?.ToString("o"));
+        Add("to", toUtc?.ToString("o"));
+        Add("reason", reason);
+        Add("tag", tag);
+        query.Add($"page={page}");
+        try
+        {
+            using var response = await http.GetAsync("/conversations/search?" + string.Join("&", query));
+            if (response.IsSuccessStatusCode) return (await response.Content.ReadFromJsonAsync<ConversationSearchPageItem>(), null);
+            var error = await response.Content.ReadFromJsonAsync<SearchError>();
+            return (null, error?.Error ?? $"Arama yapılamadı ({(int)response.StatusCode}).");
+        }
+        catch (Exception ex)
+        {
+            return (null, "Arama yapılamadı: " + ex.Message);
+        }
+    }
+
+    private sealed record SearchError(string? Error);
+
     // ─── Konuşma kapanışı ───────────────────────────────────────────────────
 
     public async Task<ConversationClosingOptions?> GetClosingOptionsAsync()

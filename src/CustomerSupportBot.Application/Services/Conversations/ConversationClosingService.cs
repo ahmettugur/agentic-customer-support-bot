@@ -1,7 +1,6 @@
 // Application/Services/Conversations/ConversationClosingService.cs
 // Canlı sohbetin kapanış nedeni, etiketler ve notla kapatılması.
 
-using System.Globalization;
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
@@ -25,7 +24,6 @@ public sealed partial class ConversationClosingService(
     ILogger<ConversationClosingService>? logger = null) : IConversationClosingPort
 {
     private const int SuggestedTagCount = 10;
-    private static readonly CultureInfo Turkish = CultureInfo.GetCultureInfo("tr-TR");
 
     private readonly ConversationClosingOptions _options = options.Value;
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
@@ -34,8 +32,6 @@ public sealed partial class ConversationClosingService(
     [GeneratedRegex(@"^[\p{L}\p{Nd}_-]+$")]
     private static partial Regex TagPattern();
 
-    [GeneratedRegex(@"\s+")]
-    private static partial Regex Whitespace();
 
     public async Task<ConversationClosingOptionsView> GetOptionsAsync(CancellationToken ct = default)
     {
@@ -102,7 +98,7 @@ public sealed partial class ConversationClosingService(
         var tags = new List<string>();
         foreach (var raw in input.Tags ?? [])
         {
-            var tag = NormalizeTag(raw);
+            var tag = TurkishText.NormalizeTag(raw);
             if (tag.Length == 0 || tags.Contains(tag)) continue;
             if (tag.Length > ConversationDisposition.MaxTagLength)
                 return ($"Etiket en fazla {ConversationDisposition.MaxTagLength} karakter olabilir: {tag}", "", [], null);
@@ -119,11 +115,4 @@ public sealed partial class ConversationClosingService(
 
         return (null, reasonCode, tags, note);
     }
-
-    /// <summary>
-    /// Küçük harf (Türkçe), boşluklar <c>-</c>. <c>I</c> ve <c>İ</c> önce <c>i</c>'ye çevrilir: yalnızca Türkçe
-    /// küçük harf "IADE"yi "ıade" yapar ve "iade" ile ayrı etiket sayılırdı.
-    /// </summary>
-    internal static string NormalizeTag(string? raw) =>
-        Whitespace().Replace((raw ?? "").Trim().Replace('I', 'i').Replace('İ', 'i').ToLower(Turkish), "-");
 }

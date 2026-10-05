@@ -96,6 +96,11 @@
                 </svg>
                 Analytics
             </button>
+            <button class="tab-btn @ActiveCls("conversations")" role="tab"
+                    aria-selected="@(_activeTab == "conversations")" aria-controls="panel-conversations"
+                    @onclick='() => SwitchTabAsync("conversations")'>
+                🔎 Konuşmalar
+            </button>
             <button class="tab-btn @ActiveCls("replies")" role="tab"
                     aria-selected="@(_activeTab == "replies")" aria-controls="panel-replies"
                     @onclick='() => SwitchTabAsync("replies")'>
@@ -615,6 +620,89 @@
                 </div>
             </div>
         </section>
+
+        <!-- TAB: KONUŞMA ARAMA (yalnız yönetici) -->
+        @if (!_isAgent)
+        {
+            <section id="panel-conversations" class="tab-content @ActiveCls("conversations")" role="tabpanel" aria-labelledby="tab-conversations">
+                <form class="card conversation-search-form" @onsubmit="() => SearchConversationsAsync(false)" @onsubmit:preventDefault>
+                    <label class="search-text">Mesajlarda ara
+                        <input type="search" maxlength="200" placeholder="ör. iade, 1030, kargo gecikti" @bind="_searchText" />
+                    </label>
+                    <label>Müşteri no <input maxlength="64" @bind="_searchCustomer" /></label>
+                    <label>Başlangıç <input type="date" @bind="_searchFrom" /></label>
+                    <label>Bitiş <input type="date" @bind="_searchTo" /></label>
+                    <label>Kapanış nedeni
+                        <select @bind="_searchReason">
+                            <option value="">Tümü</option>
+                            @foreach (var r in _searchReasons)
+                            {
+                                <option value="@r.Code">@r.Label</option>
+                            }
+                        </select>
+                    </label>
+                    <label>Etiket <input maxlength="30" placeholder="ör. kargo" @bind="_searchTag" /></label>
+                    <div class="conversation-search-actions">
+                        <button type="button" class="btn-secondary" @onclick="ClearSearchAsync" disabled="@_searching">Temizle</button>
+                        <button type="submit" class="btn-primary" disabled="@_searching">@(_searching ? "Aranıyor…" : "Ara")</button>
+                    </div>
+                </form>
+
+                @if (_searchError is not null)
+                {
+                    <p class="form-error" role="alert">@_searchError</p>
+                }
+                else if (_searchedOnce && _searchResults.Count == 0)
+                {
+                    <div class="empty-state">Eşleşen konuşma yok.</div>
+                }
+
+                <div class="conversation-search-results" aria-live="polite">
+                    @foreach (var hit in _searchResults)
+                    {
+                        var h = hit;
+                        <article class="card conversation-hit">
+                            <header class="conversation-hit-header">
+                                <code class="session-id" title="@h.SessionId">@ShortId(h.SessionId)</code>
+                                <span class="muted">@h.LastActivity.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</span>
+                                <span class="muted">Müşteri: @(h.CustomerId ?? "anonim")</span>
+                                <span class="muted">@h.MessageCount mesaj</span>
+                            </header>
+                            @if (h.Snippet is { } snippet)
+                            {
+                                <p class="conversation-hit-snippet">
+                                    @if (h.HighlightStart is int hs && h.HighlightLength is int hl && hs >= 0 && hs + hl <= snippet.Length)
+                                    {
+                                        @snippet[..hs]<mark>@snippet.Substring(hs, hl)</mark>@snippet[(hs + hl)..]
+                                    }
+                                    else
+                                    {
+                                        @snippet
+                                    }
+                                </p>
+                            }
+                            <footer class="conversation-hit-footer">
+                                @foreach (var r in h.Reasons)
+                                {
+                                    <span class="status-tag">@ReasonLabel(r)</span>
+                                }
+                                @foreach (var t in h.Tags)
+                                {
+                                    <span class="tag-chip tag-chip--static">#@t</span>
+                                }
+                                <button type="button" class="btn-secondary conversation-hit-open" @onclick="() => ShowTranscriptAsync(h.SessionId)">Görüntüle</button>
+                            </footer>
+                        </article>
+                    }
+                </div>
+                @if (_searchHasMore)
+                {
+                    <button type="button" class="btn-secondary conversation-search-more" @onclick="() => SearchConversationsAsync(true)" disabled="@_searching">
+                        Daha fazla
+                    </button>
+                }
+            </section>
+        }
 
         <!-- TAB: HAZIR YANITLAR (yalnız yönetici) -->
         @if (!_isAgent)

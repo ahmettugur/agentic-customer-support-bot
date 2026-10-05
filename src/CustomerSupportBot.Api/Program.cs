@@ -200,6 +200,7 @@ adminScope.MapSlaEndpoints();
 adminScope.MapAdminDataPrivacyEndpoints();
 adminScope.MapAdminSavedReplyEndpoints();
 adminScope.MapAdminConversationClosingEndpoints();
+adminScope.MapConversationSearchEndpoints();
 
 var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRateLimiting("general");
 agentScope.MapAgentPanelEndpoints();
