@@ -39,7 +39,7 @@ Bu klasör, hexagonal mimaride **Driving Adapter (Giriş Adaptörü)** ve **Comp
 - **WebSocket Gerçek Zamanlı Ses:** OpenAI Realtime API ile tarayıcı Web Audio PCM16 worklet'i arasında çift yönlü ses köprüsü; tek sesli mod — model doğrudan konuşur ve yazılı sohbetin tüm iş tool'larını çağırır (yan etkili işlemler insan onayına gider).
 - **Agent-to-Agent (A2A) Kanalı:** `A2A:Enabled` bayrağına bağlı, partner/özne token ayrımıyla dış sistemlere ürün/sipariş/şikayet ajanlarını yayınlama.
 - **Global Hata Yakalama:** Domain istisnalarını HTTP durum kodlarına (404, 403, 409, 503, 400) eşleyen `DomainExceptionHandler`.
-- **Rate Limiting:** `auth` (IP, yapılandırılabilir), `chat` (müşteri kimliği, 20/dk), `general` (IP, 60/dk), `a2a` (partner/özne kimliği, yapılandırılabilir) politikaları.
+- **Rate Limiting:** `auth` (IP, yapılandırılabilir), `chat` (müşteri kimliği, 20/dk), `general` (personel kullanıcı başına 300/dk; müşteri müşteri başına, kimliksiz IP başına 60/dk — `RateLimiting`), `a2a` (partner/özne kimliği, yapılandırılabilir) politikaları.
 
 ## Bağlantılar
 

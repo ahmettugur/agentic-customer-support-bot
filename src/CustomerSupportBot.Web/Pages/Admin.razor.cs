@@ -749,6 +749,12 @@ public partial class Admin
     /// 15 saniyede 4 tick/dakika × ~4 istek = ~16 istek/dakika — limitin çok altında,
     /// manuel işlemlere bol pay bırakıyor. Admin paneli için 15 sn hâlâ "canlı" hissettirir.
     /// </para>
+    ///
+    /// <para>
+    /// IP başına ortak kota yine de yetmiyordu: aynı IP'deki yönetici, temsilci ve müşteri ekranları (ve SLA
+    /// sayfası, açık sohbetin duygu yoklaması) 60'ı birlikte aşıyordu. Sunucu artık personeli kullanıcı başına
+    /// ve daha yüksek kotayla bölümlüyor (<c>RateLimiting:StaffPerMinute</c>).
+    /// </para>
     /// </summary>
     private static readonly TimeSpan AutoRefreshInterval = TimeSpan.FromSeconds(15);
 

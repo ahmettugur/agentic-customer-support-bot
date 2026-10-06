@@ -123,7 +123,8 @@ Bu dosya, `docs/CustomerSupportBot.Api/` altındaki hemen hemen tüm dosyaların
 - **Admin/agent uçları için `general` rate-limit sonradan eklendi:** yorumda belirtildiği gibi,
   bu uçlar auth arkasında olduğu için önceden rate limit yoktu — bir kimlik bilgisi
   sızarsa/kötüye kullanılırsa sınırsız istek atılabiliyordu; aynı eşik (`AnalyticsEndpoints`'te
-  zaten kullanılan `general`, 60/dk/IP) burada da uygulandı.
+  zaten kullanılan `general`) burada da uygulandı. `general` personeli kullanıcı başına (300/dk), müşteriyi
+  müşteri başına, kimliksiz isteği IP başına (60/dk) bölümler (`RateLimiting`).
 - **`adminScope`/`agentScope` `MapGroup("")` ile boş prefix kullanır:** yalnızca ortak
   `RequireAuthorization`/`RequireRateLimiting`'i birden fazla `Map*Endpoints` çağrısına
   uygulamak için bir grup oluşturur; route prefix'i eklemez (her endpoint kendi tam yolunu

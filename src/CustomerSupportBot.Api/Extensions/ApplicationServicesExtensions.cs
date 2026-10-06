@@ -49,8 +49,10 @@ public static class ApplicationServicesExtensions
             o.SerializerOptions.Converters.Add(
                 new JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase)));
 
-        // Rate limiting: "chat" = 20/dk, "general" = 60/dk (public rating endpoint'leri dahil),
+        // Rate limiting: "chat" = 20/dk, "general" = personel 300/dk, müşteri/kimliksiz 60/dk (RateLimiting),
         // "auth" = 10/dk (kimlik doğrulama uçları — bkz. aşağıdaki not)
+        services.Configure<CustomerSupportBot.Api.Infrastructure.RateLimitingOptions>(
+            configuration.GetSection(CustomerSupportBot.Api.Infrastructure.RateLimitingOptions.SectionName));
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -60,6 +62,15 @@ public static class ApplicationServicesExtensions
                     context.HttpContext.Response.Headers.RetryAfter =
                         Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds))
                             .ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+                // Hangi istemcinin hangi uçta kotayı doldurduğu görünmeden "neden 429?" sorusu cevapsız kalıyordu.
+                var http = context.HttpContext;
+                http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("RateLimiting").LogWarning(
+                    "[RateLimit] 429 | {Method} {Path} | user={User} role={Role} ip={Ip}",
+                    http.Request.Method, http.Request.Path.Value,
+                    http.User.FindFirst(ClaimTypes.Name)?.Value ?? "-",
+                    http.User.FindFirst(ClaimTypes.Role)?.Value ?? "-",
+                    http.Connection.RemoteIpAddress?.ToString() ?? "unknown");
                 return ValueTask.CompletedTask;
             };
 
@@ -102,16 +113,35 @@ public static class ApplicationServicesExtensions
                         QueueLimit = 0,
                         AutoReplenishment = true
                     }));
+            // "general" — 🐞 eskiden tüm trafik IP başına 60/dk idi. Admin/temsilci paneli sürekli yoklar
+            // (rozetler + aktif sekme, canlı sohbette duygu durumu, SLA sayfası); aynı IP'deki (yerelde hepsi
+            // 127.0.0.1, kurumda aynı NAT) yönetici, temsilci ve müşteri ekranları tek kotayı paylaşınca paneller
+            // sürekli 429 alıyordu. Artık: kimliği doğrulanmış personel KULLANICI başına (daha yüksek kota),
+            // müşteri MÜŞTERİ başına ("chat" politikasıyla aynı gerekçe), kimliksiz istek IP başına.
             options.AddPolicy("general", httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            {
+                var limits = httpContext.RequestServices
+                    .GetRequiredService<IOptions<CustomerSupportBot.Api.Infrastructure.RateLimitingOptions>>().Value;
+                var user = httpContext.User;
+                var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                var (partitionKey, limit) =
+                    user.Identity?.IsAuthenticated == true && userId is { Length: > 0 } && (user.IsInRole("Admin") || user.IsInRole("Agent"))
+                        ? ($"staff:{userId}", limits.StaffPerMinute)
+                    : user.FindFirst("linked_customer_id")?.Value is { Length: > 0 } customerId
+                        ? ($"customer:{customerId}", limits.GeneralPerMinute)
+                    : ($"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}", limits.GeneralPerMinute);
+
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: partitionKey,
                     factory: _ => new FixedWindowRateLimiterOptions
                     {
-                        PermitLimit = 60,
+                        PermitLimit = Math.Max(1, limit),
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0,
                         AutoReplenishment = true
-                    }));
+                    });
+            });
 
             // A2A: bölümleme IP'ye DEĞİL PARTNER'a göre yapılır. Dış sistemler proxy/bulut
             // çıkışı arkasında IP paylaşabilir (bir partnerin trafiği diğerinin sınırını

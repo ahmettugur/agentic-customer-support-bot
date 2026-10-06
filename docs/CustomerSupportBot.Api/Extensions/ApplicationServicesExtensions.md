@@ -24,7 +24,7 @@ mantığı + HTTP altyapısı" tarafının büyük bölümünü tek bir çağrı
   cross-origin çağırana izin verilmez.
 - Enum'ları camelCase string olarak JSON'a yazacak şekilde `HttpJsonOptions`'ı yapılandırır.
 - Dört rate-limit policy'si tanımlar: `auth` (IP bazlı, `JwtOptions.AuthRateLimitPerMinute`'tan
-  okunur), `chat` (müşteri kimliği bazlı — `linked_customer_id`, yoksa IP — 20/dk sabit), `general` (IP bazlı, 60/dk sabit), `a2a` (partner/özne
+  okunur), `chat` (müşteri kimliği bazlı — `linked_customer_id`, yoksa IP — 20/dk sabit), `general` (personel kullanıcı başına `RateLimiting:StaffPerMinute`=300/dk; müşteri müşteri başına, kimliksiz IP başına `GeneralPerMinute`=60/dk), `a2a` (partner/özne
   kimliğine göre bölümlenmiş, `A2AOptions.RequestsPerMinute`'tan okunur).
 - `services.AddAgentsAdapter()` ile Adapters.Agents katmanının (CustomerSupportTeam,
   ApprovalGateService) DI kaydını tetikler.

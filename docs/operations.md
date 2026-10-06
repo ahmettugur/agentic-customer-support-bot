@@ -6,12 +6,13 @@ Bu doküman uygulamanı **kuran**, **çalıştıran**, **gözlemleyen** ve **kon
 
 ## Agent Çalışma Güvenceleri
 
-Trace panelinde HTTP 429: admin/agent uçları IP başına ortak `general` kotasını
-(60 istek/dakika) kullanır. Trace listesi görünür sekmede 15 saniyede bir yenilenir;
+Trace panelinde HTTP 429: admin/agent uçları `general` kotasını kullanır — personel için
+**kullanıcı başına** 300 istek/dakika (`RateLimiting:StaffPerMinute`; eskiden IP başına 60'tı ve aynı
+IP'deki yönetici/temsilci/müşteri ekranları tek kotayı paylaştığı için paneller sürekli 429 alıyordu). Trace listesi görünür sekmede 15 saniyede bir yenilenir;
 429 sonrasında Trace istemcisi `Retry-After` süresini, başlık yoksa 60 saniyeyi bekler.
 Sunucu bu başlığı limiter metadata'sından üretir ve CORS üzerinden okunabilir kılar.
 Başarısız liste yenilemesinde son başarılı liste bir durum mesajıyla korunur.
-Çok sayıda açık panel/istemci aynı kotayı paylaşmaya devam eder; bu düzeltme limiti kaldırmaz.
+Aynı kullanıcının çok sayıda açık paneli/istemcisi kendi kotasını paylaşır.
 
 - `CustomerSupportTeam` singleton kalır; her koşu kendi workflow ve chat manager nesnesini oluşturur. Gerçek MAF ile eşzamanlı oturum testleri kimlik ve history ayrımını korur.
 - `MaxIterations` taban MAF kontrolüyle uygulanır. Limit nedeniyle tamamlanamayan tur `max_messages_reached` olarak kaydedilir; teknik plan metni başarı yanıtı gibi sunulmaz.

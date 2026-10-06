@@ -119,12 +119,6 @@
     private Timer?        _playTimer;
     private string?       _lastLoaded;
 
-    private static readonly JsonSerializerOptions _pretty = new()
-    {
-        WriteIndented = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
-
     protected override async Task OnParametersSetAsync()
     {
         if (!string.IsNullOrWhiteSpace(TraceIdParam) && TraceIdParam != _lastLoaded)
@@ -154,12 +148,17 @@
         }
 
         _lastLoaded = id;
-        Nav.NavigateTo($"/replay?traceId={Uri.EscapeDataString(id)}", replace: true);
+        // Adres yalnızca gerçekten değiştiyse (kutuya yazılıp yüklendiyse) güncellenir. 🐞 Eskiden her yüklemede
+        // AYNI adrese de gidiliyordu: her gezinme kimlik durumunu yeniden değerlendirdiği için (AppAuthStateProvider)
+        // [Authorize] sayfası yıkılıp yeniden oluşuyor, _lastLoaded sıfırlanıyor ve sayfa trace'i yükle → aynı
+        // adrese git → yeniden oluş döngüsüne girip saniyede onlarca istekle 429 alana kadar sürüyordu.
+        if (!string.Equals(TraceIdParam, id, StringComparison.Ordinal))
+            Nav.NavigateTo($"/replay?traceId={Uri.EscapeDataString(id)}", replace: true);
         _metaText = (trace.UserQuery?.Length ?? 0) > 70
             ? trace.UserQuery![..70] + "…"
             : trace.UserQuery ?? "(soru yok)";
 
-        _steps     = BuildSteps(trace);
+        _steps     = ReplayStepBuilder.Build(trace);
         _stepIndex = 0;
         StateHasChanged();
     }
@@ -658,63 +657,5 @@
             return list.Count > 0 ? list : null;
         }
         catch { return null; }
-    }
-
-    // ── BuildSteps ───────────────────────────────────────────────────────────
-
-    private static List<ReplayStep> BuildSteps(TraceDetail trace)
-    {
-        var steps = new List<ReplayStep>();
-
-        steps.Add(new ReplayStep("init", trace.StartedAt, "Kullanıcı Sorusu",
-            new ReplayInitPayload(trace.TraceId, trace.SessionId, trace.UserQuery)));
-
-        if (trace.Reasoning.HasValue)
-            steps.Add(new ReplayStep("reasoning", trace.StartedAt, "Pre-analysis Reasoning",
-                new ReplayJsonPayload(JsonSerializer.Serialize(trace.Reasoning, _pretty))));
-
-        if (trace.Planning.HasValue)
-        {
-            var plan     = trace.Planning.Value;
-            string title = "Yönlendirme";
-            if (TryGetProp(plan, "selectedAgent", out var sa) && sa.ValueKind is not JsonValueKind.Null)
-                title = $"→ {sa.GetString()}";
-            else if (TryGetProp(plan, "detectedIntent", out var di) && di.ValueKind is not JsonValueKind.Null)
-                title = $"→ {di.GetString()}";
-            steps.Add(new ReplayStep("planning", trace.StartedAt, title,
-                new ReplayJsonPayload(JsonSerializer.Serialize(plan, _pretty))));
-        }
-
-        var events = new List<(DateTimeOffset T, string Kind, string Title, ReplayStepPayload Payload)>();
-
-        foreach (var v in trace.AgentVisits)
-            events.Add((v.StartedAt, "agent", v.AgentName ?? "?",
-                new ReplayAgentPayload(v.AgentName, v.DurationMs, v.Output)));
-
-        foreach (var sr in trace.SpecialistReasonings)
-        {
-            var t        = trace.StartedAt;
-            var agentName = "?";
-            if (TryGetProp(sr, "recordedAt", out var ra) && ra.ValueKind is not JsonValueKind.Null
-                && DateTimeOffset.TryParse(ra.GetString(), out var parsed)) t = parsed;
-            if (TryGetProp(sr, "agentName", out var an) && an.ValueKind is not JsonValueKind.Null)
-                agentName = an.GetString() ?? "?";
-            events.Add((t, "reasoning", $"Specialist: {agentName}",
-                new ReplayJsonPayload(JsonSerializer.Serialize(sr, _pretty))));
-        }
-
-        foreach (var tc in trace.ToolCalls)
-            events.Add((tc.InvokedAt ?? trace.StartedAt, "tool", tc.ToolName ?? "?",
-                new ReplayToolPayload(tc.ToolName, tc.AgentName, tc.Success, tc.ParametersSummary, tc.ResultSummary)));
-
-        events.Sort((a, b) => a.T.CompareTo(b.T));
-        foreach (var (t, kind, title, payload) in events)
-            steps.Add(new ReplayStep(kind, t, title, payload));
-
-        steps.Add(new ReplayStep("final", trace.CompletedAt ?? trace.StartedAt,
-            "Bot Yanıtı",
-            new ReplayFinalPayload(trace.TerminationReason, trace.DurationMs, trace.IterationCount, trace.Error, trace.FinalResponse)));
-
-        return steps;
     }
 }

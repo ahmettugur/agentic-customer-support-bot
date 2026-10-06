@@ -212,7 +212,7 @@ bunu bearer token olarak okur. Aynı mekanizmayı SSE (`EventSource`) de kullan�
 | Policy | Limit | Kapsam |
 |--------|-------|--------|
 | `chat` | **Müşteri başına** 20/dk (`linked_customer_id`; claim yoksa IP) | `POST /chat/`, `POST /chat/stream`, `WS /chat/realtime-native/{sid?}` |
-| `general` | IP başına 60/dk | Tüm `Admin`/`AdminOrAgent` scope'ları (`adminScope`, `agentScope` — Program.cs) + `/analytics/*` (ayrı map edildiği için **kendi başına** `RequireRateLimiting` taşır, `admin`/`agentScope` grubuna dahil DEĞİL) + `GET /sessions/*` + `GET /chat/events/{sid}`, `.../approvals/unseen`, `.../approvals/{id}/seen`, `GET /customer/approvals/history` |
+| `general` | Personel (Admin/Agent) **kullanıcı başına** 300/dk; müşteri **müşteri başına**, kimliksiz istek **IP başına** 60/dk (`RateLimiting:StaffPerMinute` / `GeneralPerMinute`) | Tüm `Admin`/`AdminOrAgent` scope'ları (`adminScope`, `agentScope` — Program.cs) + `/analytics/*` (ayrı map edildiği için **kendi başına** `RequireRateLimiting` taşır, `admin`/`agentScope` grubuna dahil DEĞİL) + `GET /sessions/*` + `GET /chat/events/{sid}`, `.../approvals/unseen`, `.../approvals/{id}/seen`, `GET /customer/approvals/history` |
 | `a2a` | **Partner başına** `A2A:RequestsPerMinute` | `/a2a/*` |
 | `auth` | IP başına `Jwt:AuthRateLimitPerMinute` (varsayılan 10/dk) | `/auth/*` (login, customer/login, customer/register, refresh, logout) |
 
