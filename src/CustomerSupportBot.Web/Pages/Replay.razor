@@ -349,12 +349,13 @@
         var nextAction = JsonStr(p.Json, "nextAction");
         var pct        = confidence is not null ? (int)Math.Round(confidence.Value * 100) : (int?)null;
 
-        return @<div class="rp-card rp-card-reasoning">
-            <div class="rp-card-header">
+        return @<details class="rp-card rp-card-reasoning">
+            <summary class="rp-card-header">
                 <span class="rp-card-icon"><Icon Name="sparkles" Size="15" /></span>
                 <span class="rp-card-title">Ön analiz</span>
                 <span class="rp-card-time">@FmtTime(step.Time)</span>
-            </div>
+                <Icon Name="chevron-down" Size="15" Class="rp-card-chevron" />
+            </summary>
             <div class="rp-card-body">
                 @if (intent is not null)
                 {
@@ -374,7 +375,7 @@
                     <div class="rp-kv"><span class="rp-kv-key">Sonraki adım</span><span>@nextAction</span></div>
                 }
             </div>
-        </div>;
+        </details>;
     }
 
     // Planning card
@@ -388,12 +389,13 @@
         var needsClr   = JsonBool(p.Json, "needsClarification");
         var clrQ       = JsonStr(p.Json, "clarificationQuestion");
 
-        return @<div class="rp-card rp-card-planning">
-            <div class="rp-card-header">
+        return @<details class="rp-card rp-card-planning">
+            <summary class="rp-card-header">
                 <span class="rp-card-icon"><Icon Name="route" Size="15" /></span>
                 <span class="rp-card-title">Yönlendirme kararı</span>
                 <span class="rp-card-time">@FmtTime(step.Time)</span>
-            </div>
+                <Icon Name="chevron-down" Size="15" Class="rp-card-chevron" />
+            </summary>
             <div class="rp-card-body">
                 @if (agent is not null)
                 {
@@ -420,7 +422,7 @@
                     <div class="rp-clarification">@clrQ</div>
                 }
             </div>
-        </div>;
+        </details>;
     }
 
     // Agent activity card
@@ -456,13 +458,14 @@
         var planPct = planConf is not null ? (int)Math.Round(planConf.Value * 100) : (int?)null;
         var specPct = specConf is not null ? (int)Math.Round(specConf.Value * 100) : (int?)null;
 
-        return @<div class="rp-card rp-card-agent">
-            <div class="rp-card-header">
+        return @<details class="rp-card rp-card-agent">
+            <summary class="rp-card-header">
                 <span class="rp-card-icon"><Icon Name="users" Size="15" /></span>
                 <span class="rp-card-title">@(p.AgentName ?? "Asistan")</span>
                 @if (p.DurationMs is not null) { <span class="rp-duration-badge">@p.DurationMs ms</span> }
                 <span class="rp-card-time">@FmtTime(step.Time)</span>
-            </div>
+                <Icon Name="chevron-down" Size="15" Class="rp-card-chevron" />
+            </summary>
             @if (output is not null)
             {
                 <div class="rp-card-body">
@@ -522,7 +525,7 @@
                     }
                 </div>
             }
-        </div>;
+        </details>;
     }
 
     // Tool call card
@@ -531,13 +534,14 @@
         var paramFields  = ParseJsonFields(p.Parameters);
         var resultFields = ParseJsonFields(p.Result);
 
-        return @<div class="rp-card rp-card-tool">
-            <div class="rp-card-header">
+        return @<details class="rp-card rp-card-tool">
+            <summary class="rp-card-header">
                 <span class="rp-card-icon"><Icon Name="tool" Size="15" /></span>
                 <span class="rp-card-title">@(p.ToolName ?? "Araç")</span>
                 <span class="rp-success-badge @(p.Success ? "ok" : "fail")">@(p.Success ? "Başarılı" : "Başarısız")</span>
                 <span class="rp-card-time">@FmtTime(step.Time)</span>
-            </div>
+                <Icon Name="chevron-down" Size="15" Class="rp-card-chevron" />
+            </summary>
             <div class="rp-card-body">
                 @if (p.AgentName is not null)
                 {
@@ -578,7 +582,7 @@
                     else { <div class="rp-text">@p.Result</div> }
                 }
             </div>
-        </div>;
+        </details>;
     }
 
     // Specialist reasoning step (separate timeline entry)
@@ -592,12 +596,13 @@
         var postSummary  = JsonNestedStr(p.Json, "postToolReflection", "summary");
         var pct          = resultConf is not null ? (int)Math.Round(resultConf.Value * 100) : (int?)null;
 
-        return @<div class="rp-card rp-card-reasoning">
-            <div class="rp-card-header">
+        return @<details class="rp-card rp-card-reasoning">
+            <summary class="rp-card-header">
                 <span class="rp-card-icon"><Icon Name="search" Size="15" /></span>
                 <span class="rp-card-title">Asistan değerlendirmesi: @(agentName ?? "?")</span>
                 <span class="rp-card-time">@FmtTime(step.Time)</span>
-            </div>
+                <Icon Name="chevron-down" Size="15" Class="rp-card-chevron" />
+            </summary>
             <div class="rp-card-body">
                 @if (canProceed is not null)
                 {
@@ -623,7 +628,7 @@
                 }
                 @if (postSummary is not null) { <div class="rp-text">@postSummary</div> }
             </div>
-        </div>;
+        </details>;
     }
 
     // ── JSON helpers ─────────────────────────────────────────────────────────

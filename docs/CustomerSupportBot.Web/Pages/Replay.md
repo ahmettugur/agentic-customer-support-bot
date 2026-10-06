@@ -22,6 +22,10 @@ Bir trace ID'si ile açılarak, o trace'in başlangıcından sonuna kadar reason
   "Mesaj 2 / 5" ayırıcıları, ilerleme etiketinde "· Mesaj m / M" görünür. Oynatma mesajlar arasında kesintisiz ilerler.
   `sessionId` varsa `traceId`'ye göre önceliklidir; yüklenen oturum işaretlenir (boş/hatalı sonuçta da), aynı adres
   için yeniden istek atılmaz. Kutuya iz numarası girilince tek mesaj oynatmaya dönülür.
+- Adım kartları (ön analiz, yönlendirme, asistan, araç, değerlendirme) **kapalı** gelir; başlığa tıklayınca (ya da
+  klavyeyle Enter/Boşluk) içerik açılır. Yerel `<details>/<summary>` kullanılır: açık/kapalı durumu tarayıcıda tutulur,
+  oynatma ilerleyip yeni adım eklendiğinde açılan kartlar kapanmaz. Müşteri mesajı ve asistanın yanıtı balonları
+  her zaman açıktır.
 
 ## Erişim
 `[Authorize(Roles = "Admin")]` — `/traces/*` API'leri `Program.cs`'de `Admin` rolüyle

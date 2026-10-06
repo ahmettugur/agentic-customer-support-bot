@@ -308,6 +308,16 @@
 
 .rp-card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 
+/* Kartlar başta kapalı (<details>); başlığa tıklayınca içerik açılır. Açık/kapalı durumu tarayıcıda tutulur,
+   yeni adım eklendiğinde Blazor önceki kartların durumuna dokunmaz. */
+summary.rp-card-header { cursor: pointer; list-style: none; user-select: none; }
+summary.rp-card-header::-webkit-details-marker { display: none; }
+summary.rp-card-header:hover { background: var(--color-surface-alt); }
+summary.rp-card-header:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+details.rp-card:not([open]) > summary.rp-card-header { border-bottom: 0; }
+.rp-card-chevron { flex-shrink: 0; color: var(--color-text-secondary); transform: rotate(-90deg); transition: transform .15s; }
+details.rp-card[open] .rp-card-chevron { transform: rotate(0deg); }
+
 .rp-card-reasoning .rp-card-icon { background: var(--color-primary-subtle); color: var(--color-primary-hover); }
 .rp-card-planning  .rp-card-icon { background: var(--color-warn-bg); color: var(--color-warn); }
 .rp-card-agent     .rp-card-icon { background: var(--color-primary-subtle); color: var(--color-primary-hover); }
