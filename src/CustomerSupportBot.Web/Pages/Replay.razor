@@ -9,25 +9,21 @@
 <link rel="stylesheet" href="css/replay.css" />
 
 <div class="replay-layout">
-    <!-- HEADER -->
-    <header class="replay-header">
-        <div class="replay-header-left">
-            <a href="/traces" class="btn-icon" title="Trace listesine dön">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m15 18-6-6 6-6"/>
-                </svg>
-            </a>
-            <div class="replay-header-info">
-                <h1>Trace Replay</h1>
-                <p class="muted">@(_metaText ?? "Bir trace ID girin veya seçin…")</p>
-            </div>
+    <header class="page-header">
+        <div class="page-header-text">
+            <a class="page-back" href="/traces"><Icon Name="chevron-left" Size="14" /> İzler</a>
+            <h1>Tekrar oynatma</h1>
+            <p>@(_metaText is null ? "Bir mesajın karar adımlarını sırayla izleyin. İzler sayfasından bir mesaj seçin ya da iz numarasını yapıştırın." : $"“{_metaText}”")</p>
         </div>
-        <div class="replay-header-right">
-            <input type="text" placeholder="trace ID" class="replay-input"
-                   @bind="_inputId" @bind:event="oninput"
-                   @onkeydown="@(async e => { if (e.Key == "Enter") await LoadTraceAsync(_inputId); })" />
+        <div class="page-header-actions">
+            <label class="replay-search">
+                <Icon Name="search" Size="15" />
+                <input type="text" placeholder="İz numarası yapıştır" aria-label="İz numarası"
+                       @bind="_inputId" @bind:event="oninput"
+                       @onkeydown="@(async e => { if (e.Key == "Enter") await LoadTraceAsync(_inputId); })" />
+            </label>
             <button class="btn-secondary" @onclick="() => LoadTraceAsync(_inputId)" disabled="@_loading">
-                @(_loading ? "Yükleniyor…" : "Yükle")
+                @(_loading ? "Yükleniyor…" : "Aç")
             </button>
         </div>
     </header>
@@ -35,30 +31,36 @@
     <!-- TRANSPORT -->
     @if (_steps.Count > 0)
     {
-        <section class="replay-controls">
-            <button class="btn-icon" title="Başa"          @onclick="() => GoTo(0)">⏮</button>
-            <button class="btn-icon" title="Önceki adım"  @onclick="() => GoTo(_stepIndex - 1)">◀</button>
-            <button class="btn-primary" @onclick="TogglePlay">
-                @(_playing ? "⏸ Duraklat" : "▶ Oynat")
-            </button>
-            <button class="btn-icon" title="Sonraki adım" @onclick="() => GoTo(_stepIndex + 1)">▶</button>
-            <button class="btn-icon" title="Sona"         @onclick="() => GoTo(_steps.Count - 1)">⏭</button>
-            <span class="replay-step-label">@(_stepIndex + 1) / @_steps.Count</span>
-            <label class="replay-speed">
-                Hız:
-                <select @bind="_speedMs" @bind:after="OnSpeedChanged">
-                    <option value="2000">0.5×</option>
-                    <option value="1000">1×</option>
-                    <option value="500">2×</option>
-                    <option value="200">5×</option>
-                </select>
-            </label>
+        <section class="replay-controls" aria-label="Oynatıcı">
+            <div class="replay-transport">
+                <button class="rc-btn" title="Başa dön" aria-label="Başa dön" @onclick="() => GoTo(0)"><Icon Name="skip-back" Size="18" StrokeWidth="2" /></button>
+                <button class="rc-btn" title="Önceki adım" aria-label="Önceki adım" @onclick="() => GoTo(_stepIndex - 1)"><Icon Name="chevron-left" Size="18" StrokeWidth="2" /></button>
+                <button class="rc-play" @onclick="TogglePlay" aria-label="@(_playing ? "Duraklat" : "Oynat")" title="@(_playing ? "Duraklat" : "Oynat")">
+                    <Icon Name="@(_playing ? "pause" : "play")" Size="18" />
+                </button>
+                <button class="rc-btn" title="Sonraki adım" aria-label="Sonraki adım" @onclick="() => GoTo(_stepIndex + 1)"><Icon Name="chevron-right" Size="18" StrokeWidth="2" /></button>
+                <button class="rc-btn" title="Sona git" aria-label="Sona git" @onclick="() => GoTo(_steps.Count - 1)"><Icon Name="skip-forward" Size="18" StrokeWidth="2" /></button>
+            </div>
+            <div class="replay-progress">
+                <span class="replay-step-label">Adım @(_stepIndex + 1) / @_steps.Count</span>
+                <div class="replay-progress-track" role="progressbar" aria-valuemin="1" aria-valuemax="@_steps.Count" aria-valuenow="@(_stepIndex + 1)" aria-label="İlerleme">
+                    <div class="replay-progress-fill" style="width:@(((_stepIndex + 1) * 100 / _steps.Count))%"></div>
+                </div>
+            </div>
+            <div class="segmented" role="group" aria-label="Hız">
+                @foreach (var (ms, label) in Speeds)
+                {
+                    var value = ms;
+                    <button type="button" class="@(_speedMs == value ? "on" : "")" aria-pressed="@(_speedMs == value ? "true" : "false")"
+                            @onclick="() => SetSpeed(value)">@label</button>
+                }
+            </div>
         </section>
 
         <main class="replay-main">
             <!-- TIMELINE -->
             <aside class="replay-timeline-pane">
-                <h3>Zaman Çizelgesi</h3>
+                <h3>Zaman çizelgesi</h3>
                 <ol class="replay-timeline">
                     @for (var i = 0; i < _steps.Count; i++)
                     {
@@ -66,7 +68,7 @@
                         var step = _steps[i];
                         var cls  = idx == _stepIndex ? "active" : (idx < _stepIndex ? "passed" : "");
                         <li class="@cls" @onclick="() => GoTo(idx)">
-                            <span class="step-num">#@(idx + 1)</span>
+                            <span class="step-num">@(idx + 1)</span>
                             <div class="step-content">
                                 <div class="step-title">
                                     <span class="step-kind-pill kind-@step.Kind">@StepKindLabel(step.Kind)</span>
@@ -97,9 +99,10 @@
     else if (!_loading)
     {
         <div class="replay-empty">
-            <p class="muted">Yüklenmiş trace yok. Üst sağdaki kutuya bir <code>traceId</code> yapıştırıp <strong>Yükle</strong> deyin.</p>
-            <p class="muted">İpucu: <a href="/traces">Trace Dashboard</a>'tan bir trace seç → "Replay" butonu.</p>
-            @if (_errorMsg is not null) { <p style="color:#dc2626;">⚠ @_errorMsg</p> }
+            <span class="queue-empty-icon"><Icon Name="play-circle" Size="22" /></span>
+            <strong>Oynatılacak iz yok</strong>
+            <p class="muted"><a href="/traces">İzler</a> sayfasından bir mesaj seçip “Adım adım oynat”a basın ya da iz numarasını yukarıdaki kutuya yapıştırın.</p>
+            @if (_errorMsg is not null) { <p class="replay-error" role="alert"><Icon Name="alert" Size="14" /> @_errorMsg</p> }
         </div>
     }
 </div>
@@ -203,6 +206,15 @@
 
     private void OnSpeedChanged() { if (_playing) { StopPlay(); StartPlay(); } }
 
+    private static readonly (int Ms, string Label)[] Speeds = [(2000, "0,5×"), (1000, "1×"), (500, "2×"), (200, "5×")];
+
+    private void SetSpeed(int ms)
+    {
+        if (_speedMs == ms) return;
+        _speedMs = ms;
+        OnSpeedChanged();
+    }
+
     public async ValueTask DisposeAsync()
     {
         StopPlay();
@@ -217,8 +229,8 @@
         "init"      => "Soru",
         "reasoning" => "Analiz",
         "planning"  => "Plan",
-        "agent"     => "Agent",
-        "tool"      => "Tool",
+        "agent"     => "Asistan",
+        "tool"      => "Araç",
         "final"     => "Yanıt",
         _           => kind
     };
@@ -242,12 +254,12 @@
     // User query — right-aligned bubble
     private RenderFragment RenderInitBubble(ReplayInitPayload p) =>
         @<div class="rp-bubble-row rp-right">
-            <div class="rp-avatar rp-avatar-user">👤</div>
+            <div class="rp-avatar rp-avatar-user"><Icon Name="user" Size="16" /></div>
             <div class="rp-bubble rp-bubble-user">
                 <div class="rp-bubble-label">Müşteri</div>
                 <div class="rp-bubble-text">@(p.UserQuery ?? "(boş soru)")</div>
                 <div class="rp-bubble-meta">
-                    <span>TraceID: @(p.TraceId?[..Math.Min(8, p.TraceId?.Length ?? 0)] ?? "?")</span>
+                    <span>İz: @(p.TraceId?[..Math.Min(8, p.TraceId?.Length ?? 0)] ?? "?")</span>
                 </div>
             </div>
         </div>;
@@ -255,17 +267,17 @@
     // Bot final answer — left-aligned bubble
     private RenderFragment RenderFinalBubble(ReplayFinalPayload p) =>
         @<div class="rp-bubble-row rp-left">
-            <div class="rp-avatar rp-avatar-bot">🤖</div>
+            <div class="rp-avatar rp-avatar-bot"><Icon Name="sparkles" Size="16" /></div>
             <div class="rp-bubble rp-bubble-bot">
-                <div class="rp-bubble-label">Bot Yanıtı</div>
+                <div class="rp-bubble-label">Asistanın yanıtı</div>
                 @if (p.Error is not null)
                 {
-                    <div class="rp-error-badge">⚠ @p.Error</div>
+                    <div class="rp-error-badge"><Icon Name="alert" Size="13" /> @p.Error</div>
                 }
                 <div class="rp-bubble-text">@(p.Response ?? "(yanıt yok)")</div>
                 <div class="rp-bubble-meta">
-                    @if (p.DurationMs is not null) { <span>⏱ @p.DurationMs ms</span> }
-                    @if (p.IterationCount is not null) { <span>🔄 @p.IterationCount iter</span> }
+                    @if (p.DurationMs is not null) { <span>@p.DurationMs ms</span> }
+                    @if (p.IterationCount is not null) { <span>@p.IterationCount tur</span> }
                     <span class="rp-term-badge">@(p.TerminationReason ?? "?")</span>
                 </div>
             </div>
@@ -282,8 +294,8 @@
 
         return @<div class="rp-card rp-card-reasoning">
             <div class="rp-card-header">
-                <span class="rp-card-icon">🧠</span>
-                <span class="rp-card-title">Reasoning Analizi</span>
+                <span class="rp-card-icon"><Icon Name="sparkles" Size="15" /></span>
+                <span class="rp-card-title">Ön analiz</span>
                 <span class="rp-card-time">@FmtTime(step.Time)</span>
             </div>
             <div class="rp-card-body">
@@ -321,8 +333,8 @@
 
         return @<div class="rp-card rp-card-planning">
             <div class="rp-card-header">
-                <span class="rp-card-icon">📋</span>
-                <span class="rp-card-title">Yönlendirme Kararı</span>
+                <span class="rp-card-icon"><Icon Name="route" Size="15" /></span>
+                <span class="rp-card-title">Yönlendirme kararı</span>
                 <span class="rp-card-time">@FmtTime(step.Time)</span>
             </div>
             <div class="rp-card-body">
@@ -348,7 +360,7 @@
                 @if (rationale is not null) { <div class="rp-text">@rationale</div> }
                 @if (needsClr && clrQ is not null)
                 {
-                    <div class="rp-clarification">💬 @clrQ</div>
+                    <div class="rp-clarification">@clrQ</div>
                 }
             </div>
         </div>;
@@ -389,8 +401,8 @@
 
         return @<div class="rp-card rp-card-agent">
             <div class="rp-card-header">
-                <span class="rp-card-icon">⚙️</span>
-                <span class="rp-card-title">@(p.AgentName ?? "Agent")</span>
+                <span class="rp-card-icon"><Icon Name="users" Size="15" /></span>
+                <span class="rp-card-title">@(p.AgentName ?? "Asistan")</span>
                 @if (p.DurationMs is not null) { <span class="rp-duration-badge">@p.DurationMs ms</span> }
                 <span class="rp-card-time">@FmtTime(step.Time)</span>
             </div>
@@ -419,7 +431,7 @@
                             </div>
                         }
                         @if (planRationale is not null) { <div class="rp-text">@planRationale</div> }
-                        @if (planNeedsClr && planClrQ is not null) { <div class="rp-clarification">💬 @planClrQ</div> }
+                        @if (planNeedsClr && planClrQ is not null) { <div class="rp-clarification">@planClrQ</div> }
                     }
                     else if (isSpecialistJson)
                     {
@@ -464,8 +476,8 @@
 
         return @<div class="rp-card rp-card-tool">
             <div class="rp-card-header">
-                <span class="rp-card-icon">🔧</span>
-                <span class="rp-card-title">@(p.ToolName ?? "Tool")</span>
+                <span class="rp-card-icon"><Icon Name="tool" Size="15" /></span>
+                <span class="rp-card-title">@(p.ToolName ?? "Araç")</span>
                 <span class="rp-success-badge @(p.Success ? "ok" : "fail")">@(p.Success ? "Başarılı" : "Başarısız")</span>
                 <span class="rp-card-time">@FmtTime(step.Time)</span>
             </div>
@@ -525,8 +537,8 @@
 
         return @<div class="rp-card rp-card-reasoning">
             <div class="rp-card-header">
-                <span class="rp-card-icon">🔍</span>
-                <span class="rp-card-title">Specialist: @(agentName ?? "?")</span>
+                <span class="rp-card-icon"><Icon Name="search" Size="15" /></span>
+                <span class="rp-card-title">Asistan değerlendirmesi: @(agentName ?? "?")</span>
                 <span class="rp-card-time">@FmtTime(step.Time)</span>
             </div>
             <div class="rp-card-body">

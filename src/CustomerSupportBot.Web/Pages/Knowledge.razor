@@ -7,22 +7,26 @@
 <link rel="stylesheet" href="css/knowledge.css" />
 
 <div class="kb-container">
-    <div class="kb-toolbar">
-        <h1>📚 Bilgi Tabanı</h1>
-        <div class="kb-toolbar-actions">
-            <input class="kb-search" type="search" placeholder="Başlık veya içerikte ara…"
-                   @bind="_filter" @bind:event="oninput" aria-label="Makalelerde ara" />
-            <button class="kb-btn kb-btn-primary" @onclick="StartNew">+ Yeni Makale</button>
+    <header class="page-header">
+        <div class="page-header-text">
+            <h1>Bilgi tabanı</h1>
+            <p>Asistanın müşteri sorularını yanıtlarken başvurduğu makaleler. Yayındaki makaleler parçalara bölünüp
+               aranabilir hale gelir; taslaklar asistana görünmez.</p>
         </div>
-    </div>
-
-    <p class="kb-hint">
-        Yayındaki makaleler parçalara bölünüp anlamsal aramaya indekslenir; ajanlar yanıt
-        üretirken bunları kaynak olarak kullanır. Taslaklar indekslenmez.
-    </p>
+        <div class="page-header-actions">
+            <button class="kb-btn kb-btn-primary" @onclick="StartNew"><Icon Name="plus" StrokeWidth="2.2" /> Yeni makale</button>
+        </div>
+    </header>
 
     <div class="kb-layout">
         <aside class="kb-list" aria-label="Makale listesi">
+            <div class="kb-list-search">
+                <label class="kb-search-box">
+                    <Icon Name="search" Size="15" />
+                    <input type="search" placeholder="Başlık veya içerikte ara…"
+                           @bind="_filter" @bind:event="oninput" aria-label="Makalelerde ara" />
+                </label>
+            </div>
             @if (_loading)
             {
                 <div class="kb-empty">Yükleniyor…</div>
@@ -30,7 +34,7 @@
             else if (Filtered.Count == 0)
             {
                 <div class="kb-empty">
-                    @(_articles.Count == 0 ? "Henüz makale yok. “Yeni Makale” ile başlayın." : "Aramayla eşleşen makale yok.")
+                    @(_articles.Count == 0 ? "Henüz makale yok. “Yeni makale” ile başlayın." : "Aramayla eşleşen makale yok.")
                 </div>
             }
             else
@@ -113,15 +117,10 @@
                     }
                 </div>
 
+                @* Silme solda, kaydetme sağda: yıkıcı işlem birincil düğmenin yanında durmasın. *@
                 <div class="kb-actions">
-                    <button class="kb-btn kb-btn-primary" @onclick="SaveAsync" disabled="@(_busy || !CanSave)">
-                        @(_busy ? "Kaydediliyor…" : "Kaydet")
-                    </button>
-                    <button class="kb-btn" @onclick="CancelEdit" disabled="@_busy">Vazgeç</button>
-
                     @if (!IsNew)
                     {
-                        <span class="kb-actions-spacer"></span>
                         @if (_confirmingDelete)
                         {
                             <span class="kb-confirm">Silinsin mi?</span>
@@ -130,10 +129,15 @@
                         }
                         else
                         {
-                            <button class="kb-btn kb-btn-danger-outline" @onclick="() => _confirmingDelete = true"
-                                    disabled="@_busy">Sil</button>
+                            <button class="kb-btn kb-btn-ghost-danger" @onclick="() => _confirmingDelete = true"
+                                    disabled="@_busy"><Icon Name="trash" /> Makaleyi sil</button>
                         }
                     }
+                    <span class="kb-actions-spacer"></span>
+                    <button class="kb-btn" @onclick="CancelEdit" disabled="@_busy">Vazgeç</button>
+                    <button class="kb-btn kb-btn-primary" @onclick="SaveAsync" disabled="@(_busy || !CanSave)">
+                        @(_busy ? "Kaydediliyor…" : "Kaydet")
+                    </button>
                 </div>
             }
         </section>

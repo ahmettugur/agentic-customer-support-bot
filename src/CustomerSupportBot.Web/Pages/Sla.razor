@@ -8,83 +8,90 @@
 <link rel="stylesheet" href="css/sla.css" />
 
 <div class="sla-container">
-    <div class="sla-toolbar">
-        <h1>⏱️ SLA Guardian</h1>
-        <div class="sla-toolbar-actions">
-            @{
-                var pillClass = _status?.Enabled == true ? "ok" : "off";
-                var pillText  = _status is { Enabled: true }
-                    ? $"aktif · {_status.PollIntervalSeconds}sn"
-                    : (_status is null ? "durum bilinmiyor" : "pasif");
-            }
-            <span class="pill @pillClass">@pillText</span>
-            <button class="btn-secondary" @onclick="RefreshAsync">Yenile</button>
-            <label class="auto-refresh-toggle">
-                <input type="checkbox" @bind="_autoRefresh" @bind:after="OnAutoRefreshChanged" /> Auto (5sn)
-            </label>
+    <header class="page-header">
+        <div class="page-header-text">
+            <h1>SLA</h1>
+            <p>Bekleyen onaylar ve açık eskalasyonlar süre sınırlarına göre izlenir.</p>
         </div>
-    </div>
-    <p class="muted">Bekleyen onayları ve açık eskalasyonları periyodik tarayan arka plan servisi.
-       Eşik aşan onaylar otomatik reddedilir; eskalasyonların önceliği yükseltilir.</p>
+        <div class="page-header-actions">
+            <span class="sla-guard @(_status?.Enabled == true ? "on" : "off")">
+                <span class="live-dot" aria-hidden="true"></span>
+                @(_status is null ? "Durum bilinmiyor" : _status.Enabled ? $"Koruyucu çalışıyor · {_status.PollIntervalSeconds} sn'de bir tarar" : "Koruyucu kapalı")
+            </span>
+            <label class="live-toggle @(_autoRefresh ? "on" : "")" title="Sayfayı 5 saniyede bir otomatik yenile">
+                <input type="checkbox" @bind="_autoRefresh" @bind:after="OnAutoRefreshChanged" />
+                <span class="live-dot" aria-hidden="true"></span>
+                <span>@(_autoRefresh ? "Canlı · 5 sn'de bir" : "Otomatik yenileme kapalı")</span>
+            </label>
+            <button type="button" class="btn-icon-bordered" @onclick="RefreshAsync" aria-label="Şimdi yenile" title="Şimdi yenile">
+                <Icon Name="refresh" />
+            </button>
+        </div>
+    </header>
 
     <div class="sla-grid">
-        <div class="sla-card">
-            <h3>📋 Onay Kuyruğu</h3>
-            @if (_status?.Approvals is { } a)
-            {
-                @StatRow("Bekleyen sayı",     a.PendingCount.ToString(),  "")
-                @StatRow("En eski (sn)",      FormatNum(a.OldestSeconds), StatClass(a.OldestSeconds ?? 0, a.WarnAfterSeconds, a.BreachAfterSeconds))
-                @StatRow("Warn eşiği (sn)",   a.WarnAfterSeconds.ToString(),     "")
-                @StatRow("Breach eşiği (sn)", a.BreachAfterSeconds.ToString(),   "")
-                @StatRow("Breach aksiyonu",   a.OnBreach ?? "—",          "")
-                @StatRow("Son ihlaller",      a.BreachCountRecent.ToString(), a.BreachCountRecent > 0 ? "breach" : "")
-            }
-            else
-            {
-                <p class="muted">Yükleniyor…</p>
-            }
-        </div>
-        <div class="sla-card">
-            <h3>🚨 Eskalasyonlar</h3>
-            @if (_status?.Escalations is { } ev)
-            {
-                @StatRow("Açık sayı",         ev.OpenCount.ToString(),    "")
-                @StatRow("En eski (sn)",       FormatNum(ev.OldestSeconds), StatClass(ev.OldestSeconds ?? 0, ev.WarnAfterSeconds, ev.BreachAfterSeconds))
-                @StatRow("Warn eşiği (sn)",    ev.WarnAfterSeconds.ToString(),   "")
-                @StatRow("Breach eşiği (sn)",  ev.BreachAfterSeconds.ToString(), "")
-                @StatRow("Priority boost",     ev.BoostPriorityOnBreach ? "aktif" : "pasif", "")
-                @StatRow("Son ihlaller",       ev.BreachCountRecent.ToString(), ev.BreachCountRecent > 0 ? "breach" : "")
-            }
-            else
-            {
-                <p class="muted">Yükleniyor…</p>
-            }
-        </div>
+        @if (_status?.Approvals is { } a)
+        {
+            @QueueCard("Onay kuyruğu", a.PendingCount, "bekleyen", a.OldestSeconds, a.WarnAfterSeconds, a.BreachAfterSeconds,
+                       a.BreachCountRecent, $"Sınır aşıldığında: {BreachActionLabel(a.OnBreach)}.")
+        }
+        else
+        {
+            <section class="sla-card"><h2>Onay kuyruğu</h2><p class="muted">Yükleniyor…</p></section>
+        }
+        @if (_status?.Escalations is { } ev)
+        {
+            @QueueCard("Eskalasyonlar", ev.OpenCount, "açık", ev.OldestSeconds, ev.WarnAfterSeconds, ev.BreachAfterSeconds,
+                       ev.BreachCountRecent, ev.BoostPriorityOnBreach ? "Sınır aşıldığında: önceliği yükseltilir." : "Sınır aşıldığında: yalnızca kayıt tutulur.")
+        }
+        else
+        {
+            <section class="sla-card"><h2>Eskalasyonlar</h2><p class="muted">Yükleniyor…</p></section>
+        }
     </div>
 
-    <div class="sla-card" style="margin-top:16px;">
-        <h3>📜 Son Olaylar</h3>
-        <div class="sla-event-list">
-            @if (!_events.Any())
-            {
-                <div class="sla-empty">Henüz olay yok.</div>
-            }
-            else
-            {
-                @foreach (var e in _events)
+    <section class="sla-card sla-events" aria-label="Son olaylar">
+        <div class="sla-events-header">
+            <h2>Son olaylar</h2>
+            <div class="segmented" role="group" aria-label="Önem filtresi">
+                @foreach (var (key, label) in EventFilters)
                 {
-                    <div class="sla-event">
-                        <span class="ts" title="@e.Timestamp.ToString("O")">@FmtTs(e.Timestamp)</span>
-                        <span class="kind">@e.Kind</span>
-                        <span class="severity @e.Severity.ToLowerInvariant()">@e.Severity</span>
-                        <span class="target">@e.TargetId@(e.Action is not null ? $" · {e.Action}" : "")</span>
-                        <span class="age">@(e.AgeSeconds?.ToString("F0") ?? "0")s</span>
-                        @if (e.Note is not null) { <span class="note">@e.Note</span> }
-                    </div>
+                    var k = key;
+                    <button type="button" class="@(_eventFilter == k ? "on" : "")" aria-pressed="@(_eventFilter == k ? "true" : "false")"
+                            @onclick="() => _eventFilter = k">@label</button>
                 }
-            }
+            </div>
         </div>
-    </div>
+        @{ var shown = _events.Where(e => _eventFilter == "all" || string.Equals(e.Severity, _eventFilter, StringComparison.OrdinalIgnoreCase)).ToList(); }
+        @if (shown.Count == 0)
+        {
+            <div class="sla-empty">@(_events.Count == 0 ? "Henüz olay yok." : "Bu filtrede olay yok.")</div>
+        }
+        else
+        {
+            <div class="sla-table-wrap">
+                <table class="sla-table">
+                    <thead>
+                        <tr><th scope="col">Zaman</th><th scope="col">Olay</th><th scope="col">Tür</th><th scope="col">Kayıt</th><th scope="col">Bekleme</th><th scope="col">Sonuç</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var e in shown)
+                        {
+                            var sev = e.Severity.ToLowerInvariant();
+                            <tr>
+                                <td class="mono" title="@e.Timestamp.ToString("O")">@FmtTs(e.Timestamp)</td>
+                                <td><span class="sev sev-@sev">@SeverityLabel(sev)</span></td>
+                                <td>@KindLabel(e.Kind)</td>
+                                <td><code title="@e.TargetId">@ShortId(e.TargetId)</code></td>
+                                <td>@FmtDuration(e.AgeSeconds ?? 0)</td>
+                                <td class="muted-cell">@ActionText(e)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
 </div>
 
 @code {
@@ -144,13 +151,93 @@
     }
 
     private static string FmtTs(DateTimeOffset dt) => dt.LocalDateTime.ToString("HH:mm:ss");
-    private static string FormatNum(double? v) => v?.ToString("F0") ?? "0";
-    private static string StatClass(double actual, double warn, double breach) =>
-        actual >= breach ? "breach" : actual >= warn ? "warn" : "";
 
-    private RenderFragment StatRow(string label, string value, string cls) =>
-        @<div class="sla-stat-row">
-            <span class="label">@label</span>
-            <span class="value @cls">@value</span>
-        </div>;
+    private string _eventFilter = "all";
+    private static readonly (string Key, string Label)[] EventFilters = [("all", "Tümü"), ("breach", "İhlal"), ("warn", "Uyarı")];
+
+    /// <summary>Saniyeyi okunur süreye çevirir: "45 sn", "3 dk 10 sn", "2 sa 5 dk".</summary>
+    private static string FmtDuration(double seconds)
+    {
+        var t = TimeSpan.FromSeconds(Math.Max(0, seconds));
+        if (t.TotalSeconds < 60) return $"{(int)t.TotalSeconds} sn";
+        if (t.TotalMinutes < 10) return t.Seconds > 0 ? $"{(int)t.TotalMinutes} dk {t.Seconds} sn" : $"{(int)t.TotalMinutes} dk";
+        if (t.TotalHours < 1) return $"{(int)t.TotalMinutes} dk";
+        return t.Minutes > 0 ? $"{(int)t.TotalHours} sa {t.Minutes} dk" : $"{(int)t.TotalHours} sa";
+    }
+
+    private static string BreachActionLabel(string? action) => action switch
+    {
+        "AutoReject"  => "talep otomatik reddedilir",
+        "AutoApprove" => "talep otomatik onaylanır",
+        _             => "yalnızca kayıt tutulur, talep otomatik reddedilmez"
+    };
+
+    private static string SeverityLabel(string severity) => severity switch
+    {
+        "breach" => "İhlal",
+        "warn"   => "Uyarı",
+        _        => severity
+    };
+
+    private static string KindLabel(string kind) => kind switch
+    {
+        "approval"   => "Onay",
+        "escalation" => "Eskalasyon",
+        _            => kind
+    };
+
+    private static string ActionText(SlaEvent e)
+    {
+        var action = e.Action switch
+        {
+            null or "" or "None" => null,
+            "AutoReject"         => "Otomatik reddedildi",
+            "AutoApprove"        => "Otomatik onaylandı",
+            var other            => other
+        };
+        return string.Join(" · ", new[] { action, e.Note }.Where(x => !string.IsNullOrWhiteSpace(x))) is { Length: > 0 } text ? text : "—";
+    }
+
+    private static string ShortId(string id) => id.Length > 8 ? id[..8] + "…" : id;
+
+    /// <summary>Kuyruk kartı: sayı, en eski bekleyen ve uyarı/sınır eşiklerine göre konumu.</summary>
+    private RenderFragment QueueCard(string title, int count, string countNoun, double? oldestSeconds,
+                                     double warn, double breach, int recentBreaches, string breachNote)
+    {
+        var oldest = oldestSeconds ?? 0;
+        var (stateCls, stateLabel) = count == 0 ? ("ok", "Kuyruk boş")
+            : oldest >= breach ? ("breach", "Sınır aşıldı")
+            : oldest >= warn   ? ("warn", "Uyarı")
+            : ("ok", "Sınır içinde");
+        var scale  = Math.Max(breach * 1.5, 1);
+        var marker = count == 0 ? (double?)null : Math.Min(oldest / scale, 1) * 100;
+        return @<section class="sla-card" aria-label="@title">
+            <div class="sla-card-head">
+                <h2>@title</h2>
+                <span class="sla-state @stateCls">@stateLabel</span>
+            </div>
+            <div class="sla-stats">
+                <div><span class="sla-num">@count</span><span class="sla-cap">@countNoun</span></div>
+                <div><span class="sla-num @(count > 0 ? stateCls : "")">@(count == 0 ? "—" : FmtDuration(oldest))</span><span class="sla-cap">en eski</span></div>
+                <div><span class="sla-num">@recentBreaches</span><span class="sla-cap">son ihlal</span></div>
+            </div>
+            <div class="sla-scale" aria-hidden="true">
+                <div class="sla-track">
+                    <span class="seg ok" style="flex:@(warn.ToString(System.Globalization.CultureInfo.InvariantCulture))"></span>
+                    <span class="seg warn" style="flex:@((breach - warn).ToString(System.Globalization.CultureInfo.InvariantCulture))"></span>
+                    <span class="seg breach" style="flex:@((scale - breach).ToString(System.Globalization.CultureInfo.InvariantCulture))"></span>
+                    @if (marker is { } m)
+                    {
+                        <span class="sla-marker" style="left:@(m.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span>
+                    }
+                </div>
+                <div class="sla-scale-labels">
+                    <span>0</span>
+                    <span>Uyarı @FmtDuration(warn)</span>
+                    <span>Sınır @FmtDuration(breach)</span>
+                </div>
+            </div>
+            <p class="sla-note">@breachNote</p>
+        </section>;
+    }
 }

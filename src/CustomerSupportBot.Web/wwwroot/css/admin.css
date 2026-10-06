@@ -2144,6 +2144,27 @@ code.at-val {
 .section-toolbar { display: flex; justify-content: flex-end; margin-bottom: var(--space-4); }
 .warn-heading { display: flex; align-items: center; gap: 8px; color: var(--color-warn-text); }
 
+/* ─── Bölümlü seçim (hız, önem filtresi) ─── */
+.segmented {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
+}
+.segmented button {
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+}
+.segmented button.on { background: var(--color-surface); color: var(--color-text); font-weight: 600; box-shadow: var(--shadow-sm); }
+
 /* ─── Filtre çipleri ─── */
 .filter-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--space-4); }
 .chip {

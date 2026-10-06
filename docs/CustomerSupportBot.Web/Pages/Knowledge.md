@@ -12,6 +12,8 @@ Bilgi tabanı (Knowledge Base) yönetim sayfasıdır. Makale oluşturma, düzenl
 - Mevcut makaleyi düzenleme.
 - Makale silme (onay dialog'u ile).
 - Yayın durumu toggle (published/draft).
+- Ortak sayfa başlığı ve "Yeni makale" düğmesi; arama kutusu listenin üstünde. Düzenleyicide silme solda,
+  *Vazgeç* / *Kaydet* sağda (yıkıcı işlem birincil düğmenin yanında durmaz); silme yine onay ister.
 - İndeksleme durumu uyarıları gösterme.
 
 ## Erişim

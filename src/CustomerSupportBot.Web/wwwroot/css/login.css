@@ -186,3 +186,137 @@
     border-color: #7f1d1d;
 }
 [data-theme="dark"] .login-footer { color: #64748b; }
+
+
+/* ════════════════════════════════════════════════════════════════
+   Personel girişi (.staff-login) — bölünmüş ekran. Yalnızca tema
+   değişkenleri; müşteri girişi yukarıdaki sınıfları kullanır.
+   ════════════════════════════════════════════════════════════════ */
+.staff-login {
+    min-height: 100vh;
+    display: flex;
+    flex-wrap: wrap;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-staff);
+}
+
+.sl-brand {
+    flex: 1 1 420px;
+    box-sizing: border-box;
+    padding: 48px;
+    background: #111827;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 48px;
+}
+
+.sl-logo { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; }
+.sl-logo-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: #fff;
+    color: #111827;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sl-pitch { display: flex; flex-direction: column; gap: 14px; max-width: 440px; }
+.sl-pitch h2 { margin: 0; font-size: 32px; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; color: #fff; }
+.sl-pitch p  { margin: 0; color: #c9ced6; font-size: 15px; }
+.sl-foot { font-size: 13px; color: #9ca3af; }
+
+.sl-form-side {
+    flex: 999 1 480px;
+    box-sizing: border-box;
+    padding: 48px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sl-form-wrap { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 20px; }
+.sl-heading { display: flex; flex-direction: column; gap: 6px; }
+.sl-heading h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -.01em; color: var(--color-text); }
+.sl-heading p  { margin: 0; color: var(--color-text-secondary); }
+
+.sl-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--color-danger-bg);
+    color: var(--color-danger);
+    font-size: var(--font-size-sm);
+}
+
+.sl-form { display: flex; flex-direction: column; gap: 6px; }
+.sl-form label { font-size: 13px; font-weight: 500; color: var(--color-text); margin-top: 10px; }
+.sl-form label:first-of-type { margin-top: 0; }
+.sl-form input {
+    width: 100%;
+    height: 44px;
+    box-sizing: border-box;
+    padding: 0 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    font-size: 15px;
+}
+.sl-form input:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; border-color: var(--color-primary); }
+
+.sl-password { position: relative; display: flex; }
+.sl-password input { padding-right: 46px; }
+.sl-eye {
+    position: absolute;
+    right: 2px;
+    top: 2px;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.sl-eye:hover { color: var(--color-text); }
+
+.sl-submit {
+    margin-top: 16px;
+    height: 46px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--color-primary);
+    color: #fff;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.sl-submit:hover:not(:disabled) { background: var(--color-primary-hover); }
+.sl-submit:disabled { opacity: .7; cursor: progress; }
+
+.sl-alt { margin: 0; text-align: center; font-size: 13px; color: var(--color-text-secondary); }
+.sl-alt a { color: var(--color-primary); }
+
+.sl-form .validation-message { font-size: 12px; color: var(--color-danger); }
+
+@media (max-width: 720px) {
+    .sl-brand { flex-basis: 100%; padding: 28px 24px; gap: 20px; }
+    .sl-pitch h2 { font-size: 24px; }
+    .sl-foot { display: none; }
+}

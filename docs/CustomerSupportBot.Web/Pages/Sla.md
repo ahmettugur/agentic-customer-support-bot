@@ -11,6 +11,11 @@ Admin panelinde SLA metriklerini izlemek ve geçmiş SLA olaylarını incelemek 
 - Approval ve escalation SLA ayrı kartlarda göstermek.
 - SLA olay geçmişini tablo olarak listelemek (timestamp, kind, severity, action).
 - Otomatik yenileme (polling).
+- Kuyruk kartları (`QueueCard`): sayı, en eski bekleyen (okunur süre: "42 dk", "2 dk 10 sn"), son ihlal sayısı ve
+  uyarı/sınır eşiklerine göre konumu gösteren ölçek; durum rozeti *Kuyruk boş / Sınır içinde / Uyarı / Sınır aşıldı*.
+- Sınır aşılınca ne olacağı sabit metin değil, ayardan okunur (`OnBreach`: None → "yalnızca kayıt tutulur",
+  AutoReject, AutoApprove; eskalasyonda `BoostPriorityOnBreach`). Eski sayfa her durumda "otomatik reddedilir" yazıyordu.
+- Olay tablosu Türkçe etiketli (İhlal/Uyarı, Onay/Eskalasyon) ve önem filtreli (Tümü · İhlal · Uyarı).
 
 ## Erişim
 `[Authorize(Roles = "Admin")]` — `/sla/*` API'leri `Admin` rolüyle korunuyor

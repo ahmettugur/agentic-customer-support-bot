@@ -12,7 +12,7 @@
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
             <path d="M12 17h.01"/>
         </svg>
-        <p class="muted">Bir trace seçin</p>
+        <p class="muted">Ayrıntısını görmek için bir mesaj seçin</p>
     </div>
 }
 else
@@ -21,15 +21,14 @@ else
     <div class="trace-detail-header">
         <h2 class="trace-detail-query">@(Trace.UserQuery ?? "(boş sorgu)")</h2>
         <div class="trace-detail-meta">
-            <span>🕐 @Trace.StartedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm:ss")</span>
-            <span>⏱ @(Trace.DurationMs is not null ? $"{Trace.DurationMs}ms" : "—")</span>
-            <span>🔄 @(Trace.IterationCount ?? 0) iter</span>
+            <span class="tdm-item"><Icon Name="clock" Size="14" /> @Trace.StartedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm:ss")</span>
+            <span class="tdm-item"><Icon Name="timer" Size="14" /> @(Trace.DurationMs is not null ? $"{Trace.DurationMs} ms" : "—")</span>
+            <span class="tdm-item"><Icon Name="refresh" Size="14" /> @(Trace.IterationCount ?? 0) tur</span>
             <span class="badge badge-@(Trace.TerminationReason ?? "")">@(Trace.TerminationReason ?? "—")</span>
-            <code>@Trace.TraceId</code>
-            <code>session: @ShortId(Trace.SessionId)…</code>
-            <a class="btn-secondary"
-               href="/replay?traceId=@Uri.EscapeDataString(Trace.TraceId ?? "")"
-               style="margin-left:auto;text-decoration:none;font-size:12px;padding:4px 10px">▶ Replay</a>
+            <code title="İz no">@Trace.TraceId</code>
+            <code title="Oturum">oturum: @ShortId(Trace.SessionId)…</code>
+            <a class="btn-primary trace-replay-link"
+               href="/replay?traceId=@Uri.EscapeDataString(Trace.TraceId ?? "")"><Icon Name="play" Size="13" /> Adım adım oynat</a>
         </div>
     </div>
 
@@ -38,7 +37,7 @@ else
     {
         <div class="trace-section @(IsCollapsed("chat") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("chat")'>
-                @Chev <span>💬 Sohbet Geçmişi</span>
+                @Chev <Icon Name="messages" Size="15" /> <span>Sohbet geçmişi</span>
                 <span class="trace-section-tag" style="margin-left:auto">@_chatMessages.Count</span>
             </div>
             <div class="trace-section-body">
@@ -77,7 +76,7 @@ else
                                 @if (msg.Sender == "admin")
                                 {
                                     <div class="trace-chat-agent-header">
-                                        <span class="trace-chat-agent-badge">🧑‍💼 Müşteri Temsilcisi</span>
+                                        <span class="trace-chat-agent-badge"><Icon Name="user" Size="12" /> Müşteri temsilcisi</span>
                                         @if (!string.IsNullOrEmpty(msg.HumanAgent))
                                         {
                                             <span class="trace-chat-agent-name">@msg.HumanAgent</span>
@@ -90,7 +89,7 @@ else
                                 }
                                 else if (msg.Sender == "bot")
                                 {
-                                    <span class="trace-chat-role">Bot</span>
+                                    <span class="trace-chat-role">Asistan</span>
                                 }
                                 <span class="trace-chat-bubble">@msg.Text</span>
                             </div>
@@ -106,7 +105,7 @@ else
     {
         <div class="trace-section @(IsCollapsed("approvals") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("approvals")'>
-                @Chev <span>✅ Onay Geçmişi</span>
+                @Chev <Icon Name="inbox" Size="15" /> <span>Onay geçmişi</span>
                 <span class="trace-section-tag" style="margin-left:auto">@_approvals.Count</span>
             </div>
             <div class="trace-section-body">
@@ -141,7 +140,7 @@ else
                         </div>
                         @if (!string.IsNullOrEmpty(ap.DecisionReason))
                         {
-                            <div class="trace-approval-reason">💬 @ap.DecisionReason</div>
+                            <div class="trace-approval-reason">@ap.DecisionReason</div>
                         }
                     </div>
                 }
@@ -154,7 +153,7 @@ else
     {
         <div class="trace-section @(IsCollapsed("escalations") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("escalations")'>
-                @Chev <span>🚨 Eskalasyon Geçmişi</span>
+                @Chev <Icon Name="alert" Size="15" /> <span>Eskalasyon geçmişi</span>
                 <span class="trace-section-tag" style="margin-left:auto">@_escalations.Count</span>
             </div>
             <div class="trace-section-body">
@@ -182,7 +181,7 @@ else
                             <span class="@escStatusCls">@escStatusLabel</span>
                             @if (isReplan)
                             {
-                                <span class="pill" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe">🔄 Yeniden Planla</span>
+                                <span class="pill pill-blue">Yeniden planlandı</span>
                             }
                             @if (!string.IsNullOrEmpty(esc.AssignedTo))
                             {
@@ -195,12 +194,12 @@ else
                         </div>
                         @if (!string.IsNullOrEmpty(esc.Reason))
                         {
-                            <div class="trace-approval-reason" style="margin-top:4px">🤖 @esc.Reason</div>
+                            <div class="trace-approval-reason" style="margin-top:4px">@esc.Reason</div>
                         }
                         @if (!string.IsNullOrEmpty(esc.Resolution))
                         {
-                            <div class="trace-approval-reason" style="border-left-color:#16a34a;color:#166534;margin-top:4px">
-                                @(isReplan ? "🔄" : "✅") @esc.Resolution
+                            <div class="trace-approval-reason trace-resolution">
+                                @esc.Resolution
                             </div>
                         }
                     </div>
@@ -214,7 +213,7 @@ else
     {
         <div class="trace-section @(IsCollapsed("reasoning") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("reasoning")'>
-                @Chev <span>🧠 Global Reasoning</span>
+                @Chev <Icon Name="sparkles" Size="15" /> <span>Genel akıl yürütme</span>
             </div>
             <div class="trace-section-body">
                 @RenderReasoning(Trace.Reasoning.Value)
@@ -227,7 +226,7 @@ else
     {
         <div class="trace-section @(IsCollapsed("planning") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("planning")'>
-                @Chev <span>📋 Planning</span>
+                @Chev <Icon Name="route" Size="15" /> <span>Yönlendirme kararı</span>
                 <span class="trace-section-tag" style="margin-left:auto">1.4</span>
             </div>
             <div class="trace-section-body">
@@ -241,7 +240,7 @@ else
     {
         <div class="trace-section @(IsCollapsed("specialists") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("specialists")'>
-                @Chev <span>🔧 Specialist Reasonings</span>
+                @Chev <Icon Name="tool" Size="15" /> <span>Asistan akıl yürütmeleri</span>
                 <span class="trace-section-tag" style="margin-left:auto">@Trace.SpecialistReasonings.Count</span>
             </div>
             <div class="trace-section-body">
@@ -258,7 +257,7 @@ else
     {
         <div class="trace-section @(IsCollapsed("agents") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("agents")'>
-                @Chev <span>👥 Agent Visits</span>
+                @Chev <Icon Name="users" Size="15" /> <span>Asistan adımları</span>
             </div>
             <div class="trace-section-body">
                 @foreach (var v in Trace.AgentVisits)
@@ -277,7 +276,7 @@ else
     {
         <div class="trace-section @(IsCollapsed("critique") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("critique")'>
-                @Chev <span>🎯 Final Critique</span>
+                @Chev <Icon Name="shield" Size="15" /> <span>Son değerlendirme</span>
             </div>
             <div class="trace-section-body">
                 @RenderFinalCritique(Trace.SelfCritique.Value)
@@ -295,7 +294,7 @@ else
     {
         <div class="trace-section @(IsCollapsed("response") ? "collapsed" : "")">
             <div class="trace-section-header" @onclick='() => Toggle("response")'>
-                @Chev <span>💬 Final Response</span>
+                @Chev <Icon Name="message" Size="15" /> <span>Müşteriye verilen yanıt</span>
             </div>
             <div class="trace-section-body">
                 <div class="response-box">@Trace.FinalResponse</div>
@@ -344,32 +343,32 @@ else
     private MarkupString RenderReasoning(JsonElement r)
     {
         var sb = new StringBuilder();
-        KvPill(sb, "Intent", Str(r, "intent") ?? "—");
-        KvBar(sb, "Confidence", Score(r, "confidenceScore", "confidence"));
-        KvText(sb, "Analysis", Str(r, "analysis"));
-        KvText(sb, "Rationale", Str(r, "rationale"));
-        KvText(sb, "Next action", Str(r, "nextAction"));
-        KvText(sb, "Decision reason", Str(r, "decisionReason"));
-        KvSteps(sb, "Steps", r, "steps");
-        KvPillList(sb, "Required info", r, "requiredInfo");
-        KvPillList(sb, "Assumptions", r, "assumptions");
+        KvPill(sb, "Niyet", Str(r, "intent") ?? "—");
+        KvBar(sb, "Güven", Score(r, "confidenceScore", "confidence"));
+        KvText(sb, "Analiz", Str(r, "analysis"));
+        KvText(sb, "Gerekçe", Str(r, "rationale"));
+        KvText(sb, "Sonraki adım", Str(r, "nextAction"));
+        KvText(sb, "Karar gerekçesi", Str(r, "decisionReason"));
+        KvSteps(sb, "Adımlar", r, "steps");
+        KvPillList(sb, "Gereken bilgi", r, "requiredInfo");
+        KvPillList(sb, "Varsayımlar", r, "assumptions");
         return new MarkupString(sb.ToString());
     }
 
     private MarkupString RenderPlanning(JsonElement p)
     {
         var sb = new StringBuilder();
-        KvPill(sb, "Detected intent", Str(p, "detectedIntent") ?? "—");
-        KvBar(sb, "Intent confidence", ScoreDirect(p, "intentConfidence"));
-        KvCode(sb, "Selected agent", Str(p, "selectedAgent"));
-        KvText(sb, "Rationale", Str(p, "rationale"));
+        KvPill(sb, "Algılanan niyet", Str(p, "detectedIntent") ?? "—");
+        KvBar(sb, "Niyet güveni", ScoreDirect(p, "intentConfidence"));
+        KvCode(sb, "Seçilen asistan", Str(p, "selectedAgent"));
+        KvText(sb, "Gerekçe", Str(p, "rationale"));
         var needsClr = Bool(p, "needsClarification");
-        KvPill(sb, "Needs clarification", needsClr ? "yes" : "no", needsClr ? "pill pill-yellow" : "pill");
+        KvPill(sb, "Netleştirme gerekli", needsClr ? "evet" : "hayır", needsClr ? "pill pill-yellow" : "pill");
         var clrQ = Str(p, "clarificationQuestion");
-        if (!string.IsNullOrEmpty(clrQ)) KvItalic(sb, "Clarification question", clrQ);
-        KvPillList(sb, "Supporting evidence", p, "supportingEvidence");
+        if (!string.IsNullOrEmpty(clrQ)) KvItalic(sb, "Netleştirme sorusu", clrQ);
+        KvPillList(sb, "Dayanak", p, "supportingEvidence");
         RenderAlternatives(sb, p);
-        KvText(sb, "Task description", Str(p, "taskDescription"));
+        KvText(sb, "Görev", Str(p, "taskDescription"));
         return new MarkupString(sb.ToString());
     }
 
@@ -377,38 +376,38 @@ else
     {
         var sb = new StringBuilder();
         sb.Append("<div class=\"specialist-card\">");
-        sb.Append($"<h4>🛠 {HtmlEnc(Str(s, "agentName") ?? "—")}</h4>");
+        sb.Append($"<h4>{HtmlEnc(Str(s, "agentName") ?? "—")}</h4>");
 
         if (s.TryGetProperty("preToolCheck", out var pre) && pre.ValueKind == JsonValueKind.Object)
         {
             sb.Append("<div class=\"trace-section-tag\">PRE-TOOL CHECK</div>");
             var canProceed = Bool(pre, "canProceed");
-            KvPill(sb, "Can proceed", canProceed ? "yes" : "no", canProceed ? "pill pill-green" : "pill pill-red");
-            KvPillList(sb, "Required", pre, "requiredParams");
-            KvPillListColored(sb, "Collected", pre, "collectedParams", "pill-green");
-            KvPillListColored(sb, "Missing", pre, "missingParams", "pill-red");
-            KvText(sb, "Reasoning", Str(pre, "reasoning"));
-            KvBar(sb, "Confidence", ScoreDirect(pre, "confidence"));
+            KvPill(sb, "Devam edebilir", canProceed ? "evet" : "hayır", canProceed ? "pill pill-green" : "pill pill-red");
+            KvPillList(sb, "Gereken", pre, "requiredParams");
+            KvPillListColored(sb, "Toplanan", pre, "collectedParams", "pill-green");
+            KvPillListColored(sb, "Eksik", pre, "missingParams", "pill-red");
+            KvText(sb, "Akıl yürütme", Str(pre, "reasoning"));
+            KvBar(sb, "Güven", ScoreDirect(pre, "confidence"));
         }
 
         if (s.TryGetProperty("resultConfidence", out var rc) && rc.ValueKind == JsonValueKind.Number)
         {
             sb.Append("<div class=\"trace-section-tag\" style=\"margin-top:10px\">RESULT</div>");
-            KvBar(sb, "Confidence", rc.GetDouble());
-            KvText(sb, "Notes", Str(s, "resultNotes"));
+            KvBar(sb, "Güven", rc.GetDouble());
+            KvText(sb, "Notlar", Str(s, "resultNotes"));
         }
 
         if (s.TryGetProperty("postToolReflection", out var refl) && refl.ValueKind == JsonValueKind.Object)
         {
             sb.Append("<div class=\"trace-section-tag\" style=\"margin-top:10px\">POST-TOOL REFLECTION</div>");
             var status = Str(refl, "status") ?? "—";
-            KvPill(sb, "Status", status, StatusPillClass(status));
+            KvPill(sb, "Durum", status, StatusPillClass(status));
             var taskComplete = Bool(refl, "taskComplete");
-            KvPill(sb, "Task complete", taskComplete ? "yes" : "no", taskComplete ? "pill pill-green" : "pill pill-red");
-            KvCode(sb, "Handoff", Str(refl, "handoffSuggestion"));
-            KvText(sb, "Handoff reason", Str(refl, "handoffReason"));
-            KvText(sb, "Summary", Str(refl, "summary"));
-            KvPillList(sb, "Missing context", refl, "missingContext");
+            KvPill(sb, "Görev tamamlandı", taskComplete ? "evet" : "hayır", taskComplete ? "pill pill-green" : "pill pill-red");
+            KvCode(sb, "Aktarım", Str(refl, "handoffSuggestion"));
+            KvText(sb, "Aktarım nedeni", Str(refl, "handoffReason"));
+            KvText(sb, "Özet", Str(refl, "summary"));
+            KvPillList(sb, "Eksik bağlam", refl, "missingContext");
         }
 
         sb.Append("</div>");
@@ -419,18 +418,18 @@ else
     {
         var sb = new StringBuilder();
         var addressesQuery = Bool(c, "addressesUserQuery");
-        KvPill(sb, "Addresses query", addressesQuery ? "yes" : "no", addressesQuery ? "pill pill-green" : "pill pill-red");
+        KvPill(sb, "Soruyu yanıtlıyor", addressesQuery ? "evet" : "hayır", addressesQuery ? "pill pill-green" : "pill pill-red");
         var tone = Str(c, "tone") ?? "—";
         var toneClass = tone == "appropriate" ? "pill pill-green" : "pill pill-yellow";
-        KvPill(sb, "Tone", tone, toneClass);
-        KvBar(sb, "Completeness", ScoreDirect(c, "completeness"));
+        KvPill(sb, "Ton", tone, toneClass);
+        KvBar(sb, "Tamlık", ScoreDirect(c, "completeness"));
         var halluRisk = c.TryGetProperty("hallucinationRisk", out var hr) && hr.ValueKind == JsonValueKind.Number ? hr.GetDouble() : 0;
-        KvPill(sb, "Hallucination risk", halluRisk.ToString("F2"), halluRisk > 0.3 ? "pill pill-red" : "pill pill-green");
+        KvPill(sb, "Uydurma riski", halluRisk.ToString("F2"), halluRisk > 0.3 ? "pill pill-red" : "pill pill-green");
         var revisionNeeded = Bool(c, "revisionNeeded");
-        KvPill(sb, "Revision needed", revisionNeeded ? "yes" : "no", revisionNeeded ? "pill pill-yellow" : "pill pill-green");
-        KvPillList(sb, "Sources", c, "sources");
-        KvPillList(sb, "Issues found", c, "issuesFound");
-        KvText(sb, "Revision notes", Str(c, "revisionNotes"));
+        KvPill(sb, "Düzeltme gerekli", revisionNeeded ? "evet" : "hayır", revisionNeeded ? "pill pill-yellow" : "pill pill-green");
+        KvPillList(sb, "Kaynaklar", c, "sources");
+        KvPillList(sb, "Bulunan sorunlar", c, "issuesFound");
+        KvText(sb, "Düzeltme notları", Str(c, "revisionNotes"));
         return new MarkupString(sb.ToString());
     }
 

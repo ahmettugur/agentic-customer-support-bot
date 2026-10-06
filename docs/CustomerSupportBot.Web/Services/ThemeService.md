@@ -13,7 +13,7 @@ Navigasyon menüsündeki tema toggle butonunda ve sayfa ilk yüklenirken mevcut 
 
 ## Diğer Katman ve Bileşenlerle İlişkileri
 - **DI ile inject edilen**: `IJSRuntime`.
-- **Kullanan bileşenler**: `NavMenu.razor`, `AdminNavBar.razor`.
+- **Kullanan bileşenler**: `NavMenu.razor`, `StaffSidebar.razor`.
 - **JS bağımlılığı**: `wwwroot` içindeki `csbTheme` JavaScript nesnesi.
 
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı

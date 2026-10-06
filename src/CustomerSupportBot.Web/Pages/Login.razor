@@ -7,65 +7,70 @@
 
 <link rel="stylesheet" href="css/login.css" />
 
-<div class="login-page-wrap">
-    <div class="login-card">
-        <div class="login-logo" aria-hidden="true">
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
+@* Personel girişi: solda tanıtım alanı, sağda form. Stiller .staff-login altında (login.css) — müşteri
+   girişi (CustomerLogin) aynı dosyanın eski sınıflarını kullanmaya devam eder. *@
+<div class="staff-login">
+    <section class="sl-brand" aria-hidden="true">
+        <div class="sl-logo">
+            <span class="sl-logo-mark"><Icon Name="message" Size="18" StrokeWidth="2" /></span>
+            <span>Destek Konsolu</span>
         </div>
-        <h1>Yönetici Girişi</h1>
-        <p class="subtitle">Customer Support Bot — Admin Panel</p>
+        <div class="sl-pitch">
+            <h2>Asistanın karar veremediği yerde siz devreye girersiniz.</h2>
+            <p>Onay bekleyen talepler, eskalasyonlar ve canlı sohbetler tek yerde.</p>
+        </div>
+        <span class="sl-foot">Yalnızca yönetici ve temsilci hesapları içindir.</span>
+    </section>
 
-        @if (!string.IsNullOrEmpty(_error))
-        {
-            <div class="login-error visible" role="alert" aria-live="polite">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
-                @_error
+    <section class="sl-form-side">
+        <div class="sl-form-wrap">
+            <div class="sl-heading">
+                <h1>Giriş yap</h1>
+                <p>Yönetici veya temsilci hesabınızla devam edin.</p>
             </div>
-        }
 
-        <EditForm Model="_model" OnValidSubmit="HandleLoginAsync" class="login-form">
-            <DataAnnotationsValidator />
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="sl-error" role="alert" aria-live="polite">
+                    <Icon Name="alert" Size="15" />
+                    @_error
+                </div>
+            }
 
-            <label for="username">Kullanıcı Adı</label>
-            <InputText id="username" @bind-Value="_model.Username"
-                       autocomplete="username" autofocus
-                       aria-required="true" />
+            <EditForm Model="_model" OnValidSubmit="HandleLoginAsync" class="sl-form">
+                <DataAnnotationsValidator />
 
-            <label for="password">Parola</label>
-            <div class="password-wrapper">
-                <InputText id="password" type="@(_showPassword ? "text" : "password")"
-                           @bind-Value="_model.Password"
-                           autocomplete="current-password"
+                <label for="username">Kullanıcı adı</label>
+                <InputText id="username" @bind-Value="_model.Username"
+                           autocomplete="username" autofocus
                            aria-required="true" />
-                <button type="button" class="btn-show-password"
-                        @onclick="() => _showPassword = !_showPassword"
-                        aria-label="@(_showPassword ? "Parolayı gizle" : "Parolayı göster")"
-                        title="@(_showPassword ? "Gizle" : "Göster")">
-                    @if (_showPassword)
+
+                <label for="password">Parola</label>
+                <div class="sl-password">
+                    <InputText id="password" type="@(_showPassword ? "text" : "password")"
+                               @bind-Value="_model.Password"
+                               autocomplete="current-password"
+                               aria-required="true" />
+                    <button type="button" class="sl-eye"
+                            @onclick="() => _showPassword = !_showPassword"
+                            aria-label="@(_showPassword ? "Parolayı gizle" : "Parolayı göster")"
+                            title="@(_showPassword ? "Gizle" : "Göster")">
+                        <Icon Name="@(_showPassword ? "eye-off" : "eye")" Size="18" />
+                    </button>
+                </div>
+
+                <button type="submit" id="loginBtn" class="sl-submit" disabled="@_loading" aria-busy="@_loading">
+                    @if (_loading)
                     {
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" x2="23" y1="1" y2="23"/></svg>
+                        <span class="login-spinner" aria-hidden="true"></span>
                     }
-                    else
-                    {
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    }
+                    @(_loading ? "Giriş yapılıyor…" : "Giriş yap")
                 </button>
-            </div>
+            </EditForm>
 
-            <button type="submit" id="loginBtn" disabled="@_loading"
-                    aria-busy="@_loading">
-                @if (_loading)
-                {
-                    <span class="login-spinner" aria-hidden="true"></span>
-                }
-                @(_loading ? "Giriş yapılıyor…" : "Giriş Yap")
-            </button>
-        </EditForm>
-
-        <p class="login-footer">JWT Bearer · Token 60dk · Refresh 14g</p>
-    </div>
+            <p class="sl-alt">Müşteri misiniz? <a href="/customer-login">Müşteri girişi</a></p>
+        </div>
+    </section>
 </div>
 
 @code {

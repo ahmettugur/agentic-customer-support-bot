@@ -39,10 +39,10 @@ public class ReplayStepBuilderTests
         ], """{"agentName":"ComplaintAgent"}""");
 
         Titles(trace).Should().Equal(
-            "Kullanıcı Sorusu", "Pre-analysis Reasoning", "→ ComplaintAgent",
-            "PlanningAgent_b58d", "ComplaintAgent_f183", "Specialist: ComplaintAgent", "ResponseAgent_5964",
-            "Bot Yanıtı");
-        ReplayStepBuilder.Build(trace).Single(s => s.Title == "Specialist: ComplaintAgent").Time
+            "Müşteri mesajı", "Ön analiz", "→ ComplaintAgent",
+            "PlanningAgent_b58d", "ComplaintAgent_f183", "Değerlendirme: ComplaintAgent", "ResponseAgent_5964",
+            "Asistanın yanıtı");
+        ReplayStepBuilder.Build(trace).Single(s => s.Title == "Değerlendirme: ComplaintAgent").Time
             .Should().Be(T0.AddMilliseconds(3561 + 3493), "ajanın bitiş zamanı");
     }
 
@@ -58,7 +58,7 @@ public class ReplayStepBuilderTests
         ], """{"agentName":"ComplaintAgent","resultNotes":"ilk"}""", """{"agentName":"ComplaintAgent","resultNotes":"ikinci"}""");
 
         Titles(trace).Skip(3).Take(5).Should().Equal(
-            "ComplaintAgent_a", "Specialist: ComplaintAgent", "PlanningAgent_b", "ComplaintAgent_c", "Specialist: ComplaintAgent");
+            "ComplaintAgent_a", "Değerlendirme: ComplaintAgent", "PlanningAgent_b", "ComplaintAgent_c", "Değerlendirme: ComplaintAgent");
     }
 
     [Fact]
@@ -67,7 +67,7 @@ public class ReplayStepBuilderTests
         var trace = Trace([Visit("ComplaintAgent_a", 0, 1000), Visit("ResponseAgent_b", 2000, 500)],
             $$"""{"agentName":"ComplaintAgent","recordedAt":"{{T0.AddMilliseconds(2600):O}}"}""");
 
-        Titles(trace).Skip(3).Take(3).Should().Equal("ComplaintAgent_a", "ResponseAgent_b", "Specialist: ComplaintAgent");
+        Titles(trace).Skip(3).Take(3).Should().Equal("ComplaintAgent_a", "ResponseAgent_b", "Değerlendirme: ComplaintAgent");
     }
 
     [Fact]
@@ -75,6 +75,6 @@ public class ReplayStepBuilderTests
     {
         var trace = Trace([Visit("ResponseAgent_b", 2000, 500)], """{"agentName":"OrderAgent"}""");
 
-        ReplayStepBuilder.Build(trace).Single(s => s.Title == "Specialist: OrderAgent").Time.Should().Be(T0);
+        ReplayStepBuilder.Build(trace).Single(s => s.Title == "Değerlendirme: OrderAgent").Time.Should().Be(T0);
     }
 }

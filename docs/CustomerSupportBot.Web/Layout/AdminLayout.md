@@ -4,40 +4,31 @@
 
 ## Ne İşe Yarar
 
-Admin/Agent paneli sayfaları (`/admin`, `/traces`, `/replay`, `/sla`, `/knowledge`) için
-kabuk (shell) layout'udur: üst navigasyon barını ve toast bildirim alanını sabit tutar,
-sayfa içeriğini `@Body` ile ortasına basar.
+Personel sayfaları (`/admin`, `/traces`, `/replay`, `/sla`, `/knowledge`) için kabuk (shell) layout'udur:
+solda [`StaffSidebar`](StaffSidebar.md), sağda sayfa içeriği (`@Body`) ve sayfa altında toast alanı.
 
 ## Hangi Amaçla Kullanılır
 
-Her admin/agent sayfasının `@layout AdminLayout` direktifiyle bu kabuğa sarıldığı yerdir.
-Sayfa değiştiğinde yalnızca `@Body` yeniden render edilir, üst bar ve toast alanı sabit kalır.
+Her personel sayfasının `@layout AdminLayout` direktifiyle bu kabuğa sarıldığı yerdir. Sayfa değiştiğinde
+yalnızca `@Body` yeniden render edilir; kenar çubuğu ve toast alanı sabit kalır.
 
 ## Sorumlulukları
 
-- `admin.css` stylesheet'ini yüklemek.
-- [`AdminNavBar`](AdminNavBar.md) bileşenini üstte sabit göstermek.
-- `@Body` ile aktif sayfa içeriğini render etmek.
-- [`ToastContainer`](../Components/ToastContainer.md) bileşenini sayfa altında tutmak — böylece
-  hangi admin sayfasında olunursa olunsun toast bildirimleri (ör. "Onay kaydedildi") aynı yerde çıkar.
+- `admin.css` stylesheet'ini yüklemek (ortak sayfa başlığı `.page-header`, `.live-toggle`, `.segmented` gibi
+  paylaşılan stiller burada).
+- `.staff-shell` (flex) içinde [`StaffSidebar`](StaffSidebar.md) ve `.staff-main` içinde `@Body`'yi yerleştirmek.
+- [`ToastContainer`](../Components/ToastContainer.md) bileşenini sayfa altında tutmak.
 
 ## Diğer Katman ve Bileşenlerle İlişkileri
 
-- `LayoutComponentBase`'den türer (`@inherits`), Blazor'un standart layout mekanizmasını kullanır.
-- Alt bileşenler: [`AdminNavBar`](AdminNavBar.md), [`ToastContainer`](../Components/ToastContainer.md).
+- `LayoutComponentBase`'den türer.
+- Alt bileşenler: [`StaffSidebar`](StaffSidebar.md), [`ToastContainer`](../Components/ToastContainer.md).
 - Kullanan sayfalar: [Admin](../Pages/Admin.md), [Traces](../Pages/Traces.md), [Replay](../Pages/Replay.md), [Sla](../Pages/Sla.md), [Knowledge](../Pages/Knowledge.md).
 
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-Kod içermeyen saf bir kompozisyon dosyasıdır — kendi state'i veya `@code` bloğu yoktur. Tüm
-mantık (tema, logout, navigasyon) [`AdminNavBar`](AdminNavBar.md)'a devredilmiştir; bu ayrım
-tek-sorumluluk ilkesine hizmet eder: layout yalnızca "hangi bileşenler nerede duracak"ı
-belirler, davranışı barındırmaz.
+Kod içermeyen saf bir kompozisyon dosyasıdır; davranış (gezinme, tema, çıkış) [`StaffSidebar`](StaffSidebar.md)'dadır.
 
 ## Metotlar / Üyeler
 
 Yok — yalnızca markup kompozisyonu.
-
-## Bağımlılıklar
-
-Yok (constructor injection / `@inject` kullanılmaz).

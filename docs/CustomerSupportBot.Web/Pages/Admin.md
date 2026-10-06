@@ -1,7 +1,7 @@
 # Admin.razor
 
 ## Ne İşe Yarar
-Admin ve Agent panelinin ana sayfasıdır. Approvals, escalations, aktif chat oturumları, analytics dashboard, improvement yönetimi ve agent listesini sekme tabanlı arayüzde sunar.
+Admin ve Agent panelinin ana sayfasıdır. Onaylar, eskalasyonlar, canlı sohbetler, analiz, konuşma arama, siparişler, hazır yanıtlar ve iyileştirme önerilerini **adresli bölümler** (`/admin?tab=…`) halinde sunar; gezinme sol kenar çubuğundadır ([StaffSidebar](../Layout/StaffSidebar.md)).
 
 ## Hangi Amaçla Kullanılır
 `/admin` route'unda, `Admin` veya `Agent` rolüyle erişilir (`[Authorize(Roles = "Admin,Agent")]`).
@@ -38,12 +38,23 @@ Tüm yönetim işlemlerinin tek noktadan yapıldığı kapsamlı dashboard'dur.
 > yalnızca C# string içeriğine yazılan kopyalar `&` olarak düzeltildi.
 
 ## Sorumlulukları
-- Sekme navigasyonu: Approvals, Escalations, Chat Sessions, Analytics, Improvements, Agents, Sessions.
+- Bölüm yönetimi: açılan bölüm `?tab=` sorgusundan gelir ([`AdminTabs.Normalize`](../Helpers/AdminTabs.md), temsilci yalnızca
+  `escalations`/`chats`). Kenar çubuğu ya da geri tuşuyla adres değişince sayfa **yeniden oluşmaz**: `OnParametersSetAsync`
+  yalnızca bölümü değiştirir, açık sohbet paneli ve canlı bağlantılar korunur. Sayfa içinden geçişte (ör. devraldıktan sonra
+  sohbetlere) `SwitchTabAsync` adresi de günceller. Sayfa başlığı (`SectionTitle`/`SectionDescription`) bölüme göre değişir;
+  "Canlı · 15 sn'de bir" anahtarı otomatik yenilemeyi açıp kapatır, yanındaki düğme hemen yeniler.
+- Kenar çubuğu rozetleri: `RefreshBadgesAsync` sonrası sayılar [`StaffBadgeState`](../Services/StaffBadgeState.md)'e yazılır.
 - Approval onay/red işlemleri (gerekçe zorunluluğu dahil). Onay Kuyruğu sekmesindeki kayıt, admin
   karar verene ya da çok uzun süre (varsayılan 72 saat, `ApprovalOptions.StalePendingHours`)
   yanıtsız kalırsa arka planda otomatik reddedilene kadar kuyrukta bekler — sabit bir saniye
   sayacı yoktur (bkz. [`SlaPortService.md`](../../CustomerSupportBot.Application/Services/Sla/SlaPortService.md#slaapprovalsonbreach-varsayılanı--autoreject--none), eskiden burada yanlışlıkla 60 saniyede otomatik reddeden bir SLA config'i vardı).
-- Onay kartını çizmek — aşağıdaki bölüme bakın.
+- Onaylar bölümü **liste + ayrıntı** düzenindedir: solda en uzun bekleyen en üstte (15 dakikayı aşan bekleme vurgulanır) ve
+  tür/yüksek risk filtreleri; sağda seçili talebin ayrıntısı ve karar alanı. Karar notu artık modal yerine ayrıntı panelinin
+  altındadır; yüksek riskli talepte not yazılmadan **Onayla** pasiftir. Karar isteği sürerken düğmeler pasif ve
+  "İşleniyor…" görünür; karar verilen talep listeden hemen kalkar, sıradaki seçilir (`DecideApprovalAsync`).
+- Eskalasyon kartı: tek ana eylem (**Devral ve sohbet et**), **Temsilciye ata** ve "⋯" menüsünde *Asistana yeniden planlat*,
+  *Çözüldü olarak işaretle*, *Gereksiz — kapat*. Durum ve asistan adları Türkçe (`EscalationStatusLabel`, `AgentDisplayName`).
+- Onay ayrıntısını çizmek — aşağıdaki bölüme bakın.
 - Escalation yönetimi (acknowledge, resolve, dismiss, replan).
 - Aktif chat oturumlarını izleme, mesaj geçmişi görme, takeover/release, mesaj gönderme.
 - Analytics dashboard ve oturum bazlı analitik (sentiment timeline, grafikler).
@@ -83,7 +94,7 @@ ve insan diliyle yanıtlar; makine kimlikleri katlanmış `<details>` bloğuna i
 | Başlık tool adı değil **eylem** (`order_placement_tool` → *Yeni Sipariş*) | Admin geliştirici değil; tool adı hata ayıklama bilgisidir, karar bilgisi değil |
 | **Müşteri adı + numarası** başlıkta | Ad tanınırlık, numara kesinlik verir (aynı adı taşıyan iki müşteri olabilir). Partner beyanı devreye girdiğinde bu alan daha da kritikleşir |
 | Sipariş kalemleri **tablo** | Adetler sağa yaslı ve `tabular-nums` ile hizalı; göz tek kolonda aşağı inip karşılaştırabiliyor. Birden fazla kalemde toplam satırı çıkar |
-| **Yüksek risk** rozeti | `ReasonRequired` sunucudan gelir; admin gerekçe zorunluluğunu modal açılmadan **önce** görür |
+| **Yüksek risk** rozeti | `ReasonRequired` sunucudan gelir; admin gerekçe zorunluluğunu listede ve ayrıntıda karar vermeden **önce** görür |
 | Jenerik gerekçe **gizlenir** | *“OrderAgent bu tool'u çağırmak istiyor.”* PlanningAgent rationale üretemediğinde düşülen şablondur — yer kaplar, bilgi taşımaz |
 | Tool/kayıt/session/trace ve ham parametreler **katlanır** | Karar için gerekmez, hata ayıklama için bir tık uzaktadır |
 
@@ -146,7 +157,7 @@ sohbete yazılmaz. LLM bölümü üretilemezse kart hatayı gösterir, diğer b�
 
 ## Siparişler (yalnız yönetici)
 
-**📦 Siparişler** sekmesi: sipariş no ile bul (`GET /orders/{id}`); durum, ürünler, kargo/teslim bilgisi.
+**Siparişler** bölümü: sipariş no ile bul (`GET /orders/{id}`); durum, ürünler, kargo/teslim bilgisi.
 İşleniyorsa kargo firması + takip no ile **Kargoya verildi**, kargodaysa **Teslim edildi**. Geçişte müşteriye
 e-posta gider; aynı durumu tekrar işaretlemek ikinci e-posta göndermez. Geçersiz geçişte (ör. iptal edilmiş
 sipariş) sunucunun mesajı mevcut durumla gösterilir.
@@ -159,7 +170,7 @@ gösterilmez. Değerler `/analytics/dashboard`'daki `DailyLlm*`/`MonthlyLlm*` al
 
 ## Konuşma arama (yalnız yönetici)
 
-**🔎 Konuşmalar** sekmesi: mesaj metni, müşteri no, başlangıç/bitiş tarihi, kapanış nedeni (liste
+**Konuşmalar** bölümü: mesaj metni, müşteri no, başlangıç/bitiş tarihi, kapanış nedeni (liste
 `conversation-closing/options`'tan) ve etiket. Sekme ilk açılışta son konuşmaları listeler; otomatik
 yenileme aramayı tekrarlamaz (sonuçlar ve sayfalar sıfırlanmasın). Tarih seçimi tarayıcının yerel gününe
 göre UTC anlarına çevrilir (bitiş günü dahil). Sonuç kartında eşleşen kısım `<mark>` ile vurgulanır;
@@ -195,7 +206,7 @@ arama 250 ms gecikmeyle sunucuya gider). Seçilen yanıt mesaj kutusuna eklenir 
 doluysa sonuna eklenir — ve **gönderilmez**; temsilci düzenleyip kendisi gönderir. Seçimden sonra liste
 kapanır.
 
-**Yönetim:** yalnız yöneticinin gördüğü **📋 Hazır Yanıtlar** sekmesi: liste, ekle/düzenle/sil. Kısayol
+**Yönetim:** yalnız yöneticinin gördüğü **Hazır yanıtlar** bölümü: liste, ekle/düzenle/sil. Kısayol
 isteğe bağlıdır; küçük harfe çevrilir (Türkçe `I`/`İ` → `i`) ve benzersizdir — çakışmada sunucunun
 hata metni formda gösterilir.
 

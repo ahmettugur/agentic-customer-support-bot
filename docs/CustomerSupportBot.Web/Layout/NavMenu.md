@@ -23,7 +23,7 @@ görünür — projedeki asıl sayfalar (`Chat`, `Admin` vb.) kendi özel layout
 > 🐞 **Doküman düzeltmesi:** Bu dosya için daha önce yazılan doküman "responsive mobil menü
 > toggle" ve "ToastContainer entegrasyonu" iddia ediyordu — gerçek kodda **ikisi de yok**.
 > `NavMenu.razor`'da mobil hamburger menü mantığı veya `ToastContainer` referansı bulunmuyor;
-> bu satırlar muhtemelen [`AdminNavBar`](AdminNavBar.md)/[`AdminLayout`](AdminLayout.md) ile
+> bu satırlar muhtemelen o zamanki admin üst menüsü/[`AdminLayout`](AdminLayout.md) ile
 > karıştırılmıştı (o ikisi de kendi bağlamında farklı özellikler taşıyor). Aşağıdaki içerik
 > doğrudan `NavMenu.razor` kaynağından çıkarılmıştır.
 
@@ -36,7 +36,7 @@ görünür — projedeki asıl sayfalar (`Chat`, `Admin` vb.) kendi özel layout
 
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 
-[`AdminNavBar`](AdminNavBar.md) ile neredeyse aynı tema-toggle mantığını tekrar eder (aynı
+[`StaffSidebar`](StaffSidebar.md) ile neredeyse aynı tema-toggle mantığını tekrar eder (aynı
 `OnAfterRenderAsync`/`ToggleAsync`/`Dispose` üçlüsü) — ortak bir base class veya paylaşılan
 bileşene çıkarılmamış olması, `MainLayout`'un fiilen kullanılmayan bir fallback olmasıyla
 açıklanabilir: iki ayrı navbar'ı birleştirmenin getirisi, aktif olarak kullanılmayan bir

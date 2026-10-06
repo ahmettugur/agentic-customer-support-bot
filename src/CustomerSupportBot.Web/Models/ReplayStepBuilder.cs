@@ -29,11 +29,11 @@ public static class ReplayStepBuilder
     {
         var steps = new List<ReplayStep>
         {
-            new("init", trace.StartedAt, "Kullanıcı Sorusu", new ReplayInitPayload(trace.TraceId, trace.SessionId, trace.UserQuery))
+            new("init", trace.StartedAt, "Müşteri mesajı", new ReplayInitPayload(trace.TraceId, trace.SessionId, trace.UserQuery))
         };
 
         if (trace.Reasoning.HasValue)
-            steps.Add(new ReplayStep("reasoning", trace.StartedAt, "Pre-analysis Reasoning",
+            steps.Add(new ReplayStep("reasoning", trace.StartedAt, "Ön analiz",
                 new ReplayJsonPayload(JsonSerializer.Serialize(trace.Reasoning, Pretty))));
 
         if (trace.Planning.HasValue)
@@ -62,7 +62,7 @@ public static class ReplayStepBuilder
                     && DateTimeOffset.TryParse(ra.GetString(), out var parsed)
                 ? parsed
                 : FinishOfNextVisit(trace.AgentVisits, agentName, usedVisits) ?? trace.StartedAt;
-            events.Add((t, "reasoning", $"Specialist: {agentName}", new ReplayJsonPayload(JsonSerializer.Serialize(sr, Pretty))));
+            events.Add((t, "reasoning", $"Değerlendirme: {agentName}", new ReplayJsonPayload(JsonSerializer.Serialize(sr, Pretty))));
         }
 
         foreach (var tc in trace.ToolCalls)
@@ -73,7 +73,7 @@ public static class ReplayStepBuilder
         foreach (var (t, kind, title, payload) in events.OrderBy(e => e.T))
             steps.Add(new ReplayStep(kind, t, title, payload));
 
-        steps.Add(new ReplayStep("final", trace.CompletedAt ?? trace.StartedAt, "Bot Yanıtı",
+        steps.Add(new ReplayStep("final", trace.CompletedAt ?? trace.StartedAt, "Asistanın yanıtı",
             new ReplayFinalPayload(trace.TerminationReason, trace.DurationMs, trace.IterationCount, trace.Error, trace.FinalResponse)));
         return steps;
     }

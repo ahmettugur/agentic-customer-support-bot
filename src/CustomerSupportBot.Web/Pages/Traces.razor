@@ -9,36 +9,23 @@
 
 <div class="traces-layout">
 
-    <!-- HEADER -->
-    <header class="traces-header">
-        <div class="traces-header-left">
-            <a href="/" class="btn-icon" title="Sohbete dön">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m15 18-6-6 6-6"/>
-                </svg>
-            </a>
-            <div class="traces-header-info">
-                <h1>Reasoning Trace Dashboard</h1>
-                <p class="muted">Session bazlı düşünme zinciri takibi</p>
-                @if (_refreshError is not null)
-                {
-                    <p role="status">@_refreshError</p>
-                }
-            </div>
+    <header class="page-header">
+        <div class="page-header-text">
+            <h1>İzler</h1>
+            <p>Her müşteri mesajında asistanın hangi adımlarla karar verdiği.</p>
+            @if (_refreshError is not null)
+            {
+                <p role="status" class="page-header-error">@_refreshError</p>
+            }
         </div>
-        <div class="traces-header-right">
-            <label class="auto-refresh-toggle" title="Otomatik yenileme">
+        <div class="page-header-actions">
+            <label class="live-toggle @(_autoRefresh ? "on" : "")" title="Listeleri 15 saniyede bir otomatik yenile">
                 <input type="checkbox" @bind="_autoRefresh" @bind:after="OnAutoRefreshChanged" />
-                <span>Auto-refresh (15sn)</span>
+                <span class="live-dot" aria-hidden="true"></span>
+                <span>@(_autoRefresh ? "Canlı · 15 sn'de bir" : "Otomatik yenileme kapalı")</span>
             </label>
-            <button class="btn-secondary" @onclick="RefreshAsync" title="Yenile">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-                    <path d="M21 3v5h-5"/>
-                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-                    <path d="M3 21v-5h5"/>
-                </svg>
-                Yenile
+            <button type="button" class="btn-icon-bordered" @onclick="RefreshAsync" aria-label="Şimdi yenile" title="Şimdi yenile">
+                <Icon Name="refresh" />
             </button>
         </div>
     </header>
@@ -54,11 +41,8 @@
                     <span>Oturumlar</span>
                     <span class="traces-session-count">@_sessions.Count</span>
                 </div>
-                <button class="btn-all-traces" @onclick="ShowAllTracesAsync" title="Tüm trace'leri göster">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
-                    </svg>
-                    Tümü
+                <button class="btn-all-traces" @onclick="ShowAllTracesAsync" title="Tüm oturumların izlerini göster">
+                    Tüm izler
                 </button>
             </div>
             <div class="traces-sessions-list">
@@ -96,7 +80,7 @@
                 else if (_traces.Count == 0)
                 {
                     <div class="traces-empty">
-                        @(_viewMode == "session" ? "Bu oturumda henüz trace yok." : "Bir oturum seçin veya Tümü butonuna tıklayın")
+                        @(_viewMode == "session" ? "Bu oturumda henüz iz yok." : "Bir oturum seçin ya da “Tüm izler”e tıklayın.")
                     </div>
                 }
                 else
@@ -139,7 +123,7 @@
     private string?            _selectedSessionId;
     private string?            _selectedTraceId;
     private string             _viewMode      = "session";
-    private string             _traceLabel    = "trace";
+    private string             _traceLabel    = "mesaj";
     private bool               _autoRefresh   = true;
     private bool               _loading       = true;
     private bool               _loadingTraces;
@@ -219,7 +203,7 @@
     private async Task LoadTracesForSessionAsync(string sessionId)
     {
         _loadingTraces = true;
-        _traceLabel    = "trace (oturum)";
+        _traceLabel    = "mesaj · bu oturum";
         StateHasChanged();
         _traces        = await TracesApi.GetBySessionAsync(sessionId);
         _loadingTraces = false;
@@ -228,7 +212,7 @@
     private async Task LoadAllTracesAsync()
     {
         _loadingTraces = true;
-        _traceLabel    = "trace (tümü)";
+        _traceLabel    = "mesaj · tüm oturumlar";
         StateHasChanged();
         _traces        = await TracesApi.GetRecentAsync(50);
         _loadingTraces = false;

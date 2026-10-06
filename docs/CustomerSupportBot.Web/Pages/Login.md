@@ -12,6 +12,9 @@ Admin ve Agent kullanıcıları için giriş sayfasıdır.
 - Başarılı login'de `AppAuthStateProvider.NotifyStateChanged()` ile Blazor auth cascade'ini tetiklemek.
 - `?return=` query parametresinden dönüş URL'ini okumak.
 - Zaten giriş yapılmışsa otomatik yönlendirme.
+- Bölünmüş ekran: solda tanıtım alanı, sağda form; parolayı göster/gizle, müşteri girişine bağlantı. Stiller
+  `login.css` içinde `.staff-login` altında — [CustomerLogin](CustomerLogin.md) aynı dosyanın eski sınıflarını
+  kullanmaya devam eder, görünümü değişmez.
 - Hata mesajlarını göstermek.
 - Parola göster/gizle toggle.
 

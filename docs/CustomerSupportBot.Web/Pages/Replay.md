@@ -12,6 +12,10 @@ Bir trace ID'si ile açılarak, o trace'in başlangıcından sonuna kadar reason
 - Adımları kronolojik sırada, animasyonlu şekilde oynatmak.
 - Her adım tipine uygun görsel render: Init, Agent Visit, Tool Call, Reasoning, Planning, Final.
 - İleri/geri navigasyon ve otomatik oynatma.
+- Oynatıcı: başa/önceki/oynat-duraklat/sonraki/sona düğmeleri (ikon + `aria-label`), "Adım N / M" ilerleme çubuğu ve
+  0,5× · 1× · 2× · 5× bölümlü hız seçimi (`SetSpeed`). Başlıkta "← İzler" dönüş bağlantısı ve iz numarası kutusu.
+- Adım başlıkları Türkçe (`Models/ReplayStepBuilder.cs`): *Müşteri mesajı*, *Ön analiz*,
+  *Değerlendirme: {asistan}*, *Asistanın yanıtı*. `replay.css` yalnızca tema değişkenleri kullanır (ayrı karanlık tema kuralı yok).
 
 ## Erişim
 `[Authorize(Roles = "Admin")]` — `/traces/*` API'leri `Program.cs`'de `Admin` rolüyle

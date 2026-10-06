@@ -12,6 +12,7 @@ Blazor'un `<AuthorizeRouteView>`, `<AuthorizeView>` ve `[Authorize]` attribute m
 - Token mevcutsa (ve gerekirse refresh sonrası) `Username`, `Role`, `FullName` claim'leri içeren `ClaimsPrincipal` oluşturmak.
 - Token yoksa veya refresh başarısızsa anonim kimlik döndürmek.
 - Login/logout sonrası Blazor cascade'ini tetiklemek (`NotifyStateChanged`).
+- Gezinmede: kimlik alanı (staff ↔ customer) değiştiyse cascade'i yeniden yayınlamak; aynı alan içinde oturumu arka planda yeniden doğrulayıp **yalnızca geçersiz kaldıysa** yayınlamak.
 
 ## Diğer Katman ve Bileşenlerle İlişkileri
 - **DI ile inject edilen**: [AuthTokenStore](AuthTokenStore.md), `AuthService` (refresh çağrısı için).
@@ -22,7 +23,15 @@ Blazor'un `<AuthorizeRouteView>`, `<AuthorizeView>` ve `[Authorize]` attribute m
 ## Kullanılma Nedeni ve Tasarım Yaklaşımı
 Blazor WASM'da sunucu tarafı session olmadığı için kimlik bilgisi `localStorage`'dan okunur. `AuthTokenData` record'ındaki `Username`/`Role`/`FullName` alanları doğrudan claim'e çevrilir — bunlar için JWT'yi decode etmeye gerek yok (login/refresh yanıtında zaten düz JSON olarak geliyorlar).
 
-> ⚠️ **Neden `exp` claim'i ayrıca decode ediliyor?** Eskiden bu sınıf yalnızca localStorage'da bir token *var mı* diye bakıyordu — süresi dolmuş bir token da "giriş yapılmış" sayılıyordu. Sonuç: kullanıcı `[Authorize]`'lı bir sayfayı (ör. `/`, chat) sorunsuz açabiliyor, ekranı görüyor, ama ilk API çağrısında 401 alıyordu — üstelik chat akışındaki ham `fetch`/`EventSource` çağrıları bu 401'i sessizce yutuyordu (bkz. [`Chat.md`](../Pages/Chat.md)), kullanıcı "login görünüyorum ama sistem çalışmıyor" durumunda kalıyordu. Artık `GetAuthenticationStateAsync` her çağrıldığında (sayfa açılışı, her navigasyon — `OnLocationChanged`) token'ın `exp`'ini kontrol ediyor; süresi dolmuşsa (30sn tampon payıyla) `AuthService.TryRefreshAsync` ile sessizce yenilemeyi dener. Refresh token da geçersizse `Anonymous` döner ve `AuthorizeRouteView` kullanıcıyı [`RedirectToLogin`](../Layout/RedirectToLogin.md)'e düşürür — artık geçersiz bir oturumla sayfaya asla girilemez.
+> ⚠️ **Neden `exp` claim'i ayrıca decode ediliyor?** Eskiden bu sınıf yalnızca localStorage'da bir token *var mı* diye bakıyordu — süresi dolmuş bir token da "giriş yapılmış" sayılıyordu. Sonuç: kullanıcı `[Authorize]`'lı bir sayfayı (ör. `/`, chat) sorunsuz açabiliyor, ekranı görüyor, ama ilk API çağrısında 401 alıyordu — üstelik chat akışındaki ham `fetch`/`EventSource` çağrıları bu 401'i sessizce yutuyordu (bkz. [`Chat.md`](../Pages/Chat.md)), kullanıcı "login görünüyorum ama sistem çalışmıyor" durumunda kalıyordu. Artık `GetAuthenticationStateAsync` her çağrıldığında (sayfa açılışı ve her navigasyondaki arka plan doğrulaması — `OnLocationChanged`) token'ın `exp`'ini kontrol ediyor; süresi dolmuşsa (30sn tampon payıyla) `AuthService.TryRefreshAsync` ile sessizce yenilemeyi dener. Refresh token da geçersizse `Anonymous` döner ve `AuthorizeRouteView` kullanıcıyı [`RedirectToLogin`](../Layout/RedirectToLogin.md)'e düşürür — artık geçersiz bir oturumla sayfaya asla girilemez.
+
+> 🐞 **Neden her gezinmede yayın yapılmıyor?** Eskiden `OnLocationChanged` her adres değişikliğinde
+> `NotifyStateChanged()` çağırıyordu. Durum görevi localStorage okuduğu için asenkron tamamlanır; o arada
+> `AuthorizeRouteView` "Yetkilendiriliyor…" gösterip `[Authorize]` sayfasını yıkıyor, sonra yeniden
+> oluşturuyordu. Aynı sayfada adres değişince (ör. `/admin?tab=…`) tüm veri yeniden çekiliyor, açık sohbet
+> paneli kapanıyordu; Replay'deki sonsuz yenileme döngüsü de buradan doğmuştu. Artık yalnızca scope değişince
+> yayınlanır; aynı scope'ta `RevalidateAsync` oturumu doğrular, anonim kaldıysa yayınlar ve kullanıcı yine
+> [`RedirectToLogin`](../Layout/RedirectToLogin.md)'e düşer.
 
 ## Metotlar / Üyeler
 
