@@ -124,8 +124,8 @@ işlenir (kayıt kaybolmaz).
 
 ### Dinleme
 
-`GET /voice-calls/{id}` (meta + döküm satırları), `GET /voice-calls/{id}/tracks/{track}` (parçaları sırayla
-birleştirip döner — webm parçaları tek tek tam dosya olduğu için istemci tarafında sıralı oynatılır).
+`GET /voice-calls/{id}` (meta + döküm satırları), `GET /voice-calls/{id}/chunks/{chunkId}` (tek parçanın sesi —
+webm parçaları tek tek tam dosya olduğu için istemci her izi parça parça, iki izi aynı anda oynatır).
 Yetki: Admin her görüşme; Agent yalnızca kendi görüşmeleri. Panel: konuşma dökümü ve Traces sohbet
 geçmişinde "Sesli görüşme · 4 dk 12 sn" satırı + oynatıcı (iki iz eşzamanlı, döküm satırı tıklanınca
 `OffsetMs`'e atlar).
