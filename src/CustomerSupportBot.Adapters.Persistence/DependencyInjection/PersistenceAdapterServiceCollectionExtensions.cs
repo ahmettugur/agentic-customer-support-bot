@@ -50,6 +50,8 @@ public static class PersistenceAdapterServiceCollectionExtensions
         AddSessionDataStore<IChatBridge, PostgresChatBridge>(services);
         AddSessionDataStore<IRatingStore, PostgresRatingStore>(services);
         AddSessionDataStore<IAttachmentStore, PostgresAttachmentStore>(services);
+        AddSessionDataStore<IVoiceCallStore, PostgresVoiceCallStore>(services);
+        AddSessionDataStore<IVoiceRecordingStore, PostgresVoiceRecordingStore>(services);
         AddSessionDataStore<IConversationDispositionStore, PostgresConversationDispositionStore>(services);
 
         services.AddSingleton<INotificationLedger, PostgresNotificationLedger>();

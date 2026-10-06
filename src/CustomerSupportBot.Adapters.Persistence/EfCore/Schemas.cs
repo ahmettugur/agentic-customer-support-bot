@@ -7,6 +7,7 @@ namespace CustomerSupportBot.Adapters.Persistence.EfCore;
 internal static class Schemas
 {
     public const string Chat = "chat";
+    public const string Voice = "voice";
     public const string Hitl = "hitl";
     public const string Observability = "observability";
     public const string Analytics = "analytics";

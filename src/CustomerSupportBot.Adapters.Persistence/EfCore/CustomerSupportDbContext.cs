@@ -14,6 +14,7 @@ using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability;
 using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Personalization;
 using Microsoft.EntityFrameworkCore;
 
+using CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Voice;
 namespace CustomerSupportBot.Adapters.Persistence.EfCore;
 
 public sealed class CustomerSupportDbContext : DbContext
@@ -29,6 +30,8 @@ public sealed class CustomerSupportDbContext : DbContext
     public DbSet<ChatSessionModeEntity> ChatSessionModes => Set<ChatSessionModeEntity>();
     public DbSet<ChatBridgeMessageEntity> ChatBridgeMessages => Set<ChatBridgeMessageEntity>();
     public DbSet<AttachmentEntity> Attachments => Set<AttachmentEntity>();
+    public DbSet<VoiceCallEntity> VoiceCalls => Set<VoiceCallEntity>();
+    public DbSet<VoiceRecordingChunkEntity> VoiceRecordingChunks => Set<VoiceRecordingChunkEntity>();
 
     // ─── hitl schema ───
     public DbSet<ApprovalRequestEntity> Approvals => Set<ApprovalRequestEntity>();
