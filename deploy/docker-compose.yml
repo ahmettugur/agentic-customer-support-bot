@@ -186,6 +186,21 @@ services:
       # Web arayüzü
       - "127.0.0.1:8025:8025"
 
+  # coturn — sesli görüşmede (temsilci ↔ müşteri, WebRTC) NAT/kurumsal ağ arkasındaki taraflar için röle.
+  # Kimlik: TURN REST API (use-auth-secret); API kısa ömürlü kullanıcı/parola üretir (VoiceCall:Turn).
+  # static-auth-secret (turnserver.conf), appsettings'teki VoiceCall:Turn:SharedSecret ile aynı olmalı.
+  coturn:
+    image: coturn/coturn:latest
+    container_name: aibot_coturn
+    restart: unless-stopped
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+    ports:
+      - "127.0.0.1:3478:3478/udp"
+      - "127.0.0.1:3478:3478/tcp"
+      - "127.0.0.1:49160-49200:49160-49200/udp"
+
 
 volumes:
   postgres_data:

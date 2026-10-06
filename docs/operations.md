@@ -183,6 +183,22 @@ LLM harcama limiti. Tasarım: [superpowers/specs/2026-10-05-llm-spend-cap-design
   işleri `LlmBudgetExceededException` alır, yeni sesli bağlantı 503 ile reddedilir.
 - **Bilinen sınır:** Realtime ses maliyeti sayaçlara girmez (tokenlar `IChatClient`'tan geçmiyor).
 
+### `VoiceCall` (temsilci ↔ müşteri sesli görüşmesi)
+
+| Anahtar | Varsayılan | Açıklama |
+|---|---|---|
+| `Enabled` | `true` | Kapalıyken görüşme başlatılamaz (503 `disabled`). |
+| `RingTimeoutSeconds` | `45` | Müşteri bu sürede yanıt vermezse görüşme cevapsız kapanır. |
+| `ChunkStaleSeconds` | `60` | Aktif görüşmede bu süre kayıt parçası gelmezse (temsilci sekmesi kapandı) görüşme başarısız kapanır. |
+| `MaxChunkBytes` | `2097152` | Tek kayıt parçasının (10 sn) üst sınırı. |
+| `TranscriptionModel` / `TranscriptionLanguage` | `gpt-4o-transcribe` / `tr` | Parça dökümü (Azure'da model = dağıtım adı). |
+| `TranscriptionMaxAttempts` | `3` | Sonra satır "(döküm alınamadı)" olur; ses saklanır. |
+| `StunUrls` | Google STUN | Adres keşfi. |
+| `Turn:Urls` / `Turn:SharedSecret` / `Turn:CredentialTtlMinutes` | yerel coturn / dev sırrı / `10` | Bkz. deployment.md "Sesli görüşme — TURN". |
+
+Kayıt sesi `DataRetention:VoiceRecordingRetentionDays` (varsayılan 90) gün sonra silinir; döküm metni
+konuşmayla birlikte kalır. Döküm LLM bütçesine tabidir: limit doluyken parçalar bekler, limit açılınca dökülür.
+
 ### `ConversationClosing`
 
 Temsilcinin canlı sohbeti kapatırken seçtiği nedenler. `Reasons` boş bırakılırsa varsayılan liste kullanılır; yazılırsa varsayılanların **yerine** geçer (birleşmez). Listeden kaldırılan neden eski kayıtlarda kalır, analitikte kod adıyla görünür. Tasarım: [superpowers/specs/2026-10-05-conversation-disposition-design.md](superpowers/specs/2026-10-05-conversation-disposition-design.md).

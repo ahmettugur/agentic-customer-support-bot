@@ -420,6 +420,18 @@ Sohbete eklenen fotoğraflar (bkz. [Attachments](CustomerSupportBot.Application/
   okur. Onay kaydına yalnızca müşterinin **gönderdiği** fotoğraflar bağlanır.
 - Fotoğraflar oturumla birlikte silinir (FK cascade); gönderilmemiş fotoğrafı müşteri silebilir.
 
+## 5b2. Sesli Görüşme Kaydı
+
+- **Rıza zorunlu:** müşteri gelen arama kartında kayıt ve döküm bildirimini görür; "Kabul et" rızadır ve anı
+  (`ConsentAt`) kayda geçer. Rıza olmadan görüşme başlamaz (reddederse yazılı devam eder).
+- **Kaydı temsilci tarayıcısı yapar** (kendi mikrofonu + müşterinin gelen sesi, ayrı izler): müşteri kaydı
+  durduramaz/bozamaz. Parçaları yalnızca görüşmenin temsilcisi yükleyebilir.
+- **Yetki:** sinyal, kabul/ret ve kapatma yalnızca görüşmenin tarafları için; başka müşteri/temsilci 403.
+  Kaydı yönetici ve görüşmeyi yapan temsilci dinleyebilir.
+- **TURN:** paylaşılan sır sunucuda kalır; tarayıcı 10 dakikalık türetilmiş kimlik alır.
+- **Saklama:** ses 90 gün (`DataRetention:VoiceRecordingRetentionDays`); müşteri verisi silinince görüşmeler
+  ve kayıtları da silinir; dışa aktarım döküm metnini içerir (ses dosyaları boyut nedeniyle hariç).
+
 ## 5c. Kişisel Veri Saklama ve Silme (KVKK)
 
 Bkz. [Privacy](CustomerSupportBot.Application/Services/Privacy/README.md).

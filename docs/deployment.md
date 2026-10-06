@@ -17,6 +17,7 @@ services:
   otel-collector:  # OpenTelemetry trace routing
   jaeger:          # Distributed tracing UI
   mailpit:         # Yerel SMTP test sunucusu (e-postalar dışarı çıkmaz)
+  coturn:          # Sesli görüşme (WebRTC) için TURN rölesi
 ```
 
 ### Port Haritası
@@ -36,6 +37,8 @@ services:
 | **OTel Collector HTTP** | 4328 | 4318 | OTLP receiver (opsiyonel, `otel` profili) |
 | **Mailpit SMTP** | 1025 | 1025 | Uygulamanın e-posta gönderdiği yerel SMTP |
 | **Mailpit UI** | 8025 | 8025 | Gönderilen e-postaları görüntüleme (http://localhost:8025) |
+| **coturn (TURN)** | 3478 udp/tcp | 3478 | Temsilci ↔ müşteri sesli görüşmesi için röle |
+| **coturn röle aralığı** | 49160-49200 udp | 49160-49200 | TURN üzerinden akan ses |
 
 > **Tüm host portları yalnızca `127.0.0.1`'e bağlıdır** (ör. `"127.0.0.1:5433:5432"`). Redis,
 > Elasticsearch/Kibana ve Qdrant bu yığında kimlik doğrulamasız çalışır; `0.0.0.0`'a açık olmaları
@@ -80,6 +83,22 @@ Jaeger v2 doğrudan OTLP alabildiği için OTel Collector artık opsiyoneldir. `
 - İşlemci sırası: `memory_limiter` (ilk) → `resource` → `batch` (son).
 - Yapılandırma `otelcol-contrib validate` ile doğrulanabilir:
   `docker run --rm -v "$PWD/deploy/otel-collector-config.yaml:/c.yaml:ro" otel/opentelemetry-collector-contrib:0.138.0 validate --config=/c.yaml`
+
+### Sesli görüşme — TURN (coturn)
+
+Temsilci ile müşteri arasındaki sesli görüşme tarayıcılar arasında doğrudan (WebRTC) akar. Taraflardan biri
+kurumsal ağ / mobil operatör NAT'ı arkasındaysa doğrudan bağlantı kurulamaz; ses `aibot_coturn` üzerinden
+aktarılır. Yapılandırma `deploy/turnserver.conf`:
+
+- `use-auth-secret` + `static-auth-secret`: API, her görüşme için 10 dakikalık kullanıcı/parola üretir
+  (`VoiceCall:Turn:SharedSecret` ile **aynı** değer olmalı). Kalıcı sır tarayıcıya hiç gitmez.
+- Yerelde `external-ip=127.0.0.1` ve TLS kapalı. **Üretimde:** sunucunun gerçek dış IP'si, TLS (5349,
+  `turns:`), güçlü ve gizli bir sır, röle port aralığının güvenlik duvarında açılması.
+
+```bash
+docker compose -p aibot -f deploy/docker-compose.yml up -d coturn
+docker logs aibot_coturn
+```
 
 ---
 
