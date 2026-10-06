@@ -21,7 +21,11 @@ public static class AgentsEndpoints
         });
 
         // ─── Durum: tüm aktif temsilciler (geçerli durum, zaman aşımı uygulanmış) ───
-        group.MapGet("/presence", (IAgentPresencePort presence) => Results.Ok(presence.GetAll()));
+        group.MapGet("/presence", async (IAgentPresencePort presence, IVoiceCallPort voiceCalls, CancellationToken ct) =>
+        {
+            var inCall = await voiceCalls.GetAgentsInCallAsync(ct);
+            return Results.Ok(presence.GetAll().Select(a => a with { InVoiceCall = inCall.Contains(a.AgentId) }));
+        });
 
         // ─── Create ───
         group.MapPost("", (HumanAgentInput input, IHumanAgentPort port) =>

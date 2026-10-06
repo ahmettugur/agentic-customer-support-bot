@@ -146,6 +146,9 @@ public sealed class VoiceCallService(
     public Task<IReadOnlyList<VoiceCall>> ListForSessionAsync(string sessionId, CancellationToken ct = default) =>
         calls.ListForSessionAsync(sessionId, ct);
 
+    public async Task<IReadOnlySet<string>> GetAgentsInCallAsync(CancellationToken ct = default) =>
+        (await calls.ListOpenAsync(ct)).Select(c => c.AgentId).ToHashSet(StringComparer.Ordinal);
+
     public async Task<int> SweepAsync(CancellationToken ct = default)
     {
         var o = options.CurrentValue;

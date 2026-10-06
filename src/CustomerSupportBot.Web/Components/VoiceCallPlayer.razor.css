@@ -1,0 +1,9 @@
+/* Sesli görüşme kaydı oynatıcısı — renkler tema değişkenlerinden. */
+.vcp { width: min(640px, 92vw); }
+.vcp-body { padding: var(--space-4) var(--space-5); min-height: 0; }
+.vcp-controls { display: flex; gap: 8px; margin-bottom: 12px; flex-shrink: 0; }
+.vcp-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; min-height: 0; max-height: 60vh; overflow: auto; }
+.vcp-lines li { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--color-surface-alt); }
+.vcp-lines li.agent { background: var(--color-primary-subtle); }
+.vcp-speaker { font-weight: 600; min-width: 72px; }
+.voice-line-play { border: 0; background: transparent; color: var(--color-primary); font-family: var(--font-mono); font-size: 12px; cursor: pointer; }

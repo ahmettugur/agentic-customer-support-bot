@@ -31,6 +31,9 @@ Bu klasör, Onion / Hexagonal Mimari'de **Use Cases & Application Core (İş Ak�
   - [DataPrivacyService](Services/Privacy/DataPrivacyService.md) — Saklama süresi temizliği, müşteri verisini dışa aktarma ve silme.
 - [Attachments/](Services/Attachments/README.md) — Sohbete Fotoğraf Ekleme:
   - [ChatAttachmentService](Services/Attachments/ChatAttachmentService.md) — `IChatAttachmentPort` uygulayıcısı; doğrulama, meta veri silme, görsel açıklama, kayıt.
+- [Voice/](Services/Voice/README.md) — Temsilci–Müşteri Sesli Görüşme:
+  - [VoiceCallService](Services/Voice/VoiceCallService.md) — `IVoiceCallPort` uygulayıcısı; görüşme yaşam döngüsü, sinyal aktarımı, kayıt parçası kabulü, zaman aşımı.
+  - [VoiceTranscriptionProcessor](Services/Voice/VoiceTranscriptionProcessor.md) — Kayıt parçalarını yazıya döker ve temsilci paneline yayınlar.
   - [ImageSanitizer](Services/Attachments/ImageSanitizer.md) — Dosya imzasıyla tür tespiti ve EXIF/metin meta verisi silme (yön bilgisi korunur).
   - [AttachmentTurnContext](Services/Attachments/AttachmentTurnContext.md) — Fotoğraf açıklamalarını sohbet turunun metnine ekler.
 - [Auth/](Services/Auth/TokenPortService.md) — Kimlik Doğrulama ve JWT/Refresh Token Yaşam Döngüsü:

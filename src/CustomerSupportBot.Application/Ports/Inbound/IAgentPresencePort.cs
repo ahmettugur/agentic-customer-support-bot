@@ -14,7 +14,9 @@ public sealed record AgentPresenceInfo(
     DateTime? Since,
     DateTime? LastSeenAt,
     int CurrentLoad,
-    int MaxConcurrentLoad);
+    int MaxConcurrentLoad,
+    // Sesli görüşmede mi — varlık uç noktası görüşme servisinden doldurur.
+    bool InVoiceCall = false);
 
 /// <summary>Temsilci çevrimiçi/uzakta durumu. Bilinmeyen temsilci için tüm işlemler <c>null</c> döner.</summary>
 public interface IAgentPresencePort

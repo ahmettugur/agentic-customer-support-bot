@@ -11,6 +11,7 @@ Bu klasör, hexagonal mimaride **Driving Adapter (Giriş Adaptörü)** ve **Comp
   - [A2A](Endpoints/A2A.md) — `/a2a/*` (Agent-to-Agent protokolü) ve `/auth/a2a/token-exchange`.
   - [ObservabilityAndTelemetry](Endpoints/ObservabilityAndTelemetry.md) — `/agents`, `/analytics/*`, `/eval/*`, `/sla/*`, `/telemetry/*`, `/traces/*`.
   - [Intelligence](Endpoints/Intelligence.md) — `/auth/*` (staff + müşteri login), `/memory/*` (semantik hafıza + bilgi tabanı), `/customers/*` (kişiselleştirme), `/improvements/*` (öz-iyileştirme).
+  - [VoiceCallEndpoints](Endpoints/VoiceCallEndpoints.md) — `/chat-sessions/{sid}/voice-calls`, `/voice-calls/*` (temsilci), `/chat/voice-calls/*` (müşteri): temsilci–müşteri sesli görüşmesi.
 - [Extensions/](Extensions/) — Composition Root kayıt yardımcıları:
   - [AuthServicesExtensions](Extensions/AuthServicesExtensions.md) — JWT authentication + authorization policy'leri.
   - [ApplicationServicesExtensions](Extensions/ApplicationServicesExtensions.md) — driving port'lar, CORS, JSON, rate-limit policy'leri, hosted service'ler.
@@ -29,6 +30,7 @@ Bu klasör, hexagonal mimaride **Driving Adapter (Giriş Adaptörü)** ve **Comp
   - [SlaGuardianService](Workers/SlaGuardianService.md) — Yanıtsız kalan veya aşırı uzayan sohbetlerde SLA ihlallerini periyodik denetleyen `BackgroundService` (cross-pod kilit destekli).
   - [DataRetentionService](Workers/DataRetentionService.md) — Kişisel veri saklama süresi taraması (KVKK); cross-pod kilit destekli.
   - [ApprovalEmailNotificationService](Workers/ApprovalEmailNotificationService.md) — Onay sonucunu e-postayla bildirir (`Email` ayarları).
+  - [VoiceCallWorker](Workers/VoiceCallWorker.md) — Sesli görüşme döküm kuyruğu ve zaman aşımı süpürmesi.
 
 ## Mimari Rolü ve Yetenekleri
 

@@ -41,6 +41,7 @@ else
     [Parameter, EditorRequired] public string SessionId { get; set; } = "";
 
     private VoiceCallDto? _call;
+    private string? _lastCallId;
     private string _state = "idle";
     private bool _recording, _muted, _starting, _busyElsewhere;
     private DateTime _connectedAt;
@@ -70,6 +71,7 @@ else
             var (call, error) = await AdminApi.StartVoiceCallAsync(SessionId);
             if (call is null) { Toast.ShowError(VoiceCallText.StartError(error)); _busyElsewhere = error == "voice_call_busy"; return; }
             _call = call;
+            _lastCallId = call.Id;
             _ref ??= DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("csbVoice.staffStart", new
             {
@@ -83,11 +85,14 @@ else
     }
 
     /// <summary>Admin.razor.cs SSE'den çağırır: arayüz durumunu sinyale göre günceller (WebRTC'yi JS yürütür).</summary>
-    public void OnSignal(string type, string? reason)
+    /// <remarks>
+    /// JS modülü aynı sinyalde <c>OnVoiceState("ended")</c> ile çubuğu bu çağrıdan önce temizleyebilir; bu yüzden
+    /// eşleşme <c>_call</c> ile değil, son başlatılan görüşmenin kimliğiyle yapılır.
+    /// </remarks>
+    public void OnSignal(string? callId, string type, string? reason)
     {
-        if (_call is null) return;
-        if (type == "declined") { Toast.ShowInfo(VoiceCallText.StatusLabel("declined", reason)); Clear(); }
-        else if (type == "ended" && reason == "missed") { Toast.ShowInfo(VoiceCallText.StatusLabel("missed", reason)); Clear(); }
+        if (callId is null || callId != _lastCallId) return;
+        if (VoiceCallText.EndNotice(type, reason) is { } notice) { Toast.ShowInfo(notice); Clear(); _lastCallId = null; }
         StateHasChanged();
     }
 

@@ -91,6 +91,10 @@ public sealed record VoiceCallDto(
     string? EndReason,
     int? DurationSeconds);
 
+public sealed record VoiceCallLine(string ChunkId, string Track, int OffsetMs, string? Text, string Status);
+
+public sealed record VoiceCallDetail(VoiceCallDto Call, List<VoiceCallLine> Lines);
+
 // ─── Temsilci asistanı (GET …/chat-sessions/{sid}/assist) ─────────────────────
 
 public sealed record AgentAssistResult(
@@ -308,7 +312,7 @@ public sealed record ConversationClosingOptions(bool RequireReason, ClosingReaso
 /// </summary>
 public sealed record AgentPresenceItem(
     string AgentId, string DisplayName, string Presence, string ChosenPresence,
-    DateTimeOffset? Since, DateTimeOffset? LastSeenAt, int CurrentLoad, int MaxConcurrentLoad);
+    DateTimeOffset? Since, DateTimeOffset? LastSeenAt, int CurrentLoad, int MaxConcurrentLoad, bool InVoiceCall = false);
 
 // ─── Hazır yanıtlar ──────────────────────────────────────────────────────────
 

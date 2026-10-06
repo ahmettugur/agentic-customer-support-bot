@@ -485,6 +485,13 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         catch (System.Text.Json.JsonException) { return (null, null); }
     }
 
+    /// <summary>Görüşme ayrıntısı ve döküm satırları; yetki yoksa ya da bulunamazsa <c>null</c>.</summary>
+    public async Task<VoiceCallDetail?> GetVoiceCallAsync(string callId)
+    {
+        using var response = await http.GetAsync($"/voice-calls/{Uri.EscapeDataString(callId)}");
+        return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<VoiceCallDetail>() : null;
+    }
+
     public async Task<VoiceCallDto?> GetMyVoiceCallAsync()
     {
         using var response = await http.GetAsync("/voice-calls/mine");

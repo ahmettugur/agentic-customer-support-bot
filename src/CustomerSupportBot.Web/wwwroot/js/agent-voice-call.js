@@ -214,3 +214,46 @@
         }
     };
 })();
+
+// İki izli kayıt oynatıcı: her iz kendi parça dizisini sırayla çalar, iki iz aynı anda başlar.
+window.csbVoicePlayer = (function () {
+    var p = null;
+    function stop() {
+        if (!p) return;
+        p.players.forEach(function (x) { x.audio.pause(); x.urls.forEach(URL.revokeObjectURL); x.audio.remove(); });
+        p = null;
+    }
+    async function blobUrl(apiBase, token, callId, chunkId) {
+        var r = await fetch(apiBase + '/voice-calls/' + encodeURIComponent(callId) + '/chunks/' + encodeURIComponent(chunkId),
+            { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!r.ok) return null;
+        return URL.createObjectURL(await r.blob());
+    }
+    async function playTrack(o, chunks, startMs) {
+        var audio = document.createElement('audio'); document.body.appendChild(audio);
+        var player = { audio: audio, urls: [] };
+        var i = chunks.findIndex(function (c) { return c.offsetMs + 10000 > startMs; });
+        if (i < 0) return player;
+        async function playAt(idx, seekMs) {
+            if (!p || idx >= chunks.length) return;
+            var url = await blobUrl(o.apiBase, o.token, o.callId, chunks[idx].chunkId);
+            if (!url) return playAt(idx + 1, 0);
+            player.urls.push(url);
+            audio.src = url;
+            audio.onloadedmetadata = function () { audio.currentTime = Math.max(0, seekMs / 1000); audio.play().catch(function () { }); };
+            audio.onended = function () { playAt(idx + 1, 0); };
+        }
+        playAt(i, Math.max(0, startMs - chunks[i].offsetMs));
+        return player;
+    }
+    return {
+        play: async function (o) {
+            stop();
+            p = { players: [] };
+            var agent = o.lines.filter(function (l) { return l.track === 'agent'; });
+            var customer = o.lines.filter(function (l) { return l.track === 'customer'; });
+            p.players = await Promise.all([playTrack(o, agent, o.startMs), playTrack(o, customer, o.startMs)]);
+        },
+        stop: stop
+    };
+})();

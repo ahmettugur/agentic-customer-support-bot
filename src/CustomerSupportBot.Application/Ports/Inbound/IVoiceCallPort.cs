@@ -38,6 +38,9 @@ public interface IVoiceCallPort
     Task<(IceServerConfig? Config, VoiceCallError? Error)> GetIceConfigForCustomerAsync(string callId, string? customerId, CancellationToken ct = default);
     Task<IReadOnlyList<VoiceCall>> ListForSessionAsync(string sessionId, CancellationToken ct = default);
 
+    /// <summary>Şu an çalan ya da süren bir sesli görüşmesi olan temsilciler (varlık ekranında "Görüşmede").</summary>
+    Task<IReadOnlySet<string>> GetAgentsInCallAsync(CancellationToken ct = default);
+
     /// <summary>Zaman aşımı süpürmesi: çalan → Missed (45 sn), parçası kesilen aktif → Failed (60 sn). Kapatılan sayı.</summary>
     Task<int> SweepAsync(CancellationToken ct = default);
 }

@@ -188,4 +188,17 @@ public class VoiceCallServiceTests
         config!.IceServers.Should().Contain(s => s.Urls.Contains("turn:localhost:3478") && s.Username!.EndsWith(":" + call.Id));
         config.IceServers.Should().NotContain(s => s.Credential == "s", "paylaşılan sır asla istemciye gitmez");
     }
+
+    [Fact]
+    public async Task AgentsInCall_ListsAgentsWithOpenCalls_Only()
+    {
+        HumanMode("s1"); HumanMode("s2");
+        var svc = Service();
+        var active = (await svc.StartAsync("s1", Elif, Ct)).Call!;
+        await svc.AcceptAsync(active.Id, "1001", Ct);
+        var cancelled = (await svc.StartAsync("s2", Can, Ct)).Call!;
+        await svc.HangupByStaffAsync(cancelled.Id, Can, VoiceCallEndReasons.AgentHangup, Ct);
+
+        (await svc.GetAgentsInCallAsync(Ct)).Should().BeEquivalentTo(["agent-1"]);
+    }
 }

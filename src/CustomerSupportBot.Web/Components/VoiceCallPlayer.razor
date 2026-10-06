@@ -1,0 +1,74 @@
+@* Components/VoiceCallPlayer.razor — sesli görüşme kaydı: döküm satırları ve iki izli dinleme. *@
+@inject AdminApiService AdminApi
+@inject AuthTokenStore TokenStore
+@inject HttpClient Http
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="vcp-title" @onclick="CloseAsync">
+    <div class="modal vcp" @onclick:stopPropagation>
+        <header class="modal-header">
+            <div>
+                <h3 id="vcp-title">Sesli görüşme kaydı</h3>
+                @if (_detail is not null)
+                {
+                    <p class="muted small">@_detail.Call.AgentDisplayName · @(_detail.Call.DurationSeconds is int d ? VoiceCallText.FormatElapsed(TimeSpan.FromSeconds(d)) : "—")</p>
+                }
+            </div>
+            <button type="button" class="btn-icon" @onclick="CloseAsync" aria-label="Kapat"><Icon Name="x" Size="18" /></button>
+        </header>
+        <div class="modal-body vcp-body">
+            @if (_detail is null) { <p class="muted">Yükleniyor…</p> }
+            else
+            {
+                <div class="vcp-controls">
+                    <button type="button" class="btn-primary" @onclick="() => PlayAsync(0)"><Icon Name="play" Size="13" /> Baştan dinle</button>
+                    <button type="button" class="btn-secondary" @onclick="StopAsync">Durdur</button>
+                </div>
+                <ol class="vcp-lines">
+                    @foreach (var l in _detail.Lines.Where(l => l.Text is not null || l.Status == "failed"))
+                    {
+                        var line = l;
+                        <li class="@(line.Track == "agent" ? "agent" : "customer")">
+                            <button type="button" class="voice-line-play" @onclick="() => PlayAsync(line.OffsetMs)">@VoiceCallText.FormatElapsed(TimeSpan.FromMilliseconds(line.OffsetMs))</button>
+                            <span class="vcp-speaker">@(line.Track == "agent" ? "Temsilci" : "Müşteri")</span>
+                            <span>@(line.Text ?? "(döküm alınamadı)")</span>
+                        </li>
+                    }
+                </ol>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string CallId { get; set; } = "";
+    [Parameter] public int StartOffsetMs { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private VoiceCallDetail? _detail;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await JS.InvokeVoidAsync("loadScript", "/js/agent-voice-call.js", "js-agent-voice-call");
+        _detail = await AdminApi.GetVoiceCallAsync(CallId);
+        if (_detail is not null && StartOffsetMs > 0) await PlayAsync(StartOffsetMs);
+    }
+
+    private async Task PlayAsync(int startMs)
+    {
+        if (_detail is null) return;
+        await JS.InvokeVoidAsync("csbVoicePlayer.play", new
+        {
+            apiBase = Http.BaseAddress?.ToString().TrimEnd('/'),
+            token = await TokenStore.GetAccessTokenAsync(AuthScope.Staff),
+            callId = CallId,
+            startMs,
+            lines = _detail.Lines.Select(l => new { chunkId = l.ChunkId, track = l.Track, offsetMs = l.OffsetMs })
+        });
+    }
+
+    private async Task StopAsync() => await JS.InvokeVoidAsync("csbVoicePlayer.stop");
+    private async Task CloseAsync() { await StopAsync(); await OnClose.InvokeAsync(); }
+    public async ValueTask DisposeAsync() { try { await StopAsync(); } catch { } }
+}

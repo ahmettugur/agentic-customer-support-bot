@@ -15,6 +15,7 @@ Bu klasör, Onion / Hexagonal Mimarinin en iç çekirdeğini (**Core Domain**) o
 - [EscalationAction](Model/EscalationAction.md), [EscalationRequest](Model/EscalationRequest.md) — İnsan temsilciye devir modelleri.
 - [VerifiedEntities](Model/VerifiedEntities.md) — Authenticated session'dan çözümlenen müşteri kimliği.
 - [HumanAgent](Model/HumanAgent.md) — İnsan temsilci modeli.
+- [VoiceCall](Model/Voice/VoiceCall.md), [VoiceRecordingChunk](Model/Voice/VoiceRecordingChunk.md) — Temsilci–müşteri sesli görüşmesi ve kayıt parçası.
 - [OrderInfo](Model/OrderInfo.md), [OrderLineRequest](Model/OrderLineRequest.md), [OrderPlacementResult](Model/OrderPlacementResult.md), [StockDeductionResult](Model/StockDeductionResult.md) — Sipariş oluşturma zinciri: LLM talebi → stok düşümü → nihai sonuç.
 - [PlanningResult](Model/PlanningResult.md), [SubTask](Model/SubTask.md) — Orkestrasyon planı modelleri.
 - [ReasoningResult](Model/ReasoningResult.md), [ReasoningIssue](Model/ReasoningIssue.md), [ReasoningStep](Model/ReasoningStep.md), [ReasoningTrace](Model/ReasoningTrace.md), [SpecialistReasoning](Model/SpecialistReasoning.md), [SelfCritique](Model/SelfCritique.md), [TaskCompletionStatus](Model/TaskCompletionStatus.md) — 2 aşamalı niyet/akıl yürütme ve trace ambarı modelleri.

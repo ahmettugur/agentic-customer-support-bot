@@ -68,7 +68,7 @@ public static class AiClientFactory
             return new AzureOpenAIClient(new Uri(azure.Endpoint), new ApiKeyCredential(azure.ApiKey)).GetAudioClient(model);
         }
 
-        var key = options.Realtime.ApiKey ?? options.OpenAI.ApiKey;
+        var key = !string.IsNullOrWhiteSpace(options.Realtime.ApiKey) ? options.Realtime.ApiKey : options.OpenAI.ApiKey;
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidOperationException("AI:OpenAI:ApiKey yapılandırması bulunamadı (ses dökümü).");
         return new OpenAIClient(key).GetAudioClient(model);

@@ -72,4 +72,17 @@ public class AiClientFactoryTests
         Action act = () => AiClientFactory.CreateReasoningChatClient(opts);
         act.Should().Throw<InvalidOperationException>();
     }
+
+    [Fact]
+    public void AudioClient_EmptyRealtimeKey_FallsBackToOpenAiKey()
+    {
+        var opts = new AiOptions
+        {
+            Provider = AiProvider.OpenAI,
+            OpenAI = { ApiKey = "sk-stub", Model = "gpt-x" },
+            Realtime = { ApiKey = "" }
+        };
+        var client = AiClientFactory.CreateAudioClient(opts, "gpt-4o-transcribe");
+        client.Should().NotBeNull();
+    }
 }

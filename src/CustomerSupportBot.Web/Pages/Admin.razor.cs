@@ -745,7 +745,8 @@ public partial class Admin
                 using var vdoc = System.Text.Json.JsonDocument.Parse(data);
                 var vt = vdoc.RootElement.TryGetProperty("type", out var tt) ? tt.GetString() ?? "" : "";
                 var vr = vdoc.RootElement.TryGetProperty("reason", out var rr) ? rr.GetString() : null;
-                await InvokeAsync(() => _voiceBar?.OnSignal(vt, vr));
+                var vc = vdoc.RootElement.TryGetProperty("callId", out var cc) ? cc.GetString() : null;
+                await InvokeAsync(() => _voiceBar?.OnSignal(vc, vt, vr));
             }
             catch { }
             return;

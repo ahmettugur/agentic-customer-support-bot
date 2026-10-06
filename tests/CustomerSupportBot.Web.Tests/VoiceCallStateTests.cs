@@ -25,4 +25,13 @@ public class VoiceCallStateTests
     [InlineData(null, "Sesli görüşme başlatılamadı.")]
     public void StartError(string? code, string expected) =>
         VoiceCallText.StartError(code).Should().Be(expected);
+
+    [Theory]
+    [InlineData("declined", null, "Müşteri reddetti")]
+    [InlineData("declined", "no_microphone", "Müşterinin mikrofonu yok")]
+    [InlineData("ended", "missed", "Cevap verilmedi")]
+    [InlineData("ended", "customer_hangup", null)]
+    [InlineData("accepted", null, null)]
+    public void EndNotice_OnlyForCallsThatNeverConnected(string type, string? reason, string? expected) =>
+        VoiceCallText.EndNotice(type, reason).Should().Be(expected);
 }

@@ -16,6 +16,8 @@ Bu klasör, PostgreSQL veya Redis gibi harici altyapı bağımlılıkları olmad
 | [InMemoryLessonStore](InMemoryLessonStore.md) | `ILessonStore` | [PostgresLessonStore](../Postgres/PostgresLessonStore.md) |
 | [InMemoryRatingStore](InMemoryRatingStore.md) | `IRatingStore` | [PostgresRatingStore](../Postgres/PostgresRatingStore.md) |
 | `InMemoryAttachmentStore` | `IAttachmentStore` | [PostgresAttachmentStore](../Postgres/PostgresAttachmentStore.md) |
+| `InMemoryVoiceCallStore` | `IVoiceCallStore` | [PostgresVoiceCallStore](../Postgres/PostgresVoiceCallStore.md) |
+| `InMemoryVoiceRecordingStore` | `IVoiceRecordingStore` | [PostgresVoiceRecordingStore](../Postgres/PostgresVoiceRecordingStore.md) |
 | [InMemoryReasoningTraceStore](InMemoryReasoningTraceStore.md) | `IReasoningTraceStore` | [PostgresReasoningTraceStore](../Postgres/PostgresReasoningTraceStore.md) |
 | [InMemorySlaEventSink](InMemorySlaEventSink.md) | `ISlaEventSink` | [PostgresSlaEventSink](../Postgres/PostgresSlaEventSink.md) |
 | [InMemoryMessageBusAdapter](InMemoryMessageBusAdapter.md) | `IMessageBusPort` | [RedisMessageBusAdapter](../../CustomerSupportBot.Adapters.Redis/) |

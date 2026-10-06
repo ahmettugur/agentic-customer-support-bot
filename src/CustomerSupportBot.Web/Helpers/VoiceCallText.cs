@@ -16,6 +16,14 @@ public static class VoiceCallText
         _ => "Görüşme bitti"
     };
 
+    /// <summary>Temsilciye bağlanmadan biten arama için bildirim metni (ret, cevapsız); diğer sinyallerde null.</summary>
+    public static string? EndNotice(string signalType, string? reason) => signalType switch
+    {
+        "declined" => StatusLabel("declined", reason),
+        "ended" when reason == "missed" => StatusLabel("missed", reason),
+        _ => null
+    };
+
     public static string FormatElapsed(TimeSpan t) => $"{(int)t.TotalMinutes:00}:{t.Seconds:00}";
 
     public static string StartError(string? code) => code switch

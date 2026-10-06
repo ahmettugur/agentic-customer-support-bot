@@ -293,6 +293,10 @@
                             <span class="presence-dot" aria-hidden="true"></span>
                             @a.DisplayName
                             <span class="presence-load">@a.CurrentLoad/@a.MaxConcurrentLoad</span>
+                            @if (a.InVoiceCall)
+                            {
+                                <span class="presence-call"><Icon Name="phone" Size="12" /> Görüşmede</span>
+                            }
                             <span class="visually-hidden">@PresenceLabel(a.Presence)</span>
                         </span>
                     }
@@ -1340,6 +1344,12 @@
 
     </main>
 </div>
+
+<!-- SESLİ GÖRÜŞME KAYDI -->
+@if (_playerCall is { } pc)
+{
+    <VoiceCallPlayer CallId="@pc.CallId" StartOffsetMs="@pc.OffsetMs" OnClose="() => _playerCall = null" />
+}
 
 <!-- PROMPT MODAL -->
 @if (_showPromptModal)
