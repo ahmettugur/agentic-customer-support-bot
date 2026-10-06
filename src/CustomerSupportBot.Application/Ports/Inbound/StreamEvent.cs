@@ -114,6 +114,8 @@ public static class StreamEventTypes
     /// Payload: { on: bool }. Frontend typing indicator + input kilidini yönetir.
     /// </summary>
     public const string BotTyping = "bot_typing";
+    /// <summary>Sesli görüşme sinyali (WebRTC kurulumu, çalma, kabul, bitiş) — veri ham JSON yüktür.</summary>
+    public const string VoiceSignal = "voice_signal";
 
     // ─── Sentiment events ───
     /// <summary>Her tur sonrası duygu güncellemesi. Payload: { sentiment, score, consecutive }.</summary>

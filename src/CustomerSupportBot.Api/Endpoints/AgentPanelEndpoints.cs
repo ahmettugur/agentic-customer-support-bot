@@ -397,6 +397,12 @@ public static class AgentPanelEndpoints
             {
                 await foreach (var msg in chatSessions.SubscribeToAdminAsync(sid, ct))
                 {
+                    if (msg.Sender == ChatBridgeSender.VoiceSignal)
+                    {
+                        if (VoiceSignalPayload.TryParse(msg.Text) is { } payload)
+                            await SseWriter.WriteEventAsync(response, StreamEventTypes.VoiceSignal, payload, ct);
+                        continue;
+                    }
                     await SseWriter.WriteEventAsync(response, StreamEventTypes.BridgeMessage, new
                     {
                         id = msg.Id,
@@ -404,7 +410,10 @@ public static class AgentPanelEndpoints
                         sender = msg.Sender.ToString().ToLowerInvariant(),
                         text = msg.Text,
                         humanAgent = msg.HumanAgent,
-                        timestamp = msg.Timestamp
+                        timestamp = msg.Timestamp,
+                        voiceCallId = msg.VoiceCallId,
+                        voiceTrack = msg.VoiceTrack,
+                        offsetMs = msg.OffsetMs
                     }, ct);
                 }
             }

@@ -179,6 +179,7 @@ if (a2aEnabled)
 }
 app.MapChatEndpoints();
 app.MapChatAttachmentEndpoints();
+app.MapCustomerVoiceCallEndpoints();
 app.MapCustomerDataPrivacyEndpoints();
 app.MapRealtimeEndpoints();
 app.MapSessionEndpoints();
@@ -207,6 +208,7 @@ var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRa
 agentScope.MapAgentPanelEndpoints();
 agentScope.MapAgentSavedReplyEndpoints();
 agentScope.MapAgentConversationClosingEndpoints();
+agentScope.MapStaffVoiceCallEndpoints();
 
 app.MapAnalyticsEndpoints();
 

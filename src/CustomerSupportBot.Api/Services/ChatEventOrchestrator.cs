@@ -122,6 +122,14 @@ public sealed class ChatEventOrchestrator(
                     continue;
                 }
 
+                // Sesli görüşme sinyali: yük olduğu gibi (ham JSON) iletilir — WebRTC'yi tarayıcı yürütür.
+                if (msg.Sender == ChatBridgeSender.VoiceSignal)
+                {
+                    if (VoiceSignalPayload.TryParse(msg.Text) is { } payload)
+                        await write(StreamEventTypes.VoiceSignal, payload);
+                    continue;
+                }
+
                 await write(StreamEventTypes.HumanMessage, new
                 {
                     id = msg.Id,
