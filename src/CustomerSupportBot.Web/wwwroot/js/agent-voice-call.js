@@ -10,6 +10,14 @@
     var DISCONNECT_GRACE_MS = 30000;
 
     var s = null; // aktif görüşme durumu
+    var idleWatchers = {}; // görüşme bitince haber bekleyen çubuklar (anahtar → DotNet ref)
+    var ORPHAN_KEY = 'csb.voice.call'; // sayfa yenilenirse yarım kalan görüşmeyi bulmak için (sekmeye özel)
+
+    function remember(callId) { try { if (callId) sessionStorage.setItem(ORPHAN_KEY, callId); else sessionStorage.removeItem(ORPHAN_KEY); } catch (e) { } }
+
+    function notifyIdle() {
+        Object.keys(idleWatchers).forEach(function (k) { idleWatchers[k].invokeMethodAsync('OnVoiceIdle').catch(function () { }); });
+    }
 
     // Kaydediciler durdurulunca son parça onstop'ta yüklenir; yükleme görüşme bağlamını kendisi taşıdığından
     // durum hemen temizlenebilir.
@@ -39,9 +47,11 @@
     // Görüşme bitti: önce bildirim (ref temizlenmeden), sonra durum. Temsilci çubuğu bitiş türünü ister
     // (ret/cevapsız bildirimi), müşteri kartı yalnızca durumu.
     function finish(type, reason) {
-        if (s && s.role === 'staff') notify('OnVoiceEnded', type, reason || null);
+        var staff = s && s.role === 'staff';
+        if (staff) notify('OnVoiceEnded', type, reason || null);
         else notify('OnVoiceState', 'ended');
         reset();
+        if (staff) { remember(null); notifyIdle(); }
     }
 
     function post(path, body, contentType) {
@@ -177,12 +187,26 @@
         // Çubuk kapandı: görüşme sürer, yalnızca bildirimler durur.
         detach: function (callId) { if (s && s.callId === callId) s.ref = null; },
 
+        // Başka sohbette görüşmedeyken pasif düğme, görüşme bitince haber alır.
+        watchIdle: function (key, ref) { idleWatchers[key] = ref; },
+        unwatchIdle: function (key) { delete idleWatchers[key]; },
+
+        // Sayfa görüşme sürerken yenilendiyse o görüşmenin kimliği (bir kez döner); yoksa null.
+        takeOrphan: function () {
+            if (s) return null;
+            var id = null;
+            try { id = sessionStorage.getItem(ORPHAN_KEY); } catch (e) { }
+            remember(null);
+            return id;
+        },
+
         staffStart: function (o) {
             reset();
             s = { role: 'staff', apiBase: o.apiBase, token: o.token, callId: o.callId, sessionId: o.sessionId, ref: o.dotnetRef,
                   signalPath: '/voice-calls/' + encodeURIComponent(o.callId) + '/signal',
                   hangupPath: '/voice-calls/' + encodeURIComponent(o.callId) + '/hangup',
                   icePath: '/voice-calls/' + encodeURIComponent(o.callId) + '/ice-config' };
+            remember(o.callId);
             openStaffStream();
             setState('ringing');
         },
@@ -259,12 +283,17 @@
     };
 })();
 
-// İki izli kayıt oynatıcı: her iz kendi parça dizisini sırayla çalar, iki iz aynı anda başlar.
+// İki izli kayıt oynatıcı: her iz kendi parça dizisini sırayla çalar, iki iz aynı anda başlar. Her iz iki
+// <audio> ile çalışır: biri çalarken sıradaki parça indirilip ötekinde hazır bekler — parça geçişinde ağ
+// gecikmesi kadar sessizlik olmaz.
 window.csbVoicePlayer = (function () {
     var p = null;
     function stop() {
         if (!p) return;
-        p.players.forEach(function (x) { x.audio.pause(); x.urls.forEach(URL.revokeObjectURL); x.audio.remove(); });
+        p.players.forEach(function (x) {
+            x.els.forEach(function (a) { a.pause(); a.remove(); });
+            Object.keys(x.urls).forEach(function (k) { x.urls[k].then(function (u) { if (u) URL.revokeObjectURL(u); }); });
+        });
         p = null;
     }
     async function blobUrl(apiBase, token, callId, chunkId) {
@@ -273,30 +302,48 @@ window.csbVoicePlayer = (function () {
         if (!r.ok) return null;
         return URL.createObjectURL(await r.blob());
     }
-    async function playTrack(o, chunks, startMs) {
-        var audio = document.createElement('audio'); document.body.appendChild(audio);
-        var player = { audio: audio, urls: [] };
-        var i = chunks.findIndex(function (c) { return c.offsetMs + 10000 > startMs; });
-        if (i < 0) return player;
-        async function playAt(idx, seekMs) {
-            if (!p || idx >= chunks.length) return;
-            var url = await blobUrl(o.apiBase, o.token, o.callId, chunks[idx].chunkId);
-            if (!url) return playAt(idx + 1, 0);
-            player.urls.push(url);
-            audio.src = url;
-            audio.onloadedmetadata = function () { audio.currentTime = Math.max(0, seekMs / 1000); audio.play().catch(function () { }); };
-            audio.onended = function () { playAt(idx + 1, 0); };
+    function playTrack(o, chunks, startMs, session) {
+        var els = [document.createElement('audio'), document.createElement('audio')];
+        els.forEach(function (a) { a.preload = 'auto'; document.body.appendChild(a); });
+        var player = { els: els, urls: {} };
+        function url(idx) {
+            if (!player.urls[idx]) player.urls[idx] = blobUrl(o.apiBase, o.token, o.callId, chunks[idx].chunkId);
+            return player.urls[idx];
         }
-        playAt(i, Math.max(0, startMs - chunks[i].offsetMs));
+        async function load(el, idx) {
+            var u = await url(idx);
+            if (p !== session || !u) return false;
+            if (el.dataset.idx !== String(idx)) { el.dataset.idx = String(idx); el.src = u; }
+            return true;
+        }
+        async function playAt(idx, seekMs, slot) {
+            if (p !== session || idx >= chunks.length) return;
+            var el = els[slot];
+            if (!(await load(el, idx))) return playAt(idx + 1, 0, slot);
+            el.onended = function () { playAt(idx + 1, 0, 1 - slot); };
+            el.onloadedmetadata = null;   // eleman yeniden kullanılıyor: önceki parçanın konum atlaması taşınmasın
+            if (seekMs > 0) {
+                if (el.readyState >= 1) el.currentTime = seekMs / 1000;
+                else el.onloadedmetadata = function () { el.currentTime = seekMs / 1000; };
+            }
+            el.play().catch(function () { });
+            if (idx + 1 < chunks.length) load(els[1 - slot], idx + 1);   // sıradakini önden hazırla
+        }
+        // Başlangıç: konumu en son başlamış parça (parça süreleri tam 10 sn değildir).
+        var i = -1;
+        chunks.forEach(function (c, k) { if (c.offsetMs <= startMs + 50) i = k; });
+        if (i < 0 && chunks.length) i = 0;
+        if (i >= 0) playAt(i, Math.max(0, startMs - chunks[i].offsetMs), 0);
         return player;
     }
     return {
         play: async function (o) {
             stop();
-            p = { players: [] };
+            var session = { players: [] };
+            p = session;
             var agent = o.lines.filter(function (l) { return l.track === 'agent'; });
             var customer = o.lines.filter(function (l) { return l.track === 'customer'; });
-            p.players = await Promise.all([playTrack(o, agent, o.startMs), playTrack(o, customer, o.startMs)]);
+            session.players = [playTrack(o, agent, o.startMs, session), playTrack(o, customer, o.startMs, session)];
         },
         stop: stop
     };

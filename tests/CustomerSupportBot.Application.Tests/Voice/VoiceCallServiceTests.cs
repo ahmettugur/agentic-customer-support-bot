@@ -8,6 +8,7 @@ using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Voice;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Model.Voice;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -28,8 +29,8 @@ public class VoiceCallServiceTests
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 6, 12, 0, 0, TimeSpan.Zero));
     private readonly VoiceCallOptions _options = new() { Turn = { Urls = ["turn:localhost:3478"], SharedSecret = "s" } };
 
-    private VoiceCallService Service() => new(_calls, _recordings, _bridge, _modes, _sessions,
-        new OptionsMonitorStub<VoiceCallOptions>(_options), _time, NullLogger<VoiceCallService>.Instance);
+    private VoiceCallService Service(ILogger<VoiceCallService>? logger = null) => new(_calls, _recordings, _bridge, _modes, _sessions,
+        new OptionsMonitorStub<VoiceCallOptions>(_options), _time, logger ?? NullLogger<VoiceCallService>.Instance);
 
     private void HumanMode(string sid, string customerId = "1001")
     {
@@ -200,5 +201,44 @@ public class VoiceCallServiceTests
         await svc.HangupByStaffAsync(cancelled.Id, Can, VoiceCallEndReasons.AgentHangup, Ct);
 
         (await svc.GetAgentsInCallAsync(Ct)).Should().BeEquivalentTo(["agent-1"]);
+    }
+
+    private async Task<(VoiceCallService Svc, VoiceCall Call)> ActiveCallAsync(ILogger<VoiceCallService>? logger = null)
+    {
+        HumanMode("s1");
+        var svc = Service(logger);
+        var call = (await svc.StartAsync("s1", Elif, Ct)).Call!;
+        await svc.AcceptAsync(call.Id, "1001", Ct);
+        _time.Advance(TimeSpan.FromSeconds(30));
+        return (svc, call);
+    }
+
+    [Fact]
+    public async Task Hangup_AwaitsDurationNote()
+    {
+        var (svc, call) = await ActiveCallAsync();
+        var note = new TaskCompletionSource();
+        _bridge.PublishSystemMessageAsync("s1", Arg.Any<string>()).Returns(note.Task);
+
+        var hangup = svc.HangupByCustomerAsync(call.Id, "1001", VoiceCallEndReasons.CustomerHangup, Ct);
+        hangup.IsCompleted.Should().BeFalse();
+
+        note.SetResult();
+        (await hangup).Ok.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Hangup_NoteFailure_IsLogged_AndCallStillEnds()
+    {
+        var logger = Substitute.For<ILogger<VoiceCallService>>();
+        var (svc, call) = await ActiveCallAsync(logger);
+        _bridge.PublishSystemMessageAsync("s1", Arg.Any<string>()).Returns(Task.FromException(new InvalidOperationException("db down")));
+
+        var r = await svc.HangupByCustomerAsync(call.Id, "1001", VoiceCallEndReasons.CustomerHangup, Ct);
+
+        r.Call!.Status.Should().Be(VoiceCallStatus.Ended);
+        logger.ReceivedCalls().Should().Contain(c => c.GetMethodInfo().Name == "Log"
+            && (LogLevel)c.GetArguments()[0]! == LogLevel.Warning
+            && c.GetArguments()[3] is InvalidOperationException);
     }
 }

@@ -220,6 +220,22 @@ public partial class Admin
         var apiBase = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
         await JS.InvokeVoidAsync("loadScript", "/js/admin-chat-bridge.js", "js-admin-chat-bridge");
         await JS.InvokeVoidAsync("__adminChatSetup", token, apiBase);
+        await CloseOrphanVoiceCallAsync();
+    }
+
+    /// <summary>
+    /// Sayfa sesli görüşme sürerken yenilendiyse WebRTC bağlantısı gitmiştir; sunucudaki görüşme kapatılır ki
+    /// temsilci zaman aşımını (≤60 sn) beklemeden yeniden arayabilsin.
+    /// </summary>
+    private async Task CloseOrphanVoiceCallAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("loadScript", "/js/agent-voice-call.js", "js-agent-voice-call");
+            var orphan = await JS.InvokeAsync<string?>("csbVoice.takeOrphan");
+            if (orphan is not null) await AdminApi.HangupVoiceCallAsync(orphan, "connection_lost");
+        }
+        catch { }
     }
 
     // ── Tabs ──────────────────────────────────────────────────────────────────

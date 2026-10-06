@@ -497,6 +497,14 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
         using var response = await http.GetAsync("/voice-calls/mine");
         return response.StatusCode == System.Net.HttpStatusCode.OK ? await response.Content.ReadFromJsonAsync<VoiceCallDto>() : null;
     }
+
+    /// <summary>Görüşmeyi sunucuda kapatır (tarayıcıdaki WebRTC durumu yoksa — ör. sayfa yenilendi).</summary>
+    public async Task<bool> HangupVoiceCallAsync(string callId, string reason)
+    {
+        using var response = await http.PostAsync(
+            $"/voice-calls/{Uri.EscapeDataString(callId)}/hangup?reason={Uri.EscapeDataString(reason)}", null);
+        return response.IsSuccessStatusCode;
+    }
 }
 
 public sealed record ChatSentiment(string? Sentiment, double Score);

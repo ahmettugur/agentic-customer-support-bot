@@ -176,14 +176,22 @@ public sealed class VoiceCallService(
     {
         if (!call.IsOpen) return new(call);   // iki taraf aynı anda kapattı — sessizce kabul
         var wasActive = call.Status == VoiceCallStatus.Active;
-        return await TransitionAsync(call, c => c.Hangup(Now, reason), ct, onSuccess: c =>
+        var result = await TransitionAsync(call, c => c.Hangup(Now, reason), ct, onSuccess: c =>
         {
             var payload = Json(new { callId = c.Id, type = "ended", reason, by });
             if (by != "customer") bridge.PublishVoiceSignal(c.SessionId, toCustomer: true, payload);
             if (by != "agent") bridge.PublishVoiceSignal(c.SessionId, toCustomer: false, payload);
-            if (wasActive && c.Duration is { } d)
-                _ = bridge.PublishSystemMessageAsync(c.SessionId, $"Sesli görüşme · {FormatDuration(d)}");
         });
+        if (result.Ok && wasActive && result.Call!.Duration is { } d)
+            await WriteDurationNoteAsync(result.Call, d);
+        return result;
+    }
+
+    // Not yazılamazsa görüşme yine biter (durum zaten kalıcı); hata yalnızca loglanır.
+    private async Task WriteDurationNoteAsync(VoiceCall call, TimeSpan duration)
+    {
+        try { await bridge.PublishSystemMessageAsync(call.SessionId, $"Sesli görüşme · {FormatDuration(duration)}"); }
+        catch (Exception ex) { logger.LogWarning(ex, "[VoiceCall] Süre notu yazılamadı call={Call} session={Sid}", call.Id, call.SessionId); }
     }
 
     private async Task<VoiceCallResult> TransitionAsync(VoiceCall call, Action<VoiceCall> change, CancellationToken ct, Action<VoiceCall> onSuccess)

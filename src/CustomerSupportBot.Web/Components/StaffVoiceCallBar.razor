@@ -45,7 +45,8 @@ else
     private string _state = "idle";
     private bool _recording, _muted, _starting, _busyElsewhere;
     private DateTime _connectedAt;
-    private Timer? _tick;
+    private Timer? _tick, _busyCheck;
+    private readonly string _watchKey = Guid.NewGuid().ToString("N");
     private DotNetObjectReference<StaffVoiceCallBar>? _ref;
 
     private string Label => _state switch
@@ -60,11 +61,11 @@ else
     {
         await JS.InvokeVoidAsync("loadScript", "/js/agent-voice-call.js", "js-agent-voice-call");
         var mine = await AdminApi.GetMyVoiceCallAsync();
-        _busyElsewhere = mine is not null && mine.SessionId != SessionId;
+        _ref ??= DotNetObjectReference.Create(this);
+        await SetBusyElsewhereAsync(mine is not null && mine.SessionId != SessionId);
         if (mine is null || mine.SessionId != SessionId) return;
 
         // Görüşme JS modülünde sürer (sohbetler arasında gezinmek onu kesmez); bu sohbete dönülünce çubuk ona bağlanır.
-        _ref ??= DotNetObjectReference.Create(this);
         var live = await JS.InvokeAsync<VoiceAttachState?>("csbVoice.attach", mine.Id, _ref);
         if (live is null) return;
         _call = mine;
@@ -81,7 +82,7 @@ else
         try
         {
             var (call, error) = await AdminApi.StartVoiceCallAsync(SessionId);
-            if (call is null) { Toast.ShowError(VoiceCallText.StartError(error)); _busyElsewhere = error == "voice_call_busy"; return; }
+            if (call is null) { Toast.ShowError(VoiceCallText.StartError(error)); await SetBusyElsewhereAsync(error == "voice_call_busy"); return; }
             _call = call;
             _lastCallId = call.Id;
             _ref ??= DotNetObjectReference.Create(this);
@@ -112,6 +113,34 @@ else
         return InvokeAsync(StateHasChanged);
     }
 
+    /// <summary>Temsilcinin görüşmesi bitti (bu sekmede) — başka sohbetteki pasif düğme yeniden değerlendirilir.</summary>
+    [JSInvokable] public Task OnVoiceIdle() => InvokeAsync(RecheckBusyAsync);
+
+    // Görüşme başka sohbette sürerken düğme pasif. Bitişi bu sekmedeki JS modülü hemen bildirir; başka sekme ya da
+    // cihazdaki görüşme için 15 sn'de bir sunucuya da sorulur.
+    private async Task SetBusyElsewhereAsync(bool busy)
+    {
+        _busyElsewhere = busy;
+        if (busy)
+        {
+            _busyCheck ??= new Timer(_ => InvokeAsync(RecheckBusyAsync), null, 15000, 15000);
+            await JS.InvokeVoidAsync("csbVoice.watchIdle", _watchKey, _ref);
+        }
+        else
+        {
+            _busyCheck?.Dispose(); _busyCheck = null;
+            await JS.InvokeVoidAsync("csbVoice.unwatchIdle", _watchKey);
+        }
+    }
+
+    private async Task RecheckBusyAsync()
+    {
+        if (!_busyElsewhere) return;
+        var mine = await AdminApi.GetMyVoiceCallAsync();
+        await SetBusyElsewhereAsync(mine is not null && mine.SessionId != SessionId);
+        StateHasChanged();
+    }
+
     [JSInvokable] public Task OnVoiceRecording(bool on) { _recording = on; return InvokeAsync(StateHasChanged); }
     [JSInvokable] public Task OnVoiceError(string message) { Toast.ShowError(message); return Task.CompletedTask; }
 
@@ -135,6 +164,8 @@ else
     public async ValueTask DisposeAsync()
     {
         _tick?.Dispose();
+        _busyCheck?.Dispose();
+        try { await JS.InvokeVoidAsync("csbVoice.unwatchIdle", _watchKey); } catch { }
         if (_lastCallId is not null)
             try { await JS.InvokeVoidAsync("csbVoice.detach", _lastCallId); } catch { }
         _ref?.Dispose();

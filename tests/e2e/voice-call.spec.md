@@ -26,8 +26,10 @@ dotnet run --project src/CustomerSupportBot.Web                          # http:
 | 5 | Döküm satırları | Gerçek anahtarla metin; OpenAI anahtarı yoksa 3 denemeden sonra "(döküm alınamadı)". Satırlar yalnızca temsilcide görünür, müşteride görünmez. |
 | 6 | Görüşme açıkken aynı temsilci ikinci kez arar (`POST /chat-sessions/{id}/voice-calls`) ya da başka sohbeti açar. | `409 {"error":"voice_call_busy"}`; başka sohbette düğme pasif, ipucu "Zaten bir sesli görüşmedesiniz." |
 | 6b | Görüşmedeyken temsilci başka bir canlı sohbeti açar, sonra geri döner. | Görüşme sürer (`active`), müşteride süre akar; diğer sohbette düğme pasif + ipucu; geri dönünce çubuk "Görüşmede · süre · Kayıt". |
+| 6c | Temsilci başka sohbetteyken müşteri **Bitir**'e basar. | O sohbetteki "Sesli görüşme" düğmesi birkaç saniye içinde etkinleşir (sohbeti yeniden açmadan). |
+| 6d | Görüşme sürerken temsilci sayfayı yeniler. | Açılışta `POST /voice-calls/{id}/hangup?reason=connection_lost`; görüşme `Failed`, müşteri kartı kapanır; temsilci hemen yeniden arayabilir (409 yok). |
 | 7 | Müşteri **Bitir** (temsilci başka sohbetteyken de denenir). | İki tarafta kart/çubuk kapanır; iki tarafın geçmişinde "Sesli görüşme · X dk Y sn" notu; son (kısa) parça da yüklenir — kayıt kapsamı ≈ görüşme süresi. |
-| 8 | Temsilci döküm satırındaki zamana tıklar. | "Sesli görüşme kaydı" oynatıcısı açılır; **Baştan dinle** iki izi birlikte çalar (`/voice-calls/{id}/chunks/{chunkId}` → 200 `audio/webm`). |
+| 8 | Temsilci döküm satırındaki zamana tıklar. | "Sesli görüşme kaydı" oynatıcısı açılır; o zamanın parçasından başlar; **Baştan dinle** iki izi birlikte çalar (`/voice-calls/{id}/chunks/{chunkId}` → 200 `audio/webm`); parça geçişinde boşluk yok (300 ms ağ gecikmesiyle ölçüm: 0–2 ms). |
 | 9 | Yeni arama; müşteri **Reddet**. | Temsilcide "Müşteri reddetti" bildirimi, çubuk kapanır; görüşme `Declined`. |
 
 ## Son koşu — 2026-10-06 (feat/agent-voice-call)
@@ -42,3 +44,6 @@ dotnet run --project src/CustomerSupportBot.Web                          # http:
 - Son incelemede bulunan ve düzeltilen (ikinci koşu): başka sohbete geçmek görüşmeyi kapatıyordu
   (`ended / agent_hangup`) — artık sürüyor, geri dönünce çubuk bağlanıyor; müşteri kapatınca son parça
   kayboluyordu (208 sn görüşmede 200 sn kayıt) — artık 19,8 sn görüşmede 19,7 sn.
+- Üçüncü koşu (ertelenen küçük konular): 6c — düğme görüşme bitince açıldı (önce `disabled` kalıyordu); 6d —
+  yenilemeden sonra yeni arama bağlandı (önce 409); 8 — parça geçişi 300 ms gecikmede ~300 ms'den 0–2 ms'ye
+  indi, 00:10'a tıklayınca artık 1. parçadan başlıyor (önce 0. parçanın sonundan).
