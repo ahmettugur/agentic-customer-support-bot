@@ -7,7 +7,7 @@ Bu doküman Docker Compose altyapısını, servis haritasını ve production haz
 ## 1. Docker Compose Servis Haritası
 
 ```yaml
-# docker-compose.yml — 8 servis
+# docker-compose.yml — 9 servis
 services:
   postgres:        # Ana veritabanı
   redis:           # Opsiyonel cache
@@ -16,6 +16,7 @@ services:
   kibana:          # Elasticsearch görselleştirme
   otel-collector:  # OpenTelemetry trace routing
   jaeger:          # Distributed tracing UI
+  mailpit:         # Yerel SMTP test sunucusu (e-postalar dışarı çıkmaz)
 ```
 
 ### Port Haritası
@@ -33,6 +34,8 @@ services:
 | **Jaeger UI** | 16686 | 16686 | Tracing UI |
 | **OTel Collector gRPC** | 4327 | 4317 | OTLP receiver (opsiyonel, `otel` profili) |
 | **OTel Collector HTTP** | 4328 | 4318 | OTLP receiver (opsiyonel, `otel` profili) |
+| **Mailpit SMTP** | 1025 | 1025 | Uygulamanın e-posta gönderdiği yerel SMTP |
+| **Mailpit UI** | 8025 | 8025 | Gönderilen e-postaları görüntüleme (http://localhost:8025) |
 
 > **Tüm host portları yalnızca `127.0.0.1`'e bağlıdır** (ör. `"127.0.0.1:5433:5432"`). Redis,
 > Elasticsearch/Kibana ve Qdrant bu yığında kimlik doğrulamasız çalışır; `0.0.0.0`'a açık olmaları
@@ -59,14 +62,6 @@ docker compose -f deploy/docker-compose.yml up -d
 
 > ⚠️ Daha önce parola `docker-compose.yml` içinde açık metin olarak commit edilmişti — git
 > geçmişinde duruyor. Dosyadan kaldırmak geçmişten silmez; o parola **değiştirilmelidir**.
-
-### İmaj sürümleri sabit
-
-`postgres:18`, `redis:8.2`, `qdrant/qdrant:v1.15.5`, `otel/opentelemetry-collector-contrib:0.138.0`
-(Elasticsearch/Kibana `9.2.0`, Jaeger `2.17.0` zaten sabitti). Eskiden `latest`/etiketsiz imajlar
-bir sonraki `pull`'da ana sürüm atlatabiliyordu — Postgres'te bu, veri dizininin yeni sürümle
-açılamaması demektir. Postgres yalnızca ana sürüme (18) sabitlenir; küçük güncellemeler veri
-uyumluluğunu bozmaz.
 
 ### OTel Collector (Opsiyonel)
 

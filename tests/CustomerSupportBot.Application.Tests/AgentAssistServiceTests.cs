@@ -28,7 +28,7 @@ public class AgentAssistServiceTests
         public required InMemoryEscalationSink Escalations { get; init; }
         public required InMemoryApprovalQueue Approvals { get; init; }
         public required IGeneralChatClient Llm { get; init; }
-        public List<IReadOnlyList<ConversationMessage>> LlmCalls { get; } = new();
+        public required List<IReadOnlyList<ConversationMessage>> LlmCalls { get; init; }
     }
 
     private static Harness Build(string llmReply = """{"summary":"Müşteri kargosu gecikti.","customerRequest":"Kargonun durumunu öğrenmek istiyor.","suggestedReply":"Merhaba, siparişinizi hemen kontrol ediyorum."}""")
@@ -47,20 +47,19 @@ public class AgentAssistServiceTests
         var prompts = Substitute.For<IPromptRepository>();
         prompts.Get(AgentAssistService.PromptKey).Returns("ASSIST SYSTEM PROMPT");
 
-        var harness = (Harness?)null;
+        var llmCalls = new List<IReadOnlyList<ConversationMessage>>();
         var llm = Substitute.For<IGeneralChatClient>();
         llm.CompleteAsync(Arg.Any<IReadOnlyList<ConversationMessage>>(), Arg.Any<CancellationToken>())
-            .Returns(ci => { harness!.LlmCalls.Add(ci.Arg<IReadOnlyList<ConversationMessage>>()); return llmReply; });
+            .Returns(ci => { llmCalls.Add(ci.Arg<IReadOnlyList<ConversationMessage>>()); return llmReply; });
 
-        harness = new Harness
+        return new Harness
         {
             Service = new AgentAssistService(
                 sessions, profiles, memory, escalations, approvals, llm, prompts, new ContextSanitizer(),
                 NullLogger<AgentAssistService>.Instance),
             Sessions = sessions, Profiles = profiles, Memory = memory,
-            Escalations = escalations, Approvals = approvals, Llm = llm
+            Escalations = escalations, Approvals = approvals, Llm = llm, LlmCalls = llmCalls
         };
-        return harness;
     }
 
     private static async Task SeedAsync(Harness h, string? authCustomer = "1001", string? llmCustomer = null)
@@ -81,7 +80,7 @@ public class AgentAssistServiceTests
     {
         var h = Build();
         (await h.Service.GetAssistAsync("yok", CancellationToken.None)).Should().BeNull();
-        await h.Llm.DidNotReceiveWithAnyArgs().CompleteAsync(default!, default);
+        await h.Llm.DidNotReceiveWithAnyArgs().CompleteAsync(default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -192,7 +191,7 @@ public class AgentAssistServiceTests
         await SeedAsync(h);
 
         (await h.Service.GetAssistAsync(Sid, CancellationToken.None))!.Articles.Should().BeEmpty();
-        await h.Memory.DidNotReceiveWithAnyArgs().SearchAsync(default, default!, default, default);
+        await h.Memory.DidNotReceiveWithAnyArgs().SearchAsync(default, default!, default, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -216,8 +215,8 @@ public class AgentAssistServiceTests
         await SeedAsync(h);
         await h.Escalations.CreateAsync(new EscalationRequest { SessionId = Sid, AgentName = "OrderAgent", Reason = "Kargo kaybı şüphesi" });
         await h.Escalations.CreateAsync(new EscalationRequest { SessionId = "baska", AgentName = "OrderAgent", Reason = "başka oturum" });
-        await h.Approvals.CreateAsync(new ApprovalRequest { SessionId = Sid, ToolName = WellKnown.ToolNames.OrderCancel, ParamSignature = "a" });
-        await h.Approvals.CreateAsync(new ApprovalRequest { SessionId = "baska", ToolName = WellKnown.ToolNames.OrderCancel, ParamSignature = "b" });
+        await h.Approvals.CreateAsync(new ApprovalRequest { SessionId = Sid, ToolName = WellKnown.ToolNames.OrderCancel, ParamSignature = "a" }, TestContext.Current.CancellationToken);
+        await h.Approvals.CreateAsync(new ApprovalRequest { SessionId = "baska", ToolName = WellKnown.ToolNames.OrderCancel, ParamSignature = "b" }, TestContext.Current.CancellationToken);
 
         var r = (await h.Service.GetAssistAsync(Sid, CancellationToken.None))!;
 

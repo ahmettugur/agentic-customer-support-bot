@@ -11,7 +11,7 @@
 
 services:
   postgres:
-    image: postgres:18
+    image: postgres:latest
     container_name: aibot_postgres
     environment:
       POSTGRES_USER: postgres
@@ -28,7 +28,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:8.2
+    image: redis:latest
     container_name: aibot_redis
     ports:
       - "127.0.0.1:6380:6379"
@@ -42,7 +42,7 @@ services:
       retries: 5
 
   qdrant:
-    image: qdrant/qdrant:v1.15.5
+    image: qdrant/qdrant:latest
     container_name: aibot_qdrant_vector_db
     restart: unless-stopped
     ports:
@@ -81,7 +81,7 @@ services:
 
   # Elasticsearch for Jaeger storage
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.4
     container_name: aibot_elasticsearch
     environment:
       - cluster.name=elasticsearch
@@ -101,7 +101,7 @@ services:
 
   # Kibana for Elasticsearch visualization
   kibana:
-    image: docker.elastic.co/kibana/kibana:9.2.0
+    image: docker.elastic.co/kibana/kibana:9.5.4
     container_name: aibot_kibana
     restart: unless-stopped
     environment:
@@ -124,7 +124,7 @@ services:
   # OpenTelemetry Collector (opsiyonel — Jaeger v2 zaten OTLP alabilir)
   # Jaeger ile aynı anda çalıştırılacaksa farklı host portları kullanılmalı.
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.138.0
+    image: otel/opentelemetry-collector:nightly
     container_name: aibot_otel-collector
     restart: unless-stopped
     profiles: ["otel"]
@@ -148,7 +148,7 @@ services:
       start_period: 40s
 
   jaeger:
-    image: jaegertracing/jaeger:2.17.0
+    image: jaegertracing/jaeger:latest
     container_name: aibot_jaeger
     restart: unless-stopped
     command: ["--config", "/jaeger/config.yaml"]
@@ -170,6 +170,21 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # Mailpit — yerel SMTP test sunucusu: uygulamanın gönderdiği e-postalar (onay sonucu, sipariş
+  # kargolandı/teslim edildi, bütçe uyarısı) dışarı çıkmaz, web arayüzünde görünür.
+  # Uygulama ayarı: Email:Enabled=true, Email:FromAddress, Email:Smtp:Host=localhost,
+  # Email:Smtp:Port=1025, Email:Smtp:Security=None. Postalar bellekte tutulur (yeniden başlatınca silinir).
+  # Sürüm entegrasyon testlerindeki (Adapters.Email.Tests) ile aynı.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: aibot_mailpit
+    restart: unless-stopped
+    ports:
+      # SMTP
+      - "127.0.0.1:1025:1025"
+      # Web arayüzü
+      - "127.0.0.1:8025:8025"
 
 
 volumes:

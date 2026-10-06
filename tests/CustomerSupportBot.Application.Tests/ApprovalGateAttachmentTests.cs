@@ -56,9 +56,9 @@ public class ApprovalGateAttachmentTests
 
         var request = await SinglePendingAsync(f);
         request.Parameters[SideEffectApprovalGate.AttachmentIdsParameter].Should().BeEquivalentTo(new[] { photo.Id });
-        (await f.Store.GetAsync(photo.Id))!.ApprovalId.Should().Be(request.Id);
-        (await f.Store.GetAsync(foreign.Id))!.ApprovalId.Should().BeNull();
-        (await f.Store.GetAsync(otherSession.Id))!.ApprovalId.Should().BeNull();
+        (await f.Store.GetAsync(photo.Id, TestContext.Current.CancellationToken))!.ApprovalId.Should().Be(request.Id);
+        (await f.Store.GetAsync(foreign.Id, TestContext.Current.CancellationToken))!.ApprovalId.Should().BeNull();
+        (await f.Store.GetAsync(otherSession.Id, TestContext.Current.CancellationToken))!.ApprovalId.Should().BeNull();
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class ApprovalGateAttachmentTests
         await RequestAsync(f);
 
         (await SinglePendingAsync(f)).Parameters.Should().NotContainKey(SideEffectApprovalGate.AttachmentIdsParameter);
-        (await f.Store.GetAsync(unsent.Id))!.ApprovalId.Should().BeNull();
+        (await f.Store.GetAsync(unsent.Id, TestContext.Current.CancellationToken))!.ApprovalId.Should().BeNull();
     }
 
     [Fact]
@@ -95,8 +95,8 @@ public class ApprovalGateAttachmentTests
 
         await RequestAsync(f);
 
-        (await f.Queue.GetPendingAsync()).Should().ContainSingle("aynı talep yeni fotoğraf yüzünden mükerrer kayıt açmamalı");
-        (await f.Store.GetAsync(late.Id))!.ApprovalId.Should().BeNull("mevcut kaydın parametrelerinde olmayan fotoğraf ona bağlanmaz");
+        (await f.Queue.GetPendingAsync(TestContext.Current.CancellationToken)).Should().ContainSingle("aynı talep yeni fotoğraf yüzünden mükerrer kayıt açmamalı");
+        (await f.Store.GetAsync(late.Id, TestContext.Current.CancellationToken))!.ApprovalId.Should().BeNull("mevcut kaydın parametrelerinde olmayan fotoğraf ona bağlanmaz");
     }
 
     [Fact]

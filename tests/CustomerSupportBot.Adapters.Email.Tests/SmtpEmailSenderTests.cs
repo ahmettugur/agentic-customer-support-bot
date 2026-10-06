@@ -15,7 +15,7 @@ namespace CustomerSupportBot.Adapters.Email.Tests;
 
 public sealed class MailpitFixture : IAsyncLifetime
 {
-    private readonly IContainer _container = new ContainerBuilder("axllent/mailpit:v1.21")
+    private readonly IContainer _container = new ContainerBuilder("axllent/mailpit:v1.31.4")
         .WithPortBinding(1025, true)
         .WithPortBinding(8025, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilHttpRequestIsSucceeded(r => r.ForPort(8025).ForPath("/livez")))

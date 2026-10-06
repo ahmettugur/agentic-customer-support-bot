@@ -100,13 +100,12 @@ public class ChatPortAttachmentTests
     {
         var f = await CreateAsync();
 
-        await foreach (var _ in f.Service.HandleStreamAsync(
-            new ChatRequest("Ürün kırık geldi", "s1", "1001", [f.MineId, f.ForeignId]))) { }
+        await foreach (var _ in f.Service.HandleStreamAsync(new ChatRequest("Ürün kırık geldi", "s1", "1001", [f.MineId, f.ForeignId]), TestContext.Current.CancellationToken)) { }
 
         f.Team.Query.Should().Contain("Ürün kırık geldi").And.Contain("Kulpu kırık beyaz kupa.").And.NotContain("GİZLİ");
         f.PersistedUser().Should().Be(f.Team.Query, "fotoğraf notu sonraki turlarda da görünmeli");
-        (await f.Store.GetAsync(f.MineId))!.SentAt.Should().NotBeNull("onay kapısı yalnızca gönderilmiş fotoğrafı bağlar");
-        (await f.Store.GetAsync(f.ForeignId))!.SentAt.Should().BeNull();
+        (await f.Store.GetAsync(f.MineId, TestContext.Current.CancellationToken))!.SentAt.Should().NotBeNull("onay kapısı yalnızca gönderilmiş fotoğrafı bağlar");
+        (await f.Store.GetAsync(f.ForeignId, TestContext.Current.CancellationToken))!.SentAt.Should().BeNull();
     }
 
     [Fact]
@@ -114,7 +113,7 @@ public class ChatPortAttachmentTests
     {
         var f = await CreateAsync();
 
-        await f.Service.HandleAsync(new ChatRequest("bak", "s1", "1001", [f.MineId]));
+        await f.Service.HandleAsync(new ChatRequest("bak", "s1", "1001", [f.MineId]), TestContext.Current.CancellationToken);
 
         f.Team.Query.Should().Contain("[Müşterinin eklediği fotoğraf — otomatik analiz]: Kulpu kırık beyaz kupa.");
     }
@@ -124,7 +123,7 @@ public class ChatPortAttachmentTests
     {
         var f = await CreateAsync();
 
-        await f.Service.HandleAsync(new ChatRequest("merhaba", "s1", "1001"));
+        await f.Service.HandleAsync(new ChatRequest("merhaba", "s1", "1001"), TestContext.Current.CancellationToken);
 
         f.Team.Query.Should().Be("merhaba");
     }

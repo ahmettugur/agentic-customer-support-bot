@@ -434,7 +434,7 @@ agentic-customer-support-bot/
 │   └── CustomerSupportBot.Tests.Shared/        # Testcontainers Postgres fixture, fake'ler
 │
 ├── deploy/
-│   ├── docker-compose.yml                     # Postgres, Redis, Qdrant, Elasticsearch, Kibana, OTel, Jaeger
+│   ├── docker-compose.yml                     # Postgres, Redis, Qdrant, Elasticsearch, Kibana, OTel, Jaeger, Mailpit
 │   ├── .env.example                           # Gizli değer şablonu (deploy/.env olarak kopyalanır, git'e girmez)
 │   ├── jaeger-v2-config.yaml
 │   └── otel-collector-config.yaml

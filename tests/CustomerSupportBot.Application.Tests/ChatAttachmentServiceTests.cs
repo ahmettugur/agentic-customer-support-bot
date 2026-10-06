@@ -59,12 +59,12 @@ public class ChatAttachmentServiceTests
     {
         var h = Build();
 
-        var r = await h.Service.UploadAsync(null, "1001", JpegWithExif());
+        var r = await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken);
 
         r.Status.Should().Be(AttachmentUploadStatus.Ok);
         r.SessionId.Should().NotBeNullOrWhiteSpace();
         r.Description.Should().Be("Kutusu ezilmiş bir kupa, kulpu kırık.");
-        (await h.Sessions.GetAsync(r.SessionId!))!.State.AuthenticatedCustomerId.Should().Be("1001");
+        (await h.Sessions.GetAsync(r.SessionId!, TestContext.Current.CancellationToken))!.State.AuthenticatedCustomerId.Should().Be("1001");
     }
 
     [Fact]
@@ -72,8 +72,8 @@ public class ChatAttachmentServiceTests
     {
         var h = Build();
 
-        var r = await h.Service.UploadAsync(null, "1001", JpegWithExif());
-        var stored = (await h.Store.GetAsync(r.AttachmentId!))!;
+        var r = await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken);
+        var stored = (await h.Store.GetAsync(r.AttachmentId!, TestContext.Current.CancellationToken))!;
 
         stored.ContentType.Should().Be("image/jpeg");
         stored.CustomerId.Should().Be("1001");
@@ -86,9 +86,9 @@ public class ChatAttachmentServiceTests
     public async Task Upload_ToAnotherCustomersSession_IsForbidden()
     {
         var h = Build();
-        var owned = await h.Service.UploadAsync(null, "1001", JpegWithExif());
+        var owned = await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken);
 
-        var r = await h.Service.UploadAsync(owned.SessionId, "2002", JpegWithExif());
+        var r = await h.Service.UploadAsync(owned.SessionId, "2002", JpegWithExif(), TestContext.Current.CancellationToken);
 
         r.Status.Should().Be(AttachmentUploadStatus.Forbidden);
     }
@@ -100,7 +100,7 @@ public class ChatAttachmentServiceTests
     {
         var h = Build();
 
-        var r = await h.Service.UploadAsync(null, "1001", System.Text.Encoding.ASCII.GetBytes(content));
+        var r = await h.Service.UploadAsync(null, "1001", System.Text.Encoding.ASCII.GetBytes(content), TestContext.Current.CancellationToken);
 
         r.Status.Should().Be(AttachmentUploadStatus.UnsupportedType);
         r.Error.Should().NotBeNullOrWhiteSpace();
@@ -111,18 +111,18 @@ public class ChatAttachmentServiceTests
     {
         var h = Build(new AttachmentOptions { MaxBytes = 20 });
 
-        (await h.Service.UploadAsync(null, "1001", [])).Status.Should().Be(AttachmentUploadStatus.Empty);
-        (await h.Service.UploadAsync(null, "1001", JpegWithExif())).Status.Should().Be(AttachmentUploadStatus.TooLarge);
+        (await h.Service.UploadAsync(null, "1001", [], TestContext.Current.CancellationToken)).Status.Should().Be(AttachmentUploadStatus.Empty);
+        (await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken)).Status.Should().Be(AttachmentUploadStatus.TooLarge);
     }
 
     [Fact]
     public async Task SessionLimit_IsEnforced()
     {
         var h = Build(new AttachmentOptions { MaxPerSession = 2 });
-        var first = await h.Service.UploadAsync(null, "1001", JpegWithExif());
-        await h.Service.UploadAsync(first.SessionId, "1001", JpegWithExif());
+        var first = await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken);
+        await h.Service.UploadAsync(first.SessionId, "1001", JpegWithExif(), TestContext.Current.CancellationToken);
 
-        (await h.Service.UploadAsync(first.SessionId, "1001", JpegWithExif())).Status
+        (await h.Service.UploadAsync(first.SessionId, "1001", JpegWithExif(), TestContext.Current.CancellationToken)).Status
             .Should().Be(AttachmentUploadStatus.TooManyInSession);
     }
 
@@ -133,11 +133,11 @@ public class ChatAttachmentServiceTests
         h.Analyzer.DescribeAsync(Arg.Any<byte[]>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns<string>(_ => throw new HttpRequestException("vision down"));
 
-        var r = await h.Service.UploadAsync(null, "1001", JpegWithExif());
+        var r = await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken);
 
         r.Status.Should().Be(AttachmentUploadStatus.Ok);
         r.Description.Should().BeNull();
-        (await h.Store.GetAsync(r.AttachmentId!)).Should().NotBeNull();
+        (await h.Store.GetAsync(r.AttachmentId!, TestContext.Current.CancellationToken)).Should().NotBeNull();
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class ChatAttachmentServiceTests
         h.Guard.Inspect(Arg.Any<string>())
             .Returns(new InputGuardResult(InputGuardVerdict.Allow, "Etikette telefon: ***-***-**12", ["pii_masked"], null));
 
-        (await h.Service.UploadAsync(null, "1001", JpegWithExif())).Description
+        (await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken)).Description
             .Should().Be("Etikette telefon: ***-***-**12");
     }
 
@@ -158,7 +158,7 @@ public class ChatAttachmentServiceTests
         h.Guard.Inspect(Arg.Any<string>())
             .Returns(new InputGuardResult(InputGuardVerdict.Reject, "", ["injection"], "reddedildi"));
 
-        var r = await h.Service.UploadAsync(null, "1001", JpegWithExif());
+        var r = await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken);
 
         r.Status.Should().Be(AttachmentUploadStatus.Ok);
         r.Description.Should().BeNull();
@@ -168,11 +168,11 @@ public class ChatAttachmentServiceTests
     public async Task Get_ForCustomer_ReturnsOnlyTheirOwnPhoto()
     {
         var h = Build();
-        var r = await h.Service.UploadAsync(null, "1001", JpegWithExif());
+        var r = await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken);
 
-        (await h.Service.GetAsync(r.AttachmentId!, "1001")).Should().NotBeNull();
-        (await h.Service.GetAsync(r.AttachmentId!, "2002")).Should().BeNull();
-        (await h.Service.GetAsync(r.AttachmentId!, null)).Should().NotBeNull("personel uçları sahiplik kontrolü yapmaz");
+        (await h.Service.GetAsync(r.AttachmentId!, "1001", TestContext.Current.CancellationToken)).Should().NotBeNull();
+        (await h.Service.GetAsync(r.AttachmentId!, "2002", TestContext.Current.CancellationToken)).Should().BeNull();
+        (await h.Service.GetAsync(r.AttachmentId!, null, TestContext.Current.CancellationToken)).Should().NotBeNull("personel uçları sahiplik kontrolü yapmaz");
     }
 
     [Fact]
@@ -180,21 +180,21 @@ public class ChatAttachmentServiceTests
     {
         var h = Build(new AttachmentOptions { Enabled = false });
 
-        (await h.Service.UploadAsync(null, "1001", JpegWithExif())).Status.Should().Be(AttachmentUploadStatus.Disabled);
+        (await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken)).Status.Should().Be(AttachmentUploadStatus.Disabled);
     }
 
     [Fact]
     public async Task DeleteUnsent_OnlyOwnAndOnlyBeforeSending()
     {
         var h = Build();
-        var a = await h.Service.UploadAsync(null, "1001", JpegWithExif());
-        var b = await h.Service.UploadAsync(a.SessionId, "1001", JpegWithExif());
-        await h.Store.MarkSentAsync([b.AttachmentId!], DateTime.UtcNow);
+        var a = await h.Service.UploadAsync(null, "1001", JpegWithExif(), TestContext.Current.CancellationToken);
+        var b = await h.Service.UploadAsync(a.SessionId, "1001", JpegWithExif(), TestContext.Current.CancellationToken);
+        await h.Store.MarkSentAsync([b.AttachmentId!], DateTime.UtcNow, TestContext.Current.CancellationToken);
 
-        (await h.Service.DeleteUnsentAsync(a.AttachmentId!, "2002")).Should().BeFalse("başkasının fotoğrafı");
-        (await h.Service.DeleteUnsentAsync(b.AttachmentId!, "1001")).Should().BeFalse("gönderilmiş fotoğraf silinmez");
-        (await h.Service.DeleteUnsentAsync(a.AttachmentId!, "1001")).Should().BeTrue();
-        (await h.Store.GetAsync(a.AttachmentId!)).Should().BeNull();
-        (await h.Store.GetAsync(b.AttachmentId!)).Should().NotBeNull();
+        (await h.Service.DeleteUnsentAsync(a.AttachmentId!, "2002", TestContext.Current.CancellationToken)).Should().BeFalse("başkasının fotoğrafı");
+        (await h.Service.DeleteUnsentAsync(b.AttachmentId!, "1001", TestContext.Current.CancellationToken)).Should().BeFalse("gönderilmiş fotoğraf silinmez");
+        (await h.Service.DeleteUnsentAsync(a.AttachmentId!, "1001", TestContext.Current.CancellationToken)).Should().BeTrue();
+        (await h.Store.GetAsync(a.AttachmentId!, TestContext.Current.CancellationToken)).Should().BeNull();
+        (await h.Store.GetAsync(b.AttachmentId!, TestContext.Current.CancellationToken)).Should().NotBeNull();
     }
 }

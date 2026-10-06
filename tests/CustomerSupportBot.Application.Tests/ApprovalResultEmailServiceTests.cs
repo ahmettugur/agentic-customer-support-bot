@@ -62,7 +62,7 @@ public class ApprovalResultEmailServiceTests
         var h = Build();
         var request = Decided();
 
-        await Task.WhenAll(h.NewPod().HandleDecidedAsync(request), h.NewPod().HandleDecidedAsync(request));
+        await Task.WhenAll(h.NewPod().HandleDecidedAsync(request, TestContext.Current.CancellationToken), h.NewPod().HandleDecidedAsync(request, TestContext.Current.CancellationToken));
 
         h.Sender.Sent.Should().ContainSingle();
         var mail = h.Sender.Sent[0];
@@ -81,7 +81,7 @@ public class ApprovalResultEmailServiceTests
     {
         var h = Build();
 
-        await h.NewPod().HandleDecidedAsync(Decided(status, exec));
+        await h.NewPod().HandleDecidedAsync(Decided(status, exec), TestContext.Current.CancellationToken);
 
         h.Sender.Sent.Should().ContainSingle().Which.Subject.Should().Contain(expected);
     }
@@ -91,7 +91,7 @@ public class ApprovalResultEmailServiceTests
     {
         var h = Build();
 
-        await h.NewPod().HandleDecidedAsync(Decided(ApprovalStatus.Rejected, ApprovalExecutionStatus.None));
+        await h.NewPod().HandleDecidedAsync(Decided(ApprovalStatus.Rejected, ApprovalExecutionStatus.None), TestContext.Current.CancellationToken);
 
         var mail = h.Sender.Sent.Single();
         mail.HtmlBody.Should().Contain("&lt;b&gt;").And.NotContain("dolmuş <b>");
@@ -105,10 +105,10 @@ public class ApprovalResultEmailServiceTests
     {
         var h = Build();
 
-        await h.NewPod().HandleDecidedAsync(Decided(status, exec));
+        await h.NewPod().HandleDecidedAsync(Decided(status, exec), TestContext.Current.CancellationToken);
 
         h.Sender.Sent.Should().BeEmpty();
-        (await h.Ledger.TryClaimAsync("approval-result:appr-1")).Should().BeTrue("atlanan kayıt talep edilmemeli");
+        (await h.Ledger.TryClaimAsync("approval-result:appr-1", TestContext.Current.CancellationToken)).Should().BeTrue("atlanan kayıt talep edilmemeli");
     }
 
     [Fact]
@@ -121,8 +121,8 @@ public class ApprovalResultEmailServiceTests
             Notifications = new EmailOptions.NotificationOptions { ApprovalResults = false }
         });
 
-        await off.NewPod().HandleDecidedAsync(Decided());
-        await notificationsOff.NewPod().HandleDecidedAsync(Decided());
+        await off.NewPod().HandleDecidedAsync(Decided(), TestContext.Current.CancellationToken);
+        await notificationsOff.NewPod().HandleDecidedAsync(Decided(), TestContext.Current.CancellationToken);
 
         off.Sender.Sent.Should().BeEmpty();
         notificationsOff.Sender.Sent.Should().BeEmpty();
@@ -133,8 +133,8 @@ public class ApprovalResultEmailServiceTests
     {
         var h = Build(email: null);
 
-        await h.NewPod().HandleDecidedAsync(Decided(customerId: null));
-        await h.NewPod().HandleDecidedAsync(Decided());
+        await h.NewPod().HandleDecidedAsync(Decided(customerId: null), TestContext.Current.CancellationToken);
+        await h.NewPod().HandleDecidedAsync(Decided(), TestContext.Current.CancellationToken);
 
         h.Sender.Sent.Should().BeEmpty();
     }
@@ -145,11 +145,11 @@ public class ApprovalResultEmailServiceTests
         var h = Build();
         h.Sender.Fail = true;
 
-        await h.NewPod().HandleDecidedAsync(Decided());
+        await h.NewPod().HandleDecidedAsync(Decided(), TestContext.Current.CancellationToken);
 
         h.Sender.Sent.Should().BeEmpty();
         h.Sender.Fail = false;
-        await h.NewPod().HandleDecidedAsync(Decided());
+        await h.NewPod().HandleDecidedAsync(Decided(), TestContext.Current.CancellationToken);
         h.Sender.Sent.Should().ContainSingle();
     }
 }

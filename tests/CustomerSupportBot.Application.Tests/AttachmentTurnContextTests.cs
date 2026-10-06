@@ -37,7 +37,7 @@ public class AttachmentTurnContextTests
         for (var i = 0; i < 5; i++)
         {
             var a = new ChatAttachment { SessionId = "s1", CustomerId = "1001", ContentType = "image/jpeg" };
-            await store.SaveAsync(a);
+            await store.SaveAsync(a, TestContext.Current.CancellationToken);
             ids.Add(a.Id);
         }
 

@@ -111,10 +111,10 @@ public class DataPrivacyServiceTests
         var h = Build(new DataRetentionOptions { Enabled = false });
         var old = await SessionAsync(h, "1001", Now.AddDays(-400));
 
-        var result = await h.Service.RunRetentionAsync(Now);
+        var result = await h.Service.RunRetentionAsync(Now, TestContext.Current.CancellationToken);
 
         result.Enabled.Should().BeFalse();
-        (await h.Sessions.GetAsync(old.SessionId)).Should().NotBeNull();
+        (await h.Sessions.GetAsync(old.SessionId, TestContext.Current.CancellationToken)).Should().NotBeNull();
         h.Eraser.ErasedSessions.Should().BeEmpty();
     }
 
@@ -127,16 +127,16 @@ public class DataPrivacyServiceTests
         var oldPhoto = await PhotoAsync(h, fresh, "1001", Now.AddDays(-91));
         var freshPhoto = await PhotoAsync(h, fresh, "1001", Now.AddDays(-5));
 
-        var result = await h.Service.RunRetentionAsync(Now);
+        var result = await h.Service.RunRetentionAsync(Now, TestContext.Current.CancellationToken);
 
         result.SessionsErased.Should().Be(1);
         result.AttachmentsDeleted.Should().Be(1);
         result.Failures.Should().BeEmpty();
-        (await h.Sessions.GetAsync(old.SessionId)).Should().BeNull();
-        (await h.Sessions.GetAsync(fresh.SessionId)).Should().NotBeNull();
+        (await h.Sessions.GetAsync(old.SessionId, TestContext.Current.CancellationToken)).Should().BeNull();
+        (await h.Sessions.GetAsync(fresh.SessionId, TestContext.Current.CancellationToken)).Should().NotBeNull();
         h.Eraser.ErasedSessions.Should().Equal(old.SessionId);
-        (await h.Attachments.GetAsync(oldPhoto.Id)).Should().BeNull("fotoğraf saklama süresi oturumdan bağımsız");
-        (await h.Attachments.GetAsync(freshPhoto.Id)).Should().NotBeNull();
+        (await h.Attachments.GetAsync(oldPhoto.Id, TestContext.Current.CancellationToken)).Should().BeNull("fotoğraf saklama süresi oturumdan bağımsız");
+        (await h.Attachments.GetAsync(freshPhoto.Id, TestContext.Current.CancellationToken)).Should().NotBeNull();
     }
 
     [Fact]
@@ -147,11 +147,11 @@ public class DataPrivacyServiceTests
         var older = await SessionAsync(h, null, Now.AddDays(-200));
         var old = await SessionAsync(h, null, Now.AddDays(-100));
 
-        var result = await h.Service.RunRetentionAsync(Now);
+        var result = await h.Service.RunRetentionAsync(Now, TestContext.Current.CancellationToken);
 
         result.SessionsErased.Should().Be(2);
         h.Eraser.ErasedSessions.Should().BeEquivalentTo([oldest.SessionId, older.SessionId]);
-        (await h.Sessions.GetAsync(old.SessionId)).Should().NotBeNull("bir sonraki taramaya kalır");
+        (await h.Sessions.GetAsync(old.SessionId, TestContext.Current.CancellationToken)).Should().NotBeNull("bir sonraki taramaya kalır");
     }
 
     [Fact]
@@ -160,11 +160,11 @@ public class DataPrivacyServiceTests
         var h = Build(new DataRetentionOptions { ConversationRetentionDays = 30 }, new RecordingEraser("traces", fail: true));
         var old = await SessionAsync(h, "1001", Now.AddDays(-100));
 
-        var result = await h.Service.RunRetentionAsync(Now);
+        var result = await h.Service.RunRetentionAsync(Now, TestContext.Current.CancellationToken);
 
         result.SessionsErased.Should().Be(0);
         result.Failures.Should().ContainSingle().Which.Should().Contain("traces");
-        (await h.Sessions.GetAsync(old.SessionId)).Should().NotBeNull(
+        (await h.Sessions.GetAsync(old.SessionId, TestContext.Current.CancellationToken)).Should().NotBeNull(
             "oturum en son silinir; bir depo başarısızsa yerinde kalır ve sonraki taramada tekrar denenir");
     }
 
@@ -175,12 +175,12 @@ public class DataPrivacyServiceTests
         var old = await SessionAsync(h, "1001", Now.AddDays(-1000));
         var photo = await PhotoAsync(h, old, "1001", Now.AddDays(-1000));
 
-        var result = await h.Service.RunRetentionAsync(Now);
+        var result = await h.Service.RunRetentionAsync(Now, TestContext.Current.CancellationToken);
 
         result.SessionsErased.Should().Be(0);
         result.AttachmentsDeleted.Should().Be(0);
-        (await h.Sessions.GetAsync(old.SessionId)).Should().NotBeNull();
-        (await h.Attachments.GetAsync(photo.Id)).Should().NotBeNull();
+        (await h.Sessions.GetAsync(old.SessionId, TestContext.Current.CancellationToken)).Should().NotBeNull();
+        (await h.Attachments.GetAsync(photo.Id, TestContext.Current.CancellationToken)).Should().NotBeNull();
     }
 
     // ─── Dışa aktarma ────────────────────────────────────────────────────────
@@ -200,7 +200,7 @@ public class DataPrivacyServiceTests
         h.Approvals.GetHistoryForCustomerAsync("1001", Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns([new ApprovalRequest { Id = "a1", ToolName = "return_request_tool", CustomerId = "1001" }]);
 
-        var export = await h.Service.ExportCustomerDataAsync("1001");
+        var export = await h.Service.ExportCustomerDataAsync("1001", TestContext.Current.CancellationToken);
 
         export.CustomerId.Should().Be("1001");
         export.Profile.Should().NotBeNull();
@@ -227,14 +227,14 @@ public class DataPrivacyServiceTests
         await h.Profiles.GetOrCreateAsync("1001");
         await h.Profiles.GetOrCreateAsync("2002");
 
-        var result = await h.Service.EraseCustomerDataAsync("1001");
+        var result = await h.Service.EraseCustomerDataAsync("1001", TestContext.Current.CancellationToken);
 
         result.SessionsErased.Should().Be(1);
         result.RecordsByStore.Should().ContainKey("test-store");
-        (await h.Sessions.GetAsync(mine.SessionId)).Should().BeNull();
-        (await h.Sessions.GetAsync(theirs.SessionId)).Should().NotBeNull();
-        (await h.Attachments.GetAsync(myPhoto.Id)).Should().BeNull();
-        (await h.Attachments.GetAsync(theirPhoto.Id)).Should().NotBeNull();
+        (await h.Sessions.GetAsync(mine.SessionId, TestContext.Current.CancellationToken)).Should().BeNull();
+        (await h.Sessions.GetAsync(theirs.SessionId, TestContext.Current.CancellationToken)).Should().NotBeNull();
+        (await h.Attachments.GetAsync(myPhoto.Id, TestContext.Current.CancellationToken)).Should().BeNull();
+        (await h.Attachments.GetAsync(theirPhoto.Id, TestContext.Current.CancellationToken)).Should().NotBeNull();
         h.Profiles.Get("1001").Should().BeNull();
         h.Profiles.Get("2002").Should().NotBeNull();
         h.Eraser.ErasedSessions.Should().Equal(mine.SessionId);
@@ -252,11 +252,11 @@ public class DataPrivacyServiceTests
 
         (await act.Should().ThrowAsync<DataErasureException>())
             .Which.FailedStores.Should().Contain("escalations");
-        (await h.Sessions.GetAsync(mine.SessionId)).Should().NotBeNull();
+        (await h.Sessions.GetAsync(mine.SessionId, TestContext.Current.CancellationToken)).Should().NotBeNull();
 
         eraser.Fail = false;
-        var retry = await h.Service.EraseCustomerDataAsync("1001");
+        var retry = await h.Service.EraseCustomerDataAsync("1001", TestContext.Current.CancellationToken);
         retry.SessionsErased.Should().Be(1);
-        (await h.Sessions.GetAsync(mine.SessionId)).Should().BeNull();
+        (await h.Sessions.GetAsync(mine.SessionId, TestContext.Current.CancellationToken)).Should().BeNull();
     }
 }

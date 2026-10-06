@@ -47,10 +47,10 @@ public class ContainmentMetricsTests
         var takenOver = await ConversationAsync(h);
         var escalatedLegacy = await ConversationAsync(h);
         await ConversationAsync(h, turns: 0);   // boş görüşme hesaba girmez
-        await h.Tracker.MarkAsync(takenOver);
+        await h.Tracker.MarkAsync(takenOver, TestContext.Current.CancellationToken);
         await h.Escalations.CreateAsync(new EscalationRequest { SessionId = escalatedLegacy, UserQuery = "q", Reason = "r" });
 
-        var d = await h.Analytics.GetDashboardAsync();
+        var d = await h.Analytics.GetDashboardAsync(TestContext.Current.CancellationToken);
 
         d.EligibleSessions.Should().Be(4);
         d.HumanInvolvedSessions.Should().Be(2, "devralınan + (bayrağı olmayan eski) eskalasyonlu görüşme");
@@ -62,7 +62,7 @@ public class ContainmentMetricsTests
     [Fact]
     public async Task NoConversations_RateIsZero_NotNaN()
     {
-        var d = await Build().Analytics.GetDashboardAsync();
+        var d = await Build().Analytics.GetDashboardAsync(TestContext.Current.CancellationToken);
 
         d.EligibleSessions.Should().Be(0);
         d.ContainmentRate.Should().Be(0);
@@ -76,7 +76,7 @@ public class ContainmentMetricsTests
             .Returns(new LlmCostSummary(TotalCostUsd: 1.50m, AttributedCostUsd: 1.20m, SessionsWithCost: 4,
                 AverageCostPerSessionUsd: 0.30m, MedianCostPerSessionUsd: 0.25m));
 
-        var d = await h.Analytics.GetDashboardAsync();
+        var d = await h.Analytics.GetDashboardAsync(TestContext.Current.CancellationToken);
 
         d.TotalLlmCostUsd.Should().Be(1.50m);
         d.UnattributedLlmCostUsd.Should().Be(0.30m);
@@ -91,13 +91,13 @@ public class ContainmentMetricsTests
         var h = Build();
         var sid = await ConversationAsync(h);
 
-        await h.Tracker.MarkAsync(sid);
-        var first = (await h.Sessions.GetAsync(sid))!.State.HumanInvolvedAt;
-        await h.Tracker.MarkAsync(sid);
-        await h.Tracker.MarkAsync("olmayan");
-        await h.Tracker.MarkAsync(null);
+        await h.Tracker.MarkAsync(sid, TestContext.Current.CancellationToken);
+        var first = (await h.Sessions.GetAsync(sid, TestContext.Current.CancellationToken))!.State.HumanInvolvedAt;
+        await h.Tracker.MarkAsync(sid, TestContext.Current.CancellationToken);
+        await h.Tracker.MarkAsync("olmayan", TestContext.Current.CancellationToken);
+        await h.Tracker.MarkAsync(null, TestContext.Current.CancellationToken);
 
-        var state = (await h.Sessions.GetAsync(sid))!.State;
+        var state = (await h.Sessions.GetAsync(sid, TestContext.Current.CancellationToken))!.State;
         state.HumanInvolved.Should().BeTrue();
         state.HumanInvolvedAt.Should().Be(first);
     }

@@ -88,7 +88,7 @@ public class ChatPortCostAttributionTests
     {
         var (service, team, reasoning, attribution) = Build();
 
-        await foreach (var _ in service.HandleStreamAsync(new ChatRequest("merhaba", "s1"))) { }
+        await foreach (var _ in service.HandleStreamAsync(new ChatRequest("merhaba", "s1"), TestContext.Current.CancellationToken)) { }
 
         reasoning.Seen.Should().Equal("s1");
         team.Seen.Should().Equal("s1", "s1");
@@ -100,7 +100,7 @@ public class ChatPortCostAttributionTests
     {
         var (service, team, reasoning, _) = Build();
 
-        await service.HandleAsync(new ChatRequest("merhaba", "s1"));
+        await service.HandleAsync(new ChatRequest("merhaba", "s1"), TestContext.Current.CancellationToken);
 
         reasoning.Seen.Should().Equal("s1");
         team.Seen.Should().Equal("s1");

@@ -25,7 +25,7 @@ public class EpisodicMemoryEraserTests
     {
         var (eraser, store, collection) = Build();
 
-        var n = await eraser.EraseSessionsAsync(["s1", "s2"]);
+        var n = await eraser.EraseSessionsAsync(["s1", "s2"], TestContext.Current.CancellationToken);
 
         n.Should().Be(2);
         await store.Received(1).DeleteBySessionsAsync(collection,
@@ -37,7 +37,7 @@ public class EpisodicMemoryEraserTests
     {
         var (eraser, store, collection) = Build();
 
-        await eraser.EraseCustomerAsync("1001");
+        await eraser.EraseCustomerAsync("1001", TestContext.Current.CancellationToken);
 
         await store.Received(1).DeleteWhereTagAsync(collection, "customerId", "1001", Arg.Any<CancellationToken>());
     }
@@ -47,8 +47,8 @@ public class EpisodicMemoryEraserTests
     {
         var (eraser, store, _) = Build(enabled: false);
 
-        await eraser.EraseSessionsAsync(["s1"]);
-        await eraser.EraseCustomerAsync("1001");
+        await eraser.EraseSessionsAsync(["s1"], TestContext.Current.CancellationToken);
+        await eraser.EraseCustomerAsync("1001", TestContext.Current.CancellationToken);
 
         store.ReceivedCalls().Should().BeEmpty();
     }

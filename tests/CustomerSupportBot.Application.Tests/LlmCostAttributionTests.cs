@@ -39,7 +39,7 @@ public class LlmCostAttributionTests
         var service = new ChatAttachmentService(new InMemoryAttachmentStore(), sessions, locks, analyzer, guard,
             Options.Create(new AttachmentOptions()), NullLogger<ChatAttachmentService>.Instance, attribution);
 
-        var result = await service.UploadAsync(null, "1001", ChatAttachmentServiceTests.JpegWithExif());
+        var result = await service.UploadAsync(null, "1001", ChatAttachmentServiceTests.JpegWithExif(), TestContext.Current.CancellationToken);
 
         seen.Should().Be(result.SessionId);
     }
@@ -49,8 +49,8 @@ public class LlmCostAttributionTests
     {
         var attribution = new LlmCallAttribution();
         var sessions = new InMemorySessionManager(Locks());
-        var session = await sessions.GetOrCreateAsync("sess-assist");
-        await sessions.AddExchangeAsync(session.SessionId, "kargom nerede", "bakıyorum");
+        var session = await sessions.GetOrCreateAsync("sess-assist", TestContext.Current.CancellationToken);
+        await sessions.AddExchangeAsync(session.SessionId, "kargom nerede", "bakıyorum", ct: TestContext.Current.CancellationToken);
         string? seen = "unset";
         var llm = Substitute.For<IGeneralChatClient>();
         llm.CompleteAsync(Arg.Any<IReadOnlyList<ConversationMessage>>(), Arg.Any<CancellationToken>())
@@ -64,7 +64,7 @@ public class LlmCostAttributionTests
                 NullLogger<InMemoryApprovalQueue>.Instance),
             llm, prompts, new ContextSanitizer(), NullLogger<AgentAssistService>.Instance, attribution);
 
-        await service.GetAssistAsync("sess-assist");
+        await service.GetAssistAsync("sess-assist", TestContext.Current.CancellationToken);
 
         seen.Should().Be("sess-assist");
     }
@@ -74,8 +74,8 @@ public class LlmCostAttributionTests
     {
         var attribution = new LlmCallAttribution();
         var sessions = new InMemorySessionManager(Locks());
-        var session = await sessions.GetOrCreateAsync("sess-replan");
-        await sessions.AddExchangeAsync(session.SessionId, "iade istiyorum", "tamam");
+        var session = await sessions.GetOrCreateAsync("sess-replan", TestContext.Current.CancellationToken);
+        await sessions.AddExchangeAsync(session.SessionId, "iade istiyorum", "tamam", ct: TestContext.Current.CancellationToken);
         var seen = new List<string?>();
         var reasoning = Substitute.For<IReasoningPort>();
         reasoning.ReasonAsync(Arg.Any<string>(), Arg.Any<AgentSession>(), Arg.Any<List<ConversationMessage>?>(), Arg.Any<CancellationToken>())
@@ -86,7 +86,7 @@ public class LlmCostAttributionTests
         var service = new ReplanService(sessions, Substitute.For<IChatBridge>(), team, reasoning,
             Substitute.For<IApprovalContextAccessor>(), NullLogger<ReplanService>.Instance, attribution);
 
-        await service.ExecuteAsync("sess-replan");
+        await service.ExecuteAsync("sess-replan", TestContext.Current.CancellationToken);
 
         seen.Should().Equal("sess-replan", "sess-replan");
     }
