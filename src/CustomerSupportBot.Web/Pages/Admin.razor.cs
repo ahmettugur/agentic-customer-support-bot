@@ -66,6 +66,14 @@ public partial class Admin
     // admin boş bırakınca backend 400 approval_reason_required dönüyordu. Karar artık
     // sunucuda veriliyor: ApprovalRequest.ReasonRequired.
 
+    // ── Onay kararı sürerken / verildikten sonra ────────────────────────────────
+    // Karar isteği sürerken kartın düğmeleri pasif (çift tıklama ikinci istek göndermesin). Karar verilen kart
+    // listeden ANINDA kalkar: eskiden kart bir sonraki otomatik yenilemeye (≤15 sn) kadar düğmeleri açık
+    // kalıyordu — Onay Kuyruğu sekmesinde karar sonrası yenileme listeyi yeniden çekmiyordu. Karar verilmiş
+    // kayıtlar, karar anında sürmekte olan bir yenilemenin eski listesiyle geri gelmesin diye süzülür.
+    private readonly HashSet<string> _decidingApprovals = [];
+    private readonly HashSet<string> _decidedApprovals  = [];
+
     // ── Takeover pending state ──────────────────────────────────────────────────
     private EscalationRequest? _pendingTakeoverEsc;
 
@@ -167,7 +175,7 @@ public partial class Admin
             var escalations = AdminApi.GetOpenEscalationsAsync();
             var chats       = AdminApi.GetActiveChatsAsync();
             await Task.WhenAll(approvals, escalations, chats);
-            _pendingApprovals = approvals.Result;
+            _pendingApprovals = approvals.Result.Where(a => !_decidedApprovals.Contains(a.Id)).ToList();
             _openEscalations  = escalations.Result;
             _activeChats      = chats.Result;
         }
@@ -280,17 +288,24 @@ public partial class Admin
         _showPromptModal = false;
         var v = _promptInput;
         _promptInput = string.Empty;
+        // Bildirimde işlemin adı ("Sipariş İptali onaylandı") — liste yenilenmeden önce alınır.
+        var decided = ApprovalSubject(_promptId);
+        var approvalId = _promptKind is PromptKind.ApproveApproval or PromptKind.RejectApproval ? _promptId : null;
+        // Aynı kayda ikinci karar isteği gönderilmez (hızlı çift tıklama).
+        if (approvalId is not null && !_decidingApprovals.Add(approvalId)) return;
         try
         {
             switch (_promptKind)
             {
                 case PromptKind.ApproveApproval:
                     await AdminApi.ApproveAsync(_promptId, v);
-                    Toast.ShowSuccess("Tool çağrısı onaylandı.");
+                    RemoveDecidedApproval(approvalId!);
+                    Toast.ShowSuccess($"{decided} onaylandı.");
                     break;
                 case PromptKind.RejectApproval:
                     await AdminApi.RejectAsync(_promptId, v);
-                    Toast.ShowInfo("Tool çağrısı reddedildi.");
+                    RemoveDecidedApproval(approvalId!);
+                    Toast.ShowInfo($"{decided} reddedildi.");
                     break;
                 case PromptKind.ResolveEscalation:
                     await AdminApi.ResolveEscalationAsync(_promptId, v);
@@ -341,7 +356,18 @@ public partial class Admin
             _errorMessage = $"Beklenmeyen hata: {ex.Message}";
             Toast.ShowError(_errorMessage);
         }
+        finally
+        {
+            // Hata olduysa kart düğmeleri tekrar açılır (karar verilmedi).
+            if (approvalId is not null) _decidingApprovals.Remove(approvalId);
+        }
         await RefreshActiveTabAsync();
+    }
+
+    private void RemoveDecidedApproval(string approvalId)
+    {
+        _decidedApprovals.Add(approvalId);
+        _pendingApprovals = _pendingApprovals.Where(a => a.Id != approvalId).ToList();
     }
 
     // ── Escalation takeover ────────────────────────────────────────────────────
@@ -987,6 +1013,25 @@ public partial class Admin
         ToolReturnRequest  => "İade Talebi",
         ToolComplaint      => "Şikayet Kaydı",
         _                  => toolName
+    };
+
+    /// <summary>Onay/ret bildiriminin öznesi: kartın başlığıyla aynı ad; tanınmayan işlemde ham araç adı yerine "Talep".</summary>
+    private string ApprovalSubject(string approvalId)
+    {
+        var tool = _pendingApprovals.FirstOrDefault(a => a.Id == approvalId)?.ToolName;
+        return tool is ToolOrderPlacement or ToolOrderCancel or ToolReturnRequest or ToolComplaint
+            ? ToolDisplayName(tool)
+            : "Talep";
+    }
+
+    /// <summary>Onay kararının admin'e gösterilen Türkçe karşılığı (sunucu durumu: approved/rejected/expired/pending).</summary>
+    private static string DecisionLabel(string? status) => status switch
+    {
+        "approved" => "Onaylandı",
+        "rejected" => "Reddedildi",
+        "expired"  => "Zaman aşımı",
+        "pending"  => "Bekliyor",
+        _          => status ?? "—"
     };
 
     /// <summary>Kart başlığındaki ikon — kart tipini bir bakışta ayırt ettirir.</summary>

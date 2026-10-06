@@ -29,7 +29,7 @@
             </a>
             <div class="admin-header-info">
                 <h1>@(_isAgent ? "Temsilci Paneli" : "HITL Admin Panel")</h1>
-                <p class="muted">@(_isAgent ? "Atanmış eskalasyonlar & canlı sohbetler" : "Human-in-the-Loop · Onay bekleyen tool çağrıları & açık eskalasyonlar")</p>
+                <p class="muted">@(_isAgent ? "Atanmış eskalasyonlar & canlı sohbetler" : "Onay bekleyen talepler ve açık eskalasyonlar")</p>
             </div>
         </div>
         <div class="admin-header-right">
@@ -130,7 +130,7 @@
         <!-- TAB: APPROVALS -->
         <section id="panel-approvals" class="tab-content @ActiveCls("approvals")" role="tabpanel" aria-labelledby="tab-approvals">
             <div class="tab-header">
-                <h2>Onay Bekleyen Tool Çağrıları</h2>
+                <h2>Onay Bekleyen Talepler</h2>
                 @* Bloklamayan HITL modelinde (bkz. ApprovalGateService.ExecuteWithApprovalGateAsync) tool
                    çağrısı admin kararını BEKLEMEZ — kayıt burada, sen karar verene kadar durur. Eskiden
                    burada ApprovalRequest.TimeoutSeconds'a bağlı "N saniye sonra otomatik reddedilir" yazan
@@ -140,7 +140,7 @@
                    bir yapılandırma) davranışıyla yanlışlıkla örtüşüyordu. O yapılandırma düzeltildi
                    (bkz. SlaOptions.cs) — artık yalnızca çok uzun süredir bekleyen kayıtlar için arka planda
                    sessiz bir "pes et" eşiği var, admin'e görünen bir sayaç değil. *@
-                <p class="muted">LLM bir yan etkili tool çağırmak istiyor. Sen karar verene kadar kuyrukta bekler — çok uzun süre (günler) yanıtsız kalırsa sistem otomatik reddeder.</p>
+                <p class="muted">Müşterinin sipariş, iptal, iade ve şikayet talepleri. Sen karar verene kadar bekler — çok uzun süre (günler) yanıtsız kalırsa sistem otomatik reddeder.</p>
             </div>
             <div class="cards-list">
                 @if (_pendingApprovals.Count == 0) { <div class="empty-state">Onay bekleyen istek yok.</div> }
@@ -152,7 +152,8 @@
                            makine kimlikleri (tool adı, kayıt no, session, ham parametreler) en altta,
                            katlanmış "Teknik ayrıntı" bloğunda. Admin 50 kartı tararken her birini
                            saniyeler içinde okuyabilmeli. *@
-                        <article class="card card-approval">
+                        var deciding = _decidingApprovals.Contains(a.Id);
+                        <article class="card card-approval @(deciding ? "deciding" : "")" aria-busy="@(deciding ? "true" : "false")">
                             <header class="card-header approval-header">
                                 <div class="card-title">
                                     <span class="approval-icon" aria-hidden="true">@ToolIcon(a.ToolName)</span>
@@ -282,8 +283,12 @@
                                 </details>
                             </div>
                             <footer class="card-actions">
-                                <button class="btn-primary" @onclick='() => ShowApprovePrompt(a)'>✓ Onayla</button>
-                                <button class="btn-danger"  @onclick='() => ShowPrompt(PromptKind.RejectApproval,  a.Id, "Reddet",  "Red sebebi (isteğe bağlı)")'>✗ Reddet</button>
+                                @if (deciding)
+                                {
+                                    <span class="muted deciding-label" role="status">İşleniyor…</span>
+                                }
+                                <button class="btn-primary" disabled="@deciding" @onclick='() => ShowApprovePrompt(a)'>✓ Onayla</button>
+                                <button class="btn-danger"  disabled="@deciding" @onclick='() => ShowPrompt(PromptKind.RejectApproval,  a.Id, "Reddet",  "Red sebebi (isteğe bağlı)")'>✗ Reddet</button>
                             </footer>
                         </article>
                     }
@@ -1095,8 +1100,8 @@
                                         @foreach (var a in sa.ApprovalDetails)
                                         {
                                             <div class="sa-detail-item">
-                                                <code>@a.ToolName</code>
-                                                <span class="status-tag @a.Status">@a.Status</span>
+                                                <span title="@a.ToolName">@ToolDisplayName(a.ToolName)</span>
+                                                <span class="status-tag @a.Status">@DecisionLabel(a.Status)</span>
                                                 @if (a.DecidedBy is not null) { <span class="muted">by @a.DecidedBy</span> }
                                                 <time class="muted">@FmtRelative(a.RequestedAt)</time>
                                             </div>
@@ -1156,7 +1161,7 @@
                         <article class="card card-history">
                             <header class="card-header">
                                 <div class="card-title">
-                                    <span class="tool-tag">@a.ToolName</span>
+                                    <span class="tool-tag" title="@a.ToolName">@ToolDisplayName(a.ToolName)</span>
                                     <span class="status-tag pending">işlem askıda</span>
                                     <code class="card-id">@ShortId(a.Id)</code>
                                 </div>
@@ -1180,7 +1185,7 @@
                     {
                         <article class="card card-history">
                             <header class="card-header">
-                                <div class="card-title"><span class="tool-tag">@a.ToolName</span><span class="status-tag @a.Status">@a.Status</span>@if (a.ExecutionStatus is "running" or "failed")
+                                <div class="card-title"><span class="tool-tag" title="@a.ToolName">@ToolDisplayName(a.ToolName)</span><span class="status-tag @a.Status">@DecisionLabel(a.Status)</span>@if (a.ExecutionStatus is "running" or "failed")
                                     {
                                         <span class="status-tag @(a.ExecutionStatus == "failed" ? "rejected" : "pending")">@ExecutionStatusLabel(a.ExecutionStatus, IsStuck(a))</span>
                                     }<code class="card-id">@ShortId(a.Id)</code></div>

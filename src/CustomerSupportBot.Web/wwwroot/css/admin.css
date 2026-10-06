@@ -220,6 +220,8 @@
 }
 
 .card-approval     { border-left: 3px solid var(--color-primary); }
+.card-approval.deciding { opacity: .6; }
+.card-approval .deciding-label { margin-right: auto; }
 .card-escalation   { border-left: 3px solid #d97706; }
 .card-active-chat  { border-left: 3px solid var(--color-accent); }
 .card-history      { opacity: 0.92; }
