@@ -19,6 +19,9 @@ public sealed class DataRetentionOptions
     /// <summary>Bundan eski fotoğraflar silinir — oturum daha yeni olsa bile (veri en aza indirme).</summary>
     public int AttachmentRetentionDays { get; set; } = 90;
 
+    /// <summary>Bundan eski sesli görüşme kayıtlarının sesi silinir; döküm metni konuşmayla kalır.</summary>
+    public int VoiceRecordingRetentionDays { get; set; } = 90;
+
     /// <summary>Tarama aralığı.</summary>
     public int SweepIntervalMinutes { get; set; } = 60;
 
