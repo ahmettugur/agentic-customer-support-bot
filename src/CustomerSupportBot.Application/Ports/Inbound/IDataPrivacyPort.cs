@@ -25,7 +25,8 @@ public interface IDataPrivacyPort
     Task<ErasureResult> EraseCustomerDataAsync(string customerId, CancellationToken ct = default);
 }
 
-public sealed record RetentionResult(bool Enabled, int SessionsErased, int AttachmentsDeleted, IReadOnlyList<string> Failures);
+public sealed record RetentionResult(bool Enabled, int SessionsErased, int AttachmentsDeleted, IReadOnlyList<string> Failures,
+    int VoiceRecordingsPurged = 0);
 
 public sealed record ErasureResult(string CustomerId, int SessionsErased, IReadOnlyDictionary<string, int> RecordsByStore);
 
@@ -52,7 +53,14 @@ public sealed record ExportedSession(
     DateTime LastActivity,
     IReadOnlyList<ConversationMessage> Messages,
     IReadOnlyList<ExportedAttachment> Attachments,
-    IReadOnlyList<ExportedDisposition>? Dispositions = null);
+    IReadOnlyList<ExportedDisposition>? Dispositions = null,
+    IReadOnlyList<ExportedVoiceCall>? VoiceCalls = null);
+
+/// <summary>Sesli görüşme — yalnızca döküm metni (ses dosyaları boyutu nedeniyle dışa aktarıma girmez).</summary>
+public sealed record ExportedVoiceCall(string AgentDisplayName, DateTime CreatedAt, DateTime? EndedAt, int? DurationSeconds,
+    IReadOnlyList<ExportedVoiceLine> Lines);
+
+public sealed record ExportedVoiceLine(string Speaker, int OffsetMs, string Text);
 
 /// <summary>Temsilcinin sohbeti kapatırken kaydettiği neden/etiket/not (kapatan temsilcinin adı hariç).</summary>
 public sealed record ExportedDisposition(string ReasonCode, IReadOnlyList<string> Tags, string? Note, DateTime ClosedAt);

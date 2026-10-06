@@ -7,6 +7,7 @@ using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
+using CustomerSupportBot.Domain.Model.Voice;
 namespace CustomerSupportBot.Application.Services.Privacy;
 
 /// <summary>
@@ -39,6 +40,8 @@ public sealed class DataPrivacyService : IDataPrivacyPort
     private readonly DataRetentionOptions _options;
     private readonly ILogger<DataPrivacyService> _logger;
     private readonly IConversationDispositionStore? _dispositions;
+    private readonly IVoiceRecordingStore? _voiceRecordings;
+    private readonly IVoiceCallStore? _voiceCalls;
 
     /// <summary>Onay geçmişinden dışa aktarılacak en fazla kayıt.</summary>
     private const int MaxExportedApprovals = 1000;
@@ -55,9 +58,13 @@ public sealed class DataPrivacyService : IDataPrivacyPort
         IComplaintRepository complaints,
         IOptions<DataRetentionOptions> options,
         ILogger<DataPrivacyService> logger,
-        IConversationDispositionStore? dispositions = null)
+        IConversationDispositionStore? dispositions = null,
+        IVoiceRecordingStore? voiceRecordings = null,
+        IVoiceCallStore? voiceCalls = null)
     {
         _dispositions = dispositions;
+        _voiceRecordings = voiceRecordings;
+        _voiceCalls = voiceCalls;
         _sessions = sessions;
         _attachments = attachments;
         _sessionErasers = sessionErasers.ToList();
@@ -93,6 +100,22 @@ public sealed class DataPrivacyService : IDataPrivacyPort
             }
         }
 
+        // Sesli görüşme kaydının sesi (en hassas veri) ayrı, daha kısa süreyle silinir; döküm metni kalır.
+        var voicePurged = 0;
+        if (_voiceRecordings is not null && _options.VoiceRecordingRetentionDays > 0)
+        {
+            try
+            {
+                voicePurged = await _voiceRecordings.PurgeAudioCreatedBeforeAsync(
+                    nowUtc.AddDays(-_options.VoiceRecordingRetentionDays), ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "[Privacy] Süresi dolan ses kayıtları silinemedi");
+                failures.Add("voice_recordings: " + ex.Message);
+            }
+        }
+
         var sessionsErased = 0;
         if (_options.ConversationRetentionDays > 0)
         {
@@ -106,14 +129,30 @@ public sealed class DataPrivacyService : IDataPrivacyPort
             }
         }
 
-        if (sessionsErased > 0 || attachmentsDeleted > 0 || failures.Count > 0)
+        if (sessionsErased > 0 || attachmentsDeleted > 0 || voicePurged > 0 || failures.Count > 0)
         {
             _logger.LogInformation(
-                "[Privacy] Saklama taraması: {Sessions} oturum, {Attachments} fotoğraf silindi, {Failures} hata",
-                sessionsErased, attachmentsDeleted, failures.Count);
+                "[Privacy] Saklama taraması: {Sessions} oturum, {Attachments} fotoğraf, {Voice} ses kaydı silindi, {Failures} hata",
+                sessionsErased, attachmentsDeleted, voicePurged, failures.Count);
         }
 
-        return new RetentionResult(true, sessionsErased, attachmentsDeleted, failures);
+        return new RetentionResult(true, sessionsErased, attachmentsDeleted, failures, voicePurged);
+    }
+
+    private async Task<IReadOnlyList<ExportedVoiceCall>?> ExportVoiceCallsAsync(string sessionId, CancellationToken ct)
+    {
+        if (_voiceCalls is null || _voiceRecordings is null) return null;
+        var list = new List<ExportedVoiceCall>();
+        foreach (var call in await _voiceCalls.ListForSessionAsync(sessionId, ct))
+        {
+            var lines = (await _voiceRecordings.ListMetaAsync(call.Id, ct))
+                .Where(c => !string.IsNullOrWhiteSpace(c.TranscriptText))
+                .Select(c => new ExportedVoiceLine(c.Track == VoiceTrack.Customer ? "Müşteri" : "Temsilci", c.OffsetMs, c.TranscriptText!))
+                .ToList();
+            list.Add(new ExportedVoiceCall(call.AgentDisplayName, call.CreatedAt, call.EndedAt,
+                call.Duration is { } d ? (int)d.TotalSeconds : null, lines));
+        }
+        return list;
     }
 
     public async Task<CustomerDataExport> ExportCustomerDataAsync(string customerId, CancellationToken ct = default)
@@ -138,7 +177,8 @@ public sealed class DataPrivacyService : IDataPrivacyPort
                     .Select(d => new ExportedDisposition(d.ReasonCode, d.Tags, d.Note, d.ClosedAt))
                     .ToList();
 
-            sessions.Add(new ExportedSession(session.SessionId, session.CreatedAt, session.LastActivity, history, attachments, dispositions));
+            sessions.Add(new ExportedSession(session.SessionId, session.CreatedAt, session.LastActivity, history, attachments, dispositions,
+                await ExportVoiceCallsAsync(info.SessionId, ct)));
             if (_ratings.GetBySession(info.SessionId) is { } rating) ratings.Add(rating);
         }
 

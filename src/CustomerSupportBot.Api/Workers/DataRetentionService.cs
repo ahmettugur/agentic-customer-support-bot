@@ -40,9 +40,9 @@ public sealed class DataRetentionService : BackgroundService
     {
         var initial = _options.CurrentValue;
         _logger.LogInformation(
-            "[Privacy] Veri saklama taraması {State}. Sohbet={Conv} gün, fotoğraf={Att} gün, aralık={Interval} dk",
+            "[Privacy] Veri saklama taraması {State}. Sohbet={Conv} gün, fotoğraf={Att} gün, ses kaydı={Voice} gün, aralık={Interval} dk",
             initial.Enabled ? "açık" : "kapalı",
-            initial.ConversationRetentionDays, initial.AttachmentRetentionDays, initial.SweepIntervalMinutes);
+            initial.ConversationRetentionDays, initial.AttachmentRetentionDays, initial.VoiceRecordingRetentionDays, initial.SweepIntervalMinutes);
 
         while (!stoppingToken.IsCancellationRequested)
         {
