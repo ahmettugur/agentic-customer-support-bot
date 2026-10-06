@@ -142,6 +142,25 @@ public class InMemoryChatBridge : IChatBridge
         Broadcast(_toUser, sessionId, msg);
     }
 
+    public void PublishVoiceSignal(string sessionId, bool toCustomer, string payloadJson)
+    {
+        // Transient ve yönlü — geçmişe yazılmaz, yalnızca hedef tarafa.
+        var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.VoiceSignal, Text = payloadJson };
+        Broadcast(toCustomer ? _toUser : _toAdmin, sessionId, msg);
+    }
+
+    public Task PublishVoiceTranscriptAsync(string sessionId, string callId, string track, int offsetMs, string text)
+    {
+        var msg = new ChatBridgeMessage
+        {
+            SessionId = sessionId, Sender = ChatBridgeSender.System, Text = text,
+            VoiceCallId = callId, VoiceTrack = track, OffsetMs = offsetMs
+        };
+        Append(sessionId, msg);
+        Broadcast(_toAdmin, sessionId, msg);
+        return Task.CompletedTask;
+    }
+
     public Task RecordBotExchangeAsync(string sessionId, string userQuery, string botResponse)
     {
         RecordBotExchange(sessionId, userQuery, botResponse);

@@ -134,6 +134,26 @@ public sealed class PostgresChatBridge : IChatBridge, ISessionDataEraser
         PublishRedis("csbot:bridge:touser", msg);
     }
 
+    public void PublishVoiceSignal(string sessionId, bool toCustomer, string payloadJson)
+    {
+        // Transient — DB'ye yazılmaz (BotTyping gibi); yalnızca hedef tarafa.
+        var msg = new ChatBridgeMessage { SessionId = sessionId, Sender = ChatBridgeSender.VoiceSignal, Text = payloadJson };
+        Broadcast(toCustomer ? _toUser : _toAdmin, sessionId, msg);
+        PublishRedis(toCustomer ? "csbot:bridge:touser" : "csbot:bridge:toadmin", msg);
+    }
+
+    public async Task PublishVoiceTranscriptAsync(string sessionId, string callId, string track, int offsetMs, string text)
+    {
+        var msg = new ChatBridgeMessage
+        {
+            SessionId = sessionId, Sender = ChatBridgeSender.System, Text = text,
+            VoiceCallId = callId, VoiceTrack = track, OffsetMs = offsetMs
+        };
+        await AppendAsync(sessionId, msg).ConfigureAwait(false);
+        Broadcast(_toAdmin, sessionId, msg);
+        PublishRedis("csbot:bridge:toadmin", msg);
+    }
+
     public async Task RecordBotExchangeAsync(string sessionId, string userQuery, string botResponse)
     {
         if (!string.IsNullOrWhiteSpace(userQuery))
@@ -305,7 +325,10 @@ public sealed class PostgresChatBridge : IChatBridge, ISessionDataEraser
             Sender = msg.Sender.ToString(),
             HumanAgent = msg.HumanAgent,
             Text = msg.Text,
-            CreatedAt = msg.Timestamp
+            CreatedAt = msg.Timestamp,
+            VoiceCallId = msg.VoiceCallId,
+            VoiceTrack = msg.VoiceTrack,
+            OffsetMs = msg.OffsetMs
         });
         await ctx.SaveChangesAsync();
     }
@@ -370,7 +393,10 @@ public sealed class PostgresChatBridge : IChatBridge, ISessionDataEraser
                     Sender = sender,
                     HumanAgent = e.HumanAgent,
                     Text = e.Text,
-                    Timestamp = e.CreatedAt
+                    Timestamp = e.CreatedAt,
+                    VoiceCallId = e.VoiceCallId,
+                    VoiceTrack = e.VoiceTrack,
+                    OffsetMs = e.OffsetMs
                 });
             }
         }
@@ -402,7 +428,10 @@ public sealed class PostgresChatBridge : IChatBridge, ISessionDataEraser
                 Sender = sender,
                 Text = root.GetProperty("Text").GetString() ?? "",
                 HumanAgent = root.TryGetProperty("HumanAgent", out var ha) && ha.ValueKind != JsonValueKind.Null ? ha.GetString() : null,
-                Timestamp = root.TryGetProperty("Timestamp", out var ts) ? ts.GetDateTime() : DateTime.UtcNow
+                Timestamp = root.TryGetProperty("Timestamp", out var ts) ? ts.GetDateTime() : DateTime.UtcNow,
+                VoiceCallId = root.TryGetProperty("VoiceCallId", out var vc) && vc.ValueKind == JsonValueKind.String ? vc.GetString() : null,
+                VoiceTrack = root.TryGetProperty("VoiceTrack", out var vt) && vt.ValueKind == JsonValueKind.String ? vt.GetString() : null,
+                OffsetMs = root.TryGetProperty("OffsetMs", out var vo) && vo.ValueKind == JsonValueKind.Number ? vo.GetInt32() : null
             };
 
             Broadcast(registry, sessionId, msg);
@@ -423,7 +452,10 @@ public sealed class PostgresChatBridge : IChatBridge, ISessionDataEraser
             Sender = msg.Sender.ToString(),
             msg.Text,
             msg.HumanAgent,
-            msg.Timestamp
+            msg.Timestamp,
+            msg.VoiceCallId,
+            msg.VoiceTrack,
+            msg.OffsetMs
         };
         _messageBus.Publish(channel, JsonSerializer.Serialize(payload));
     }

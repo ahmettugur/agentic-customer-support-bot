@@ -22,7 +22,13 @@ public enum ChatBridgeSender
     /// Bot "yazıyor…" canlı göstergesi (typing indicator). Text alanı
     /// "on" veya "off" — history'e yazılmaz, sadece broadcast edilir.
     /// </summary>
-    BotTyping
+    BotTyping,
+
+    /// <summary>
+    /// Sesli görüşme sinyali (WebRTC teklif/yanıt/ağ adresi, çalma, kabul…). Text: JSON yük. Geçmişe
+    /// yazılmaz ve yönlüdür: yalnızca hedef tarafa yayınlanır.
+    /// </summary>
+    VoiceSignal
 }
 
 public class ChatBridgeMessage
@@ -36,5 +42,14 @@ public class ChatBridgeMessage
     public string? HumanAgent { get; set; }
 
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Sesli görüşme döküm satırıysa görüşme kimliği; değilse <c>null</c>.</summary>
+    public string? VoiceCallId { get; set; }
+
+    /// <summary>Döküm satırının konuşanı: <c>agent</c> | <c>customer</c>.</summary>
+    public string? VoiceTrack { get; set; }
+
+    /// <summary>Döküm satırının görüşme başından itibaren konumu (ms) — kayıtta o ana atlamak için.</summary>
+    public int? OffsetMs { get; set; }
 }
 

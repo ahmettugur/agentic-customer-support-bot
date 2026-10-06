@@ -17,4 +17,9 @@ public sealed class ChatBridgeMessageEntity
     public string? HumanAgent { get; set; }
     public string Text { get; set; } = "";
     public DateTime CreatedAt { get; set; }
+
+    // Sesli görüşme döküm satırı meta verisi (diğer mesajlarda null).
+    public string? VoiceCallId { get; set; }
+    public string? VoiceTrack { get; set; }
+    public int? OffsetMs { get; set; }
 }

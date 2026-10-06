@@ -48,6 +48,10 @@ internal sealed class ChatBridgeMessageConfiguration : IEntityTypeConfiguration<
             .HasColumnType("timestamptz")
             .IsRequired();
 
+        builder.Property(m => m.VoiceCallId).HasColumnName("voice_call_id").HasMaxLength(32);
+        builder.Property(m => m.VoiceTrack).HasColumnName("voice_track").HasMaxLength(16);
+        builder.Property(m => m.OffsetMs).HasColumnName("offset_ms");
+
         builder.HasIndex(m => new { m.SessionId, m.Id })
             .HasDatabaseName("ix_bridge_messages_session");
 

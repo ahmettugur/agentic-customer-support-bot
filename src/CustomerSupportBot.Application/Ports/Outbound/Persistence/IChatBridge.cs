@@ -18,6 +18,15 @@ public interface IChatBridge
     Task PublishAdminOnlyMessageAsync(string sessionId, string text);
     Task PublishBotMessageAsync(string sessionId, string text);
     void PublishBotTyping(string sessionId, bool on);
+
+    /// <summary>
+    /// Sesli görüşme sinyali — kalıcı DEĞİL, yalnızca hedef tarafa: <paramref name="toCustomer"/> true ise
+    /// müşteri kanalına, değilse temsilci kanalına. <paramref name="payloadJson"/> mesajın Text'idir.
+    /// </summary>
+    void PublishVoiceSignal(string sessionId, bool toCustomer, string payloadJson);
+
+    /// <summary>Döküm satırı — geçmişe yazılır, yalnızca temsilci kanalına yayınlanır (müşteri görmez).</summary>
+    Task PublishVoiceTranscriptAsync(string sessionId, string callId, string track, int offsetMs, string text);
     /// <summary>
     /// Bot turunu (kullanıcı + bot mesajı) admin paneli geçmişine yazar. Her bot turunun
     /// sonunda çalışır — bu yüzden asenkron.
