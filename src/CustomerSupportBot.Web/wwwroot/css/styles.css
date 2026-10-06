@@ -2357,6 +2357,48 @@ body {
 .skeleton-line--w80 { width: 80%; }
 
 /* ═══════════════════════════════════════════════
+   BLAZOR YÜKLENME GÖSTERGESİ (index.html #app)
+   ═══════════════════════════════════════════════
+   🐞 Bu stiller yalnızca hiç bağlanmayan şablon artığı app.css'teydi; uygulama açılırken
+   SVG varsayılan 300×150 boyutta ve içi siyah dolu çiziliyordu. Tema değişkenleriyle
+   burada — index.html teması Blazor'dan önce ayarladığı için karanlık temada da doğru. */
+.loading-progress {
+    position: absolute;
+    display: block;
+    width: 4.5rem;
+    height: 4.5rem;
+    inset: 32vh 0 auto 0;
+    margin: 0 auto;
+}
+
+.loading-progress circle {
+    fill: none;
+    stroke: var(--color-border);
+    stroke-width: 0.35rem;
+    transform-origin: 50% 50%;
+    transform: rotate(-90deg);
+}
+
+.loading-progress circle:last-child {
+    stroke: var(--color-primary);
+    stroke-linecap: round;
+    stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
+    transition: stroke-dasharray 0.05s ease-in-out;
+}
+
+.loading-progress-text {
+    position: absolute;
+    inset: calc(32vh + 5.5rem) 0 auto 0;
+    text-align: center;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.loading-progress-text::after {
+    content: var(--blazor-load-percentage-text, "Yükleniyor");
+}
+
+/* ═══════════════════════════════════════════════
    DARK MODE  (data-theme="dark" + sistem tercihi)
    ═══════════════════════════════════════════════ */
 [data-theme="dark"] {
