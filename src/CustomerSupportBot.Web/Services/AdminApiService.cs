@@ -469,6 +469,27 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
     {
         try { await http.PostAsJsonAsync($"/improvements/{Uri.EscapeDataString(id)}/reject", new { reason }); } catch { }
     }
+
+    // ─── Sesli görüşme ────────────────────────────────────────────────────────
+    // Uçlar öneksizdir (yönetici ve temsilci aynı yolu kullanır; politika AdminOrAgent).
+
+    public async Task<(VoiceCallDto? Call, string? Error)> StartVoiceCallAsync(string sessionId)
+    {
+        using var response = await http.PostAsync($"/chat-sessions/{Uri.EscapeDataString(sessionId)}/voice-calls", null);
+        if (response.IsSuccessStatusCode) return (await response.Content.ReadFromJsonAsync<VoiceCallDto>(), null);
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            return (null, body.TryGetProperty("error", out var e) ? e.GetString() : null);
+        }
+        catch (System.Text.Json.JsonException) { return (null, null); }
+    }
+
+    public async Task<VoiceCallDto?> GetMyVoiceCallAsync()
+    {
+        using var response = await http.GetAsync("/voice-calls/mine");
+        return response.StatusCode == System.Net.HttpStatusCode.OK ? await response.Content.ReadFromJsonAsync<VoiceCallDto>() : null;
+    }
 }
 
 public sealed record ChatSentiment(string? Sentiment, double Score);

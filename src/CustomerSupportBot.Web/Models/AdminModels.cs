@@ -71,8 +71,25 @@ public sealed record ActiveChatSession(
 public sealed record ChatHistoryMessage(
     string Sender,
     string Text,
-    DateTimeOffset Timestamp
+    DateTimeOffset Timestamp,
+    // Sesli görüşme döküm satırı meta verisi (diğer mesajlarda null).
+    string? VoiceCallId = null,
+    string? VoiceTrack = null,
+    int? OffsetMs = null
 );
+
+// ─── Sesli görüşme (temsilci ↔ müşteri) ───────────────────────────────────────
+
+public sealed record VoiceCallDto(
+    string Id,
+    string SessionId,
+    string AgentDisplayName,
+    string Status,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? AnsweredAt,
+    DateTimeOffset? EndedAt,
+    string? EndReason,
+    int? DurationSeconds);
 
 // ─── Temsilci asistanı (GET …/chat-sessions/{sid}/assist) ─────────────────────
 

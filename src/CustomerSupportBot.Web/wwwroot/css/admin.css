@@ -2413,3 +2413,9 @@ code.at-val {
     .esc-actions .btn-icon-bordered { width: 36px; }
     .menu { left: auto; right: 0; }
 }
+
+/* ─── Sesli görüşme döküm satırı (canlı sohbet akışı) ─── */
+.voice-line { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--color-surface-alt); font-size: var(--font-size-sm); color: var(--color-text); }
+.voice-line.agent { background: var(--color-primary-subtle); }
+.voice-line-text { flex: 1; }
+.voice-line-play { border: 0; background: transparent; color: var(--color-primary); font-family: var(--font-mono); font-size: 12px; cursor: pointer; }

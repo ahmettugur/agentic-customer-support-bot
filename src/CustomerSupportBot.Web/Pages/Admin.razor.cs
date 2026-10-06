@@ -1,3 +1,4 @@
+using CustomerSupportBot.Web.Components;
 using System.Text.Json;
 using System.Security.Claims;
 using CustomerSupportBot.Web.Helpers;
@@ -737,6 +738,18 @@ public partial class Admin
     [JSInvokable]
     public async Task OnChatEvent(string type, string data)
     {
+        if (type == "voice_signal")
+        {
+            try
+            {
+                using var vdoc = System.Text.Json.JsonDocument.Parse(data);
+                var vt = vdoc.RootElement.TryGetProperty("type", out var tt) ? tt.GetString() ?? "" : "";
+                var vr = vdoc.RootElement.TryGetProperty("reason", out var rr) ? rr.GetString() : null;
+                await InvokeAsync(() => _voiceBar?.OnSignal(vt, vr));
+            }
+            catch { }
+            return;
+        }
         if (type != "bridge_message" || _openChatSession is null) return;
         try
         {
@@ -746,9 +759,12 @@ public partial class Admin
             var text    = root.TryGetProperty("text",      out var t) ? t.GetString() ?? "" : "";
             var tsRaw   = root.TryGetProperty("timestamp", out var ts) ? ts.GetString() : null;
             var stamp   = DateTimeOffset.TryParse(tsRaw, out var dt) ? dt : DateTimeOffset.UtcNow;
+            var voiceCallId = root.TryGetProperty("voiceCallId", out var vc) && vc.ValueKind == System.Text.Json.JsonValueKind.String ? vc.GetString() : null;
+            var voiceTrack  = root.TryGetProperty("voiceTrack", out var vtr) && vtr.ValueKind == System.Text.Json.JsonValueKind.String ? vtr.GetString() : null;
+            int? offsetMs   = root.TryGetProperty("offsetMs", out var vo) && vo.ValueKind == System.Text.Json.JsonValueKind.Number ? vo.GetInt32() : null;
             await InvokeAsync(() =>
             {
-                _chatMessages.Add(new ChatHistoryMessage(sender, text, stamp));
+                _chatMessages.Add(new ChatHistoryMessage(sender, text, stamp, voiceCallId, voiceTrack, offsetMs));
                 StateHasChanged();
                 _ = ScrollChatToBottomAsync().ContinueWith(t =>
                     { if (t.IsFaulted) Console.Error.WriteLine($"[ScrollChat] {t.Exception}"); },
@@ -757,6 +773,16 @@ public partial class Admin
         }
         catch { }
     }
+
+    // ── Sesli görüşme ─────────────────────────────────────────────────────────
+    private StaffVoiceCallBar? _voiceBar;
+
+    /// <summary>Döküm satırından açılan kayıt oynatıcısı (görüşme + başlangıç konumu).</summary>
+    private (string CallId, int OffsetMs)? _playerCall;
+
+    private void OpenPlayer(string callId, int offsetMs) => _playerCall = (callId, offsetMs);
+
+    private static string FmtOffset(int ms) => VoiceCallText.FormatElapsed(TimeSpan.FromMilliseconds(ms));
 
     // ── Sentiment ─────────────────────────────────────────────────────────────
     private void StartSentimentTimer(string sessionId)

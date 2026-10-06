@@ -1,0 +1,125 @@
+@* Components/StaffVoiceCallBar.razor — açık sohbetin başlığında sesli görüşme denetimi (temsilci). *@
+@inject AdminApiService AdminApi
+@inject AuthTokenStore TokenStore
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject ToastService Toast
+@implements IAsyncDisposable
+
+@if (_call is null)
+{
+    <button type="button" class="btn-secondary" @onclick="StartAsync" disabled="@(_busyElsewhere || _starting)"
+            title="@(_busyElsewhere ? "Zaten bir sesli görüşmedesiniz." : "Müşteriyi sesli ara")">
+        <Icon Name="phone" /> Sesli görüşme
+    </button>
+}
+else
+{
+    <div class="vcall-bar" role="status" aria-live="polite">
+        <span class="vcall-dot @_state"></span>
+        <span class="vcall-label">@Label</span>
+        @if (_state == "connected")
+        {
+            <span class="vcall-time">@VoiceCallText.FormatElapsed(DateTime.UtcNow - _connectedAt)</span>
+        }
+        @if (_recording)
+        {
+            <span class="vcall-rec" title="Görüşme kaydediliyor"><Icon Name="mic" Size="13" /> Kayıt</span>
+        }
+        @if (_state is "connecting" or "connected")
+        {
+            <button type="button" class="btn-icon-bordered" @onclick="ToggleMuteAsync" aria-pressed="@(_muted ? "true" : "false")"
+                    aria-label="@(_muted ? "Sesi aç" : "Sessize al")" title="@(_muted ? "Sesi aç" : "Sessize al")">
+                <Icon Name="@(_muted ? "mic-off" : "mic")" />
+            </button>
+        }
+        <button type="button" class="btn-danger" @onclick="HangupAsync"><Icon Name="phone-off" /> @(_state == "ringing" ? "İptal" : "Bitir")</button>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public string SessionId { get; set; } = "";
+
+    private VoiceCallDto? _call;
+    private string _state = "idle";
+    private bool _recording, _muted, _starting, _busyElsewhere;
+    private DateTime _connectedAt;
+    private Timer? _tick;
+    private DotNetObjectReference<StaffVoiceCallBar>? _ref;
+
+    private string Label => _state switch
+    {
+        "ringing" => "Aranıyor…",
+        "connecting" => "Bağlanıyor…",
+        "connected" => "Görüşmede",
+        _ => ""
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await JS.InvokeVoidAsync("loadScript", "/js/agent-voice-call.js", "js-agent-voice-call");
+        var mine = await AdminApi.GetMyVoiceCallAsync();
+        _busyElsewhere = mine is not null && mine.SessionId != SessionId;
+    }
+
+    private async Task StartAsync()
+    {
+        _starting = true;
+        try
+        {
+            var (call, error) = await AdminApi.StartVoiceCallAsync(SessionId);
+            if (call is null) { Toast.ShowError(VoiceCallText.StartError(error)); _busyElsewhere = error == "voice_call_busy"; return; }
+            _call = call;
+            _ref ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("csbVoice.staffStart", new
+            {
+                apiBase = Http.BaseAddress?.ToString().TrimEnd('/'),
+                token = await TokenStore.GetAccessTokenAsync(AuthScope.Staff),
+                callId = call.Id,
+                dotnetRef = _ref
+            });
+        }
+        finally { _starting = false; }
+    }
+
+    /// <summary>Admin.razor.cs SSE'den çağırır: arayüz durumunu sinyale göre günceller (WebRTC'yi JS yürütür).</summary>
+    public void OnSignal(string type, string? reason)
+    {
+        if (_call is null) return;
+        if (type == "declined") { Toast.ShowInfo(VoiceCallText.StatusLabel("declined", reason)); Clear(); }
+        else if (type == "ended" && reason == "missed") { Toast.ShowInfo(VoiceCallText.StatusLabel("missed", reason)); Clear(); }
+        StateHasChanged();
+    }
+
+    [JSInvokable] public Task OnVoiceState(string state)
+    {
+        _state = state;
+        if (state == "connected")
+        {
+            _connectedAt = DateTime.UtcNow;
+            _tick ??= new Timer(_ => InvokeAsync(StateHasChanged), null, 1000, 1000);
+        }
+        if (state == "ended") Clear();
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable] public Task OnVoiceRecording(bool on) { _recording = on; return InvokeAsync(StateHasChanged); }
+    [JSInvokable] public Task OnVoiceError(string message) { Toast.ShowError(message); return Task.CompletedTask; }
+
+    private async Task ToggleMuteAsync() { _muted = !_muted; await JS.InvokeVoidAsync("csbVoice.setMuted", _muted); }
+
+    private async Task HangupAsync() => await JS.InvokeVoidAsync("csbVoice.hangup", "agent_hangup");
+
+    private void Clear()
+    {
+        _call = null; _state = "idle"; _recording = false; _muted = false;
+        _tick?.Dispose(); _tick = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _tick?.Dispose();
+        try { if (await JS.InvokeAsync<bool>("csbVoice.isActive")) await JS.InvokeVoidAsync("csbVoice.hangup", "agent_hangup"); } catch { }
+        _ref?.Dispose();
+    }
+}

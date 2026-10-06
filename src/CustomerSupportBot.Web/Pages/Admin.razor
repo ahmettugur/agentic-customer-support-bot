@@ -487,6 +487,7 @@
                                         @SentimentLabel(_sentimentLabel) (@_sentimentScore.ToString("F1"))
                                     </span>
                                 }
+                                <StaffVoiceCallBar @ref="_voiceBar" SessionId="@_openChatSession.SessionId" @key="_openChatSession.SessionId" />
                                 <button class="btn-secondary @(_assistOpen ? "active" : "")" @onclick="ToggleAssistAsync" aria-pressed="@_assistOpen" title="Özet, müşteri bağlamı ve yanıt taslağı"><Icon Name="sparkles" /> Asistan</button>
                                 <button class="btn-secondary" @onclick='() => ShowPrompt(PromptKind.ReplanChat, _openChatSession.SessionId, "Asistana yeniden planlat", "Not (isteğe bağlı)")'><Icon Name="refresh" /> Yeniden planla</button>
                                 <button class="btn-danger" @onclick="ReleaseChatAsync">Sohbeti bitir</button>
@@ -587,7 +588,17 @@
                                 @if (_chatMessages.Count == 0) { <div class="empty-state">Henüz mesaj yok.</div> }
                                 @foreach (var m in _chatMessages)
                                 {
-                                    @if (m.Sender.Equals("system", StringComparison.OrdinalIgnoreCase) && m.Text.StartsWith("📋"))
+                                    @if (m.VoiceCallId is not null)
+                                    {
+                                        var vm = m;
+                                        <div class="voice-line @(vm.VoiceTrack == "agent" ? "agent" : "customer")">
+                                            <Icon Name="mic" Size="13" />
+                                            <span class="voice-line-text">@vm.Text</span>
+                                            <button type="button" class="voice-line-play" @onclick="() => OpenPlayer(vm.VoiceCallId!, vm.OffsetMs ?? 0)"
+                                                    aria-label="Kayıtta bu ana git">@FmtOffset(vm.OffsetMs ?? 0)</button>
+                                        </div>
+                                    }
+                                    else if (m.Sender.Equals("system", StringComparison.OrdinalIgnoreCase) && m.Text.StartsWith("📋"))
                                     {
                                         var noteText = m.Text.StartsWith("📋 Temsilci yeniden planlama notu: ")
                                             ? m.Text["📋 Temsilci yeniden planlama notu: ".Length..].Trim('"')
