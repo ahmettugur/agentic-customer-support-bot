@@ -80,6 +80,9 @@ public sealed record ChatHistoryMessage(
 
 // ─── Sesli görüşme (temsilci ↔ müşteri) ───────────────────────────────────────
 
+/// <summary>JS modülünde süren görüşmenin anlık durumu (<c>csbVoice.attach</c>); bağlanma zamanı Unix ms.</summary>
+public sealed record VoiceAttachState(string State, bool Recording, bool Muted, double ConnectedAtMs);
+
 public sealed record VoiceCallDto(
     string Id,
     string SessionId,

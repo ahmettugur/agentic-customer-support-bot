@@ -738,19 +738,6 @@ public partial class Admin
     [JSInvokable]
     public async Task OnChatEvent(string type, string data)
     {
-        if (type == "voice_signal")
-        {
-            try
-            {
-                using var vdoc = System.Text.Json.JsonDocument.Parse(data);
-                var vt = vdoc.RootElement.TryGetProperty("type", out var tt) ? tt.GetString() ?? "" : "";
-                var vr = vdoc.RootElement.TryGetProperty("reason", out var rr) ? rr.GetString() : null;
-                var vc = vdoc.RootElement.TryGetProperty("callId", out var cc) ? cc.GetString() : null;
-                await InvokeAsync(() => _voiceBar?.OnSignal(vc, vt, vr));
-            }
-            catch { }
-            return;
-        }
         if (type != "bridge_message" || _openChatSession is null) return;
         try
         {
@@ -776,8 +763,6 @@ public partial class Admin
     }
 
     // ── Sesli görüşme ─────────────────────────────────────────────────────────
-    private StaffVoiceCallBar? _voiceBar;
-
     /// <summary>Döküm satırından açılan kayıt oynatıcısı (görüşme + başlangıç konumu).</summary>
     private (string CallId, int OffsetMs)? _playerCall;
 

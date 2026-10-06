@@ -25,7 +25,8 @@ dotnet run --project src/CustomerSupportBot.Web                          # http:
 | 4 | 25 sn bekle; `docker exec aibot_postgres psql -U postgres -d CustomerSupportDb -c "select track, sequence from voice.recording_chunks where call_id = '…'"` | Her iz (Agent, Customer) için en az 2 parça; parçalar ~10 sn, `offset_ms` artan. |
 | 5 | Döküm satırları | Gerçek anahtarla metin; OpenAI anahtarı yoksa 3 denemeden sonra "(döküm alınamadı)". Satırlar yalnızca temsilcide görünür, müşteride görünmez. |
 | 6 | Görüşme açıkken aynı temsilci ikinci kez arar (`POST /chat-sessions/{id}/voice-calls`) ya da başka sohbeti açar. | `409 {"error":"voice_call_busy"}`; başka sohbette düğme pasif, ipucu "Zaten bir sesli görüşmedesiniz." |
-| 7 | Müşteri **Bitir**. | İki tarafta kart/çubuk kapanır; iki tarafın geçmişinde "Sesli görüşme · X dk Y sn" notu. |
+| 6b | Görüşmedeyken temsilci başka bir canlı sohbeti açar, sonra geri döner. | Görüşme sürer (`active`), müşteride süre akar; diğer sohbette düğme pasif + ipucu; geri dönünce çubuk "Görüşmede · süre · Kayıt". |
+| 7 | Müşteri **Bitir** (temsilci başka sohbetteyken de denenir). | İki tarafta kart/çubuk kapanır; iki tarafın geçmişinde "Sesli görüşme · X dk Y sn" notu; son (kısa) parça da yüklenir — kayıt kapsamı ≈ görüşme süresi. |
 | 8 | Temsilci döküm satırındaki zamana tıklar. | "Sesli görüşme kaydı" oynatıcısı açılır; **Baştan dinle** iki izi birlikte çalar (`/voice-calls/{id}/chunks/{chunkId}` → 200 `audio/webm`). |
 | 9 | Yeni arama; müşteri **Reddet**. | Temsilcide "Müşteri reddetti" bildirimi, çubuk kapanır; görüşme `Declined`. |
 
@@ -37,4 +38,7 @@ dotnet run --project src/CustomerSupportBot.Web                          # http:
 - 9: görüşme 0,2 sn içinde `Declined`; "Müşteri reddetti" bildirimi göründü, çubuk kapandı, düğme geri geldi.
 - Koşu sırasında bulunan ve düzeltilen: boş `Realtime:ApiKey` ses dökümünde `OpenAI:ApiKey`'e düşmüyordu;
   oynatıcı gövdesinde iç boşluk yoktu; ret/cevapsız bildirimi JS'in çubuğu önce temizlemesi yüzünden hiç
-  gösterilmiyordu (artık sinyal `callId` ile eşleşiyor).
+  gösterilmiyordu.
+- Son incelemede bulunan ve düzeltilen (ikinci koşu): başka sohbete geçmek görüşmeyi kapatıyordu
+  (`ended / agent_hangup`) — artık sürüyor, geri dönünce çubuk bağlanıyor; müşteri kapatınca son parça
+  kayboluyordu (208 sn görüşmede 200 sn kayıt) — artık 19,8 sn görüşmede 19,7 sn.

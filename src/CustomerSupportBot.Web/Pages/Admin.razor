@@ -491,7 +491,7 @@
                                         @SentimentLabel(_sentimentLabel) (@_sentimentScore.ToString("F1"))
                                     </span>
                                 }
-                                <StaffVoiceCallBar @ref="_voiceBar" SessionId="@_openChatSession.SessionId" @key="_openChatSession.SessionId" />
+                                <StaffVoiceCallBar SessionId="@_openChatSession.SessionId" @key="_openChatSession.SessionId" />
                                 <button class="btn-secondary @(_assistOpen ? "active" : "")" @onclick="ToggleAssistAsync" aria-pressed="@_assistOpen" title="Özet, müşteri bağlamı ve yanıt taslağı"><Icon Name="sparkles" /> Asistan</button>
                                 <button class="btn-secondary" @onclick='() => ShowPrompt(PromptKind.ReplanChat, _openChatSession.SessionId, "Asistana yeniden planlat", "Not (isteğe bağlı)")'><Icon Name="refresh" /> Yeniden planla</button>
                                 <button class="btn-danger" @onclick="ReleaseChatAsync">Sohbeti bitir</button>

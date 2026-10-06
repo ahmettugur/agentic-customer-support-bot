@@ -22,12 +22,8 @@ window.__adminSubscribeChat = function (ref, sessionId) {
     es.addEventListener('bridge_message', function (e) {
         ref.invokeMethodAsync('OnChatEvent', 'bridge_message', e.data || '{}').catch(function () { });
     });
-    // Sesli görüşme sinyali: WebRTC'yi JS modülü yürütür, arayüz durumu için Blazor'a da iletilir.
-    es.addEventListener('voice_signal', function (e) {
-        var data = e.data || '{}';
-        if (window.csbVoice) window.csbVoice.staffOnSignal(data);
-        ref.invokeMethodAsync('OnChatEvent', 'voice_signal', data).catch(function () { });
-    });
+    // Sesli görüşme sinyalleri burada dinlenmez: agent-voice-call.js görüşmenin oturumuna kendi akışını açar,
+    // böylece temsilci başka sohbete geçince görüşme kesilmez.
     es.onerror = function () { };
 };
 

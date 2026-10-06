@@ -61,6 +61,18 @@ else
         await JS.InvokeVoidAsync("loadScript", "/js/agent-voice-call.js", "js-agent-voice-call");
         var mine = await AdminApi.GetMyVoiceCallAsync();
         _busyElsewhere = mine is not null && mine.SessionId != SessionId;
+        if (mine is null || mine.SessionId != SessionId) return;
+
+        // Görüşme JS modülünde sürer (sohbetler arasında gezinmek onu kesmez); bu sohbete dönülünce çubuk ona bağlanır.
+        _ref ??= DotNetObjectReference.Create(this);
+        var live = await JS.InvokeAsync<VoiceAttachState?>("csbVoice.attach", mine.Id, _ref);
+        if (live is null) return;
+        _call = mine;
+        _lastCallId = mine.Id;
+        _state = live.State;
+        _recording = live.Recording;
+        _muted = live.Muted;
+        if (live.State == "connected") StartTimer(DateTimeOffset.FromUnixTimeMilliseconds((long)live.ConnectedAtMs).UtcDateTime);
     }
 
     private async Task StartAsync()
@@ -78,33 +90,25 @@ else
                 apiBase = Http.BaseAddress?.ToString().TrimEnd('/'),
                 token = await TokenStore.GetAccessTokenAsync(AuthScope.Staff),
                 callId = call.Id,
+                sessionId = SessionId,
                 dotnetRef = _ref
             });
         }
         finally { _starting = false; }
     }
 
-    /// <summary>Admin.razor.cs SSE'den çağırır: arayüz durumunu sinyale göre günceller (WebRTC'yi JS yürütür).</summary>
-    /// <remarks>
-    /// JS modülü aynı sinyalde <c>OnVoiceState("ended")</c> ile çubuğu bu çağrıdan önce temizleyebilir; bu yüzden
-    /// eşleşme <c>_call</c> ile değil, son başlatılan görüşmenin kimliğiyle yapılır.
-    /// </remarks>
-    public void OnSignal(string? callId, string type, string? reason)
-    {
-        if (callId is null || callId != _lastCallId) return;
-        if (VoiceCallText.EndNotice(type, reason) is { } notice) { Toast.ShowInfo(notice); Clear(); _lastCallId = null; }
-        StateHasChanged();
-    }
-
     [JSInvokable] public Task OnVoiceState(string state)
     {
         _state = state;
-        if (state == "connected")
-        {
-            _connectedAt = DateTime.UtcNow;
-            _tick ??= new Timer(_ => InvokeAsync(StateHasChanged), null, 1000, 1000);
-        }
-        if (state == "ended") Clear();
+        if (state == "connected") StartTimer(DateTime.UtcNow);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Görüşme bitti (iki taraftan biri, ret ya da zaman aşımı). Bağlanmadan bitenler için bildirim gösterilir.</summary>
+    [JSInvokable] public Task OnVoiceEnded(string type, string? reason)
+    {
+        if (VoiceCallText.EndNotice(type, reason) is { } notice) Toast.ShowInfo(notice);
+        Clear();
         return InvokeAsync(StateHasChanged);
     }
 
@@ -115,16 +119,24 @@ else
 
     private async Task HangupAsync() => await JS.InvokeVoidAsync("csbVoice.hangup", "agent_hangup");
 
+    private void StartTimer(DateTime connectedAt)
+    {
+        _connectedAt = connectedAt;
+        _tick ??= new Timer(_ => InvokeAsync(StateHasChanged), null, 1000, 1000);
+    }
+
     private void Clear()
     {
         _call = null; _state = "idle"; _recording = false; _muted = false;
         _tick?.Dispose(); _tick = null;
     }
 
+    /// <summary>Çubuk kapanır (başka sohbet, başka sekme) ama görüşme sürer; yalnızca bildirim bağı kopar.</summary>
     public async ValueTask DisposeAsync()
     {
         _tick?.Dispose();
-        try { if (await JS.InvokeAsync<bool>("csbVoice.isActive")) await JS.InvokeVoidAsync("csbVoice.hangup", "agent_hangup"); } catch { }
+        if (_lastCallId is not null)
+            try { await JS.InvokeVoidAsync("csbVoice.detach", _lastCallId); } catch { }
         _ref?.Dispose();
     }
 }

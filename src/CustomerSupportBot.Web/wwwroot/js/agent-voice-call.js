@@ -1,6 +1,8 @@
-// agent-voice-call.js — temsilci ↔ müşteri sesli görüşmesi (WebRTC). Sinyal: POST …/signal, gelen sinyal SSE
-// `voice_signal` olayıyla bu modüle verilir. Kayıt YALNIZCA temsilci tarafında: yerel mikrofon ve uzak müşteri
-// sesi ayrı ayrı, 10 sn'lik tam webm parçaları (kaydedici her parçada yeniden başlar) halinde yüklenir.
+// agent-voice-call.js — temsilci ↔ müşteri sesli görüşmesi (WebRTC). Sinyal: POST …/signal; gelen sinyal SSE
+// `voice_signal` olayıyla gelir. Müşteride sohbet akışı bu modüle iletir; temsilcide modül görüşmenin oturumuna
+// kendi akışını açar — görüşme sohbet paneline bağlı değildir, temsilci başka sohbete geçince kesilmez.
+// Kayıt YALNIZCA temsilci tarafında: yerel mikrofon ve uzak müşteri sesi ayrı ayrı, 10 sn'lik tam webm
+// parçaları (kaydedici her parçada yeniden başlar) halinde yüklenir.
 (function () {
     'use strict';
     var SEGMENT_MS = 10000;
@@ -9,9 +11,16 @@
 
     var s = null; // aktif görüşme durumu
 
+    // Kaydediciler durdurulunca son parça onstop'ta yüklenir; yükleme görüşme bağlamını kendisi taşıdığından
+    // durum hemen temizlenebilir.
+    function stopRecorders() {
+        try { (s.recorders || []).forEach(function (r) { r.stopped = true; if (r.rec && r.rec.state !== 'inactive') r.rec.stop(); }); } catch (e) { }
+    }
+
     function reset() {
         if (!s) return;
-        try { (s.recorders || []).forEach(function (r) { r.stopped = true; if (r.rec && r.rec.state !== 'inactive') r.rec.stop(); }); } catch (e) { }
+        stopRecorders();
+        try { if (s.es) s.es.close(); } catch (e) { }
         try { if (s.pc) s.pc.close(); } catch (e) { }
         try { if (s.local) s.local.getTracks().forEach(function (t) { t.stop(); }); } catch (e) { }
         if (s.audio) { s.audio.srcObject = null; s.audio.remove(); }
@@ -19,7 +28,21 @@
         s = null;
     }
 
-    function notify(method, arg) { if (s && s.ref) s.ref.invokeMethodAsync(method, arg).catch(function () { }); }
+    function notify(method) {
+        if (!s || !s.ref) return;
+        var args = Array.prototype.slice.call(arguments);
+        s.ref.invokeMethodAsync.apply(s.ref, args).catch(function () { });
+    }
+
+    function setState(state) { if (!s) return; s.state = state; if (state === 'connected') s.connectedAt = Date.now(); notify('OnVoiceState', state); }
+
+    // Görüşme bitti: önce bildirim (ref temizlenmeden), sonra durum. Temsilci çubuğu bitiş türünü ister
+    // (ret/cevapsız bildirimi), müşteri kartı yalnızca durumu.
+    function finish(type, reason) {
+        if (s && s.role === 'staff') notify('OnVoiceEnded', type, reason || null);
+        else notify('OnVoiceState', 'ended');
+        reset();
+    }
 
     function post(path, body, contentType) {
         var headers = { 'Authorization': 'Bearer ' + s.token };
@@ -59,7 +82,7 @@
             var st = pc.connectionState;
             if (st === 'connected') {
                 clearTimeout(s.connectTimer); clearTimeout(s.disconnectTimer);
-                notify('OnVoiceState', 'connected');
+                setState('connected');
             } else if (st === 'disconnected') {
                 clearTimeout(s.disconnectTimer);
                 s.disconnectTimer = setTimeout(function () { window.csbVoice.hangup('connection_lost'); }, DISCONNECT_GRACE_MS);
@@ -87,16 +110,17 @@
     // ── Kayıt (yalnız temsilci) ───────────────────────────────────────────────
     function startRecording() {
         s.recordingStarted = true;
-        s.callStart = performance.now();
-        s.recorders = [segmentRecorder(s.local, 'agent'), segmentRecorder(s.remote, 'customer')];
+        // Yüklemeler `s`'e değil bu bağlama dayanır: görüşme bitip durum temizlendikten sonra gelen son parça da yüklenir.
+        var call = { apiBase: s.apiBase, token: s.token, callId: s.callId, start: performance.now() };
+        s.recorders = [segmentRecorder(s.local, 'agent', call), segmentRecorder(s.remote, 'customer', call)];
         notify('OnVoiceRecording', true);
     }
 
-    function segmentRecorder(stream, track) {
+    function segmentRecorder(stream, track, call) {
         var mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/ogg;codecs=opus';
         var state = { seq: 0, stopped: false, rec: null };
         function next() {
-            if (state.stopped || !s) return;
+            if (state.stopped) return;
             var startedAt = performance.now();
             var rec = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 });
             state.rec = rec;
@@ -104,9 +128,9 @@
             rec.ondataavailable = function (e) { if (e.data && e.data.size) parts.push(e.data); };
             rec.onstop = function () {
                 var blob = new Blob(parts, { type: mime.split(';')[0] });
-                var offset = Math.max(0, Math.round(startedAt - s.callStart));
+                var offset = Math.max(0, Math.round(startedAt - call.start));
                 var duration = Math.round(performance.now() - startedAt);
-                upload(track, state.seq++, offset, duration, blob);
+                upload(call, track, state.seq++, offset, duration, blob);
                 next();
             };
             rec.start();
@@ -116,31 +140,51 @@
         return state;
     }
 
-    async function upload(track, seq, offsetMs, durationMs, blob, attempt) {
-        if (!blob.size || !s) return;
+    async function upload(call, track, seq, offsetMs, durationMs, blob, attempt) {
+        if (!blob.size) return;
         attempt = attempt || 0;
-        var path = '/voice-calls/' + encodeURIComponent(s.callId) + '/chunks?track=' + track + '&seq=' + seq
+        var url = call.apiBase + '/voice-calls/' + encodeURIComponent(call.callId) + '/chunks?track=' + track + '&seq=' + seq
             + '&offsetMs=' + offsetMs + '&durationMs=' + durationMs;
         try {
-            var r = await post(path, blob, blob.type);
+            var r = await fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + call.token, 'Content-Type': blob.type }, body: blob });
             if (r.ok || r.status === 409 || r.status === 403) return;
             throw new Error('HTTP ' + r.status);
         } catch (e) {
-            if (attempt < 3) setTimeout(function () { upload(track, seq, offsetMs, durationMs, blob, attempt + 1); }, 1000 * (attempt + 1));
+            if (attempt < 3) setTimeout(function () { upload(call, track, seq, offsetMs, durationMs, blob, attempt + 1); }, 1000 * (attempt + 1));
             else notify('OnVoiceError', 'Kayıt kesintiye uğradı.');
         }
+    }
+
+    // Temsilci: görüşmenin oturumundaki sinyalleri dinleyen akış (yalnızca voice_signal kullanılır).
+    function openStaffStream() {
+        var url = s.apiBase + '/agent/chat-sessions/' + encodeURIComponent(s.sessionId) + '/subscribe?access_token=' + encodeURIComponent(s.token);
+        var es = new EventSource(url);
+        es.addEventListener('voice_signal', function (e) { window.csbVoice.staffOnSignal(e.data || '{}'); });
+        es.onerror = function () { };
+        s.es = es;
     }
 
     window.csbVoice = {
         isActive: function () { return !!s; },
 
+        // Temsilci çubuğu yeniden açıldığında süren görüşmeye bağlanır; görüşme yoksa null.
+        attach: function (callId, ref) {
+            if (!s || s.role !== 'staff' || s.callId !== callId) return null;
+            s.ref = ref;
+            return { state: s.state || 'ringing', recording: !!s.recordingStarted, muted: !!s.muted, connectedAtMs: s.connectedAt || 0 };
+        },
+
+        // Çubuk kapandı: görüşme sürer, yalnızca bildirimler durur.
+        detach: function (callId) { if (s && s.callId === callId) s.ref = null; },
+
         staffStart: function (o) {
             reset();
-            s = { role: 'staff', apiBase: o.apiBase, token: o.token, callId: o.callId, ref: o.dotnetRef,
+            s = { role: 'staff', apiBase: o.apiBase, token: o.token, callId: o.callId, sessionId: o.sessionId, ref: o.dotnetRef,
                   signalPath: '/voice-calls/' + encodeURIComponent(o.callId) + '/signal',
                   hangupPath: '/voice-calls/' + encodeURIComponent(o.callId) + '/hangup',
                   icePath: '/voice-calls/' + encodeURIComponent(o.callId) + '/ice-config' };
-            notify('OnVoiceState', 'ringing');
+            openStaffStream();
+            setState('ringing');
         },
 
         staffOnSignal: async function (json) {
@@ -150,7 +194,7 @@
             if (m.type === 'accepted') {
                 try { s.local = await getMic(); }
                 catch (e) { notify('OnVoiceError', 'Mikrofon izni verilmedi.'); window.csbVoice.hangup('agent_hangup'); return; }
-                notify('OnVoiceState', 'connecting');
+                setState('connecting');
                 var pc = await createPeer();
                 var offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
@@ -160,7 +204,7 @@
             } else if (m.type === 'ice') {
                 await addIce(m.data);
             } else if (m.type === 'declined' || m.type === 'ended') {
-                notify('OnVoiceState', 'ended'); reset();
+                finish(m.type, m.reason);
             }
         },
 
@@ -177,7 +221,7 @@
             }
             var r = await post('/chat/voice-calls/' + encodeURIComponent(o.callId) + '/accept');
             if (!r.ok) { reset(); return false; }
-            notify('OnVoiceState', 'connecting');
+            setState('connecting');
             await createPeer();
             return true;
         },
@@ -194,23 +238,23 @@
             } else if (m.type === 'ice') {
                 await addIce(m.data);
             } else if (m.type === 'ended') {
-                notify('OnVoiceState', 'ended'); reset();
+                finish('ended', m.reason);
             }
         },
 
         hangup: async function (reason) {
             if (!s) return;
+            var mine = s;
             var path = s.hangupPath + '?reason=' + encodeURIComponent(reason || '');
-            var ref = s.ref;
-            // Son kayıt parçaları kapanmadan yüklensin diye kaydediciler önce durdurulur (onstop yükler).
-            (s.recorders || []).forEach(function (r) { r.stopped = true; if (r.rec && r.rec.state !== 'inactive') r.rec.stop(); });
+            stopRecorders();
             try { await post(path); } catch (e) { }
-            if (ref) ref.invokeMethodAsync('OnVoiceState', 'ended').catch(function () { });
-            setTimeout(reset, 1500);
+            if (s === mine) finish('ended', reason);
         },
 
         setMuted: function (muted) {
-            if (s && s.local) s.local.getAudioTracks().forEach(function (t) { t.enabled = !muted; });
+            if (!s) return;
+            s.muted = !!muted;
+            if (s.local) s.local.getAudioTracks().forEach(function (t) { t.enabled = !muted; });
         }
     };
 })();
