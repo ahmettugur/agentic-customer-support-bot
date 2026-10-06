@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 // Application/DependencyInjection/ApplicationServiceCollectionExtensions.cs
 // Application katmanı servis kayıtları — driving port implementasyonları ve use case servisleri.
 
@@ -84,6 +85,7 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
         services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
+        services.Configure<VoiceCallOptions>(configuration.GetSection(VoiceCallOptions.SectionName));
         services.Configure<Services.Budget.LlmBudgetOptions>(configuration.GetSection(Services.Budget.LlmBudgetOptions.SectionName));
         services.Configure<Services.Conversations.ConversationClosingOptions>(
             configuration.GetSection(Services.Conversations.ConversationClosingOptions.SectionName));
@@ -141,6 +143,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<ChatPortService>();
         services.AddSingleton<IChatAttachmentPort, Services.Attachments.ChatAttachmentService>();
         services.AddSingleton<IDataPrivacyPort, Services.Privacy.DataPrivacyService>();
+        // Temsilci–müşteri sesli görüşmesi (ses P2P; burada durum, sinyal, kayıt parçaları).
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<IVoiceCallPort, Services.Voice.VoiceCallService>();
         services.AddSingleton<Ports.Outbound.Observability.ILlmCallAttribution, Services.Telemetry.LlmCallAttribution>();
         services.AddSingleton<Services.Telemetry.HumanInvolvementTracker>();
         services.AddSingleton<ISavedReplyPort, Services.SavedReplies.SavedReplyService>();
