@@ -571,6 +571,8 @@
             </p>
         </footer>
 
+        <CustomerVoiceCallCard @ref="_voiceCard" OnIncomingCall="OnIncomingVoiceCallAsync" />
+
         <VoiceCallOverlay Model="_voiceCall"
                           CaptionsOn="_voiceCaptionsOn"
                           OnToggleMute="VoiceCallToggleMuteAsync"
@@ -1221,6 +1223,14 @@
         await JS.InvokeVoidAsync("__streamChat", _dotNetRef, _apiBase, query, sessionId, true, attachmentIds ?? []);
     }
 
+    private CustomerVoiceCallCard? _voiceCard;
+
+    /// <summary>Temsilci araması gelince yapay zekâ sesli modu kapatılır (iki ses kanalı aynı anda açık kalmaz).</summary>
+    private async Task OnIncomingVoiceCallAsync()
+    {
+        try { await JS.InvokeVoidAsync("__stopVoice"); } catch { }
+    }
+
     /// <summary>
     /// Kalıcı bildirim kanalının (EventSource) bir hatası — muhtemelen süresi dolmuş token.
     /// EventSource tarayıcı API'sinde HTTP status kodu görünmediği için ayrım yapılamaz;
@@ -1502,6 +1512,13 @@
     [JSInvokable]
     public async Task OnPersistentEvent(string type, string data)
     {
+        // Temsilci araması: kart çalma/bitişi gösterir (WebRTC sinyallerini JS modülü zaten aldı).
+        if (type == "voice_signal")
+        {
+            if (_voiceCard is not null) await InvokeAsync(() => _voiceCard.OnSignal(data));
+            return;
+        }
+
         JsonElement jd;
         try { jd = JsonSerializer.Deserialize<JsonElement>(data); }
         catch { jd = default; }

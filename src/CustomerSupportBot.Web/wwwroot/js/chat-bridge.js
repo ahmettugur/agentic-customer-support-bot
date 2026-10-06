@@ -193,7 +193,9 @@ window.__chatSetup = function (ref, apiBase, authToken) {
         var tokenQs = window._authToken ? '?access_token=' + encodeURIComponent(window._authToken) : '';
         var es = new EventSource(apiBase + '/chat/events/' + encodeURIComponent(sid) + tokenQs);
         window._chatEs = es;
-        ['human_joined', 'human_left', 'bot_typing', 'human_message', 'handoff_pending', 'handoff_cleared', 'approval_resolved'].forEach(function (t) {
+        // voice_signal: temsilci araması (çalma/bitiş .NET kartına; WebRTC teklif/yanıt/ağ adresi JS modülüne).
+        es.addEventListener('voice_signal', function (e) { if (window.csbVoice) window.csbVoice.customerOnSignal(e.data || '{}'); });
+        ['human_joined', 'human_left', 'bot_typing', 'human_message', 'handoff_pending', 'handoff_cleared', 'approval_resolved', 'voice_signal'].forEach(function (t) {
             es.addEventListener(t, function (e) {
                 ref.invokeMethodAsync('OnPersistentEvent', t, e.data || '{}');
             });

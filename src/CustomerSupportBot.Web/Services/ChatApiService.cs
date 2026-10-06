@@ -4,6 +4,13 @@ namespace CustomerSupportBot.Web.Services;
 
 public sealed class ChatApiService(HttpClient http)
 {
+    /// <summary>Gelen temsilci aramasını reddeder (görüşme yazılı devam eder).</summary>
+    public async Task DeclineVoiceCallAsync(string callId)
+    {
+        try { (await http.PostAsync($"/chat/voice-calls/{Uri.EscapeDataString(callId)}/decline?reason=declined", null)).Dispose(); }
+        catch (HttpRequestException) { }
+    }
+
     public async Task<RatingResponse?> SubmitRatingAsync(string sessionId, int stars, string? feedback)
     {
         var response = await http.PostAsJsonAsync($"/sessions/{sessionId}/rating",

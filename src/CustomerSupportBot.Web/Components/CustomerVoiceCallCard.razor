@@ -1,0 +1,124 @@
+@* Components/CustomerVoiceCallCard.razor — müşteriye gelen temsilci araması: kayıt rızası + kabul/ret, sonra görüşme. *@
+@inject ChatApiService ChatApi
+@inject AuthTokenStore TokenStore
+@inject HttpClient Http
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@if (_callId is not null)
+{
+    <div class="cvc-card" role="dialog" aria-modal="false" aria-labelledby="cvc-title">
+        @if (_state == "ringing")
+        {
+            <div class="cvc-head">
+                <span class="cvc-avatar"><Icon Name="phone" Size="18" /></span>
+                <div>
+                    <strong id="cvc-title">@_agentName sizi arıyor</strong>
+                    <p class="cvc-consent">Bu görüşme kalite ve kayıt amacıyla kaydedilecek ve yazıya dökülecek. Kabul ederek buna onay vermiş olursunuz.</p>
+                </div>
+            </div>
+            <div class="cvc-actions">
+                <button type="button" class="cvc-decline" @onclick="DeclineAsync"><Icon Name="phone-off" /> Reddet</button>
+                <button type="button" class="cvc-accept" @onclick="AcceptAsync" disabled="@_answering"><Icon Name="phone" /> Kabul et</button>
+            </div>
+        }
+        else
+        {
+            <div class="cvc-head">
+                <span class="cvc-avatar live"><Icon Name="phone" Size="18" /></span>
+                <div>
+                    <strong id="cvc-title">@_agentName</strong>
+                    <p class="cvc-sub">@(_state == "connected" ? VoiceCallText.FormatElapsed(DateTime.UtcNow - _connectedAt) : "Bağlanıyor…") · Kaydediliyor</p>
+                </div>
+            </div>
+            <div class="cvc-actions">
+                <button type="button" class="cvc-mute" @onclick="ToggleMuteAsync" aria-pressed="@(_muted ? "true" : "false")">
+                    <Icon Name="@(_muted ? "mic-off" : "mic")" /> @(_muted ? "Sesi aç" : "Sessize al")
+                </button>
+                <button type="button" class="cvc-decline" @onclick="HangupAsync"><Icon Name="phone-off" /> Bitir</button>
+            </div>
+        }
+        @if (_error is not null) { <p class="cvc-error" role="alert">@_error</p> }
+    </div>
+}
+
+@code {
+    /// <summary>Gelen arama AI sesli modunu kapatmalı — Chat.razor bunu dinler.</summary>
+    [Parameter] public EventCallback OnIncomingCall { get; set; }
+
+    private string? _callId, _agentName, _error;
+    private string _state = "ringing";
+    private bool _answering, _muted;
+    private DateTime _connectedAt;
+    private Timer? _tick;
+    private DotNetObjectReference<CustomerVoiceCallCard>? _ref;
+
+    protected override async Task OnInitializedAsync() =>
+        await JS.InvokeVoidAsync("loadScript", "/js/agent-voice-call.js", "js-agent-voice-call");
+
+    public async Task OnSignal(string json)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+        var callId = root.TryGetProperty("callId", out var c) ? c.GetString() : null;
+        if (type == "ring" && _callId is null)
+        {
+            _callId = callId; _state = "ringing"; _error = null;
+            _agentName = root.TryGetProperty("agentName", out var a) ? a.GetString() : "Temsilci";
+            await OnIncomingCall.InvokeAsync();
+        }
+        else if (type == "ended" && callId == _callId)
+        {
+            Clear();
+        }
+        StateHasChanged();
+    }
+
+    private async Task AcceptAsync()
+    {
+        _answering = true;
+        _ref ??= DotNetObjectReference.Create(this);
+        var ok = await JS.InvokeAsync<bool>("csbVoice.customerAnswer", new
+        {
+            apiBase = Http.BaseAddress?.ToString().TrimEnd('/'),
+            token = await TokenStore.GetAccessTokenAsync(AuthScope.Customer),
+            callId = _callId,
+            dotnetRef = _ref
+        });
+        _answering = false;
+        if (!ok) { _error = "Mikrofona erişilemedi; görüşme yazılı devam edecek."; _callId = null; }
+    }
+
+    private async Task DeclineAsync()
+    {
+        if (_callId is null) return;
+        if (_state == "ringing") await ChatApi.DeclineVoiceCallAsync(_callId);
+        else await JS.InvokeVoidAsync("csbVoice.hangup", "customer_hangup");
+        Clear();
+    }
+
+    private async Task HangupAsync() { await JS.InvokeVoidAsync("csbVoice.hangup", "customer_hangup"); Clear(); }
+
+    private async Task ToggleMuteAsync() { _muted = !_muted; await JS.InvokeVoidAsync("csbVoice.setMuted", _muted); }
+
+    [JSInvokable] public Task OnVoiceState(string state)
+    {
+        _state = state;
+        if (state == "connected") { _connectedAt = DateTime.UtcNow; _tick ??= new Timer(_ => InvokeAsync(StateHasChanged), null, 1000, 1000); }
+        if (state == "ended") Clear();
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable] public Task OnVoiceRecording(bool on) => Task.CompletedTask;
+    [JSInvokable] public Task OnVoiceError(string message) { _error = message; return InvokeAsync(StateHasChanged); }
+
+    private void Clear() { _callId = null; _state = "ringing"; _muted = false; _tick?.Dispose(); _tick = null; }
+
+    public async ValueTask DisposeAsync()
+    {
+        _tick?.Dispose();
+        try { if (await JS.InvokeAsync<bool>("csbVoice.isActive")) await JS.InvokeVoidAsync("csbVoice.hangup", "customer_hangup"); } catch { }
+        _ref?.Dispose();
+    }
+}

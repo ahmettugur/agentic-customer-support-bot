@@ -1,0 +1,12 @@
+/* Müşteriye gelen temsilci araması kartı — renkler tema değişkenlerinden. */
+.cvc-card { position: fixed; right: 20px; bottom: 96px; z-index: 1200; width: min(360px, calc(100vw - 32px)); padding: 16px; border-radius: 16px; background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: var(--shadow-xl); display: flex; flex-direction: column; gap: 14px; }
+.cvc-head { display: flex; gap: 12px; align-items: flex-start; }
+.cvc-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--color-primary-subtle); color: var(--color-primary-hover); }
+.cvc-avatar.live { background: var(--color-success-bg); color: var(--color-success-text); }
+.cvc-consent, .cvc-sub { margin: 4px 0 0; font-size: 13px; color: var(--color-text-secondary); }
+.cvc-actions { display: flex; gap: 8px; }
+.cvc-actions button { flex: 1; min-height: 44px; border-radius: 10px; font: inherit; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+.cvc-accept { border: 0; background: var(--color-success); color: #fff; }
+.cvc-decline { border: 1px solid var(--color-danger-border); background: var(--color-surface); color: var(--color-danger); }
+.cvc-mute { border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); }
+.cvc-error { margin: 0; font-size: 13px; color: var(--color-danger); }
