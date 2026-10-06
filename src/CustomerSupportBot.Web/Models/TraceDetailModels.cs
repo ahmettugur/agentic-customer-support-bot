@@ -47,4 +47,5 @@ public sealed record ReplayToolPayload(string? ToolName, string? AgentName, bool
 public sealed record ReplayAgentPayload(string? AgentName, int? DurationMs, string? Output) : ReplayStepPayload;
 public sealed record ReplayJsonPayload(string Json) : ReplayStepPayload;
 
-public sealed record ReplayStep(string Kind, DateTimeOffset? Time, string Title, ReplayStepPayload Payload);
+/// <param name="Section">Konuşmanın tümü oynatılırken adımın ait olduğu mesaj (1'den başlar); tek iz oynatmada 0.</param>
+public sealed record ReplayStep(string Kind, DateTimeOffset? Time, string Title, ReplayStepPayload Payload, int Section = 0);

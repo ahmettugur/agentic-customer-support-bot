@@ -756,3 +756,6 @@
 .page-header-error { color: var(--color-warn-text) !important; }
 /* styles.css'teki sohbet kenar çubuğunun .session-item'ı (flex satır) burada geçerli olmasın. */
 .traces-sessions-pane .session-item { display: block; }
+.btn-play-session { margin-left: auto; padding: 4px 10px; font-size: 12px; text-decoration: none; }
+.btn-play-session:hover { color: #fff; text-decoration: none; }
+.traces-list-header { align-items: center; }

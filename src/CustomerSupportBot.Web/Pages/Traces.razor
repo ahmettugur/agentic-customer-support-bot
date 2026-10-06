@@ -71,6 +71,13 @@
             <div class="traces-list-header">
                 <span class="traces-count">@_traces.Count</span>
                 <span class="muted">@_traceLabel</span>
+                @if (_viewMode == "session" && _selectedSessionId is not null && _traces.Count > 0)
+                {
+                    <a class="btn-primary btn-play-session" href="/replay?sessionId=@Uri.EscapeDataString(_selectedSessionId)"
+                       title="Bu konuşmadaki bütün mesajları sırayla oynat">
+                        <Icon Name="play" Size="12" /> Tümünü oynat
+                    </a>
+                }
             </div>
             <div class="traces-list">
                 @if (_loadingTraces)

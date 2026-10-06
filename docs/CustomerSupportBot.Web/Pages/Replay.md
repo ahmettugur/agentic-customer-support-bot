@@ -16,6 +16,12 @@ Bir trace ID'si ile açılarak, o trace'in başlangıcından sonuna kadar reason
   0,5× · 1× · 2× · 5× bölümlü hız seçimi (`SetSpeed`). Başlıkta "← İzler" dönüş bağlantısı ve iz numarası kutusu.
 - Adım başlıkları Türkçe (`Models/ReplayStepBuilder.cs`): *Müşteri mesajı*, *Ön analiz*,
   *Değerlendirme: {asistan}*, *Asistanın yanıtı*. `replay.css` yalnızca tema değişkenleri kullanır (ayrı karanlık tema kuralı yok).
+- **Konuşmanın tümü** (`/replay?sessionId=…`): oturumdaki bütün mesajların izleri `GET /traces/by-session/{id}` ile
+  çekilir ve `ReplayStepBuilder.BuildSession` ile başlangıç zamanına göre art arda dizilir (API sırası ne olursa olsun
+  konuşma baştan oynar). Her adım ait olduğu mesajı (`ReplayStep.Section`) taşır; zaman çizelgesinde ve akışta
+  "Mesaj 2 / 5" ayırıcıları, ilerleme etiketinde "· Mesaj m / M" görünür. Oynatma mesajlar arasında kesintisiz ilerler.
+  `sessionId` varsa `traceId`'ye göre önceliklidir; yüklenen oturum işaretlenir (boş/hatalı sonuçta da), aynı adres
+  için yeniden istek atılmaz. Kutuya iz numarası girilince tek mesaj oynatmaya dönülür.
 
 ## Erişim
 `[Authorize(Roles = "Admin")]` — `/traces/*` API'leri `Program.cs`'de `Admin` rolüyle

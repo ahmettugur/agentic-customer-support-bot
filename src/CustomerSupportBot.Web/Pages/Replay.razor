@@ -13,7 +13,8 @@
         <div class="page-header-text">
             <a class="page-back" href="/traces"><Icon Name="chevron-left" Size="14" /> İzler</a>
             <h1>Tekrar oynatma</h1>
-            <p>@(_metaText is null ? "Bir mesajın karar adımlarını sırayla izleyin. İzler sayfasından bir mesaj seçin ya da iz numarasını yapıştırın." : $"“{_metaText}”")</p>
+            <p>@(_metaText is null ? "Bir mesajın ya da konuşmanın tamamının karar adımlarını sırayla izleyin. İzler sayfasından seçin ya da iz numarasını yapıştırın."
+                 : _sectionCount > 0 ? _metaText : $"“{_metaText}”")</p>
         </div>
         <div class="page-header-actions">
             <label class="replay-search">
@@ -42,7 +43,7 @@
                 <button class="rc-btn" title="Sona git" aria-label="Sona git" @onclick="() => GoTo(_steps.Count - 1)"><Icon Name="skip-forward" Size="18" StrokeWidth="2" /></button>
             </div>
             <div class="replay-progress">
-                <span class="replay-step-label">Adım @(_stepIndex + 1) / @_steps.Count</span>
+                <span class="replay-step-label">Adım @(_stepIndex + 1) / @_steps.Count@(_sectionCount > 0 ? $" · Mesaj {_steps[_stepIndex].Section} / {_sectionCount}" : "")</span>
                 <div class="replay-progress-track" role="progressbar" aria-valuemin="1" aria-valuemax="@_steps.Count" aria-valuenow="@(_stepIndex + 1)" aria-label="İlerleme">
                     <div class="replay-progress-fill" style="width:@(((_stepIndex + 1) * 100 / _steps.Count))%"></div>
                 </div>
@@ -67,6 +68,10 @@
                         var idx  = i;
                         var step = _steps[i];
                         var cls  = idx == _stepIndex ? "active" : (idx < _stepIndex ? "passed" : "");
+                        @if (StartsSection(idx))
+                        {
+                            <li class="tl-section" aria-hidden="true">Mesaj @step.Section / @_sectionCount</li>
+                        }
                         <li class="@cls" @onclick="() => GoTo(idx)">
                             <span class="step-num">@(idx + 1)</span>
                             <div class="step-content">
@@ -88,6 +93,10 @@
                     {
                         var step    = _steps[i];
                         var isCurr  = i == _stepIndex;
+                        @if (StartsSection(i))
+                        {
+                            <div class="rp-section-divider" role="separator"><span>Mesaj @step.Section / @_sectionCount</span></div>
+                        }
                         <div class="rp-item rp-@step.Kind @(isCurr ? "rp-current" : "rp-past")">
                             @RenderChatItem(step)
                         </div>
@@ -111,6 +120,12 @@
     [SupplyParameterFromQuery(Name = "traceId")]
     private string? TraceIdParam { get; set; }
 
+    // Konuşmanın tümü: /replay?sessionId=… — oturumdaki bütün mesajların izleri art arda oynatılır.
+    [SupplyParameterFromQuery(Name = "sessionId")]
+    private string? SessionIdParam { get; set; }
+    private string? _lastLoadedSession;
+    private int     _sectionCount;
+
     private string        _inputId   = string.Empty;
     private string?       _metaText;
     private string?       _errorMsg;
@@ -124,6 +139,11 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        if (!string.IsNullOrWhiteSpace(SessionIdParam))
+        {
+            if (SessionIdParam != _lastLoadedSession) await LoadSessionAsync(SessionIdParam);
+            return;
+        }
         if (!string.IsNullOrWhiteSpace(TraceIdParam) && TraceIdParam != _lastLoaded)
         {
             _inputId = TraceIdParam;
@@ -150,7 +170,9 @@
             return;
         }
 
-        _lastLoaded = id;
+        _lastLoaded        = id;
+        _lastLoadedSession = null;
+        _sectionCount      = 0;
         // Adres yalnızca gerçekten değiştiyse (kutuya yazılıp yüklendiyse) güncellenir. 🐞 Eskiden her yüklemede
         // AYNI adrese de gidiliyordu: her gezinme kimlik durumunu yeniden değerlendirdiği için (AppAuthStateProvider)
         // [Authorize] sayfası yıkılıp yeniden oluşuyor, _lastLoaded sıfırlanıyor ve sayfa trace'i yükle → aynı
@@ -165,6 +187,41 @@
         _stepIndex = 0;
         StateHasChanged();
     }
+
+    private async Task LoadSessionAsync(string sessionId)
+    {
+        StopPlay();
+        _loading  = true;
+        _errorMsg = null;
+        _steps    = [];
+        StateHasChanged();
+
+        var traces = await TracesApi.GetBySessionAsync(sessionId);
+        _loading = false;
+        // Hata ya da boş sonuçta da işaretlenir: aynı adres için yeniden denemeye (döngüye) girilmez.
+        _lastLoadedSession = sessionId;
+
+        if (traces.Count == 0)
+        {
+            _sectionCount = 0;
+            _metaText     = null;
+            _errorMsg     = "Bu konuşmada oynatılacak mesaj bulunamadı.";
+            StateHasChanged();
+            return;
+        }
+
+        _lastLoaded   = null;
+        _inputId      = string.Empty;
+        _sectionCount = traces.Count;
+        _metaText     = $"Konuşmanın tümü · {traces.Count} mesaj";
+        _steps        = ReplayStepBuilder.BuildSession(traces);
+        _stepIndex    = 0;
+        StateHasChanged();
+    }
+
+    /// <summary>Konuşma oynatmada bu adım yeni bir mesajın ilk adımı mı (ayırıcı çizilir)?</summary>
+    private bool StartsSection(int idx)
+        => _sectionCount > 0 && (idx == 0 || _steps[idx - 1].Section != _steps[idx].Section);
 
     private void GoTo(int idx)
     {

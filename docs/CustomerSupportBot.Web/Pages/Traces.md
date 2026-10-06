@@ -13,6 +13,8 @@ Admin panelinde AI'ın reasoning süreçlerini incelemek, debug etmek ve oturum 
 - Replay sayfasına yönlendirme.
 - Ortak sayfa başlığı ("İzler") ve "Canlı · 15 sn'de bir" anahtarı; ayrıntı panelinde "Adım adım oynat" ile [Replay](Replay.md)'e geçiş.
   Bölüm başlıkları ve ayrıntıdaki alan adları Türkçe; emoji yerine [`Icon`](../Components/Icon.md).
+- Bir oturum seçiliyken mesaj listesinin başlığında **"Tümünü oynat"**: konuşmanın bütün mesajlarını [Replay](Replay.md)'de
+  sırayla oynatır (`/replay?sessionId=…`).
 - Auto-refresh açıkken 15sn'de bir oturum listesini yenilemek — yalnızca sekme görünürken
   (bkz. aşağıdaki not).
 - Aynı anda ikinci oturum yenilemesini başlatmamak. Yenileme başarısızsa son başarılı

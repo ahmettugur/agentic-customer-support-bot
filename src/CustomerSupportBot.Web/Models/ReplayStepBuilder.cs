@@ -79,6 +79,17 @@ public static class ReplayStepBuilder
     }
 
     /// <summary>
+    /// Konuşmanın tümü: oturumdaki her mesajın izi başlangıç zamanına göre art arda dizilir. Her adım ait olduğu
+    /// mesajın sırasını (<see cref="ReplayStep.Section"/>, 1'den) taşır — Replay zaman çizelgesinde ve akışta
+    /// "Mesaj 2 / 5" ayırıcılarını buna göre çizer. Bir mesajın kendi adım sırası <see cref="Build"/> ile aynıdır.
+    /// </summary>
+    public static List<ReplayStep> BuildSession(IEnumerable<TraceDetail> traces)
+        => traces.OrderBy(t => t.StartedAt)
+                 .Select((trace, i) => (trace, section: i + 1))
+                 .SelectMany(x => Build(x.trace).Select(step => step with { Section = x.section }))
+                 .ToList();
+
+    /// <summary>
     /// Ajanın henüz bir değerlendirmeyle eşleşmemiş ilk ziyaretinin bitiş zamanı. Ziyaret adları örnek
     /// soneki taşır (<c>ComplaintAgent_f183…</c>), değerlendirmedeki ad taşımaz (<c>ComplaintAgent</c>).
     /// </summary>

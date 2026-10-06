@@ -77,4 +77,40 @@ public class ReplayStepBuilderTests
 
         ReplayStepBuilder.Build(trace).Single(s => s.Title == "Değerlendirme: OrderAgent").Time.Should().Be(T0);
     }
+
+    // ── Konuşmanın tümü ──────────────────────────────────────────────────────
+
+    private static TraceDetail Message(string id, string query, int startSec) => new()
+    {
+        TraceId = id, SessionId = "s1", UserQuery = query,
+        StartedAt = T0.AddSeconds(startSec), CompletedAt = T0.AddSeconds(startSec + 3)
+    };
+
+    [Fact]
+    public void BuildSession_PlaysMessagesInTimeOrder_AndNumbersSections()
+    {
+        // API sırası garanti değil: en yeni önce gelse bile konuşma baştan oynatılmalı.
+        var steps = ReplayStepBuilder.BuildSession([Message("t3", "Teşekkürler", 60), Message("t1", "Merhaba", 0), Message("t2", "Siparişim nerede?", 20)]);
+
+        steps.Where(s => s.Kind == "init")
+             .Select(s => ((ReplayInitPayload)s.Payload).UserQuery)
+             .Should().Equal("Merhaba", "Siparişim nerede?", "Teşekkürler");
+        steps.Select(s => s.Section).Distinct().Should().Equal(1, 2, 3);
+        steps.Where(s => s.Kind == "final").Select(s => s.Section).Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void BuildSession_KeepsEachMessagesOwnStepOrder()
+    {
+        var single = Trace([Visit("ComplaintAgent_f183", 100, 500)], """{"agentName":"ComplaintAgent"}""");
+
+        var session = ReplayStepBuilder.BuildSession([single]);
+
+        session.Select(s => s.Title).Should().Equal(Titles(single));
+        session.Should().OnlyContain(s => s.Section == 1);
+    }
+
+    [Fact]
+    public void Build_SingleTrace_HasNoSection()
+        => ReplayStepBuilder.Build(Message("t1", "Merhaba", 0)).Should().OnlyContain(s => s.Section == 0);
 }
