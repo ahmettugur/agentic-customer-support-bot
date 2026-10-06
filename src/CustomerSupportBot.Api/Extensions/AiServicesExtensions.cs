@@ -50,6 +50,15 @@ public static class AiServicesExtensions
             sp.GetRequiredService<IChatClient>(),
             sp.GetRequiredService<CustomerSupportBot.Application.Ports.Outbound.IPromptRepository>()));
 
+        // Sesli görüşme kayıt parçalarının dökümü (VoiceCall:TranscriptionModel).
+        services.AddSingleton<IAudioTranscriber>(sp =>
+        {
+            var ai = sp.GetRequiredService<IOptions<AiOptions>>();
+            var voice = sp.GetRequiredService<IOptionsMonitor<CustomerSupportBot.Application.Ports.Outbound.VoiceCallOptions>>();
+            return new CustomerSupportBot.Adapters.AI.Audio.OpenAiAudioTranscriber(
+                () => AiClientFactory.CreateAudioClient(ai.Value, voice.CurrentValue.TranscriptionModel), voice);
+        });
+
         return services;
     }
 

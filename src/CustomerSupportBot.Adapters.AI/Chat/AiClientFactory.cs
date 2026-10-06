@@ -54,6 +54,26 @@ public static class AiClientFactory
             ? value!
             : throw new InvalidOperationException($"{key} yapılandırması bulunamadı (appsettings.json'da boş veya tanımsız).");
 
+    /// <summary>
+    /// Ses dökümü istemcisi. OpenAI'de Realtime anahtarı varsa o, yoksa genel anahtar; Azure'da
+    /// <paramref name="model"/> dağıtım adıdır.
+    /// </summary>
+    public static OpenAI.Audio.AudioClient CreateAudioClient(AiOptions options, string model)
+    {
+        if (options.Provider == AiProvider.AzureOpenAI)
+        {
+            var azure = options.AzureOpenAI;
+            if (string.IsNullOrWhiteSpace(azure.Endpoint) || string.IsNullOrWhiteSpace(azure.ApiKey))
+                throw new InvalidOperationException("AI:AzureOpenAI:Endpoint/ApiKey yapılandırması bulunamadı (ses dökümü).");
+            return new AzureOpenAIClient(new Uri(azure.Endpoint), new ApiKeyCredential(azure.ApiKey)).GetAudioClient(model);
+        }
+
+        var key = options.Realtime.ApiKey ?? options.OpenAI.ApiKey;
+        if (string.IsNullOrWhiteSpace(key))
+            throw new InvalidOperationException("AI:OpenAI:ApiKey yapılandırması bulunamadı (ses dökümü).");
+        return new OpenAIClient(key).GetAudioClient(model);
+    }
+
     // ─── Internals ───
 
     private static IChatClient CreateOpenAIChatClient(OpenAiOptions options, string model)

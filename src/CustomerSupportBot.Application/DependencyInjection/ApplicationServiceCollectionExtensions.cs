@@ -146,6 +146,7 @@ public static class ApplicationServiceCollectionExtensions
         // Temsilci–müşteri sesli görüşmesi (ses P2P; burada durum, sinyal, kayıt parçaları).
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IVoiceCallPort, Services.Voice.VoiceCallService>();
+        services.AddSingleton<Services.Voice.VoiceTranscriptionProcessor>();
         services.AddSingleton<Ports.Outbound.Observability.ILlmCallAttribution, Services.Telemetry.LlmCallAttribution>();
         services.AddSingleton<Services.Telemetry.HumanInvolvementTracker>();
         services.AddSingleton<ISavedReplyPort, Services.SavedReplies.SavedReplyService>();

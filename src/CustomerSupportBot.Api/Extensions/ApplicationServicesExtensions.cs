@@ -188,6 +188,8 @@ public static class ApplicationServicesExtensions
         services.AddHostedService<ApprovalEmailNotificationService>();
         // Yapay zekâ çözüm oranı: eskalasyon/devralma görüşmeyi "insan dahil" işaretler.
         services.AddHostedService<HumanInvolvementTrackingService>();
+        // Sesli görüşme: kayıt parçalarının dökümü + zaman aşımı süpürmesi (çalan → cevapsız, kesilen → başarısız).
+        services.AddHostedService<VoiceCallWorker>();
         // RoutingLoadTrackerService kaldırıldı — load-tracking HumanAgentPortService constructor'ında.
 
         // KnowledgeBase startup adapter — use-case mantığı Application katmanında; bu sadece startup tetikleyicisi
