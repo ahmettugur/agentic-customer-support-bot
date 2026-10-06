@@ -25,12 +25,47 @@ public sealed class AppAuthStateProvider : AuthenticationStateProvider, IDisposa
         _store = store;
         _authService = authService;
         _nav = nav;
+        _lastScope = AuthScopeRouter.Resolve(_nav.ToBaseRelativePath(_nav.Uri));
         // Route staff<->customer sınırını geçtiğinde (ör. NavLink ile) cascade'i
         // yeniden tetikle — aksi halde eski scope'un ClaimsPrincipal'ı cache'de kalır.
         _nav.LocationChanged += OnLocationChanged;
     }
 
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => NotifyStateChanged();
+    private AuthScope _lastScope;
+
+    // 🐞 Eskiden HER gezinmede cascade yeniden yayınlanıyordu. Durum görevi localStorage okuduğu için
+    // asenkron tamamlanır; o arada AuthorizeRouteView "Yetkilendiriliyor…" gösterip [Authorize] sayfasını
+    // YIKIYOR, sonra yeniden oluşturuyordu: aynı sayfada adres değişince (ör. /admin?tab=…) tüm veri
+    // yeniden çekiliyor, açık sohbet paneli kapanıyordu (Replay'deki sonsuz yenileme döngüsü de buradan).
+    // Artık yalnızca scope değişince yayınlanır; aynı scope içinde oturum arka planda yeniden
+    // doğrulanır ve yalnızca geçersiz kaldıysa (süre doldu, yenilenemedi) yayınlanır — giriş sayfasına
+    // yönlendirme davranışı korunur.
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        var scope = AuthScopeRouter.Resolve(_nav.ToBaseRelativePath(e.Location));
+        if (scope != _lastScope)
+        {
+            _lastScope = scope;
+            NotifyStateChanged();
+            return;
+        }
+        _ = RevalidateAsync();
+    }
+
+    private async Task RevalidateAsync()
+    {
+        try
+        {
+            var state = await GetAuthenticationStateAsync();
+            if (state.User.Identity?.IsAuthenticated != true)
+                NotifyAuthenticationStateChanged(Task.FromResult(state));
+        }
+        catch
+        {
+            // Doğrulama başarısızsa (ör. JS interop kapanırken) mevcut durum korunur; bir sonraki API
+            // çağrısı 401 → refresh akışından geçer.
+        }
+    }
 
     /// <summary>
     /// Bir token'ın süresi dolmuş sayılması için kalan pay — clock skew ve "tam bu anda

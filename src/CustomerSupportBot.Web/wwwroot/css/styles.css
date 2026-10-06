@@ -24,6 +24,21 @@
     --color-error-text:    #991b1b;
     --color-error-border:  #fecaca;
 
+    /* Durum renkleri (personel paneli: rozet, SLA, risk) */
+    --color-warn:          #c2410c;
+    --color-warn-bg:       #fff1e6;
+    --color-warn-text:     #9a3412;
+    --color-success:       #16a34a;
+    --color-success-bg:    #ecfdf3;
+    --color-success-text:  #15803d;
+    --color-danger:        #b42318;
+    --color-danger-bg:     #fdecec;
+    --color-danger-border: #f1c4c0;
+
+    /* Personel paneli yazı tipi — müşteri sohbeti Inter'de kalır */
+    --font-staff: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono:  'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
     /* Tipografi */
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-size-xs:   0.75rem;
@@ -2364,6 +2379,16 @@ body {
     --color-error-text:     #fca5a5;
     --color-error-border:   #7f1d1d;
 
+    --color-warn:           #f97316;
+    --color-warn-bg:        #431407;
+    --color-warn-text:      #fdba74;
+    --color-success:        #22c55e;
+    --color-success-bg:     #052e16;
+    --color-success-text:   #86efac;
+    --color-danger:         #f87171;
+    --color-danger-bg:      #450a0a;
+    --color-danger-border:  #7f1d1d;
+
     --shadow-sm:  0 1px 2px rgba(0,0,0,.4);
     --shadow-md:  0 4px 12px rgba(0,0,0,.5);
     --shadow-lg:  0 8px 30px rgba(0,0,0,.6);
@@ -2425,7 +2450,7 @@ body {
     background: rgba(245, 158, 11, 0.18);
 }
 
-/* Tema toggle butonu — global stiller (NavMenu + AdminNavBar paylaşır) */
+/* Tema toggle butonu — global stiller (NavMenu) */
 .csb-theme-toggle {
     display: inline-flex;
     align-items: center;

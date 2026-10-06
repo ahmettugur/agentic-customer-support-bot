@@ -1,0 +1,242 @@
+@inject NavigationManager Nav
+@inject AuthService AuthSvc
+@inject AppAuthStateProvider AuthState
+@inject ThemeService ThemeSvc
+@inject StaffBadgeState Badges
+@implements IDisposable
+
+@* Personel kenar çubuğu — eski üst menünün (AdminNavBar) yerini aldı. Admin panelinin sekmeleri artık
+   adresli (/admin?tab=…), bu yüzden menü her sayfadan doğrudan bir bölüme gidebiliyor. Menü role göre
+   süzülür: temsilci yalnızca kendi iş kuyruğunu görür (Admin.razor'daki sekme kısıtıyla aynı). *@
+<aside class="staff-sidebar @(_drawerOpen ? "open" : "")" id="staff-sidebar" aria-label="Ana menü">
+    <div class="sb-brand">
+        <span class="sb-logo"><Icon Name="message" Size="16" StrokeWidth="2" /></span>
+        <span class="sb-brand-text">
+            <span class="sb-brand-name">Destek Konsolu</span>
+            <span class="sb-brand-role">@(_isAgent ? "Temsilci" : "Yönetici")</span>
+        </span>
+        <button type="button" class="sb-close" aria-label="Menüyü kapat" @onclick="CloseDrawer">
+            <Icon Name="x" Size="18" />
+        </button>
+    </div>
+
+    <nav class="sb-nav">
+        @foreach (var group in VisibleGroups)
+        {
+            <div class="sb-group">
+                <span class="sb-group-title">@group.Title</span>
+                @foreach (var item in group.Items)
+                {
+                    var active = IsActive(item);
+                    <a class="sb-link @(active ? "active" : "")" href="@item.Href"
+                       aria-current="@(active ? "page" : null)"
+                       target="@(item.External ? "_blank" : null)" rel="@(item.External ? "noopener" : null)"
+                       @onclick="CloseDrawer">
+                        <Icon Name="@item.Icon" Size="17" />
+                        <span class="sb-link-text">@item.Label</span>
+                        @{ var count = BadgeFor(item); }
+                        @if (count is > 0)
+                        {
+                            <span class="sb-badge @item.BadgeTone" aria-label="@count @item.BadgeNoun">@count</span>
+                        }
+                        @if (item.External)
+                        {
+                            <Icon Name="external" Size="13" Class="sb-ext" />
+                        }
+                    </a>
+                }
+            </div>
+        }
+    </nav>
+
+    <div class="sb-footer">
+        <span class="sb-avatar" aria-hidden="true">@Initials</span>
+        <span class="sb-user">
+            <span class="sb-user-name" title="@_userName">@_displayName</span>
+            <span class="sb-user-role">@(_isAgent ? "Temsilci" : "Yönetici")</span>
+        </span>
+        <button type="button" class="sb-icon-btn" @onclick="ToggleThemeAsync"
+                aria-label="@(ThemeSvc.IsDark ? "Aydınlık temaya geç" : "Karanlık temaya geç")"
+                title="@(ThemeSvc.IsDark ? "Aydınlık tema" : "Karanlık tema")">
+            <Icon Name="@(ThemeSvc.IsDark ? "sun" : "moon")" Size="17" />
+        </button>
+        <button type="button" class="sb-icon-btn" @onclick="LogoutAsync" aria-label="Çıkış yap" title="Çıkış yap">
+            <Icon Name="logout" Size="17" />
+        </button>
+    </div>
+</aside>
+
+@if (_drawerOpen)
+{
+    <div class="sb-scrim" @onclick="CloseDrawer" aria-hidden="true"></div>
+}
+
+@* Mobil alt çubuk: en sık kullanılan kuyruklar + tüm menüyü açan "Menü". Üst menü yok. *@
+<nav class="staff-bottombar" aria-label="Hızlı erişim">
+    @foreach (var item in BottomItems)
+    {
+        var active = IsActive(item);
+        <a class="bb-link @(active ? "active" : "")" href="@item.Href" aria-current="@(active ? "page" : null)">
+            <span class="bb-icon">
+                <Icon Name="@item.Icon" Size="21" />
+                @{ var count = BadgeFor(item); }
+                @if (count is > 0)
+                {
+                    <span class="bb-badge @item.BadgeTone" aria-label="@count @item.BadgeNoun">@count</span>
+                }
+            </span>
+            <span>@item.ShortLabel</span>
+        </a>
+    }
+    <button type="button" class="bb-link" @onclick="OpenDrawer" aria-controls="staff-sidebar" aria-expanded="@(_drawerOpen ? "true" : "false")">
+        <span class="bb-icon"><Icon Name="menu" Size="21" /></span>
+        <span>Menü</span>
+    </button>
+</nav>
+
+@code {
+    private sealed record NavItem(string Key, string Label, string Href, string Icon,
+        string? Tab = null, string? Badge = null, string BadgeTone = "", string BadgeNoun = "",
+        bool External = false, bool AgentVisible = false, string? Short = null)
+    {
+        public string ShortLabel => Short ?? Label;
+    }
+
+    private sealed record NavGroup(string Title, IReadOnlyList<NavItem> Items);
+
+    private static readonly NavItem Approvals   = new("approvals", "Onaylar", "/admin?tab=approvals", "inbox", Tab: "approvals", Badge: "approvals", BadgeTone: "primary", BadgeNoun: "bekleyen");
+    private static readonly NavItem Escalations = new("escalations", "Eskalasyonlar", "/admin?tab=escalations", "alert", Tab: "escalations", Badge: "escalations", BadgeTone: "warn", BadgeNoun: "açık", AgentVisible: true, Short: "Eskalasyon");
+    private static readonly NavItem Chats       = new("chats", "Canlı sohbetler", "/admin?tab=chats", "message", Tab: "chats", Badge: "chats", BadgeTone: "live", BadgeNoun: "canlı", AgentVisible: true, Short: "Sohbetler");
+
+    private static readonly NavGroup[] Groups =
+    [
+        new("İş kuyruğu", [Approvals, Escalations, Chats]),
+        new("Kayıtlar",
+        [
+            new("conversations", "Konuşmalar", "/admin?tab=conversations", "messages", Tab: "conversations"),
+            new("orders", "Siparişler", "/admin?tab=orders", "package", Tab: "orders"),
+            new("history", "Karar geçmişi", "/admin?tab=history", "history", Tab: "history"),
+        ]),
+        new("Raporlar",
+        [
+            new("analytics", "Analiz", "/admin?tab=analytics", "chart", Tab: "analytics"),
+            new("sla", "SLA", "/sla", "timer"),
+        ]),
+        new("Yönetim",
+        [
+            new("replies", "Hazır yanıtlar", "/admin?tab=replies", "bookmark", Tab: "replies"),
+            new("improvements", "İyileştirme önerileri", "/admin?tab=improvements", "bulb", Tab: "improvements", Badge: "lessons", BadgeTone: "neutral", BadgeNoun: "öneri"),
+            new("knowledge", "Bilgi tabanı", "/knowledge", "book"),
+        ]),
+        new("Geliştirici",
+        [
+            new("traces", "İzler (Trace)", "/traces", "activity"),
+            new("replay", "Tekrar oynatma", "/replay", "play-circle"),
+            // Müşteri sohbeti ayrı bir oturum alanında (Customer) — personel oturumunu bozmasın diye yeni sekmede.
+            new("chat", "Müşteri sohbeti", "/", "user", External: true),
+        ]),
+    ];
+
+    private bool _isAgent;
+    private bool _drawerOpen;
+    private string _userName = "";
+    private string _displayName = "";
+
+    private IEnumerable<NavGroup> VisibleGroups => _isAgent
+        ? Groups.Select(g => new NavGroup(g.Title, g.Items.Where(i => i.AgentVisible).ToList()))
+                .Where(g => g.Items.Count > 0)
+        : Groups;
+
+    private IEnumerable<NavItem> BottomItems => _isAgent ? [Escalations, Chats] : [Approvals, Escalations, Chats];
+
+    private string Initials
+    {
+        get
+        {
+            var parts = (_displayName.Length > 0 ? _displayName : _userName)
+                .Split([' ', '.', '@', '_', '-'], StringSplitOptions.RemoveEmptyEntries);
+            var text = parts.Length switch
+            {
+                0 => "?",
+                1 => parts[0][..Math.Min(2, parts[0].Length)],
+                _ => $"{parts[0][0]}{parts[1][0]}"
+            };
+            return text.ToUpperInvariant();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        Badges.OnChange     += OnBadgesChanged;
+        AuthState.AuthenticationStateChanged += OnAuthChanged;
+        await LoadUserAsync(AuthState.GetAuthenticationStateAsync());
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await ThemeSvc.EnsureInitAsync();
+        ThemeSvc.OnChange += OnThemeChanged;
+        StateHasChanged();
+    }
+
+    private async Task LoadUserAsync(Task<AuthenticationState> stateTask)
+    {
+        var user = (await stateTask).User;
+        _isAgent     = user.IsInRole("Agent");
+        _userName    = user.Identity?.Name ?? "";
+        _displayName = user.FindFirst(ClaimTypes.GivenName)?.Value is { Length: > 0 } given ? given : _userName;
+    }
+
+    private void OnAuthChanged(Task<AuthenticationState> task)
+        => _ = InvokeAsync(async () => { await LoadUserAsync(task); StateHasChanged(); });
+
+    private bool IsActive(NavItem item)
+    {
+        var uri  = Nav.ToAbsoluteUri(Nav.Uri);
+        var path = uri.AbsolutePath.TrimEnd('/');
+        if (item.External) return false;
+        if (item.Tab is null)
+            return string.Equals(path, item.Href, StringComparison.OrdinalIgnoreCase);
+        if (!string.Equals(path, "/admin", StringComparison.OrdinalIgnoreCase)) return false;
+
+        var tab = AdminTabs.Normalize(AdminTabs.FromQuery(uri.Query), _isAgent);
+        return string.Equals(tab, item.Tab, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private int? BadgeFor(NavItem item) => item.Badge switch
+    {
+        "approvals"   => Badges.PendingApprovals,
+        "escalations" => Badges.OpenEscalations,
+        "chats"       => Badges.ActiveChats,
+        "lessons"     => Badges.ProposedLessons,
+        _             => null
+    };
+
+    private void OpenDrawer()  => _drawerOpen = true;
+    private void CloseDrawer() => _drawerOpen = false;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+        => _ = InvokeAsync(() => { _drawerOpen = false; StateHasChanged(); });
+
+    private void OnBadgesChanged() => _ = InvokeAsync(StateHasChanged);
+    private void OnThemeChanged()  => _ = InvokeAsync(StateHasChanged);
+
+    private async Task ToggleThemeAsync() => await ThemeSvc.ToggleAsync();
+
+    private async Task LogoutAsync()
+    {
+        await AuthSvc.LogoutAsync(AuthScope.Staff);
+        AuthState.NotifyStateChanged();
+        Nav.NavigateTo("/login", forceLoad: false);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        Badges.OnChange     -= OnBadgesChanged;
+        ThemeSvc.OnChange   -= OnThemeChanged;
+        AuthState.AuthenticationStateChanged -= OnAuthChanged;
+    }
+}

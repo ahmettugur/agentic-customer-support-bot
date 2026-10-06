@@ -2,8 +2,12 @@
 
 <link rel="stylesheet" href="css/admin.css" />
 
-<AdminNavBar />
-
-@Body
+@* Personel yüzeyi: solda kenar çubuğu, sağda sayfa. Üst menü yok (eski AdminNavBar). *@
+<div class="staff-shell">
+    <StaffSidebar />
+    <div class="staff-main">
+        @Body
+    </div>
+</div>
 
 <ToastContainer />

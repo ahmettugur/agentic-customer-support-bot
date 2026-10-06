@@ -57,6 +57,7 @@ builder.Services.AddScoped(sp => new AuthService(
 // ── UI Servisleri ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<ThemeService>();
+builder.Services.AddScoped<StaffBadgeState>();
 
 // ── API Servisleri ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<AdminApiService>();

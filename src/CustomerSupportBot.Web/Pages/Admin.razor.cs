@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Security.Claims;
+using CustomerSupportBot.Web.Helpers;
 using CustomerSupportBot.Web.Models;
 using CustomerSupportBot.Web.Services;
 using Microsoft.AspNetCore.Components;
@@ -11,6 +12,9 @@ namespace CustomerSupportBot.Web.Pages;
 public partial class Admin
 {
     // ── State ──────────────────────────────────────────────────────────────────
+    // Bölüm adresten gelir (/admin?tab=…) — kenar çubuğu linkleri, yenileme ve geri tuşu aynı bölümde kalır.
+    [SupplyParameterFromQuery(Name = "tab")] public string? Tab { get; set; }
+    private bool   _initialized;
     private string _activeTab   = "approvals";
     private bool   _autoRefresh = true;
     private Timer? _refreshTimer;
@@ -51,7 +55,7 @@ public partial class Admin
     private string?                  _errorMessage;
 
     // ── Prompt modal ───────────────────────────────────────────────────────────
-    private enum PromptKind { None, ApproveApproval, RejectApproval, ResolveEscalation, DismissEscalation, ReplanEscalation, ReplanChat, ApproveLesson, RejectLesson, TakeoverChat }
+    private enum PromptKind { None, ResolveEscalation, DismissEscalation, ReplanEscalation, ReplanChat, ApproveLesson, RejectLesson, TakeoverChat }
     private PromptKind _promptKind;
     private string     _promptId    = string.Empty;
     private string     _promptTitle = string.Empty;
@@ -73,6 +77,61 @@ public partial class Admin
     // kayıtlar, karar anında sürmekte olan bir yenilemenin eski listesiyle geri gelmesin diye süzülür.
     private readonly HashSet<string> _decidingApprovals = [];
     private readonly HashSet<string> _decidedApprovals  = [];
+
+    // ── Onay listesi + detay ──────────────────────────────────────────────────
+    // Liste en uzun bekleyen en üstte; sağda seçili talebin ayrıntısı ve karar alanı (eski modal yerine).
+    private string? _selectedApprovalId;
+    private string  _approvalNote   = string.Empty;
+    private string  _approvalFilter = "all";
+
+    /// <summary>Bu süreden uzun bekleyen talep listede vurgulanır.</summary>
+    private static readonly TimeSpan LongWait = TimeSpan.FromMinutes(15);
+
+    private IEnumerable<ApprovalRequest> SortedApprovals => _pendingApprovals.OrderBy(a => a.RequestedAt);
+
+    private bool MatchesApprovalFilter(ApprovalRequest a, string filter) => filter switch
+    {
+        "all"  => true,
+        "risk" => a.ReasonRequired,
+        _      => a.ToolName == filter
+    };
+
+    private List<ApprovalRequest> VisibleApprovals
+        => SortedApprovals.Where(a => MatchesApprovalFilter(a, _approvalFilter)).ToList();
+
+    private ApprovalRequest? SelectedApproval(List<ApprovalRequest> visible)
+        => visible.FirstOrDefault(a => a.Id == _selectedApprovalId) ?? visible.FirstOrDefault();
+
+    /// <summary>Filtre çipleri: yalnızca kuyrukta olan türler (+ varsa yüksek risk).</summary>
+    private IEnumerable<(string Key, string Label, int Count)> ApprovalFilters()
+    {
+        yield return ("all", "Tümü", _pendingApprovals.Count);
+        foreach (var g in _pendingApprovals.GroupBy(a => a.ToolName).OrderBy(g => ToolDisplayName(g.Key)))
+            yield return (g.Key, ToolDisplayName(g.Key), g.Count());
+        var risky = _pendingApprovals.Count(a => a.ReasonRequired);
+        if (risky > 0) yield return ("risk", "Yüksek risk", risky);
+    }
+
+    private void SelectApproval(ApprovalRequest a)
+    {
+        if (_selectedApprovalId == a.Id) return;
+        _selectedApprovalId = a.Id;
+        _approvalNote       = string.Empty;
+    }
+
+    private void SetApprovalFilter(string key)
+    {
+        _approvalFilter     = key;
+        _selectedApprovalId = null;
+        _approvalNote       = string.Empty;
+    }
+
+    private static bool IsLongWait(ApprovalRequest a) => DateTimeOffset.UtcNow - a.RequestedAt >= LongWait;
+
+    // ── Eskalasyon kartı "diğer işlemler" menüsü ────────────────────────────────
+    private string? _escMenuOpenId;
+    private void ToggleEscMenu(string id) => _escMenuOpenId = _escMenuOpenId == id ? null : id;
+    private void CloseEscMenu() => _escMenuOpenId = null;
 
     // ── Takeover pending state ──────────────────────────────────────────────────
     private EscalationRequest? _pendingTakeoverEsc;
@@ -134,12 +193,22 @@ public partial class Admin
     {
         var state = await AuthState.GetAuthenticationStateAsync();
         _isAgent = state.User.FindFirst(ClaimTypes.Role)?.Value == "Agent";
-        if (_isAgent) _activeTab = "escalations";
+        _activeTab = AdminTabs.Normalize(Tab, _isAgent);
         if (_isAgent) await ConnectPresenceAsync();
 
         await RefreshBadgesAsync();
         await RefreshActiveTabAsync();
         if (_autoRefresh) StartAutoRefresh();
+        _initialized = true;
+    }
+
+    // Kenar çubuğundan (ya da geri tuşuyla) aynı sayfada başka bölüme geçildi: sayfa yeniden oluşmaz,
+    // yalnızca bölüm değişir — açık sohbet paneli ve canlı bağlantılar korunur.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_initialized) return;
+        var tab = AdminTabs.Normalize(Tab, _isAgent);
+        if (tab != _activeTab) await ActivateTabAsync(tab);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -155,9 +224,22 @@ public partial class Admin
     // ── Tabs ──────────────────────────────────────────────────────────────────
     private string ActiveCls(string tab) => _activeTab == tab ? "active" : string.Empty;
 
+    /// <summary>Sayfa içinden bölüm değiştirir ve adresi günceller (ör. devraldıktan sonra sohbetlere geç).</summary>
     private async Task SwitchTabAsync(string tab)
     {
+        tab = AdminTabs.Normalize(tab, _isAgent);
+        var fromUrl = AdminTabs.Normalize(Tab, _isAgent);
+        // Önce bölüm atanır: adres değişince gelen OnParametersSetAsync aynı bölümü ikinci kez yüklemesin.
         _activeTab = tab;
+        if (tab != fromUrl)
+            Nav.NavigateTo($"/admin?tab={tab}");
+        await ActivateTabAsync(tab);
+    }
+
+    private async Task ActivateTabAsync(string tab)
+    {
+        _activeTab = tab;
+        _escMenuOpenId = null;
         // Sekme değişimi ELLE yapılan, seyrek bir işlem — burada rozet verisini de tazelemek
         // kota açısından önemsiz. Buna karşılık RefreshActiveTabAsync artık rozetlerle
         // çakışan istekleri tekrarlamıyor, dolayısıyla elle geçişte veri bayat kalmasın diye
@@ -167,6 +249,13 @@ public partial class Admin
     }
 
     // ── Refresh ───────────────────────────────────────────────────────────────
+    /// <summary>Başlıktaki "Şimdi yenile": kuyruk sayıları + açık bölüm.</summary>
+    private async Task RefreshNowAsync()
+    {
+        await RefreshBadgesAsync();
+        await RefreshActiveTabAsync();
+    }
+
     private async Task RefreshBadgesAsync()
     {
         try
@@ -178,6 +267,7 @@ public partial class Admin
             _pendingApprovals = approvals.Result.Where(a => !_decidedApprovals.Contains(a.Id)).ToList();
             _openEscalations  = escalations.Result;
             _activeChats      = chats.Result;
+            PublishBadges();
         }
         catch { /* badge hatalarını sessizce geç */ }
     }
@@ -201,6 +291,7 @@ public partial class Admin
                     break;
                 case "chats":
                     _activeChats = await AdminApi.GetActiveChatsAsync();
+                    PublishBadges();
                     if (_openChatSession is not null)
                         _chatMessages = await AdminApi.GetChatHistoryAsync(_openChatSession.SessionId);
                     break;
@@ -232,6 +323,7 @@ public partial class Admin
                     break;
                 case "improvements":
                     _proposedLessons = await AdminApi.GetLessonsAsync("Proposed");
+                    Badges.SetProposedLessons(_proposedLessons.Count);
                     _approvedLessons = await AdminApi.GetLessonsAsync("Approved");
                     break;
             }
@@ -261,15 +353,6 @@ public partial class Admin
         _showPromptModal = true;
     }
 
-    private void ShowApprovePrompt(ApprovalRequest a)
-    {
-        var required = a.ReasonRequired;
-        var label = required
-            ? "Onay gerekçesi (zorunlu — yüksek riskli işlem)"
-            : "Onay notu (isteğe bağlı)";
-        ShowPrompt(PromptKind.ApproveApproval, a.Id, "Onayla", label, required);
-    }
-
     private void CancelPrompt() { _showPromptModal = false; }
 
     private void OnModalKeyDown(KeyboardEventArgs e)
@@ -288,25 +371,10 @@ public partial class Admin
         _showPromptModal = false;
         var v = _promptInput;
         _promptInput = string.Empty;
-        // Bildirimde işlemin adı ("Sipariş İptali onaylandı") — liste yenilenmeden önce alınır.
-        var decided = ApprovalSubject(_promptId);
-        var approvalId = _promptKind is PromptKind.ApproveApproval or PromptKind.RejectApproval ? _promptId : null;
-        // Aynı kayda ikinci karar isteği gönderilmez (hızlı çift tıklama).
-        if (approvalId is not null && !_decidingApprovals.Add(approvalId)) return;
         try
         {
             switch (_promptKind)
             {
-                case PromptKind.ApproveApproval:
-                    await AdminApi.ApproveAsync(_promptId, v);
-                    RemoveDecidedApproval(approvalId!);
-                    Toast.ShowSuccess($"{decided} onaylandı.");
-                    break;
-                case PromptKind.RejectApproval:
-                    await AdminApi.RejectAsync(_promptId, v);
-                    RemoveDecidedApproval(approvalId!);
-                    Toast.ShowInfo($"{decided} reddedildi.");
-                    break;
                 case PromptKind.ResolveEscalation:
                     await AdminApi.ResolveEscalationAsync(_promptId, v);
                     Toast.ShowSuccess("Eskalasyon çözüldü.");
@@ -356,19 +424,62 @@ public partial class Admin
             _errorMessage = $"Beklenmeyen hata: {ex.Message}";
             Toast.ShowError(_errorMessage);
         }
+        await RefreshActiveTabAsync();
+    }
+
+    // ── Onay kararı (detay panelinde, modal yok) ───────────────────────────────
+    private async Task DecideApprovalAsync(ApprovalRequest a, bool approve)
+    {
+        // Aynı kayda ikinci karar isteği gönderilmez (hızlı çift tıklama).
+        if (!_decidingApprovals.Add(a.Id)) return;
+        var note = _approvalNote;
+        // Bildirimde işlemin adı ("Sipariş İptali onaylandı") — liste değişmeden önce alınır.
+        var decided = ApprovalSubject(a.Id);
+        try
+        {
+            if (approve)
+            {
+                await AdminApi.ApproveAsync(a.Id, note);
+                RemoveDecidedApproval(a.Id);
+                Toast.ShowSuccess($"{decided} onaylandı.");
+            }
+            else
+            {
+                await AdminApi.RejectAsync(a.Id, note);
+                RemoveDecidedApproval(a.Id);
+                Toast.ShowInfo($"{decided} reddedildi.");
+            }
+            if (_selectedApprovalId == a.Id) { _selectedApprovalId = null; _approvalNote = string.Empty; }
+        }
+        catch (HttpRequestException ex)
+        {
+            var msg = ex.StatusCode.HasValue
+                ? $"İşlem başarısız (HTTP {(int)ex.StatusCode.Value}): {ex.Message}"
+                : $"API'ye bağlanılamadı: {ex.Message}";
+            _errorMessage = msg;
+            Toast.ShowError(msg);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Beklenmeyen hata: {ex.Message}";
+            Toast.ShowError(_errorMessage);
+        }
         finally
         {
-            // Hata olduysa kart düğmeleri tekrar açılır (karar verilmedi).
-            if (approvalId is not null) _decidingApprovals.Remove(approvalId);
+            // Hata olduysa düğmeler tekrar açılır (karar verilmedi).
+            _decidingApprovals.Remove(a.Id);
         }
-        await RefreshActiveTabAsync();
     }
 
     private void RemoveDecidedApproval(string approvalId)
     {
         _decidedApprovals.Add(approvalId);
         _pendingApprovals = _pendingApprovals.Where(a => a.Id != approvalId).ToList();
+        PublishBadges();
     }
+
+    private void PublishBadges()
+        => Badges.SetQueues(_pendingApprovals.Count, _openEscalations.Count, _activeChats.Count);
 
     // ── Escalation takeover ────────────────────────────────────────────────────
     private async Task TakeoverAndChatAsync(EscalationRequest e)
@@ -1034,14 +1145,95 @@ public partial class Admin
         _          => status ?? "—"
     };
 
-    /// <summary>Kart başlığındaki ikon — kart tipini bir bakışta ayırt ettirir.</summary>
+    /// <summary>Sayfa başlığı — kenar çubuğundaki bölüm adıyla aynı.</summary>
+    private string SectionTitle => _activeTab switch
+    {
+        "approvals"     => "Onaylar",
+        "escalations"   => "Eskalasyonlar",
+        "chats"         => "Canlı sohbetler",
+        "conversations" => "Konuşmalar",
+        "orders"        => "Siparişler",
+        "history"       => "Karar geçmişi",
+        "analytics"     => "Analiz",
+        "replies"       => "Hazır yanıtlar",
+        "improvements"  => "İyileştirme önerileri",
+        _               => "Destek Konsolu"
+    };
+
+    private string SectionDescription => _activeTab switch
+    {
+        "approvals"     => "Müşterilerin sipariş, iptal, iade ve şikayet talepleri. En uzun bekleyen en üstte; çok uzun süre (günler) yanıtsız kalan talebi sistem otomatik reddeder.",
+        "escalations"   => _isAgent ? "Size atanan ve atanmayı bekleyen konuşmalar." : "Asistanın çözemediği ve bir temsilcinin bakması gereken konuşmalar.",
+        "chats"         => "Temsilcinin devraldığı canlı konuşmalar. Bir eskalasyonu devraldığınızda burada açılır.",
+        "conversations" => "Kapanmış ve süren konuşmalarda mesaj, müşteri, tarih ve etikete göre arama.",
+        "orders"        => "Sipariş durumunu güncelleyin; durum değişince müşteriye e-posta gider.",
+        "history"       => "Son 50 onay kararı ve son 50 eskalasyon.",
+        "analytics"     => "Genel istatistikler; bir oturum seçerek ayrıntısını görün.",
+        "replies"       => "Temsilcilerin canlı sohbette tek tıkla ekleyebildiği yanıtlar.",
+        "improvements"  => "Düşük puanlı ya da hatalı konuşmalardan çıkarılan ders önerileri. Onaylanan ders asistanın hafızasına yazılır.",
+        _               => ""
+    };
+
+    /// <summary>Eskalasyon durumunun Türkçe karşılığı (sunucu: open/acknowledged/resolved/dismissed).</summary>
+    private static string EscalationStatusLabel(string? status) => status switch
+    {
+        "open"         => "Atanmamış",
+        "acknowledged" => "Üstlenildi",
+        "resolved"     => "Çözüldü",
+        "dismissed"    => "Kapatıldı",
+        _              => status ?? "—"
+    };
+
+    /// <summary>Duygu etiketinin Türkçe karşılığı.</summary>
+    private static string SentimentLabel(string? label) => label?.ToLowerInvariant() switch
+    {
+        "positive" => "Olumlu",
+        "negative" => "Olumsuz",
+        "angry"    => "Öfkeli",
+        "neutral"  => "Nötr",
+        null       => "Nötr",
+        _          => label
+    };
+
+    /// <summary>Asistan (ajan) adının panelde gösterilen karşılığı; tanınmayan ad olduğu gibi kalır.</summary>
+    private static string AgentDisplayName(string? agentName) => agentName switch
+    {
+        null or ""                          => "—",
+        "OrderAgent" or "OrderInfoAgent"    => "Sipariş asistanı",
+        "ComplaintAgent" or "ComplaintInfoAgent" => "Şikayet asistanı",
+        "ProductAgent" or "ProductInfoAgent" => "Ürün asistanı",
+        "PlanningAgent"                     => "Planlama",
+        "ResponseAgent"                     => "Yanıt asistanı",
+        "HumanHandoffAgent"                 => "Temsilciye aktarım",
+        _                                   => agentName
+    };
+
+    private static string LessonStatusLabel(string? status) => status switch
+    {
+        "Approved" => "Onaylandı",
+        "Rejected" => "Reddedildi",
+        "Proposed" => "Öneri",
+        _          => status ?? "—"
+    };
+
+    /// <summary>Talep türünün ikonu (Icon bileşeni adı) — türü bir bakışta ayırt ettirir.</summary>
     private static string ToolIcon(string toolName) => toolName switch
     {
-        ToolOrderPlacement => "🛒",
-        ToolOrderCancel    => "⛔",
-        ToolReturnRequest  => "↩",
-        ToolComplaint      => "⚑",
-        _                  => "⚙"
+        ToolOrderPlacement => "cart",
+        ToolOrderCancel    => "x-circle",
+        ToolReturnRequest  => "undo",
+        ToolComplaint      => "complaint",
+        _                  => "tool"
+    };
+
+    /// <summary>İkon kutusunun renk tonu (CSS sınıfı) — tür başına sabit.</summary>
+    private static string ToolTone(string toolName) => toolName switch
+    {
+        ToolOrderPlacement => "tone-success",
+        ToolOrderCancel    => "tone-danger",
+        ToolReturnRequest  => "tone-primary",
+        ToolComplaint      => "tone-warn",
+        _                  => "tone-neutral"
     };
 
     /// <summary>

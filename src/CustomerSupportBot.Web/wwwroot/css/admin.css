@@ -1,9 +1,27 @@
 /* ════════════════════════════════════════════════════════════════
    admin.css — HITL Admin Panel (kurumsal · temiz · 2026 standardı)
    ════════════════════════════════════════════════════════════════
-   styles.css'teki tasarım token'larını kullanır.
-   Sadece light tema. Full-width gövde + 32px güvenli kenar boşluğu.
+   styles.css'teki tasarım token'larını kullanır (aydınlık + karanlık tema).
+   Gezinme sol kenar çubuğunda (StaffSidebar); sayfa üstte bölüm başlığıyla başlar.
    ──────────────────────────────────────────────────────────────── */
+
+/* ─── Personel kabuğu: kenar çubuğu + sayfa (AdminLayout) ─── */
+.staff-shell {
+    display: flex;
+    min-height: 100vh;
+    background: var(--color-bg);
+    font-family: var(--font-staff);
+}
+
+.staff-main {
+    flex: 1;
+    min-width: 0;
+}
+
+@media (max-width: 860px) {
+    .staff-shell { display: block; }
+    .staff-main  { padding-bottom: 76px; }
+}
 
 /* ─── Layout ─── */
 .admin-body {
@@ -22,108 +40,74 @@
     background: var(--color-bg);
 }
 
-/* ─── Header ─── */
-.admin-header {
+/* ─── Bölüm başlığı (tüm personel sayfaları) ─── */
+.page-header {
     display: flex;
-    align-items: center;
+    flex-wrap: wrap;
+    align-items: flex-end;
     justify-content: space-between;
-    padding: var(--space-4) var(--space-5);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-sm);
-}
-
-.admin-header-left {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    min-width: 0;
-}
-
-.admin-header-info h1 {
-    margin: 0;
-    font-size: var(--font-size-md);
-    font-weight: 600;
-    color: var(--color-text);
-    line-height: 1.3;
-}
-
-.admin-header-info p {
-    margin: 2px 0 0;
-    font-size: var(--font-size-xs);
-    color: var(--color-text-secondary);
-}
-
-.admin-header-right {
-    display: flex;
-    align-items: center;
     gap: var(--space-3);
-    flex-shrink: 0;
 }
 
-.auto-refresh-toggle {
+.page-header-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 760px; }
+
+.page-header h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    color: var(--color-text);
+}
+
+.page-header p {
+    margin: 0;
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+}
+
+.page-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Otomatik yenileme anahtarı: "Canlı · 15 sn'de bir" */
+.live-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
     font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
+    color: var(--color-text);
     cursor: pointer;
-    -webkit-user-select: none;
     user-select: none;
 }
+.live-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.live-toggle:focus-within { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-border-strong); }
+.live-toggle.on .live-dot { background: var(--color-success); box-shadow: 0 0 0 3px var(--color-success-bg); }
 
-.auto-refresh-toggle input { accent-color: var(--color-primary); cursor: pointer; }
+.btn-icon-bordered {
+    width: 36px;
+    height: 36px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+    transition: background var(--transition), border-color var(--transition);
+}
+.btn-icon-bordered:hover { background: var(--color-surface-alt); border-color: var(--color-border-strong); }
+.btn-icon-bordered:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 
 /* ─── Utility ─── */
 .hidden { display: none !important; }
 .analytics-summary-tight { margin-top: 0; }
-
-/* ─── Tabs ─── */
-.admin-tabs {
-    display: flex;
-    gap: 2px;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    padding: 4px;
-    box-shadow: var(--shadow-sm);
-    overflow-x: auto;
-    -ms-overflow-style: none;
-}
-.admin-tabs::-webkit-scrollbar { display: none; }
-@supports (scrollbar-width: none) {
-    .admin-tabs { scrollbar-width: none; }
-}
-
-.tab-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    background: transparent;
-    border: none;
-    border-radius: var(--radius-sm);
-    font-family: inherit;
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    transition: background var(--transition), color var(--transition);
-    white-space: nowrap;
-}
-
-.tab-btn:hover {
-    background: var(--color-surface-alt);
-    color: var(--color-text);
-}
-
-.tab-btn.active {
-    background: var(--color-primary-subtle);
-    color: var(--color-primary-hover);
-}
-
-.tab-btn svg { vertical-align: -2px; }
 
 /* ─── Badges ─── */
 .badge {
@@ -141,7 +125,6 @@
     line-height: 1;
 }
 
-.tab-btn.active .badge { background: var(--color-primary); color: #fff; }
 
 .badge-warn  { background: #d97706; }
 .badge-muted { background: var(--color-border-strong); color: var(--color-text-secondary); }
@@ -262,8 +245,7 @@
     color: var(--color-primary-hover);
     border: 1px solid var(--color-primary-light);
     border-radius: var(--radius-sm);
-    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
 }
 
@@ -272,10 +254,8 @@
     align-items: center;
     padding: 2px 8px;
     border-radius: var(--radius-sm);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
     border: 1px solid transparent;
 }
 .status-tag.open         { background: #fef3c7; color: #92400e; border-color: #fde68a; }
@@ -393,15 +373,12 @@
    Admin, onay modalinde zorunlu alanla karşılaşmadan ÖNCE bunu görmeli. */
 .risk-tag {
     display: inline-block;
-    padding: 2px 8px;
-    background: #fef3c7;
-    color: #92400e;
-    border: 1px solid #fde68a;
+    padding: 1px 7px;
+    background: var(--color-warn-bg);
+    color: var(--color-warn-text);
     border-radius: var(--radius-full);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
     white-space: nowrap;
 }
 
@@ -663,7 +640,7 @@ code.at-val {
 }
 
 .btn-danger {
-    background: #fff;
+    background: var(--color-surface);
     color: var(--color-error-text);
     border-color: var(--color-error-border);
 }
@@ -725,11 +702,14 @@ code.at-val {
 
 /* ─── Escalations layout (sol kapanmış · sağ açık) ─── */
 .escalations-layout {
-    display: grid;
-    grid-template-columns: 320px 1fr;
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--space-4);
-    align-items: start;
+    align-items: flex-start;
 }
+/* Açık eskalasyonlar önde; son kapananlar sağda dar sütun (dar ekranda alta iner). */
+.escalations-main    { order: 1; flex: 999 1 520px; }
+.escalations-sidebar { order: 2; flex: 1 1 280px; max-width: 360px; }
 
 .escalations-sidebar {
     background: var(--color-surface);
@@ -1609,12 +1589,6 @@ code.at-val {
 
 @media (max-width: 640px) {
     .admin-layout { padding: var(--space-4); }
-    .admin-header,
-    .admin-tabs {
-        flex-wrap: wrap;
-        gap: var(--space-3);
-    }
-    .admin-header { align-items: flex-start; flex-direction: column; }
     .card-actions { flex-direction: column; }
     .card-actions button { width: 100%; }
     /* Dar ekranda başlık tek satıra sığmaz; zaman damgası alta iner. */
@@ -2161,3 +2135,260 @@ code.at-val {
 .order-facts dt { color: var(--color-text-secondary); }
 .order-facts dd { margin: 0; overflow-wrap: anywhere; }
 .order-actions { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Yeni yerleşim bileşenleri (kenar çubuklu tasarım)
+   ═══════════════════════════════════════════════════════════════ */
+
+.section-toolbar { display: flex; justify-content: flex-end; margin-bottom: var(--space-4); }
+.warn-heading { display: flex; align-items: center; gap: 8px; color: var(--color-warn-text); }
+
+/* ─── Filtre çipleri ─── */
+.filter-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--space-4); }
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 16px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+}
+.chip:hover { border-color: var(--color-border-strong); }
+.chip.on { background: var(--color-text); border-color: var(--color-text); color: var(--color-surface); }
+.chip-count { opacity: .7; }
+
+/* ─── Boş kuyruk ─── */
+.queue-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 64px 24px;
+    text-align: center;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+}
+.queue-empty strong { color: var(--color-text); font-size: 15px; }
+.queue-empty-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-success-bg);
+    color: var(--color-success-text);
+}
+
+/* ─── Liste + ayrıntı ─── */
+.master-detail { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-start; }
+
+.md-list {
+    flex: 1 1 320px;
+    max-width: 440px;
+    min-width: 0;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+.md-list-empty { padding: 32px 20px; text-align: center; color: var(--color-text-secondary); }
+
+.md-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.md-row:first-child { border-top: 0; }
+.md-row:hover { background: var(--color-surface-alt); }
+.md-row:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+.md-row.selected { background: var(--color-primary-subtle); box-shadow: inset 3px 0 0 var(--color-primary); }
+.md-row.deciding { opacity: .55; }
+.md-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.md-row-title { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--color-text); }
+.md-row-sub {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.type-icon {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.tone-primary { background: var(--color-primary-subtle); color: var(--color-primary-hover); }
+.tone-warn    { background: var(--color-warn-bg);   color: var(--color-warn); }
+.tone-danger  { background: var(--color-danger-bg); color: var(--color-danger); }
+.tone-success { background: var(--color-success-bg); color: var(--color-success-text); }
+.tone-neutral { background: var(--color-surface-alt); color: var(--color-text-secondary); }
+
+.wait {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+}
+.wait.long {
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: var(--color-warn-bg);
+    color: var(--color-warn-text);
+    font-weight: 600;
+}
+.wait-text.long { color: var(--color-warn-text); font-weight: 600; }
+
+.md-detail {
+    flex: 999 1 420px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+.md-detail.card-approval { border-left: 1px solid var(--color-border); }
+.md-detail.deciding { opacity: 1; }
+.md-detail.deciding .md-detail-body { opacity: .6; }
+
+.md-detail-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.md-detail-title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.md-detail-title h2 { margin: 0; font-size: 18px; font-weight: 600; color: var(--color-text); }
+.md-detail-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.md-detail-body { padding: 18px 22px; }
+
+.md-detail-footer {
+    padding: 14px 22px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface-alt);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.decision-note { display: flex; flex-direction: column; gap: 6px; font-size: var(--font-size-sm); font-weight: 500; color: var(--color-text); }
+.decision-note textarea {
+    box-sizing: border-box;
+    width: 100%;
+    resize: vertical;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--font-size-base);
+    font-weight: 400;
+}
+.decision-note textarea:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.decision-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.decision-actions .deciding-label { margin-right: auto; }
+.decision-actions .btn-primary,
+.decision-actions .btn-danger { min-height: 40px; padding: 0 16px; font-weight: 600; }
+
+/* ─── Eskalasyon kartı ─── */
+.card-escalation { border-left: 1px solid var(--color-border); padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; overflow: visible; }
+.card-escalation:hover { box-shadow: none; }
+.card-escalation.card-acknowledged { background: var(--color-surface); }
+.esc-header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.esc-title { margin: 0; flex: 1; min-width: 200px; font-size: 16px; font-weight: 600; color: var(--color-text); }
+.esc-time { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.esc-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 12px;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+}
+.esc-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.esc-status.open  { background: var(--color-warn-bg); color: var(--color-warn-text); }
+.esc-status.taken { background: var(--color-primary-subtle); color: var(--color-primary-hover); }
+.esc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.esc-summary { margin: 0; font-size: var(--font-size-sm); color: var(--color-text); }
+.esc-missing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.missing-chip { padding: 1px 8px; border-radius: 6px; border: 1px dashed var(--color-border-strong); color: var(--color-text); }
+.esc-actions { padding: 4px 0 0; background: transparent; border-top: 0; align-items: center; }
+
+/* ─── Açılır menü ("diğer işlemler") ─── */
+.menu-wrap { position: relative; }
+.menu-scrim { position: fixed; inset: 0; z-index: 40; }
+.menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 6px);
+    z-index: 41;
+    min-width: 240px;
+    padding: 6px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+}
+.menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--font-size-base);
+    text-align: left;
+    cursor: pointer;
+}
+.menu button:hover, .menu button:focus-visible { background: var(--color-surface-alt); outline: none; }
+.menu button.danger { color: var(--color-danger); }
+.menu-sep { height: 1px; margin: 4px 0; background: var(--color-border); }
+
+@media (max-width: 640px) {
+    .md-list { max-width: none; }
+    .decision-actions .btn-primary,
+    .decision-actions .btn-danger { flex: 1; }
+    .esc-actions { flex-direction: row; }
+    .esc-actions .btn-primary { flex: 1 1 100%; }
+    .esc-actions .btn-secondary { flex: 1; width: auto; }
+    .esc-actions .btn-icon-bordered { width: 36px; }
+    .menu { left: auto; right: 0; }
+}

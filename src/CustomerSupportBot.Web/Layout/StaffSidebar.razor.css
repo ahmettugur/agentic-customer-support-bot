@@ -1,0 +1,238 @@
+/* Personel kenar çubuğu. Renkler yalnızca tema değişkenlerinden (styles.css) — karanlık tema kendiliğinden uyar. */
+
+.staff-sidebar {
+    position: sticky;
+    top: 0;
+    flex: 0 0 248px;
+    width: 248px;
+    height: 100vh;
+    box-sizing: border-box;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 16px 12px;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    z-index: 30;
+}
+
+.sb-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px;
+}
+
+.sb-logo {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: var(--color-text);
+    color: var(--color-surface);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+}
+
+.sb-brand-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.sb-brand-name { font-weight: 600; font-size: 14px; color: var(--color-text); }
+.sb-brand-role { font-size: 12px; color: var(--color-text-secondary); }
+
+.sb-close { display: none; }
+
+.sb-nav { display: flex; flex-direction: column; gap: 16px; }
+.sb-group { display: flex; flex-direction: column; gap: 2px; }
+
+.sb-group-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    padding: 0 10px 4px;
+}
+
+.sb-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+    padding: 0 10px;
+    border-radius: 8px;
+    color: var(--color-text);
+    opacity: .86;
+    text-decoration: none;
+    font-size: 14px;
+    transition: background var(--transition), opacity var(--transition);
+}
+
+.sb-link:hover { background: var(--color-surface-alt); opacity: 1; text-decoration: none; }
+.sb-link:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+
+.sb-link.active {
+    background: var(--color-primary-subtle);
+    color: var(--color-primary-hover);
+    font-weight: 600;
+    opacity: 1;
+}
+
+.sb-link-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+::deep .sb-ext { opacity: .6; }
+
+.sb-badge {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sb-badge.primary { background: var(--color-primary); color: #fff; }
+.sb-badge.warn    { background: var(--color-warn-bg); color: var(--color-warn-text); }
+.sb-badge.live    { background: var(--color-success-bg); color: var(--color-success-text); }
+.sb-badge.neutral { background: var(--color-surface-alt); color: var(--color-text-secondary); }
+
+.sb-footer {
+    margin-top: auto;
+    border-top: 1px solid var(--color-border);
+    padding-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sb-avatar {
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--color-primary-subtle);
+    color: var(--color-primary-hover);
+    font-weight: 600;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sb-user { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sb-user-name { font-weight: 600; font-size: 13px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-user-role { font-size: 12px; color: var(--color-text-secondary); }
+
+.sb-icon-btn {
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.sb-icon-btn:hover { background: var(--color-surface-alt); color: var(--color-text); }
+.sb-icon-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+
+.sb-scrim, .staff-bottombar { display: none; }
+
+/* ─── Mobil: kenar çubuğu çekmeceye döner, altta hızlı erişim çubuğu ─── */
+@media (max-width: 860px) {
+    .staff-sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: min(300px, 86vw);
+        height: 100dvh;
+        transform: translateX(-100%);
+        transition: transform 200ms cubic-bezier(.4, 0, .2, 1);
+        box-shadow: var(--shadow-xl);
+        z-index: 1100;
+    }
+
+    .staff-sidebar.open { transform: translateX(0); }
+
+    .sb-close {
+        display: inline-flex;
+        width: 40px;
+        height: 40px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--color-text-secondary);
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    .sb-scrim {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, .45);
+        z-index: 1050;
+    }
+
+    .staff-bottombar {
+        display: flex;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+        background: var(--color-surface);
+        border-top: 1px solid var(--color-border);
+        z-index: 1000;
+    }
+
+    .bb-link {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        min-height: 48px;
+        padding: 4px 0;
+        border: 0;
+        background: transparent;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--color-text-secondary);
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .bb-link.active { color: var(--color-primary-hover); font-weight: 600; }
+
+    .bb-icon { position: relative; display: inline-flex; }
+
+    .bb-badge {
+        position: absolute;
+        top: -5px;
+        right: -11px;
+        min-width: 17px;
+        height: 17px;
+        padding: 0 4px;
+        box-sizing: border-box;
+        border-radius: 9px;
+        font-size: 10px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .bb-badge.primary { background: var(--color-primary); color: #fff; }
+    .bb-badge.warn    { background: var(--color-warn); color: #fff; }
+    .bb-badge.live    { background: var(--color-success); color: #fff; }
+}
