@@ -20,6 +20,22 @@ public class SlaOptions
 
     public ApprovalSlaOptions Approvals { get; set; } = new();
     public EscalationSlaOptions Escalations { get; set; } = new();
+    public ComplaintSlaOptions Complaints { get; set; } = new();
+}
+
+public class ComplaintSlaOptions
+{
+    /// <summary>Beklemede (üstlenilmeden) bekleme — uyarı (varsayılan 4 saat).</summary>
+    public int PickupWarnAfterSeconds { get; set; } = 14400;
+
+    /// <summary>Beklemede bekleme — ihlal (varsayılan 24 saat).</summary>
+    public int PickupBreachAfterSeconds { get; set; } = 86400;
+
+    /// <summary>Açık kalma toplamı (oluşturmadan beri) — uyarı (varsayılan 48 saat).</summary>
+    public int ResolveWarnAfterSeconds { get; set; } = 172800;
+
+    /// <summary>Açık kalma toplamı — ihlal (varsayılan 72 saat).</summary>
+    public int ResolveBreachAfterSeconds { get; set; } = 259200;
 }
 
 public class ApprovalSlaOptions

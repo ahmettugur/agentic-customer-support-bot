@@ -126,4 +126,15 @@ public static class SlaPolicyEvaluator
         EscalationPriority.Critical => EscalationPriority.Critical,
         _ => EscalationPriority.Normal
     };
+
+    /// <summary>Panel rengi: "none" (kapalı), "breach", "warn", "ok". Beklemede ise üstlenme, değilse çözüm eşikleri.</summary>
+    public static string ComplaintTone(ComplaintInfo c, ComplaintSlaOptions o, DateTime nowUtc)
+    {
+        if (!WellKnown.ComplaintStatuses.IsOpen(c.Status) || c.CreatedAt == default) return "none";
+        var age = (nowUtc - c.CreatedAt).TotalSeconds;
+        var pending = c.Status == WellKnown.ComplaintStatuses.Pending;
+        if (age >= o.ResolveBreachAfterSeconds || (pending && age >= o.PickupBreachAfterSeconds)) return "breach";
+        if (age >= o.ResolveWarnAfterSeconds || (pending && age >= o.PickupWarnAfterSeconds)) return "warn";
+        return "ok";
+    }
 }

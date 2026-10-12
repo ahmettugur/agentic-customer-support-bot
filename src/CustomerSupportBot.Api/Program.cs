@@ -202,11 +202,13 @@ adminScope.MapAdminSavedReplyEndpoints();
 adminScope.MapAdminConversationClosingEndpoints();
 adminScope.MapConversationSearchEndpoints();
 adminScope.MapOrderFulfillmentEndpoints();
+adminScope.MapAdminComplaintEndpoints();
 
 var agentScope = app.MapGroup("").RequireAuthorization("AdminOrAgent").RequireRateLimiting("general");
 agentScope.MapAgentPanelEndpoints();
 agentScope.MapAgentSavedReplyEndpoints();
 agentScope.MapAgentConversationClosingEndpoints();
+agentScope.MapAgentComplaintEndpoints();
 
 app.MapAnalyticsEndpoints();
 
