@@ -224,6 +224,8 @@ internal sealed class WorkflowTraceEventProcessor
                         EnsureSideEffectToolCompletion(pendingMessages, reasonings, WellKnown.AgentNames.Complaint, ComplaintAgentSideEffectTools);
 
                     if (reasonings.Count > 0) MergeSpecialistReasonings(st.Trace, reasonings);
+
+                    RecordToolCalls(st.Trace, pendingMessages, completedId);
                 }
 
                 _traceStore.Update(st.Trace);
@@ -462,6 +464,83 @@ internal sealed class WorkflowTraceEventProcessor
                 ? "Talep onaya gönderildi; sonucu bildirim olarak iletilecek (sistem garantisiyle düzeltildi)."
                 : "İşlem başarıyla tamamlandı (sistem garantisiyle status=done'a düzeltildi).";
     }
+
+    private const int MaxToolFailureSummary = 200;
+
+    /// <summary>
+    /// Tamamlanan ajan turundaki araç çağrılarını trace'e yazar (performans ekranının "hangi araç hata
+    /// veriyor" verisi). Eskiden <see cref="ReasoningTrace.ToolCalls"/> modeli ve sütunu vardı ama hiçbir
+    /// yerde doldurulmuyordu.
+    ///
+    /// <para>
+    /// Çağrı ancak sonucu aynı mesajlarda görüldüğünde yazılır (yarım kalmış çağrı sonraki turda tamamlanır).
+    /// Tekilleştirme <see cref="FunctionCallContent.CallId"/> ile yapılır (<see cref="ToolInvocation.Signature"/>):
+    /// sonraki ajanların tamamlanma mesajları geçmişi tekrar taşıyabilir. Parametreler ve başarılı sonuç
+    /// gövdesi bilerek yazılmaz (müşteri metni/kişisel veri taşıyabilir); yalnızca başarısızlığın kodu ve
+    /// mesajı (kısaltılmış) tutulur.
+    /// </para>
+    /// </summary>
+    internal static void RecordToolCalls(ReasoningTrace trace, IEnumerable<ChatMessage> messages, string executorId)
+    {
+        var contents = messages.SelectMany(m => m.Contents).ToList();
+        var results = new Dictionary<string, FunctionResultContent>(StringComparer.Ordinal);
+        foreach (var r in contents.OfType<FunctionResultContent>())
+            if (!string.IsNullOrEmpty(r.CallId)) results[r.CallId] = r;
+
+        var agentName = AgentNameOf(executorId);
+        foreach (var call in contents.OfType<FunctionCallContent>())
+        {
+            if (string.IsNullOrEmpty(call.CallId) || !results.TryGetValue(call.CallId, out var result)) continue;
+            if (trace.ToolCalls.Any(t => string.Equals(t.Signature, call.CallId, StringComparison.Ordinal))) continue;
+
+            var (success, failure) = DescribeOutcome(result);
+            trace.ToolCalls.Add(new ToolInvocation
+            {
+                ToolName = call.Name,
+                AgentName = agentName,
+                InvokedAt = DateTime.UtcNow,
+                Success = success,
+                ResultSummary = success ? null : Truncate(failure, MaxToolFailureSummary),
+                Signature = call.CallId
+            });
+        }
+    }
+
+    /// <summary>"OrderAgent_35e6…" → "OrderAgent" (yürütücü kimliğindeki örnek soneki atılır).</summary>
+    internal static string AgentNameOf(string executorId)
+    {
+        var cut = executorId.IndexOf('_');
+        return cut > 0 ? executorId[..cut] : executorId;
+    }
+
+    private static (bool Success, string? Failure) DescribeOutcome(FunctionResultContent result)
+    {
+        if (result.Exception is { } ex) return (false, ex.Message);
+
+        switch (result.Result)
+        {
+            case ToolResult tr:
+                return tr.Success ? (true, null) : (false, Join(tr.Error?.Code, tr.Message));
+            case JsonElement { ValueKind: JsonValueKind.Object } je
+                when je.TryGetProperty("success", out var s) && s.ValueKind == JsonValueKind.False:
+                var code = je.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.Object
+                           && err.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.String
+                    ? c.GetString() : null;
+                var message = je.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String ? m.GetString() : null;
+                return (false, Join(code, message));
+            default:
+                // Tanınmayan şekil (düz metin vb.) — çağrı hata fırlatmadan döndüyse başarılı sayılır.
+                return (true, null);
+        }
+    }
+
+    private static string? Join(string? code, string? message) =>
+        string.IsNullOrWhiteSpace(code) ? message
+        : string.IsNullOrWhiteSpace(message) ? code
+        : $"{code}: {message}";
+
+    private static string? Truncate(string? text, int max) =>
+        text is null || text.Length <= max ? text : text[..(max - 1)] + "…";
 
     /// <summary>
     /// AIFunctionFactory sonucu bazen ham <see cref="ToolResult"/> nesnesi, bazen (serileştirme
