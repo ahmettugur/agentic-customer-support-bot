@@ -277,11 +277,15 @@ internal sealed class WorkflowTraceEventProcessor
                     EnsureHumanHandoffEscalation(allMessages, specialistReasonings);
                     EnsureSideEffectToolCompletion(allMessages, specialistReasonings, WellKnown.AgentNames.Order, OrderAgentSideEffectTools);
                     EnsureSideEffectToolCompletion(allMessages, specialistReasonings, WellKnown.AgentNames.Complaint, ComplaintAgentSideEffectTools);
+
+                    // Araç çağrıları gerçek akışta YALNIZCA burada görünür: bu MAF sürümünde
+                    // ExecutorCompletedEvent.Data boş gelir (canlı turda doğrulandı).
+                    RecordToolCalls(st.Trace, allMessages, fallbackExecutorId: null);
                 }
 
                 if (specialistReasonings.Count > 0)
                     MergeSpecialistReasonings(st.Trace, specialistReasonings);
-                if (planning != null || specialistReasonings.Count > 0)
+                if (planning != null || specialistReasonings.Count > 0 || st.Trace.ToolCalls.Count > 0)
                     _traceStore.Update(st.Trace);
                 return NoEvents;
             }
@@ -480,16 +484,18 @@ internal sealed class WorkflowTraceEventProcessor
     /// mesajı (kısaltılmış) tutulur.
     /// </para>
     /// </summary>
-    internal static void RecordToolCalls(ReasoningTrace trace, IEnumerable<ChatMessage> messages, string executorId)
+    internal static void RecordToolCalls(ReasoningTrace trace, IEnumerable<ChatMessage> messages, string? fallbackExecutorId)
     {
-        var contents = messages.SelectMany(m => m.Contents).ToList();
+        var list = messages.ToList();
         var results = new Dictionary<string, FunctionResultContent>(StringComparer.Ordinal);
-        foreach (var r in contents.OfType<FunctionResultContent>())
+        foreach (var r in list.SelectMany(m => m.Contents).OfType<FunctionResultContent>())
             if (!string.IsNullOrEmpty(r.CallId)) results[r.CallId] = r;
 
-        var agentName = AgentNameOf(executorId);
-        foreach (var call in contents.OfType<FunctionCallContent>())
+        var calls = list.SelectMany(m => m.Contents.OfType<FunctionCallContent>().Select(c => (Call: c, m.AuthorName)));
+        foreach (var (call, author) in calls)
         {
+            var agentName = !string.IsNullOrWhiteSpace(author) ? AgentNameOf(author)
+                : fallbackExecutorId is null ? null : AgentNameOf(fallbackExecutorId);
             if (string.IsNullOrEmpty(call.CallId) || !results.TryGetValue(call.CallId, out var result)) continue;
             if (trace.ToolCalls.Any(t => string.Equals(t.Signature, call.CallId, StringComparison.Ordinal))) continue;
 

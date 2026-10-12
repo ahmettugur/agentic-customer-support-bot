@@ -89,4 +89,20 @@ public class ToolCallRecordingTests
 
         trace.ToolCalls[0].ResultSummary!.Length.Should().BeLessThanOrEqualTo(200);
     }
+
+    [Fact]
+    public void MessageAuthor_WinsOverExecutorFallback()
+    {
+        // Gerçek akışta çağrılar yalnızca final WorkflowOutputEvent'in tüm mesaj listesinde görünür;
+        // ajan, mesajın yazarıdır (AuthorName = "ProductAgent").
+        var trace = new ReasoningTrace();
+        var call = Call("c1", "product_inquiry_tool");
+        call.AuthorName = "ProductAgent";
+        var result = Result("c1", ToolResult.Ok("stokta"));
+        result.AuthorName = "ProductAgent";
+
+        WorkflowTraceEventProcessor.RecordToolCalls(trace, [call, result], fallbackExecutorId: null);
+
+        trace.ToolCalls.Should().ContainSingle().Which.AgentName.Should().Be("ProductAgent");
+    }
 }
