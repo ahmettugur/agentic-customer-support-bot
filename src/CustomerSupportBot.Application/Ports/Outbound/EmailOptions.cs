@@ -48,6 +48,12 @@ public sealed class EmailOptions
 
         /// <summary>Sipariş teslim edildiğinde müşteriye e-posta.</summary>
         public bool OrderDelivered { get; set; } = true;
+
+        /// <summary>Şikayet incelemeye alındığında (ya da yeniden açıldığında) müşteriye e-posta.</summary>
+        public bool ComplaintInReview { get; set; } = true;
+
+        /// <summary>Şikayet çözüldüğünde ya da reddedildiğinde (açıklamayla) müşteriye e-posta.</summary>
+        public bool ComplaintClosed { get; set; } = true;
     }
 }
 
