@@ -127,6 +127,38 @@ public static class SlaPolicyEvaluator
         _ => EscalationPriority.Normal
     };
 
+    public const string KindComplaintPickup = "complaint_pickup";
+    public const string KindComplaintResolve = "complaint_resolve";
+
+    /// <summary>
+    /// Açık şikayet için uyarı/ihlal olayları. Üstlenme eşikleri yalnız Beklemede'de; açık kalma eşikleri her
+    /// açık durumda. Her (tür, şikayet, önem) için bir kez (<see cref="ISlaEventSink.LastEmittedAt"/>). Yeniden
+    /// açılan şikayet için aynı tür olay tekrar yazılmaz (spec'te kabul edilen sınır).
+    /// </summary>
+    public static IReadOnlyList<SlaEvent> EvaluateComplaint(string complaintId, ComplaintInfo c, ComplaintSlaOptions o,
+        ISlaEventSink sink, DateTime now)
+    {
+        var events = new List<SlaEvent>();
+        if (!WellKnown.ComplaintStatuses.IsOpen(c.Status) || c.CreatedAt == default) return events;
+        var age = (int)Math.Floor((now - c.CreatedAt).TotalSeconds);
+
+        if (c.Status == WellKnown.ComplaintStatuses.Pending)
+            Add(KindComplaintPickup, o.PickupWarnAfterSeconds, o.PickupBreachAfterSeconds, "Üstlenilmedi");
+        Add(KindComplaintResolve, o.ResolveWarnAfterSeconds, o.ResolveBreachAfterSeconds, "Açık");
+        return events;
+
+        void Add(string kind, int warn, int breach, string what)
+        {
+            var severity = age >= breach ? SeverityBreach : age >= warn ? SeverityWarn : null;
+            if (severity is null || sink.LastEmittedAt(kind, complaintId, severity) is not null) return;
+            events.Add(new SlaEvent
+            {
+                Kind = kind, Severity = severity, TargetId = complaintId, AgeSeconds = age,
+                Note = $"{what} {age}s — eşik {(severity == SeverityBreach ? breach : warn)}s"
+            });
+        }
+    }
+
     /// <summary>Panel rengi: "none" (kapalı), "breach", "warn", "ok". Beklemede ise üstlenme, değilse çözüm eşikleri.</summary>
     public static string ComplaintTone(ComplaintInfo c, ComplaintSlaOptions o, DateTime nowUtc)
     {

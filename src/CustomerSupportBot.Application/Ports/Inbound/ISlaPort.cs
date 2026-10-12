@@ -19,11 +19,22 @@ public sealed record SlaEscalationStatus(
     bool BoostPriorityOnBreach,
     int BreachCountRecent);
 
+public sealed record SlaComplaintStatus(
+    int OpenCount,
+    int PendingCount,
+    int OldestSeconds,
+    int PickupWarnAfterSeconds,
+    int PickupBreachAfterSeconds,
+    int ResolveWarnAfterSeconds,
+    int ResolveBreachAfterSeconds,
+    int BreachCountRecent);
+
 public sealed record SlaStatusResult(
     bool Enabled,
     int PollIntervalSeconds,
     SlaApprovalStatus Approvals,
-    SlaEscalationStatus Escalations);
+    SlaEscalationStatus Escalations,
+    SlaComplaintStatus? Complaints = null);
 
 /// <summary>
 /// SLA olay listesi, anlık durum özeti ve periyodik tarama için primary (driving) port.

@@ -15,17 +15,20 @@ public sealed class SlaPortService : ISlaPort
     private readonly IApprovalQueue _approvals;
     private readonly IEscalationSink _escalations;
     private readonly IOptionsMonitor<SlaOptions> _options;
+    private readonly IComplaintRepository? _complaints;
 
     public SlaPortService(
         ISlaEventSink events,
         IApprovalQueue approvals,
         IEscalationSink escalations,
-        IOptionsMonitor<SlaOptions> options)
+        IOptionsMonitor<SlaOptions> options,
+        IComplaintRepository? complaints = null)
     {
         _events = events;
         _approvals = approvals;
         _escalations = escalations;
         _options = options;
+        _complaints = complaints;
     }
 
     public IReadOnlyList<SlaEvent> GetRecentEvents(int count = 100)
@@ -58,6 +61,13 @@ public sealed class SlaPortService : ISlaPort
                     esc.Priority = eval.NewPriority.Value;
             }
         }
+
+        if (_complaints is not null)
+        {
+            foreach (var item in await _complaints.GetOpenAsync(500, ct))
+                foreach (var evt in SlaPolicyEvaluator.EvaluateComplaint(item.ComplaintId, item.Complaint, opts.Complaints, _events, now))
+                    await _events.RecordAsync(evt);
+        }
     }
 
     private async Task ApplyApprovalBreachAsync(ApprovalRequest req, SlaBreachAction action, CancellationToken ct)
@@ -89,6 +99,22 @@ public sealed class SlaPortService : ISlaPort
         var pendingAges = pending.Select(p => (int)Math.Floor((now - p.RequestedAt).TotalSeconds)).ToList();
         var openAges = open.Select(e => (int)Math.Floor((now - e.CreatedAt).TotalSeconds)).ToList();
 
+        SlaComplaintStatus? complaintStatus = null;
+        if (_complaints is not null)
+        {
+            var openComplaints = await _complaints.GetOpenAsync(5000, ct);
+            var ages = openComplaints.Where(i => i.Complaint.CreatedAt != default)
+                .Select(i => (int)Math.Floor((now - i.Complaint.CreatedAt).TotalSeconds)).ToList();
+            complaintStatus = new SlaComplaintStatus(
+                openComplaints.Count,
+                openComplaints.Count(i => i.Complaint.Status == WellKnown.ComplaintStatuses.Pending),
+                ages.Count > 0 ? ages.Max() : 0,
+                opts.Complaints.PickupWarnAfterSeconds, opts.Complaints.PickupBreachAfterSeconds,
+                opts.Complaints.ResolveWarnAfterSeconds, opts.Complaints.ResolveBreachAfterSeconds,
+                recent.Count(e => e.Kind is SlaPolicyEvaluator.KindComplaintPickup or SlaPolicyEvaluator.KindComplaintResolve
+                               && e.Severity == SlaPolicyEvaluator.SeverityBreach));
+        }
+
         return new SlaStatusResult(
             opts.Enabled,
             opts.PollIntervalSeconds,
@@ -107,6 +133,7 @@ public sealed class SlaPortService : ISlaPort
                 opts.Escalations.BreachAfterSeconds,
                 opts.Escalations.BoostPriorityOnBreach,
                 recent.Count(e => e.Kind == SlaPolicyEvaluator.KindEscalation
-                               && e.Severity == SlaPolicyEvaluator.SeverityBreach)));
+                               && e.Severity == SlaPolicyEvaluator.SeverityBreach)),
+            complaintStatus);
     }
 }
