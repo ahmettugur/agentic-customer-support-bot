@@ -94,6 +94,11 @@ sohbeti devralması (Live Takeover). `AdminEndpoints` **Admin** rolü için, `Ag
 | `POST /chat-sessions/{sid}/takeover` | Session'ı Human moda alır. |
 | `POST /chat-sessions/{sid}/release` | Session'ı Bot moduna döndürür (kapanış kaydı oluşturmaz — programatik bırakma). |
 | `POST /chat-sessions/{sid}/close` | Panelin "Sohbeti Bitir"i (`ConversationClosingEndpoints`): `body: { reason, tags?, note? }` doğrulanır, sonra release akışı çalışır ve kapanış kaydı yazılır. Geçersiz 400 (sohbet kapanmaz), sohbet canlı değilse 404. Kayıt yazılamazsa 200 + `warning`. |
+| `GET /complaints?status=&assigned=&page=&pageSize=` | Şikayet listesi (`ComplaintEndpoints`). `status`: `open` (Beklemede + İncelemede), tek durum ya da `all`; `assigned`: `unassigned` ya da temsilci kimliği. Açıklar en eskiden, kapalılar en yeniden. Her öğede `sla` (`none`/`ok`/`warn`/`breach`) ve çağıranın yapabileceği `actions`. |
+| `GET /complaints/counts` \| `GET /complaints/{code}` | Rozet sayıları (`pending`, `inProgress`) / ayrıntı: sipariş özeti, `attachmentIds` (şikayeti doğuran onaydan), olaylar (iç notlar dahil). |
+| `POST /complaints/{code}/assign` | `body: { agentId, expectedVersion? }` — Beklemede ya da İncelemede şikayeti aktif bir temsilciye atar (Beklemede'den atamada müşteriye "inceleniyor" e-postası). |
+| `POST /complaints/{code}/resolve` \| `/reject` | `body: { text, note?, expectedVersion? }` — `text` müşteriye görünen açıklama (zorunlu, ≤ 2000), `note` iç not. Müşteriye e-posta. |
+| `POST /complaints/{code}/reopen` \| `/notes` | `body: { text }` — yeniden açma gerekçesi / iç not. Kodlar: 404 yok, 409 geçersiz geçiş ya da yarış (`currentStatus`, `version`), 403 başkasının şikayeti, 400 eksik/uzun girdi. |
 | `GET /orders/{id}` | Sipariş (`OrderFulfillmentEndpoints`, yalnız Admin): durum, ürünler, kargo bilgisi, teslim zamanı. |
 | `POST /orders/{id}/shipment` | `İşleniyor → Kargolandı`; `body: { carrier?, trackingNumber? }` (≤ 64). Geçişte müşteriye e-posta. 404 bulunamadı, 409 geçersiz geçiş (`currentStatus`), 400 geçersiz girdi; aynı duruma tekrar 200 + `changed=false` (e-posta tekrar gitmez). Depo/fulfillment sistemi bu ucu bir servis hesabıyla çağırır. |
 | `POST /orders/{id}/delivery` | `Kargolandı → Teslim Edildi` (`delivered_at` yazılır; iade süresi buradan sayılır). Kodlar shipment ile aynı. |
@@ -121,6 +126,9 @@ Yukarıdakiyle aynı işlerin agent-kapsamlı hâli — route'lar `/agent/...` a
 | `POST /agent/presence/heartbeat` | Panel açıkken 30 sn'de bir; seçimi değiştirmez. Durum uçlarında bağlı temsilci yoksa 400, temsilci kaydı yoksa 404. |
 | `POST /agent/chat-sessions/{sid}/close` \| `GET /agent/conversation-closing/options` | Admin uçlarıyla aynı; kapatan temsilcinin yükü düşürülür (`linked_agent_id`). |
 | `GET /agent/saved-replies?q=` | Hazır yanıtlar — yalnız okuma (yönetim yalnız Admin). |
+| `GET /agent/complaints?status=&mine=&page=` \| `/agent/complaints/counts` \| `/agent/complaints/{code}` | Şikayetler: atanmamış + kendisine atananlar (`mine=true` yalnız kendisininkiler); sayaçta `assignedToMe`. Başkasına atanmış şikayetin ayrıntısı salt-okunur görülebilir. |
+| `POST /agent/complaints/{code}/claim` | Üstlen: Beklemede → İncelemede, kendine atanır; müşteriye "inceleniyor" e-postası. Eşzamanlı ikinci üstlenme 409. |
+| `POST /agent/complaints/{code}/resolve` \| `/reject` \| `/reopen` \| `/notes` | Admin uçlarıyla aynı; yalnız kendisine atanmış şikayette (aksi 403). Bağlı temsilci kaydı yoksa 400. |
 | *(approvals, chat-sessions uçları)* | `AdminEndpoints` ile aynı davranış, `decidedBy`/`humanAgent` alanı JWT'deki `linked_agent_id`'den türetilir. |
 
 | Yardımcı üye | Açıklama |

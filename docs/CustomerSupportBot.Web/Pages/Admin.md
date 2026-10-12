@@ -1,7 +1,7 @@
 # Admin.razor
 
 ## Ne İşe Yarar
-Admin ve Agent panelinin ana sayfasıdır. Onaylar, eskalasyonlar, canlı sohbetler, analiz, konuşma arama, siparişler, hazır yanıtlar ve iyileştirme önerilerini **adresli bölümler** (`/admin?tab=…`) halinde sunar; gezinme sol kenar çubuğundadır ([StaffSidebar](../Layout/StaffSidebar.md)).
+Admin ve Agent panelinin ana sayfasıdır. Onaylar, eskalasyonlar, canlı sohbetler, analiz, konuşma arama, şikayetler ([ComplaintsPanel](../Components/ComplaintsPanel.md)), siparişler, hazır yanıtlar ve iyileştirme önerilerini **adresli bölümler** (`/admin?tab=…`) halinde sunar; gezinme sol kenar çubuğundadır ([StaffSidebar](../Layout/StaffSidebar.md)).
 
 ## Hangi Amaçla Kullanılır
 `/admin` route'unda, `Admin` veya `Agent` rolüyle erişilir (`[Authorize(Roles = "Admin,Agent")]`).

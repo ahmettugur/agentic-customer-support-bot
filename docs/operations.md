@@ -431,10 +431,10 @@ DI haritası ayrıntısı → [architecture.md#dependency-injection-haritası](a
 
 | Servis | Sorumluluk |
 |---|---|
-| `SlaOptions` | `PollIntervalSeconds`, `Approvals.{Warn,Breach}AfterSeconds`, `Approvals.OnBreach` (`None` / `AutoReject` / `AutoApprove`), `Escalations.{Warn,Breach}AfterSeconds`, `Escalations.BoostPriorityOnBreach` |
+| `SlaOptions` | `PollIntervalSeconds`, `Approvals.{Warn,Breach}AfterSeconds`, `Approvals.OnBreach` (`None` / `AutoReject` / `AutoApprove`), `Escalations.{Warn,Breach}AfterSeconds`, `Escalations.BoostPriorityOnBreach`, `Complaints.{Pickup,Resolve}{Warn,Breach}AfterSeconds` (varsayılan 4 sa / 24 sa / 48 sa / 72 sa; yalnızca kayıt, otomatik işlem yok) |
 | `SlaPolicyEvaluator` | Saf yan-etkisiz karar verici. Bir kayıtın yaşına ve sink'teki son emit zamanına göre `WarnEvent` / `BreachEvent` ve aksiyon üretir. Aynı target+severity için tekrar event üretmez (idempotent) |
 | `ISlaEventSink` (`InMemorySlaEventSink`) | Son 500 event'i tutar. `LastEmittedAt(kind, targetId, severity)` ile dedupe sağlar |
-| `SlaGuardianService` | `BackgroundService` — `PollIntervalSeconds`'te bir `IApprovalQueue.GetPending()` ve `IEscalationSink.GetOpen()` taraması yapar. Breach olunca onayları `IApprovalQueue.Decide(false)` ile reddeder; eskalasyon önceliğini bir kademe yükseltir (Critical sabit) |
+| `SlaGuardianService` | `BackgroundService` — `PollIntervalSeconds`'te bir `IApprovalQueue.GetPending()`, `IEscalationSink.GetOpen()` ve açık şikayetler (`IComplaintRepository.GetOpenAsync`) taraması yapar. Breach olunca onayları `IApprovalQueue.Decide(false)` ile reddeder; eskalasyon önceliğini bir kademe yükseltir (Critical sabit) |
 | Endpoints | `GET /sla/status` — anlık özet; `GET /sla/events?count=N` — son olaylar |
 
 ---

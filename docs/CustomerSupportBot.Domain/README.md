@@ -43,6 +43,7 @@ Bu klasör, Onion / Hexagonal Mimarinin en iç çekirdeğini (**Core Domain**) o
 - [ReasoningResultParser](Services/ReasoningResultParser.md), [PlanningResultParser](Services/PlanningResultParser.md), [SpecialistReasoningParser](Services/SpecialistReasoningParser.md), [SelfCritiqueParser](Services/SelfCritiqueParser.md) — LLM çıktısı JSON bloklarını hata toleranslı ayrıştıran servisler.
 - [SessionStateExtractor](Services/SessionStateExtractor.md) — Oturum durumu güncelleyici (duygu tespiti dahil).
 - [EscalationStates](Services/EscalationStates.md) — Eskalasyon durum makinesi.
+- [ComplaintTransitions](Services/ComplaintTransitions.md) — Şikayet durum geçiş kuralları (Beklemede → İncelemede → Çözüldü / Reddedildi, yeniden açma).
 
 ### Exceptions/
 

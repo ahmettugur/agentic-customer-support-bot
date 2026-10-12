@@ -35,7 +35,18 @@
 | `ComplaintInfo? Get(string complaintId)` | Tek şikayeti getirir. |
 | `IReadOnlyList<(string ComplaintId, ComplaintInfo Complaint)> GetByOrder(string orderId)` | Bir siparişe ait tüm şikayetler, kod sırasına göre. |
 | `IReadOnlyList<(string ComplaintId, ComplaintInfo Complaint)> GetByCustomer(string customerId)` | Bir müşterinin tüm şikayetleri, kod sırasına göre. |
+| `Task<ComplaintPage> ListAsync(ComplaintQuery)` | Panel listesi: durum (`open` = Beklemede + İncelemede), atanan / atanmamış, temsilci kapsamı (`VisibleToAgentId`: atanmamış + kendisi). Açıklar `created_at` artan, kapalılar `updated_at` azalan (CASE WHEN sıralaması). |
+| `Task<ComplaintCounts> CountOpenAsync(agentId)` | Bekleyen, incelemede ve o temsilciye atanan açık şikayet sayıları. |
+| `Task<IReadOnlyList<ComplaintListItem>> GetOpenAsync(max)` | SLA taraması için açık şikayetler (`ix_complaints_status_created_at`). |
+| `Task<IReadOnlyList<ComplaintEvent>> GetEventsAsync(code)` | `catalog.complaint_events` — zaman çizelgesi. |
+| `Task<ComplaintTransitionOutcome> TryTransitionAsync(transition)` | **Koşullu geçiş:** `WHERE code = @c AND status = @expected AND version = @v` ile `ExecuteUpdate` (durum, atanan, açıklama — `null` ise korunur —, `updated_at`, `version + 1`) ve olay satırı **aynı transaction**'da; execution strategy içinde. Etkilenen satır 0 ise hiçbir şey yazılmaz → `Conflict`. |
+| `Task<bool> AddEventAsync(code, evt)` | Durumu değiştirmeden olay (iç not). |
 | `private static ComplaintInfo MapToModel(ComplaintEntity e)` | Entity → Domain modeli. |
+
+**Şema (migration `AddComplaintLifecycle`):** `created_at`, `updated_at` (`now()` varsayılanı; eski kayıtlar migration
+anını alır), `assigned_agent_id`, `resolution` (≤ 2000), `approval_id`, `version`; `catalog.complaint_events`
+(FK, cascade). `Create` artık `created_at` / `approval_id` yazar ve `created` olayını ekler. Migration öncesi kayıtların
+olay geçmişi boştur.
 
 ## 7. Bağımlılıklar
 

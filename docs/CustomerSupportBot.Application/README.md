@@ -26,6 +26,7 @@ Bu klasör, Onion / Hexagonal Mimari'de **Use Cases & Application Core (İş Ak�
 - [Orders/](../superpowers/specs/2026-10-05-proactive-notifications-design.md) — Sipariş durum güncellemesi (`OrderFulfillmentService`: kargolandı/teslim edildi) ve proaktif e-posta (`Notifications/OrderStatusEmailService`).
 - [Budget/](Services/Budget/README.md) — LLM harcama limiti (`LlmSpendGuard`, `LlmBudgetOptions`).
 - [Conversations/](Services/Conversations/README.md) — Konuşma kapanış nedeni/etiket/not (`ConversationClosingService`, `ConversationClosingOptions`) ve yönetici konuşma araması (`ConversationSearchService`, `TurkishText`).
+- [Complaints/](Services/Complaints/README.md) — Şikayet yaşam döngüsü (`ComplaintManagementService`: üstlenme, atama, çözme/reddetme, yeniden açma, iç not; koşullu geçiş ve müşteri e-postası).
 - [SavedReplies/](Services/SavedReplies/README.md) — Hazır yanıt kütüphanesi (`SavedReplyService`: doğrulama, kısayol benzersizliği, Türkçe sıralama/arama).
 - [Privacy/](Services/Privacy/README.md) — Kişisel Veri (KVKK):
   - [DataPrivacyService](Services/Privacy/DataPrivacyService.md) — Saklama süresi temizliği, müşteri verisini dışa aktarma ve silme.

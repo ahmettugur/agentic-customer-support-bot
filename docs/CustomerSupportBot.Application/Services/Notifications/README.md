@@ -27,6 +27,18 @@ Proaktif bildirim: sipariş **kargoya verildiğinde** ve **teslim edildiğinde**
 - **İçerik:** konu "Siparişiniz kargoya verildi — #1044" / "… teslim edildi — #1044"; gövdede ürünler, kargo firması
   ve takip numarası, (ayarlıysa) bağlantı. HTML'e giren her metin escape edilir.
 
+## ComplaintStatusEmailService
+
+Şikayet **incelemeye alındığında** (üstlenme, Beklemede'den atama, yeniden açma) ve **kapandığında** (çözüldü / reddedildi,
+müşteriye görünen açıklamayla) müşteriye e-posta (`Email:Notifications:ComplaintInReview`, `ComplaintClosed`).
+
+- **Bir kez gönderim:** `complaint:{no}:{in_review|closed}:{sürüm}` anahtarı `INotificationLedger`'da talep edilir. Sürüm
+  her geçişte arttığı için yeniden açılıp tekrar kapanan şikayet yeni e-posta alır; aynı geçişin iki pod'da işlenmesi
+  tek e-posta gönderir.
+- **Alıcı/hata:** sipariş e-postasıyla aynı; bildirim hatası geçişi geri almaz.
+- **İçerik** (`ComplaintStatusEmailComposer`): konu "Şikayetiniz inceleniyor — #1006" / "… çözüldü …" / "… sonuçlandı …"
+  (reddedildi). İç not asla girmez; HTML'e giren her metin escape edilir.
+
 ## ApprovalEmailComposer
 
 Türkçe konu ve gövde (düz metin + HTML). Konu: "Talebiniz onaylandı — İade", "… reddedildi", "… zaman aşımına

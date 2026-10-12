@@ -23,13 +23,13 @@ public class ComplaintSlaTests
     };
 
     [Fact]
-    public void Pending_PastPickupBreach_EmitsPickupBreach_Once()
+    public async Task Pending_PastPickupBreach_EmitsPickupBreach_Once()
     {
         var sink = new InMemorySlaEventSink(NullLogger<InMemorySlaEventSink>.Instance);
 
         var first = SlaPolicyEvaluator.EvaluateComplaint("1006", C(WellKnown.ComplaintStatuses.Pending, 250), O, sink, Now);
         first.Should().ContainSingle(e => e.Kind == SlaPolicyEvaluator.KindComplaintPickup && e.Severity == SlaPolicyEvaluator.SeverityBreach);
-        foreach (var e in first) sink.RecordAsync(e).GetAwaiter().GetResult();
+        foreach (var e in first) await sink.RecordAsync(e);
 
         SlaPolicyEvaluator.EvaluateComplaint("1006", C(WellKnown.ComplaintStatuses.Pending, 260), O, sink, Now).Should().BeEmpty();
     }

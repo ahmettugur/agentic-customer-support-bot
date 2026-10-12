@@ -70,7 +70,7 @@ boş kalır; panel bunu "geçmiş kaydı yok" olarak gösterir.
 | `assign` | İncelemede | İncelemede | Admin | `agentId` (yeniden atama) |
 | `resolve` | İncelemede | Çözüldü | Atanan temsilci ya da admin | `resolution` |
 | `reject` | İncelemede | Reddedildi | Atanan temsilci ya da admin | `resolution` |
-| `reopen` | Çözüldü / Reddedildi | İncelemede | Admin ya da şikayeti kapatan temsilci | `note` (gerekçe); atama korunur |
+| `reopen` | Çözüldü / Reddedildi | İncelemede | Admin ya da atanan temsilci (kapatan zaten ya admin ya atanandır) | `note` (gerekçe); atama korunur |
 | `note` | herhangi | (değişmez) | Admin ya da atanan temsilci | `note` |
 
 - Başkasına atanmış şikayette temsilcinin `resolve/reject/note` denemesi **403**.

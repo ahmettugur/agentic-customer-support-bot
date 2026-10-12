@@ -18,6 +18,7 @@ Sistem, uzmanlaşmış LLM ajanlarından oluşan bir takımı orkestrasyon mant�
 - **LLM Harcama Limiti** — Günlük, aylık ve görüşme başına USD limiti (`LlmBudget`, appsettings'ten; `0` = sınırsız). Limit aşılınca LLM çağrısı yapılmaz: müşteri bilgilendirme mesajı alır, görüşme limiti aşılan sohbet bir temsilciye aktarılır, yeni sesli bağlantı açılmaz. %80 ve %100'de bir kez uyarı (log + isteğe bağlı e-posta). Sayaçlar Redis'te (pod'lar arası tek toplam); panelde bugünkü/aylık harcama.
 - **Konuşma Arama** — Yönetici panelinin "🔎 Konuşmalar" sekmesinde geçmiş konuşmalar mesaj metninde (Türkçe büyük/küçük harf duyarsız), müşteri numarası, tarih aralığı, kapanış nedeni ve etikete göre aranır; sonuçta vurgulu alıntı görünür, konuşmanın tamamı açılabilir. Tek SQL sorgusu.
 - **Konuşma Kapanış Nedeni ve Etiketler** — Temsilci canlı sohbeti bitirirken kapanış nedeni (`ConversationClosing`, appsettings'ten ayarlanır; varsayılan zorunlu), etiketler ve not kaydeder. Analitik panelinde neden dağılımı ve en sık etiketler görünür; kayıtlar KVKK silme ve dışa aktarmaya dahildir.
+- **Şikayet Yönetimi** — Şikayetler `Beklemede → İncelemede → Çözüldü / Reddedildi` akışıyla yönetilir; kapanmış şikayet yeniden açılabilir. Temsilci atanmamış şikayeti üstlenir, yönetici atar; kapatırken müşteriye görünen açıklama zorunludur, iç notlar yalnızca zaman çizelgesinde kalır. Eşzamanlı iki işlemden yalnızca biri kazanır (koşullu güncelleme). Müşteriye incelemeye alınınca ve kapanınca e-posta gider (`Email:Notifications:ComplaintInReview`, `ComplaintClosed`); bot sorulunca güncel durumu ve açıklamayı söyler. Fotoğraflar onay kaydı üzerinden şikayette görünür. Geciken şikayetler SLA ekranına düşer (`Sla:Complaints`).
 - **Hazır Yanıtlar** — Ekip çapında standart yanıt kütüphanesi (başlık, metin, isteğe bağlı kısayol). Yönetici "📋 Hazır Yanıtlar" sekmesinden yönetir; temsilci canlı sohbette 📋 ile arar ve seçtiği yanıtı mesaj kutusuna alır — gönderilmeden önce düzenlenebilir.
 - **Temsilci Asistanı** — Sohbeti devralan temsilci, canlı sohbet panelinde tek tıkla konuşma özeti, müşterinin talebi, düzenlenebilir yanıt taslağı, duygu durumu, müşteri profili, oturumun açık işleri ve ilgili bilgi tabanı makalelerini görür. Taslak otomatik gönderilmez; "Taslağı kullan" yalnızca mesaj kutusuna alır.
 - **Smart Routing & Skills-Based Escalation** — Eskalasyon oluştuğunda intent + müşteri profili üzerinden gerekli skill tag'leri çıkarılır ve `IHumanAgentRegistry`'deki temsilciler arasında en iyi skill + dil + load match'iyle aday önerilir. Manuel re-route + load tracking + auto-decrement.
@@ -311,6 +312,11 @@ curl -X POST http://localhost:5021/chat/ \
 | `/agent/profile` | `GET` | Kendi HumanAgent profilini getir (agent) |
 | `/sla/status` | `GET` | SLA Guardian güncel durum: pending/open sayı, en eski yaş, ihlal sayısı (admin) |
 | `/sla/events` | `GET` | Son SLA warn/breach olayları (admin) |
+| `/complaints` | `GET` | Şikayet listesi — durum/atanan filtresi, SLA rengi, kullanılabilir eylemler (admin) |
+| `/complaints/{code}` | `GET` | Şikayet ayrıntısı: sipariş, fotoğraflar, zaman çizelgesi (admin) |
+| `/complaints/{code}/assign` | `POST` | Temsilciye ata (admin) |
+| `/complaints/{code}/resolve` · `/reject` · `/reopen` · `/notes` | `POST` | Çözüldü / reddedildi (müşteriye açıklama + e-posta), yeniden aç, iç not (admin) |
+| `/agent/complaints` · `/agent/complaints/{code}/claim` | `GET` · `POST` | Atanmamış + bana atanmış şikayetler; üstlen (agent) — kapatma/yeniden açma/not uçları admin ile aynı |
 
 Tam API referansı için [`docs/CustomerSupportBot.Api/`](docs/CustomerSupportBot.Api/README.md) klasörüne bakın.
 

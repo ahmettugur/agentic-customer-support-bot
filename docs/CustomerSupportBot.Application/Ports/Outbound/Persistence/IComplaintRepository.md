@@ -36,6 +36,12 @@ doğrudan kullanıcıya/LLM'e döndürebilir.
 | `ComplaintInfo? Get(string complaintId)` | Id ile sorgular. |
 | `IReadOnlyList<(string ComplaintId, ComplaintInfo Complaint)> GetByOrder(string orderId)` | Siparişe bağlı şikayetler. |
 | `IReadOnlyList<(string ComplaintId, ComplaintInfo Complaint)> GetByCustomer(string customerId)` | Müşterinin tüm şikayetleri. |
+| `Task<ComplaintPage> ListAsync(ComplaintQuery query, CancellationToken ct)` | Panel listesi (durum, atanan, temsilci kapsamı, sayfa). |
+| `Task<ComplaintCounts> CountOpenAsync(string? agentId, CancellationToken ct)` | Bekleyen / incelemede / temsilciye atanan sayıları. |
+| `Task<IReadOnlyList<ComplaintListItem>> GetOpenAsync(int max, CancellationToken ct)` | SLA taraması için açık şikayetler. |
+| `Task<IReadOnlyList<ComplaintEvent>> GetEventsAsync(string complaintId, CancellationToken ct)` | Zaman çizelgesi. |
+| `Task<ComplaintTransitionOutcome> TryTransitionAsync(ComplaintTransition t, CancellationToken ct)` | Koşullu geçiş (`status` + `version`) + olay, tek transaction; kaybeden `Conflict`. |
+| `Task<bool> AddEventAsync(string complaintId, ComplaintEvent evt, CancellationToken ct)` | Durumu değiştirmeden iç not. |
 
 ## 7. Bağımlılıklar
 
