@@ -654,6 +654,14 @@
             </div>
         </section>
 
+        <!-- TAB: ŞİKAYETLER (yönetici + temsilci) -->
+        <section id="panel-complaints" class="tab-content @ActiveCls("complaints")" role="tabpanel" aria-labelledby="tab-complaints">
+            @if (_activeTab == "complaints")
+            {
+                <ComplaintsPanel @ref="_complaintsPanel" IsAgent="_isAgent" OnChanged="RefreshBadgesAsync" />
+            }
+        </section>
+
         <!-- TAB: SİPARİŞLER (yalnız yönetici) — kargo/teslim durumu, müşteriye proaktif e-posta -->
         @if (!_isAgent)
         {

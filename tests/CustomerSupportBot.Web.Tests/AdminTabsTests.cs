@@ -36,4 +36,10 @@ public class AdminTabsTests
     [InlineData("analytics", true, "escalations")]
     public void Normalize_applies_role_and_default(string? tab, bool isAgent, string expected)
         => AdminTabs.Normalize(tab, isAgent).Should().Be(expected);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Complaints_IsOpenForAdminAndAgent(bool isAgent)
+        => AdminTabs.Normalize("complaints", isAgent).Should().Be("complaints");
 }

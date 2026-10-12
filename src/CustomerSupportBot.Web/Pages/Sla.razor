@@ -48,6 +48,11 @@
         {
             <section class="sla-card"><h2>Eskalasyonlar</h2><p class="muted">Yükleniyor…</p></section>
         }
+        @if (_status?.Complaints is { } cs)
+        {
+            @QueueCard("Şikayetler", cs.OpenCount, "açık", cs.OldestSeconds, cs.ResolveWarnAfterSeconds, cs.ResolveBreachAfterSeconds,
+                       cs.BreachCountRecent, $"{cs.PendingCount} üstlenilmeyi bekliyor · üstlenme sınırı {FmtDuration(cs.PickupBreachAfterSeconds)}. Sınır aşıldığında yalnızca kayıt tutulur.")
+        }
     </div>
 
     <section class="sla-card sla-events" aria-label="Son olaylar">
@@ -183,6 +188,8 @@
     {
         "approval"   => "Onay",
         "escalation" => "Eskalasyon",
+        "complaint_pickup"  => "Şikayet (üstlenme)",
+        "complaint_resolve" => "Şikayet (çözüm)",
         _            => kind
     };
 

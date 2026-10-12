@@ -8,9 +8,9 @@ namespace CustomerSupportBot.Web.Helpers;
 public static class AdminTabs
 {
     public static readonly IReadOnlyList<string> All =
-        ["approvals", "escalations", "chats", "history", "analytics", "orders", "conversations", "replies", "improvements"];
+        ["approvals", "escalations", "chats", "complaints", "history", "analytics", "orders", "conversations", "replies", "improvements"];
 
-    private static readonly HashSet<string> AgentAllowed = ["escalations", "chats"];
+    private static readonly HashSet<string> AgentAllowed = ["escalations", "chats", "complaints"];
 
     public static string Default(bool isAgent) => isAgent ? "escalations" : "approvals";
 

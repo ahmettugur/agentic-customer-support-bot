@@ -287,6 +287,57 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
     private sealed record OrderUpdateResponse(string OrderId, bool Changed, OrderViewItem? Order);
     private sealed record OrderUpdateError(string? Error, string? CurrentStatus);
 
+    // ─── Şikayetler (admin: /complaints, temsilci: /agent/complaints) ───────
+
+    public async Task<ComplaintPageResponse?> GetComplaintsAsync(string? status, bool mine, int page)
+    {
+        try
+        {
+            var prefix = await PrefixAsync();
+            var url = $"{prefix}/complaints?status={Uri.EscapeDataString(status ?? "open")}&page={page}&pageSize=20"
+                      + (mine && prefix == "/agent" ? "&mine=true" : "");
+            return await http.GetFromJsonAsync<ComplaintPageResponse>(url);
+        }
+        catch { return null; }
+    }
+
+    public async Task<ComplaintCountsResponse?> GetComplaintCountsAsync()
+    {
+        try { return await http.GetFromJsonAsync<ComplaintCountsResponse>($"{await PrefixAsync()}/complaints/counts"); }
+        catch { return null; }
+    }
+
+    public async Task<ComplaintDetailResponse?> GetComplaintAsync(string id)
+    {
+        try
+        {
+            using var response = await http.GetAsync($"{await PrefixAsync()}/complaints/{Uri.EscapeDataString(id)}");
+            return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<ComplaintDetailResponse>() : null;
+        }
+        catch { return null; }
+    }
+
+    /// <param name="action">claim | assign | resolve | reject | reopen | notes</param>
+    public async Task<(ComplaintItem? Complaint, string? Error)> ComplaintActionAsync(string id, string action, object body)
+    {
+        try
+        {
+            using var response = await http.PostAsJsonAsync($"{await PrefixAsync()}/complaints/{Uri.EscapeDataString(id)}/{action}", body);
+            if (response.IsSuccessStatusCode) return (await response.Content.ReadFromJsonAsync<ComplaintItem>(), null);
+            var error = await response.Content.ReadFromJsonAsync<ComplaintActionError>();
+            var message = error?.Error ?? $"İşlem yapılamadı ({(int)response.StatusCode}).";
+            return (null, response.StatusCode == System.Net.HttpStatusCode.Conflict
+                ? $"{message} Kayıt yenilendi; lütfen tekrar deneyin."
+                : message);
+        }
+        catch (Exception ex)
+        {
+            return (null, "İşlem yapılamadı: " + ex.Message);
+        }
+    }
+
+    private sealed record ComplaintActionError(string? Error, string? CurrentStatus, int? Version);
+
     // ─── Konuşma arama (yalnız yönetici) ─────────────────────────────────────
 
     /// <summary><paramref name="fromUtc"/> dahil, <paramref name="toUtc"/> hariç.</summary>

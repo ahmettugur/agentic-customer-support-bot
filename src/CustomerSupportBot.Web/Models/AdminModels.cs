@@ -200,13 +200,46 @@ public sealed record EscalationSummaryItem(string Id, string? AgentName, string 
 
 public sealed record AgentInfo(string Id, string DisplayName, bool IsActive);
 
+// ─── Şikayetler (GET …/complaints) ───────────────────────────────────────────
+
+/// <param name="Sla">"none" | "ok" | "warn" | "breach" — sunucu hesaplar.</param>
+/// <param name="Actions">Bu kullanıcının yapabileceği eylemler (claim, assign, resolve, reject, reopen, note).</param>
+public sealed record ComplaintItem(
+    string ComplaintId,
+    string OrderId,
+    string CustomerId,
+    string Complaint,
+    string Status,
+    string? AssignedAgentId,
+    string? AssignedAgentName,
+    string? Resolution,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    int Version,
+    string Sla,
+    List<string> Actions
+);
+
+public sealed record ComplaintPageResponse(List<ComplaintItem> Items, int Total, int Page, int PageSize);
+
+public sealed record ComplaintCountsResponse(int Pending, int InProgress, int AssignedToMe);
+
+public sealed record ComplaintEventItem(
+    DateTime At, string Actor, string Kind, string? FromStatus, string? ToStatus, string? AssignedAgentId, string? Note);
+
+public sealed record ComplaintOrderSummary(string Status, string LinesSummary);
+
+public sealed record ComplaintDetailResponse(
+    ComplaintItem Complaint, ComplaintOrderSummary? Order, List<string> AttachmentIds, List<ComplaintEventItem> Events);
+
 // ─── SLA ─────────────────────────────────────────────────────────────────────
 
 public sealed record SlaStatus(
     bool Enabled,
     int PollIntervalSeconds,
     SlaApprovalStats? Approvals,
-    SlaEscalationStats? Escalations
+    SlaEscalationStats? Escalations,
+    SlaComplaintStats? Complaints = null
 );
 
 public sealed record SlaApprovalStats(
@@ -224,6 +257,17 @@ public sealed record SlaEscalationStats(
     double WarnAfterSeconds,
     double BreachAfterSeconds,
     bool BoostPriorityOnBreach,
+    int BreachCountRecent
+);
+
+public sealed record SlaComplaintStats(
+    int OpenCount,
+    int PendingCount,
+    double? OldestSeconds,
+    double PickupWarnAfterSeconds,
+    double PickupBreachAfterSeconds,
+    double ResolveWarnAfterSeconds,
+    double ResolveBreachAfterSeconds,
     int BreachCountRecent
 );
 

@@ -12,6 +12,7 @@ public sealed class StaffBadgeState
     public int? OpenEscalations  { get; private set; }
     public int? ActiveChats      { get; private set; }
     public int? ProposedLessons  { get; private set; }
+    public int? OpenComplaints   { get; private set; }
 
     public event Action? OnChange;
 
@@ -29,6 +30,13 @@ public sealed class StaffBadgeState
     {
         if (ProposedLessons == count) return;
         ProposedLessons = count;
+        OnChange?.Invoke();
+    }
+
+    public void SetComplaints(int count)
+    {
+        if (OpenComplaints == count) return;
+        OpenComplaints = count;
         OnChange?.Invoke();
     }
 }

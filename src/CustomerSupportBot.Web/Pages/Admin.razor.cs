@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Security.Claims;
+using CustomerSupportBot.Web.Components;
 using CustomerSupportBot.Web.Helpers;
 using CustomerSupportBot.Web.Models;
 using CustomerSupportBot.Web.Services;
@@ -140,6 +141,8 @@ public partial class Admin
     private bool             _showAssignModal;
     private string           _assignEscalationId = string.Empty;
     private List<AgentInfo>  _assignAgents       = [];
+    private ComplaintsPanel? _complaintsPanel;
+    private ComplaintCountsResponse? _complaintCounts;
     private string           _assignSelected     = string.Empty;
     private string           _assignFallbackText = string.Empty;
 
@@ -263,10 +266,12 @@ public partial class Admin
             var approvals   = AdminApi.GetPendingApprovalsAsync();
             var escalations = AdminApi.GetOpenEscalationsAsync();
             var chats       = AdminApi.GetActiveChatsAsync();
-            await Task.WhenAll(approvals, escalations, chats);
+            var complaints  = AdminApi.GetComplaintCountsAsync();
+            await Task.WhenAll(approvals, escalations, chats, complaints);
             _pendingApprovals = approvals.Result.Where(a => !_decidedApprovals.Contains(a.Id)).ToList();
             _openEscalations  = escalations.Result;
             _activeChats      = chats.Result;
+            _complaintCounts  = complaints.Result ?? _complaintCounts;
             PublishBadges();
         }
         catch { /* badge hatalarını sessizce geç */ }
@@ -288,6 +293,9 @@ public partial class Admin
                     var recent         = await AdminApi.GetRecentEscalationsAsync(30);
                     _closedEscalations = recent.Where(e => e.Status is "resolved" or "dismissed").ToList();
                     if (!_isAgent) _agentPresence = await AdminApi.GetAgentPresenceAsync();
+                    break;
+                case "complaints":
+                    if (_complaintsPanel is not null) await _complaintsPanel.RefreshAsync();
                     break;
                 case "chats":
                     _activeChats = await AdminApi.GetActiveChatsAsync();
@@ -479,7 +487,10 @@ public partial class Admin
     }
 
     private void PublishBadges()
-        => Badges.SetQueues(_pendingApprovals.Count, _openEscalations.Count, _activeChats.Count);
+    {
+        Badges.SetQueues(_pendingApprovals.Count, _openEscalations.Count, _activeChats.Count);
+        if (_complaintCounts is { } cc) Badges.SetComplaints(ComplaintView.BadgeCount(cc, _isAgent));
+    }
 
     // ── Escalation takeover ────────────────────────────────────────────────────
     private async Task TakeoverAndChatAsync(EscalationRequest e)
@@ -876,7 +887,7 @@ public partial class Admin
     ///
     /// <para>
     /// Eskiden 3 saniyeydi ve panel kendi kendini rate-limit'liyordu: her tick'te
-    /// RefreshBadgesAsync (3 istek) + RefreshActiveTabAsync (1-2 istek) çalışıyor, yani
+    /// RefreshBadgesAsync (4 istek) + RefreshActiveTabAsync (1-2 istek) çalışıyor, yani
     /// dakikada ~100 istek üretiliyordu. Sunucudaki "general" politikası ise IP başına
     /// <b>60 istek/dakika</b>. Sonuç: panel açık durduğu sürece kota tükeniyor ve
     /// "Yeni Tarama Çalıştır" gibi butonlar HTTP 429 alıyordu.
@@ -1152,6 +1163,7 @@ public partial class Admin
         "escalations"   => "Eskalasyonlar",
         "chats"         => "Canlı sohbetler",
         "conversations" => "Konuşmalar",
+        "complaints"    => "Şikayetler",
         "orders"        => "Siparişler",
         "history"       => "Karar geçmişi",
         "analytics"     => "Analiz",
@@ -1166,6 +1178,7 @@ public partial class Admin
         "escalations"   => _isAgent ? "Size atanan ve atanmayı bekleyen konuşmalar." : "Asistanın çözemediği ve bir temsilcinin bakması gereken konuşmalar.",
         "chats"         => "Temsilcinin devraldığı canlı konuşmalar. Bir eskalasyonu devraldığınızda burada açılır.",
         "conversations" => "Kapanmış ve süren konuşmalarda mesaj, müşteri, tarih ve etikete göre arama.",
+        "complaints"    => _isAgent ? "Üstlenmeyi bekleyen ve size atanan şikayetler. Kapatırken müşteriye gidecek açıklamayı yazın." : "Müşteri şikayetleri: atayın, izleyin; çözüldüğünde ya da reddedildiğinde müşteriye e-posta gider.",
         "orders"        => "Sipariş durumunu güncelleyin; durum değişince müşteriye e-posta gider.",
         "history"       => "Son 50 onay kararı ve son 50 eskalasyon.",
         "analytics"     => "Genel istatistikler; bir oturum seçerek ayrıntısını görün.",
