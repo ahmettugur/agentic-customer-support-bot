@@ -1,7 +1,9 @@
 namespace CustomerSupportBot.Application.Ports.Outbound.Persistence;
 
-/// <summary>Trace toplamları: tur sayısı, tamamlanan, hatalı, ortalama süre, eskalasyonla biten.</summary>
-public sealed record TraceTotals(int Traces, int Completed, int Errors, double AvgDurationMs, int Escalated);
+/// <summary>Trace toplamları: tur sayısı, asistanın yanıtladığı, hatalı, ortalama süre, eskalasyonla biten.</summary>
+/// <param name="Answered">Hatasız ve "tamamlandı" ya da "müşteriden bilgi bekleniyor" ile biten turlar — asistanın
+/// kendi başına yanıt verdiği turlar. (Yalnızca trace'in kapanması ölçü değildir: iptal ve "bulunamadı" da kapanır.)</param>
+public sealed record TraceTotals(int Traces, int Answered, int Errors, double AvgDurationMs, int Escalated);
 
 /// <summary>Bir ajanın çalıştığı tur sayısı ve ortalama süresi (trace'teki ajan ziyaretleri).</summary>
 public sealed record AgentTurnStat(string AgentName, int Turns, double AvgDurationMs);

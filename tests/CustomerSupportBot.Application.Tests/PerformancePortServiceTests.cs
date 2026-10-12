@@ -79,7 +79,7 @@ public class PerformancePortServiceTests
         r.Agents.Single(a => a.AgentName == "PlanningAgent").SuccessRate.Should().BeNull("planlama ajanı görev sonucu bildirmez");
         r.Agents.Single(a => a.AgentName == "ComplaintAgent").Turns.Should().Be(0);
 
-        r.Summary.Should().Match<AiSummary>(s => s.Traces == 10 && s.CompletionRate == 0.8 && s.ErrorRate == 0.1
+        r.Summary.Should().Match<AiSummary>(s => s.Traces == 10 && s.AnsweredRate == 0.8 && s.ErrorRate == 0.1
                                                 && s.EscalationRate == 0.2 && s.ToolCalls == 10);
         r.Summary.ToolFailureRate.Should().Be(0.1);
         r.Tools.First().ToolName.Should().Be("order_cancel_tool", "en çok hata veren araç üstte");
@@ -93,7 +93,7 @@ public class PerformancePortServiceTests
 
         var r = await svc.GetAsync(null, null, Ct);
 
-        r.Summary.CompletionRate.Should().Be(0);
+        r.Summary.AnsweredRate.Should().Be(0);
         r.Summary.ToolFailureRate.Should().BeNull();
         r.Agents.Should().BeEmpty();
     }

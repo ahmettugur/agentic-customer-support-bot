@@ -654,6 +654,17 @@
             </div>
         </section>
 
+        <!-- TAB: PERFORMANS (yalnız yönetici) -->
+        @if (!_isAgent)
+        {
+            <section id="panel-performance" class="tab-content @ActiveCls("performance")" role="tabpanel" aria-labelledby="tab-performance">
+                @if (_activeTab == "performance")
+                {
+                    <PerformancePanel @ref="_performancePanel" />
+                }
+            </section>
+        }
+
         <!-- TAB: ŞİKAYETLER (yönetici + temsilci) -->
         <section id="panel-complaints" class="tab-content @ActiveCls("complaints")" role="tabpanel" aria-labelledby="tab-complaints">
             @if (_activeTab == "complaints")

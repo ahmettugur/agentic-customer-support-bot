@@ -232,6 +232,26 @@ public sealed record ComplaintOrderSummary(string Status, string LinesSummary);
 public sealed record ComplaintDetailResponse(
     ComplaintItem Complaint, ComplaintOrderSummary? Order, List<string> AttachmentIds, List<ComplaintEventItem> Events);
 
+// ─── Performans (GET /analytics/performance) ─────────────────────────────────
+
+public sealed record PerformanceSummary(
+    int Traces, double AnsweredRate, double ErrorRate, double EscalationRate, double AvgDurationMs, int ToolCalls, double? ToolFailureRate);
+
+public sealed record PerformanceAgentRow(
+    string AgentName, int Turns, double AvgDurationMs, int Outcomes, int Succeeded, int Escalated, int NeedsFollowUp, int Failed, double? SuccessRate);
+
+public sealed record PerformanceToolRow(string ToolName, string? AgentName, int Calls, int Failures, double FailureRate, string? LastFailure);
+
+public sealed record PerformanceHumanRow(
+    string AgentId, string DisplayName, int EscalationsTaken, int EscalationsResolved, double? AvgFirstResponseSeconds,
+    double? AvgResolutionSeconds, int ComplaintsClosed, double? AvgRating, int Ratings);
+
+public sealed record PerformanceTermination(string Reason, int Count);
+
+public sealed record PerformanceReportResponse(
+    DateTime FromUtc, DateTime ToUtc, PerformanceSummary Summary, List<PerformanceAgentRow> Agents, List<PerformanceToolRow> Tools,
+    List<PerformanceHumanRow> HumanAgents, List<PerformanceTermination> Terminations);
+
 // ─── SLA ─────────────────────────────────────────────────────────────────────
 
 public sealed record SlaStatus(

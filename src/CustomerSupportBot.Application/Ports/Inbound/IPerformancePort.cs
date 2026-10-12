@@ -6,13 +6,13 @@ using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 namespace CustomerSupportBot.Application.Ports.Inbound;
 
 /// <param name="Traces">Asistanın işlediği tur (trace) sayısı.</param>
-/// <param name="CompletionRate">Tamamlanan turların oranı (0–1).</param>
+/// <param name="AnsweredRate">Asistanın kendi başına yanıtladığı turların oranı (0–1).</param>
 /// <param name="ErrorRate">Hatayla biten turların oranı.</param>
 /// <param name="EscalationRate">Temsilciye aktarımla biten turların oranı.</param>
 /// <param name="ToolFailureRate">Başarısız araç çağrılarının oranı; hiç çağrı yoksa null.</param>
 public sealed record AiSummary(
     int Traces,
-    double CompletionRate,
+    double AnsweredRate,
     double ErrorRate,
     double EscalationRate,
     double AvgDurationMs,

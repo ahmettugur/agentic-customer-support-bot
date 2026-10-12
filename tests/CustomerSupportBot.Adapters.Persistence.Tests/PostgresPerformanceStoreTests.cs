@@ -56,7 +56,7 @@ public class PostgresPerformanceStoreTests(PostgresCatalogFixture fixture)
         var ai = await Store.GetAiAsync(From, To, Ct);
 
         ai.Totals.Traces.Should().Be(3);
-        ai.Totals.Completed.Should().Be(2);
+        ai.Totals.Answered.Should().Be(1, "eskalasyonla ve hatayla biten turlar asistanın yanıtladığı sayılmaz");
         ai.Totals.Errors.Should().Be(1);
         ai.Totals.Escalated.Should().Be(1);
         ai.Totals.AvgDurationMs.Should().BeApproximately(4000, 1);

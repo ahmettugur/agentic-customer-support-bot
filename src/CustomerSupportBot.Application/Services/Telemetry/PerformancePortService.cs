@@ -57,7 +57,7 @@ public sealed class PerformancePortService(
         var calls = ai.Tools.Sum(x => x.Calls);
         return new AiSummary(
             t.Traces,
-            Rate(t.Completed, t.Traces) ?? 0,
+            Rate(t.Answered, t.Traces) ?? 0,
             Rate(t.Errors, t.Traces) ?? 0,
             Rate(t.Escalated, t.Traces) ?? 0,
             t.AvgDurationMs,

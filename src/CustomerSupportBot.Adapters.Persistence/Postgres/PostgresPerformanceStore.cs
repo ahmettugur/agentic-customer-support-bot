@@ -21,7 +21,8 @@ public sealed class PostgresPerformanceStore(IDbContextFactory<CustomerSupportDb
 
         var totals = (await ctx.Database.SqlQuery<TotalsRow>($"""
             SELECT count(*)::int AS "Traces",
-                   count(completed_at)::int AS "Completed",
+                   (count(*) FILTER (WHERE termination_reason IN ('completed', 'awaiting_user_input')
+                                       AND coalesce(error, '') = ''))::int AS "Answered",
                    (count(*) FILTER (WHERE error IS NOT NULL AND error <> ''))::int AS "Errors",
                    coalesce(avg(extract(epoch FROM (completed_at - started_at)) * 1000)
                             FILTER (WHERE completed_at IS NOT NULL), 0)::float8 AS "AvgDurationMs",
@@ -74,7 +75,7 @@ public sealed class PostgresPerformanceStore(IDbContextFactory<CustomerSupportDb
             """).ToListAsync(ct);
 
         return new AiPerformanceData(
-            new TraceTotals(totals.Traces, totals.Completed, totals.Errors, totals.AvgDurationMs, totals.Escalated),
+            new TraceTotals(totals.Traces, totals.Answered, totals.Errors, totals.AvgDurationMs, totals.Escalated),
             turns.Select(r => new AgentTurnStat(r.AgentName, r.Turns, r.AvgDurationMs)).ToList(),
             outcomes.Select(r => new AgentOutcomeStat(r.AgentName, r.Status, r.Count)).ToList(),
             tools.Select(r => new ToolStat(r.ToolName, r.AgentName, r.Calls, r.Failures, r.LastFailure)).ToList(),
@@ -139,7 +140,7 @@ public sealed class PostgresPerformanceStore(IDbContextFactory<CustomerSupportDb
     private static DateTime Utc(DateTime d) => DateTime.SpecifyKind(d, DateTimeKind.Utc);
 
     // SqlQuery<T> sütunları özellik adlarıyla eşler; bu yüzden ayarlanabilir özellikli satır tipleri.
-    private sealed class TotalsRow { public int Traces { get; set; } public int Completed { get; set; } public int Errors { get; set; } public double AvgDurationMs { get; set; } public int Escalated { get; set; } }
+    private sealed class TotalsRow { public int Traces { get; set; } public int Answered { get; set; } public int Errors { get; set; } public double AvgDurationMs { get; set; } public int Escalated { get; set; } }
     private sealed class TurnRow { public string AgentName { get; set; } = ""; public int Turns { get; set; } public double AvgDurationMs { get; set; } }
     private sealed class OutcomeRow { public string AgentName { get; set; } = ""; public string Status { get; set; } = ""; public int Count { get; set; } }
     private sealed class ToolRow { public string ToolName { get; set; } = ""; public string? AgentName { get; set; } public int Calls { get; set; } public int Failures { get; set; } public string? LastFailure { get; set; } }

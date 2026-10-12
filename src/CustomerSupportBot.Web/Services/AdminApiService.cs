@@ -338,6 +338,18 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
 
     private sealed record ComplaintActionError(string? Error, string? CurrentStatus, int? Version);
 
+    // ─── Performans (yalnız yönetici) ────────────────────────────────────────
+
+    public async Task<PerformanceReportResponse?> GetPerformanceAsync(DateTime fromUtc, DateTime toUtc)
+    {
+        try
+        {
+            var url = $"/analytics/performance?from={Uri.EscapeDataString(fromUtc.ToString("o"))}&to={Uri.EscapeDataString(toUtc.ToString("o"))}";
+            return await http.GetFromJsonAsync<PerformanceReportResponse>(url);
+        }
+        catch { return null; }
+    }
+
     // ─── Konuşma arama (yalnız yönetici) ─────────────────────────────────────
 
     /// <summary><paramref name="fromUtc"/> dahil, <paramref name="toUtc"/> hariç.</summary>

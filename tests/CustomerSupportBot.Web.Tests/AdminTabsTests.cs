@@ -42,4 +42,11 @@ public class AdminTabsTests
     [InlineData(true)]
     public void Complaints_IsOpenForAdminAndAgent(bool isAgent)
         => AdminTabs.Normalize("complaints", isAgent).Should().Be("complaints");
+
+    [Fact]
+    public void Performance_IsAdminOnly()
+    {
+        AdminTabs.Normalize("performance", isAgent: false).Should().Be("performance");
+        AdminTabs.Normalize("performance", isAgent: true).Should().Be("escalations");
+    }
 }

@@ -1,0 +1,254 @@
+@* Performans sekmesi (yalnız yönetici): yapay zekâ ajanları, araçlar ve temsilciler — seçilen dönemde.
+   Analiz sekmesinin kartları (analytics-summary) ve SLA sayfasının tablo düzeni kullanılır. *@
+@using System.Globalization
+@using CustomerSupportBot.Web.Helpers
+@using CustomerSupportBot.Web.Models
+@inject AdminApiService AdminApi
+
+<div class="perf-toolbar">
+    <div class="filter-chips" role="group" aria-label="Dönem">
+        @foreach (var (days, label) in PerformanceView.Ranges)
+        {
+            var d = days;
+            <button type="button" class="chip @(_days == d ? "on" : "")" aria-pressed="@(_days == d ? "true" : "false")"
+                    @onclick="() => SetRangeAsync(d)">@label</button>
+        }
+    </div>
+    @if (_report is { } period)
+    {
+        <span class="muted small">@Fmt(period.FromUtc) – @Fmt(period.ToUtc)</span>
+    }
+</div>
+
+@if (_error is not null)
+{
+    <p class="form-error" role="alert">@_error</p>
+}
+else if (_report is null)
+{
+    <div class="md-list-empty">Yükleniyor…</div>
+}
+else
+{
+    var s = _report.Summary;
+    <div class="analytics-summary">
+        @Card("route", "sessions", s.Traces.ToString(CultureInfo.InvariantCulture), "Asistan turu")
+        @Card("check", "containment", PerformanceView.Percent(s.AnsweredRate), "Asistanın yanıtladığı tur")
+        @Card("users", "handoff", PerformanceView.Percent(s.EscalationRate), "Temsilciye aktarılan tur")
+        @Card("x-circle", "negative-icon", PerformanceView.Percent(s.ErrorRate), "Hatayla biten tur")
+        @Card("clock", "avg", PerformanceView.DurationMs(s.AvgDurationMs), "Ortalama tur süresi")
+        @Card("tool", "cost", s.ToolFailureRate is null ? "—" : PerformanceView.Percent(s.ToolFailureRate), $"Araç hata oranı ({s.ToolCalls} çağrı)")
+    </div>
+
+    <section class="perf-section" aria-labelledby="perf-agents">
+        <header>
+            <h3 id="perf-agents">Yapay zekâ ajanları</h3>
+            <p class="muted small">Uzman ajanların bildirdiği görev sonuçları. Başarılı = tamamlanan + onaya gönderilen.</p>
+        </header>
+        @if (_report.Agents.Count == 0)
+        {
+            <div class="perf-empty">Bu dönemde asistan turu yok.</div>
+        }
+        else
+        {
+            <div class="perf-table-wrap">
+                <table class="perf-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Ajan</th><th scope="col" class="num">Tur</th><th scope="col" class="num">Ort. süre</th>
+                            <th scope="col" class="num">Görev</th><th scope="col" class="num">Başarılı</th><th scope="col" class="num">Aktarım</th>
+                            <th scope="col" class="num">Takip</th><th scope="col" class="num">Başarısız</th><th scope="col" class="num">Başarı</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var a in _report.Agents)
+                        {
+                            <tr>
+                                <td><strong>@PerformanceView.AgentLabel(a.AgentName)</strong> <span class="muted small">@a.AgentName</span></td>
+                                <td class="num">@a.Turns</td>
+                                <td class="num">@PerformanceView.DurationMs(a.AvgDurationMs)</td>
+                                <td class="num">@Dash(a.Outcomes)</td>
+                                <td class="num">@Dash(a.Succeeded, a.Outcomes)</td>
+                                <td class="num">@Dash(a.Escalated, a.Outcomes)</td>
+                                <td class="num">@Dash(a.NeedsFollowUp, a.Outcomes)</td>
+                                <td class="num">@Dash(a.Failed, a.Outcomes)</td>
+                                <td class="num">
+                                    @if (a.SuccessRate is { } rate)
+                                    {
+                                        <span class="perf-rate @PerformanceView.SuccessTone(rate)">@PerformanceView.Percent(rate)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted" title="Bu ajan görev sonucu bildirmez">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="perf-section" aria-labelledby="perf-tools">
+        <header>
+            <h3 id="perf-tools">Araçlar</h3>
+            <p class="muted small">En çok hata veren araç üstte. Son hata, aracın döndürdüğü kod ve mesajdır.</p>
+        </header>
+        @if (_report.Tools.Count == 0)
+        {
+            <div class="perf-empty">Bu dönemde kayıtlı araç çağrısı yok. Araç çağrıları bu sürümle birlikte kaydedilmeye başladı.</div>
+        }
+        else
+        {
+            <div class="perf-table-wrap">
+                <table class="perf-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Araç</th><th scope="col">Ajan</th><th scope="col" class="num">Çağrı</th>
+                            <th scope="col" class="num">Hata</th><th scope="col" class="num">Hata oranı</th><th scope="col">Son hata</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in _report.Tools)
+                        {
+                            <tr>
+                                <td><strong>@PerformanceView.ToolLabel(t.ToolName)</strong> <code class="muted small">@t.ToolName</code></td>
+                                <td>@(t.AgentName is { } an ? PerformanceView.AgentLabel(an) : "—")</td>
+                                <td class="num">@t.Calls</td>
+                                <td class="num">@t.Failures</td>
+                                <td class="num">
+                                    @if (t.Failures > 0)
+                                    {
+                                        <span class="perf-rate @PerformanceView.FailureTone(t.Failures, t.FailureRate)">@PerformanceView.Percent(t.FailureRate)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">%0</span>
+                                    }
+                                </td>
+                                <td class="perf-failure">@(t.LastFailure ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="perf-section" aria-labelledby="perf-humans">
+        <header>
+            <h3 id="perf-humans">Temsilciler</h3>
+            <p class="muted small">Dönemde açılan eskalasyonlar ve kapatılan şikayetler. İlk yanıt: eskalasyonun açılışından üstlenilmesine kadar geçen süre.</p>
+        </header>
+        @if (_report.HumanAgents.Count == 0)
+        {
+            <div class="perf-empty">Kayıtlı temsilci yok.</div>
+        }
+        else
+        {
+            <div class="perf-table-wrap">
+                <table class="perf-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Temsilci</th><th scope="col" class="num">Üstlenilen</th><th scope="col" class="num">Çözülen</th>
+                            <th scope="col" class="num">İlk yanıt</th><th scope="col" class="num">Çözüm süresi</th>
+                            <th scope="col" class="num">Kapatılan şikayet</th><th scope="col" class="num">Müşteri puanı</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var h in _report.HumanAgents)
+                        {
+                            <tr>
+                                <td><strong>@h.DisplayName</strong></td>
+                                <td class="num">@h.EscalationsTaken</td>
+                                <td class="num">@h.EscalationsResolved</td>
+                                <td class="num">@PerformanceView.Duration(h.AvgFirstResponseSeconds)</td>
+                                <td class="num">@PerformanceView.Duration(h.AvgResolutionSeconds)</td>
+                                <td class="num">@h.ComplaintsClosed</td>
+                                <td class="num">
+                                    @if (h.AvgRating is { } stars)
+                                    {
+                                        <span title="@h.Ratings değerlendirme">@PerformanceView.Rating(stars) ★</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="muted">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    @if (_report.Terminations.Count > 0)
+    {
+        var total = _report.Terminations.Sum(t => t.Count);
+        <section class="perf-section" aria-labelledby="perf-ends">
+            <header>
+                <h3 id="perf-ends">Turlar nasıl bitti</h3>
+            </header>
+            <ul class="perf-bars">
+                @foreach (var t in _report.Terminations)
+                {
+                    var share = total == 0 ? 0 : (double)t.Count / total;
+                    <li>
+                        <span class="perf-bar-label">@PerformanceView.TerminationLabel(t.Reason)</span>
+                        <span class="perf-bar-track" aria-hidden="true"><span class="perf-bar-fill" style="width:@((share * 100).ToString("0.#", CultureInfo.InvariantCulture))%"></span></span>
+                        <span class="perf-bar-value">@t.Count <span class="muted">(@PerformanceView.Percent(share))</span></span>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+}
+
+@code {
+    private int _days = PerformanceView.DefaultRangeDays;
+    private PerformanceReportResponse? _report;
+    private string? _error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    /// <summary>Admin sayfasının otomatik yenilemesi çağırır — dönem "şimdi"ye göre kayar.</summary>
+    public async Task RefreshAsync()
+    {
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task SetRangeAsync(int days)
+    {
+        _days = days;
+        _report = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var to = DateTime.UtcNow;
+        var report = await AdminApi.GetPerformanceAsync(to.AddDays(-_days), to);
+        _error = report is null ? "Performans verisi alınamadı." : null;
+        if (report is not null) _report = report;
+    }
+
+    private static string Fmt(DateTime utc) => utc.ToLocalTime().ToString("dd.MM.yyyy HH:mm");
+
+    private static string Dash(int value) => value == 0 ? "—" : value.ToString(CultureInfo.InvariantCulture);
+
+    private static string Dash(int value, int outcomes) => outcomes == 0 ? "—" : value.ToString(CultureInfo.InvariantCulture);
+
+    private static RenderFragment Card(string icon, string tone, string value, string label) => __builder =>
+    {
+        <div class="analytics-card">
+            <div class="analytics-card-icon @tone"><Icon Name="@icon" Size="20" /></div>
+            <div class="analytics-card-data">
+                <div class="analytics-card-value">@value</div>
+                <div class="analytics-card-label">@label</div>
+            </div>
+        </div>
+    };
+}

@@ -142,6 +142,7 @@ public partial class Admin
     private string           _assignEscalationId = string.Empty;
     private List<AgentInfo>  _assignAgents       = [];
     private ComplaintsPanel? _complaintsPanel;
+    private PerformancePanel? _performancePanel;
     private ComplaintCountsResponse? _complaintCounts;
     private string           _assignSelected     = string.Empty;
     private string           _assignFallbackText = string.Empty;
@@ -293,6 +294,9 @@ public partial class Admin
                     var recent         = await AdminApi.GetRecentEscalationsAsync(30);
                     _closedEscalations = recent.Where(e => e.Status is "resolved" or "dismissed").ToList();
                     if (!_isAgent) _agentPresence = await AdminApi.GetAgentPresenceAsync();
+                    break;
+                case "performance":
+                    if (_performancePanel is not null) await _performancePanel.RefreshAsync();
                     break;
                 case "complaints":
                     if (_complaintsPanel is not null) await _complaintsPanel.RefreshAsync();
@@ -1167,6 +1171,7 @@ public partial class Admin
         "orders"        => "Siparişler",
         "history"       => "Karar geçmişi",
         "analytics"     => "Analiz",
+        "performance"   => "Performans",
         "replies"       => "Hazır yanıtlar",
         "improvements"  => "İyileştirme önerileri",
         _               => "Destek Konsolu"
@@ -1181,6 +1186,7 @@ public partial class Admin
         "complaints"    => _isAgent ? "Üstlenmeyi bekleyen ve size atanan şikayetler. Kapatırken müşteriye gidecek açıklamayı yazın." : "Müşteri şikayetleri: atayın, izleyin; çözüldüğünde ya da reddedildiğinde müşteriye e-posta gider.",
         "orders"        => "Sipariş durumunu güncelleyin; durum değişince müşteriye e-posta gider.",
         "history"       => "Son 50 onay kararı ve son 50 eskalasyon.",
+        "performance"   => "Yapay zekâ ajanlarının başarısı, hata veren araçlar ve temsilcilerin yanıt/çözüm süreleri.",
         "analytics"     => "Genel istatistikler; bir oturum seçerek ayrıntısını görün.",
         "replies"       => "Temsilcilerin canlı sohbette tek tıkla ekleyebildiği yanıtlar.",
         "improvements"  => "Düşük puanlı ya da hatalı konuşmalardan çıkarılan ders önerileri. Onaylanan ders asistanın hafızasına yazılır.",
