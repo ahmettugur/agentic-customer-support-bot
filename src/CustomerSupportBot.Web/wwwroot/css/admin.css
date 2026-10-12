@@ -2433,3 +2433,4 @@ code.at-val {
 .complaint-text-input textarea { width: 100%; }
 .complaint-timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .complaint-timeline li { border-left: 2px solid var(--color-border); padding-left: 10px; }
+.complaints-list, .complaint-detail { padding: 16px; }

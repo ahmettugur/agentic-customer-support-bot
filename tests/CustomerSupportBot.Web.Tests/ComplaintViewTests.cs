@@ -50,4 +50,29 @@ public class ComplaintViewTests
         ComplaintView.BadgeCount(c, isAgent: false).Should().Be(4);
         ComplaintView.BadgeCount(c, isAgent: true).Should().Be(6);
     }
+
+    [Fact]
+    public void Fields_FollowAvailableActions()
+    {
+        ComplaintView.ShowsResolutionField(["assign", "note"]).Should().BeFalse("beklemede müşteriye açıklama yazılmaz");
+        ComplaintView.ShowsNoteField(["assign", "note"]).Should().BeTrue();
+        ComplaintView.ShowsResolutionField(["resolve", "reject", "note"]).Should().BeTrue();
+        ComplaintView.ShowsNoteField(["claim"]).Should().BeFalse();
+        ComplaintView.NoteLabel(["reopen", "note"]).Should().Be("Yeniden açma gerekçesi / iç not (müşteriye gitmez)");
+        ComplaintView.NoteLabel(["resolve", "reject", "note"]).Should().Be("İç not (müşteriye gitmez)");
+    }
+
+    [Theory]
+    [InlineData("resolve", "Yeni ürün gönderildi", "", "", true)]
+    [InlineData("resolve", "", "iç not", "", false)]
+    [InlineData("reject", " ", "", "", false)]
+    [InlineData("note", "açıklama", "", "", false)]
+    [InlineData("note", "", "kargoya soruldu", "", true)]
+    [InlineData("reopen", "", "itiraz", "", true)]
+    [InlineData("reopen", "x", "", "", false)]
+    [InlineData("assign", "", "", "agent-jdoe", true)]
+    [InlineData("assign", "", "", "", false)]
+    [InlineData("claim", "", "", "", true)]
+    public void CanSubmit(string action, string resolution, string note, string assignee, bool expected)
+        => ComplaintView.CanSubmit(action, resolution, note, assignee).Should().Be(expected);
 }

@@ -53,12 +53,25 @@ public static class ComplaintView
     /// <summary>Admin: üstlenilmeyi bekleyenler. Temsilci: bekleyenler + kendisine atanan açıklar.</summary>
     public static int BadgeCount(ComplaintCountsResponse c, bool isAgent) => isAgent ? c.Pending + c.AssignedToMe : c.Pending;
 
-    /// <summary>Metin isteyen eylemler ve alan etiketi.</summary>
-    public static string? TextPrompt(string action) => action switch
+    // İki AYRI alan: müşteriye giden açıklama yalnız Çözüldü/Reddet için; iç not ise not, yeniden açma
+    // gerekçesi ve kapanıştaki isteğe bağlı iç not için. Tek ortak kutu, müşteriye yazılan metnin yanlışlıkla
+    // iç not olarak (ya da tersi) kaydedilmesine yol açıyordu.
+
+    public static bool ShowsResolutionField(IReadOnlyCollection<string> actions) =>
+        actions.Contains("resolve") || actions.Contains("reject");
+
+    public static bool ShowsNoteField(IReadOnlyCollection<string> actions) =>
+        actions.Any(a => a is "resolve" or "reject" or "reopen" or "note");
+
+    public static string NoteLabel(IReadOnlyCollection<string> actions) =>
+        actions.Contains("reopen") ? "Yeniden açma gerekçesi / iç not (müşteriye gitmez)" : "İç not (müşteriye gitmez)";
+
+    /// <summary>Düğme etkin mi: kapanış açıklama ister; not ve yeniden açma iç not ister; atama temsilci ister.</summary>
+    public static bool CanSubmit(string action, string? resolution, string? note, string? assignee) => action switch
     {
-        "resolve" or "reject" => "Müşteriye gönderilecek açıklama",
-        "reopen" => "Yeniden açma gerekçesi (iç not)",
-        "note" => "İç not (müşteriye gitmez)",
-        _ => null
+        "resolve" or "reject" => !string.IsNullOrWhiteSpace(resolution),
+        "reopen" or "note" => !string.IsNullOrWhiteSpace(note),
+        "assign" => !string.IsNullOrWhiteSpace(assignee),
+        _ => true
     };
 }

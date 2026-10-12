@@ -101,25 +101,24 @@
                             </select>
                         </label>
                     }
-                    @if (c.Actions.Any(a => ComplaintView.TextPrompt(a) is not null))
+                    @if (ComplaintView.ShowsResolutionField(c.Actions))
                     {
-                        <label class="complaint-text-input">@(ComplaintView.TextPrompt(_textFor) ?? "Metin")
-                            <textarea maxlength="2000" rows="3" @bind="_text" @bind:event="oninput"></textarea>
+                        <label class="complaint-text-input">Müşteriye gönderilecek açıklama (Çözüldü / Reddet için zorunlu)
+                            <textarea maxlength="2000" rows="3" @bind="_resolution" @bind:event="oninput"></textarea>
                         </label>
-                        @if (_textFor is "resolve" or "reject")
-                        {
-                            <label class="complaint-text-input">İç not (isteğe bağlı)
-                                <textarea maxlength="2000" rows="2" @bind="_note"></textarea>
-                            </label>
-                        }
+                    }
+                    @if (ComplaintView.ShowsNoteField(c.Actions))
+                    {
+                        <label class="complaint-text-input">@ComplaintView.NoteLabel(c.Actions)
+                            <textarea maxlength="2000" rows="2" @bind="_note" @bind:event="oninput"></textarea>
+                        </label>
                     }
                     <div class="order-actions">
                         @foreach (var action in c.Actions)
                         {
                             var act = action;
                             <button type="button" class="@(act is "resolve" or "claim" ? "btn-primary" : "btn-secondary")"
-                                    disabled="@(_busy || !CanSubmit(act))"
-                                    @onmouseover="() => _textFor = act" @onfocus="() => _textFor = act"
+                                    disabled="@(_busy || !ComplaintView.CanSubmit(act, _resolution, _note, _assignee))"
                                     @onclick="() => RunAsync(act)">@ComplaintView.ActionLabel(act)</button>
                         }
                     </div>
@@ -161,9 +160,8 @@
     private ComplaintDetailResponse? _detail;
     private List<AgentInfo> _agents = [];
     private string _assignee = "";
-    private string _text = "";
+    private string _resolution = "";
     private string _note = "";
-    private string _textFor = "resolve";
     private string? _error;
     private bool _busy;
 
@@ -197,36 +195,28 @@
     {
         _selectedId = id;
         _error = null;
-        _text = _note = _assignee = "";
+        _resolution = _note = _assignee = "";
         _detail = await AdminApi.GetComplaintAsync(id);
     }
-
-    private bool CanSubmit(string action) => action switch
-    {
-        "assign" => !string.IsNullOrWhiteSpace(_assignee),
-        "resolve" or "reject" or "reopen" or "note" => !string.IsNullOrWhiteSpace(_text),
-        _ => true
-    };
 
     private async Task RunAsync(string action)
     {
         if (_detail is null) return;
-        _textFor = action;
         _busy = true;
         _error = null;
         var c = _detail.Complaint;
         object body = action switch
         {
             "assign" => new { agentId = _assignee, expectedVersion = c.Version },
-            "resolve" or "reject" => new { text = _text, note = string.IsNullOrWhiteSpace(_note) ? null : _note, expectedVersion = c.Version },
-            "reopen" => new { text = _text, expectedVersion = c.Version },
-            "note" => new { text = _text },
+            "resolve" or "reject" => new { text = _resolution, note = string.IsNullOrWhiteSpace(_note) ? null : _note, expectedVersion = c.Version },
+            "reopen" => new { text = _note, expectedVersion = c.Version },
+            "note" => new { text = _note },
             _ => new { expectedVersion = c.Version }
         };
         var (_, error) = await AdminApi.ComplaintActionAsync(c.ComplaintId, action == "note" ? "notes" : action, body);
         _busy = false;
         _error = error;
-        if (error is null) _text = _note = _assignee = "";
+        if (error is null) _resolution = _note = _assignee = "";
         _detail = await AdminApi.GetComplaintAsync(c.ComplaintId);
         _page = await AdminApi.GetComplaintsAsync(_status, _mine, _pageNo);
         await OnChanged.InvokeAsync();
