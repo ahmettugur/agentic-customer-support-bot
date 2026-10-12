@@ -252,11 +252,27 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("code");
 
+                    b.Property<string>("ApprovalId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("approval_id");
+
+                    b.Property<string>("AssignedAgentId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("assigned_agent_id");
+
                     b.Property<string>("Complaint")
                         .IsRequired()
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)")
                         .HasColumnName("complaint");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
 
                     b.Property<long>("CustomerId")
                         .HasColumnType("bigint")
@@ -266,11 +282,28 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("order_id");
 
+                    b.Property<string>("Resolution")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("resolution");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("version");
 
                     b.HasKey("Code");
 
@@ -280,7 +313,67 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     b.HasIndex("OrderId")
                         .HasDatabaseName("ix_complaints_order_id");
 
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("ix_complaints_status_created_at");
+
                     b.ToTable("complaints", "catalog");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.ComplaintEventEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("actor");
+
+                    b.Property<string>("AssignedAgentId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("assigned_agent_id");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("at");
+
+                    b.Property<long>("ComplaintCode")
+                        .HasColumnType("bigint")
+                        .HasColumnName("complaint_code");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("from_status");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("ToStatus")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("to_status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComplaintCode", "At")
+                        .HasDatabaseName("ix_complaint_events_code_at");
+
+                    b.ToTable("complaint_events", "catalog");
                 });
 
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.CustomerEntity", b =>
@@ -1425,6 +1518,15 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_refresh_tokens_user");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.ComplaintEventEntity", b =>
+                {
+                    b.HasOne("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.ComplaintEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ComplaintCode")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.OrderDetailEntity", b =>

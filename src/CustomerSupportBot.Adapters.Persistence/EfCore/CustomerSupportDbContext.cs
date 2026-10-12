@@ -70,6 +70,7 @@ public sealed class CustomerSupportDbContext : DbContext
     public DbSet<OrderDetailEntity> OrderDetails => Set<OrderDetailEntity>();
     public DbSet<ProductEntity> Products => Set<ProductEntity>();
     public DbSet<ComplaintEntity> Complaints => Set<ComplaintEntity>();
+    public DbSet<ComplaintEventEntity> ComplaintEvents => Set<ComplaintEventEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

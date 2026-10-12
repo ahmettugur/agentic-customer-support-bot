@@ -7,4 +7,10 @@ public sealed class ComplaintEntity
     public long CustomerId { get; set; }
     public string Complaint { get; set; } = "";
     public string Status { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    public string? AssignedAgentId { get; set; }
+    public string? Resolution { get; set; }
+    public string? ApprovalId { get; set; }
+    public int Version { get; set; }
 }
