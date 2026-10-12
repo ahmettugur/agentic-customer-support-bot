@@ -152,6 +152,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IOrderFulfillmentPort, Services.Orders.OrderFulfillmentService>();
         services.AddSingleton<Services.Notifications.ComplaintStatusEmailService>();
         services.AddSingleton<IComplaintManagementPort, Services.Complaints.ComplaintManagementService>();
+        services.AddSingleton<IPerformancePort, Services.Telemetry.PerformancePortService>();
         services.AddSingleton<IChatPort>(sp => sp.GetRequiredService<ChatPortService>());
         services.AddSingleton<IApprovalContextAccessor, ApprovalContextAccessor>();
         services.AddSingleton<IApprovalExecutionRouter, ApprovalExecutionRouter>();
