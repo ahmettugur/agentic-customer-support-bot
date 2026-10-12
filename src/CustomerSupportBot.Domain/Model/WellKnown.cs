@@ -370,6 +370,11 @@ public static class WellKnown
         public const string Pending = "Beklemede";
         public const string InProgress = "İncelemede";
         public const string Resolved = "Çözüldü";
+        public const string Rejected = "Reddedildi";
+
+        public static bool IsClosed(string? status) => status is Resolved or Rejected;
+
+        public static bool IsOpen(string? status) => status is Pending or InProgress;
     }
 
     /// <summary>Tool error code'ları (makine-okunur).</summary>
