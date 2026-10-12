@@ -65,4 +65,10 @@ public sealed record ExportedApproval(
 
 public sealed record ExportedOrder(string OrderId, string Status, DateTime OrderDate, string Lines);
 
-public sealed record ExportedComplaint(string ComplaintId, string OrderId, string Complaint, string Status);
+public sealed record ExportedComplaintStep(DateTime At, string? FromStatus, string? ToStatus);
+
+/// <summary>Müşteriye görünen alanlar + durum adımları. İç notlar ve personel kimlikleri bilerek yok.</summary>
+public sealed record ExportedComplaint(
+    string ComplaintId, string OrderId, string Complaint, string Status,
+    string? Resolution = null, DateTime? CreatedAt = null, DateTime? UpdatedAt = null,
+    IReadOnlyList<ExportedComplaintStep>? History = null);

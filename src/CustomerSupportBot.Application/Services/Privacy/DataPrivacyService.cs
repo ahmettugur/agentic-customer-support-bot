@@ -4,6 +4,7 @@
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
+using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -148,9 +149,17 @@ public sealed class DataPrivacyService : IDataPrivacyPort
         var orders = _orders.GetByCustomer(customerId)
             .Select(o => new ExportedOrder(o.OrderId, o.Order.Status, o.Order.OrderDate, o.Order.LinesSummary()))
             .ToList();
-        var complaints = _complaints.GetByCustomer(customerId)
-            .Select(c => new ExportedComplaint(c.ComplaintId, c.Complaint.OrderId, c.Complaint.Complaint, c.Complaint.Status))
-            .ToList();
+        var complaints = new List<ExportedComplaint>();
+        foreach (var (complaintId, c) in _complaints.GetByCustomer(customerId))
+        {
+            // Yalnızca durum adımları: iç notlar, aktör adları ve temsilci kimliği dışa aktarılmaz.
+            var steps = (await _complaints.GetEventsAsync(complaintId, ct))
+                .Where(e => e.ToStatus is not null && e.Kind != ComplaintEventKinds.Note)
+                .Select(e => new ExportedComplaintStep(e.At, e.FromStatus, e.ToStatus))
+                .ToList();
+            complaints.Add(new ExportedComplaint(complaintId, c.OrderId, c.Complaint, c.Status, c.Resolution,
+                c.CreatedAt == default ? null : c.CreatedAt, c.UpdatedAt == default ? null : c.UpdatedAt, steps));
+        }
 
         return new CustomerDataExport(
             customerId,

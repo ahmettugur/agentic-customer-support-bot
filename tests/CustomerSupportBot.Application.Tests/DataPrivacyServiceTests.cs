@@ -68,6 +68,7 @@ public class DataPrivacyServiceTests
         orders.GetByCustomer(Arg.Any<string>()).Returns(Array.Empty<(string, OrderInfo)>());
         var complaints = Substitute.For<IComplaintRepository>();
         complaints.GetByCustomer(Arg.Any<string>()).Returns(Array.Empty<(string, ComplaintInfo)>());
+        complaints.GetEventsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(Array.Empty<ComplaintEvent>());
 
         var service = new DataPrivacyService(
             sessions, attachments,
@@ -258,5 +259,34 @@ public class DataPrivacyServiceTests
         var retry = await h.Service.EraseCustomerDataAsync("1001", TestContext.Current.CancellationToken);
         retry.SessionsErased.Should().Be(1);
         (await h.Sessions.GetAsync(mine.SessionId, TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
+    // KVKK dışa aktarma: şikayet açıklaması ve durum geçmişi var; iç not ve personel adı yok.
+    [Fact]
+    public async Task Export_IncludesComplaintResolutionAndStatusSteps_NotNotesOrActors()
+    {
+        var h = Build();
+        h.Complaints.GetByCustomer("1001").Returns(
+        [
+            ("1006", new ComplaintInfo
+            {
+                OrderId = "1030", CustomerId = "1001", Complaint = "kırık", Status = WellKnown.ComplaintStatuses.Resolved,
+                Resolution = "Yeni ürün gönderildi.", CreatedAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc)
+            })
+        ]);
+        h.Complaints.GetEventsAsync("1006", Arg.Any<CancellationToken>()).Returns(
+        [
+            new ComplaintEvent(new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc), "system", ComplaintEventKinds.Created, null, "Beklemede", null, null),
+            new ComplaintEvent(new DateTime(2026, 10, 1, 1, 0, 0, DateTimeKind.Utc), "ayse", ComplaintEventKinds.Note, null, null, null, "GİZLİ NOT"),
+            new ComplaintEvent(new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc), "ayse", ComplaintEventKinds.Resolved, "İncelemede", "Çözüldü", "a1", "iç")
+        ]);
+
+        var export = await h.Service.ExportCustomerDataAsync("1001", TestContext.Current.CancellationToken);
+
+        var c = export.Complaints.Should().ContainSingle().Subject;
+        c.Resolution.Should().Be("Yeni ürün gönderildi.");
+        c.History!.Select(s => s.ToStatus).Should().Equal("Beklemede", "Çözüldü");
+        System.Text.Json.JsonSerializer.Serialize(export).Should().NotContain("GİZLİ NOT").And.NotContain("ayse").And.NotContain("\"a1\"");
     }
 }
