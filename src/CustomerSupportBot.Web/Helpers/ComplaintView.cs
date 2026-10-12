@@ -11,6 +11,42 @@ public static class ComplaintView
         ("Çözüldü", "Çözüldü"), ("Reddedildi", "Reddedildi"), ("all", "Tümü")
     ];
 
+    /// <summary>Durum rozeti/ikon tonu — panelin ortak <c>tone-*</c> renkleri.</summary>
+    public static string StatusTone(string status) => status switch
+    {
+        "Beklemede" => "tone-warn",
+        "İncelemede" => "tone-primary",
+        "Çözüldü" => "tone-success",
+        "Reddedildi" => "tone-danger",
+        _ => "tone-neutral"
+    };
+
+    /// <summary>SLA yalnızca dikkat gerektirdiğinde etiketlenir; "ok" sessizdir.</summary>
+    public static string? SlaLabel(string sla) => sla switch
+    {
+        "warn" => "SLA yaklaşıyor",
+        "breach" => "SLA aşıldı",
+        _ => null
+    };
+
+    /// <summary>Liste başlığı: şikayet metninin ilk dolu satırı, gerekirse "…" ile kısaltılmış.</summary>
+    public static string Headline(string? text, int max = 80)
+    {
+        var line = (text ?? "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0);
+        if (string.IsNullOrEmpty(line)) return "Şikayet";
+        return line.Length <= max ? line : line[..(max - 1)].TrimEnd() + "…";
+    }
+
+    /// <summary>Zaman çizelgesi noktasının tonu.</summary>
+    public static string KindTone(string kind) => kind switch
+    {
+        "claimed" or "assigned" => "tone-primary",
+        "reopened" => "tone-warn",
+        "resolved" => "tone-success",
+        "rejected" => "tone-danger",
+        _ => "tone-neutral"
+    };
+
     public static string ToneClass(string sla) => sla switch
     {
         "breach" => "sla-breach",
@@ -59,12 +95,6 @@ public static class ComplaintView
 
     public static bool ShowsResolutionField(IReadOnlyCollection<string> actions) =>
         actions.Contains("resolve") || actions.Contains("reject");
-
-    public static bool ShowsNoteField(IReadOnlyCollection<string> actions) =>
-        actions.Any(a => a is "resolve" or "reject" or "reopen" or "note");
-
-    public static string NoteLabel(IReadOnlyCollection<string> actions) =>
-        actions.Contains("reopen") ? "Yeniden açma gerekçesi / iç not (müşteriye gitmez)" : "İç not (müşteriye gitmez)";
 
     /// <summary>Düğme etkin mi: kapanış açıklama ister; not ve yeniden açma iç not ister; atama temsilci ister.</summary>
     public static bool CanSubmit(string action, string? resolution, string? note, string? assignee) => action switch

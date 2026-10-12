@@ -1,155 +1,286 @@
-@* Şikayetler sekmesi: liste (filtre + sayfalama) ve seçili şikayetin ayrıntısı. Düğmeleri sunucu (actions) belirler. *@
+@* Şikayetler sekmesi — Onaylar sekmesiyle aynı liste + ayrıntı kalıbı (master-detail, tone-*, decision-*).
+   Düğmeleri sunucu (actions) belirler. Müşteriye giden açıklama yalnızca kapanış alanında, iç not ayrı alanda yazılır. *@
 @using CustomerSupportBot.Web.Helpers
 @using CustomerSupportBot.Web.Models
 @inject AdminApiService AdminApi
 
-<div class="complaints-layout">
-    <section class="card complaints-list" aria-label="Şikayet listesi">
-        <div class="complaints-filters">
-            <label>Durum
-                <select @bind="_status" @bind:after="ReloadAsync">
-                    @foreach (var (value, label) in ComplaintView.StatusFilters)
-                    {
-                        <option value="@value">@label</option>
-                    }
-                </select>
-            </label>
-            @if (IsAgent)
+<div class="filter-chips" role="group" aria-label="Şikayet filtresi">
+    @foreach (var (value, label) in ComplaintView.StatusFilters)
+    {
+        var v = value;
+        var count = FilterCount(v);
+        <button type="button" class="chip @(_status == v && !_mine ? "on" : "")" aria-pressed="@(_status == v && !_mine ? "true" : "false")"
+                @onclick="() => SetFilterAsync(v, false)">
+            @label @if (count is { } n) { <span class="chip-count">@n</span> }
+        </button>
+    }
+    @if (IsAgent)
+    {
+        <button type="button" class="chip @(_mine ? "on" : "")" aria-pressed="@(_mine ? "true" : "false")"
+                @onclick='() => SetFilterAsync("open", true)'>
+            Bana atananlar @if (Counts is { } c) { <span class="chip-count">@c.AssignedToMe</span> }
+        </button>
+    }
+</div>
+
+@if (_page is null)
+{
+    <div class="md-list-empty">Yükleniyor…</div>
+}
+else if (_page.Total == 0 && _status == "open" && !_mine)
+{
+    <div class="queue-empty">
+        <span class="queue-empty-icon"><Icon Name="check" Size="22" StrokeWidth="2.2" /></span>
+        <strong>Açık şikayet yok</strong>
+        <span>Yeni şikayet onaylanınca burada görünür.</span>
+    </div>
+}
+else
+{
+    <div class="master-detail">
+        <div class="md-list" role="list" aria-label="Şikayetler">
+            @if (_page.Items.Count == 0)
             {
-                <label class="inline-check"><input type="checkbox" @bind="_mine" @bind:after="ReloadAsync" /> Yalnız bana atananlar</label>
+                <div class="md-list-empty">Bu filtrede şikayet yok.</div>
+            }
+            @foreach (var c in _page.Items)
+            {
+                var id = c.ComplaintId;
+                var isSel = id == _selectedId;
+                var slaLabel = ComplaintView.SlaLabel(c.Sla);
+                <button type="button" role="listitem" class="md-row @(isSel ? "selected" : "")" aria-current="@(isSel ? "true" : null)"
+                        @onclick="() => SelectAsync(id)">
+                    <span class="type-icon @ComplaintView.StatusTone(c.Status)"><Icon Name="complaint" Size="17" /></span>
+                    <span class="md-row-main">
+                        <span class="md-row-title">
+                            <span class="cp-headline">@ComplaintView.Headline(c.Complaint)</span>
+                        </span>
+                        <span class="md-row-sub">#@c.ComplaintId · Sipariş #@c.OrderId · @(c.AssignedAgentName ?? "Atanmamış")</span>
+                        <span class="cp-row-tags">
+                            <span class="cp-status @ComplaintView.StatusTone(c.Status)">@c.Status</span>
+                            @if (slaLabel is not null) { <span class="cp-sla @c.Sla">@slaLabel</span> }
+                        </span>
+                    </span>
+                    <span class="wait @(slaLabel is not null ? "long" : "")" title="@c.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")">
+                        <Icon Name="clock" Size="13" StrokeWidth="2" />@ComplaintView.Age(c.CreatedAt, DateTime.UtcNow)
+                    </span>
+                </button>
+            }
+            @if (_page.Total > PageSize)
+            {
+                <div class="cp-pager">
+                    <button type="button" class="btn-secondary btn-sm" disabled="@(_pageNo <= 1)" @onclick="() => GoAsync(-1)">Önceki</button>
+                    <span class="muted small">@_pageNo / @((int)Math.Ceiling(_page.Total / (double)PageSize)) · @_page.Total kayıt</span>
+                    <button type="button" class="btn-secondary btn-sm" disabled="@(_pageNo * PageSize >= _page.Total)" @onclick="() => GoAsync(1)">Sonraki</button>
+                </div>
             }
         </div>
 
-        @if (_page is null)
+        @if (_detail is { } d)
         {
-            <p class="muted">Yükleniyor…</p>
-        }
-        else if (_page.Items.Count == 0)
-        {
-            <p class="muted">Bu filtrede şikayet yok.</p>
-        }
-        else
-        {
-            <ul class="complaint-rows">
-                @foreach (var c in _page.Items)
-                {
-                    var id = c.ComplaintId;
-                    <li>
-                        <button type="button" class="complaint-row @(id == _selectedId ? "selected" : "") @ComplaintView.ToneClass(c.Sla)"
-                                @onclick="() => SelectAsync(id)">
-                            <span class="mono">#@c.ComplaintId</span>
-                            <span>Sipariş #@c.OrderId</span>
-                            <span class="status-tag">@c.Status</span>
-                            <span class="muted small">@ComplaintView.Age(c.CreatedAt, DateTime.UtcNow) · @(c.AssignedAgentName ?? "atanmamış")</span>
-                        </button>
-                    </li>
-                }
-            </ul>
-            <div class="complaints-pager">
-                <button type="button" class="btn-secondary btn-sm" disabled="@(_pageNo <= 1)" @onclick="() => GoAsync(-1)">Önceki</button>
-                <span class="muted small">@_pageNo / @Math.Max(1, (int)Math.Ceiling(_page.Total / 20.0)) · @_page.Total kayıt</span>
-                <button type="button" class="btn-secondary btn-sm" disabled="@(_pageNo * 20 >= _page.Total)" @onclick="() => GoAsync(1)">Sonraki</button>
-            </div>
-        }
-    </section>
-
-    <section class="card complaint-detail" aria-label="Şikayet ayrıntısı" aria-busy="@_busy">
-        @if (_detail is null)
-        {
-            <p class="muted">Ayrıntısını görmek için bir şikayet seçin.</p>
-        }
-        else
-        {
-            var c = _detail.Complaint;
-            <header class="order-card-header">
-                <h3>Şikayet #@c.ComplaintId</h3>
-                <span class="status-tag">@c.Status</span>
-            </header>
-            <dl class="order-facts">
-                <dt>Müşteri</dt><dd>@c.CustomerId</dd>
-                <dt>Sipariş</dt><dd>#@c.OrderId @(_detail.Order is { } o ? $"· {o.LinesSummary} · {o.Status}" : "")</dd>
-                <dt>Atanan</dt><dd>@(c.AssignedAgentName ?? c.AssignedAgentId ?? "—")</dd>
-                <dt>Açıldı</dt><dd>@c.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm") (@ComplaintView.Age(c.CreatedAt, DateTime.UtcNow))</dd>
-            </dl>
-            <p class="complaint-text">@c.Complaint</p>
-            @if (!string.IsNullOrWhiteSpace(c.Resolution))
-            {
-                <p class="complaint-resolution"><strong>Müşteriye gönderilen açıklama:</strong> @c.Resolution</p>
-            }
-            @if (_detail.AttachmentIds.Count > 0)
-            {
-                <ApprovalPhotos Ids="_detail.AttachmentIds" />
-            }
-
-            @if (_error is not null)
-            {
-                <p class="form-error" role="alert">@_error</p>
-            }
-
-            @if (c.Actions.Count > 0)
-            {
-                <div class="complaint-actions">
-                    @if (c.Actions.Contains("assign"))
-                    {
-                        <label>Temsilci
-                            <select @bind="_assignee">
-                                <option value="">Seçin…</option>
-                                @foreach (var a in _agents.Where(a => a.IsActive))
-                                {
-                                    <option value="@a.Id">@a.DisplayName</option>
-                                }
-                            </select>
-                        </label>
-                    }
-                    @if (ComplaintView.ShowsResolutionField(c.Actions))
-                    {
-                        <label class="complaint-text-input">Müşteriye gönderilecek açıklama (Çözüldü / Reddet için zorunlu)
-                            <textarea maxlength="2000" rows="3" @bind="_resolution" @bind:event="oninput"></textarea>
-                        </label>
-                    }
-                    @if (ComplaintView.ShowsNoteField(c.Actions))
-                    {
-                        <label class="complaint-text-input">@ComplaintView.NoteLabel(c.Actions)
-                            <textarea maxlength="2000" rows="2" @bind="_note" @bind:event="oninput"></textarea>
-                        </label>
-                    }
-                    <div class="order-actions">
-                        @foreach (var action in c.Actions)
-                        {
-                            var act = action;
-                            <button type="button" class="@(act is "resolve" or "claim" ? "btn-primary" : "btn-secondary")"
-                                    disabled="@(_busy || !ComplaintView.CanSubmit(act, _resolution, _note, _assignee))"
-                                    @onclick="() => RunAsync(act)">@ComplaintView.ActionLabel(act)</button>
-                        }
+            var c = d.Complaint;
+            var slaLabel = ComplaintView.SlaLabel(c.Sla);
+            <article class="md-detail" aria-busy="@(_busy ? "true" : "false")" aria-label="Şikayet ayrıntısı">
+                <header class="md-detail-header">
+                    <div class="md-detail-title">
+                        <span class="type-icon @ComplaintView.StatusTone(c.Status)"><Icon Name="complaint" Size="18" /></span>
+                        <h2>Şikayet #@c.ComplaintId</h2>
+                        <span class="cp-status @ComplaintView.StatusTone(c.Status)">@c.Status</span>
+                        @if (slaLabel is not null) { <span class="cp-sla @c.Sla">@slaLabel</span> }
                     </div>
-                </div>
-            }
+                    <div class="md-detail-meta">
+                        <span>@ComplaintView.Age(c.CreatedAt, DateTime.UtcNow) önce açıldı</span>
+                        <span>Müşteri #@c.CustomerId</span>
+                        <span>@(c.AssignedAgentName is { } n ? $"Atanan: {n}" : "Atanmamış")</span>
+                    </div>
+                </header>
 
-            <h4>Zaman çizelgesi</h4>
-            @if (_detail.Events.Count == 0)
-            {
-                <p class="muted small">Geçmiş kaydı yok (bu şikayet zaman çizelgesi tutulmaya başlamadan önce açılmış).</p>
-            }
-            else
-            {
-                <ol class="complaint-timeline">
-                    @foreach (var e in _detail.Events)
+                <div class="card-body md-detail-body">
+                    <blockquote class="approval-quote">@c.Complaint</blockquote>
+
+                    <dl class="approval-facts">
+                        <div class="af-row">
+                            <dt>Sipariş</dt>
+                            <dd>#@c.OrderId@(d.Order is { } o ? $" · {o.LinesSummary}" : "")</dd>
+                        </div>
+                        @if (d.Order is { } order)
+                        {
+                            <div class="af-row"><dt>Sipariş durumu</dt><dd>@order.Status</dd></div>
+                        }
+                        <div class="af-row"><dt>Açıldı</dt><dd>@c.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</dd></div>
+                        @if (c.UpdatedAt > c.CreatedAt)
+                        {
+                            <div class="af-row"><dt>Son güncelleme</dt><dd>@c.UpdatedAt.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</dd></div>
+                        }
+                    </dl>
+
+                    @if (d.AttachmentIds.Count > 0)
                     {
-                        <li>
-                            <span class="mono small">@e.At.ToLocalTime().ToString("dd.MM HH:mm")</span>
-                            <strong>@ComplaintView.KindLabel(e.Kind)</strong>
-                            <span class="muted small">@e.Actor</span>
-                            @if (!string.IsNullOrWhiteSpace(e.Note)) { <div class="small">@e.Note</div> }
-                        </li>
+                        <ApprovalPhotos Ids="d.AttachmentIds" />
                     }
-                </ol>
-            }
+
+                    @if (!string.IsNullOrWhiteSpace(c.Resolution))
+                    {
+                        <div class="cp-resolution">
+                            <span class="cp-section-label">Müşteriye gönderilen açıklama</span>
+                            <p>@c.Resolution</p>
+                        </div>
+                    }
+
+                    <section class="cp-timeline-section" aria-label="Zaman çizelgesi">
+                        <h3 class="cp-section-label">Zaman çizelgesi</h3>
+                        @if (d.Events.Count == 0)
+                        {
+                            <p class="muted small">Geçmiş kaydı yok — bu şikayet zaman çizelgesi tutulmaya başlamadan önce açılmış.</p>
+                        }
+                        else
+                        {
+                            <ol class="cp-timeline">
+                                @foreach (var e in d.Events)
+                                {
+                                    <li>
+                                        <span class="cp-dot @ComplaintView.KindTone(e.Kind)" aria-hidden="true"></span>
+                                        <div class="cp-event">
+                                            <div class="cp-event-head">
+                                                <strong>@ComplaintView.KindLabel(e.Kind)</strong>
+                                                <span class="muted">@e.Actor</span>
+                                                <time class="muted" title="@e.At.ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")">@e.At.ToLocalTime().ToString("dd.MM HH:mm")</time>
+                                            </div>
+                                            @if (!string.IsNullOrWhiteSpace(e.Note))
+                                            {
+                                                <p class="cp-event-note">@e.Note</p>
+                                            }
+                                        </div>
+                                    </li>
+                                }
+                            </ol>
+                        }
+
+                        @if (c.Actions.Contains("note"))
+                        {
+                            <div class="cp-note-composer">
+                                <textarea rows="2" maxlength="2000" placeholder="İç not ekleyin — müşteriye gitmez" aria-label="İç not"
+                                          disabled="@_busy" @bind="_noteText" @bind:event="oninput"></textarea>
+                                <button type="button" class="btn-secondary btn-sm"
+                                        disabled="@(_busy || !ComplaintView.CanSubmit("note", null, _noteText, null))"
+                                        @onclick='() => RunAsync("note")'>
+                                    <Icon Name="plus" Size="14" /> Not ekle
+                                </button>
+                            </div>
+                        }
+                    </section>
+                </div>
+
+                @if (HasFooter(c.Actions) || _error is not null)
+                {
+                    <footer class="md-detail-footer">
+                        @if (_error is not null)
+                        {
+                            <p class="form-error" role="alert">@_error</p>
+                        }
+
+                        @if (c.Actions.Contains("claim"))
+                        {
+                            <div class="decision-actions">
+                                <span class="muted deciding-label">Üstlendiğinizde müşteriye "inceleniyor" e-postası gider.</span>
+                                <button type="button" class="btn-primary" disabled="@_busy" @onclick='() => RunAsync("claim")'>
+                                    <Icon Name="check" StrokeWidth="2.2" /> Üstlen
+                                </button>
+                            </div>
+                        }
+
+                        @if (c.Actions.Contains("assign"))
+                        {
+                            <div class="cp-assign">
+                                <label class="decision-note">
+                                    <span>@(c.AssignedAgentId is null ? "Temsilciye ata" : "Başka temsilciye ata")</span>
+                                    <select class="form-control" @bind="_assignee" disabled="@_busy">
+                                        <option value="">Temsilci seçin…</option>
+                                        @foreach (var a in _agents.Where(a => a.IsActive && a.Id != c.AssignedAgentId))
+                                        {
+                                            <option value="@a.Id">@a.DisplayName</option>
+                                        }
+                                    </select>
+                                </label>
+                                <button type="button" class="btn-primary" disabled="@(_busy || !ComplaintView.CanSubmit("assign", null, null, _assignee))"
+                                        @onclick='() => RunAsync("assign")'>
+                                    <Icon Name="user" StrokeWidth="2.2" /> Ata
+                                </button>
+                            </div>
+                        }
+
+                        @if (ComplaintView.ShowsResolutionField(c.Actions))
+                        {
+                            <label class="decision-note">
+                                <span>Müşteriye gönderilecek açıklama <span class="muted">(zorunlu — e-postayla gider)</span></span>
+                                <textarea rows="3" maxlength="2000" placeholder="Örn. Yeni ürün bugün kargoya verildi; takip numarası …" disabled="@_busy"
+                                          @bind="_resolution" @bind:event="oninput"></textarea>
+                            </label>
+                            <label class="decision-note">
+                                <span>İç not <span class="muted">(isteğe bağlı — müşteriye gitmez)</span></span>
+                                <input class="form-control" maxlength="2000" disabled="@_busy" @bind="_closeNote" @bind:event="oninput" />
+                            </label>
+                            <div class="decision-actions">
+                                @if (_busy) { <span class="muted deciding-label" role="status">İşleniyor…</span> }
+                                @if (c.Actions.Contains("reject"))
+                                {
+                                    <button type="button" class="btn-danger" disabled="@(_busy || !ComplaintView.CanSubmit("reject", _resolution, null, null))"
+                                            @onclick='() => RunAsync("reject")'>
+                                        <Icon Name="x" StrokeWidth="2.2" /> Reddet
+                                    </button>
+                                }
+                                <button type="button" class="btn-primary" disabled="@(_busy || !ComplaintView.CanSubmit("resolve", _resolution, null, null))"
+                                        @onclick='() => RunAsync("resolve")'>
+                                    <Icon Name="check" StrokeWidth="2.2" /> Çözüldü
+                                </button>
+                            </div>
+                        }
+
+                        @if (c.Actions.Contains("reopen"))
+                        {
+                            @if (_reopenOpen)
+                            {
+                                <label class="decision-note">
+                                    <span>Yeniden açma gerekçesi <span class="muted">(müşteriye gitmez)</span></span>
+                                    <textarea rows="2" maxlength="2000" disabled="@_busy" @bind="_reopenReason" @bind:event="oninput"></textarea>
+                                </label>
+                                <div class="decision-actions">
+                                    <button type="button" class="btn-secondary" disabled="@_busy" @onclick="() => _reopenOpen = false">Vazgeç</button>
+                                    <button type="button" class="btn-primary" disabled="@(_busy || !ComplaintView.CanSubmit("reopen", null, _reopenReason, null))"
+                                            @onclick='() => RunAsync("reopen")'>
+                                        <Icon Name="undo" StrokeWidth="2.2" /> Yeniden aç
+                                    </button>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="decision-actions">
+                                    <span class="muted deciding-label">Şikayet kapandı. Müşteri itiraz ederse yeniden açabilirsiniz.</span>
+                                    <button type="button" class="btn-secondary" @onclick="() => _reopenOpen = true">
+                                        <Icon Name="undo" StrokeWidth="2.2" /> Yeniden aç
+                                    </button>
+                                </div>
+                            }
+                        }
+                    </footer>
+                }
+            </article>
         }
-    </section>
-</div>
+        else if (_page.Items.Count > 0)
+        {
+            <article class="md-detail"><div class="md-list-empty">Ayrıntısını görmek için bir şikayet seçin.</div></article>
+        }
+    </div>
+}
 
 @code {
+    private const int PageSize = 20;
+
     [Parameter] public bool IsAgent { get; set; }
+
+    /// <summary>Admin sayfasının rozet için zaten çektiği sayaçlar — çip sayıları için ek istek atılmaz.</summary>
+    [Parameter] public ComplaintCountsResponse? Counts { get; set; }
+
     [Parameter] public EventCallback OnChanged { get; set; }
 
     private string _status = "open";
@@ -161,42 +292,77 @@
     private List<AgentInfo> _agents = [];
     private string _assignee = "";
     private string _resolution = "";
-    private string _note = "";
+    private string _closeNote = "";
+    private string _noteText = "";
+    private string _reopenReason = "";
+    private bool _reopenOpen;
     private string? _error;
     private bool _busy;
 
     protected override async Task OnInitializedAsync()
     {
         if (!IsAgent) _agents = await AdminApi.GetAgentsAsync();
-        await ReloadAsync();
+        await LoadPageAsync();
     }
 
-    /// <summary>Admin sayfasının otomatik yenilemesi çağırır: liste ve açık ayrıntı tazelenir, yazılan metin korunur.</summary>
+    /// <summary>Admin sayfasının otomatik yenilemesi çağırır: liste ve açık ayrıntı tazelenir, yazılan metinler korunur.</summary>
     public async Task RefreshAsync()
     {
+        if (_busy) return;
         _page = await AdminApi.GetComplaintsAsync(_status, _mine, _pageNo);
-        if (_selectedId is not null && !_busy) _detail = await AdminApi.GetComplaintAsync(_selectedId);
+        if (_selectedId is not null) _detail = await AdminApi.GetComplaintAsync(_selectedId);
         StateHasChanged();
     }
 
-    private async Task ReloadAsync()
+    private int? FilterCount(string status) => Counts is not { } c ? null : status switch
     {
+        "open" => c.Pending + c.InProgress,
+        "Beklemede" => c.Pending,
+        "İncelemede" => c.InProgress,
+        _ => null
+    };
+
+    private static bool HasFooter(List<string> actions) =>
+        actions.Any(a => a is "claim" or "assign" or "resolve" or "reject" or "reopen");
+
+    private async Task SetFilterAsync(string status, bool mine)
+    {
+        _status = status;
+        _mine = mine;
         _pageNo = 1;
-        _page = await AdminApi.GetComplaintsAsync(_status, _mine, _pageNo);
+        await LoadPageAsync();
     }
 
     private async Task GoAsync(int delta)
     {
         _pageNo = Math.Max(1, _pageNo + delta);
+        await LoadPageAsync();
+    }
+
+    /// <summary>Listeyi yükler; seçili şikayet listede yoksa ilkini seçer (Onaylar sekmesiyle aynı davranış).</summary>
+    private async Task LoadPageAsync()
+    {
         _page = await AdminApi.GetComplaintsAsync(_status, _mine, _pageNo);
+        var items = _page?.Items ?? [];
+        if (_selectedId is null || items.All(i => i.ComplaintId != _selectedId))
+        {
+            if (items.Count > 0) await SelectAsync(items[0].ComplaintId);
+            else { _selectedId = null; _detail = null; }
+        }
     }
 
     private async Task SelectAsync(string id)
     {
+        if (id != _selectedId) ResetInputs();
         _selectedId = id;
         _error = null;
-        _resolution = _note = _assignee = "";
         _detail = await AdminApi.GetComplaintAsync(id);
+    }
+
+    private void ResetInputs()
+    {
+        _assignee = _resolution = _closeNote = _noteText = _reopenReason = "";
+        _reopenOpen = false;
     }
 
     private async Task RunAsync(string action)
@@ -208,15 +374,15 @@
         object body = action switch
         {
             "assign" => new { agentId = _assignee, expectedVersion = c.Version },
-            "resolve" or "reject" => new { text = _resolution, note = string.IsNullOrWhiteSpace(_note) ? null : _note, expectedVersion = c.Version },
-            "reopen" => new { text = _note, expectedVersion = c.Version },
-            "note" => new { text = _note },
+            "resolve" or "reject" => new { text = _resolution, note = string.IsNullOrWhiteSpace(_closeNote) ? null : _closeNote, expectedVersion = c.Version },
+            "reopen" => new { text = _reopenReason, expectedVersion = c.Version },
+            "note" => new { text = _noteText },
             _ => new { expectedVersion = c.Version }
         };
         var (_, error) = await AdminApi.ComplaintActionAsync(c.ComplaintId, action == "note" ? "notes" : action, body);
         _busy = false;
         _error = error;
-        if (error is null) _resolution = _note = _assignee = "";
+        if (error is null) ResetInputs();
         _detail = await AdminApi.GetComplaintAsync(c.ComplaintId);
         _page = await AdminApi.GetComplaintsAsync(_status, _mine, _pageNo);
         await OnChanged.InvokeAsync();

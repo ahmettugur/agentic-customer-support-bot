@@ -658,7 +658,7 @@
         <section id="panel-complaints" class="tab-content @ActiveCls("complaints")" role="tabpanel" aria-labelledby="tab-complaints">
             @if (_activeTab == "complaints")
             {
-                <ComplaintsPanel @ref="_complaintsPanel" IsAgent="_isAgent" OnChanged="RefreshBadgesAsync" />
+                <ComplaintsPanel @ref="_complaintsPanel" IsAgent="_isAgent" Counts="_complaintCounts" OnChanged="RefreshBadgesAsync" />
             }
         </section>
 

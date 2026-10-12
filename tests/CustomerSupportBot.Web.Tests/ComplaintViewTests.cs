@@ -55,11 +55,7 @@ public class ComplaintViewTests
     public void Fields_FollowAvailableActions()
     {
         ComplaintView.ShowsResolutionField(["assign", "note"]).Should().BeFalse("beklemede müşteriye açıklama yazılmaz");
-        ComplaintView.ShowsNoteField(["assign", "note"]).Should().BeTrue();
         ComplaintView.ShowsResolutionField(["resolve", "reject", "note"]).Should().BeTrue();
-        ComplaintView.ShowsNoteField(["claim"]).Should().BeFalse();
-        ComplaintView.NoteLabel(["reopen", "note"]).Should().Be("Yeniden açma gerekçesi / iç not (müşteriye gitmez)");
-        ComplaintView.NoteLabel(["resolve", "reject", "note"]).Should().Be("İç not (müşteriye gitmez)");
     }
 
     [Theory]
@@ -75,4 +71,37 @@ public class ComplaintViewTests
     [InlineData("claim", "", "", "", true)]
     public void CanSubmit(string action, string resolution, string note, string assignee, bool expected)
         => ComplaintView.CanSubmit(action, resolution, note, assignee).Should().Be(expected);
+
+    [Theory]
+    [InlineData("Beklemede", "tone-warn")]
+    [InlineData("İncelemede", "tone-primary")]
+    [InlineData("Çözüldü", "tone-success")]
+    [InlineData("Reddedildi", "tone-danger")]
+    [InlineData("?", "tone-neutral")]
+    public void StatusTone(string status, string expected) => ComplaintView.StatusTone(status).Should().Be(expected);
+
+    [Theory]
+    [InlineData("warn", "SLA yaklaşıyor")]
+    [InlineData("breach", "SLA aşıldı")]
+    [InlineData("ok", null)]
+    [InlineData("none", null)]
+    public void SlaLabel(string sla, string? expected) => ComplaintView.SlaLabel(sla).Should().Be(expected);
+
+    [Fact]
+    public void Headline_FirstLine_Truncated()
+    {
+        ComplaintView.Headline("  Kutu ezik geldi.\nİkinci satır").Should().Be("Kutu ezik geldi.");
+        ComplaintView.Headline(new string('a', 100), 20).Should().Be(new string('a', 19) + "…");
+        ComplaintView.Headline("   ").Should().Be("Şikayet");
+    }
+
+    [Theory]
+    [InlineData("created", "tone-neutral")]
+    [InlineData("claimed", "tone-primary")]
+    [InlineData("assigned", "tone-primary")]
+    [InlineData("reopened", "tone-warn")]
+    [InlineData("resolved", "tone-success")]
+    [InlineData("rejected", "tone-danger")]
+    [InlineData("note", "tone-neutral")]
+    public void KindTone(string kind, string expected) => ComplaintView.KindTone(kind).Should().Be(expected);
 }
