@@ -109,6 +109,22 @@ public static string ResolveApprovalJustification(TraceState st)
 ```
 - **Ne işe yarar?:** Admin panelinde "bu tool neden çağrılıyor" sorusunun cevabı olarak gösterilecek gerekçeyi seçer: önce `Trace.Planning.Rationale` (PlanningAgent'ın routing gerekçesi — uzman turundan ÖNCE tamamlandığı için o an zaten trace'te mevcuttur), yoksa `Trace.Reasoning.Rationale`, o da yoksa boş string (çağıran `ApprovalGateService` jenerik şablona düşer). Uzmanın kendi `preToolCheck.reasoning`'i kullanılmaz çünkü o alan tool ÇALIŞTIKTAN sonra üretilen final JSON'un parçasıdır — onay ise tool çalışmadan önce tetiklenir.
 
+### 7. `RecordToolCalls` (Internal Static)
+```csharp
+internal static void RecordToolCalls(ReasoningTrace trace, IEnumerable<ChatMessage> messages, string? fallbackExecutorId)
+```
+- **Ne işe yarar?:** Araç çağrılarını trace'e yazar (`ReasoningTrace.ToolCalls`, performans ekranının "hangi araç hata
+  veriyor" verisi). Eskiden model ve `tool_calls` sütunu vardı ama hiçbir yerde doldurulmuyordu.
+- **Nereden çağrılır?:** `WorkflowOutputEvent` — çağrı/sonuç içerikleri gerçek akışta **yalnızca** burada görünür. Bu MAF
+  sürümünde `ExecutorCompletedEvent.Data` boş gelir (canlı turda tanılamayla doğrulandı); bu yüzden o aşamadaki
+  `EnsureHumanHandoffEscalation` / `EnsureSideEffectToolCompletion` çağrıları da fiilen çalışmaz, doğru davranışı
+  `WorkflowOutputEvent`'teki "son güvence" sağlar.
+- **Davranış:** `FunctionCallContent` ile aynı `CallId`'li `FunctionResultContent` eşlenir; sonucu görülmeyen çağrı atlanır.
+  Ajan, mesajın yazarıdır (`AuthorName`, ör. `ProductAgent`); yoksa yürütücü kimliği ("OrderAgent_35e6…" → "OrderAgent").
+  Başarı: istisna yoksa ve `ToolResult.Success` (ya da JSON `success`) false değilse. Başarısızlıkta yalnızca hata kodu ve
+  mesajı (≤ 200 karakter) tutulur; parametreler ve başarılı sonuç gövdesi kişisel veri taşıyabileceği için yazılmaz.
+  `CallId` ile tekilleştirilir.
+
 ## Bağımlılıklar
 
 - [IReasoningTraceStore](../CustomerSupportBot.Application/Ports/Outbound/Observability/IReasoningTraceStore.md)

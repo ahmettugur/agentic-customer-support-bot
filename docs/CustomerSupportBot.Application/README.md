@@ -72,7 +72,7 @@ Bu klasör, Onion / Hexagonal Mimari'de **Use Cases & Application Core (İş Ak�
 - [Improvement/](Services/Improvement/ImprovementsPortService.md) — Kendi Kendini İyileştirme ve Ders Çıkarma:
   - [LessonMiner](Services/Improvement/LessonMiner.md) — Düşük puanlı/hatalı trace'lerden LLM ile "ders" önerisi üretir.
   - [ImprovementsPortService](Services/Improvement/ImprovementsPortService.md) — [IImprovementsPort](Ports.md) uygulayıcısı.
-- [Telemetry/](Services/Telemetry/TelemetryPortService.md) — İzleme, Trace ve Analitik Port Servisleri.
+- [Telemetry/](Services/Telemetry/TelemetryPortService.md) — İzleme, Trace ve Analitik Port Servisleri; [PerformancePortService](Services/Telemetry/PerformancePortService.md) (ajan, araç ve temsilci performansı).
 - [Routing/](Services/Routing/SkillsBasedRouter.md) — Yetenek Bazlı Ajan Yönlendiricisi.
 - [UiHint/](Services/UiHint/UiHintEmitter.md) — İstemciye (Blazor) UI kart ipuçları yayınlayan servis.
 

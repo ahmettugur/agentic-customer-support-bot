@@ -92,6 +92,7 @@ sohbet akışının kendisini etkilemez — hepsi **izleme/yönetim** amaçlıd�
 |---|---|
 | `GET /analytics/dashboard` *(Admin)* | Genel istatistik özeti. |
 | `GET /analytics/session/{sid}` *(Admin)* | Tek oturum için detaylı analiz. |
+| `GET /analytics/performance?from=&to=` *(Admin, `PerformanceEndpoints`)* | Yapay zekâ ajanları, araçlar ve temsilcilerin performansı ([PerformancePortService](../../CustomerSupportBot.Application/Services/Telemetry/PerformancePortService.md)). ISO-8601 tarihler; varsayılan son 7 gün, en fazla 92 gün; geçersiz aralık 400. |
 | `POST /sessions/{sid}/rating` | Konuşma değerlendirmesi gönderir (`RatingInput { Stars, Feedback }`; `Stars` 1-5, `Feedback` ≤ 2000 karakter — aksi hâlde 400; ardından oturum yoksa 404). |
 | `GET /sessions/{sid}/rating` | Bir oturumun mevcut rating'ini döner. |
 | `GET /analytics/ratings/recent` *(Admin)* | Son N rating. |

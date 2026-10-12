@@ -30,7 +30,7 @@ Her kullanıcı mesajı işlendiğinde `WorkflowTraceEventProcessor` bir `Reason
 | `Planning` | `PlanningResult?` | Planlama sonucu |
 | `SpecialistReasonings` | `List<SpecialistReasoning>` | Her specialist'in reasoning'i |
 | `AgentVisits` | `List<AgentVisit>` | Ziyaret edilen agent'lar (zaman sıralı) |
-| `ToolCalls` | `List<ToolInvocation>` | Tool çağrıları (zaman sıralı) |
+| `ToolCalls` | `List<ToolInvocation>` | Tool çağrıları (zaman sıralı) — `WorkflowTraceEventProcessor.RecordToolCalls` doldurur; başarısızlıkta `ResultSummary` = hata kodu + mesajı, `Signature` = `CallId` |
 | `TerminationReason` | `string?` | Workflow neden durdu |
 | `FinalResponse` | `string?` | Nihai yanıt (truncate) |
 | `SelfCritique` | `SelfCritique?` | ResponseAgent kalite notu |
