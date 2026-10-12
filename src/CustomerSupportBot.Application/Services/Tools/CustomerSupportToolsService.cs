@@ -63,8 +63,8 @@ public sealed class CustomerSupportToolsService : ICustomerSupportToolsService
     public ToolResult GetAllComplaintsTool(string customerId)
         => _complaint.GetAllComplaintsTool(customerId);
 
-    public ToolResult ComplaintRegistrationTool(string orderId, string complaintText, string? customerId = null)
-        => _complaint.ComplaintRegistrationTool(orderId, complaintText, customerId);
+    public ToolResult ComplaintRegistrationTool(string orderId, string complaintText, string? customerId = null, string? approvalId = null)
+        => _complaint.ComplaintRegistrationTool(orderId, complaintText, customerId, approvalId);
 
     // ─── HumanHandoff (yan etkisiz, bağımlılıksız) ───
     [Description("Kullanıcıyı bir müşteri temsilcisine yönlendirme talebini kaydeder. " +

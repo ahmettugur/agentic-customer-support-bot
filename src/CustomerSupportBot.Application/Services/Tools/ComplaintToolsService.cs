@@ -30,7 +30,8 @@ public sealed class ComplaintToolsService : IComplaintToolsService
     public ToolResult ComplaintRegistrationTool(
         [Description("Şikayetin ilişkili olduğu sipariş numarası (zorunlu, ör. '1030')")] string orderId,
         [Description("Şikayet açıklaması (zorunlu, en az 10 karakter)")] string complaintText,
-        [Description("Müşteri kimlik numarası (opsiyonel; boşsa siparişten türetilir)")] string? customerId = null)
+        [Description("Müşteri kimlik numarası (opsiyonel; boşsa siparişten türetilir)")] string? customerId = null,
+        string? approvalId = null)
     {
         var missing = new List<string>();
         if (string.IsNullOrWhiteSpace(orderId)) missing.Add(WellKnown.ToolParameterNames.OrderId);
@@ -89,7 +90,8 @@ public sealed class ComplaintToolsService : IComplaintToolsService
             OrderId    = orderId,
             CustomerId = effectiveCustomerId!,
             Complaint  = complaintText,
-            Status     = WellKnown.ComplaintStatuses.Pending
+            Status     = WellKnown.ComplaintStatuses.Pending,
+            ApprovalId = approvalId
         });
 
         var result = ToolResult.Ok(
@@ -135,14 +137,22 @@ public sealed class ComplaintToolsService : IComplaintToolsService
             return ToolResult.NotFound(
                 WellKnown.ToolErrorCodes.CustomerIdMismatch, ComplaintNotAccessibleMessage(complaintId));
 
+        var message = $"Şikayet No: {complaintId}, Sipariş: {complaint.OrderId}, Durum: {complaint.Status}";
+        var closed = WellKnown.ComplaintStatuses.IsClosed(complaint.Status);
+        if (closed && !string.IsNullOrWhiteSpace(complaint.Resolution)) message += $", Açıklama: {complaint.Resolution}";
+        if (complaint.UpdatedAt != default) message += $", Son güncelleme: {complaint.UpdatedAt:dd.MM.yyyy}";
+
+        // İç notlar, olay geçmişi ve atanan temsilci bilerek DIŞARIDA: bu metin müşteriye gider.
         return ToolResult.Ok(
-            message: $"Şikayet No: {complaintId}, Sipariş: {complaint.OrderId}, Durum: {complaint.Status}.",
+            message: message + ".",
             data: new
             {
                 complaintId,
                 orderId = complaint.OrderId,
                 status = complaint.Status,
-                complaint = complaint.Complaint
+                complaint = complaint.Complaint,
+                resolution = closed ? complaint.Resolution : null,
+                updatedAt = complaint.UpdatedAt == default ? (DateTime?)null : complaint.UpdatedAt
             });
     }
 

@@ -33,7 +33,8 @@ public sealed class ApprovalExecutionRouter : IApprovalExecutionRouter
             WellKnown.ToolNames.ComplaintRegistration => _tools.ComplaintRegistrationTool(
                 GetString(p, "orderId") ?? "",
                 GetString(p, "complaintText") ?? "",
-                customerId),
+                customerId,
+                request.Id),
 
             WellKnown.ToolNames.OrderCancel => _tools.OrderCancelTool(
                 GetString(p, "orderId") ?? "",

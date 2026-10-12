@@ -141,10 +141,10 @@ public class ApprovalExecutionRouterTests
     public async Task ComplaintRegistration_UsesTheRequestsCustomerId_NotTheParameterCopy()
     {
         var tools = Substitute.For<ICustomerSupportToolsService>();
-        tools.ComplaintRegistrationTool(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>())
+        tools.ComplaintRegistrationTool(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>())
             .Returns(ToolResult.Ok("kaydedildi"));
 
-        await new ApprovalExecutionRouter(tools).ExecuteAsync(new ApprovalRequest
+        var request = new ApprovalRequest
         {
             ToolName = WellKnown.ToolNames.ComplaintRegistration,
             CustomerId = "1027",
@@ -152,9 +152,11 @@ public class ApprovalExecutionRouterTests
             {
                 ["orderId"] = "1030", ["complaintText"] = "ürün hasarlı geldi", ["customerId"] = "9999"
             }
-        }, TestContext.Current.CancellationToken);
+        };
+        await new ApprovalExecutionRouter(tools).ExecuteAsync(request, TestContext.Current.CancellationToken);
 
-        tools.Received(1).ComplaintRegistrationTool("1030", "ürün hasarlı geldi", "1027");
+        // Onay kimliği şikayete yazılır: fotoğraflar (onaya bağlı) şikayet ayrıntısında görünür.
+        tools.Received(1).ComplaintRegistrationTool("1030", "ürün hasarlı geldi", "1027", request.Id);
     }
 
     [Fact]

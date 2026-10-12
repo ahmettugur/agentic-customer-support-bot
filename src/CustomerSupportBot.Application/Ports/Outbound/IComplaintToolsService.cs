@@ -7,7 +7,8 @@ namespace CustomerSupportBot.Application.Ports.Outbound;
 /// </summary>
 public interface IComplaintToolsService
 {
-    ToolResult ComplaintRegistrationTool(string orderId, string complaintText, string? customerId);
+    /// <param name="approvalId">Onay sonrası yürütmede şikayete yazılan onay kimliği (fotoğraflar ona bağlı).</param>
+    ToolResult ComplaintRegistrationTool(string orderId, string complaintText, string? customerId, string? approvalId = null);
 
     /// <summary>
     /// Şikayet durumunu şikayet numarasıyla sorgular (SALT-OKUNUR).
