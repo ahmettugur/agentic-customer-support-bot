@@ -174,6 +174,30 @@ public static class ApplicationServicesExtensions
                         AutoReplenishment = true
                     });
             });
+
+            // MCP: a2a ile AYNI limit (A2AOptions.RequestsPerMinute) ama ayrı kova.
+            options.AddPolicy("mcp", httpContext =>
+            {
+                var limits = httpContext.RequestServices
+                    .GetRequiredService<IOptions<A2AOptions>>().Value;
+
+                var subjectId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var partitionKey =
+                    A2ASubjectIdentity.TryGetPartnerId(subjectId)   // özne token'ı → partner
+                    ?? subjectId                                    // partner token'ı → kendisi
+                    ?? httpContext.Connection.RemoteIpAddress?.ToString()  // kimliksiz → IP
+                    ?? "unknown";
+
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: $"mcp:{partitionKey}",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = Math.Max(1, limits.RequestsPerMinute),
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    });
+            });
         });
 
         // Agents adapter — CustomerSupportTeam + ApprovalGateService

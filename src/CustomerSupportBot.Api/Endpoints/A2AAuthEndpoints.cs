@@ -21,6 +21,7 @@ public static class A2AAuthEndpoints
             ExchangeRequest req,
             ClaimsPrincipal caller,
             A2ATokenExchangeService exchange,
+            CustomerSupportBot.Application.Ports.Outbound.A2A.IPartnerChannelAuthorizer channels,
             CancellationToken ct) =>
         {
             // Partner kimliği ÇAĞIRANIN TOKEN'INDAN alınır, istek gövdesinden değil — aksi
@@ -36,6 +37,10 @@ public static class A2AAuthEndpoints
                          ?? caller.FindFirst("unique_name")?.Value;
 
             if (string.IsNullOrWhiteSpace(partnerId))
+                return Results.Forbid();
+
+            // Hiçbir kanalı olmayan partner token da alamaz (kanalsız partner = kapalı partner).
+            if (!channels.CanUseAny(partnerId))
                 return Results.Forbid();
 
             var result = await exchange.ExchangeAsync(partnerId, req.CustomerId, ct);

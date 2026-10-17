@@ -5,6 +5,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Security.Claims;
 using CustomerSupportBot.Adapters.Agents.A2A;
+using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.A2A;
 using Microsoft.Agents.AI;
@@ -52,22 +53,26 @@ public static class A2AEndpoints
         app.MapA2AJsonRpc(A2AAgentNames.Product, "/a2a/product")
             .RequireAuthorization("Partner")
             .RequireRateLimiting("a2a")
+            .AddEndpointFilter(new PartnerChannelFilter(PartnerChannels.A2A))
             .AddEndpointFilter(new A2ALogFilter("product"))
             .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.JsonRpc);
         app.MapA2AHttpJson(A2AAgentNames.Product, "/a2a/product")
             .RequireAuthorization("Partner")
             .RequireRateLimiting("a2a")
+            .AddEndpointFilter(new PartnerChannelFilter(PartnerChannels.A2A))
             .AddEndpointFilter(new A2ALogFilter("product"))
             .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.HttpJson);
 
         app.MapA2AJsonRpc(A2AAgentNames.Order, "/a2a/order")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
+            .AddEndpointFilter(new PartnerChannelFilter(PartnerChannels.A2A))
             .AddEndpointFilter(new A2ASubjectScopeFilter("order"))
             .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.JsonRpc);
         app.MapA2AHttpJson(A2AAgentNames.Order, "/a2a/order")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
+            .AddEndpointFilter(new PartnerChannelFilter(PartnerChannels.A2A))
             .AddEndpointFilter(new A2ASubjectScopeFilter("order"))
             .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.HttpJson);
 
@@ -75,11 +80,13 @@ public static class A2AEndpoints
         app.MapA2AJsonRpc(A2AAgentNames.Complaint, "/a2a/complaint")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
+            .AddEndpointFilter(new PartnerChannelFilter(PartnerChannels.A2A))
             .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"))
             .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.JsonRpc);
         app.MapA2AHttpJson(A2AAgentNames.Complaint, "/a2a/complaint")
             .RequireAuthorization("A2ASubject")
             .RequireRateLimiting("a2a")
+            .AddEndpointFilter(new PartnerChannelFilter(PartnerChannels.A2A))
             .AddEndpointFilter(new A2ASubjectScopeFilter("complaint"))
             .WithProtocolGuards(maxRequestBytes, A2AProtocolBinding.HttpJson);
 

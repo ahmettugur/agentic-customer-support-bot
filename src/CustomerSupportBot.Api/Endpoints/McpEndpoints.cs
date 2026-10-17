@@ -9,6 +9,7 @@
 
 using System.Security.Claims;
 using CustomerSupportBot.Adapters.Agents.Mcp;
+using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.A2A;
 using CustomerSupportBot.Application.Services.Approval;
@@ -29,15 +30,17 @@ public static class McpEndpoints
     {
         var maxBytes = Math.Max(1024, app.ServiceProvider.GetRequiredService<IOptions<McpOptions>>().Value.MaxRequestBytes);
 
-        // "a2a" hız sınırı politikası yeniden kullanılır: bölümleme anahtarı token'dan partner kimliğidir.
+        // "mcp" hız sınırı: a2a ile AYNI limit, ama ayrı kova (bir kanalın yoğunluğu diğerinin kotasını tüketmesin).
         app.MapMcp(CatalogPath)
             .RequireAuthorization("Partner")
-            .RequireRateLimiting("a2a")
+            .RequireRateLimiting("mcp")
+            .AddEndpointFilter(new PartnerChannelFilter(PartnerChannels.Mcp))
             .AddEndpointFilter(new McpGuardFilter("catalog", maxBytes, customerScoped: false));
 
         app.MapMcp(CustomerPath)
             .RequireAuthorization("A2ASubject")
-            .RequireRateLimiting("a2a")
+            .RequireRateLimiting("mcp")
+            .AddEndpointFilter(new PartnerChannelFilter(PartnerChannels.Mcp))
             .AddEndpointFilter(new McpGuardFilter("customer", maxBytes, customerScoped: true));
 
         return app;

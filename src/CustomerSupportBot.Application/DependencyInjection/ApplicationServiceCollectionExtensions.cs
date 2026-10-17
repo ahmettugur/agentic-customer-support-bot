@@ -196,6 +196,7 @@ public static class ApplicationServiceCollectionExtensions
         // Yetki kararı VARSAYILAN OLARAK REDDEDER; yapılandırma yoksa hiçbir partner
         // hiçbir müşteri adına token alamaz (bkz. ConfiguredA2ASubjectAuthorizer).
         services.AddSingleton<Ports.Outbound.A2A.IA2ASubjectAuthorizer, Services.A2A.ConfiguredA2ASubjectAuthorizer>();
+        services.AddSingleton<Ports.Outbound.A2A.IPartnerChannelAuthorizer, Services.A2A.ConfiguredPartnerChannelAuthorizer>();
         // Scoped: IJwtAccessTokenProvider scoped'dır (bkz. auth kayıtları); singleton bir servis
         // scoped bir bağımlılığı tüketemez — DI doğrulaması host başlangıcında bunu reddeder.
         services.AddScoped<Services.A2A.A2ATokenExchangeService>();

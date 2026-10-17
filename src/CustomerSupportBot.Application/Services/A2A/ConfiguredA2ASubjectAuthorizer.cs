@@ -135,4 +135,19 @@ public sealed class A2APartnerOptions
 
     /// <summary>Bu partnerin adına hareket edebileceği müşteri kimlikleri. <c>"*"</c> = tümü.</summary>
     public List<string> AllowedCustomerIds { get; set; } = new();
+
+    /// <summary>
+    /// Bu partnerin kullanabileceği dış kanallar: <c>a2a</c>, <c>mcp</c> (bkz. <see cref="PartnerChannels"/>).
+    /// Belirtilmezse YALNIZCA <c>a2a</c>: MCP sonradan eklendi ve var olan partnerler ona kendiliğinden girmemeli.
+    /// Partneri tamamen kapatmak için <c>Partners</c> listesinden çıkarın.
+    ///
+    /// <para>
+    /// Varsayılan bir <c>List&lt;string&gt;</c> İNİTİALİZER'ı olarak verilmez: .NET yapılandırma bağlayıcısı dolu bir listeye
+    /// yapılandırmadaki değerleri EKLER, yani <c>["mcp"]</c> yazan partner sessizce <c>a2a</c> da alırdı. Bu yüzden alan
+    /// null başlar ve varsayılan <see cref="EffectiveChannels"/>'da uygulanır.
+    /// </para>
+    /// </summary>
+    public List<string>? Channels { get; set; }
+
+    public IReadOnlyList<string> EffectiveChannels => Channels ?? [PartnerChannels.A2A];
 }

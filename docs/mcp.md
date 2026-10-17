@@ -17,6 +17,33 @@ Araya LLM girmez: araç doğrudan çalışır, maliyet ve prompt-injection yüze
 "Hangi sistem" (Partner) ile "hangi müşteri" (özne token'ı) ayrı token'larda kalır — A2A ile birebir aynı ayrım. Partner token'ı
 `/mcp/customer`'a **giremez** (403); özne token'ı `/mcp/catalog`'a giremez.
 
+## Kanal yetkisi (partner başına)
+
+Token "geçerli bir partner" demektir; **hangi kanala girebileceği** partnerin yapılandırmasındadır ve her istekte okunur
+(token'a yazılmaz): erişim yapılandırma değişince token süresi beklenmeden kesilir, çalınmış bir token kendi kanalını
+genişletemez.
+
+```json
+"A2A": {
+  "Partners": [
+    { "PartnerId": "acme",  "AllowedCustomerIds": ["1027"] },                         // yalnızca A2A (varsayılan)
+    { "PartnerId": "ide-x", "AllowedCustomerIds": ["*"], "Channels": ["mcp"] },       // yalnızca MCP
+    { "PartnerId": "bot-y", "AllowedCustomerIds": ["1027"], "Channels": ["a2a", "mcp"] }
+  ]
+}
+```
+
+- `Channels` belirtilmezse **yalnızca `a2a`**: var olan partnerler MCP'ye kendiliğinden girmez.
+- `A2A:Partners`'ta hiç tanımlı olmayan `Partner` rollü bir hesap eskiden olduğu gibi A2A **ürün ajanını** kullanır (geriye dönük
+  uyum; müşteri verisi için özne token'ı gerekir ve onu yalnızca tanımlı partner alabilir). MCP'ye ise **giremez**.
+- Kanalı olmayan (tanımsız) partner token değişimi de yapamaz. Bir partneri tamamen kapatmak için listeden çıkarın.
+- İhlal, dışarıya sessiz 403 döner; sebep (`[mcp] REDDEDİLDİ · partner=… · sebep=…`) günlüğe yazılır.
+- Hız sınırı kanal başına ayrı kovadır (`a2a` ve `mcp`, aynı `A2A:RequestsPerMinute` değeri): biri diğerinin kotasını tüketmez.
+
+> Yapılandırma notu: `Channels` bilerek null başlar. .NET yapılandırma bağlayıcısı dolu bir `List<string>` varsayılanına
+> yapılandırmadaki değerleri *ekler*; varsayılan `["a2a"]` olsaydı `["mcp"]` yazan partner sessizce `a2a` da alırdı
+> (entegrasyon testi bunu ölçer).
+
 ## Bağlanma
 
 1. Partner olarak giriş yapın (`POST /auth/login`, `Partner` rolündeki hesap) → `accessToken`.
@@ -49,7 +76,7 @@ Araya LLM girmez: araç doğrudan çalışır, maliyet ve prompt-injection yüze
 - **Müşteri kimliği token'dan gelir**, araç argümanından değil: araçların müşteri parametresi yoktur; kimlik istek kapsamında
   ambient bağlama kurulur. Eşzamanlı iki müşterinin kimliği karışmadığı testle doğrulanır (kapsam kaldırılınca testler düşer).
 - **Stateless:** oturum yoktur, dolayısıyla ele geçirilebilecek/paylaşılabilecek bir oturum kimliği de yoktur.
-- Hız sınırı A2A ile aynı politikadır (`a2a`, partner başına); gövde üst sınırı `Mcp:MaxRequestBytes` (varsayılan 16 KB).
+- Hız sınırı partner başına, MCP için ayrı kova (A2A ile aynı limit); gövde üst sınırı `Mcp:MaxRequestBytes` (varsayılan 16 KB).
 - Bilinmeyen bir yol **boş** araç kümesi alır (yanlış yapılandırma veri açmaz).
 
 ## Kapsam dışı
