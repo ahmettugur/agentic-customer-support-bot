@@ -5,9 +5,13 @@
 //   3) ICostCalculatorPort ile USD maliyeti hesaplar
 //   4) Meter counter'larına ve in-memory CostUsageStore'a yazar
 //   5) Streaming ve non-streaming akışlarını ayrı işler
+//   6) Span'i gen_ai.* semantic conventions ve langfuse.* nitelikleriyle Langfuse'un "generation"
+//      olarak tanıyacağı biçime getirir (model, token, maliyet, oturum/kullanıcı, isteğe bağlı içerik)
 
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Json;
 using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using Microsoft.Extensions.AI;
@@ -25,6 +29,7 @@ public sealed class TelemetryChatClient : DelegatingChatClient
     private readonly string _modelHint;
     private readonly string _provider;
     private readonly ILogger<TelemetryChatClient> _logger;
+    private readonly LlmTraceEnrichment _enrichment;
 
     public TelemetryChatClient(
         IChatClient inner,
@@ -34,8 +39,10 @@ public sealed class TelemetryChatClient : DelegatingChatClient
         string provider,
         ILogger<TelemetryChatClient> logger,
         ILlmCallPersistencePort? persistence = null,
-        ILlmCallAttribution? attribution = null) : base(inner)
+        ILlmCallAttribution? attribution = null,
+        LlmTraceEnrichment? enrichment = null) : base(inner)
     {
+        _enrichment = enrichment ?? new LlmTraceEnrichment();
         _attribution = attribution;
         _costCalculator = costCalculator;
         _usageStore = usageStore;
@@ -51,6 +58,7 @@ public sealed class TelemetryChatClient : DelegatingChatClient
         CancellationToken cancellationToken = default)
     {
         using var activity = CustomerSupportTelemetry.StartLlmActivity("chat", _modelHint, _provider);
+        EnrichStart(activity, messages);
         var sw = Stopwatch.StartNew();
         ChatResponse? response = null;
         try
@@ -58,6 +66,7 @@ public sealed class TelemetryChatClient : DelegatingChatClient
             response = await base.GetResponseAsync(messages, options, cancellationToken);
             sw.Stop();
             RecordSuccess(activity, response.Usage, sw.Elapsed.TotalMilliseconds, ResolveModel(response));
+            RecordOutput(activity, response.Text);
             return response;
         }
         catch (Exception ex)
@@ -74,9 +83,12 @@ public sealed class TelemetryChatClient : DelegatingChatClient
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         using var activity = CustomerSupportTelemetry.StartLlmActivity("chat.stream", _modelHint, _provider);
+        EnrichStart(activity, messages);
         var sw = Stopwatch.StartNew();
         UsageDetails? lastUsage = null;
         string? lastModel = null;
+        // Yalnızca içerik kaydı açıkken biriktirilir — kapalıyken akış başına ek bellek yok.
+        var output = activity is not null && _enrichment.CaptureContent ? new StringBuilder() : null;
 
         IAsyncEnumerable<ChatResponseUpdate> stream;
         try
@@ -98,11 +110,13 @@ public sealed class TelemetryChatClient : DelegatingChatClient
                 if (c is UsageContent uc) lastUsage = uc.Details;
             }
             if (!string.IsNullOrEmpty(update.ModelId)) lastModel = update.ModelId;
+            output?.Append(update.Text);
             yield return update;
         }
 
         sw.Stop();
         RecordSuccess(activity, lastUsage, sw.Elapsed.TotalMilliseconds, lastModel ?? _modelHint);
+        if (output is not null) RecordOutput(activity, output.ToString());
     }
 
     // ─── Internals ───
@@ -139,6 +153,13 @@ public sealed class TelemetryChatClient : DelegatingChatClient
             activity.SetTag("ai.tokens.output", output);
             activity.SetTag("ai.cost.usd", (double)cost);
             activity.SetTag("ai.duration.ms", durationMs);
+
+            // gen_ai.* semantic conventions: Langfuse bunlardan model ve token kullanımını okur.
+            activity.SetTag("gen_ai.response.model", model);
+            activity.SetTag("gen_ai.usage.input_tokens", input);
+            activity.SetTag("gen_ai.usage.output_tokens", output);
+            // Kendi hesapladığımız maliyet: Langfuse'un fiyat tablosunda olmayan modellerde de görünsün.
+            activity.SetTag("langfuse.observation.cost_details", JsonSerializer.Serialize(new { total = cost }));
             activity.SetStatus(ActivityStatusCode.Ok);
         }
 
@@ -146,6 +167,78 @@ public sealed class TelemetryChatClient : DelegatingChatClient
             "LLM call recorded: model={Model} input={Input} output={Output} cost=${Cost:F6} duration={Ms:F0}ms",
             model, input, output, cost, durationMs);
     }
+
+    /// <summary>
+    /// Span adı ve çağrıdan önce bilinen nitelikler: gen_ai.* (işlem, sağlayıcı, model), Langfuse türü,
+    /// oturum ve kullanıcı; içerik kaydı açıksa maskelenmiş girdi.
+    /// </summary>
+    private void EnrichStart(Activity? activity, IEnumerable<ChatMessage> messages)
+    {
+        if (activity is null) return;
+
+        activity.DisplayName = $"chat {_modelHint}";
+        activity.SetTag("gen_ai.operation.name", "chat");
+        activity.SetTag("gen_ai.system", GenAiSystem(_provider));
+        activity.SetTag("gen_ai.request.model", _modelHint);
+        activity.SetTag("langfuse.observation.type", "generation");
+
+        if (_attribution?.CurrentSessionId is { Length: > 0 } sessionId)
+        {
+            activity.SetTag("session.id", sessionId);
+            activity.SetTag("langfuse.session.id", sessionId);
+        }
+        if (_enrichment.CurrentUserId() is { Length: > 0 } userId)
+        {
+            activity.SetTag("user.id", userId);
+            activity.SetTag("langfuse.user.id", userId);
+        }
+
+        if (_enrichment.CaptureContent)
+            activity.SetTag("langfuse.observation.input", DescribeInput(messages));
+    }
+
+    private void RecordOutput(Activity? activity, string? text)
+    {
+        if (activity is null || !_enrichment.CaptureContent) return;
+        activity.SetTag("langfuse.observation.output", Truncate(_enrichment.Redact(text ?? "")));
+    }
+
+    /// <summary>
+    /// Mesajlar → <c>[{"role":"user","content":"…"}]</c>. Araç çağrısı ve sonucu da okunur biçimde yazılır
+    /// (modelin hangi veriyle karar verdiği Langfuse'ta görülsün). Sınırı aşarsa JSON yerine kısaltılmış düz metin.
+    /// </summary>
+    private string DescribeInput(IEnumerable<ChatMessage> messages)
+    {
+        var items = messages.Select(m => new
+        {
+            role = m.Role.Value,
+            content = _enrichment.Redact(string.Join("\n", m.Contents.Select(DescribeContent).Where(t => t.Length > 0)))
+        }).ToList();
+        var json = JsonSerializer.Serialize(items, ContentJson);
+        return json.Length <= _enrichment.MaxContentChars
+            ? json
+            : Truncate(string.Join("\n\n", items.Select(i => $"[{i.role}] {i.content}")));
+    }
+
+    private static string DescribeContent(AIContent content) => content switch
+    {
+        TextContent t => t.Text,
+        FunctionCallContent call => $"→ {call.Name}({JsonSerializer.Serialize(call.Arguments, ContentJson)})",
+        FunctionResultContent result => $"← {result.CallId}: {result.Result}",
+        _ => ""
+    };
+
+    private static readonly JsonSerializerOptions ContentJson = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    private string Truncate(string text) =>
+        text.Length <= _enrichment.MaxContentChars ? text : text[..(_enrichment.MaxContentChars - 1)] + "…";
+
+    /// <summary>OpenTelemetry gen_ai.system değerleri: "openai", "az.ai.openai".</summary>
+    private static string GenAiSystem(string provider) =>
+        provider.Contains("azure", StringComparison.OrdinalIgnoreCase) ? "az.ai.openai" : provider.ToLowerInvariant();
 
     private void PersistAsync(string model, long input, long output, decimal cost, double durationMs)
     {
