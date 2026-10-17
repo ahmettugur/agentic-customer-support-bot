@@ -2,10 +2,13 @@
 // Telemetri adapter'ları için DI kayıtları.
 // TelemetryOptions (Options/TelemetryOptions.cs) kullanır — TelemetryAdapterOptions kaldırıldı.
 
+using CustomerSupportBot.Adapters.Telemetry.Langfuse;
 using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 using CustomerSupportBot.Application.Ports.Outbound.Observability;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using global::OpenTelemetry.Exporter;
 using global::OpenTelemetry.Metrics;
 using global::OpenTelemetry.Resources;
@@ -39,6 +42,22 @@ public static class TelemetryAdapterServiceCollectionExtensions
 
         if (!options.Enabled)
             return services;
+
+        // Müşteri puanı → Langfuse skoru (REST). Kapalıyken port hiç kaydedilmez; AnalyticsPortService bunu opsiyonel alır.
+        var langfuse = configuration.GetSection(LangfuseOptions.SectionName).Get<LangfuseOptions>() ?? new LangfuseOptions();
+        if (langfuse.Enabled)
+        {
+            services.AddSingleton<IConversationScoreSink>(sp => new LangfuseScoreSink(
+                new HttpClient { Timeout = TimeSpan.FromSeconds(5) }, langfuse,
+                sp.GetRequiredService<ILogger<LangfuseScoreSink>>()));
+
+            // KVKK: oturum/müşteri silinince Langfuse'taki trace'ler ve oturum puanı skoru da silinir (DataPrivacyService).
+            services.AddSingleton(sp => new LangfuseDataEraser(
+                new HttpClient { Timeout = TimeSpan.FromSeconds(30) }, langfuse,
+                sp.GetRequiredService<ILogger<LangfuseDataEraser>>()));
+            services.AddSingleton<ISessionDataEraser>(sp => sp.GetRequiredService<LangfuseDataEraser>());
+            services.AddSingleton<ICustomerDataEraser>(sp => sp.GetRequiredService<LangfuseDataEraser>());
+        }
 
         services.AddOpenTelemetry()
             .ConfigureResource(r => r.AddService(options.ServiceName, serviceVersion: options.ServiceVersion))

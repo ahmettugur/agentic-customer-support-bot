@@ -67,9 +67,36 @@ Açıkken:
 - İçerik yalnızca Langfuse'ta saklanır: collector Jaeger'a giden kopyadan `langfuse.observation.input/output`
   niteliklerini siler (`attributes/strip-llm-content`).
 
-**KVKK:** İçerik kaydı açıkken Langfuse kişisel veri saklayan bir sistem olur. Uygulamanın müşteri verisi silme
-akışı (`DataPrivacyService`) Langfuse'taki kayıtları silmez; Langfuse'un kendi saklama süresi ayarlanmalı ya da
-üretimde içerik kaydı kapalı tutulmalıdır.
+**KVKK:** İçerik kaydı açıkken Langfuse kişisel veri saklayan bir sistem olur. Bunun için `Telemetry:Langfuse`
+açıkken (aşağıya bakın) müşteri/oturum silme akışı Langfuse'taki kayıtları da siler. Üretimde yine de Langfuse'un
+kendi saklama süresini ayarlayın ya da içerik kaydını kapalı tutun.
+
+## Müşteri puanı: skorlar ve veri silme (`Telemetry:Langfuse`)
+
+Trace'ler OTel Collector üzerinden gider; aşağıdaki iki özellik ise Langfuse'un **REST API**'sini kullanır ve
+proje anahtarları ister. Varsayılan **kapalıdır**:
+
+```json
+"Telemetry": {
+  "Langfuse": { "Enabled": true, "BaseUrl": "http://localhost:3000", "PublicKey": "pk-lf-...", "SecretKey": "sk-lf-..." }
+}
+```
+
+Anahtarlar `deploy/.env`'deki `LANGFUSE_INIT_PROJECT_*` değerleridir; yerelde `appsettings.Development.json`, üretimde
+ortam değişkeni/secret store ile verin (`Telemetry__Langfuse__SecretKey`).
+
+- **Skor:** Müşteri puan verince (`POST` puanlama ucu) `customer_rating` adlı 1–5 arası sayısal skor, o oturuma
+  bağlı olarak Langfuse'a yazılır; yorum varsa skorun yorumu olur. Skor kimliği oturuma sabittir: yeniden puanlama
+  skoru günceller (yorum yoksa eski yorum temizlenir). Langfuse'ta *Sessions* altında oturumun yanında görünür; düşük
+  puanlı oturumlar süzülüp trace'leri incelenebilir. Gönderim en iyi gayrettir (3 sn sınırı, hata yutulur): Langfuse
+  erişilemese de puan kaydedilir.
+- **Veri silme:** `DataPrivacyService` oturum silerken (saklama süresi dolunca ya da müşteri talebiyle) o oturumun
+  trace'lerini ve puan skorunu; müşteri silerken `user.id` müşteri numarası olan trace'leri Langfuse'tan siler.
+  **Langfuse erişilemezse silme hata verir** ve oturum yerinde kalır; silme sonraki turda/talepte tekrar denenir
+  (kişisel veri silinmeden "silindi" raporlanmaz). Silme Langfuse tarafında asenkrondur, birkaç saniye sürer.
+
+> Langfuse v4 (`events_only` modu) eski `traces`/`sessions`/`scores` okuma uçlarını kapatmıştır. Silme bu yüzden
+> gözlem (`/api/public/v2/observations`) üzerinden `sessionId`/`userId` süzmesiyle trace'leri bulur.
 
 ## Sorun giderme
 
