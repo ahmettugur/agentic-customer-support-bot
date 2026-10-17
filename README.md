@@ -481,6 +481,7 @@ Her proje için: README + her sınıf/dosya grubu için ayrı doküman.
 | Doküman | İçerik |
 |---|---|
 | [`docs/architecture.md`](docs/architecture.md) | Üst seviye mimari, bileşen haritası, DI, istek yaşam döngüsü |
+| [`docs/ai-agent-architecture-map.md`](docs/ai-agent-architecture-map.md) | 8 katmanlı AI Agent referans mimarisine göre katman haritası, .NET karşılıkları ve eksikler |
 | [`docs/agentic-patterns.md`](docs/agentic-patterns.md) | Tasarım desenleri: ReAct, Self-Reflection, Chain-of-Thought, sub-agent vs sub-component |
 | [`docs/reasoning.md`](docs/reasoning.md) | Uygulamadaki reasoning pattern'leri: CoT, sanity check, ReAct, decomposition, grounding, handoff, replan |
 | [`docs/debugging-chat.md`](docs/debugging-chat.md) | Chat akışını adım adım debug etme: breakpoint noktaları, senaryo bazlı tanı, traceId takibi, yaygın tuzaklar |
