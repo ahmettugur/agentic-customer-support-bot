@@ -101,12 +101,11 @@ geçmesi (fallback zinciri) de bu katmanda yapılır.
 | SQL/DB | Sipariş, ürün ve şikayet tool'ları (EF Core / Postgres) | ✅ |
 | APIs | E-posta, kargo uçları | ✅ |
 | GitHub / Browser / Code | Müşteri destek alanı için gerekli değil | — |
-| MCP (Model Context Protocol) | — | ❌ |
+| MCP (Model Context Protocol) | Sunucu: salt-okunur araçlar Streamable HTTP ile dışa açılır (`docs/mcp.md`, varsayılan kapalı). İstemci (harici MCP araçlarını tüketme) yok | 🟡 |
 
-**Eksik — MCP:** Tool'lar MAF'a doğrudan kayıtlı. Bunları bir MCP sunucusu olarak dışa
-açmak (`ModelContextProtocol` NuGet paketiyle) iki şey sağlar: başka ajanlar ve IDE'ler
-(Claude Desktop, Copilot) aynı iş tool'larını kullanabilir, proje de harici MCP
-sunucularını tüketebilir.
+**MCP:** Salt-okunur araçlar (ürün kataloğu; sipariş/şikayet sorguları) MCP sunucusu olarak dışa açıldı, A2A ile aynı
+Partner/özne token modeliyle (`docs/mcp.md`). **Eksik:** MCP *istemcisi* (harici sunucuların araçlarını ajanlara bağlamak) yok —
+araç açıklamaları ve sonuçları LLM bağlamına girdiği için ayrı bir güvenlik tasarımı gerektirir.
 
 ## 6. Durum / Veri Katmanı
 
@@ -172,7 +171,7 @@ pub/sub).
 | 2 | Orkestrasyon | 🟢 çok güçlü | Checkpoint'i üretimde açmadan önce yük/gecikme ölçümü |
 | 3 | Hafıza & Bağlam | 🟢 güçlü (hibrit arama eklendi) | Prompt cache farkındalığı (maliyet doğruluğu) |
 | 4 | Modeller | 🟡 tek sağlayıcı | Çok sağlayıcı + fallback |
-| 5 | Araçlar | 🟢 alan için yeterli | MCP sunucusu |
+| 5 | Araçlar | 🟢 alan için yeterli (MCP sunucusu var) | MCP istemcisi (güvenlik tasarımıyla) |
 | 6 | Durum / Veri | 🟢 güçlü | Nesne deposu (S3/MinIO) |
 | 7 | Gözlem, Güvenlik, Eval | 🟢/🟡 gözlem güçlü, güvenlik-eval eksikli | Çıktı guardrail'i, RAG metrikleri, eval kapsamı |
 | 8 | Dağıtım | 🟠 zayıf | Uygulama container'ı + k8s |

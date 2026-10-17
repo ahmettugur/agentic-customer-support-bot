@@ -37,6 +37,17 @@ if (a2aEnabled)
     builder.Services.AddA2AAgents();
 }
 
+// MCP (Model Context Protocol) — A2A ile aynı mantık: kapalıyken hiç kaydedilmez ve endpoint map edilmez. Kimlik
+// altyapısı (Partner / özne token'ları, token değişimi) A2A'nındır; A2A kapalıyken MCP açılırsa kimse token alamaz,
+// bu yüzden sessizce işe yaramaz bir kanal yerine açılışta net bir hatayla durulur.
+var mcpEnabled = builder.Configuration.GetValue<bool>("Mcp:Enabled");
+if (mcpEnabled)
+{
+    if (!a2aEnabled)
+        throw new InvalidOperationException("Mcp:Enabled için A2A:Enabled de true olmalı: MCP, A2A'nın Partner/özne token altyapısını kullanır.");
+    builder.Services.AddMcpChannel();
+}
+
 var app = builder.Build();
 
 // Kimlik guard: depoya İŞLENMİŞ örnek imzalama anahtarı üretimde kabul edilemez.
@@ -176,6 +187,10 @@ if (a2aEnabled)
 {
     app.MapA2AAuthEndpoints();
     app.MapA2AAgentEndpoints();
+}
+if (mcpEnabled)
+{
+    app.MapMcpChannel();
 }
 app.MapChatEndpoints();
 app.MapChatAttachmentEndpoints();

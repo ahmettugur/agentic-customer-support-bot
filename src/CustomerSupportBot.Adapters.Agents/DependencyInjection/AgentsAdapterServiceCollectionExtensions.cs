@@ -43,6 +43,9 @@ public static class AgentsAdapterServiceCollectionExtensions
         // Endpoint'e bağlanması Api katmanının işidir; burada yalnızca kurulur.
         services.AddSingleton<A2A.A2AAgentCatalog>();
 
+        // MCP ile açılan salt-okunur tool kümeleri (endpoint yalnızca Mcp:Enabled iken map edilir).
+        services.AddSingleton<Mcp.McpToolCatalog>();
+
         // EvaluationRunner MAF'ın EvalItem/ChatMessage tiplerine bağımlı olduğu için
         // burada (Application değil) yaşıyor — bkz. CriteriaEvaluator.cs başındaki not.
         services.AddSingleton<EvaluationRunner>();
