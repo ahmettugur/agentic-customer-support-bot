@@ -11,7 +11,9 @@
 # span'leri orada yalnızca gürültü olur ve ClickHouse depolamasını şişirir. Altyapı ayrıntısı
 # için Jaeger kullanılmaya devam eder.
 #
-# Bu dosya contrib imajı gerektirir (basicauth extension + filter processor + nop exporter).
+# Metrikler: tüm OTLP metrikleri Prometheus exporter'ına (8889) gider; Prometheus oradan çeker.
+#
+# Bu dosya contrib imajı gerektirir (basicauth extension + filter processor + prometheus exporter).
 
 receivers:
   otlp:
@@ -93,10 +95,10 @@ exporters:
       enabled: true
       max_elapsed_time: 120s
 
-  # Uygulama metrikleri de aynı OTLP ucuna gelir (Telemetry:MetricsEnabled). Ne Jaeger ne Langfuse
-  # metrik alır; pipeline olmasaydı collector "Unimplemented" döner ve uygulama her export'ta hata
-  # loglardı. Metrikler burada sessizce bırakılır.
-  nop:
+  # Uygulama metrikleri (Telemetry:MetricsEnabled) aynı OTLP ucuna gelir; Prometheus bunları collector'ın
+  # 8889 portundan çeker (deploy/prometheus.yml). Alarm kuralları: deploy/prometheus-alerts.yml.
+  prometheus:
+    endpoint: 0.0.0.0:8889
 
 service:
   extensions: [health_check, basicauth/langfuse]
@@ -114,4 +116,4 @@ service:
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [nop]
+      exporters: [prometheus]

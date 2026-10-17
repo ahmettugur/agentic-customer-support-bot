@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: customer-support-bot
+    folder: Customer Support Bot
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

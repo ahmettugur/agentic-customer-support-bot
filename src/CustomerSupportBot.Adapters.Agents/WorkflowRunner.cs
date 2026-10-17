@@ -96,6 +96,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
         var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent);
+        var runTimer = System.Diagnostics.Stopwatch.StartNew();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
         var started = await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
@@ -140,6 +141,13 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         }
 
         var outcome = await FinalizeAbnormalTerminationAsync(run, st, query, timeoutCts, ct, workflowError);
+        WorkflowMetrics.Record(outcome.Kind switch
+        {
+            RunOutcomeKind.Completed => "ok",
+            RunOutcomeKind.TimedOut => "timeout",
+            RunOutcomeKind.Cancelled => "cancelled",
+            _ => "error"
+        }, runTimer.Elapsed);
         switch (outcome.Kind)
         {
             case RunOutcomeKind.TimedOut:
@@ -234,6 +242,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
         var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent);
+        var runTimer = System.Diagnostics.Stopwatch.StartNew();
         await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
         var started = await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
@@ -281,6 +290,13 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         }
 
         var outcome = await FinalizeAbnormalTerminationAsync(run, st, query, timeoutCts, ct, workflowError);
+        WorkflowMetrics.Record(outcome.Kind switch
+        {
+            RunOutcomeKind.Completed => "ok",
+            RunOutcomeKind.TimedOut => "timeout",
+            RunOutcomeKind.Cancelled => "cancelled",
+            _ => "error"
+        }, runTimer.Elapsed);
         switch (outcome.Kind)
         {
             case RunOutcomeKind.TimedOut:
