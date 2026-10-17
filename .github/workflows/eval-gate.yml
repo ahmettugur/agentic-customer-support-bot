@@ -1,0 +1,132 @@
+# Değerlendirme kapısı: tüm eval senaryolarını GERÇEK LLM ile koşturur ve POST /eval/gate kararını uygular.
+#
+# Neden CI'dan ayrı: her senaryo birden çok OpenAI çağrısı yapar (para harcar) ve çıktı deterministik değildir.
+# Bu yüzden her PR'da değil, gece ve elle çalışır. Prompt değişikliğinin regresyon yapıp yapmadığını yakalar.
+#
+# Gereken: repo secret'ı OPENAI_API_KEY. Gece çalışması için repo değişkeni EVAL_GATE_ENABLED=true (ayarlı değilse
+# zamanlanmış çalışma atlanır; elle tetikleme her zaman çalışır). Eşikler: appsettings.json > EvaluationGate.
+#
+# Kapı yalnızca OTOMATİK değerlendirilebilen kriterlere bakar (bkz. docs/evaluation.md §9).
+
+name: Eval gate
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      min_pass_rate:
+        description: "Asgari başarı oranı (0-1); boşsa appsettings değeri"
+        required: false
+        default: ""
+      quality_checks:
+        description: "LLM-judge kalite kontrollerini de aç (ek maliyet)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: eval-gate
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  eval-gate:
+    name: Eval kapısı
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.EVAL_GATE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_PASSWORD: ci-eval-password
+          POSTGRES_DB: eval
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:latest
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports: ["6333:6333", "6334:6334"]
+
+    env:
+      ASPNETCORE_ENVIRONMENT: Development   # başlangıçta migrasyon + demo veri (müşteri/sipariş) tohumlaması
+      ASPNETCORE_URLS: http://localhost:5000
+      ConnectionStrings__PostgreSQL: "Host=localhost;Port=5432;Database=eval;Username=postgres;Password=ci-eval-password"
+      ConnectionStrings__Redis: "localhost:6379,abortConnect=false"
+      SemanticMemory__VectorStore__Host: localhost
+      SemanticMemory__VectorStore__Port: "6334"
+      Telemetry__Enabled: "false"
+      Auth__DefaultAdminUsername: admin
+      Auth__DefaultAdminPassword: ci-eval-admin-Passw0rd!
+      EvaluationQuality__Enabled: ${{ inputs.quality_checks == true && 'true' || 'false' }}
+
+    steps:
+      - name: OpenAI anahtarı var mı
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::OPENAI_API_KEY secret'ı tanımlı değil; eval kapısı çalıştırılamaz."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: NuGet önbelleği
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Derle
+        run: dotnet build src/CustomerSupportBot.Api -c Release
+
+      - name: API'yi başlat
+        env:
+          AI__OpenAI__ApiKey: ${{ secrets.OPENAI_API_KEY }}
+          EvaluationGate__MinPassRate: ${{ inputs.min_pass_rate }}
+        run: |
+          # Boş giriş (zamanlanmış çalışma) ortam değişkenini kaldırır; appsettings değeri geçerli kalır.
+          if [ -z "$EvaluationGate__MinPassRate" ]; then unset EvaluationGate__MinPassRate; fi
+          nohup dotnet run --no-build -c Release --project src/CustomerSupportBot.Api --no-launch-profile > api.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:5000/health > /dev/null && exit 0
+            sleep 2
+          done
+          echo "::error::API 2 dakikada ayağa kalkmadı"; tail -50 api.log; exit 1
+
+      - name: Eval kapısı
+        env:
+          BASE_URL: http://localhost:5000
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: ci-eval-admin-Passw0rd!
+          RESULT_FILE: ${{ github.workspace }}/eval-gate-result.json
+        run: ./scripts/eval-gate.sh
+
+      - name: Sonuçları yükle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-gate
+          path: |
+            eval-gate-result.json
+            api.log
+          if-no-files-found: ignore
+          retention-days: 30

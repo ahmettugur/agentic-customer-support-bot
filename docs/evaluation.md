@@ -232,6 +232,7 @@ Sonuç, diğer kriterler gibi `ScenarioResult.CriteriaResults`'a `quality_releva
 | `/eval/scenarios` | `GET` | Tanımlı senaryoları listele |
 | `/eval/run` | `POST` | Tüm senaryoları çalıştır |
 | `/eval/run?limit=N` | `POST` | İlk N senaryoyu çalıştır |
+| `/eval/gate` | `POST` | Tüm senaryoları çalıştır ve CI kapısı kararını ver (geçti `200` / kaldı `422`). Bkz. §9 |
 
 ### Yanıt Formatı (`EvaluationRunResult`)
 
@@ -317,6 +318,33 @@ Sonuç, diğer kriterler gibi `ScenarioResult.CriteriaResults`'a `quality_releva
 ```
 
 > **Not:** `type` alanı `CriteriaEvaluator`'ın dispatch table'ında yoksa (§3 tablosu) `manual_review_needed` olarak işaretlenir — aynı `type: manual_review` gibi. Bu senaryolar rapordan düşmez ama `Passed=false`, `Skipped="manual_review_needed"` olur.
+
+---
+
+## 9. CI kapısı (`POST /eval/gate`)
+
+Gece (ve elle) çalışan **Eval gate** iş akışı (`.github/workflows/eval-gate.yml`), tüm senaryoları gerçek LLM ile koşturur
+ve prompt/kod değişikliğinin regresyon yapıp yapmadığına karar verir. Her PR'da çalışmaz: her senaryo birden çok OpenAI
+çağrısıdır ve çıktı deterministik değildir. Gece çalışması için repo değişkeni `EVAL_GATE_ENABLED=true` ve secret
+`OPENAI_API_KEY` gerekir; elle tetikleme her zaman çalışır. Yerelde: `ADMIN_PASSWORD=… ./scripts/eval-gate.sh`
+(çıkış kodu `0` geçti, `1` kaldı, `2` altyapı sorunu).
+
+**Kapı neden ham `PassRate`'e bakmaz:** `manual_review` kriterleri `Passed=false` olarak toplam kriter sayısına girer;
+manuel kriteri olan bir senaryo hiçbir zaman `Passed` olmaz. Kapı yalnızca **otomatik değerlendirilebilen** (`Skipped`
+olmayan) kriterlere bakar (`EvaluationGate`):
+
+- Bir senaryo, otomatik kriterlerinin **tümü** geçtiyse geçer. Yalnızca manuel kriteri olan senaryolar *değerlendirilmedi*
+  sayılır ve orandan çıkar. Hata veren senaryo (`Error`) kalır.
+- Kapı geçmez: oran `EvaluationGate:MinPassRate` altındaysa (varsayılan 0,8), değerlendirilen senaryo sayısı
+  `MinEvaluatedScenarios` altındaysa (her şeyin atlandığı "boş ama yeşil" koşuyu yakalar) ya da `RequiredScenarios`
+  (varsayılan `S17`, prompt injection) geçmediyse, koşuda yoksa veya değerlendirilemediyse.
+- Yanıt metinleri dönmez (müşteri verisi içerebilir); ayrıntı için `POST /eval/run/{id}`.
+
+**Kapsam:** 23 senaryonun yaklaşık yarısında otomatik kriter vardır; geri kalanı (ör. S18 dil, S19 anlamsız girdi)
+kapıda *değerlendirilmedi* görünür. Kapsamı artırmak için senaryoya otomatik bir `type` ekleyin (§3, §8). S17'ye
+"yazma tool'u çağrılmadı" kriteri bu yüzden eklendi.
+
+> Eşikler (`0,8`, `S17`) ilk gerçek koşudan önce ayarlanmış varsayımlardır; ilk gece koşusunun sonucuna göre gözden geçirin.
 
 ---
 

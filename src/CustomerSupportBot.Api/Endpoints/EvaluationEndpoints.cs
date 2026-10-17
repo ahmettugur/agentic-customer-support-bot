@@ -3,10 +3,13 @@
 // - GET  /eval/scenarios          : Mevcut senaryoları listeler (YAML'dan)
 // - POST /eval/run                : Tüm senaryoları koşturur
 // - POST /eval/run/{id}           : Tek senaryoyu koşturur
+// - POST /eval/gate               : Tüm senaryoları koşturur ve CI kapısı kararını verir (geçti 200 / kaldı 422)
 
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Services.Evaluation;
 using CustomerSupportBot.Domain.Model;
+using Microsoft.Extensions.Options;
 
 namespace CustomerSupportBot.Api.Endpoints;
 
@@ -17,6 +20,7 @@ public static class EvaluationEndpoints
         app.MapGet("/eval/scenarios", HandleListScenarios);
         app.MapPost("/eval/run", HandleRunAll);
         app.MapPost("/eval/run/{id}", HandleRunOne);
+        app.MapPost("/eval/gate", HandleGate);
         return app;
     }
 
@@ -70,6 +74,38 @@ public static class EvaluationEndpoints
         return Results.Json(result);
     }
 
+    /// <summary>
+    /// CI kapısı: tüm senaryoları koşturur, <see cref="EvaluationGate"/> ile karar verir. Geçerse 200, kalırsa 422 —
+    /// <c>curl --fail</c> gibi araçlar durum koduyla başarısız olabilir. Yanıt metinleri dönmez: müşteri verisi
+    /// içerebilen model çıktısı CI günlüğüne yazılmamalı (ayrıntı için /eval/run/{id}).
+    /// </summary>
+    private static async Task<IResult> HandleGate(
+        IEvaluationPort runner,
+        IOptions<EvaluationGateOptions> gateOptions,
+        IWebHostEnvironment env,
+        HttpContext ctx)
+    {
+        var path = ResolveScenarioPath(env);
+        if (path == null) return Results.NotFound(new { error = "evaluation-scenarios.yaml bulunamadı" });
+
+        var file = ScenarioLoader.LoadScenarios(path);
+        var run = await runner.RunAsync(file.Scenarios, ctx.RequestAborted);
+        var verdict = EvaluationGate.Evaluate(run, gateOptions.Value);
+
+        return Results.Json(new
+        {
+            passed = verdict.Passed,
+            passRate = verdict.PassRate,
+            evaluated = verdict.Evaluated,
+            passing = verdict.Passing,
+            totalScenarios = run.TotalScenarios,
+            reasons = verdict.Reasons,
+            scenarios = verdict.Scenarios,
+            startedAt = run.StartedAt,
+            completedAt = run.CompletedAt
+        }, statusCode: verdict.Passed ? StatusCodes.Status200OK : StatusCodes.Status422UnprocessableEntity);
+    }
+
     /// <summary>Tek bir senaryoyu (id ile) koşturur.</summary>
     private static async Task<IResult> HandleRunOne(
         string id,
@@ -90,18 +126,8 @@ public static class EvaluationEndpoints
         return Results.Json(result);
     }
 
-    /// <summary>
-    /// Evaluation-scenarios.yaml konumunu bulur.
-    /// Önce CustomerSupportBot.Api/docs/, sonra CustomerSupport/docs/ denenir.
-    /// </summary>
-    private static string? ResolveScenarioPath(IWebHostEnvironment env)
-    {
-        var candidates = new[]
-        {
-            Path.Combine(env.ContentRootPath, "docs", WellKnown.Evaluation.ScenarioFileName),
-            Path.Combine(env.ContentRootPath, "..", "docs", WellKnown.Evaluation.ScenarioFileName),
-        };
-        return candidates.FirstOrDefault(File.Exists);
-    }
+    /// <summary>Evaluation-scenarios.yaml konumunu bulur (bkz. <see cref="ScenarioLoader.Locate"/>).</summary>
+    private static string? ResolveScenarioPath(IWebHostEnvironment env) =>
+        ScenarioLoader.Locate(WellKnown.Evaluation.ScenarioFileName, env.ContentRootPath);
 }
 

@@ -94,6 +94,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<EmailOptions>, EmailOptionsValidator>();
 
         services.Configure<EvaluationQualityOptions>(configuration.GetSection(EvaluationQualityOptions.SectionName));
+        services.Configure<Services.Evaluation.EvaluationGateOptions>(configuration.GetSection(Services.Evaluation.EvaluationGateOptions.SectionName));
     }
 
     private static void AddDrivingPorts(this IServiceCollection services)
