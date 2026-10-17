@@ -235,6 +235,7 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore, ICacheWa
         }
         else
         {
+            existing.PromptVersion = t.PromptVersion;
             existing.CompletedAt = t.CompletedAt;
             existing.TerminationReason = t.TerminationReason;
             existing.FinalResponse = t.FinalResponse;
@@ -255,6 +256,7 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore, ICacheWa
         TraceId = t.TraceId,
         SessionId = t.SessionId,
         UserQuery = t.UserQuery,
+        PromptVersion = t.PromptVersion,
         StartedAt = t.StartedAt,
         CompletedAt = t.CompletedAt,
         TerminationReason = t.TerminationReason,
@@ -274,6 +276,7 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore, ICacheWa
         TraceId = e.TraceId,
         SessionId = e.SessionId,
         UserQuery = e.UserQuery,
+        PromptVersion = e.PromptVersion,
         StartedAt = e.StartedAt,
         CompletedAt = e.CompletedAt,
         TerminationReason = e.TerminationReason,

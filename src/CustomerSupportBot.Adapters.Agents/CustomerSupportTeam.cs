@@ -47,7 +47,7 @@ public class CustomerSupportTeam : IAgentTeamPort
 
         var factory = new AgentTeamFactory(chatClient, prompts, approvalGate, tools, guards, loggerFactory, approvalContext);
         var finalizer = new TurnFinalizer(traceStore, approvalGate, loggerFactory, semanticMemory, profileService);
-        var traceProcessor = new WorkflowTraceEventProcessor(traceStore, approvalContext);
+        var traceProcessor = new WorkflowTraceEventProcessor(traceStore, approvalContext, prompts);
         var messageBuilder = new WorkflowMessageBuilder(contextPipeline, prompts, chatClient, loggerFactory, identityHint);
 
         _runner = new WorkflowRunner(

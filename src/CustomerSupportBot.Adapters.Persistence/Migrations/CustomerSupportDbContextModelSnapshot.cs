@@ -18,7 +18,7 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1381,6 +1381,11 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     b.Property<string>("PlanningJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("planning");
+
+                    b.Property<string>("PromptVersion")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("prompt_version");
 
                     b.Property<string>("ReasoningJson")
                         .HasColumnType("jsonb")

@@ -48,6 +48,12 @@ deposu) ve MinIO (ham yükleme deposu). Postgres ve Redis uygulamanınkilerle pa
 | User | `user.id` / `langfuse.user.id` — müşteri numarası (ajan turu içindeki çağrılarda) |
 | Girdi / çıktı | Yalnızca `Telemetry:CaptureLlmContent = true` iken — aşağıya bakın |
 
+## Prompt sürümü
+
+Her LLM span'i, yüklü prompt setinin içerik sürümünü `langfuse.version` olarak taşır (aynı değer trace kaydında
+`promptVersion`, yönetici ucu `GET /prompts`). Langfuse'ta *Version* süzgeciyle bir prompt değişikliğinden önceki ve
+sonraki trace'leri ayırıp `customer_rating` skorlarını karşılaştırabilirsiniz. Ayrıntı: `Prompts/README.md`.
+
 ## Prompt ve yanıt içeriği (`Telemetry:CaptureLlmContent`)
 
 Varsayılan **kapalıdır**: prompt ve yanıt müşteri verisi taşır. Açmak için:

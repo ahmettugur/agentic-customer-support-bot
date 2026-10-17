@@ -190,6 +190,7 @@ app.MapSessionEndpoints();
 var adminScope = app.MapGroup("").RequireAuthorization("Admin").RequireRateLimiting("general");
 adminScope.MapAdminEndpoints();
 adminScope.MapTraceEndpoints();
+adminScope.MapPromptEndpoints();
 adminScope.MapEvaluationEndpoints();
 adminScope.MapMemoryEndpoints();
 adminScope.MapImprovementsEndpoints();

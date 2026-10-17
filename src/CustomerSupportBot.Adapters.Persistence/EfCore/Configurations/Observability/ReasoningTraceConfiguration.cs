@@ -30,6 +30,10 @@ internal sealed class ReasoningTraceConfiguration : IEntityTypeConfiguration<Rea
             .HasColumnName("user_query")
             .IsRequired();
 
+        builder.Property(t => t.PromptVersion)
+            .HasColumnName("prompt_version")
+            .HasMaxLength(16);
+
         builder.Property(t => t.StartedAt)
             .HasColumnName("started_at")
             .HasColumnType("timestamptz")

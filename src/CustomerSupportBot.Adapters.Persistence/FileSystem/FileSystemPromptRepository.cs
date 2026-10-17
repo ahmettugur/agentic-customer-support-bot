@@ -9,6 +9,7 @@
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Domain.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -75,6 +76,16 @@ public class FileSystemPromptRepository : IPromptRepository
     /// </summary>
     public IReadOnlyCollection<string> Keys => _prompts.Keys.ToList();
 
+    /// <summary>İçerik sürümleri yükleme anında hesaplanır; prompt'lar süreç ömrü boyunca değişmez.</summary>
+    public IReadOnlyDictionary<string, string> Versions { get; private set; } = new Dictionary<string, string>();
+
+    public string SetVersion { get; private set; } = "";
+
+    public string VersionOf(string key) =>
+        Versions.TryGetValue(key, out var version)
+            ? version
+            : throw new KeyNotFoundException($"Prompt '{key}' bulunamadı.");
+
     // ─── YÜKLEME ───
 
     private void LoadAll()
@@ -107,9 +118,15 @@ public class FileSystemPromptRepository : IPromptRepository
             _prompts[key] = content;
         }
 
+        Versions = new Dictionary<string, string>(
+            _prompts.Select(kv => KeyValuePair.Create(kv.Key, PromptFingerprint.Of(kv.Value))),
+            StringComparer.OrdinalIgnoreCase);
+        SetVersion = PromptFingerprint.SetVersion(Versions);
+
         _logger.LogInformation(
-            "FileSystemPromptRepository: {Count} prompt yüklendi — {Keys}",
+            "FileSystemPromptRepository: {Count} prompt yüklendi (sürüm {SetVersion}) — {Keys}",
             _prompts.Count,
+            SetVersion,
             string.Join(", ", _prompts.Keys));
 
         if (_prompts.IsEmpty)
