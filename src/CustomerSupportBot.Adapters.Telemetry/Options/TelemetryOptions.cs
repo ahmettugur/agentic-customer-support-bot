@@ -16,6 +16,16 @@ public sealed class TelemetryOptions
     public bool MetricsEnabled { get; set; } = true;
 
     /// <summary>
+    /// LLM prompt ve yanıt metni trace'e yazılsın mı (Langfuse'ta generation girdi/çıktısı). Varsayılan KAPALI:
+    /// metin müşteri verisi taşır. Açıkken kart/telefon/TC/e-posta maskelenir (<c>InputGuard.RedactPii</c>);
+    /// ad-soyad gibi serbest kişisel veri maskelenmez. Ayrıntı: docs/langfuse.md
+    /// </summary>
+    public bool CaptureLlmContent { get; set; }
+
+    /// <summary>İçerik kaydında girdi ve çıktı için ayrı ayrı üst sınır (karakter).</summary>
+    public int MaxLlmContentChars { get; set; } = 8000;
+
+    /// <summary>
     /// Per-model USD/1K token pricing table. Key = model name (case-insensitive).
     /// "default" key is used as fallback for unknown models.
     /// </summary>

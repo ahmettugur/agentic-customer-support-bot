@@ -144,6 +144,12 @@ public sealed partial class InputGuard : IInputGuard
         return new InputGuardResult(InputGuardVerdict.Allow, normalized, flags, null);
     }
 
+    /// <summary>
+    /// Serbest metindeki kart, telefon, TC kimlik ve e-postayı maskeler — guard kararı vermeden. Müşteri
+    /// mesajı dışındaki metinler (ör. trace'e/Langfuse'a yazılan model yanıtı ve bağlam) için.
+    /// </summary>
+    public static string RedactPii(string text) => string.IsNullOrEmpty(text) ? text : MaskPii(text).Text;
+
     private static (string Text, List<string> Flags) MaskPii(string text)
     {
         var flags = new List<string>();

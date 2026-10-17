@@ -6,8 +6,52 @@
 #     Bu dosya üretim için DEĞİLDİR — paylaşımlı/uzak bir ortamda Redis requirepass,
 #     Qdrant API key ve Elasticsearch xpack.security açılmalıdır.
 #   - Gizli değerler deploy/.env dosyasından okunur (git'e girmez); şablon: deploy/.env.example.
-#   - İmajlar sabit sürümlere bağlıdır: "latest" bir sonraki pull'da ana sürüm atlatıp
-#     (ör. Postgres veri dizini uyumsuzluğu) yığını sessizce bozabilir.
+#   - Langfuse (LLM gözlemlenebilirliği) yığının parçasıdır: uygulama span'leri otel-collector'a
+#     (host 4327) gider, collector bunları Jaeger'a ve Langfuse'a dağıtır. Arayüz: http://localhost:3000
+#     Langfuse değişkenleri deploy/.env'de tanımlı olmalıdır (şablon: deploy/.env.example). Ayrıntı: docs/langfuse.md
+
+# Langfuse web ve worker'ın ortak ortamı. Uygulamanın Postgres ve Redis'ini paylaşır, ama ayrı yerlerde:
+#   - Postgres: aynı sunucuda ayrı "langfuse" veritabanı (uygulama CustomerSupportDb'yi kullanır).
+#   - Redis: 1 numaralı veritabanı (uygulama 0'ı kullanır). Langfuse kuyruğu "noeviction" ister; uygulamanın
+#     Redis'inde maxmemory sınırı olmadığı için varsayılan politika zaten noeviction'dır.
+# ClickHouse ve MinIO Langfuse'a özgüdür (olay deposu ve ham yükleme deposu); yığında karşılıkları yok.
+x-langfuse-env: &langfuse-env
+  NEXTAUTH_URL: http://localhost:3000
+  DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+  SALT: ${LANGFUSE_SALT:?LANGFUSE_SALT tanımlı değil - bkz. deploy/.env.example}
+  ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?LANGFUSE_ENCRYPTION_KEY tanımlı değil (openssl rand -hex 32) - bkz. deploy/.env.example}
+  # Langfuse'un kendi ürün telemetrisini (vendor'a anonim kullanım verisi) kapatır.
+  TELEMETRY_ENABLED: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+  CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:?LANGFUSE_CLICKHOUSE_PASSWORD tanımlı değil - bkz. deploy/.env.example}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD:?LANGFUSE_MINIO_PASSWORD tanımlı değil - bkz. deploy/.env.example}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  REDIS_CONNECTION_STRING: redis://redis:6379/1
+
+x-langfuse-depends-on: &langfuse-depends-on
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  langfuse-clickhouse:
+    condition: service_healthy
+  langfuse-minio:
+    condition: service_healthy
 
 services:
   postgres:
@@ -32,7 +76,7 @@ services:
     container_name: aibot_redis
     ports:
       - "127.0.0.1:6380:6379"
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     healthcheck:
@@ -121,14 +165,15 @@ services:
       start_period: 40s
 
 
-  # OpenTelemetry Collector (opsiyonel — Jaeger v2 zaten OTLP alabilir)
-  # Jaeger ile aynı anda çalıştırılacaksa farklı host portları kullanılmalı.
+  # OpenTelemetry Collector — uygulamanın tek OTLP ucu (Telemetry:Otlp:Endpoint = http://localhost:4327).
+  # Span'leri iki hedefe dağıtır: Jaeger (tümü, prompt içeriği silinmiş) ve Langfuse (ajan/LLM span'leri).
+  # Yapılandırma: otel-collector-config.yaml. Contrib imajı: basicauth, filter, attributes ve nop bileşenleri
+  # core imajda yok. İmaj distroless'tır (curl yok) — sağlık: http://localhost:13133/
   otel-collector:
-    image: otel/opentelemetry-collector:nightly
+    image: otel/opentelemetry-collector-contrib:latest
     container_name: aibot_otel-collector
     restart: unless-stopped
-    profiles: ["otel"]
-    command: ["--config=/etc/otel-collector-config.yaml"]
+    command: ["--config=/etc/otelcol/config.yaml"]
     ports:
       # OTLP gRPC receiver (host 4327 → container 4317)
       - "127.0.0.1:4327:4317"
@@ -137,15 +182,16 @@ services:
       # Health check endpoint
       - "127.0.0.1:13133:13133"
     volumes:
-      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
     environment:
-      - GOGC=80
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:13133/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:?LANGFUSE_INIT_PROJECT_PUBLIC_KEY tanımlı değil - bkz. deploy/.env.example}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:?LANGFUSE_INIT_PROJECT_SECRET_KEY tanımlı değil - bkz. deploy/.env.example}
+      GOGC: "80"
+    depends_on:
+      jaeger:
+        condition: service_started
+      langfuse-web:
+        condition: service_started
 
   jaeger:
     image: jaegertracing/jaeger:latest
@@ -187,9 +233,83 @@ services:
       - "127.0.0.1:8025:8025"
 
 
+  # ─── Langfuse — LLM gözlemlenebilirliği (arayüz: http://localhost:3000) ───────────────────
+  # Organizasyon, proje, API anahtarları ve ilk kullanıcı "headless init" ile İLK açılışta oluşturulur;
+  # collector aynı anahtarlarla (Basic Auth) span gönderir — elle anahtar üretmek gerekmez.
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:latest
+    container_name: aibot_langfuse_web
+    restart: unless-stopped
+    depends_on: *langfuse-depends-on
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:?LANGFUSE_NEXTAUTH_SECRET tanımlı değil - bkz. deploy/.env.example}
+      LANGFUSE_INIT_ORG_ID: customer-support
+      LANGFUSE_INIT_ORG_NAME: Customer Support
+      LANGFUSE_INIT_PROJECT_ID: customer-support-bot
+      LANGFUSE_INIT_PROJECT_NAME: CustomerSupportBot
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:?LANGFUSE_INIT_USER_EMAIL tanımlı değil - bkz. deploy/.env.example}
+      LANGFUSE_INIT_USER_NAME: Admin
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:?LANGFUSE_INIT_USER_PASSWORD tanımlı değil - bkz. deploy/.env.example}
+      # Tek kullanıcılı yerel kurulum: açık kayıt formunu kapatır.
+      AUTH_DISABLE_SIGNUP: "true"
+
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:latest
+    container_name: aibot_langfuse_worker
+    restart: unless-stopped
+    depends_on: *langfuse-depends-on
+    environment:
+      <<: *langfuse-env
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: aibot_langfuse_clickhouse
+    restart: unless-stopped
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  langfuse-minio:
+    image: cgr.dev/chainguard/minio:latest
+    container_name: aibot_langfuse_minio
+    restart: unless-stopped
+    entrypoint: sh
+    # 'langfuse' bucket'ını sunucu açılmadan önce oluşturur.
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_PASSWORD}
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+
 volumes:
   postgres_data:
   redis_data:
   qdrant_storage:
   qdrant_snapshots:
   elasticsearch_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_minio_data:

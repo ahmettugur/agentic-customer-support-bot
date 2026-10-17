@@ -131,4 +131,21 @@ public class InputGuardTests
         r.Flags.Any(f => f.StartsWith("soft_suspicious")).Should().BeTrue();
         r.RejectionReason.Should().NotBeNullOrWhiteSpace();
     }
+
+    // Trace'e (Langfuse) yazılan prompt/yanıt metni için: aynı maskeleme, guard kararı olmadan.
+    [Fact]
+    public void RedactPii_MasksEmailPhoneCardAndTckn_InFreeText()
+    {
+        var text = "Kartım 4111 1111 1111 1111, mail ali.veli@example.com, tel 0532 123 45 67, TC 10000000146.";
+
+        var redacted = InputGuard.RedactPii(text);
+
+        redacted.Should().NotContain("4111 1111 1111 1111").And.NotContain("ali.veli@example.com")
+            .And.NotContain("0532 123 45 67").And.NotContain("10000000146");
+        redacted.Should().StartWith("Kartım ");
+    }
+
+    [Fact]
+    public void RedactPii_LeavesOrderIdListsAlone()
+        => InputGuard.RedactPii("1030 1031 1032 1033 siparişleri").Should().Be("1030 1031 1032 1033 siparişleri");
 }

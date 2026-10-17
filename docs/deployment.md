@@ -7,16 +7,19 @@ Bu doküman Docker Compose altyapısını, servis haritasını ve production haz
 ## 1. Docker Compose Servis Haritası
 
 ```yaml
-# docker-compose.yml — 9 servis
+# docker-compose.yml — 12 servis
 services:
-  postgres:        # Ana veritabanı
-  redis:           # Opsiyonel cache
+  postgres:        # Ana veritabanı (+ Langfuse'un ayrı "langfuse" veritabanı)
+  redis:           # Cache (db0) + Langfuse kuyrukları (db1)
   qdrant:          # Vektör veritabanı (semantic memory)
   elasticsearch:   # Jaeger trace storage
   kibana:          # Elasticsearch görselleştirme
-  otel-collector:  # OpenTelemetry trace routing
+  otel-collector:  # Uygulamanın tek OTLP ucu: span'leri Jaeger'a ve Langfuse'a dağıtır
   jaeger:          # Distributed tracing UI
   mailpit:         # Yerel SMTP test sunucusu (e-postalar dışarı çıkmaz)
+  langfuse-web:    # Langfuse arayüzü + OTLP girişi (LLM gözlemlenebilirliği, docs/langfuse.md)
+  langfuse-worker: # Langfuse arka plan işleyicisi
+  langfuse-clickhouse / langfuse-minio  # Langfuse'a özgü olay deposu ve ham yükleme deposu
 ```
 
 ### Port Haritası
@@ -29,11 +32,13 @@ services:
 | **Qdrant gRPC** | 7334 | 6334 | Vektör DB gRPC (uygulama bunu kullanır) |
 | **Elasticsearch** | 9200 | 9200 | Jaeger backend |
 | **Kibana** | 5601 | 5601 | ES görselleştirme UI |
-| **Jaeger OTLP gRPC** | 4317 | 4317 | OTLP receiver (uygulama buraya yazar) |
+| **Jaeger OTLP gRPC** | 4317 | 4317 | OTLP receiver (collector buraya yazar) |
 | **Jaeger OTLP HTTP** | 4318 | 4318 | OTLP receiver |
 | **Jaeger UI** | 16686 | 16686 | Tracing UI |
-| **OTel Collector gRPC** | 4327 | 4317 | OTLP receiver (opsiyonel, `otel` profili) |
-| **OTel Collector HTTP** | 4328 | 4318 | OTLP receiver (opsiyonel, `otel` profili) |
+| **OTel Collector gRPC** | 4327 | 4317 | OTLP receiver — **uygulama buraya yazar** (`Telemetry:Otlp:Endpoint`) |
+| **OTel Collector HTTP** | 4328 | 4318 | OTLP receiver |
+| **OTel Collector health** | 13133 | 13133 | Sağlık kontrolü |
+| **Langfuse UI** | 3000 | 3000 | LLM generation'ları, oturum/kullanıcı görünümü (http://localhost:3000) |
 | **Mailpit SMTP** | 1025 | 1025 | Uygulamanın e-posta gönderdiği yerel SMTP |
 | **Mailpit UI** | 8025 | 8025 | Gönderilen e-postaları görüntüleme (http://localhost:8025) |
 
@@ -63,9 +68,12 @@ docker compose -f deploy/docker-compose.yml up -d
 > ⚠️ Daha önce parola `docker-compose.yml` içinde açık metin olarak commit edilmişti — git
 > geçmişinde duruyor. Dosyadan kaldırmak geçmişten silmez; o parola **değiştirilmelidir**.
 
-### OTel Collector (Opsiyonel)
+### OTel Collector
 
-Jaeger v2 doğrudan OTLP alabildiği için OTel Collector artık opsiyoneldir. `docker compose --profile otel up` ile ayrıca açılabilir. Port çakışması oluşmaması için OTel Collector host portları 4327/4328 olarak ayarlanmıştır.
+Uygulamanın tek OTLP ucudur (host 4327). Span'leri iki hedefe dağıtır: **Jaeger** (tüm span'ler; prompt/yanıt
+içeriği silinmiş) ve **Langfuse** (yalnızca ajan/LLM span'leri ve sohbet ucunun kök span'i). Metrikler alınır ama
+hiçbir yere gönderilmez (`nop`). Contrib imajı kullanılır (`basicauth`, `filter`, `attributes`, `nop`). Langfuse
+kurulumu ve içerik kaydı: [`docs/langfuse.md`](langfuse.md).
 
 `deploy/otel-collector-config.yaml`:
 
@@ -77,9 +85,10 @@ Jaeger v2 doğrudan OTLP alabildiği için OTel Collector artık opsiyoneldir. `
   `upsert` ediyordu — o işlemci **span** niteliklerine yazar, resource'a değil; her span'e
   uygulamanın gerçek adıyla (`CustomerSupportBot`) çelişen `AI.Api` değerini basıyordu. `insert`
   mevcut değeri korur, yalnızca adını bildirmeyen bir kaynak için varsayılan sağlar.
-- İşlemci sırası: `memory_limiter` (ilk) → `resource` → `batch` (son).
+- İşlemci sırası: `memory_limiter` (ilk) → `resource` → (Jaeger: `attributes/strip-llm-content`,
+  Langfuse: `filter/langfuse`) → `batch` (son).
 - Yapılandırma `otelcol-contrib validate` ile doğrulanabilir:
-  `docker run --rm -v "$PWD/deploy/otel-collector-config.yaml:/c.yaml:ro" otel/opentelemetry-collector-contrib:0.138.0 validate --config=/c.yaml`
+  `docker run --rm -v "$PWD/deploy/otel-collector-config.yaml:/c.yaml:ro" otel/opentelemetry-collector-contrib:latest validate --config=/c.yaml`
 
 ---
 

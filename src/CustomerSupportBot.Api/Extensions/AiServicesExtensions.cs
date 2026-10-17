@@ -12,7 +12,9 @@ using CustomerSupportBot.Adapters.Telemetry;
 using CustomerSupportBot.Adapters.Telemetry.Chat;
 using CustomerSupportBot.Adapters.Telemetry.OpenTelemetry;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Observability;
+using CustomerSupportBot.Application.Services.Chat;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
@@ -82,7 +84,24 @@ public static class AiServicesExtensions
             provider,
             sp.GetRequiredService<ILogger<TelemetryChatClient>>(),
             sp.GetService<ILlmCallPersistencePort>(),
-            sp.GetService<ILlmCallAttribution>());
+            sp.GetService<ILlmCallAttribution>(),
+            BuildTraceEnrichment(sp, telemetryOptions));
+    }
+
+    /// <summary>
+    /// Langfuse zenginleştirmesi: müşteri kimliği ajan turunun ortam bağlamından (onay kapsamı) okunur;
+    /// içerik yalnızca <c>Telemetry:CaptureLlmContent</c> açıkken ve PII maskelenerek yazılır.
+    /// </summary>
+    private static LlmTraceEnrichment BuildTraceEnrichment(IServiceProvider sp, TelemetryOptions options)
+    {
+        var approvalContext = sp.GetService<IApprovalContextAccessor>();
+        return new LlmTraceEnrichment
+        {
+            CaptureContent = options.CaptureLlmContent,
+            MaxContentChars = Math.Max(500, options.MaxLlmContentChars),
+            Redact = InputGuard.RedactPii,
+            CurrentUserId = () => approvalContext?.Context?.CustomerId
+        };
     }
 
     private static string ResolveStandardModel(AiOptions options) => options.Provider switch

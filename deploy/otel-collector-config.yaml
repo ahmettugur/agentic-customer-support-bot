@@ -1,9 +1,19 @@
-# OpenTelemetry Collector Configuration
-# This configuration file enables trace collection from the AI.Api application
-# and exports traces to Jaeger for visualization
+# OpenTelemetry Collector — Jaeger + Langfuse fan-out yapılandırması
+#
+# deploy/docker-compose.yml içindeki "otel-collector" servisi kullanır. Uygulama span'leri tek bir
+# OTLP ucuna (host 4327 → container 4317) gönderir; collector bunları iki hedefe dağıtır:
+#
+#   traces/jaeger    → TÜM span'ler (ASP.NET, EF Core, HttpClient, ajan, LLM) → Jaeger
+#   traces/langfuse  → yalnızca ajan/LLM span'leri                              → Langfuse
+#
+# Langfuse'a yalnızca LLM odaklı span'lerin gitmesinin nedeni: Langfuse, gen_ai.* nitelikli
+# span'leri "generation" olarak gösteren LLM'e özel bir arayüzdür; EF Core / Redis / HTTP
+# span'leri orada yalnızca gürültü olur ve ClickHouse depolamasını şişirir. Altyapı ayrıntısı
+# için Jaeger kullanılmaya devam eder.
+#
+# Bu dosya contrib imajı gerektirir (basicauth extension + filter processor + nop exporter).
 
 receivers:
-  # OTLP gRPC receiver for receiving traces from applications
   otlp:
     protocols:
       grpc:
@@ -12,24 +22,17 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
-  # Batch processor to group traces before exporting
-  batch:
-    send_batch_size: 512
-    timeout: 5s
-    send_batch_max_size: 2048
-
-  # Memory limiter to prevent OOMKilled
   memory_limiter:
     check_interval: 1s
     limit_mib: 512
     spike_limit_mib: 128
 
-  # Resource processor — kaynak (resource) niteliklerini YALNIZCA eksikse ekler.
-  #
-  # Eskiden "attributes" işlemcisi service.name'i "upsert" ediyordu: o işlemci span
-  # niteliklerine yazar, resource'a değil; her span'e uygulamanın gerçek adıyla
-  # (CustomerSupportBot) çelişen "AI.Api" değerini zorla basıyordu. "insert" mevcut değeri
-  # korur, yalnızca adını bildirmeyen bir kaynak için varsayılan sağlar.
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+    send_batch_max_size: 2048
+
+  # Bkz. otel-collector-config.yaml — "insert" yalnızca eksikse ekler, uygulamanın adını ezmez.
   resource:
     attributes:
       - key: service.name
@@ -39,32 +42,76 @@ processors:
         value: development
         action: insert
 
-exporters:
-  # OTLP gRPC exporter to send traces to Jaeger
-  otlp:
-    endpoint: jaeger:4317
-    tls:
-      insecure: true
-
-  # Debug exporter — pipeline'a VARSAYILAN OLARAK BAĞLI DEĞİL. "detailed" ayrıntı düzeyi her
-  # span'in tüm niteliklerini (kullanıcı sorguları, tool parametreleri) collector stdout'una
-  # döküyordu; loglar bu verilerin saklanması için tasarlanmamış bir yüzeydir. Hata ayıklarken
-  # geçici olarak traces.exporters listesine eklenebilir.
-  debug:
-    verbosity: basic
-
-service:
-  pipelines:
-    # Traces pipeline configuration
-    # Sıra: memory_limiter ilk (aşırı yükte veriyi en erken reddetmek için), batch son.
+  # Koşulu sağlayan span DÜŞÜRÜLÜR. Tutulanlar:
+  #   - Uygulamanın kendi ActivitySource'u (TelemetryConstants.ActivitySourceName =
+  #     "CustomerSupportBot.Api"): MAF invoke_agent span'leri, MEAI "chat <model>" span'leri
+  #     (gen_ai.* semantic conventions) ve agent.* / tool.* / ai.* özel span'leri.
+  #   - Sohbet giriş uçlarının ASP.NET Core sunucu span'i: Langfuse'ta trace'in kökü ve adı
+  #     ("POST /chat/stream") olur; düşürülseydi LLM span'leri ebeveynsiz görünürdü.
+  filter/langfuse:
+    error_mode: ignore
     traces:
-      receivers: [otlp]
-      processors: [memory_limiter, resource, batch]
-      exporters: [otlp]
+      span:
+        - >-
+          instrumentation_scope.name != "CustomerSupportBot.Api" and
+          not (instrumentation_scope.name == "Microsoft.AspNetCore" and
+          IsMatch(attributes["url.path"], "^/(chat|a2a|realtime)"))
 
-  # Extensions for health checks
-  extensions: [health_check]
+  # Prompt/yanıt içeriği (Telemetry:CaptureLlmContent) yalnızca Langfuse'ta saklanır; Jaeger'a giden
+  # kopyadan silinir — altyapı izlemesi için gereksiz ve müşteri verisi taşır.
+  attributes/strip-llm-content:
+    actions:
+      - key: langfuse.observation.input
+        action: delete
+      - key: langfuse.observation.output
+        action: delete
 
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
+
+  # Langfuse OTLP ucu Basic Auth ister: kullanıcı = public key, parola = secret key.
+  # Anahtarlar deploy/.env'den gelir ve Langfuse'un headless init'iyle oluşturulan projeyle aynıdır.
+  basicauth/langfuse:
+    client_auth:
+      username: ${env:LANGFUSE_INIT_PROJECT_PUBLIC_KEY}
+      password: ${env:LANGFUSE_INIT_PROJECT_SECRET_KEY}
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Langfuse yalnızca OTLP/HTTP (protobuf) kabul eder; gRPC desteklemez.
+  # otlphttp exporter'ı endpoint'in sonuna /v1/traces ekler → /api/public/otel/v1/traces.
+  otlphttp/langfuse:
+    endpoint: http://langfuse-web:3000/api/public/otel
+    auth:
+      authenticator: basicauth/langfuse
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 120s
+
+  # Uygulama metrikleri de aynı OTLP ucuna gelir (Telemetry:MetricsEnabled). Ne Jaeger ne Langfuse
+  # metrik alır; pipeline olmasaydı collector "Unimplemented" döner ve uygulama her export'ta hata
+  # loglardı. Metrikler burada sessizce bırakılır.
+  nop:
+
+service:
+  extensions: [health_check, basicauth/langfuse]
+  pipelines:
+    traces/jaeger:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes/strip-llm-content, batch]
+      exporters: [otlp/jaeger]
+
+    traces/langfuse:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, filter/langfuse, batch]
+      exporters: [otlphttp/langfuse]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [nop]
