@@ -63,6 +63,25 @@ public sealed class SemanticMemoryOptions
         public int TopK { get; set; } = 4;
         public float MinScore { get; set; } = 0.35f;
         public int MaxContextChars { get; set; } = 1800;
+
+        /// <summary>Dense (anlamsal) aramaya sözcüksel (BM25 benzeri) sinyal ekleyen hibrit arama.</summary>
+        public HybridOptions Hybrid { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Hibrit arama: dense sonuçlar ile sözcüksel sonuçlar Reciprocal Rank Fusion ile birleştirilir. Ürün/iade
+    /// kodu, sipariş no gibi tam eşleşme gereken sorgularda dense aramanın kaçırdığı belgeleri bulur.
+    /// Varsayılan KAPALI; sözcüksel indeks yazma/silmede her durumda güncel tutulur, bu yüzden açıp kapamak güvenlidir.
+    /// </summary>
+    public sealed class HybridOptions
+    {
+        public bool Enabled { get; set; }
+
+        /// <summary>Her sinyalden birleştirmeye alınacak aday sayısı (en az TopK).</summary>
+        public int Candidates { get; set; } = 20;
+
+        /// <summary>RRF sabiti: büyüdükçe sıra farkları yumuşar (standart değer 60).</summary>
+        public int RrfK { get; set; } = 60;
     }
 
     public sealed class KnowledgeBaseOptions

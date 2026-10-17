@@ -116,7 +116,7 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
         if (!Enabled || string.IsNullOrWhiteSpace(query)) return Array.Empty<MemorySearchHit>();
 
         var vec = await _embedder.EmbedAsync(query, ct);
-        return await SearchByVectorAsync(kind, vec, topK, minScore, ct: ct);
+        return await SearchByVectorAsync(kind, vec, topK, minScore, queryText: query, ct: ct);
     }
 
     /// <summary>
@@ -133,9 +133,22 @@ public sealed class SemanticMemoryService : ISemanticMemoryIngestor, ISemanticMe
     public async Task<IReadOnlyList<MemorySearchHit>> SearchByVectorAsync(
         MemoryKind kind, float[] queryVector, int? topK = null, float? minScore = null,
         IReadOnlyDictionary<string, string>? tagFilter = null,
+        string? queryText = null,
         CancellationToken ct = default)
     {
         if (!Enabled || queryVector.Length == 0) return Array.Empty<MemorySearchHit>();
+
+        // Hibrit: sorgu METNİ de verilmişse sözcüksel sinyal dense'e eklenir (kod/sipariş no gibi tam eşleşmeler).
+        // Metin yoksa (yalnızca vektör) ya da özellik kapalıysa davranış eskisiyle aynıdır.
+        if (_options.Retrieval.Hybrid.Enabled && !string.IsNullOrWhiteSpace(queryText))
+        {
+            return await _store.HybridSearchAsync(
+                CollectionFor(kind), queryVector, queryText,
+                topK ?? _options.Retrieval.TopK,
+                minScore ?? _options.Retrieval.MinScore,
+                tagFilter: tagFilter,
+                ct: ct);
+        }
 
         return await _store.SearchAsync(
             CollectionFor(kind), queryVector,
