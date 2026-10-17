@@ -5,12 +5,14 @@ using ChatResponse = Microsoft.Extensions.AI.ChatResponse;
 
 namespace CustomerSupportBot.Adapters.Agents.Tests;
 
-// K3 madde 2: FunctionInvokingChatClient'ın red edilen bir ApprovalRequiredAIFunction için
-// gerçekten ürettiği metnin "Tool call invocation rejected. {reason}" formatında olduğunu,
-// prompt seviyesinde değil framework/agent seviyesinde kilitleyen regresyon testi. order-agent.md
-// ve complaint-agent.md bu formatı JSON gibi parse etmeye çalışmadan tanıyıp status="failed"
-// üretecek şekilde güncellendi (bkz. ApprovalGateService.cs); bu test o varsayımın hâlâ doğru
-// olduğunu ChatClientAgent + mock IChatClient ile, gerçek LLM çağrısı olmadan doğrular.
+// FunctionInvokingChatClient'ın red edilen bir ApprovalRequiredAIFunction için ne yaptığını framework/agent
+// seviyesinde kilitler: gerçek tool HİÇ çalışmaz ve onaylayanın gerekçesi modele araç sonucu olarak iletilir.
+//
+// Metnin kendisi bilerek kilitlenmez. Microsoft.Extensions.AI 10.11 metni "Tool call invocation rejected. {reason}"
+// iken "Tool call invocation was rejected by the approver and must not be retried. {reason}" yaptı; bu metni tanıyan
+// bir prompt ya da kod artık yok. Üretimde de bu yol kullanılmıyor: yan etkili tool'lar ApprovalRequiredAIFunction
+// ile sarılmıyor, onay kaydı oluşturup hemen Pending dönüyor (bkz. ApprovalGateService). Test, biri tool'u yeniden
+// sarmaya kalkarsa davranışın değişmediğini gösterir.
 public class HitlRejectionFormatTests
 {
     [Fact]
@@ -72,8 +74,8 @@ public class HitlRejectionFormatTests
             .Select(c => c.Result?.ToString())
             .FirstOrDefault(r => r is not null && r.Contains("rejected", StringComparison.OrdinalIgnoreCase));
 
-        rejectionResult.Should().NotBeNull();
-        rejectionResult.Should().StartWith("Tool call invocation rejected.");
-        rejectionResult.Should().Contain("musteri_vazgecti");
+        rejectionResult.Should().NotBeNull("red, modele bir araç sonucu olarak iletilmeli");
+        rejectionResult.Should().StartWith("Tool call invocation", "framework'ün red metni");
+        rejectionResult.Should().Contain("musteri_vazgecti", "onaylayanın gerekçesi modele ulaşmalı");
     }
 }
