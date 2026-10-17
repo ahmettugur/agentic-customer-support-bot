@@ -29,7 +29,12 @@ public static class AgentsAdapterServiceCollectionExtensions
         }
 
         services.AddSingleton<ApprovalGateService>();
+
+        // Workflow checkpoint'leme + çökme sonrası devam (WorkflowCheckpointing:Enabled=false iken pasif).
+        services.AddSingleton<Checkpointing.WorkflowCheckpointing>();
         services.AddSingleton<CustomerSupportTeam>();
+        services.AddSingleton<Checkpointing.ITurnResumer>(sp => sp.GetRequiredService<CustomerSupportTeam>());
+        services.AddSingleton<Application.Ports.Inbound.IWorkflowRecoveryPort, Checkpointing.WorkflowRecoveryService>();
         services.AddSingleton<IAgentTeamPort>(sp =>
             sp.GetRequiredService<CustomerSupportTeam>());
 

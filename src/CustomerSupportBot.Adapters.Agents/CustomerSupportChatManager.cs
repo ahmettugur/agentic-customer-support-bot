@@ -28,12 +28,11 @@ public class CustomerSupportChatManager : GroupChatManager
     private readonly AIAgent _responseAgent;
     private readonly IReadOnlyList<IRoutingStrategy> _strategies;
 
-    // NOT — checkpoint restore ön koşulu: GroupChatManager.IterationCount framework tarafından
-    // otomatik checkpoint'lenir, ama bu dictionary DEĞİL (bkz. GroupChatManager.OnCheckpointingAsync/
-    // OnCheckpointRestoredAsync — RoundRobinGroupChatManager kendi cursor'ı için bu deseni kullanıyor).
-    // Bugün CheckpointManager bağlı olmadığı için bu hook'lar hiç ateşlenmiyor, dolayısıyla bu bir bug
-    // değil. Ama checkpointing ileride bağlanırsa, bu iki hook override edilip _handoffCounts burada
-    // persist/restore edilmeden restart sonrası sessizce sıfırlanır (handoff-limit garantisi zayıflar).
+    // Handoff sayaçları checkpoint'e dahil edilir (bkz. OnCheckpointingAsync/OnCheckpointRestoredAsync): MAF yalnızca
+    // kendi durumunu (IterationCount) kaydeder, bu sözlüğü değil. Kaydedilmezse devam eden tur sayaçları sıfırdan
+    // başlar ve "ajan başına en fazla MaxHandoffsPerAgent devir" güvencesi sessizce zayıflar.
+    private const string HandoffCountsStateKey = "csbot.handoffCounts";
+
     private readonly Dictionary<string, int> _handoffCounts =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -114,6 +113,30 @@ public class CustomerSupportChatManager : GroupChatManager
 
         _logger.LogWarning("No routing strategy matched; falling back to PlanningAgent");
         return _planningAgent;
+    }
+
+    protected override async ValueTask OnCheckpointingAsync(IWorkflowContext context, CancellationToken cancellationToken)
+    {
+        await base.OnCheckpointingAsync(context, cancellationToken).ConfigureAwait(false);
+        await SaveHandoffCountsAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    protected override async ValueTask OnCheckpointRestoredAsync(IWorkflowContext context, CancellationToken cancellationToken)
+    {
+        await base.OnCheckpointRestoredAsync(context, cancellationToken).ConfigureAwait(false);
+        await RestoreHandoffCountsAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal ValueTask SaveHandoffCountsAsync(IWorkflowContext context, CancellationToken cancellationToken) =>
+        context.QueueStateUpdateAsync(
+            HandoffCountsStateKey, new Dictionary<string, int>(_handoffCounts, StringComparer.OrdinalIgnoreCase), cancellationToken);
+
+    internal async ValueTask RestoreHandoffCountsAsync(IWorkflowContext context, CancellationToken cancellationToken)
+    {
+        var saved = await context.ReadStateAsync<Dictionary<string, int>>(HandoffCountsStateKey, cancellationToken).ConfigureAwait(false);
+        _handoffCounts.Clear();
+        if (saved is null) return;
+        foreach (var (agent, count) in saved) _handoffCounts[agent] = count;
     }
 
     private void EnforceHandoffLimit(ref AIAgent selected, ref string branch)

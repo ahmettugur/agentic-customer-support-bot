@@ -7,8 +7,11 @@
 // o da her alt görev için bu sınıfın RunAsync/RunStreamingAsync'ini çağırır.
 
 using System.Runtime.CompilerServices;
+using System.Diagnostics;
+using CustomerSupportBot.Adapters.Agents.Checkpointing;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Services.Approval;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
@@ -29,6 +32,8 @@ internal sealed class WorkflowRunner : IWorkflowRunner
     private readonly ILoggerFactory _loggerFactory;
     private readonly WorkflowTraceEventProcessor _traceProcessor;
     private readonly WorkflowMessageBuilder _messageBuilder;
+    private readonly WorkflowCheckpointing? _checkpointing;
+    private readonly IApprovalContextAccessor? _approvalContext;
 
     public WorkflowRunner(
         AgentTeamFactory factory,
@@ -39,7 +44,9 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         IUiHintEmitter uiHint,
         ILoggerFactory loggerFactory,
         WorkflowTraceEventProcessor traceProcessor,
-        WorkflowMessageBuilder messageBuilder)
+        WorkflowMessageBuilder messageBuilder,
+        WorkflowCheckpointing? checkpointing = null,
+        IApprovalContextAccessor? approvalContext = null)
     {
         _factory = factory;
         _finalizer = finalizer;
@@ -50,6 +57,8 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         _loggerFactory = loggerFactory;
         _traceProcessor = traceProcessor;
         _messageBuilder = messageBuilder;
+        _checkpointing = checkpointing;
+        _approvalContext = approvalContext;
     }
 
     /// <summary>Bkz. <see cref="IAgentTeamPort.GetWorkflowDiagram"/>.</summary>
@@ -96,10 +105,31 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
         var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent);
-        var runTimer = System.Diagnostics.Stopwatch.StartNew();
-        await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
+        var checkpoint = await BeginCheckpointingAsync(session, conversationHistory, reasoning, st, query);
+        await using var turnGuard = checkpoint is null ? null : new CheckpointTurnGuard(checkpoint, st.Trace.TraceId, ct);
+        var runTimer = Stopwatch.StartNew();
+        await using var run = await StartRunAsync(workflow, messages, checkpoint, st.Trace.TraceId, effectiveCt);
         var started = await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
+        return await DriveToResultAsync(run, started, st, query, session, timeoutCts, ct, effectiveCt, runTimer);
+    }
+
+    /// <summary>
+    /// Koşunun event döngüsünü sürer, anormal sonlanmayı ele alır, nihai yanıtı üretir ve turu kalıcılaştırır.
+    /// <see cref="RunAsync"/> ve checkpoint'ten devam (<see cref="ResumeAsync"/>) AYNI yolu kullanır — bu blok iki
+    /// yerde kopya olsaydı, daha önce streaming/non-streaming arasında olduğu gibi sessizce sapardı.
+    /// </summary>
+    private async Task<string> DriveToResultAsync(
+        StreamingRun run,
+        bool started,
+        WorkflowTraceEventProcessor.TraceState st,
+        string query,
+        AgentSession? session,
+        CancellationTokenSource timeoutCts,
+        CancellationToken ct,
+        CancellationToken effectiveCt,
+        Stopwatch runTimer)
+    {
         Exception? workflowError = null;
 
         if (!started)
@@ -242,8 +272,10 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
         var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent);
-        var runTimer = System.Diagnostics.Stopwatch.StartNew();
-        await using var run = await InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: effectiveCt);
+        var checkpoint = await BeginCheckpointingAsync(session, conversationHistory, reasoning, st, query);
+        await using var turnGuard = checkpoint is null ? null : new CheckpointTurnGuard(checkpoint, st.Trace.TraceId, ct);
+        var runTimer = Stopwatch.StartNew();
+        await using var run = await StartRunAsync(workflow, messages, checkpoint, st.Trace.TraceId, effectiveCt);
         var started = await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         Exception? workflowError = null;
@@ -391,6 +423,66 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         // kalıcılaştırma için bunu okur — bkz. ResponseCompletePayload.
         yield return new StreamEvent(StreamEventTypes.ResponseComplete,
             new ResponseCompletePayload(result, terminationReason));
+    }
+
+    private async Task<WorkflowCheckpointing?> BeginCheckpointingAsync(
+        AgentSession? session, List<ConversationMessage>? history, ReasoningResult? reasoning,
+        WorkflowTraceEventProcessor.TraceState st, string query)
+    {
+        if (_checkpointing is null || !_checkpointing.ShouldCheckpoint(session, history, reasoning)) return null;
+        return await _checkpointing.TryBeginAsync(st.Trace, query, session!, history!.Count, reasoning) ? _checkpointing : null;
+    }
+
+    private static ValueTask<StreamingRun> StartRunAsync(
+        Workflow workflow, List<ChatMessage> messages, WorkflowCheckpointing? checkpoint, string traceId, CancellationToken ct) =>
+        checkpoint is null
+            ? InProcessExecution.RunStreamingAsync(workflow, messages, cancellationToken: ct)
+            : InProcessExecution.RunStreamingAsync(workflow, messages, checkpoint.Manager, traceId, ct);
+
+    /// <summary>
+    /// Tur ne şekilde çıkarsa çıksın (dönüş, istisna, iterator'ın bırakılması) checkpoint'leri bırakır ya da saklar.
+    /// <c>await using</c> ile kullanılır: RunStreamingAsync'in onlarca <c>yield break</c> çıkışına dokunmadan hepsini kapsar.
+    /// </summary>
+    private sealed class CheckpointTurnGuard(WorkflowCheckpointing checkpointing, string traceId, CancellationToken turnToken)
+        : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() => new(checkpointing.EndAsync(traceId, turnToken));
+    }
+
+    /// <summary>
+    /// Çökme/kapanış yüzünden yarım kalan turu son checkpoint'inden sürdürür ve nihai yanıtı döner (kalıcılaştırma
+    /// <see cref="BuildFinalResultAsync"/> içinde yapılır; konuşma geçmişine yazmak çağıranın işidir).
+    /// </summary>
+    public async Task<string> ResumeAsync(
+        WorkflowTurnContext turn, AgentSession? session, CheckpointInfo from, CancellationToken ct)
+    {
+        if (_checkpointing is null)
+            throw new InvalidOperationException("Checkpoint'leme yapılandırılmamış.");
+
+        var trace = _traceStore.Get(turn.TraceId)
+            ?? throw new InvalidOperationException($"Trace bulunamadı: {turn.TraceId}");
+
+        // Başlangıçta "process_restart" olarak kapatılmış olabilir; tur yeniden açılır, bitince gerçek sonuçla kapanır.
+        // Çökmede yalnızca iskelet kalıcıdır (ajan ziyaretleri tur bitince yazılır), bu yüzden yalnızca devam sonrası kısım
+        // kaydedilir.
+        trace.CompletedAt = null;
+        trace.TerminationReason = null;
+        trace.Error = null;
+        trace.Reasoning = turn.Reasoning;
+        _traceStore.Update(trace);
+
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_guards.TimeoutSeconds));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        var effectiveCt = linkedCts.Token;
+
+        var st = _traceProcessor.AttachTraceState(trace);
+        using var scope = _approvalContext?.SetScope(turn.SessionId, null, turn.Query, turn.CustomerId);
+        _traceProcessor.BindToAmbientContext(st);
+
+        var workflow = _factory.CreateWorkflow(null);
+        var runTimer = Stopwatch.StartNew();
+        await using var run = await InProcessExecution.ResumeStreamingAsync(workflow, from, _checkpointing.Manager, effectiveCt);
+        return await DriveToResultAsync(run, started: true, st, turn.Query, session, timeoutCts, ct, effectiveCt, runTimer);
     }
 
     /// <summary>

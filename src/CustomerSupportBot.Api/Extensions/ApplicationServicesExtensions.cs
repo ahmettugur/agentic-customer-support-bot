@@ -2,7 +2,9 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using CustomerSupportBot.Adapters.Agents.DependencyInjection;
 using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Api.Workers;
+using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.DependencyInjection;
 
 using System.Security.Claims;
@@ -188,6 +190,9 @@ public static class ApplicationServicesExtensions
         services.AddHostedService<ApprovalEmailNotificationService>();
         // Yapay zekâ çözüm oranı: eskalasyon/devralma görüşmeyi "insan dahil" işaretler.
         services.AddHostedService<HumanInvolvementTrackingService>();
+        // Çökme/deploy yüzünden yarım kalan workflow turlarını bitirir — WorkflowCheckpointing ayarları (varsayılan kapalı).
+        services.AddSingleton<IShutdownSignal, HostShutdownSignal>();
+        services.AddHostedService<WorkflowRecoveryWorker>();
         // RoutingLoadTrackerService kaldırıldı — load-tracking HumanAgentPortService constructor'ında.
 
         // KnowledgeBase startup adapter — use-case mantığı Application katmanında; bu sadece startup tetikleyicisi

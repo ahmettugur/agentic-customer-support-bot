@@ -125,6 +125,9 @@ internal sealed class WorkflowTraceEventProcessor
         return new TraceState { Trace = trace };
     }
 
+    /// <summary>Mevcut (devam ettirilen) bir trace için izleme durumu kurar; yeni trace AÇMAZ.</summary>
+    public TraceState AttachTraceState(ReasoningTrace trace) => new() { Trace = trace };
+
     /// <summary>
     /// Trace'i ambient onay bağlamına (<c>AsyncLocal</c>) bağlar; tool'ların oluşturduğu onay
     /// kayıtları <c>TraceId</c>'yi buradan okur.

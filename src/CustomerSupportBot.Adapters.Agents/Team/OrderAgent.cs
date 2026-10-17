@@ -29,6 +29,9 @@ internal sealed class OrderAgent : SupportAgentBase
             chatClient,
             new ChatClientAgentOptions
             {
+                // Sabit kimlik: executor adı "<Ad>_<Id>" olduğundan rastgele GUID, başka süreçte kurulan workflow'un
+                // eski bir checkpoint'le eşleşmesini imkânsız kılar (bkz. WorkflowCheckpointing).
+                Id = WellKnown.AgentNames.Order,
                 Name = WellKnown.AgentNames.Order,
                 Description = "Sipariş oluşturma, sorgulama, iptal ve iade işlemlerini yürütür.",
                 ChatOptions = new ChatOptions

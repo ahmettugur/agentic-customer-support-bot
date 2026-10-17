@@ -53,6 +53,7 @@ public static class PersistenceAdapterServiceCollectionExtensions
         AddSessionDataStore<IConversationDispositionStore, PostgresConversationDispositionStore>(services);
 
         services.AddSingleton<INotificationLedger, PostgresNotificationLedger>();
+        services.AddSingleton<IWorkflowCheckpointRepository, PostgresWorkflowCheckpointRepository>();
         services.AddSingleton<ISavedReplyStore, PostgresSavedReplyStore>();
         services.AddSingleton<IConversationSearchStore, PostgresConversationSearchStore>();
         services.AddSingleton<IPerformanceStore, PostgresPerformanceStore>();

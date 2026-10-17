@@ -1439,6 +1439,83 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                     b.ToTable("reasoning_traces", "observability");
                 });
 
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability.WorkflowCheckpointEntity", b =>
+                {
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("trace_id");
+
+                    b.Property<string>("CheckpointId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("checkpoint_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ParentCheckpointId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("parent_checkpoint_id");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload");
+
+                    b.HasKey("TraceId", "CheckpointId");
+
+                    b.HasIndex("TraceId", "CreatedAt")
+                        .HasDatabaseName("ix_workflow_checkpoints_trace_created");
+
+                    b.ToTable("workflow_checkpoints", "observability");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability.WorkflowTurnEntity", b =>
+                {
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("trace_id");
+
+                    b.Property<string>("CustomerId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("customer_id");
+
+                    b.Property<int>("HistoryCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("history_count");
+
+                    b.Property<string>("Query")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("query");
+
+                    b.Property<string>("ReasoningJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("reasoning");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("session_id");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("TraceId");
+
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("ix_workflow_turns_started_at");
+
+                    b.ToTable("workflow_turns", "observability");
+                });
+
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Personalization.CustomerProfileEntity", b =>
                 {
                     b.Property<string>("CustomerId")
@@ -1582,6 +1659,15 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_messages_session");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability.WorkflowCheckpointEntity", b =>
+                {
+                    b.HasOne("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability.WorkflowTurnEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TraceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.CategoryEntity", b =>

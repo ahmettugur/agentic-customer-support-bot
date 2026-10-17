@@ -19,6 +19,13 @@ internal static class WorkflowMetrics
         "agent.workflow.completions", unit: "{run}",
         description: "Biten workflow koşuları (status: ok / timeout / cancelled / error).");
 
+    private static readonly Counter<long> Recoveries = Meter.CreateCounter<long>(
+        "agent.workflow.recoveries", unit: "{turn}",
+        description: "Çökme sonrası devam taramasının sonuçları (result: resumed / discarded / failed).");
+
+    public static void RecordRecovery(string result) =>
+        Recoveries.Add(1, new KeyValuePair<string, object?>("result", result));
+
     public static void Record(string status, TimeSpan elapsed)
     {
         var tag = new KeyValuePair<string, object?>("status", status);
