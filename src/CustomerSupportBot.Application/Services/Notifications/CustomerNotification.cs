@@ -36,10 +36,10 @@ public static class CustomerNotifications
                     string.IsNullOrWhiteSpace(order.TrackingNumber) ? null : $"Takip no: {order.TrackingNumber.Trim()}"
                 }.Where(x => x is not null));
                 return new(CustomerNotificationKinds.OrderShipped, "Siparişiniz kargoya verildi",
-                    $"#{orderId} numaralı siparişiniz kargoya verildi. {detail}".Trim(), orderId, at);
+                    $"#{orderId} numaralı sipariş yola çıktı. {detail}".Trim(), orderId, at);
             case OrderStatusEmailService.Delivered:
                 return new(CustomerNotificationKinds.OrderDelivered, "Siparişiniz teslim edildi",
-                    $"#{orderId} numaralı siparişiniz teslim edildi.", orderId, at);
+                    $"#{orderId} numaralı sipariş size ulaştı.", orderId, at);
             default:
                 return null;
         }
@@ -51,10 +51,10 @@ public static class CustomerNotifications
         return kind switch
         {
             ComplaintStatusEmailService.InReview => new(CustomerNotificationKinds.ComplaintInReview,
-                "Şikayetiniz inceleniyor", $"#{complaint.OrderId} numaralı siparişle ilgili şikayetiniz incelemeye alındı.",
+                "Şikayetiniz inceleniyor", $"#{complaint.OrderId} numaralı siparişle ilgili kaydınız bir temsilci tarafından ele alınıyor.",
                 complaintId, at),
             ComplaintStatusEmailService.Closed => new(CustomerNotificationKinds.ComplaintClosed,
-                "Şikayetiniz sonuçlandı", $"#{complaint.OrderId} numaralı siparişle ilgili şikayetiniz sonuçlandı. Ayrıntılar e-postanızda.",
+                "Şikayetiniz sonuçlandı", $"#{complaint.OrderId} numaralı siparişle ilgili kaydınıza yanıt verildi. Ayrıntılar e-postanızda.",
                 complaintId, at),
             _ => null
         };

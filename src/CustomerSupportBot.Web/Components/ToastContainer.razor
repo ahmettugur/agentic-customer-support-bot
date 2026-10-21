@@ -1,7 +1,7 @@
 @inject ToastService ToastSvc
 @implements IDisposable
 
-<div class="toast-stack" aria-live="polite" aria-atomic="false" role="status">
+<div class="toast-stack @(Top ? "toast-stack--top" : "")" aria-live="polite" aria-atomic="false" role="status">
     @foreach (var toast in _toasts)
     {
         <div class="toast toast--@toast.Type.ToString().ToLowerInvariant() @(toast.Removing ? "toast--removing" : "")">
@@ -15,6 +15,9 @@
 </div>
 
 @code {
+    /// <summary>Sohbet gibi altta giriş çubuğu olan sayfalarda toast'lar üstte (giriş butonlarını kapatmasın).</summary>
+    [Parameter] public bool Top { get; set; }
+
     private sealed record ToastEntry(ToastMessage Message, string Text, ToastType Type)
     {
         public bool Removing { get; set; }

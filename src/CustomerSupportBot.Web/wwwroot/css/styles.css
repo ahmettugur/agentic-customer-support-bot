@@ -2267,6 +2267,11 @@ body {
     width: 340px;
 }
 
+.toast-stack--top {
+    bottom: auto;
+    top: 84px;
+}
+
 .toast {
     display: flex;
     align-items: center;
