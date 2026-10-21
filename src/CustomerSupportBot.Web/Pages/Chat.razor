@@ -425,6 +425,18 @@
                                         }
                                     </div>
                                 }
+                                @* Hızlı yanıt çipleri yalnızca SON mesajda ve akış bittiyse görünür: müşteri yeni bir mesaj
+                                   yazdığı anda (ya da çip seçtiğinde) eski turun önerileri kaybolur. *@
+                                @if (!msg.IsStreaming && !_isStreaming && msg.Suggestions is { Count: > 0 } && ReferenceEquals(msg, _messages[^1]))
+                                {
+                                    <div class="suggested-replies" role="group" aria-label="Önerilen yanıtlar">
+                                        @foreach (var suggestion in msg.Suggestions)
+                                        {
+                                            var text = suggestion;
+                                            <button type="button" class="suggested-reply" @onclick="() => SendChipMessage(text)">@text</button>
+                                        }
+                                    </div>
+                                }
                                 @* Picker, ipucu geldiği anda DEĞİL tur bittiğinde çizilir.
                                    category_picker tool çalışırken yayınlanıyor (bkz.
                                    ProductToolsService.ShowCategoryPicker), yani veri turun
@@ -653,6 +665,9 @@
         public JsonElement? ReasoningData { get; set; }
         public bool   IsStreaming   { get; set; }
         public List<string>? CategoryPicker { get; set; }
+
+        /// <summary>Tur bittikten sonra sunucunun önerdiği hızlı yanıtlar (yalnızca canlı turda; geçmişten yüklenen mesajlarda yok).</summary>
+        public List<string>? Suggestions { get; set; }
 
         /// <summary>
         /// Bu yanıtı üretirken görev alan ajanların (friendly) adları, sıralı ve
@@ -1413,6 +1428,18 @@
                     var hintAgentName = hintAgent.GetString();
                     if (!string.IsNullOrEmpty(hintAgentName) && !_agentChips.Any(c => c.Name == hintAgentName))
                         UpsertAgentChip(hintAgentName, "running");
+                }
+                if (_currentBot is not null
+                    && jd.TryGetProperty("kind", out var suggestKind)
+                    && suggestKind.GetString() == "suggested_replies"
+                    && jd.TryGetProperty("suggestions", out var sugg)
+                    && sugg.ValueKind == JsonValueKind.Array)
+                {
+                    _currentBot.Suggestions = sugg.EnumerateArray()
+                        .Select(x => x.GetString() ?? "")
+                        .Where(x => x.Length > 0)
+                        .Take(3)
+                        .ToList();
                 }
                 if (_currentBot is not null
                     && jd.TryGetProperty("kind", out var hintKind)

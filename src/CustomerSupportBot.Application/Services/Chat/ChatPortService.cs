@@ -371,6 +371,7 @@ public sealed class ChatPortService : IChatPort
         // delta'lar birleştirildiği için geçmişe ham metin yazılıyordu (bkz. ResponseCompletePayload).
         var responseBuilder = new System.Text.StringBuilder();
         string? canonicalResponse = null;
+        string? terminationReason = null;
         await foreach (var evt in WithCostScope(_team.RunStreamingAsync(query, history, session, reasoningResult, ct), sessionId, ct))
         {
             yield return evt;
@@ -381,12 +382,21 @@ public sealed class ChatPortService : IChatPort
             else if (evt.Type == StreamEventTypes.ResponseComplete && evt.Data is ResponseCompletePayload complete)
             {
                 canonicalResponse = complete.Text;
+                terminationReason = complete.TerminationReason;
             }
         }
 
         var fullResponse = (canonicalResponse ?? responseBuilder.ToString()).TrimEnd();
         await _sessionState.PersistExchangeAsync(
             sessionId, query, fullResponse, _chatBridge, TurnSignals.From(reasoningResult), ct);
+
+        // Hızlı yanıt çipleri: yanıt ve kayıttan SONRA (istemci balon henüz açıkken alır). Yanıt hiç tamamlanmadıysa
+        // (hata/iptal: response_complete yok) terminationReason null kalır ve öneri üretilmez.
+        var suggestions = SuggestedRepliesPolicy.Suggest(
+            reasoningResult?.Intent, terminationReason, canonicalResponse,
+            isCompound: Services.Reasoning.SubTaskOrchestrator.IsCompoundQuery(reasoningResult));
+        if (suggestions.Count > 0)
+            yield return new StreamEvent(StreamEventTypes.UiHint, new { kind = "suggested_replies", suggestions });
 
         // Sentiment events
         //

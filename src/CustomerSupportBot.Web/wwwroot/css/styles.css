@@ -2552,3 +2552,13 @@ body {
 }
 .fb-reason:hover:not(:disabled) { background: var(--color-surface-alt); border-color: var(--color-border-strong); }
 .fb-thanks { margin-left: 6px; font-size: 12px; color: var(--color-text-muted); }
+
+/* ── Hızlı yanıt çipleri (tur sonu önerileri) ── */
+.suggested-replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.suggested-reply {
+    padding: 6px 12px; font-size: 13px; line-height: 1.3;
+    border: 1px solid var(--color-border); border-radius: var(--radius-full);
+    background: var(--color-surface); color: var(--color-text); cursor: pointer;
+    transition: background var(--transition), border-color var(--transition);
+}
+.suggested-reply:hover { background: var(--color-surface-alt); border-color: var(--color-border-strong); }

@@ -125,6 +125,7 @@ public static class StreamEventTypes
     /// <summary>
     /// Tool çıktısına bağlı frontend UI bileşeni. Payload: { kind, ...data }.
     /// kind="category_picker" → { categories: string[] }
+    /// kind="suggested_replies" → { suggestions: string[] } (tur bittikten sonra; çip metni müşterinin sonraki mesajı olarak gönderilir)
     /// </summary>
     public const string UiHint = "ui_hint";
 }

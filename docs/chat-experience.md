@@ -26,3 +26,14 @@ Her tamamlanmış bot yanıtının altında 👍/👎 vardır (sesli görüşme,
   `chat_message_feedback_total{helpful,reason}` ve Grafana panosunda panel.
 - **KVKK:** yorum serbest metin olduğundan dışa aktarmaya girer, oturum silinince silinir; Langfuse skoru önce oradan kaldırılır ve
   başarısızlıkta silme tekrarlanır (veri bir yerde kalmışken "silindi" denmez).
+
+## Hızlı yanıt çipleri
+
+Tur bittiğinde, **niyete göre sabit ve kural tabanlı** (ek LLM çağrısı yok) en fazla 3 öneri yanıtın altında çip olarak çıkar; tıklanınca metin
+müşterinin sonraki mesajı olarak aynen gönderilir. Örn. sipariş sorgusundan sonra: *Siparişimi iptal etmek istiyorum · İade talebi oluşturmak
+istiyorum · Siparişimle ilgili şikayetim var*.
+
+Kurallar (`SuggestedRepliesPolicy`): yalnızca `completed` sonlanan, tek niyetli ve **müşteriden bilgi istemeyen** (son ~140 karakterde `?` yok)
+turlar öneri alır; hata, eskalasyon, "bulunamadı", bileşik sorgu, bilinmeyen/`genel`/temsilci niyeti ve boş yanıtta çıkmaz. Olay: `ui_hint`
+`{ kind: "suggested_replies", suggestions: [...] }` — yanıt ve kayıttan sonra gelir. Çipler yalnızca **son** mesajda ve akış bittiyse görünür;
+geçmişten yüklenen konuşmalarda yoktur (kalıcı değil, tur anına özgüdür).
