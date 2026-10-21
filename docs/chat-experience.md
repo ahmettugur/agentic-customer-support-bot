@@ -52,3 +52,13 @@ model yanlış özetlese bile kart doğrudur.
   İç not, atanan temsilci ve onay kaydı kartta **yoktur**; çözüm açıklaması yalnızca kapanmış şikayette görünür.
 - **Kanal:** yalnızca canlı sohbet akışında çizilir. Sesli görüşme, A2A ve MCP'de akış olmadığı için ipucu düşer, araç sonucu değişmez.
 - Kartlar tur anına özgüdür; geçmişten yüklenen (yenilemeden sonraki) konuşmalarda kart yoktur, metin vardır.
+
+## İlgili makaleler (bilgi tabanı)
+
+Bot yanıtını verirken bilgi tabanından makaleler bağlama girdiyse (RAG), yanıtın altında **"İlgili makaleler: …"** olarak başlıkları görünür
+(en çok 3; aynı başlık tek). Olay: `ui_hint` `{ kind: "sources", sources: [{ title }] }`, `SemanticMemoryContextProvider` yayınlar.
+
+**Etiket bilerek "kaynak" değil "ilgili":** model bu makalelere dayandığını söylemez, yalnızca onları görmüştür; "kaynak" demek olmayan bir
+atıf iddiası olurdu. Gösterilen, bu tur bağlama **gerçekten enjekte edilen** makalelerdir — bağlam bütçesine sığmayanlar gösterilmez;
+dersler ve episodik bellek hiç gösterilmez. Bileşik sorguda her alt görevin ipucu birleştirilir. Makale müşteriye açık bir sayfa olmadığı
+için başlık düz metindir (bağlantı yok).

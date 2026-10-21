@@ -4,6 +4,7 @@
 
 using System.Text;
 
+using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Memory;
@@ -18,6 +19,10 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
     private readonly SemanticMemoryService _memory;
     private readonly IContextSanitizer _sanitizer;
     private readonly ILogger<SemanticMemoryContextProvider> _logger;
+    private readonly IUiHintEmitter? _uiHint;
+
+    /// <summary>Müşteriye gösterilecek en fazla makale sayısı.</summary>
+    private const int MaxSourcesShown = 3;
 
     public string Name => "SemanticMemory";
     public int Order => 7;
@@ -25,8 +30,10 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
     public SemanticMemoryContextProvider(
         SemanticMemoryService memory,
         IContextSanitizer sanitizer,
-        ILogger<SemanticMemoryContextProvider> logger)
+        ILogger<SemanticMemoryContextProvider> logger,
+        IUiHintEmitter? uiHint = null)
     {
+        _uiHint = uiHint;
         _memory = memory;
         _sanitizer = sanitizer;
         _logger = logger;
@@ -85,7 +92,8 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
             if (kb.Count > 0)
             {
                 sb.AppendLine("## 📚 İlgili Bilgi Tabanı (citation'lı kullanılmalı)");
-                AppendHits(sb, kb, ref budget);
+                var injected = AppendHits(sb, kb, ref budget);
+                EmitRelatedArticles(injected);
             }
             if (episodes.Count > 0 && budget > 200)
             {
@@ -111,8 +119,30 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
         }
     }
 
-    private void AppendHits(StringBuilder sb, IReadOnlyList<MemorySearchHit> hits, ref int budget)
+    /// <summary>
+    /// Bu turda bağlama GERÇEKTEN enjekte edilen bilgi tabanı makalelerini müşteriye "ilgili makaleler" olarak bildirir.
+    /// Etiket bilerek "kaynak" değil "ilgili": model bu makalelere dayandığını söylemez, yalnızca onları görmüştür. Bütçeye
+    /// sığmayıp bağlama girmeyen makale gösterilmez; aynı başlık tek sayılır; en çok <see cref="MaxSourcesShown"/>.
+    /// </summary>
+    private void EmitRelatedArticles(IReadOnlyList<MemorySearchHit> injected)
     {
+        if (_uiHint is null) return;
+
+        var titles = injected
+            .Select(h => _sanitizer.Sanitize(h.Document.Title ?? h.Document.Source ?? ""))
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.Ordinal)
+            .Take(MaxSourcesShown)
+            .ToList();
+        if (titles.Count == 0) return;
+
+        _uiHint.Emit(new StreamEvent(StreamEventTypes.UiHint,
+            new { kind = "sources", sources = titles.Select(t => new { title = t }).ToList() }));
+    }
+
+    private List<MemorySearchHit> AppendHits(StringBuilder sb, IReadOnlyList<MemorySearchHit> hits, ref int budget)
+    {
+        var included = new List<MemorySearchHit>();
         foreach (var h in hits)
         {
             if (budget <= 100) break;
@@ -127,6 +157,8 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
             sb.AppendLine($"- **[{title}]** _(score={h.Score:F2}, kaynak={src})_");
             sb.AppendLine($"  {wrapped}");
             budget -= snippet.Length + title.Length + 20;
+            included.Add(h);
         }
+        return included;
     }
 }

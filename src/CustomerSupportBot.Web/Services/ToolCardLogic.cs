@@ -40,6 +40,27 @@ public static class ToolCardLogic
         catch (JsonException) { return null; }
     }
 
+    /// <summary>En çok kaç "ilgili makale" gösterilir (sunucu da en çok bu kadar yollar; bileşik turda birleşince aşılmasın).</summary>
+    public const int MaxSources = 3;
+
+    /// <summary>
+    /// Sunucunun <c>sources</c> ipucunu mevcut listeyle birleştirir: aynı başlık tek, en fazla <see cref="MaxSources"/>.
+    /// Bozuk ipucu mevcut listeyi değiştirmez.
+    /// </summary>
+    public static List<string> MergeSources(IEnumerable<string>? existing, JsonElement hint)
+    {
+        var merged = (existing ?? []).ToList();
+        if (hint.ValueKind != JsonValueKind.Object || !hint.TryGetProperty("sources", out var list) || list.ValueKind != JsonValueKind.Array)
+            return merged;
+
+        foreach (var item in list.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("title", out var t) || t.GetString() is not { Length: > 0 } title) continue;
+            if (!merged.Contains(title, StringComparer.Ordinal)) merged.Add(title);
+        }
+        return merged.Take(MaxSources).ToList();
+    }
+
     public static IReadOnlyList<ComplaintCardView> ParseComplaintHint(JsonElement hint)
     {
         try

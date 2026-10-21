@@ -484,6 +484,16 @@
                                         }
                                     </div>
                                 }
+                                @if (!msg.IsStreaming && msg.Sources is { Count: > 0 })
+                                {
+                                    <div class="related-articles" aria-label="İlgili bilgi tabanı makaleleri">
+                                        <span class="related-label">İlgili makaleler:</span>
+                                        @foreach (var title in msg.Sources)
+                                        {
+                                            <span class="related-chip">@title</span>
+                                        }
+                                    </div>
+                                }
                                 @* Hızlı yanıt çipleri yalnızca SON mesajda ve akış bittiyse görünür: müşteri yeni bir mesaj
                                    yazdığı anda (ya da çip seçtiğinde) eski turun önerileri kaybolur. *@
                                 @if (!msg.IsStreaming && !_isStreaming && msg.Suggestions is { Count: > 0 } && ReferenceEquals(msg, _messages[^1]))
@@ -730,6 +740,9 @@
 
         /// <summary>Sipariş/şikayet araçlarının döndürdüğü yapılandırılmış kartlar (veritabanından; modelin metninden değil).</summary>
         public OrderCardsHint? OrderCards { get; set; }
+
+        /// <summary>Bu tur bağlama enjekte edilen bilgi tabanı makalelerinin başlıkları ("ilgili makaleler" — modelin dayandığı kaynak iddiası değil).</summary>
+        public List<string>? Sources { get; set; }
         public IReadOnlyList<ComplaintCardView>? ComplaintCards { get; set; }
 
         /// <summary>
@@ -1497,6 +1510,7 @@
                     var cardKindName = cardKind.GetString();
                     if (cardKindName == "order_cards") _currentBot.OrderCards = ToolCardLogic.ParseOrderHint(jd);
                     else if (cardKindName == "complaint_cards") _currentBot.ComplaintCards = ToolCardLogic.ParseComplaintHint(jd);
+                    else if (cardKindName == "sources") _currentBot.Sources = ToolCardLogic.MergeSources(_currentBot.Sources, jd);
                 }
                 if (_currentBot is not null
                     && jd.TryGetProperty("kind", out var suggestKind)

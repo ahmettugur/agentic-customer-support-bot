@@ -112,6 +112,35 @@ public class ToolCardLogicTests
         ToolCardLogic.Shipping(new("1", "İşleniyor", Ordered, [], 0, null, null, null, null, null)).Should().BeNull();
     }
 
+    // ═══ ilgili makaleler ═══
+
+    private static JsonElement Hint(string json) => JsonSerializer.Deserialize<JsonElement>(json);
+
+    [Fact]
+    public void MergeSources_AddsTheServersTitles()
+    {
+        var merged = ToolCardLogic.MergeSources(null, Hint("""{"kind":"sources","sources":[{"title":"İade Politikası"},{"title":"Kargo"}]}"""));
+
+        merged.Should().Equal("İade Politikası", "Kargo");
+    }
+
+    [Fact]
+    public void MergeSources_AcrossSeveralHintsInOneTurn_IsDeduplicatedAndCapped()
+    {
+        // Bileşik sorguda her alt görev kendi ipucunu yollar.
+        var first = ToolCardLogic.MergeSources(null, Hint("""{"sources":[{"title":"A"},{"title":"B"}]}"""));
+        var second = ToolCardLogic.MergeSources(first, Hint("""{"sources":[{"title":"B"},{"title":"C"},{"title":"D"}]}"""));
+
+        second.Should().Equal("A", "B", "C");
+    }
+
+    [Theory]
+    [InlineData("""{"sources":"yanlış"}""")]
+    [InlineData("""{"sources":[{"baslik":"x"}]}""")]
+    [InlineData("""{}""")]
+    public void MergeSources_IgnoresMalformedHints(string json) =>
+        ToolCardLogic.MergeSources(["Var"], Hint(json)).Should().Equal("Var");
+
     // ═══ sunucu sözleşmesi ═══
 
     [Fact]
