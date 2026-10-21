@@ -2,7 +2,9 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using CustomerSupportBot.Adapters.Agents.DependencyInjection;
 using CustomerSupportBot.Api.Services;
+using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Api.Workers;
+using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.DependencyInjection;
 
 using System.Security.Claims;
@@ -172,6 +174,30 @@ public static class ApplicationServicesExtensions
                         AutoReplenishment = true
                     });
             });
+
+            // MCP: a2a ile AYNI limit (A2AOptions.RequestsPerMinute) ama ayrı kova.
+            options.AddPolicy("mcp", httpContext =>
+            {
+                var limits = httpContext.RequestServices
+                    .GetRequiredService<IOptions<A2AOptions>>().Value;
+
+                var subjectId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var partitionKey =
+                    A2ASubjectIdentity.TryGetPartnerId(subjectId)   // özne token'ı → partner
+                    ?? subjectId                                    // partner token'ı → kendisi
+                    ?? httpContext.Connection.RemoteIpAddress?.ToString()  // kimliksiz → IP
+                    ?? "unknown";
+
+                return RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: $"mcp:{partitionKey}",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = Math.Max(1, limits.RequestsPerMinute),
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    });
+            });
         });
 
         // Agents adapter — CustomerSupportTeam + ApprovalGateService
@@ -188,6 +214,9 @@ public static class ApplicationServicesExtensions
         services.AddHostedService<ApprovalEmailNotificationService>();
         // Yapay zekâ çözüm oranı: eskalasyon/devralma görüşmeyi "insan dahil" işaretler.
         services.AddHostedService<HumanInvolvementTrackingService>();
+        // Çökme/deploy yüzünden yarım kalan workflow turlarını bitirir — WorkflowCheckpointing ayarları (varsayılan kapalı).
+        services.AddSingleton<IShutdownSignal, HostShutdownSignal>();
+        services.AddHostedService<WorkflowRecoveryWorker>();
         // RoutingLoadTrackerService kaldırıldı — load-tracking HumanAgentPortService constructor'ında.
 
         // KnowledgeBase startup adapter — use-case mantığı Application katmanında; bu sadece startup tetikleyicisi

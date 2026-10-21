@@ -21,10 +21,14 @@ internal sealed class WorkflowTraceEventProcessor
     private readonly IReasoningTraceStore _traceStore;
     private readonly IApprovalContextAccessor _approvalContext;
 
-    public WorkflowTraceEventProcessor(IReasoningTraceStore traceStore, IApprovalContextAccessor approvalContext)
+    private readonly IPromptRepository? _prompts;
+
+    public WorkflowTraceEventProcessor(
+        IReasoningTraceStore traceStore, IApprovalContextAccessor approvalContext, IPromptRepository? prompts = null)
     {
         _traceStore = traceStore;
         _approvalContext = approvalContext;
+        _prompts = prompts;
     }
 
     /// <summary>
@@ -115,13 +119,14 @@ internal sealed class WorkflowTraceEventProcessor
     public async Task<TraceState> StartTraceStateAsync(AgentSession? session, string query, ReasoningResult? reasoning)
     {
         var trace = await _traceStore.StartTraceAsync(session?.SessionId ?? "anonymous", query);
-        if (reasoning != null)
-        {
-            trace.Reasoning = reasoning;
-            _traceStore.Update(trace);
-        }
+        trace.PromptVersion = _prompts?.SetVersion;
+        if (reasoning != null) trace.Reasoning = reasoning;
+        if (reasoning != null || trace.PromptVersion != null) _traceStore.Update(trace);
         return new TraceState { Trace = trace };
     }
+
+    /// <summary>Mevcut (devam ettirilen) bir trace için izleme durumu kurar; yeni trace AÇMAZ.</summary>
+    public TraceState AttachTraceState(ReasoningTrace trace) => new() { Trace = trace };
 
     /// <summary>
     /// Trace'i ambient onay bağlamına (<c>AsyncLocal</c>) bağlar; tool'ların oluşturduğu onay

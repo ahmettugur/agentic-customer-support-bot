@@ -54,8 +54,8 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
             var queryVector = await _memory.EmbedQueryAsync(query, ct);
             if (queryVector.Length == 0) return null;
 
-            var kbTask = _memory.SearchByVectorAsync(MemoryKind.Knowledge, queryVector, ct: ct);
-            var lessonsTask = _memory.SearchByVectorAsync(MemoryKind.Lesson, queryVector, ct: ct);
+            var kbTask = _memory.SearchByVectorAsync(MemoryKind.Knowledge, queryVector, queryText: query, ct: ct);
+            var lessonsTask = _memory.SearchByVectorAsync(MemoryKind.Lesson, queryVector, queryText: query, ct: ct);
 
             // Doğrulanmış müşteri kimliği varsa, o müşterinin GEÇMİŞ OTURUMLARDAKİ episode'ları
             // da aranır — customerId tag'iyle filtrelenir, sessionId'yle değil. Sınır sessionId
@@ -68,7 +68,7 @@ public sealed class SemanticMemoryContextProvider : IContextProvider
             var episodesTask = string.IsNullOrWhiteSpace(customerId)
                 ? Task.FromResult<IReadOnlyList<MemorySearchHit>>(Array.Empty<MemorySearchHit>())
                 : _memory.SearchByVectorAsync(MemoryKind.Episodic, queryVector,
-                    tagFilter: new Dictionary<string, string> { ["customerId"] = customerId }, ct: ct);
+                    tagFilter: new Dictionary<string, string> { ["customerId"] = customerId }, queryText: query, ct: ct);
 
             await Task.WhenAll(kbTask, lessonsTask, episodesTask);
 

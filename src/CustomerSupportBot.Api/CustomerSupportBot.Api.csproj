@@ -42,6 +42,7 @@
          TypeLoadException/MissingMethodException olarak çıkar. Yani "build temiz" hiçbir
          şey kanıtlamaz. Çekirdek sürümü yükseltilirken bu paket de birlikte yükseltilmeli;
          köprünün gerçekten ayakta olduğunu A2AHostingSpikeTests ölçer. -->
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
     <PackageReference Include="A2A" Version="1.0.0-preview2" />
     <PackageReference Include="A2A.AspNetCore" Version="1.0.0-preview2" />
     <PackageReference Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.22.0-preview.260918.1" />

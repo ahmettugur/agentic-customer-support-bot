@@ -24,6 +24,20 @@ public interface IVectorMemoryPort
         IReadOnlyDictionary<string, string>? tagFilter = null,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Dense (<paramref name="query"/>) ve sözcüksel (<paramref name="queryText"/>) sinyalleri birleştirerek arar.
+    /// <paramref name="minScore"/> yalnızca dense sinyale uygulanır; dönen <c>Score</c> RRF skorunun 0–1'e
+    /// ölçeklenmiş halidir (her iki sinyalde 1. sıra = 1.0), kosinüs benzerliği DEĞİLDİR.
+    /// </summary>
+    Task<IReadOnlyList<MemorySearchHit>> HybridSearchAsync(
+        string collection,
+        float[] query,
+        string queryText,
+        int topK,
+        float minScore,
+        IReadOnlyDictionary<string, string>? tagFilter = null,
+        CancellationToken ct = default);
+
     /// <summary>Tek bir noktayı siler.</summary>
     Task DeleteAsync(string collection, string id, CancellationToken ct = default);
 

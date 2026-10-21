@@ -52,20 +52,7 @@ public static class CustomerSupportTelemetry
         Meter.CreateHistogram<double>("ai.llm.duration", unit: "ms",
             description: "LLM çağrı tamamlanma süresi.");
 
-    /// <summary>Tool çalıştırma sayısı (tool adı tag'i ile).</summary>
-    public static readonly Counter<long> ToolInvocationsCounter =
-        Meter.CreateCounter<long>("agent.tool.invocations", unit: "{call}",
-            description: "Domain tool çağrı sayısı.");
-
-    /// <summary>Workflow tamamlanma süresi (ms).</summary>
-    public static readonly Histogram<double> WorkflowDurationHistogram =
-        Meter.CreateHistogram<double>("agent.workflow.duration", unit: "ms",
-            description: "Bir kullanıcı isteği için end-to-end workflow süresi.");
-
-    /// <summary>Workflow tamamlanma sayısı (status tag'i ile: ok / error / timeout).</summary>
-    public static readonly Counter<long> WorkflowCompletionsCounter =
-        Meter.CreateCounter<long>("agent.workflow.completions", unit: "{run}",
-            description: "Tamamlanan workflow sayısı (status'a göre).");
+    // agent.workflow.duration / agent.workflow.completions: Adapters.Agents/WorkflowMetrics.cs (aynı Meter adı).
 
     // ─── Activity (span) yardımcıları ───
 

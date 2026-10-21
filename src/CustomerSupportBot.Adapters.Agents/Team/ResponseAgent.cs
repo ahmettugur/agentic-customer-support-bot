@@ -21,9 +21,15 @@ internal sealed class ResponseAgent : SupportAgentBase
     private static ChatClientAgent BuildInner(IChatClient chatClient, IPromptRepository prompts)
         => new(
             chatClient,
-            instructions: prompts.Get("agents/response-agent"),
-            name: WellKnown.AgentNames.Response,
-            description: "Yanıtları biçimlendirir ve kullanıcıya iletir.");
+            new ChatClientAgentOptions
+            {
+                // Sabit kimlik: executor adı "<Ad>_<Id>" olduğundan rastgele GUID, başka süreçte kurulan workflow'un
+                // eski bir checkpoint'le eşleşmesini imkânsız kılar (bkz. WorkflowCheckpointing).
+                Id = WellKnown.AgentNames.Response,
+                Name = WellKnown.AgentNames.Response,
+                Description = "Yanıtları biçimlendirir ve kullanıcıya iletir.",
+                ChatOptions = new ChatOptions { Instructions = prompts.Get("agents/response-agent") }
+            });
 
     /// <summary>
     /// BREAKPOINT BURAYA: LLM'e gönderilen tam mesaj listesi — specialist'in ürettiği

@@ -193,6 +193,12 @@ public sealed class TelemetryChatClient : DelegatingChatClient
             activity.SetTag("langfuse.user.id", userId);
         }
 
+        if (_enrichment.PromptVersion is { Length: > 0 } promptVersion)
+        {
+            activity.SetTag("langfuse.version", promptVersion);
+            activity.SetTag("prompt.version", promptVersion);
+        }
+
         if (_enrichment.CaptureContent)
             activity.SetTag("langfuse.observation.input", DescribeInput(messages));
     }

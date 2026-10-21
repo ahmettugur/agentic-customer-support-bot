@@ -27,6 +27,9 @@ internal sealed class ProductAgent : SupportAgentBase
             chatClient,
             new ChatClientAgentOptions
             {
+                // Sabit kimlik: executor adı "<Ad>_<Id>" olduğundan rastgele GUID, başka süreçte kurulan workflow'un
+                // eski bir checkpoint'le eşleşmesini imkânsız kılar (bkz. WorkflowCheckpointing).
+                Id = WellKnown.AgentNames.Product,
                 Name = WellKnown.AgentNames.Product,
                 Description = "Ürün sorgularını yanıtlar.",
                 ChatOptions = new ChatOptions

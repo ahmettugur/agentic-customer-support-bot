@@ -100,7 +100,8 @@ public static class AiServicesExtensions
             CaptureContent = options.CaptureLlmContent,
             MaxContentChars = Math.Max(500, options.MaxLlmContentChars),
             Redact = InputGuard.RedactPii,
-            CurrentUserId = () => approvalContext?.Context?.CustomerId
+            CurrentUserId = () => approvalContext?.Context?.CustomerId,
+            PromptVersion = sp.GetService<IPromptRepository>()?.SetVersion
         };
     }
 

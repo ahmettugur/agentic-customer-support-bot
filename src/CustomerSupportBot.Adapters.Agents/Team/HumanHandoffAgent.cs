@@ -21,6 +21,9 @@ internal sealed class HumanHandoffAgent : SupportAgentBase
             chatClient,
             new ChatClientAgentOptions
             {
+                // Sabit kimlik: executor adı "<Ad>_<Id>" olduğundan rastgele GUID, başka süreçte kurulan workflow'un
+                // eski bir checkpoint'le eşleşmesini imkânsız kılar (bkz. WorkflowCheckpointing).
+                Id = WellKnown.AgentNames.HumanHandoff,
                 Name = WellKnown.AgentNames.HumanHandoff,
                 Description = "Kullanıcının açıkça insan temsilcisiyle görüşme talebini karşılar.",
                 ChatOptions = new ChatOptions

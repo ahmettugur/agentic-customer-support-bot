@@ -66,3 +66,19 @@ zamanında `AppContext.BaseDirectory/Prompts` altından okur.
 3. Kod tarafında `promptService.Get("kategori/dosya")` veya `Render(...)` ile kullan.
 
 Yeniden build etmek yeterli; ekstra kayıt gerekmez.
+
+## Sürümleme (içerik sürümü)
+
+Her prompt'un sürümü **içeriğinden** türetilir (SHA-256'nın ilk 8 hex karakteri; CRLF/LF farkı sayılmaz). Elle sürüm
+numarası yoktur: bir `.md` dosyası düzenlenince sürümü kendiliğinden değişir. Tüm prompt'ların birleşik **set sürümü**
+(`IPromptRepository.SetVersion`) şuralara damgalanır:
+
+- Her sohbet turunun trace'ine (`reasoning_traces.prompt_version`, trace JSON'unda `promptVersion`).
+- LLM span'lerine `langfuse.version` / `prompt.version` olarak → Langfuse'ta trace'ler sürüme göre süzülür; müşteri puanı
+  skorlarıyla (`customer_rating`) iki sürümün kalitesi karşılaştırılır.
+- `GET /prompts` (Admin): set sürümü + prompt başına sürüm. Prompt metni dönmez.
+
+**Sınırlar:** Prompt'lar süreç başlangıcında okunur ve ajanlara gömülür; bir `.md` dosyasını değiştirmek **yeniden
+başlatma/deploy** gerektirir (sürüm yeni süreçte değişir). İki sürümün aynı anda trafiğe yarı yarıya verilmesi (A/B
+sunumu) yoktur; karşılaştırma ardışık sürümler arasında, damgalı trace/skorlar üzerinden yapılır.
+

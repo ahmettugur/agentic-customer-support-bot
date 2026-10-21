@@ -40,6 +40,8 @@ public sealed class CustomerSupportDbContext : DbContext
     // ─── observability schema ───
     public DbSet<ReasoningTraceEntity> ReasoningTraces => Set<ReasoningTraceEntity>();
     public DbSet<LlmCallUsageEntity> LlmCallUsages => Set<LlmCallUsageEntity>();
+    public DbSet<WorkflowTurnEntity> WorkflowTurns => Set<WorkflowTurnEntity>();
+    public DbSet<WorkflowCheckpointEntity> WorkflowCheckpoints => Set<WorkflowCheckpointEntity>();
 
     // ─── analytics schema ───
     public DbSet<RatingEntity> Ratings => Set<RatingEntity>();

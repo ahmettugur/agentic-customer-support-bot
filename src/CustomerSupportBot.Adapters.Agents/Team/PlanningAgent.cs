@@ -31,6 +31,9 @@ internal sealed class PlanningAgent : SupportAgentBase
             chatClient,
             new ChatClientAgentOptions
             {
+                // Sabit kimlik: executor adı "<Ad>_<Id>" olduğundan rastgele GUID, başka süreçte kurulan workflow'un
+                // eski bir checkpoint'le eşleşmesini imkânsız kılar (bkz. WorkflowCheckpointing).
+                Id = WellKnown.AgentNames.Planning,
                 Name = WellKnown.AgentNames.Planning,
                 Description = "Müşteri destek görevlerini planlayan ve uygun ajanlara yönlendiren bir ajandır.",
                 ChatOptions = new ChatOptions

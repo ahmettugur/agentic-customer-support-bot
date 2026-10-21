@@ -11,6 +11,7 @@ public sealed class ReasoningTraceEntity
     public string TraceId { get; set; } = "";
     public string SessionId { get; set; } = "";
     public string UserQuery { get; set; } = "";
+    public string? PromptVersion { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public string? TerminationReason { get; set; }

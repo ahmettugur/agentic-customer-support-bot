@@ -94,6 +94,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<EmailOptions>, EmailOptionsValidator>();
 
         services.Configure<EvaluationQualityOptions>(configuration.GetSection(EvaluationQualityOptions.SectionName));
+        services.Configure<Services.Mcp.McpOptions>(configuration.GetSection(Services.Mcp.McpOptions.SectionName));
+        services.Configure<WorkflowCheckpointingOptions>(configuration.GetSection(WorkflowCheckpointingOptions.SectionName));
+        services.Configure<Services.Evaluation.EvaluationGateOptions>(configuration.GetSection(Services.Evaluation.EvaluationGateOptions.SectionName));
     }
 
     private static void AddDrivingPorts(this IServiceCollection services)
@@ -193,6 +196,7 @@ public static class ApplicationServiceCollectionExtensions
         // Yetki kararı VARSAYILAN OLARAK REDDEDER; yapılandırma yoksa hiçbir partner
         // hiçbir müşteri adına token alamaz (bkz. ConfiguredA2ASubjectAuthorizer).
         services.AddSingleton<Ports.Outbound.A2A.IA2ASubjectAuthorizer, Services.A2A.ConfiguredA2ASubjectAuthorizer>();
+        services.AddSingleton<Ports.Outbound.A2A.IPartnerChannelAuthorizer, Services.A2A.ConfiguredPartnerChannelAuthorizer>();
         // Scoped: IJwtAccessTokenProvider scoped'dır (bkz. auth kayıtları); singleton bir servis
         // scoped bir bağımlılığı tüketemez — DI doğrulaması host başlangıcında bunu reddeder.
         services.AddScoped<Services.A2A.A2ATokenExchangeService>();

@@ -5,12 +5,15 @@
 // TurnFinalizer (tur sonu yan etkileri) arasında bölünmüştür — bu sınıf yalnızca
 // compound/single query ayrımını yapıp doğru koşucuya yönlendirir.
 
+using CustomerSupportBot.Adapters.Agents.Checkpointing;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
+using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Services.Providers;
 using CustomerSupportBot.Application.Services.Reasoning;
 using CustomerSupportBot.Domain.Model;
 using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -20,7 +23,7 @@ namespace CustomerSupportBot.Adapters.Agents;
 /// <summary>
 /// Müşteri destek ajan takımını yönetir.
 /// </summary>
-public class CustomerSupportTeam : IAgentTeamPort
+public class CustomerSupportTeam : IAgentTeamPort, ITurnResumer
 {
     private readonly WorkflowRunner _runner;
     private readonly DecomposedRunner _decomposed;
@@ -40,19 +43,20 @@ public class CustomerSupportTeam : IAgentTeamPort
         ILoggerFactory loggerFactory,
         CustomerIdentityHintBuilder identityHint,
         ISemanticMemoryWriter? semanticMemory = null,
-        ICustomerProfileService? profileService = null)
+        ICustomerProfileService? profileService = null,
+        WorkflowCheckpointing? checkpointing = null)
     {
         var guards = guardOptions.Value;
         _uiHint = uiHint;
 
         var factory = new AgentTeamFactory(chatClient, prompts, approvalGate, tools, guards, loggerFactory, approvalContext);
         var finalizer = new TurnFinalizer(traceStore, approvalGate, loggerFactory, semanticMemory, profileService);
-        var traceProcessor = new WorkflowTraceEventProcessor(traceStore, approvalContext);
+        var traceProcessor = new WorkflowTraceEventProcessor(traceStore, approvalContext, prompts);
         var messageBuilder = new WorkflowMessageBuilder(contextPipeline, prompts, chatClient, loggerFactory, identityHint);
 
         _runner = new WorkflowRunner(
             factory, finalizer, guards, traceStore,
-            approvalGate, uiHint, loggerFactory, traceProcessor, messageBuilder);
+            approvalGate, uiHint, loggerFactory, traceProcessor, messageBuilder, checkpointing, approvalContext);
 
         _decomposed = new DecomposedRunner(_runner, parallelOptions.Value, uiHint, approvalContext, finalizer);
     }
@@ -92,4 +96,8 @@ public class CustomerSupportTeam : IAgentTeamPort
     }
 
     public string GetWorkflowDiagram() => _runner.GetWorkflowDiagram();
+
+    /// <inheritdoc />
+    public Task<string> ResumeAsync(WorkflowTurnContext turn, AgentSession? session, CheckpointInfo from, CancellationToken ct) =>
+        _runner.ResumeAsync(turn, session, from, ct);
 }

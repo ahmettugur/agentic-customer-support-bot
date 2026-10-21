@@ -42,6 +42,44 @@ Regresyon kapsamı: `AgentWorkflowRegressionTests`, `UiHintEmitterTests`, `Profi
 
 ---
 
+## Workflow checkpoint ve çökme sonrası devam
+
+Bir sohbet turu (GroupChat workflow'u) süreç ölürse (çökme, OOM, deploy) normalde kaybolur: müşteri hata alır, yanıt hiçbir yere
+yazılmaz. `WorkflowCheckpointing:Enabled=true` ile her workflow adımı kalıcı bir checkpoint yazar ve yarım kalan tur başka bir
+tarama tarafından kaldığı yerden bitirilir; yanıt konuşma geçmişine yazılır, müşteri sayfayı yenileyince görür.
+
+**Varsayılan KAPALI.** Her tur adım başına bir DB yazması ekler (sıcak yol), amacı nadir bir durumdur. Açmadan önce:
+
+| Ayar (`WorkflowCheckpointing`) | Varsayılan | Anlamı |
+|---|---|---|
+| `Enabled` | `false` | Checkpoint yazımı ve devam taraması |
+| `SweepIntervalSeconds` | 60 | Devam taramasının sıklığı |
+| `GraceSeconds` | 60 | Bir turun "sahibi öldü" sayılması için `WorkflowGuards:TimeoutSeconds`'a eklenen pay. **Devam gecikmesi** de budur (~90 sn) |
+| `MaxAgeMinutes` | 30 | Bundan eski tur devam ettirilmez (müşteri gitmiştir, LLM maliyeti boşa gider) |
+| `MaxTurnsPerSweep` | 3 | Tek taramada devam ettirilecek en fazla tur (maliyet/yük sınırı) |
+
+**Nasıl çalışır**
+- Tur başında `observability.workflow_turns` satırı (sorgu, müşteri, reasoning sonucu, geçmiş sayısı), her adımda
+  `observability.workflow_checkpoints` satırı yazılır. Tur normal biterse, hata/zaman aşımı olursa ya da **istemci vazgeçerse**
+  ikisi de silinir — kullanıcının iptal ettiği tur asla diriltilmez.
+- Host **kapanırken** (rolling update) iptal edilen tur istisnadır: checkpoint'ler saklanır, yeni pod bitirir.
+- Tarama son etkinliği `TimeoutSeconds + GraceSeconds`'tan eski turları alır (yaşayan tur her adımda ilerler; en geç zaman
+  aşımında temizlenir). Her tur için `workflow-recovery:{traceId}` kilidi alınır: iki pod aynı turu devam ettirmez.
+- **Devam ettirilmeyen** (yalnızca silinen) turlar: `MaxAgeMinutes`'ten eski, alt görev (bileşik sorgunun parçası; birleştirme
+  yeniden kurulamaz), oturumu olmayan ve **kullanıcının bu arada ilerlediği** (geçmiş mesaj sayısı turun başındakinden farklı:
+  yeniden sordu ya da temsilci devraldı) turlar. Eski turun yanıtı yeni sorunun yanıtından sonra gelmez.
+- Devam başarısız olursa tur bırakılır (tekrar denenmez; aynı hata LLM parası yakar).
+
+**Bilinen sınırlar**
+- Devam gecikmesi ~`TimeoutSeconds + GraceSeconds`; canlı akışa (SSE) geri bağlanılmaz, yanıt geçmişe yazılır.
+- Ajan ziyaretleri/araç çağrıları trace'e tur bitince yazılır; çökmüş turun trace'inde yalnızca devam sonrası kısım görünür.
+- Devam, checkpoint'ten sonraki adımları yeniden koşar. Yazma araçları onay kuyruğundan geçtiği (tekilleştirme imzası) için
+  yinelenen kayıt oluşmaz; okuma araçları tekrar çalışır.
+- Workflow yapısı sabit olmalı: ajan `Id`'leri sabit (rastgele GUID olursa başka süreçteki workflow eski checkpoint'i
+  "uyumsuz" bulur) ve checkpoint yükü `jsonb` değil `text` saklanır (jsonb `$type` sırasını bozar). Ajan ekler/çıkarır ya da
+  yeniden adlandırırsanız o anda yarım kalan turlar devam edemez; devam hatası olarak atılır.
+- Metrik: `agent_workflow_recoveries_total{result=resumed|discarded|failed}`.
+
 ## 1. Hızlı başlangıç
 
 ### Gereksinimler

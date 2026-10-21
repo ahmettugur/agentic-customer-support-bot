@@ -50,6 +50,7 @@ döngüyü ve sonlandırmayı yönetir.
 | Mastra | — | — | — |
 | Planlama + yeniden planlama | — | `PlanningAgent`, compound query, replan, paralel SubTask | ✅ |
 | Human-in-the-loop | MAF approval | `ApprovalGateService`, onay kuyruğu | ✅ |
+| Dayanıklı yürütme (checkpoint) | MAF `CheckpointManager` | Adım başına kalıcı checkpoint, çökme/deploy sonrası tur devamı (`WorkflowCheckpointing`, **varsayılan kapalı**; bkz. `docs/operations.md`) | 🟡 |
 
 **Değerlendirme:** Bu katman projenin en güçlü katmanı.
 
@@ -63,6 +64,7 @@ döngüyü ve sonlandırmayı yönetir.
 | Uzun süreli hafıza | Episodik bellek (Qdrant) + `CustomerProfile` | ✅ |
 | Vector DB | Qdrant, `text-embedding-3-large` | ✅ |
 | Retrieval (RAG) | `SemanticMemoryContextProvider`, KnowledgeBase + Lessons | ✅ |
+| Hibrit arama | Qdrant sparse + dense, RRF | Dense + sözcüksel (BM25 benzeri, Türkçe-duyarlı) sinyal RRF ile birleşir; ürün/iade kodu gibi tam eşleşmeler yakalanır (`docs/hybrid-search.md`) | ✅ |
 | Prompt Cache | — | 🟡 |
 
 **Eksik — Prompt Cache:** OpenAI, 1024 token'ı aşan aynı prefix'leri otomatik önbelleğe alır.
@@ -99,12 +101,11 @@ geçmesi (fallback zinciri) de bu katmanda yapılır.
 | SQL/DB | Sipariş, ürün ve şikayet tool'ları (EF Core / Postgres) | ✅ |
 | APIs | E-posta, kargo uçları | ✅ |
 | GitHub / Browser / Code | Müşteri destek alanı için gerekli değil | — |
-| MCP (Model Context Protocol) | — | ❌ |
+| MCP (Model Context Protocol) | Sunucu: salt-okunur araçlar Streamable HTTP ile dışa açılır (`docs/mcp.md`, varsayılan kapalı). İstemci (harici MCP araçlarını tüketme) yok | 🟡 |
 
-**Eksik — MCP:** Tool'lar MAF'a doğrudan kayıtlı. Bunları bir MCP sunucusu olarak dışa
-açmak (`ModelContextProtocol` NuGet paketiyle) iki şey sağlar: başka ajanlar ve IDE'ler
-(Claude Desktop, Copilot) aynı iş tool'larını kullanabilir, proje de harici MCP
-sunucularını tüketebilir.
+**MCP:** Salt-okunur araçlar (ürün kataloğu; sipariş/şikayet sorguları) MCP sunucusu olarak dışa açıldı, A2A ile aynı
+Partner/özne token modeliyle (`docs/mcp.md`). **Eksik:** MCP *istemcisi* (harici sunucuların araçlarını ajanlara bağlamak) yok —
+araç açıklamaları ve sonuçları LLM bağlamına girdiği için ayrı bir güvenlik tasarımı gerektirir.
 
 ## 6. Durum / Veri Katmanı
 
@@ -123,17 +124,22 @@ deposuna taşınması önerilir.
 | Diyagramdaki | Bu projede | Durum |
 |---|---|---|
 | Tracing | OpenTelemetry → OTel Collector → Jaeger; MAF `UseOpenTelemetry` (gen_ai semconv) | ✅ |
-| Langfuse / Phoenix | — (OTLP hazır, yalnızca exporter eksik) | 🟡 |
+| Langfuse / Phoenix | OTel Collector Jaeger + Langfuse'a dağıtır (`docs/langfuse.md`): generation'lar, oturum/müşteri, maliyet, isteğe bağlı PII maskeli içerik; müşteri puanı oturum skoru olarak gider; KVKK silmesi Langfuse trace'lerini de siler | ✅ |
+| Metrik & alarm | Prometheus + Grafana | Token, maliyet, gecikme, workflow sonucu, HTTP 5xx; 4 alarm kuralı (bildirim kanalı yok, Alertmanager yok) | ✅ |
+| Prompt versiyonlama | Langfuse prompts / DB | İçerikten türeyen prompt sürümü trace'e ve Langfuse'a damgalanır, `GET /prompts`. Çalışırken düzenleme ve A/B sunumu yok | 🟡 |
 | Maliyet | `CostCalculator`, `LlmBudget`, görüşme başına maliyet | ✅ |
 | Guardrails (girdi) | `InputGuard`: injection, PII maskeleme, unicode, ID bombası | ✅ |
 | Guardrails (çıktı) | `ResponseAgent` self-critique + `ReasoningSanityChecker` | 🟡 |
 | RAGAS / TruLens | MEAI LLM-judge (relevance/coherence), YAML senaryolar | 🟡 |
+| Eval CI kapısı | Gece iş akışı | `POST /eval/gate` + `eval-gate.yml`: yalnızca otomatik kriterlere bakar, zorunlu senaryo (prompt injection). Senaryoların yaklaşık yarısında otomatik kriter var | 🟡 |
 | Replay / debug | Trace Replay UI | ✅ |
 
 **Eksikler:**
 
-- **Langfuse/Phoenix:** Collector'a ikinci bir OTLP exporter eklemek yeterli. Böylece prompt
-  ve completion içerikleri LLM'e özel bir arayüzde görünür.
+- **Eval kapsamı:** Kapı yalnızca otomatik kriteri olan senaryoları değerlendirir; geri kalanı
+  (dil, anlamsız girdi vb.) `manual_review`. Kapsamı artırmak için senaryolara otomatik kriter eklenmeli.
+  Eşikler ilk gerçek gece koşusundan önce varsayımdır.
+- **Alarm bildirimi:** Prometheus alarmları yalnızca arayüzde görünür; e-posta/Slack için Alertmanager yok.
 - **Çıktı guardrail'i:** Bot yanıtı müşteriye gitmeden önce deterministik bir çıktı kapısı
   yok. Örneğin başka bir müşterinin e-postası veya telefonu, iç sistem bilgisi ya da
   system prompt sızıntısı yakalanmıyor.
@@ -162,10 +168,10 @@ pub/sub).
 | # | Katman | Durum | En değerli sonraki adım |
 |---|---|---|---|
 | 1 | Arayüz & Kanallar | 🟢 güçlü | Slack/Teams adaptörü |
-| 2 | Orkestrasyon | 🟢 çok güçlü | — |
-| 3 | Hafıza & Bağlam | 🟢 güçlü | Prompt cache farkındalığı (maliyet doğruluğu) |
+| 2 | Orkestrasyon | 🟢 çok güçlü | Checkpoint'i üretimde açmadan önce yük/gecikme ölçümü |
+| 3 | Hafıza & Bağlam | 🟢 güçlü (hibrit arama eklendi) | Prompt cache farkındalığı (maliyet doğruluğu) |
 | 4 | Modeller | 🟡 tek sağlayıcı | Çok sağlayıcı + fallback |
-| 5 | Araçlar | 🟢 alan için yeterli | MCP sunucusu |
+| 5 | Araçlar | 🟢 alan için yeterli (MCP sunucusu var) | MCP istemcisi (güvenlik tasarımıyla) |
 | 6 | Durum / Veri | 🟢 güçlü | Nesne deposu (S3/MinIO) |
-| 7 | Gözlem, Güvenlik, Eval | 🟡 iyi ama eksikli | Çıktı guardrail'i, Langfuse, RAG metrikleri |
+| 7 | Gözlem, Güvenlik, Eval | 🟢/🟡 gözlem güçlü, güvenlik-eval eksikli | Çıktı guardrail'i, RAG metrikleri, eval kapsamı |
 | 8 | Dağıtım | 🟠 zayıf | Uygulama container'ı + k8s |

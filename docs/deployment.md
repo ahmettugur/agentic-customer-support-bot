@@ -7,7 +7,7 @@ Bu doküman Docker Compose altyapısını, servis haritasını ve production haz
 ## 1. Docker Compose Servis Haritası
 
 ```yaml
-# docker-compose.yml — 12 servis
+# docker-compose.yml — 14 servis
 services:
   postgres:        # Ana veritabanı (+ Langfuse'un ayrı "langfuse" veritabanı)
   redis:           # Cache (db0) + Langfuse kuyrukları (db1)
@@ -15,6 +15,8 @@ services:
   elasticsearch:   # Jaeger trace storage
   kibana:          # Elasticsearch görselleştirme
   otel-collector:  # Uygulamanın tek OTLP ucu: span'leri Jaeger'a ve Langfuse'a dağıtır
+  prometheus:      # Uygulama metrikleri + alarm kuralları (deploy/prometheus-alerts.yml)
+  grafana:         # Metrik panoları (hazır pano: Customer Support Bot — Genel)
   jaeger:          # Distributed tracing UI
   mailpit:         # Yerel SMTP test sunucusu (e-postalar dışarı çıkmaz)
   langfuse-web:    # Langfuse arayüzü + OTLP girişi (LLM gözlemlenebilirliği, docs/langfuse.md)
@@ -38,6 +40,8 @@ services:
 | **OTel Collector gRPC** | 4327 | 4317 | OTLP receiver — **uygulama buraya yazar** (`Telemetry:Otlp:Endpoint`) |
 | **OTel Collector HTTP** | 4328 | 4318 | OTLP receiver |
 | **OTel Collector health** | 13133 | 13133 | Sağlık kontrolü |
+| **Prometheus** | 9090 | 9090 | Metrikler ve alarmlar (http://localhost:9090/alerts) |
+| **Grafana** | 3001 | 3000 | Metrik panoları (http://localhost:3001, kullanıcı `admin`, parola `GRAFANA_ADMIN_PASSWORD`) |
 | **Langfuse UI** | 3000 | 3000 | LLM generation'ları, oturum/kullanıcı görünümü (http://localhost:3000) |
 | **Mailpit SMTP** | 1025 | 1025 | Uygulamanın e-posta gönderdiği yerel SMTP |
 | **Mailpit UI** | 8025 | 8025 | Gönderilen e-postaları görüntüleme (http://localhost:8025) |
@@ -71,9 +75,23 @@ docker compose -f deploy/docker-compose.yml up -d
 ### OTel Collector
 
 Uygulamanın tek OTLP ucudur (host 4327). Span'leri iki hedefe dağıtır: **Jaeger** (tüm span'ler; prompt/yanıt
-içeriği silinmiş) ve **Langfuse** (yalnızca ajan/LLM span'leri ve sohbet ucunun kök span'i). Metrikler alınır ama
-hiçbir yere gönderilmez (`nop`). Contrib imajı kullanılır (`basicauth`, `filter`, `attributes`, `nop`). Langfuse
+içeriği silinmiş) ve **Langfuse** (yalnızca ajan/LLM span'leri ve sohbet ucunun kök span'i). Metrikler collector'ın
+Prometheus exporter'ına (8889) gider; **Prometheus** oradan çeker, **Grafana** gösterir. Contrib imajı kullanılır
+(`basicauth`, `filter`, `attributes`, `prometheus`). Langfuse
 kurulumu ve içerik kaydı: [`docs/langfuse.md`](langfuse.md).
+
+### Metrikler, pano ve alarmlar
+
+| Metrik (Prometheus adı) | Kaynak |
+|---|---|
+| `ai_llm_calls_total`, `ai_tokens_input_total`, `ai_tokens_output_total`, `ai_cost_usd_USD_total`, `ai_llm_duration_milliseconds_*` | `TelemetryChatClient` (etiket: `ai_model`, `ai_provider`) |
+| `agent_workflow_completions_total`, `agent_workflow_duration_milliseconds_*` | `WorkflowRunner` (etiket: `status` = ok / timeout / cancelled / error) |
+| `http_server_request_duration_seconds_*` | ASP.NET Core |
+
+Alarmlar (`deploy/prometheus-alerts.yml`): günlük maliyet bütçenin %80'inde, LLM p95 gecikme > 20 sn, workflow
+hata/timeout oranı > %10, HTTP 5xx oranı > %5. **Alertmanager yoktur**; alarmlar <http://localhost:9090/alerts>
+adresinde görünür. E-posta/Slack bildirimi için Alertmanager ya da Grafana contact point eklenmelidir.
+Eşikler `LlmBudget` varsayılanlarına göre sabittir; bütçe ayarını değiştirirseniz kuralı da güncelleyin.
 
 `deploy/otel-collector-config.yaml`:
 

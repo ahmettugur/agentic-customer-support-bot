@@ -1,0 +1,44 @@
+# Alarm kuralları. Alertmanager yok: alarmlar Prometheus arayüzünde (http://localhost:9090/alerts) ve
+# Grafana'da görünür. Bildirim (e-posta/Slack) istenirse Alertmanager ya da Grafana contact point eklenir.
+#
+# Metrik adları OTel -> Prometheus çevirisinden gelir: nokta "_" olur, birim son ek olur
+# (ms -> _milliseconds, s -> _seconds, USD -> _USD), sayaçlara _total eklenir.
+groups:
+  - name: customer-support-bot
+    rules:
+      # Bütçe: LlmBudget:DailyLimitUsd (50) değerinin %80'i (WarningThresholdPercent).
+      - alert: LlmDailyCostNearBudget
+        expr: sum(increase(ai_cost_usd_USD_total[24h])) > 40
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Son 24 saatte LLM maliyeti günlük bütçenin %80'ini aştı"
+          description: "{{ $value | printf \"%.2f\" }} USD (limit: LlmBudget:DailyLimitUsd)."
+
+      - alert: LlmLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(ai_llm_duration_milliseconds_bucket[5m]))) > 20000
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "LLM çağrılarında p95 gecikme 20 sn üzerinde"
+          description: "p95 = {{ $value | printf \"%.0f\" }} ms."
+
+      - alert: WorkflowFailureRateHigh
+        expr: |
+          sum(rate(agent_workflow_completions_total{status=~"error|timeout"}[10m]))
+            / sum(rate(agent_workflow_completions_total[10m])) > 0.10
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: "Workflow koşularının %10'dan fazlası hata/timeout ile bitiyor"
+          description: "Oran: {{ $value | humanizePercentage }}."
+
+      - alert: Http5xxRateHigh
+        expr: |
+          sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m]))
+            / sum(rate(http_server_request_duration_seconds_count[5m])) > 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "HTTP isteklerinin %5'inden fazlası 5xx dönüyor"
+          description: "Oran: {{ $value | humanizePercentage }}."

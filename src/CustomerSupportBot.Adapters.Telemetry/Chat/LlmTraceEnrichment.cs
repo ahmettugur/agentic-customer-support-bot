@@ -21,6 +21,12 @@ public sealed class LlmTraceEnrichment
     /// <summary>Span'e yazılmadan önce her metne uygulanan PII maskeleyici.</summary>
     public Func<string, string> Redact { get; init; } = static s => s;
 
+    /// <summary>
+    /// Yüklü prompt setinin içerik sürümü. Span'e <c>langfuse.version</c> / <c>prompt.version</c> olarak yazılır:
+    /// Langfuse'ta trace'ler sürüme göre süzülür, müşteri puanı skorlarıyla sürümler karşılaştırılır.
+    /// </summary>
+    public string? PromptVersion { get; init; }
+
     /// <summary>Çağrı anındaki müşteri kimliği (Langfuse "Users" görünümü); yoksa null.</summary>
     public Func<string?> CurrentUserId { get; init; } = static () => null;
 }

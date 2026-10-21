@@ -22,4 +22,27 @@ public class WorkflowTraceEventProcessorTests
         accessor.Context.SessionId.Should().Be("session-1");
         accessor.Context.CustomerId.Should().Be("1001");
     }
+
+    [Fact]
+    public async Task StartTraceState_StampsThePromptSetVersion_OnTheTrace()
+    {
+        var prompts = Substitute.For<CustomerSupportBot.Application.Ports.Outbound.IPromptRepository>();
+        prompts.SetVersion.Returns("a1b2c3d4");
+        var processor = new WorkflowTraceEventProcessor(
+            new InMemoryReasoningTraceStore(), new ApprovalContextAccessor(), prompts);
+
+        var state = await processor.StartTraceStateAsync(new AgentSession { SessionId = "s" }, "merhaba", null);
+
+        state.Trace.PromptVersion.Should().Be("a1b2c3d4");
+    }
+
+    [Fact]
+    public async Task StartTraceState_WithoutPromptRepository_LeavesVersionNull()
+    {
+        var processor = new WorkflowTraceEventProcessor(new InMemoryReasoningTraceStore(), new ApprovalContextAccessor());
+
+        var state = await processor.StartTraceStateAsync(new AgentSession { SessionId = "s" }, "merhaba", null);
+
+        state.Trace.PromptVersion.Should().BeNull();
+    }
 }

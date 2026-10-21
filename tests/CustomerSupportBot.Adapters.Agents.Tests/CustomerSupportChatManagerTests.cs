@@ -187,4 +187,62 @@ public class CustomerSupportChatManagerTests
         var history = new List<ChatMessage> { msg1, msg2 };
         (await InvokeShouldTerminate(mgr, history)).Should().BeTrue();
     }
+
+    // ─── checkpoint: yönetici durumu (handoff sayaçları) ───
+    //
+    // MAF yalnızca kendi durumunu (IterationCount) checkpoint'ler; bu sözlük bizim. Kaydedilmezse devam eden tur sayaçları
+    // sıfırdan başlar ve "ajan başına en fazla N devir" güvencesi zayıflar.
+
+    private static Microsoft.Agents.AI.Workflows.IWorkflowContext FakeStateContext()
+    {
+        var state = new Dictionary<string, object?>();
+        var ctx = Substitute.For<Microsoft.Agents.AI.Workflows.IWorkflowContext>();
+        ctx.QueueStateUpdateAsync(Arg.Any<string>(), Arg.Any<Dictionary<string, int>>(), Arg.Any<CancellationToken>())
+            .Returns(call => { state[call.ArgAt<string>(0)] = call.ArgAt<Dictionary<string, int>>(1); return ValueTask.CompletedTask; });
+        ctx.ReadStateAsync<Dictionary<string, int>>(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call => new ValueTask<Dictionary<string, int>?>(
+                state.TryGetValue(call.ArgAt<string>(0), out var v) ? (Dictionary<string, int>?)v : null));
+        return ctx;
+    }
+
+    private static List<ChatMessage> PlanToOrder() =>
+    [
+        new(ChatRole.User, "soru"),
+        new(ChatRole.Assistant, "{\"selectedAgent\":\"" + WellKnown.AgentNames.Order + "\",\"needsClarification\":false}")
+            { AuthorName = WellKnown.AgentNames.Planning }
+    ];
+
+    [Fact]
+    public async Task HandoffCounts_SurviveACheckpointRoundTrip_IntoAFreshManager()
+    {
+        var guards = new WorkflowGuardOptions { MaxHandoffsPerAgent = 1 };
+        var before = BuildManager(guards);
+        (await InvokeSelectAsync(before, PlanToOrder())).Name.Should().Be(WellKnown.AgentNames.Order);   // sayaç 1'e çıktı
+        var ctx = FakeStateContext();
+        await before.SaveHandoffCountsAsync(ctx, default);
+
+        var afterRestart = BuildManager(guards);
+        await afterRestart.RestoreHandoffCountsAsync(ctx, default);
+
+        (await InvokeSelectAsync(afterRestart, PlanToOrder())).Name.Should().Be(WellKnown.AgentNames.Response,
+            "devir sınırı yeniden başlatmayla sıfırlanmamalı");
+    }
+
+    [Fact]
+    public async Task WithoutRestore_AFreshManagerStartsFromZero()
+    {
+        var fresh = BuildManager(new WorkflowGuardOptions { MaxHandoffsPerAgent = 1 });
+
+        (await InvokeSelectAsync(fresh, PlanToOrder())).Name.Should().Be(WellKnown.AgentNames.Order);
+    }
+
+    [Fact]
+    public async Task Restore_WithNothingSaved_KeepsCountsEmpty()
+    {
+        var mgr = BuildManager(new WorkflowGuardOptions { MaxHandoffsPerAgent = 1 });
+
+        await mgr.RestoreHandoffCountsAsync(FakeStateContext(), default);
+
+        (await InvokeSelectAsync(mgr, PlanToOrder())).Name.Should().Be(WellKnown.AgentNames.Order);
+    }
 }

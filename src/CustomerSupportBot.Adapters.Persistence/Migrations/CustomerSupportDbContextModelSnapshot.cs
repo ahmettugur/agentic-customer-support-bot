@@ -18,7 +18,7 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -1382,6 +1382,11 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("planning");
 
+                    b.Property<string>("PromptVersion")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("prompt_version");
+
                     b.Property<string>("ReasoningJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("reasoning");
@@ -1432,6 +1437,83 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .HasDatabaseName("ix_traces_session_started");
 
                     b.ToTable("reasoning_traces", "observability");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability.WorkflowCheckpointEntity", b =>
+                {
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("trace_id");
+
+                    b.Property<string>("CheckpointId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("checkpoint_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ParentCheckpointId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("parent_checkpoint_id");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload");
+
+                    b.HasKey("TraceId", "CheckpointId");
+
+                    b.HasIndex("TraceId", "CreatedAt")
+                        .HasDatabaseName("ix_workflow_checkpoints_trace_created");
+
+                    b.ToTable("workflow_checkpoints", "observability");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability.WorkflowTurnEntity", b =>
+                {
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("trace_id");
+
+                    b.Property<string>("CustomerId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("customer_id");
+
+                    b.Property<int>("HistoryCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("history_count");
+
+                    b.Property<string>("Query")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("query");
+
+                    b.Property<string>("ReasoningJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("reasoning");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("session_id");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("TraceId");
+
+                    b.HasIndex("StartedAt")
+                        .HasDatabaseName("ix_workflow_turns_started_at");
+
+                    b.ToTable("workflow_turns", "observability");
                 });
 
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Personalization.CustomerProfileEntity", b =>
@@ -1577,6 +1659,15 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_messages_session");
+                });
+
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability.WorkflowCheckpointEntity", b =>
+                {
+                    b.HasOne("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Observability.WorkflowTurnEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TraceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Catalog.CategoryEntity", b =>

@@ -94,6 +94,27 @@ public sealed class TelemetryChatClientLangfuseTests : IDisposable
     }
 
     [Fact]
+    public async Task PromptVersion_IsStampedAsLangfuseVersion()
+    {
+        var client = Build(Inner(), new LlmTraceEnrichment { PromptVersion = "a1b2c3d4" });
+
+        await client.GetResponseAsync([new ChatMessage(ChatRole.User, "x")], cancellationToken: Ct);
+
+        Span.GetTagItem("langfuse.version").Should().Be("a1b2c3d4");
+        Span.GetTagItem("prompt.version").Should().Be("a1b2c3d4");
+    }
+
+    [Fact]
+    public async Task WithoutPromptVersion_NoVersionTagIsWritten()
+    {
+        var client = Build(Inner());
+
+        await client.GetResponseAsync([new ChatMessage(ChatRole.User, "x")], cancellationToken: Ct);
+
+        Span.GetTagItem("langfuse.version").Should().BeNull();
+    }
+
+    [Fact]
     public async Task ContentIsNotCaptured_ByDefault()
     {
         var client = Build(Inner());

@@ -20,6 +20,13 @@ public class ReasoningTrace
     /// <summary>Kullanıcı sorgusu.</summary>
     public string UserQuery { get; set; } = "";
 
+    /// <summary>
+    /// Bu turda yüklü prompt setinin birleşik içerik sürümü (<c>PromptFingerprint.SetVersion</c>). "Bu yanıt hangi
+    /// prompt metniyle üretildi?" sorusunun cevabı; yanıt kalitesini prompt sürümleri arasında karşılaştırmanın anahtarı.
+    /// Eski kayıtlarda <c>null</c>.
+    /// </summary>
+    public string? PromptVersion { get; set; }
+
     /// <summary>Workflow başlangıç zamanı (UTC).</summary>
     public DateTime StartedAt { get; set; } = DateTime.UtcNow;
 

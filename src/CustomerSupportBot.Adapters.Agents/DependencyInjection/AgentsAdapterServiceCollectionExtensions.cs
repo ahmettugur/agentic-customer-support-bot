@@ -29,7 +29,12 @@ public static class AgentsAdapterServiceCollectionExtensions
         }
 
         services.AddSingleton<ApprovalGateService>();
+
+        // Workflow checkpoint'leme + çökme sonrası devam (WorkflowCheckpointing:Enabled=false iken pasif).
+        services.AddSingleton<Checkpointing.WorkflowCheckpointing>();
         services.AddSingleton<CustomerSupportTeam>();
+        services.AddSingleton<Checkpointing.ITurnResumer>(sp => sp.GetRequiredService<CustomerSupportTeam>());
+        services.AddSingleton<Application.Ports.Inbound.IWorkflowRecoveryPort, Checkpointing.WorkflowRecoveryService>();
         services.AddSingleton<IAgentTeamPort>(sp =>
             sp.GetRequiredService<CustomerSupportTeam>());
 
@@ -37,6 +42,9 @@ public static class AgentsAdapterServiceCollectionExtensions
         // ajanlarından AYRI örneklerdir (salt-okunur tool kümesi, düz metin çıktı).
         // Endpoint'e bağlanması Api katmanının işidir; burada yalnızca kurulur.
         services.AddSingleton<A2A.A2AAgentCatalog>();
+
+        // MCP ile açılan salt-okunur tool kümeleri (endpoint yalnızca Mcp:Enabled iken map edilir).
+        services.AddSingleton<Mcp.McpToolCatalog>();
 
         // EvaluationRunner MAF'ın EvalItem/ChatMessage tiplerine bağımlı olduğu için
         // burada (Application değil) yaşıyor — bkz. CriteriaEvaluator.cs başındaki not.

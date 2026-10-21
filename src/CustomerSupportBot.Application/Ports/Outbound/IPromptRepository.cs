@@ -13,4 +13,16 @@ public interface IPromptRepository
 
     /// <summary>Kayıtlı tüm prompt anahtarları.</summary>
     IReadOnlyCollection<string> Keys { get; }
+
+    /// <summary>Bir prompt'un içerik sürümü (8 hex). Anahtar yoksa <see cref="KeyNotFoundException"/>.</summary>
+    string VersionOf(string key);
+
+    /// <summary>Anahtar → içerik sürümü.</summary>
+    IReadOnlyDictionary<string, string> Versions { get; }
+
+    /// <summary>
+    /// Tüm prompt'ların birleşik sürümü. Trace'e ve Langfuse'a damgalanır: "bu yanıt hangi prompt setiyle
+    /// üretildi?" sorusunun cevabı ve sürümler arası karşılaştırmanın anahtarı.
+    /// </summary>
+    string SetVersion { get; }
 }

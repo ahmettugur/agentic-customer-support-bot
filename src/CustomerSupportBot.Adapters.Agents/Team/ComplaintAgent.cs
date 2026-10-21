@@ -26,6 +26,9 @@ internal sealed class ComplaintAgent : SupportAgentBase
             chatClient,
             new ChatClientAgentOptions
             {
+                // Sabit kimlik: executor adı "<Ad>_<Id>" olduğundan rastgele GUID, başka süreçte kurulan workflow'un
+                // eski bir checkpoint'le eşleşmesini imkânsız kılar (bkz. WorkflowCheckpointing).
+                Id = WellKnown.AgentNames.Complaint,
                 Name = WellKnown.AgentNames.Complaint,
                 Description = "Müşteri şikayetlerini işler.",
                 ChatOptions = new ChatOptions

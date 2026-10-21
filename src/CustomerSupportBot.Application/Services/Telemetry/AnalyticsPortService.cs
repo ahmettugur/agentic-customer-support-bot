@@ -24,6 +24,8 @@ public sealed class AnalyticsPortService : IAnalyticsPort
     private readonly Ports.Outbound.Observability.ILlmCallPersistencePort? _costs;
     private readonly IConversationDispositionStore? _dispositions;
     private readonly Ports.Outbound.Observability.ILlmSpendGuard? _spendGuard;
+    private readonly Ports.Outbound.Observability.IConversationScoreSink? _scoreSink;
+    private static readonly TimeSpan ScorePublishTimeout = TimeSpan.FromSeconds(3);
     private readonly ConversationClosingOptions _closing;
 
     /// <summary>Panelde gösterilen en sık etiket sayısı.</summary>
@@ -44,8 +46,10 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         Ports.Outbound.Observability.ILlmCallPersistencePort? costs = null,
         IConversationDispositionStore? dispositions = null,
         IOptions<ConversationClosingOptions>? closing = null,
-        Ports.Outbound.Observability.ILlmSpendGuard? spendGuard = null)
+        Ports.Outbound.Observability.ILlmSpendGuard? spendGuard = null,
+        Ports.Outbound.Observability.IConversationScoreSink? scoreSink = null)
     {
+        _scoreSink = scoreSink;
         _spendGuard = spendGuard;
         _costs = costs;
         _dispositions = dispositions;
@@ -66,7 +70,26 @@ public sealed class AnalyticsPortService : IAnalyticsPort
         _logger.LogInformation(
             "Rating submitted: session={SessionId} stars={Stars}",
             sessionId, stars);
+        await PublishScoreAsync(rating);
         return rating;
+    }
+
+    /// <summary>
+    /// Puanı gözlem aracına skor olarak yollar. En iyi gayret: kısa bir süreyle sınırlı, hata yutulur —
+    /// puan zaten kaydedildi ve aracın erişilemez olması müşterinin puan vermesini engellememeli.
+    /// </summary>
+    private async Task PublishScoreAsync(ConversationRating rating)
+    {
+        if (_scoreSink is null) return;
+        using var timeout = new CancellationTokenSource(ScorePublishTimeout);
+        try
+        {
+            await _scoreSink.PublishRatingAsync(rating, timeout.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Rating score could not be published (session={SessionId})", rating.SessionId);
+        }
     }
 
     public ConversationRating? GetRating(string sessionId)
