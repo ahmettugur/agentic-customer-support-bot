@@ -397,6 +397,23 @@ body {
 }
 
 /* ── Kişisel verilerim (KVKK) ── */
+.history-menu { position: relative; flex-shrink: 0; }
+.history-panel { width: 320px; padding: var(--space-1); display: flex; flex-direction: column; gap: 2px; }
+.history-item {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+    padding: 8px 10px; border: 0; border-radius: var(--radius-sm); background: transparent;
+    color: var(--color-text); text-align: left; cursor: pointer;
+    transition: background var(--transition);
+}
+.history-item:hover:not(:disabled) { background: var(--color-surface-alt); }
+.history-item:disabled { opacity: .55; cursor: not-allowed; }
+.history-item.active { background: var(--color-surface-alt); box-shadow: inset 2px 0 0 var(--color-primary, #4f46e5); }
+.history-title {
+    font-size: 13.5px; font-weight: 500; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.history-meta { font-size: 11.5px; color: var(--color-text-muted); }
+
 .privacy-menu { position: relative; }
 
 .privacy-panel { width: 320px; padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }

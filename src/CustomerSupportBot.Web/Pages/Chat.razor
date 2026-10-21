@@ -95,6 +95,39 @@
                         </div>
                     }
                 </div>
+                <div class="history-menu">
+                    <button type="button" class="btn-approval-bell" @onclick="ToggleHistoryPanelAsync"
+                            aria-label="Konuşmalarım" title="Konuşmalarım" aria-expanded="@(_showHistoryPanel ? "true" : "false")">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>
+                        </svg>
+                    </button>
+                    @if (_showHistoryPanel)
+                    {
+                        <div class="approval-panel history-panel" role="list" aria-label="Geçmiş konuşmalarım">
+                            @if (_pastLoading)
+                            {
+                                <div class="approval-panel-empty">Yükleniyor…</div>
+                            }
+                            else if (_pastSessions.Count == 0)
+                            {
+                                <div class="approval-panel-empty">Henüz geçmiş bir konuşmanız yok.</div>
+                            }
+                            else
+                            {
+                                @foreach (var past in _pastSessions)
+                                {
+                                    var pastId = past.SessionId;
+                                    <button type="button" role="listitem" class="history-item @(pastId == _sessionId ? "active" : "")"
+                                            @onclick="() => OpenSessionAsync(pastId)" disabled="@_isStreaming">
+                                        <span class="history-title">@ChatHistory.TitleOf(past)</span>
+                                        <span class="history-meta">@ChatHistory.RelativeTime(past.LastActivity, DateTimeOffset.Now, DateTimeOffset.Now.Offset) · @past.MessageCount mesaj</span>
+                                    </button>
+                                }
+                            }
+                        </div>
+                    }
+                </div>
                 <div class="privacy-menu">
                     <button type="button" class="btn-theme-toggle" @onclick="TogglePrivacyPanel"
                             aria-label="Kişisel verilerim" title="Kişisel verilerim" aria-expanded="@(_showPrivacyPanel ? "true" : "false")">
@@ -853,6 +886,8 @@
         await JS.InvokeVoidAsync("loadScript", "/js/voice-orb.js", "js-voice-orb");
         await JS.InvokeVoidAsync("loadScript", "/js/realtime-client.js", "js-realtime-client");
         await JS.InvokeVoidAsync("loadScript", "/js/realtime-ui.js", "js-realtime-ui");
+
+        await RestoreActiveSessionAsync();
     }
 
     private async Task ToggleThemeAsync() => await ThemeSvc.ToggleAsync();
@@ -1097,6 +1132,7 @@
         if (!string.IsNullOrEmpty(id) && _sessionId != id)
         {
             _sessionId = id;
+            RememberSession(id);
             _ = JS.InvokeVoidAsync("_startPersistentEvents", id).AsTask();
             _ = FetchUnseenApprovalsAsync(id);
         }
@@ -1260,6 +1296,7 @@
                     if (s is not null && s != _sessionId)
                     {
                         _sessionId = s;
+                        RememberSession(s);
                         _ = JS.InvokeVoidAsync("_startPersistentEvents", s).AsTask();
                         _ = FetchUnseenApprovalsAsync(s);
                     }
@@ -1272,6 +1309,7 @@
                     if (s2 is not null)
                     {
                         _sessionId = s2;
+                        RememberSession(s2);
                         _ = JS.InvokeVoidAsync("_startPersistentEvents", s2).AsTask();
                         _ = FetchUnseenApprovalsAsync(s2);
                     }
@@ -1414,6 +1452,7 @@
     {
         if (id is null || id == _sessionId) return;
         _sessionId = id;
+        RememberSession(id);
         try { await JS.InvokeVoidAsync("_startPersistentEvents", id); } catch { }
         _ = FetchUnseenApprovalsAsync(id);
     }
@@ -1573,6 +1612,67 @@
             await InvokeAsync(ScrollBottomAsync);
     }
 
+    // ── Geçmiş konuşmalar ─────────────────────────────────────────────────────
+    // Sayfa yenilenince / tarayıcı kapanıp açılınca konuşma kaybolmasın. Hangi oturumun "aktif" olduğu bu tarayıcıda
+    // tutulur (localStorage); "Yeni sohbet" bunu siler, böylece yenilemede eski konuşma istenmeden geri gelmez.
+    // Depolama kapalıysa (gizli pencere vb.) özellik sessizce devre dışı kalır, sohbet etkilenmez.
+    private const string ActiveSessionKey = "csbot.activeSession";
+    private bool _showHistoryPanel;
+    private bool _pastLoading;
+    private List<SessionInfo> _pastSessions = [];
+
+    private void RememberSession(string id)
+        => _ = JS.InvokeVoidAsync("localStorage.setItem", ActiveSessionKey, id).AsTask().ContinueWith(_ => { });
+
+    private async Task ForgetSessionAsync()
+    {
+        try { await JS.InvokeVoidAsync("localStorage.removeItem", ActiveSessionKey); } catch { }
+    }
+
+    private async Task RestoreActiveSessionAsync()
+    {
+        string? active;
+        try { active = await JS.InvokeAsync<string?>("localStorage.getItem", ActiveSessionKey); }
+        catch { return; }
+        if (string.IsNullOrEmpty(active)) return;
+
+        var target = ChatHistory.ResolveRestore(await ChatApi.GetSessionsAsync(), active);
+        if (target is null) { await ForgetSessionAsync(); return; }
+        await LoadSessionAsync(target);
+    }
+
+    private async Task ToggleHistoryPanelAsync()
+    {
+        _showHistoryPanel = !_showHistoryPanel;
+        if (!_showHistoryPanel) return;
+
+        _pastLoading = true;
+        StateHasChanged();
+        _pastSessions = ChatHistory.Visible(await ChatApi.GetSessionsAsync());
+        _pastLoading = false;
+    }
+
+    private async Task OpenSessionAsync(string id)
+    {
+        _showHistoryPanel = false;
+        if (_isStreaming || id == _sessionId) return;
+        await LoadSessionAsync(id);
+    }
+
+    /// <summary>Konuşmayı sıfırlar ve sunucudaki mesajlarla doldurur; oturum olayları/onay bildirimleri yeniden bağlanır.</summary>
+    private async Task LoadSessionAsync(string id)
+    {
+        var history = await ChatApi.GetSessionMessagesAsync(id);
+        if (history.Count == 0) { await ForgetSessionAsync(); return; }
+
+        await NewChatAsync();
+        foreach (var m in history)
+            _messages.Add(new ChatMsg { Role = ChatHistory.UiRole(m.Role), Content = m.Text });
+        await SetSessionAsync(id);
+        StateHasChanged();
+        _ = ScrollBottomAsync();
+    }
+
     // ── New chat ──────────────────────────────────────────────────────────────
     private async Task NewChatAsync()
     {
@@ -1580,6 +1680,7 @@
         try { await JS.InvokeVoidAsync("_stopPersistentEvents"); } catch { }
         _messages.Clear();
         _sessionId           = null;
+        await ForgetSessionAsync();
         _input               = string.Empty;
         _pendingPhotos.Clear();
         _photoError          = null;

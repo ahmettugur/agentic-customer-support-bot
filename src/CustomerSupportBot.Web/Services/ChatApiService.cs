@@ -157,8 +157,11 @@ public sealed class ChatApiService(HttpClient http)
 public sealed record RatingResponse(int Stars, string? Feedback);
 public sealed record AttachmentUploadResponse(string? AttachmentId, string? SessionId, string? Description, string? Error = null);
 public sealed record ApiError(string? Error, string? Message);
-public sealed record SessionInfo(string SessionId, DateTimeOffset LastActivity, int MessageCount);
-public sealed record SessionMessage(string Role, string Content, DateTimeOffset Timestamp);
+/// <summary>GET /sessions/ satırı. Alanlar sunucu şekliyle (SessionInfo) birebir: Title ilk kullanıcı mesajının başıdır.</summary>
+public sealed record SessionInfo(string SessionId, string Title, DateTimeOffset LastActivity, int MessageCount);
+
+/// <summary>GET /sessions/{id}/messages satırı: sunucu <c>{ role: "user"|"bot", text }</c> döndürür.</summary>
+public sealed record SessionMessage(string Role, string Text);
 
 public sealed record UnseenApproval(
     string Id,
