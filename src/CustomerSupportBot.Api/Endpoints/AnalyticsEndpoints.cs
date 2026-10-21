@@ -67,6 +67,18 @@ public static class AnalyticsEndpoints
             })
             .RequireRateLimiting("general");
 
+        // Bot yanıtlarına 👍/👎 (en yeni üstte). Bot metni DÖNMEZ: yalnızca oturum, trace, neden ve müşterinin yorumu —
+        // metne trace üzerinden (GET /traces/{id}) ulaşılır.
+        app.MapGet("/analytics/message-feedback/recent",
+            async (CustomerSupportBot.Application.Ports.Outbound.Persistence.IMessageFeedbackStore store,
+                   int count = 50, bool? helpful = null, CancellationToken ct = default) =>
+                Results.Json((await store.GetRecentAsync(Math.Clamp(count, 1, 500), helpful, ct)).Select(f => new
+                {
+                    f.SessionId, f.TraceId, f.Helpful, f.Reason, f.Comment, f.CustomerId, f.UpdatedAt
+                })))
+            .RequireAuthorization("Admin")
+            .RequireRateLimiting("general");
+
         app.MapGet("/analytics/ratings/recent",
             (IAnalyticsPort analytics, int count = 20) =>
                 Results.Json(analytics.GetRecentRatings(count)))

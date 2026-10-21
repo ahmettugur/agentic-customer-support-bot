@@ -235,6 +235,34 @@
           "legendFormat": "toplam"
         }
       ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Bot yanıtı geri bildirimi / saat (👍 / 👎)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (helpful, reason) (increase(chat_message_feedback_total[1h]))",
+          "legendFormat": "helpful={{helpful}} {{reason}}"
+        }
+      ]
     }
   ]
 }

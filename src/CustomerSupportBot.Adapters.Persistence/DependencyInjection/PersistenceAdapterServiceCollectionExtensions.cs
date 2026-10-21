@@ -49,6 +49,7 @@ public static class PersistenceAdapterServiceCollectionExtensions
         AddSessionDataStore<IChatModeRegistry, PostgresChatModeRegistry>(services);
         AddSessionDataStore<IChatBridge, PostgresChatBridge>(services);
         AddSessionDataStore<IRatingStore, PostgresRatingStore>(services);
+        AddSessionDataStore<IMessageFeedbackStore, PostgresMessageFeedbackStore>(services);
         AddSessionDataStore<IAttachmentStore, PostgresAttachmentStore>(services);
         AddSessionDataStore<IConversationDispositionStore, PostgresConversationDispositionStore>(services);
 

@@ -12,4 +12,10 @@ namespace CustomerSupportBot.Application.Ports.Outbound.Observability;
 public interface IConversationScoreSink
 {
     Task PublishRatingAsync(ConversationRating rating, CancellationToken ct = default);
+
+    /// <summary>Mesaj başına 👍/👎'yi oturum skoru olarak yazar (kimlik: oturum + mesaj özeti; yeniden verince güncellenir).</summary>
+    Task PublishMessageFeedbackAsync(MessageFeedback feedback, CancellationToken ct = default);
+
+    /// <summary>Daha önce yazılmış mesaj skorunu kaldırır (oy geri çekildi / KVKK silme). Olmayan skor hata değildir.</summary>
+    Task RemoveMessageFeedbackAsync(string sessionId, string messageHash, CancellationToken ct = default);
 }

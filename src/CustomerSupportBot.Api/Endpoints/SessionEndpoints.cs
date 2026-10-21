@@ -40,18 +40,47 @@ public static class SessionEndpoints
         // GET /sessions/{sessionId}/messages — Belirli oturumun mesajlarını getir
         app.MapGet("/sessions/{sessionId}/messages", async (
             string sessionId, HttpContext http,
-            ISessionPort sessionPort, ISessionManager sessions, CancellationToken ct) =>
+            ISessionPort sessionPort, ISessionManager sessions, IMessageFeedbackPort feedback, CancellationToken ct) =>
         {
             if (!await IsOwnSessionAsync(sessionId, http, sessions, ct)) return SessionForbidden();
 
             var history = await sessionPort.GetHistoryAsync(sessionId, ct);
-            var messages = history.Select(m => new
+            var votes = await feedback.GetForSessionAsync(sessionId, ct);
+            var messages = history.Select(m =>
             {
-                role = m.Role == ConversationRoles.User ? "user" : "bot",
-                text = m.Text ?? ""
+                var isUser = m.Role == ConversationRoles.User;
+                var text = m.Text ?? "";
+                // Bot mesajlarına müşterinin daha önce verdiği oy eklenir (sayfa yenilenince 👍/👎 durumu kaybolmasın).
+                votes.TryGetValue(MessageFeedback.HashOf(text), out var vote);
+                return new
+                {
+                    role = isUser ? "user" : "bot",
+                    text,
+                    feedback = !isUser && vote is not null ? new { helpful = vote.Helpful, reason = vote.Reason } : null
+                };
             });
             return Results.Json(messages);
         }).RequireAuthorization("SessionAccess").RequireRateLimiting("general");
+
+        // POST /sessions/{sessionId}/messages/feedback — bot yanıtına 👍/👎 (helpful=null: oyu geri çek)
+        app.MapPost("/sessions/{sessionId}/messages/feedback", async (
+            string sessionId, MessageFeedbackBody body, HttpContext http,
+            ISessionManager sessions, IMessageFeedbackPort feedback, CancellationToken ct) =>
+        {
+            // Yalnızca müşteri kendi oturumunda oy verir; admin/agent geri bildirim üretmez.
+            if (!http.User.IsInRole("Customer") || !await IsOwnSessionAsync(sessionId, http, sessions, ct)) return SessionForbidden();
+
+            var customerId = http.User.FindFirst("linked_customer_id")?.Value;
+            var result = await feedback.SubmitAsync(sessionId, customerId,
+                new MessageFeedbackRequest(body.Text ?? "", body.Helpful, body.Reason, body.Comment), ct);
+
+            return result.Outcome switch
+            {
+                MessageFeedbackOutcome.Saved or MessageFeedbackOutcome.Cleared => Results.Json(new { outcome = result.Outcome.ToString().ToLowerInvariant() }),
+                MessageFeedbackOutcome.MessageNotFound => Results.NotFound(new { error = "Mesaj bu oturumda bulunamadı." }),
+                _ => Results.BadRequest(new { error = result.Error ?? "Geçersiz istek." })
+            };
+        }).RequireAuthorization("Customer").RequireRateLimiting("general");
 
         // GET /sessions/{sessionId}/state — Oturum durumunu getir (debug/frontend için)
         app.MapGet("/sessions/{sessionId}/state", async (
@@ -94,6 +123,8 @@ public static class SessionEndpoints
     /// Rol beyaz listesi bu ayrımı açıkça yapar.
     /// </para>
     /// </summary>
+    public sealed record MessageFeedbackBody(string? Text, bool? Helpful, string? Reason, string? Comment);
+
     private static bool TryResolveScope(HttpContext http, out string? customerScope)
     {
         customerScope = null;

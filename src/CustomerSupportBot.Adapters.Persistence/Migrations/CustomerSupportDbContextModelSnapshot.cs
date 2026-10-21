@@ -23,6 +23,60 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Analytics.MessageFeedbackEntity", b =>
+                {
+                    b.Property<string>("SessionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("session_id");
+
+                    b.Property<string>("MessageHash")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("message_hash");
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("text")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CustomerId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("customer_id");
+
+                    b.Property<bool>("Helpful")
+                        .HasColumnType("boolean")
+                        .HasColumnName("helpful");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("trace_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("SessionId", "MessageHash");
+
+                    b.HasIndex("TraceId")
+                        .HasDatabaseName("ix_message_feedback_trace_id");
+
+                    b.HasIndex("UpdatedAt")
+                        .HasDatabaseName("ix_message_feedback_updated_at");
+
+                    b.ToTable("message_feedback", "analytics");
+                });
+
             modelBuilder.Entity("CustomerSupportBot.Adapters.Persistence.EfCore.Entities.Analytics.RatingEntity", b =>
                 {
                     b.Property<string>("SessionId")

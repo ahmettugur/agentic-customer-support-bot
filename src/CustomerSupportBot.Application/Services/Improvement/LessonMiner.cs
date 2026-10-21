@@ -38,6 +38,7 @@ public sealed class LessonMiner
     private readonly IGeneralChatClient _chatClient;
     private readonly SelfImprovementOptions _options;
     private readonly ILogger<LessonMiner> _logger;
+    private readonly IMessageFeedbackStore? _feedback;
 
     public LessonMiner(
         IReasoningTraceStore traceStore,
@@ -46,8 +47,10 @@ public sealed class LessonMiner
         IGeneralChatClient chatClient,
         IOptions<SelfImprovementOptions> options,
         ILogger<LessonMiner> logger,
-        SemanticMemoryService? memory = null)
+        SemanticMemoryService? memory = null,
+        IMessageFeedbackStore? feedback = null)
     {
+        _feedback = feedback;
         _traceStore = traceStore;
         _ratingStore = ratingStore;
         _lessonStore = lessonStore;
@@ -68,9 +71,19 @@ public sealed class LessonMiner
             .Where(r => r.Stars <= _options.MinRatingForLesson)
             .ToDictionary(r => r.SessionId, r => r);
 
+        // Müşterinin bir yanıta verdiği 👎: o turu adaylığa sokar (yıldız puanı vermemiş olsa bile). Eşleşme tur
+        // kimliğiyle yapılır; turu bulunamamış oylar (TraceId yok) burada sinyal olmaz.
+        var downvotes = new Dictionary<string, MessageFeedback>(StringComparer.Ordinal);
+        if (_feedback is not null)
+        {
+            foreach (var f in await _feedback.GetUnhelpfulSinceAsync(DateTime.UtcNow.AddDays(-30), 500, ct))
+                if (!string.IsNullOrEmpty(f.TraceId)) downvotes[f.TraceId] = f;
+        }
+
         var candidates = new List<ReasoningTrace>();
         foreach (var t in traces)
         {
+            if (downvotes.ContainsKey(t.TraceId)) { candidates.Add(t); continue; }
             if (lowRatings.ContainsKey(t.SessionId)) { candidates.Add(t); continue; }
             if (!string.IsNullOrEmpty(t.Error)) { candidates.Add(t); continue; }
             if (t.TerminationReason is "timeout" or "error") { candidates.Add(t); continue; }
@@ -93,7 +106,7 @@ public sealed class LessonMiner
 
         // En yeni 8'i ile sınırla — token bütçesi
         var picked = candidates.OrderByDescending(t => t.StartedAt).Take(8).ToList();
-        var prompt = BuildAnalysisPrompt(picked, lowRatings);
+        var prompt = BuildAnalysisPrompt(picked, lowRatings, downvotes);
 
         string llmText;
         try
@@ -208,7 +221,8 @@ public sealed class LessonMiner
     // ─── helpers ───
 
     private static List<ConversationMessage> BuildAnalysisPrompt(
-        List<ReasoningTrace> traces, IDictionary<string, ConversationRating> lowRatings)
+        List<ReasoningTrace> traces, IDictionary<string, ConversationRating> lowRatings,
+        IDictionary<string, MessageFeedback> downvotes)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Aşağıda müşteri destek bot'unun başarısız veya düşük puanlı konuşma trace'leri var.");
@@ -245,6 +259,9 @@ public sealed class LessonMiner
             sb.AppendLine($"- Iterasyon: {t.IterationCount} | Süre(ms): {t.DurationMs ?? -1}");
             if (lowRatings.TryGetValue(t.SessionId, out var rating))
                 sb.AppendLine($"- KullanıcıPuanı: {rating.Stars}★ — \"{Trim(rating.Feedback ?? "", 200)}\"");
+            if (downvotes.TryGetValue(t.TraceId, out var vote))
+                sb.AppendLine($"- KullanıcıGeriBildirimi: 👎 (neden: {vote.Reason ?? "belirtilmedi"})" +
+                              (string.IsNullOrWhiteSpace(vote.Comment) ? "" : $" — \"{Trim(vote.Comment, 200)}\""));
             if (t.Reasoning?.SanityIssues?.Count > 0)
                 sb.AppendLine($"- SanityIssues: {string.Join("; ", t.Reasoning.SanityIssues.Select(i => $"[{i.Severity}] {i.Message}"))}");
             if (t.SelfCritique is { } sc)

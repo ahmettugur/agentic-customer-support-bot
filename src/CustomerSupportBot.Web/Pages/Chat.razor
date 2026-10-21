@@ -397,6 +397,34 @@
                                         }
                                     </div>
                                 }
+                                @if (FeedbackUi.CanVote(msg.Role, msg.IsStreaming, msg.Content, _sessionId, msg.VoiceId is not null))
+                                {
+                                    var voteMsg = msg;
+                                    <div class="message-feedback" role="group" aria-label="Bu yanıt yardımcı oldu mu?">
+                                        <button type="button" class="fb-btn @(msg.Feedback == true ? "on" : "")" aria-pressed="@(msg.Feedback == true ? "true" : "false")"
+                                                title="Yardımcı oldu" aria-label="Yardımcı oldu" disabled="@msg.FeedbackBusy"
+                                                @onclick="() => VoteAsync(voteMsg, true)">👍</button>
+                                        <button type="button" class="fb-btn @(msg.Feedback == false ? "on down" : "")" aria-pressed="@(msg.Feedback == false ? "true" : "false")"
+                                                title="Yardımcı olmadı" aria-label="Yardımcı olmadı" disabled="@msg.FeedbackBusy"
+                                                @onclick="() => VoteAsync(voteMsg, false)">👎</button>
+                                        @if (FeedbackUi.ShowReasons(msg.Feedback, msg.FeedbackReason))
+                                        {
+                                            <span class="fb-reasons">
+                                                <span class="fb-reasons-label">Neden?</span>
+                                                @foreach (var (code, label) in FeedbackUi.Reasons)
+                                                {
+                                                    var reasonCode = code;
+                                                    <button type="button" class="fb-reason" disabled="@msg.FeedbackBusy"
+                                                            @onclick="() => ChooseReasonAsync(voteMsg, reasonCode)">@label</button>
+                                                }
+                                            </span>
+                                        }
+                                        else if (msg.Feedback == false && !string.IsNullOrEmpty(msg.FeedbackReason))
+                                        {
+                                            <span class="fb-thanks" role="status">Geri bildiriminiz için teşekkürler.</span>
+                                        }
+                                    </div>
+                                }
                                 @* Picker, ipucu geldiği anda DEĞİL tur bittiğinde çizilir.
                                    category_picker tool çalışırken yayınlanıyor (bkz.
                                    ProductToolsService.ShowCategoryPicker), yani veri turun
@@ -639,6 +667,11 @@
 
         /// <summary>Sesli modda transcript beklenirken gösterilen yer tutucu kullanıcı balonu.</summary>
         public bool IsPlaceholder { get; set; }
+
+        /// <summary>Müşterinin bu yanıta oyu: true 👍, false 👎, null oy yok.</summary>
+        public bool? Feedback { get; set; }
+        public string? FeedbackReason { get; set; }
+        public bool FeedbackBusy { get; set; }
 
         /// <summary>Sesli modda çalışan tool'un durum etiketi ("Sipariş sorgulanıyor…").</summary>
         public string? VoiceStatus { get; set; }
@@ -1612,6 +1645,34 @@
             await InvokeAsync(ScrollBottomAsync);
     }
 
+    // ── Yanıt geri bildirimi (👍/👎) ──────────────────────────────────────────
+    // İyimser güncelleme: oy hemen görünür, sunucu reddederse eski haline döner (ağ hatası sessizce oyu kaybettirmesin).
+    private async Task VoteAsync(ChatMsg msg, bool pressed)
+    {
+        if (msg.FeedbackBusy || _sessionId is null) return;
+        var next = FeedbackUi.NextVote(msg.Feedback, pressed);
+        // Oy değişirse önceki neden geçersizdir; aynı oyun tekrarı zaten geri çekmedir.
+        await SendVoteAsync(msg, next, reason: null);
+    }
+
+    private async Task ChooseReasonAsync(ChatMsg msg, string reason)
+    {
+        if (msg.FeedbackBusy || _sessionId is null || msg.Feedback != false) return;
+        await SendVoteAsync(msg, false, reason);
+    }
+
+    private async Task SendVoteAsync(ChatMsg msg, bool? vote, string? reason)
+    {
+        var (prevVote, prevReason) = (msg.Feedback, msg.FeedbackReason);
+        (msg.Feedback, msg.FeedbackReason, msg.FeedbackBusy) = (vote, reason, true);
+        StateHasChanged();
+
+        var ok = await ChatApi.SubmitMessageFeedbackAsync(_sessionId!, msg.Content, vote, reason);
+        if (!ok) (msg.Feedback, msg.FeedbackReason) = (prevVote, prevReason);
+        msg.FeedbackBusy = false;
+        StateHasChanged();
+    }
+
     // ── Geçmiş konuşmalar ─────────────────────────────────────────────────────
     // Sayfa yenilenince / tarayıcı kapanıp açılınca konuşma kaybolmasın. Hangi oturumun "aktif" olduğu bu tarayıcıda
     // tutulur (localStorage); "Yeni sohbet" bunu siler, böylece yenilemede eski konuşma istenmeden geri gelmez.
@@ -1667,7 +1728,11 @@
 
         await NewChatAsync();
         foreach (var m in history)
-            _messages.Add(new ChatMsg { Role = ChatHistory.UiRole(m.Role), Content = m.Text });
+            _messages.Add(new ChatMsg
+            {
+                Role = ChatHistory.UiRole(m.Role), Content = m.Text,
+                Feedback = m.Feedback?.Helpful, FeedbackReason = m.Feedback?.Reason
+            });
         await SetSessionAsync(id);
         StateHasChanged();
         _ = ScrollBottomAsync();

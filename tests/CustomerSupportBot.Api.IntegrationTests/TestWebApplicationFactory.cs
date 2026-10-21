@@ -104,6 +104,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
             // testte bellek içi katman (SideEffectIdempotencyCache) zaten yeterli.
             services.RemoveAll<IDistributedIdempotencyStore>();
 
+            // Mesaj geri bildirimi deposu ham SQL / ExecuteDelete kullanır (EF InMemory desteklemez) — bellek içi ikiz.
+            services.Replace(ServiceDescriptor.Singleton<
+                CustomerSupportBot.Application.Ports.Outbound.Persistence.IMessageFeedbackStore,
+                CustomerSupportBot.Adapters.Persistence.InMemory.InMemoryMessageFeedbackStore>());
+
             // LLM harcama sayaçları da Redis'teydi — süreç içi ikiz.
             services.Replace(ServiceDescriptor.Singleton<
                 CustomerSupportBot.Application.Ports.Outbound.Observability.ILlmSpendCounter, InMemoryLlmSpendCounter>());

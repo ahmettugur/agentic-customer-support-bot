@@ -94,4 +94,76 @@ public class LangfuseScoreSinkTests
 
         Assert.NotNull(handler.Request);
     }
+
+    // ═══ mesaj başına geri bildirim ═══
+
+    private static MessageFeedback Vote(bool helpful, string? reason = null, string? comment = null) => new()
+    {
+        SessionId = "sess-42", MessageHash = "abc123def4567890", Helpful = helpful, Reason = reason, Comment = comment
+    };
+
+    [Fact]
+    public async Task PublishMessageFeedback_PostsABooleanSessionScore_WithAStablePerMessageId()
+    {
+        var handler = new CapturingHandler();
+
+        await Build(handler).PublishMessageFeedbackAsync(Vote(helpful: false, reason: "wrong"), Ct);
+
+        var root = JsonDocument.Parse(handler.Body!).RootElement;
+        Assert.Equal("message_feedback:sess-42:abc123def4567890", root.GetProperty("id").GetString());
+        Assert.Equal("sess-42", root.GetProperty("sessionId").GetString());
+        Assert.Equal("message_feedback", root.GetProperty("name").GetString());
+        Assert.Equal("BOOLEAN", root.GetProperty("dataType").GetString());
+        Assert.Equal(0, root.GetProperty("value").GetInt32());
+        Assert.Equal("wrong", root.GetProperty("comment").GetString());
+    }
+
+    [Fact]
+    public async Task PublishMessageFeedback_NeverSendsTheCustomersFreeText()
+    {
+        var handler = new CapturingHandler();
+
+        await Build(handler).PublishMessageFeedbackAsync(Vote(false, "other", "adım Ali, telefonum 0532 000 00 00"), Ct);
+
+        Assert.DoesNotContain("0532", handler.Body);
+        Assert.DoesNotContain("Ali", handler.Body);
+    }
+
+    [Fact]
+    public async Task PublishMessageFeedback_Upvote_SendsValueOne_AndAClearedComment()
+    {
+        var handler = new CapturingHandler();
+
+        await Build(handler).PublishMessageFeedbackAsync(Vote(helpful: true), Ct);
+
+        var root = JsonDocument.Parse(handler.Body!).RootElement;
+        Assert.Equal(1, root.GetProperty("value").GetInt32());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("comment").ValueKind);
+    }
+
+    [Fact]
+    public async Task RemoveMessageFeedback_DeletesTheScoreById()
+    {
+        var handler = new CapturingHandler();
+
+        await Build(handler).RemoveMessageFeedbackAsync("sess-42", "abc123def4567890", Ct);
+
+        Assert.Equal(HttpMethod.Delete, handler.Request!.Method);
+        Assert.EndsWith("/api/public/scores/" + Uri.EscapeDataString("message_feedback:sess-42:abc123def4567890"),
+            handler.Request.RequestUri!.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task RemoveMessageFeedback_ServerError_Throws_SoKvkkErasureIsNotReportedAsDone()
+    {
+        var handler = new CapturingHandler(HttpStatusCode.InternalServerError);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => Build(handler).RemoveMessageFeedbackAsync("s", "h", Ct));
+    }
+
+    [Fact]
+    public async Task RemoveMessageFeedback_NotFound_IsFine()
+    {
+        await Build(new CapturingHandler(HttpStatusCode.NotFound)).RemoveMessageFeedbackAsync("s", "h", Ct);
+    }
 }
