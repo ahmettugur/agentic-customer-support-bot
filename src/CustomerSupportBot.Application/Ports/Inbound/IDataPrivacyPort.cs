@@ -52,7 +52,11 @@ public sealed record ExportedSession(
     DateTime LastActivity,
     IReadOnlyList<ConversationMessage> Messages,
     IReadOnlyList<ExportedAttachment> Attachments,
-    IReadOnlyList<ExportedDisposition>? Dispositions = null);
+    IReadOnlyList<ExportedDisposition>? Dispositions = null,
+    IReadOnlyList<ExportedMessageFeedback>? Feedback = null);
+
+/// <summary>Bot yanıtlarına verilen 👍/👎; yorum serbest metindir (kişisel veri olabilir).</summary>
+public sealed record ExportedMessageFeedback(bool Helpful, string? Reason, string? Comment, DateTime At);
 
 /// <summary>Temsilcinin sohbeti kapatırken kaydettiği neden/etiket/not (kapatan temsilcinin adı hariç).</summary>
 public sealed record ExportedDisposition(string ReasonCode, IReadOnlyList<string> Tags, string? Note, DateTime ClosedAt);

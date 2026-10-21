@@ -45,6 +45,7 @@ public sealed class CustomerSupportDbContext : DbContext
 
     // ─── analytics schema ───
     public DbSet<RatingEntity> Ratings => Set<RatingEntity>();
+    public DbSet<MessageFeedbackEntity> MessageFeedback => Set<MessageFeedbackEntity>();
 
     // ─── auth schema ───
     public DbSet<UserEntity> Users => Set<UserEntity>();

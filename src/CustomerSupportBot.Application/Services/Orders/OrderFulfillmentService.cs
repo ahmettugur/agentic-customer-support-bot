@@ -11,9 +11,11 @@ namespace CustomerSupportBot.Application.Services.Orders;
 /// <summary>
 /// <see cref="IOrderFulfillmentPort"/> uygulaması. Bildirim yalnızca gerçek geçişte (<see cref="OrderStatusChange.Updated"/>)
 /// gider — tekrarlanan çağrı (depo sistemi aynı olayı yeniden gönderdi) müşteriye ikinci e-posta göndermez.
-/// Bildirim hatası durum güncellemesini geri almaz (bkz. <see cref="OrderStatusEmailService"/>).
+/// Bildirim hatası durum güncellemesini geri almaz (bkz. <see cref="OrderStatusEmailService"/>). Açık sohbet akışı
+/// ayrıca anlık bildirim alır (<see cref="CustomerNotificationHub"/>).
 /// </summary>
-public sealed class OrderFulfillmentService(IOrderRepository orders, OrderStatusEmailService notifier, TimeProvider? clock = null)
+public sealed class OrderFulfillmentService(
+    IOrderRepository orders, OrderStatusEmailService notifier, TimeProvider? clock = null, CustomerNotificationHub? hub = null)
     : IOrderFulfillmentPort
 {
     public const int MaxCarrierLength = 64;
@@ -49,7 +51,12 @@ public sealed class OrderFulfillmentService(IOrderRepository orders, OrderStatus
         string orderId, OrderStatusUpdateResult result, string kind, CancellationToken ct)
     {
         if (result.Change == OrderStatusChange.Updated && result.Order is not null)
+        {
+            // Sohbet içi bildirim e-postadan bağımsız (e-posta kapalı olsa da açık sohbet bilgilenir) ve önce gider.
+            if (CustomerNotifications.ForOrder(orderId, result.Order, kind, _clock.GetUtcNow().UtcDateTime) is { } note)
+                hub?.Publish(result.Order.CustomerId, note);
             await notifier.NotifyAsync(orderId, result.Order, kind, ct);
+        }
 
         var status = result.Change switch
         {

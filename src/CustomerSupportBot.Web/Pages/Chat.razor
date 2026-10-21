@@ -10,6 +10,7 @@
 @inject NavigationManager Nav
 @implements IAsyncDisposable
 @inject ThemeService ThemeSvc
+@inject ToastService Toast
 @using System.Text.Json
 @using Markdig
 
@@ -91,6 +92,39 @@
                                 <button type="button" class="approval-panel-history-link" @onclick="ToggleFullHistoryAsync">
                                     Tüm geçmişi gör →
                                 </button>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="history-menu">
+                    <button type="button" class="btn-approval-bell" @onclick="ToggleHistoryPanelAsync"
+                            aria-label="Konuşmalarım" title="Konuşmalarım" aria-expanded="@(_showHistoryPanel ? "true" : "false")">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>
+                        </svg>
+                    </button>
+                    @if (_showHistoryPanel)
+                    {
+                        <div class="approval-panel history-panel" role="list" aria-label="Geçmiş konuşmalarım">
+                            @if (_pastLoading)
+                            {
+                                <div class="approval-panel-empty">Yükleniyor…</div>
+                            }
+                            else if (_pastSessions.Count == 0)
+                            {
+                                <div class="approval-panel-empty">Henüz geçmiş bir konuşmanız yok.</div>
+                            }
+                            else
+                            {
+                                @foreach (var past in _pastSessions)
+                                {
+                                    var pastId = past.SessionId;
+                                    <button type="button" role="listitem" class="history-item @(pastId == _sessionId ? "active" : "")"
+                                            @onclick="() => OpenSessionAsync(pastId)" disabled="@_isStreaming">
+                                        <span class="history-title">@ChatHistory.TitleOf(past)</span>
+                                        <span class="history-meta">@ChatHistory.RelativeTime(past.LastActivity, DateTimeOffset.Now, DateTimeOffset.Now.Offset) · @past.MessageCount mesaj</span>
+                                    </button>
+                                }
                             }
                         </div>
                     }
@@ -364,6 +398,121 @@
                                         }
                                     </div>
                                 }
+                                @if (!msg.IsStreaming && msg.RetryText is not null && ReferenceEquals(msg, _messages[^1]) && !_isStreaming)
+                                {
+                                    <div class="turn-retry">
+                                        <button type="button" class="turn-retry-btn" @onclick="() => RetryAsync(msg)">↻ Tekrar dene</button>
+                                    </div>
+                                }
+                                @if (FeedbackUi.CanVote(msg.Role, msg.IsStreaming, msg.Content, _sessionId, msg.VoiceId is not null))
+                                {
+                                    var voteMsg = msg;
+                                    <div class="message-feedback" role="group" aria-label="Bu yanıt yardımcı oldu mu?">
+                                        <button type="button" class="fb-btn @(msg.Feedback == true ? "on" : "")" aria-pressed="@(msg.Feedback == true ? "true" : "false")"
+                                                title="Yardımcı oldu" aria-label="Yardımcı oldu" disabled="@msg.FeedbackBusy"
+                                                @onclick="() => VoteAsync(voteMsg, true)">👍</button>
+                                        <button type="button" class="fb-btn @(msg.Feedback == false ? "on down" : "")" aria-pressed="@(msg.Feedback == false ? "true" : "false")"
+                                                title="Yardımcı olmadı" aria-label="Yardımcı olmadı" disabled="@msg.FeedbackBusy"
+                                                @onclick="() => VoteAsync(voteMsg, false)">👎</button>
+                                        @if (FeedbackUi.ShowReasons(msg.Feedback, msg.FeedbackReason))
+                                        {
+                                            <span class="fb-reasons">
+                                                <span class="fb-reasons-label">Neden?</span>
+                                                @foreach (var (code, label) in FeedbackUi.Reasons)
+                                                {
+                                                    var reasonCode = code;
+                                                    <button type="button" class="fb-reason" disabled="@msg.FeedbackBusy"
+                                                            @onclick="() => ChooseReasonAsync(voteMsg, reasonCode)">@label</button>
+                                                }
+                                            </span>
+                                        }
+                                        else if (msg.Feedback == false && !string.IsNullOrEmpty(msg.FeedbackReason))
+                                        {
+                                            <span class="fb-thanks" role="status">Geri bildiriminiz için teşekkürler.</span>
+                                        }
+                                    </div>
+                                }
+                                @if (!msg.IsStreaming && msg.OrderCards is { Orders.Count: > 0 } orderHint)
+                                {
+                                    <div class="tool-cards" aria-label="Siparişleriniz">
+                                        @foreach (var order in orderHint.Orders)
+                                        {
+                                            var steps = ToolCardLogic.Steps(order, CardOffset);
+                                            var shipping = ToolCardLogic.Shipping(order);
+                                            <article class="tool-card tone-@ToolCardLogic.OrderTone(order.Status)">
+                                                <header class="tool-card-head">
+                                                    <span class="tool-card-title">Sipariş #@order.OrderId</span>
+                                                    <span class="tool-card-badge">@order.Status</span>
+                                                </header>
+                                                <ul class="tool-card-lines">
+                                                    @foreach (var line in order.Lines)
+                                                    {
+                                                        <li><span>@line.Product</span><span class="qty">× @line.Quantity</span></li>
+                                                    }
+                                                </ul>
+                                                <ol class="tool-card-steps">
+                                                    @foreach (var step in steps)
+                                                    {
+                                                        <li class="step step-@step.State.ToString().ToLowerInvariant()">
+                                                            <span class="step-label">@step.Label</span>
+                                                            @if (step.When is not null) { <span class="step-when">@step.When</span> }
+                                                        </li>
+                                                    }
+                                                </ol>
+                                                @if (shipping is not null)
+                                                {
+                                                    <div class="tool-card-shipping"><span aria-hidden="true">📦</span> @shipping</div>
+                                                }
+                                            </article>
+                                        }
+                                        @if (orderHint.TotalCount > orderHint.Orders.Count)
+                                        {
+                                            <div class="tool-card-more">Toplam @orderHint.TotalCount siparişiniz var; en yeni @orderHint.Orders.Count tanesi gösteriliyor.</div>
+                                        }
+                                    </div>
+                                }
+                                @if (!msg.IsStreaming && msg.ComplaintCards is { Count: > 0 })
+                                {
+                                    <div class="tool-cards" aria-label="Şikayetleriniz">
+                                        @foreach (var complaint in msg.ComplaintCards)
+                                        {
+                                            <article class="tool-card tone-@ToolCardLogic.ComplaintTone(complaint.Status)">
+                                                <header class="tool-card-head">
+                                                    <span class="tool-card-title">Şikayet #@complaint.ComplaintId</span>
+                                                    <span class="tool-card-badge">@complaint.Status</span>
+                                                </header>
+                                                <div class="tool-card-meta">Sipariş #@complaint.OrderId@(complaint.UpdatedAt is { } upd ? $" · Son güncelleme {ToolCardLogic.Date(upd, CardOffset)}" : "")</div>
+                                                <p class="tool-card-text">@complaint.Complaint</p>
+                                                @if (!string.IsNullOrWhiteSpace(complaint.Resolution))
+                                                {
+                                                    <div class="tool-card-resolution"><strong>Sonuç:</strong> @complaint.Resolution</div>
+                                                }
+                                            </article>
+                                        }
+                                    </div>
+                                }
+                                @if (!msg.IsStreaming && msg.Sources is { Count: > 0 })
+                                {
+                                    <div class="related-articles" aria-label="İlgili bilgi tabanı makaleleri">
+                                        <span class="related-label">İlgili makaleler:</span>
+                                        @foreach (var title in msg.Sources)
+                                        {
+                                            <span class="related-chip">@title</span>
+                                        }
+                                    </div>
+                                }
+                                @* Hızlı yanıt çipleri yalnızca SON mesajda ve akış bittiyse görünür: müşteri yeni bir mesaj
+                                   yazdığı anda (ya da çip seçtiğinde) eski turun önerileri kaybolur. *@
+                                @if (!msg.IsStreaming && !_isStreaming && msg.Suggestions is { Count: > 0 } && ReferenceEquals(msg, _messages[^1]))
+                                {
+                                    <div class="suggested-replies" role="group" aria-label="Önerilen yanıtlar">
+                                        @foreach (var suggestion in msg.Suggestions)
+                                        {
+                                            var text = suggestion;
+                                            <button type="button" class="suggested-reply" @onclick="() => SendChipMessage(text)">@text</button>
+                                        }
+                                    </div>
+                                }
                                 @* Picker, ipucu geldiği anda DEĞİL tur bittiğinde çizilir.
                                    category_picker tool çalışırken yayınlanıyor (bkz.
                                    ProductToolsService.ShowCategoryPicker), yani veri turun
@@ -582,6 +731,9 @@
     </div>
 </div>
 
+@* Sohbet içi bildirim toast'ları (EmptyLayout ToastContainer içermez). *@
+<ToastContainer />
+
 @code {
     // ── Message model ─────────────────────────────────────────────────────────
     private sealed class ChatMsg
@@ -592,6 +744,19 @@
         public JsonElement? ReasoningData { get; set; }
         public bool   IsStreaming   { get; set; }
         public List<string>? CategoryPicker { get; set; }
+
+        /// <summary>Tur bittikten sonra sunucunun önerdiği hızlı yanıtlar (yalnızca canlı turda; geçmişten yüklenen mesajlarda yok).</summary>
+        public List<string>? Suggestions { get; set; }
+
+        /// <summary>Sipariş/şikayet araçlarının döndürdüğü yapılandırılmış kartlar (veritabanından; modelin metninden değil).</summary>
+        public OrderCardsHint? OrderCards { get; set; }
+
+        /// <summary>Tur başarısız olduysa (bağlantı koptu / sunucu hata verdi) yeniden gönderilecek metin; yoksa "Tekrar dene" çıkmaz.</summary>
+        public string? RetryText { get; set; }
+
+        /// <summary>Bu tur bağlama enjekte edilen bilgi tabanı makalelerinin başlıkları ("ilgili makaleler" — modelin dayandığı kaynak iddiası değil).</summary>
+        public List<string>? Sources { get; set; }
+        public IReadOnlyList<ComplaintCardView>? ComplaintCards { get; set; }
 
         /// <summary>
         /// Bu yanıtı üretirken görev alan ajanların (friendly) adları, sıralı ve
@@ -606,6 +771,11 @@
 
         /// <summary>Sesli modda transcript beklenirken gösterilen yer tutucu kullanıcı balonu.</summary>
         public bool IsPlaceholder { get; set; }
+
+        /// <summary>Müşterinin bu yanıta oyu: true 👍, false 👎, null oy yok.</summary>
+        public bool? Feedback { get; set; }
+        public string? FeedbackReason { get; set; }
+        public bool FeedbackBusy { get; set; }
 
         /// <summary>Sesli modda çalışan tool'un durum etiketi ("Sipariş sorgulanıyor…").</summary>
         public string? VoiceStatus { get; set; }
@@ -853,6 +1023,8 @@
         await JS.InvokeVoidAsync("loadScript", "/js/voice-orb.js", "js-voice-orb");
         await JS.InvokeVoidAsync("loadScript", "/js/realtime-client.js", "js-realtime-client");
         await JS.InvokeVoidAsync("loadScript", "/js/realtime-ui.js", "js-realtime-ui");
+
+        await RestoreActiveSessionAsync();
     }
 
     private async Task ToggleThemeAsync() => await ThemeSvc.ToggleAsync();
@@ -1094,9 +1266,11 @@
     [JSInvokable]
     public void VoiceSetSession(string id)
     {
+        _baselineKnown = false;   // sesli görüşme sunucuya mesaj ekler; sayaç artık güvenilir değil
         if (!string.IsNullOrEmpty(id) && _sessionId != id)
         {
             _sessionId = id;
+            RememberSession(id);
             _ = JS.InvokeVoidAsync("_startPersistentEvents", id).AsTask();
             _ = FetchUnseenApprovalsAsync(id);
         }
@@ -1176,6 +1350,7 @@
     private async Task SendAsync(string text, IReadOnlyList<PendingPhoto>? photos = null)
     {
         ClearRatingDelayTimer();
+        (_lastSentText, _lastSentHadPhotos, _turnFailed) = (text, photos is { Count: > 0 }, false);
         _messages.Add(new ChatMsg
         {
             Role = "user",
@@ -1209,7 +1384,7 @@
         if (refreshed is null)
         {
             AuthState.NotifyStateChanged();
-            OnStreamError("oturum süresi doldu");
+            await HandleStreamErrorAsync("oturum süresi doldu", allowRecovery: false);
             var returnTo = Uri.EscapeDataString(Nav.Uri);
             Nav.NavigateTo($"/customer-login?return={returnTo}", forceLoad: false);
             return;
@@ -1260,6 +1435,7 @@
                     if (s is not null && s != _sessionId)
                     {
                         _sessionId = s;
+                        RememberSession(s);
                         _ = JS.InvokeVoidAsync("_startPersistentEvents", s).AsTask();
                         _ = FetchUnseenApprovalsAsync(s);
                     }
@@ -1272,6 +1448,7 @@
                     if (s2 is not null)
                     {
                         _sessionId = s2;
+                        RememberSession(s2);
                         _ = JS.InvokeVoidAsync("_startPersistentEvents", s2).AsTask();
                         _ = FetchUnseenApprovalsAsync(s2);
                     }
@@ -1327,6 +1504,7 @@
                     _currentBot = null;
                 }
                 _humanMode  = true;
+                _baselineKnown = false;
                 _humanAgent = jd.TryGetProperty("humanAgent", out var haj) ? haj.GetString() : "temsilci";
                 ClearPendingHandoffTimer();
                 _pendingHandoff = false;
@@ -1343,6 +1521,25 @@
                     if (!string.IsNullOrEmpty(hintAgentName) && !_agentChips.Any(c => c.Name == hintAgentName))
                         UpsertAgentChip(hintAgentName, "running");
                 }
+                if (_currentBot is not null && jd.TryGetProperty("kind", out var cardKind))
+                {
+                    var cardKindName = cardKind.GetString();
+                    if (cardKindName == "order_cards") _currentBot.OrderCards = ToolCardLogic.ParseOrderHint(jd);
+                    else if (cardKindName == "complaint_cards") _currentBot.ComplaintCards = ToolCardLogic.ParseComplaintHint(jd);
+                    else if (cardKindName == "sources") _currentBot.Sources = ToolCardLogic.MergeSources(_currentBot.Sources, jd);
+                }
+                if (_currentBot is not null
+                    && jd.TryGetProperty("kind", out var suggestKind)
+                    && suggestKind.GetString() == "suggested_replies"
+                    && jd.TryGetProperty("suggestions", out var sugg)
+                    && sugg.ValueKind == JsonValueKind.Array)
+                {
+                    _currentBot.Suggestions = sugg.EnumerateArray()
+                        .Select(x => x.GetString() ?? "")
+                        .Where(x => x.Length > 0)
+                        .Take(3)
+                        .ToList();
+                }
                 if (_currentBot is not null
                     && jd.TryGetProperty("kind", out var hintKind)
                     && hintKind.GetString() == "category_picker"
@@ -1356,8 +1553,12 @@
                 }
                 break;
             case "error":
+                // Sunucunun bildirdiği hata: tur başarısız. Yanıt geçmişte yoksa "Tekrar dene" çıkar.
+                _turnFailed = true;
                 _currentBot.Content    = jd.TryGetProperty("message", out var err) ? err.GetString() ?? "Hata oluştu." : "Hata oluştu.";
                 _currentBot.IsStreaming = false;
+                _currentBot.RetryText = _lastSentHadPhotos ? null : _lastSentText;
+                _ = ResyncServerCountAsync();
                 break;
         }
 
@@ -1382,6 +1583,8 @@
     public void OnStreamComplete()
     {
         ClearRatingDelayTimer();
+        // Başarılı bot turu sunucuda 2 mesaj ekler (kullanıcı + bot); kopma sonrası kurtarmanın başlangıç sayısı budur.
+        if (!_turnFailed && !_humanMode && _currentBot is { Content.Length: > 0 }) _serverMessageCount += 2;
         if (_currentBot is not null) _currentBot.IsStreaming = false;
         _isStreaming = false;
         _currentBot  = null;
@@ -1396,16 +1599,20 @@
     }
 
     [JSInvokable]
-    public void OnStreamError(string msg)
+    public async Task OnStreamError(string msg) => await HandleStreamErrorAsync(msg, allowRecovery: true);
+
+    private async Task HandleStreamErrorAsync(string msg, bool allowRecovery)
     {
-        if (_currentBot is not null)
-        {
-            if (string.IsNullOrEmpty(_currentBot.Content))
-                _currentBot.Content = $"Bağlantı hatası: {msg}";
-            _currentBot.IsStreaming = false;
-        }
+        var bot = _currentBot;
         _isStreaming = false;
         _currentBot  = null;
+        if (bot is not null)
+        {
+            bot.IsStreaming = false;
+            // Akıştan kısmi yanıt geldiyse korunur (kullanıcı en azından yarısını görmüş olur); boşsa kurtarma/hata.
+            if (string.IsNullOrEmpty(bot.Content)) await FailTurnAsync(bot, $"Bağlantı hatası: {msg}", allowRecovery);
+            else { _turnFailed = true; bot.RetryText = _lastSentHadPhotos ? null : _lastSentText; }
+        }
         StateHasChanged();
         _ = ScrollBottomAsync();
     }
@@ -1414,6 +1621,7 @@
     {
         if (id is null || id == _sessionId) return;
         _sessionId = id;
+        RememberSession(id);
         try { await JS.InvokeVoidAsync("_startPersistentEvents", id); } catch { }
         _ = FetchUnseenApprovalsAsync(id);
     }
@@ -1527,6 +1735,7 @@
                 ClearPendingHandoffTimer();
                 _pendingHandoff = false;
                 _humanMode  = true;
+                _baselineKnown = false;
                 _humanAgent = jd.TryGetProperty("humanAgent", out var ha) ? ha.GetString() : "temsilci";
                 _messages.Add(new ChatMsg { Role = "system", Content = $"💬 Temsilci {_humanAgent} sohbete katıldı." });
                 try { await JS.InvokeVoidAsync("__stopVoice"); } catch { }
@@ -1554,6 +1763,15 @@
                 else
                     _messages.Add(new ChatMsg { Role = "human", Content = msgText });
                 break;
+            case "notification":
+                // Sunucu tarafında yalnızca bu müşterinin bildirimleri gelir (bkz. docs/chat-experience.md).
+                // Sohbete sistem notu olarak da düşer: toast kaybolunca bile konuşmada kalır.
+                if (ChatNotificationLogic.Parse(jd) is { } note)
+                {
+                    _messages.Add(new ChatMsg { Role = "system", Content = ChatNotificationLogic.ChatNote(note) });
+                    Toast.ShowInfo(ChatNotificationLogic.ToastText(note));
+                }
+                break;
             case "approval_resolved":
                 var approval = new UnseenApproval(
                     Id: jd.TryGetProperty("id", out var aid) ? aid.GetString() ?? "" : "",
@@ -1569,8 +1787,161 @@
         }
 
         await InvokeAsync(StateHasChanged);
-        if (type is "human_joined" or "human_left" or "human_message")
+        if (type is "human_joined" or "human_left" or "human_message" or "notification")
             await InvokeAsync(ScrollBottomAsync);
+    }
+
+    // Tarayıcının UTC farkı: kart tarihleri kullanıcının yerel gününe göre yazılır.
+    private static TimeSpan CardOffset => DateTimeOffset.Now.Offset;
+
+    // ── Yanıt geri bildirimi (👍/👎) ──────────────────────────────────────────
+    // İyimser güncelleme: oy hemen görünür, sunucu reddederse eski haline döner (ağ hatası sessizce oyu kaybettirmesin).
+    private async Task VoteAsync(ChatMsg msg, bool pressed)
+    {
+        if (msg.FeedbackBusy || _sessionId is null) return;
+        var next = FeedbackUi.NextVote(msg.Feedback, pressed);
+        // Oy değişirse önceki neden geçersizdir; aynı oyun tekrarı zaten geri çekmedir.
+        await SendVoteAsync(msg, next, reason: null);
+    }
+
+    private async Task ChooseReasonAsync(ChatMsg msg, string reason)
+    {
+        if (msg.FeedbackBusy || _sessionId is null || msg.Feedback != false) return;
+        await SendVoteAsync(msg, false, reason);
+    }
+
+    private async Task SendVoteAsync(ChatMsg msg, bool? vote, string? reason)
+    {
+        var (prevVote, prevReason) = (msg.Feedback, msg.FeedbackReason);
+        (msg.Feedback, msg.FeedbackReason, msg.FeedbackBusy) = (vote, reason, true);
+        StateHasChanged();
+
+        var ok = await ChatApi.SubmitMessageFeedbackAsync(_sessionId!, msg.Content, vote, reason);
+        if (!ok) (msg.Feedback, msg.FeedbackReason) = (prevVote, prevReason);
+        msg.FeedbackBusy = false;
+        StateHasChanged();
+    }
+
+    // ── Başarısız turu kurtarma / tekrar deneme ─────────────────────────────────
+    // Bağlantı koptuğunda sunucu çoğu zaman turu İPTAL eder (istemci bağlantıyı keserse zincir iptal edilir); ama sahte kopmada
+    // ya da zaman aşımında tur sunucuda tamamlanıp kaydedilmiş olabilir. Önce oturum geçmişine bakılır: yanıt oradaysa gösterilir,
+    // değilse hata ve tek tıkla "Tekrar dene". Başlangıç mesaj sayısı bilinmiyorsa (temsilci/sesli kullanıldı) kurtarma denenmez —
+    // yanlış pozitif ("eski yanıtı yeni sanmak"), hiç kurtarmamaktan kötüdür.
+    private int _serverMessageCount;
+    private bool _baselineKnown = true;
+    private string? _lastSentText;
+    private bool _lastSentHadPhotos;
+    private bool _turnFailed;
+
+    private async Task FailTurnAsync(ChatMsg? bot, string errorText, bool allowRecovery)
+    {
+        _turnFailed = true;
+        if (bot is null) return;
+
+        if (allowRecovery && _baselineKnown && !_humanMode && _sessionId is not null && _lastSentText is not null)
+        {
+            var server = await ChatApi.GetSessionMessagesAsync(_sessionId);
+            var answer = StreamRecovery.FindCompletedAnswer(server, _serverMessageCount, _lastSentText);
+            if (answer is not null)
+            {
+                bot.Content = answer;
+                bot.RetryText = null;
+                _serverMessageCount = server.Count;
+                _turnFailed = false;
+                return;
+            }
+        }
+
+        // Başarısız tur sunucuya kullanıcı mesajını yazmış olabilir; sayaç gerçek duruma göre yeniden hizalanır.
+        await ResyncServerCountAsync();
+        bot.Content = errorText;
+        // Fotoğraflı mesaj yeniden gönderilemez (ek kimlikleri tüketildi); onda yalnızca hata görünür.
+        bot.RetryText = _lastSentHadPhotos ? null : _lastSentText;
+    }
+
+    private async Task ResyncServerCountAsync()
+    {
+        if (_sessionId is null || !_baselineKnown) return;
+        var count = (await ChatApi.GetSessionMessagesAsync(_sessionId)).Count;
+        // Beklerken yeni bir tur başladıysa sayaç o turun payıdır; üzerine yazılmaz.
+        if (!_isStreaming) _serverMessageCount = count;
+    }
+
+    /// <summary>Başarısız turun kullanıcı balonunu ve hata balonunu kaldırıp aynı metni yeniden gönderir.</summary>
+    private async Task RetryAsync(ChatMsg failed)
+    {
+        if (_isStreaming || failed.RetryText is not { } text) return;
+        var index = _messages.IndexOf(failed);
+        if (index < 1 || _messages[index - 1].Role != "user") return;
+
+        _messages.RemoveRange(index - 1, 2);
+        await SendAsync(text);
+    }
+
+    // ── Geçmiş konuşmalar ─────────────────────────────────────────────────────
+    // Sayfa yenilenince / tarayıcı kapanıp açılınca konuşma kaybolmasın. Hangi oturumun "aktif" olduğu bu tarayıcıda
+    // tutulur (localStorage); "Yeni sohbet" bunu siler, böylece yenilemede eski konuşma istenmeden geri gelmez.
+    // Depolama kapalıysa (gizli pencere vb.) özellik sessizce devre dışı kalır, sohbet etkilenmez.
+    private const string ActiveSessionKey = "csbot.activeSession";
+    private bool _showHistoryPanel;
+    private bool _pastLoading;
+    private List<SessionInfo> _pastSessions = [];
+
+    private void RememberSession(string id)
+        => _ = JS.InvokeVoidAsync("localStorage.setItem", ActiveSessionKey, id).AsTask().ContinueWith(_ => { });
+
+    private async Task ForgetSessionAsync()
+    {
+        try { await JS.InvokeVoidAsync("localStorage.removeItem", ActiveSessionKey); } catch { }
+    }
+
+    private async Task RestoreActiveSessionAsync()
+    {
+        string? active;
+        try { active = await JS.InvokeAsync<string?>("localStorage.getItem", ActiveSessionKey); }
+        catch { return; }
+        if (string.IsNullOrEmpty(active)) return;
+
+        var target = ChatHistory.ResolveRestore(await ChatApi.GetSessionsAsync(), active);
+        if (target is null) { await ForgetSessionAsync(); return; }
+        await LoadSessionAsync(target);
+    }
+
+    private async Task ToggleHistoryPanelAsync()
+    {
+        _showHistoryPanel = !_showHistoryPanel;
+        if (!_showHistoryPanel) return;
+
+        _pastLoading = true;
+        StateHasChanged();
+        _pastSessions = ChatHistory.Visible(await ChatApi.GetSessionsAsync());
+        _pastLoading = false;
+    }
+
+    private async Task OpenSessionAsync(string id)
+    {
+        _showHistoryPanel = false;
+        if (_isStreaming || id == _sessionId) return;
+        await LoadSessionAsync(id);
+    }
+
+    /// <summary>Konuşmayı sıfırlar ve sunucudaki mesajlarla doldurur; oturum olayları/onay bildirimleri yeniden bağlanır.</summary>
+    private async Task LoadSessionAsync(string id)
+    {
+        var history = await ChatApi.GetSessionMessagesAsync(id);
+        if (history.Count == 0) { await ForgetSessionAsync(); return; }
+
+        await NewChatAsync();
+        (_serverMessageCount, _baselineKnown) = (history.Count, true);
+        foreach (var m in history)
+            _messages.Add(new ChatMsg
+            {
+                Role = ChatHistory.UiRole(m.Role), Content = m.Text,
+                Feedback = m.Feedback?.Helpful, FeedbackReason = m.Feedback?.Reason
+            });
+        await SetSessionAsync(id);
+        StateHasChanged();
+        _ = ScrollBottomAsync();
     }
 
     // ── New chat ──────────────────────────────────────────────────────────────
@@ -1580,6 +1951,8 @@
         try { await JS.InvokeVoidAsync("_stopPersistentEvents"); } catch { }
         _messages.Clear();
         _sessionId           = null;
+        (_serverMessageCount, _baselineKnown, _lastSentText, _turnFailed) = (0, true, null, false);
+        await ForgetSessionAsync();
         _input               = string.Empty;
         _pendingPhotos.Clear();
         _photoError          = null;

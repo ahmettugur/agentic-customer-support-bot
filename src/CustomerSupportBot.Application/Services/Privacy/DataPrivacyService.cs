@@ -40,6 +40,7 @@ public sealed class DataPrivacyService : IDataPrivacyPort
     private readonly DataRetentionOptions _options;
     private readonly ILogger<DataPrivacyService> _logger;
     private readonly IConversationDispositionStore? _dispositions;
+    private readonly IMessageFeedbackStore? _messageFeedback;
 
     /// <summary>Onay geçmişinden dışa aktarılacak en fazla kayıt.</summary>
     private const int MaxExportedApprovals = 1000;
@@ -56,9 +57,11 @@ public sealed class DataPrivacyService : IDataPrivacyPort
         IComplaintRepository complaints,
         IOptions<DataRetentionOptions> options,
         ILogger<DataPrivacyService> logger,
-        IConversationDispositionStore? dispositions = null)
+        IConversationDispositionStore? dispositions = null,
+        IMessageFeedbackStore? messageFeedback = null)
     {
         _dispositions = dispositions;
+        _messageFeedback = messageFeedback;
         _sessions = sessions;
         _attachments = attachments;
         _sessionErasers = sessionErasers.ToList();
@@ -139,7 +142,13 @@ public sealed class DataPrivacyService : IDataPrivacyPort
                     .Select(d => new ExportedDisposition(d.ReasonCode, d.Tags, d.Note, d.ClosedAt))
                     .ToList();
 
-            sessions.Add(new ExportedSession(session.SessionId, session.CreatedAt, session.LastActivity, history, attachments, dispositions));
+            var feedback = _messageFeedback is null
+                ? null
+                : (await _messageFeedback.GetForSessionAsync(info.SessionId, ct))
+                    .Select(f => new ExportedMessageFeedback(f.Helpful, f.Reason, f.Comment, f.UpdatedAt))
+                    .ToList();
+
+            sessions.Add(new ExportedSession(session.SessionId, session.CreatedAt, session.LastActivity, history, attachments, dispositions, feedback));
             if (_ratings.GetBySession(info.SessionId) is { } rating) ratings.Add(rating);
         }
 

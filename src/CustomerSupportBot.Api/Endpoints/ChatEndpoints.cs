@@ -287,7 +287,8 @@ public static class ChatEndpoints
             sessionId,
             sse,
             _ => IsSessionAccessibleAsync(sessionId, httpContext, sessions),
-            httpContext.RequestAborted);
+            httpContext.RequestAborted,
+            ResolveAuthenticatedCustomerId(httpContext));
     }
 
     /// <summary>

@@ -24,6 +24,20 @@ public sealed class ChatApiService(HttpClient http)
         }
     }
 
+    /// <summary>👍 (true) / 👎 (false) / oyu geri çek (null). Başarısızsa false döner; arayüz oyu eski haline çevirir.</summary>
+    public async Task<bool> SubmitMessageFeedbackAsync(string sessionId, string text, bool? helpful, string? reason = null, string? comment = null)
+    {
+        try
+        {
+            var response = await http.PostAsJsonAsync($"/sessions/{sessionId}/messages/feedback", new { text, helpful, reason, comment });
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public async Task<List<SessionInfo>> GetSessionsAsync()
     {
         try
@@ -157,8 +171,14 @@ public sealed class ChatApiService(HttpClient http)
 public sealed record RatingResponse(int Stars, string? Feedback);
 public sealed record AttachmentUploadResponse(string? AttachmentId, string? SessionId, string? Description, string? Error = null);
 public sealed record ApiError(string? Error, string? Message);
-public sealed record SessionInfo(string SessionId, DateTimeOffset LastActivity, int MessageCount);
-public sealed record SessionMessage(string Role, string Content, DateTimeOffset Timestamp);
+/// <summary>GET /sessions/ satırı. Alanlar sunucu şekliyle (SessionInfo) birebir: Title ilk kullanıcı mesajının başıdır.</summary>
+public sealed record SessionInfo(string SessionId, string Title, DateTimeOffset LastActivity, int MessageCount);
+
+/// <summary>GET /sessions/{id}/messages satırı: sunucu <c>{ role: "user"|"bot", text }</c> döndürür.</summary>
+public sealed record SessionMessage(string Role, string Text, MessageFeedbackView? Feedback = null);
+
+/// <summary>Müşterinin bir bot yanıtına verdiği oy (geçmiş yüklenirken sunucu ekler).</summary>
+public sealed record MessageFeedbackView(bool Helpful, string? Reason);
 
 public sealed record UnseenApproval(
     string Id,

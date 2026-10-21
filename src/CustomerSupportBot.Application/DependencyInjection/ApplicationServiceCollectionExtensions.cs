@@ -84,6 +84,8 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
         services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
+        services.Configure<Services.Chat.OutputGuardrailOptions>(configuration.GetSection(Services.Chat.OutputGuardrailOptions.SectionName));
+        services.AddSingleton<Services.Chat.OutputGuardrailService>();
         services.Configure<Services.Budget.LlmBudgetOptions>(configuration.GetSection(Services.Budget.LlmBudgetOptions.SectionName));
         services.Configure<Services.Conversations.ConversationClosingOptions>(
             configuration.GetSection(Services.Conversations.ConversationClosingOptions.SectionName));
@@ -151,6 +153,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IConversationSearchPort, Services.Conversations.ConversationSearchService>();
         services.AddSingleton<Ports.Outbound.Observability.ILlmSpendGuard, Services.Budget.LlmSpendGuard>();
         services.AddSingleton<Services.Notifications.ApprovalResultEmailService>();
+        services.AddSingleton<Services.Notifications.CustomerNotificationHub>(sp => new Services.Notifications.CustomerNotificationHub(
+            sp.GetService<Ports.Outbound.Messaging.IMessageBusPort>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Notifications.CustomerNotificationHub>>()));
         services.AddSingleton<Services.Notifications.OrderStatusEmailService>();
         services.AddSingleton<IOrderFulfillmentPort, Services.Orders.OrderFulfillmentService>();
         services.AddSingleton<Services.Notifications.ComplaintStatusEmailService>();
@@ -196,6 +201,7 @@ public static class ApplicationServiceCollectionExtensions
         // Yetki kararı VARSAYILAN OLARAK REDDEDER; yapılandırma yoksa hiçbir partner
         // hiçbir müşteri adına token alamaz (bkz. ConfiguredA2ASubjectAuthorizer).
         services.AddSingleton<Ports.Outbound.A2A.IA2ASubjectAuthorizer, Services.A2A.ConfiguredA2ASubjectAuthorizer>();
+        services.AddSingleton<Ports.Inbound.IMessageFeedbackPort, Services.Feedback.MessageFeedbackService>();
         services.AddSingleton<Ports.Outbound.A2A.IPartnerChannelAuthorizer, Services.A2A.ConfiguredPartnerChannelAuthorizer>();
         // Scoped: IJwtAccessTokenProvider scoped'dır (bkz. auth kayıtları); singleton bir servis
         // scoped bir bağımlılığı tüketemez — DI doğrulaması host başlangıcında bunu reddeder.

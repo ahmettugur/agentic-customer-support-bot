@@ -44,6 +44,8 @@ public sealed class ChatPortService : IChatPort
     /// </summary>
     private static readonly TimeSpan TurnLockWait = TimeSpan.FromSeconds(120);
 
+    private readonly OutputGuardrailService? _guardrail;
+
     public ChatPortService(
         IAgentTeamPort team,
         IReasoningPort reasoning,
@@ -59,8 +61,10 @@ public sealed class ChatPortService : IChatPort
         Ports.Outbound.Observability.ILlmCallAttribution? attribution = null,
         ILlmSpendGuard? spendGuard = null,
         IEscalationSink? escalations = null,
-        IOptions<LlmBudgetOptions>? budgetOptions = null)
+        IOptions<LlmBudgetOptions>? budgetOptions = null,
+        OutputGuardrailService? guardrail = null)
     {
+        _guardrail = guardrail;
         _attribution = attribution;
         _spendGuard = spendGuard;
         _escalations = escalations;
@@ -166,6 +170,8 @@ public sealed class ChatPortService : IChatPort
             await _sessions.AppendUserMessageAsync(sessionId, query, ct);
             throw;
         }
+
+        response = await GuardAsync(response, query, history, session, ct);
 
         // Intent/sentiment turun kapanışında TEK yerde işlenir — bkz. TurnSignals.
         // (Bu yol eskiden sentiment'i hiç iletmiyordu; streaming yolla arasındaki
@@ -284,6 +290,15 @@ public sealed class ChatPortService : IChatPort
         return _budget.ConversationLimitMessage;
     }
 
+    /// <summary>Yanıtı çıktı guardrail'inden geçirir; müdahale yoksa AYNI string referansı döner.</summary>
+    private async Task<string> GuardAsync(
+        string answer, string query, IReadOnlyList<ConversationMessage> history, AgentSession session, CancellationToken ct)
+    {
+        if (_guardrail is null || string.IsNullOrEmpty(answer)) return answer;
+        var result = await _guardrail.InspectAsync(answer, query, history, session.State.AuthenticatedCustomerId, ct);
+        return result.Verdict == OutputGuardVerdict.Clean ? answer : result.Text;
+    }
+
     private async Task ForwardHumanMessageAsync(string sessionId, string query, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(query)) return;
@@ -371,22 +386,40 @@ public sealed class ChatPortService : IChatPort
         // delta'lar birleştirildiği için geçmişe ham metin yazılıyordu (bkz. ResponseCompletePayload).
         var responseBuilder = new System.Text.StringBuilder();
         string? canonicalResponse = null;
+        string? terminationReason = null;
         await foreach (var evt in WithCostScope(_team.RunStreamingAsync(query, history, session, reasoningResult, ct), sessionId, ct))
         {
-            yield return evt;
+            var outgoing = evt;
             if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is TextDeltaPayload { Text.Length: > 0 } delta)
             {
                 responseBuilder.Append(delta.Text);
             }
             else if (evt.Type == StreamEventTypes.ResponseComplete && evt.Data is ResponseCompletePayload complete)
             {
-                canonicalResponse = complete.Text;
+                // Çıktı guardrail'i: kanonik metin hem ekrana (balonun üzerine yazar) hem geçmişe BU kapıdan geçerek gider.
+                // Not: ham delta'lar akarken zaten gösterilmiş olabilir; response_complete onları ezer.
+                var guarded = await GuardAsync(complete.Text, query, history, session, ct);
+                if (!ReferenceEquals(guarded, complete.Text))
+                    outgoing = evt with { Data = complete with { Text = guarded } };
+                canonicalResponse = guarded;
+                terminationReason = complete.TerminationReason;
             }
+            yield return outgoing;
         }
 
-        var fullResponse = (canonicalResponse ?? responseBuilder.ToString()).TrimEnd();
+        // Kanonik metin hiç gelmediyse (hata/iptal) delta birleşimi de geçmişe yazılmadan önce kontrolden geçer.
+        var fullResponse = (canonicalResponse
+            ?? await GuardAsync(responseBuilder.ToString(), query, history, session, ct)).TrimEnd();
         await _sessionState.PersistExchangeAsync(
             sessionId, query, fullResponse, _chatBridge, TurnSignals.From(reasoningResult), ct);
+
+        // Hızlı yanıt çipleri: yanıt ve kayıttan SONRA (istemci balon henüz açıkken alır). Yanıt hiç tamamlanmadıysa
+        // (hata/iptal: response_complete yok) terminationReason null kalır ve öneri üretilmez.
+        var suggestions = SuggestedRepliesPolicy.Suggest(
+            reasoningResult?.Intent, terminationReason, canonicalResponse,
+            isCompound: Services.Reasoning.SubTaskOrchestrator.IsCompoundQuery(reasoningResult));
+        if (suggestions.Count > 0)
+            yield return new StreamEvent(StreamEventTypes.UiHint, new { kind = "suggested_replies", suggestions });
 
         // Sentiment events
         //

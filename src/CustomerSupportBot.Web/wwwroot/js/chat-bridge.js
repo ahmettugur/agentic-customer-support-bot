@@ -193,7 +193,7 @@ window.__chatSetup = function (ref, apiBase, authToken) {
         var tokenQs = window._authToken ? '?access_token=' + encodeURIComponent(window._authToken) : '';
         var es = new EventSource(apiBase + '/chat/events/' + encodeURIComponent(sid) + tokenQs);
         window._chatEs = es;
-        ['human_joined', 'human_left', 'bot_typing', 'human_message', 'handoff_pending', 'handoff_cleared', 'approval_resolved'].forEach(function (t) {
+        ['human_joined', 'human_left', 'bot_typing', 'human_message', 'handoff_pending', 'handoff_cleared', 'approval_resolved', 'notification'].forEach(function (t) {
             es.addEventListener(t, function (e) {
                 ref.invokeMethodAsync('OnPersistentEvent', t, e.data || '{}');
             });

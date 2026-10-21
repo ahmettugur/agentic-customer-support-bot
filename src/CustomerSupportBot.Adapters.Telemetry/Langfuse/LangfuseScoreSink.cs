@@ -46,4 +46,42 @@ public sealed class LangfuseScoreSink : IConversationScoreSink
             _logger.LogWarning("Langfuse skor gönderimi başarısız: {Status} (session={SessionId})",
                 (int)response.StatusCode, rating.SessionId);
     }
+
+    public const string MessageFeedbackScoreName = "message_feedback";
+
+    public static string MessageFeedbackScoreId(string sessionId, string messageHash) =>
+        $"{MessageFeedbackScoreName}:{sessionId}:{messageHash}";
+
+    /// <summary>
+    /// 👍/👎 oturum skoru olarak yazılır (BOOLEAN 1/0). Yorum (serbest metin, kişisel veri olabilir) Langfuse'a GİTMEZ;
+    /// yalnızca sabit neden kodu gider. Kimlik oturum+mesaj özetidir: oyu değiştirmek skoru günceller.
+    /// </summary>
+    public async Task PublishMessageFeedbackAsync(MessageFeedback feedback, CancellationToken ct = default)
+    {
+        using var request = LangfuseRequests.Create(HttpMethod.Post, _options, "/api/public/scores", JsonContent.Create(new
+        {
+            id = MessageFeedbackScoreId(feedback.SessionId, feedback.MessageHash),
+            sessionId = feedback.SessionId,
+            name = MessageFeedbackScoreName,
+            value = feedback.Helpful ? 1 : 0,
+            dataType = "BOOLEAN",
+            // Langfuse aynı kimlikli skoru birleştirir: neden yoksa eski neden temizlensin diye açıkça null.
+            comment = feedback.Helpful ? null : feedback.Reason
+        }));
+
+        using var response = await _http.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+            _logger.LogWarning("Langfuse mesaj geri bildirimi başarısız: {Status} (session={SessionId})",
+                (int)response.StatusCode, feedback.SessionId);
+    }
+
+    public async Task RemoveMessageFeedbackAsync(string sessionId, string messageHash, CancellationToken ct = default)
+    {
+        using var request = LangfuseRequests.Create(HttpMethod.Delete, _options,
+            $"/api/public/scores/{Uri.EscapeDataString(MessageFeedbackScoreId(sessionId, messageHash))}");
+        using var response = await _http.SendAsync(request, ct);
+        // Olmayan skoru silmek hata değildir (Langfuse 202/404 döner); gerçek hata KVKK silmesinde görünür olmalı.
+        if (response.StatusCode != System.Net.HttpStatusCode.NotFound)
+            response.EnsureSuccessStatusCode();
+    }
 }

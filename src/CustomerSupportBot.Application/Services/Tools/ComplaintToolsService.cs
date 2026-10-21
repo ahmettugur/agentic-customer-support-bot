@@ -13,12 +13,15 @@ public sealed class ComplaintToolsService : IComplaintToolsService
     private readonly IComplaintRepository _complaints;
     private readonly IOrderRepository _orders;
     private readonly SideEffectIdempotencyCache _idempotency;
+    private readonly IUiHintEmitter? _uiHint;
 
     public ComplaintToolsService(
         IComplaintRepository complaints,
         IOrderRepository orders,
-        SideEffectIdempotencyCache? idempotency = null)
+        SideEffectIdempotencyCache? idempotency = null,
+        IUiHintEmitter? uiHint = null)
     {
+        _uiHint = uiHint;
         _complaints = complaints;
         _orders = orders;
         _idempotency = idempotency ?? new SideEffectIdempotencyCache();
@@ -137,6 +140,8 @@ public sealed class ComplaintToolsService : IComplaintToolsService
             return ToolResult.NotFound(
                 WellKnown.ToolErrorCodes.CustomerIdMismatch, ComplaintNotAccessibleMessage(complaintId));
 
+        ToolCards.EmitComplaints(_uiHint, [(complaintId, complaint)]);
+
         var message = $"Şikayet No: {complaintId}, Sipariş: {complaint.OrderId}, Durum: {complaint.Status}";
         var closed = WellKnown.ComplaintStatuses.IsClosed(complaint.Status);
         if (closed && !string.IsNullOrWhiteSpace(complaint.Resolution)) message += $", Açıklama: {complaint.Resolution}";
@@ -168,6 +173,8 @@ public sealed class ComplaintToolsService : IComplaintToolsService
             return ToolResult.NotFound(
                 WellKnown.ToolErrorCodes.NoComplaintsForCustomer,
                 "Kayıtlı bir şikayetiniz bulunmamaktadır.");
+
+        ToolCards.EmitComplaints(_uiHint, all);
 
         var lines = all.Select(c => $"{c.ComplaintId}: Sipariş {c.Complaint.OrderId}, Durum: {c.Complaint.Status}");
 
