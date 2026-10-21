@@ -10,6 +10,7 @@
 @inject NavigationManager Nav
 @implements IAsyncDisposable
 @inject ThemeService ThemeSvc
+@inject ToastService Toast
 @using System.Text.Json
 @using Markdig
 
@@ -729,6 +730,9 @@
 
     </div>
 </div>
+
+@* Sohbet içi bildirim toast'ları (EmptyLayout ToastContainer içermez). *@
+<ToastContainer />
 
 @code {
     // ── Message model ─────────────────────────────────────────────────────────
@@ -1759,6 +1763,15 @@
                 else
                     _messages.Add(new ChatMsg { Role = "human", Content = msgText });
                 break;
+            case "notification":
+                // Sunucu tarafında yalnızca bu müşterinin bildirimleri gelir (bkz. docs/chat-experience.md).
+                // Sohbete sistem notu olarak da düşer: toast kaybolunca bile konuşmada kalır.
+                if (ChatNotificationLogic.Parse(jd) is { } note)
+                {
+                    _messages.Add(new ChatMsg { Role = "system", Content = ChatNotificationLogic.ChatNote(note) });
+                    Toast.ShowInfo(ChatNotificationLogic.ToastText(note));
+                }
+                break;
             case "approval_resolved":
                 var approval = new UnseenApproval(
                     Id: jd.TryGetProperty("id", out var aid) ? aid.GetString() ?? "" : "",
@@ -1774,7 +1787,7 @@
         }
 
         await InvokeAsync(StateHasChanged);
-        if (type is "human_joined" or "human_left" or "human_message")
+        if (type is "human_joined" or "human_left" or "human_message" or "notification")
             await InvokeAsync(ScrollBottomAsync);
     }
 

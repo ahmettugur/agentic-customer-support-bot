@@ -28,6 +28,7 @@ public class ComplaintManagementServiceTests
         public List<EmailMessage> Sent { get; } = [];
         public IEmailSender Email { get; } = Substitute.For<IEmailSender>();
         public ComplaintInfo Current { get; set; } = null!;
+        public List<CustomerNotification> Pushed { get; } = [];
     }
 
     private static Harness Build(string status = WellKnown.ComplaintStatuses.Pending, string? assigned = null,
@@ -77,8 +78,10 @@ public class ComplaintManagementServiceTests
         var orders = Substitute.For<IOrderRepository>();
         orders.Get("1030").Returns(new OrderInfo { CustomerId = "1001", Status = "Teslim Edildi", Lines = [new OrderLine("Kahve", 1)] });
 
+        var hub = new CustomerNotificationHub(null, NullLogger<CustomerNotificationHub>.Instance);
+        hub.Subscribe("1001", n => { h.Pushed.Add(n); return Task.CompletedTask; });
         h.Service = new ComplaintManagementService(repo, orders, approvals, agents, notifier,
-            NullLogger<ComplaintManagementService>.Instance);
+            NullLogger<ComplaintManagementService>.Instance, hub: hub);
         return h;
     }
 
@@ -249,5 +252,35 @@ public class ComplaintManagementServiceTests
         d!.Order!.LinesSummary().Should().Be("Kahve x1");
         d.AttachmentIds.Should().Equal("att-1", "att-2");
         d.Events.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Claim_PushesAnInReviewNotification_ToTheComplainant()
+    {
+        var h = Build();
+
+        await h.Service.ExecuteAsync("1006", AgentA, new ComplaintCommand(ComplaintAction.Claim), Ct);
+
+        h.Pushed.Should().ContainSingle().Which.Kind.Should().Be(CustomerNotificationKinds.ComplaintInReview);
+    }
+
+    [Fact]
+    public async Task Resolve_PushesAClosedNotification()
+    {
+        var h = Build(WellKnown.ComplaintStatuses.InProgress, assigned: "a1");
+
+        await h.Service.ExecuteAsync("1006", AgentA, new ComplaintCommand(ComplaintAction.Resolve, Text: "çözüldü"), Ct);
+
+        h.Pushed.Should().ContainSingle().Which.Kind.Should().Be(CustomerNotificationKinds.ComplaintClosed);
+    }
+
+    [Fact]
+    public async Task ARejectedCommand_PushesNothing()
+    {
+        var h = Build(WellKnown.ComplaintStatuses.InProgress, assigned: "a1");
+
+        await h.Service.ExecuteAsync("1006", AgentA, new ComplaintCommand(ComplaintAction.Resolve, Text: " "), Ct);
+
+        h.Pushed.Should().BeEmpty();
     }
 }

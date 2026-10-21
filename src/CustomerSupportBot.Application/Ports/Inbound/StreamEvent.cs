@@ -82,6 +82,11 @@ public static class StreamEventTypes
     // ─── HITL events ───
     /// <summary>Bir tool çağrısı admin onayı bekliyor. Payload: ApprovalRequest.</summary>
     public const string ApprovalRequired = "approval_required";
+    /// <summary>
+    /// Sohbet içi anlık bildirim (sipariş kargoya verildi/teslim edildi, şikayet durumu). Yalnızca kalıcı oturum
+    /// akışında gider. Payload: { kind, title, text, referenceId?, createdAt }.
+    /// </summary>
+    public const string Notification = "notification";
     /// <summary>Onay kararı verildi. Payload: { id, status, reason? }.</summary>
     public const string ApprovalResolved = "approval_resolved";
     /// <summary>Yeni bir eskalasyon kaydı oluştu. Payload: EscalationRequest.</summary>

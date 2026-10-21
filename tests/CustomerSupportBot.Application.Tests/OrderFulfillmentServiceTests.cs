@@ -29,7 +29,8 @@ public class OrderFulfillmentServiceTests
 
     private static Harness Build(
         OrderStatusChange change = OrderStatusChange.Updated, string status = "Kargolandı",
-        Action<EmailOptions>? configure = null, InMemoryNotificationLedger? ledger = null)
+        Action<EmailOptions>? configure = null, InMemoryNotificationLedger? ledger = null,
+        CustomerNotificationHub? hub = null)
     {
         var orders = Substitute.For<IOrderRepository>();
         orders.MarkShipped(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<DateTime>())
@@ -48,7 +49,7 @@ public class OrderFulfillmentServiceTests
         ledger ??= new InMemoryNotificationLedger();
         var notifier = new OrderStatusEmailService(email, ledger, customers, Options.Create(options),
             NullLogger<OrderStatusEmailService>.Instance);
-        return new Harness(new OrderFulfillmentService(orders, notifier), orders, customers, email, sent, ledger);
+        return new Harness(new OrderFulfillmentService(orders, notifier, hub: hub), orders, customers, email, sent, ledger);
     }
 
     [Fact]
@@ -145,5 +146,72 @@ public class OrderFulfillmentServiceTests
         await h.Service.MarkShippedAsync("1044", null, null, Ct);
 
         h.Sent.Should().BeEmpty();
+    }
+
+    private static (CustomerNotificationHub Hub, List<CustomerNotification> Received) HubFor(string customerId)
+    {
+        var hub = new CustomerNotificationHub(null, NullLogger<CustomerNotificationHub>.Instance);
+        var received = new List<CustomerNotification>();
+        hub.Subscribe(customerId, n => { received.Add(n); return Task.CompletedTask; });
+        return (hub, received);
+    }
+
+    [Fact]
+    public async Task Shipped_PushesAnInChatNotification_ToTheOrdersCustomer()
+    {
+        var (hub, received) = HubFor("1001");
+        var h = Build(hub: hub);
+
+        await h.Service.MarkShippedAsync("1044", "Yurtiçi Kargo", "YK1", Ct);
+
+        received.Should().ContainSingle().Which.Kind.Should().Be(CustomerNotificationKinds.OrderShipped);
+    }
+
+    [Fact]
+    public async Task Delivered_PushesAnInChatNotification()
+    {
+        var (hub, received) = HubFor("1001");
+        var h = Build(hub: hub);
+
+        await h.Service.MarkDeliveredAsync("1044", Ct);
+
+        received.Should().ContainSingle().Which.Kind.Should().Be(CustomerNotificationKinds.OrderDelivered);
+    }
+
+    [Fact]
+    public async Task InChatNotification_DoesNotDependOnEmailBeingEnabled()
+    {
+        var (hub, received) = HubFor("1001");
+        var h = Build(configure: o => o.Enabled = false, hub: hub);
+
+        await h.Service.MarkShippedAsync("1044", null, null, Ct);
+
+        h.Sent.Should().BeEmpty();
+        received.Should().ContainSingle("e-posta kapalıyken bile açık sohbet bilgilenmeli");
+    }
+
+    [Theory]
+    [InlineData(OrderStatusChange.Unchanged)]
+    [InlineData(OrderStatusChange.NotFound)]
+    [InlineData(OrderStatusChange.InvalidTransition)]
+    public async Task NoNotification_WhenNothingActuallyChanged(OrderStatusChange change)
+    {
+        var (hub, received) = HubFor("1001");
+        var h = Build(change, hub: hub);
+
+        await h.Service.MarkShippedAsync("1044", null, null, Ct);
+
+        received.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AnotherCustomersSubscriber_GetsNothing()
+    {
+        var (hub, received) = HubFor("2002");
+        var h = Build(hub: hub);
+
+        await h.Service.MarkShippedAsync("1044", null, null, Ct);
+
+        received.Should().BeEmpty();
     }
 }

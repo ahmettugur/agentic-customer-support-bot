@@ -78,3 +78,29 @@ sonradan gelmez. İki durum ayrılır:
 
 Bilinen sınır: sunucu süreci ölürse (çökme/deploy) ve `WorkflowCheckpointing` açıksa tur başka bir pod'da bitirilir ve yanıt geçmişe yazılır;
 bu ~90 sn sürebildiği için sayfa beklemez — yanıt, konuşma geri yüklenince (yenileme) ya da **Konuşmalarım**'dan açılınca görünür.
+
+## Sohbet içi bildirimler
+
+Sohbet açıkken siparişiniz kargoya verilir/teslim edilirse ya da şikayetinizin durumu değişirse, müşteri bunu
+e-postayı beklemeden **anında** görür: sohbete bir sistem notu düşer ve kısa bir toast çıkar.
+
+| Olay | Tür (`kind`) | Tetikleyen |
+|---|---|---|
+| Sipariş kargoya verildi | `order_shipped` | `OrderFulfillmentService.MarkShippedAsync` (gerçek geçiş) |
+| Sipariş teslim edildi | `order_delivered` | `OrderFulfillmentService.MarkDeliveredAsync` (gerçek geçiş) |
+| Şikayet incelemeye alındı | `complaint_in_review` | `ComplaintManagementService` (üstlenme / yeniden açma / ilk atama) |
+| Şikayet sonuçlandı | `complaint_closed` | `ComplaintManagementService` (çözüm / ret) |
+
+**Nasıl akar.** Yayın, e-postanın gittiği noktalarla aynı yerde yapılır; ama e-postadan **bağımsızdır** (e-posta kapalı olsa
+da açık sohbet bilgilenir). `CustomerNotificationHub` bildirimi `IMessageBusPort` üzerinden tek kanala (`csbot:customer-notify`)
+yayınlar; her pod yalnızca kendi açık bağlantılarına dağıtır — bildirimi veren pod ile müşterinin SSE'sini tutan pod farklı
+olabilir. Müşteriye ulaşım, **mevcut kalıcı oturum akışı** (`GET /chat/events/{sessionId}`) üzerinde `notification` olayıyla olur;
+yeni bir uç yoktur.
+
+**Güvenlik.** Abonelik, oturum kimliğine değil JWT'deki doğrulanmış müşteri kimliğine (`linked_customer_id`) bağlanır; kimliksiz
+akış bildirim almaz. Yazım, akıştaki diğer tüm olaylar gibi her seferinde sahiplik kontrolünden geçer — oturum başka bir müşteriye
+geçerse akış kapanır. Metin istemcide Razor ile kaçışlı basılır (kargo firması/takip no yönetici girdisidir).
+
+**Sınırlar (bilerek).** Bildirim *geçicidir*: sohbet açık değilse (ya da bağlantı kopukken) kaybolur ve yeniden gönderilmez —
+kalıcı kanal e-postadır. Sesli görüşme / A2A / MCP gibi kalıcı oturum akışı olmayan yüzeylere inmez. Yayın başarısız olursa
+durum güncellemesi etkilenmez (hata yutulup loglanır).

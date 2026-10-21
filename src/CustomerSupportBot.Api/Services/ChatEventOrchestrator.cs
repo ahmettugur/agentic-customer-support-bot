@@ -6,6 +6,7 @@ namespace CustomerSupportBot.Api.Services;
 
 using CustomerSupportBot.Api.Infrastructure;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Services.Notifications;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Hosting;
 
@@ -18,12 +19,14 @@ public sealed class ChatEventOrchestrator(
     IChatSessionPort chatSession,
     IHitlEventPort hitlEvents,
     IHostApplicationLifetime appLifetime,
-    ILogger<ChatEventOrchestrator> logger)
+    ILogger<ChatEventOrchestrator> logger,
+    CustomerNotificationHub? notifications = null)
 {
     /// <summary>
     /// Executes the persistent event stream for a chat session.
     /// Returns when the client disconnects or cancellation is requested.
     /// </summary>
+    /// <param name="customerId">Doğrulanmış müşteri kimliği (JWT claim'i); yoksa bildirim akışa bağlanmaz.</param>
     /// <param name="stillAuthorized">
     /// Akışın HÂLÂ bu aboneye ait olup olmadığını söyleyen kontrol. Bağlantı açılışındaki tek
     /// seferlik kontrol yetmez: henüz kimseye bağlı OLMAYAN bir oturuma abone olmak serbesttir
@@ -36,7 +39,8 @@ public sealed class ChatEventOrchestrator(
         string sessionId,
         SseForwarder sse,
         Func<CancellationToken, Task<bool>> stillAuthorized,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? customerId = null)
     {
         using var streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
 
@@ -62,6 +66,12 @@ public sealed class ChatEventOrchestrator(
         using var subscription = hitlEvents.SubscribeToChatEvents(
             sessionId,
             GuardedWriteAsync);
+
+        // Sohbet içi bildirimler (sipariş kargoda, şikayet sonuçlandı…). Yalnızca doğrulanmış müşteri kimliğine
+        // abone olunur; yazım da diğer olaylar gibi sahiplik kontrolünden geçer (GuardedWriteAsync).
+        using var notificationSub = string.IsNullOrWhiteSpace(customerId) || notifications is null
+            ? null
+            : notifications.Subscribe(customerId, n => GuardedWriteAsync(StreamEventTypes.Notification, n));
 
         await ProcessBridgeMessagesAsync(sessionId, GuardedWriteAsync, streamCts.Token);
 

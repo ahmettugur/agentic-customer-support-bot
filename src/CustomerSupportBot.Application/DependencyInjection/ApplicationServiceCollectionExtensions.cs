@@ -151,6 +151,9 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IConversationSearchPort, Services.Conversations.ConversationSearchService>();
         services.AddSingleton<Ports.Outbound.Observability.ILlmSpendGuard, Services.Budget.LlmSpendGuard>();
         services.AddSingleton<Services.Notifications.ApprovalResultEmailService>();
+        services.AddSingleton<Services.Notifications.CustomerNotificationHub>(sp => new Services.Notifications.CustomerNotificationHub(
+            sp.GetService<Ports.Outbound.Messaging.IMessageBusPort>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Notifications.CustomerNotificationHub>>()));
         services.AddSingleton<Services.Notifications.OrderStatusEmailService>();
         services.AddSingleton<IOrderFulfillmentPort, Services.Orders.OrderFulfillmentService>();
         services.AddSingleton<Services.Notifications.ComplaintStatusEmailService>();

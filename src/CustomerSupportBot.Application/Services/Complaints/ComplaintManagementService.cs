@@ -19,7 +19,8 @@ public sealed class ComplaintManagementService(
     IHumanAgentRegistry agents,
     ComplaintStatusEmailService notifier,
     ILogger<ComplaintManagementService> logger,
-    TimeProvider? clock = null) : IComplaintManagementPort
+    TimeProvider? clock = null,
+    CustomerNotificationHub? hub = null) : IComplaintManagementPort
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
@@ -111,7 +112,12 @@ public sealed class ComplaintManagementService(
             ComplaintAction.Resolve or ComplaintAction.Reject => ComplaintStatusEmailService.Closed,
             _ => null
         };
-        if (emailKind is not null) await notifier.NotifyAsync(complaintId, updated, emailKind, ct);
+        if (emailKind is not null)
+        {
+            if (CustomerNotifications.ForComplaint(complaintId, updated, emailKind, _clock.GetUtcNow().UtcDateTime) is { } pushed)
+                hub?.Publish(updated.CustomerId, pushed);
+            await notifier.NotifyAsync(complaintId, updated, emailKind, ct);
+        }
 
         logger.LogInformation("[Complaint] {Action} complaint={ComplaintId} {From}→{To} by={Actor}",
             ComplaintTransitions.ActionName(command.Action), complaintId, complaint.Status, updated.Status, actor.Name);
