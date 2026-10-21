@@ -14,13 +14,16 @@ public sealed class OrderToolsService : IOrderToolsService
     private readonly IProductCatalogRepository _products;
     private readonly ICustomerRepository _customers;
     private readonly SideEffectIdempotencyCache _idempotency;
+    private readonly IUiHintEmitter? _uiHint;
 
     public OrderToolsService(
         IOrderRepository orders,
         IProductCatalogRepository products,
         ICustomerRepository customers,
-        SideEffectIdempotencyCache? idempotency = null)
+        SideEffectIdempotencyCache? idempotency = null,
+        IUiHintEmitter? uiHint = null)
     {
+        _uiHint = uiHint;
         _orders = orders;
         _products = products;
         _customers = customers;
@@ -212,6 +215,7 @@ public sealed class OrderToolsService : IOrderToolsService
         if (ValidateOrderActionable(orderId, customerId) is { } blocked) return blocked;
 
         var order = _orders.Get(orderId)!;
+        ToolCards.EmitOrder(_uiHint, orderId, order);
 
         return ToolResult.Ok(
             message: $"Sipariş No: {orderId}, Ürünler: {order.LinesSummary()}, Durum: {order.Status}{ShippingText(order)}.",
@@ -240,6 +244,7 @@ public sealed class OrderToolsService : IOrderToolsService
             return ToolResult.NotFound(WellKnown.ToolErrorCodes.NoOrdersForCustomer, $"Henüz {customerId} kimlik numarası ile kayıtlı bir siparişiniz bulunmamaktadır.");
 
         var (orderId, order) = result.Value;
+        ToolCards.EmitOrder(_uiHint, orderId, order);
         return ToolResult.Ok(
             message: $"Sipariş No: {orderId}, Ürünler: {order.LinesSummary()}, Durum: {order.Status}{ShippingText(order)}, Tarih: {order.OrderDate:g}",
             data: new
@@ -265,6 +270,8 @@ public sealed class OrderToolsService : IOrderToolsService
         var orders = _orders.GetByCustomer(customerId);
         if (orders.Count == 0)
             return ToolResult.NotFound(WellKnown.ToolErrorCodes.NoOrdersForCustomer, $"Henüz {customerId} kimlik numarası ile kayıtlı bir siparişiniz bulunmamaktadır.");
+
+        ToolCards.EmitOrders(_uiHint, orders);
 
         var listing = orders.Select((o, i) =>
             $"{i + 1}. Sipariş No: {o.OrderId}, Ürünler: {o.Order.LinesSummary()}, Durum: {o.Order.Status}, Tarih: {o.Order.OrderDate:g}");

@@ -37,3 +37,18 @@ Kurallar (`SuggestedRepliesPolicy`): yalnızca `completed` sonlanan, tek niyetli
 turlar öneri alır; hata, eskalasyon, "bulunamadı", bileşik sorgu, bilinmeyen/`genel`/temsilci niyeti ve boş yanıtta çıkmaz. Olay: `ui_hint`
 `{ kind: "suggested_replies", suggestions: [...] }` — yanıt ve kayıttan sonra gelir. Çipler yalnızca **son** mesajda ve akış bittiyse görünür;
 geçmişten yüklenen konuşmalarda yoktur (kalıcı değil, tur anına özgüdür).
+
+## Sipariş ve şikayet kartları
+
+Sipariş sorgusu (`order_status_tool`, `get_last_order_tool`, `get_all_orders_tool`) ve şikayet sorgusu (`complaint_status_tool`,
+`get_all_complaints_tool`) başarılı olunca araç, yanıt metninin yanında **yapılandırılmış bir `ui_hint`** de yayınlar
+(`order_cards` / `complaint_cards`). Kart **veritabanındaki gerçek veriden** üretilir (modelin yazdığı metinden değil), bu yüzden
+model yanlış özetlese bile kart doğrudur.
+
+- **Sipariş kartı:** numara, durum rozeti, ürün satırları, tarihli zaman çizelgesi (Sipariş alındı → Kargolandı → Teslim edildi;
+  iptalde Alındı → İptal edildi; iadede ek adım) ve kargo firması / takip numarası. Liste sorgusunda en yeni 5 kart + toplam sayı.
+- **Şikayet kartı:** numara, durum, ilgili sipariş, şikayet metni (en çok 200 karakter), kapanmışsa sonuç açıklaması.
+- **Gizlilik:** kartlar yalnızca araç başarılı olunca (sahiplik doğrulanmış) yayınlanır; başkasının siparişi/şikayeti kart olarak da çıkmaz.
+  İç not, atanan temsilci ve onay kaydı kartta **yoktur**; çözüm açıklaması yalnızca kapanmış şikayette görünür.
+- **Kanal:** yalnızca canlı sohbet akışında çizilir. Sesli görüşme, A2A ve MCP'de akış olmadığı için ipucu düşer, araç sonucu değişmez.
+- Kartlar tur anına özgüdür; geçmişten yüklenen (yenilemeden sonraki) konuşmalarda kart yoktur, metin vardır.

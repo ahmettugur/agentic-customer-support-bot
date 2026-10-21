@@ -425,6 +425,65 @@
                                         }
                                     </div>
                                 }
+                                @if (!msg.IsStreaming && msg.OrderCards is { Orders.Count: > 0 } orderHint)
+                                {
+                                    <div class="tool-cards" aria-label="Siparişleriniz">
+                                        @foreach (var order in orderHint.Orders)
+                                        {
+                                            var steps = ToolCardLogic.Steps(order, CardOffset);
+                                            var shipping = ToolCardLogic.Shipping(order);
+                                            <article class="tool-card tone-@ToolCardLogic.OrderTone(order.Status)">
+                                                <header class="tool-card-head">
+                                                    <span class="tool-card-title">Sipariş #@order.OrderId</span>
+                                                    <span class="tool-card-badge">@order.Status</span>
+                                                </header>
+                                                <ul class="tool-card-lines">
+                                                    @foreach (var line in order.Lines)
+                                                    {
+                                                        <li><span>@line.Product</span><span class="qty">× @line.Quantity</span></li>
+                                                    }
+                                                </ul>
+                                                <ol class="tool-card-steps">
+                                                    @foreach (var step in steps)
+                                                    {
+                                                        <li class="step step-@step.State.ToString().ToLowerInvariant()">
+                                                            <span class="step-label">@step.Label</span>
+                                                            @if (step.When is not null) { <span class="step-when">@step.When</span> }
+                                                        </li>
+                                                    }
+                                                </ol>
+                                                @if (shipping is not null)
+                                                {
+                                                    <div class="tool-card-shipping"><span aria-hidden="true">📦</span> @shipping</div>
+                                                }
+                                            </article>
+                                        }
+                                        @if (orderHint.TotalCount > orderHint.Orders.Count)
+                                        {
+                                            <div class="tool-card-more">Toplam @orderHint.TotalCount siparişiniz var; en yeni @orderHint.Orders.Count tanesi gösteriliyor.</div>
+                                        }
+                                    </div>
+                                }
+                                @if (!msg.IsStreaming && msg.ComplaintCards is { Count: > 0 })
+                                {
+                                    <div class="tool-cards" aria-label="Şikayetleriniz">
+                                        @foreach (var complaint in msg.ComplaintCards)
+                                        {
+                                            <article class="tool-card tone-@ToolCardLogic.ComplaintTone(complaint.Status)">
+                                                <header class="tool-card-head">
+                                                    <span class="tool-card-title">Şikayet #@complaint.ComplaintId</span>
+                                                    <span class="tool-card-badge">@complaint.Status</span>
+                                                </header>
+                                                <div class="tool-card-meta">Sipariş #@complaint.OrderId@(complaint.UpdatedAt is { } upd ? $" · Son güncelleme {ToolCardLogic.Date(upd, CardOffset)}" : "")</div>
+                                                <p class="tool-card-text">@complaint.Complaint</p>
+                                                @if (!string.IsNullOrWhiteSpace(complaint.Resolution))
+                                                {
+                                                    <div class="tool-card-resolution"><strong>Sonuç:</strong> @complaint.Resolution</div>
+                                                }
+                                            </article>
+                                        }
+                                    </div>
+                                }
                                 @* Hızlı yanıt çipleri yalnızca SON mesajda ve akış bittiyse görünür: müşteri yeni bir mesaj
                                    yazdığı anda (ya da çip seçtiğinde) eski turun önerileri kaybolur. *@
                                 @if (!msg.IsStreaming && !_isStreaming && msg.Suggestions is { Count: > 0 } && ReferenceEquals(msg, _messages[^1]))
@@ -668,6 +727,10 @@
 
         /// <summary>Tur bittikten sonra sunucunun önerdiği hızlı yanıtlar (yalnızca canlı turda; geçmişten yüklenen mesajlarda yok).</summary>
         public List<string>? Suggestions { get; set; }
+
+        /// <summary>Sipariş/şikayet araçlarının döndürdüğü yapılandırılmış kartlar (veritabanından; modelin metninden değil).</summary>
+        public OrderCardsHint? OrderCards { get; set; }
+        public IReadOnlyList<ComplaintCardView>? ComplaintCards { get; set; }
 
         /// <summary>
         /// Bu yanıtı üretirken görev alan ajanların (friendly) adları, sıralı ve
@@ -1429,6 +1492,12 @@
                     if (!string.IsNullOrEmpty(hintAgentName) && !_agentChips.Any(c => c.Name == hintAgentName))
                         UpsertAgentChip(hintAgentName, "running");
                 }
+                if (_currentBot is not null && jd.TryGetProperty("kind", out var cardKind))
+                {
+                    var cardKindName = cardKind.GetString();
+                    if (cardKindName == "order_cards") _currentBot.OrderCards = ToolCardLogic.ParseOrderHint(jd);
+                    else if (cardKindName == "complaint_cards") _currentBot.ComplaintCards = ToolCardLogic.ParseComplaintHint(jd);
+                }
                 if (_currentBot is not null
                     && jd.TryGetProperty("kind", out var suggestKind)
                     && suggestKind.GetString() == "suggested_replies"
@@ -1671,6 +1740,9 @@
         if (type is "human_joined" or "human_left" or "human_message")
             await InvokeAsync(ScrollBottomAsync);
     }
+
+    // Tarayıcının UTC farkı: kart tarihleri kullanıcının yerel gününe göre yazılır.
+    private static TimeSpan CardOffset => DateTimeOffset.Now.Offset;
 
     // ── Yanıt geri bildirimi (👍/👎) ──────────────────────────────────────────
     // İyimser güncelleme: oy hemen görünür, sunucu reddederse eski haline döner (ağ hatası sessizce oyu kaybettirmesin).
