@@ -397,6 +397,12 @@
                                         }
                                     </div>
                                 }
+                                @if (!msg.IsStreaming && msg.RetryText is not null && ReferenceEquals(msg, _messages[^1]) && !_isStreaming)
+                                {
+                                    <div class="turn-retry">
+                                        <button type="button" class="turn-retry-btn" @onclick="() => RetryAsync(msg)">↻ Tekrar dene</button>
+                                    </div>
+                                }
                                 @if (FeedbackUi.CanVote(msg.Role, msg.IsStreaming, msg.Content, _sessionId, msg.VoiceId is not null))
                                 {
                                     var voteMsg = msg;
@@ -740,6 +746,9 @@
 
         /// <summary>Sipariş/şikayet araçlarının döndürdüğü yapılandırılmış kartlar (veritabanından; modelin metninden değil).</summary>
         public OrderCardsHint? OrderCards { get; set; }
+
+        /// <summary>Tur başarısız olduysa (bağlantı koptu / sunucu hata verdi) yeniden gönderilecek metin; yoksa "Tekrar dene" çıkmaz.</summary>
+        public string? RetryText { get; set; }
 
         /// <summary>Bu tur bağlama enjekte edilen bilgi tabanı makalelerinin başlıkları ("ilgili makaleler" — modelin dayandığı kaynak iddiası değil).</summary>
         public List<string>? Sources { get; set; }
@@ -1253,6 +1262,7 @@
     [JSInvokable]
     public void VoiceSetSession(string id)
     {
+        _baselineKnown = false;   // sesli görüşme sunucuya mesaj ekler; sayaç artık güvenilir değil
         if (!string.IsNullOrEmpty(id) && _sessionId != id)
         {
             _sessionId = id;
@@ -1336,6 +1346,7 @@
     private async Task SendAsync(string text, IReadOnlyList<PendingPhoto>? photos = null)
     {
         ClearRatingDelayTimer();
+        (_lastSentText, _lastSentHadPhotos, _turnFailed) = (text, photos is { Count: > 0 }, false);
         _messages.Add(new ChatMsg
         {
             Role = "user",
@@ -1369,7 +1380,7 @@
         if (refreshed is null)
         {
             AuthState.NotifyStateChanged();
-            OnStreamError("oturum süresi doldu");
+            await HandleStreamErrorAsync("oturum süresi doldu", allowRecovery: false);
             var returnTo = Uri.EscapeDataString(Nav.Uri);
             Nav.NavigateTo($"/customer-login?return={returnTo}", forceLoad: false);
             return;
@@ -1489,6 +1500,7 @@
                     _currentBot = null;
                 }
                 _humanMode  = true;
+                _baselineKnown = false;
                 _humanAgent = jd.TryGetProperty("humanAgent", out var haj) ? haj.GetString() : "temsilci";
                 ClearPendingHandoffTimer();
                 _pendingHandoff = false;
@@ -1537,8 +1549,12 @@
                 }
                 break;
             case "error":
+                // Sunucunun bildirdiği hata: tur başarısız. Yanıt geçmişte yoksa "Tekrar dene" çıkar.
+                _turnFailed = true;
                 _currentBot.Content    = jd.TryGetProperty("message", out var err) ? err.GetString() ?? "Hata oluştu." : "Hata oluştu.";
                 _currentBot.IsStreaming = false;
+                _currentBot.RetryText = _lastSentHadPhotos ? null : _lastSentText;
+                _ = ResyncServerCountAsync();
                 break;
         }
 
@@ -1563,6 +1579,8 @@
     public void OnStreamComplete()
     {
         ClearRatingDelayTimer();
+        // Başarılı bot turu sunucuda 2 mesaj ekler (kullanıcı + bot); kopma sonrası kurtarmanın başlangıç sayısı budur.
+        if (!_turnFailed && !_humanMode && _currentBot is { Content.Length: > 0 }) _serverMessageCount += 2;
         if (_currentBot is not null) _currentBot.IsStreaming = false;
         _isStreaming = false;
         _currentBot  = null;
@@ -1577,16 +1595,20 @@
     }
 
     [JSInvokable]
-    public void OnStreamError(string msg)
+    public async Task OnStreamError(string msg) => await HandleStreamErrorAsync(msg, allowRecovery: true);
+
+    private async Task HandleStreamErrorAsync(string msg, bool allowRecovery)
     {
-        if (_currentBot is not null)
-        {
-            if (string.IsNullOrEmpty(_currentBot.Content))
-                _currentBot.Content = $"Bağlantı hatası: {msg}";
-            _currentBot.IsStreaming = false;
-        }
+        var bot = _currentBot;
         _isStreaming = false;
         _currentBot  = null;
+        if (bot is not null)
+        {
+            bot.IsStreaming = false;
+            // Akıştan kısmi yanıt geldiyse korunur (kullanıcı en azından yarısını görmüş olur); boşsa kurtarma/hata.
+            if (string.IsNullOrEmpty(bot.Content)) await FailTurnAsync(bot, $"Bağlantı hatası: {msg}", allowRecovery);
+            else { _turnFailed = true; bot.RetryText = _lastSentHadPhotos ? null : _lastSentText; }
+        }
         StateHasChanged();
         _ = ScrollBottomAsync();
     }
@@ -1709,6 +1731,7 @@
                 ClearPendingHandoffTimer();
                 _pendingHandoff = false;
                 _humanMode  = true;
+                _baselineKnown = false;
                 _humanAgent = jd.TryGetProperty("humanAgent", out var ha) ? ha.GetString() : "temsilci";
                 _messages.Add(new ChatMsg { Role = "system", Content = $"💬 Temsilci {_humanAgent} sohbete katıldı." });
                 try { await JS.InvokeVoidAsync("__stopVoice"); } catch { }
@@ -1786,6 +1809,62 @@
         StateHasChanged();
     }
 
+    // ── Başarısız turu kurtarma / tekrar deneme ─────────────────────────────────
+    // Bağlantı koptuğunda sunucu çoğu zaman turu İPTAL eder (istemci bağlantıyı keserse zincir iptal edilir); ama sahte kopmada
+    // ya da zaman aşımında tur sunucuda tamamlanıp kaydedilmiş olabilir. Önce oturum geçmişine bakılır: yanıt oradaysa gösterilir,
+    // değilse hata ve tek tıkla "Tekrar dene". Başlangıç mesaj sayısı bilinmiyorsa (temsilci/sesli kullanıldı) kurtarma denenmez —
+    // yanlış pozitif ("eski yanıtı yeni sanmak"), hiç kurtarmamaktan kötüdür.
+    private int _serverMessageCount;
+    private bool _baselineKnown = true;
+    private string? _lastSentText;
+    private bool _lastSentHadPhotos;
+    private bool _turnFailed;
+
+    private async Task FailTurnAsync(ChatMsg? bot, string errorText, bool allowRecovery)
+    {
+        _turnFailed = true;
+        if (bot is null) return;
+
+        if (allowRecovery && _baselineKnown && !_humanMode && _sessionId is not null && _lastSentText is not null)
+        {
+            var server = await ChatApi.GetSessionMessagesAsync(_sessionId);
+            var answer = StreamRecovery.FindCompletedAnswer(server, _serverMessageCount, _lastSentText);
+            if (answer is not null)
+            {
+                bot.Content = answer;
+                bot.RetryText = null;
+                _serverMessageCount = server.Count;
+                _turnFailed = false;
+                return;
+            }
+        }
+
+        // Başarısız tur sunucuya kullanıcı mesajını yazmış olabilir; sayaç gerçek duruma göre yeniden hizalanır.
+        await ResyncServerCountAsync();
+        bot.Content = errorText;
+        // Fotoğraflı mesaj yeniden gönderilemez (ek kimlikleri tüketildi); onda yalnızca hata görünür.
+        bot.RetryText = _lastSentHadPhotos ? null : _lastSentText;
+    }
+
+    private async Task ResyncServerCountAsync()
+    {
+        if (_sessionId is null || !_baselineKnown) return;
+        var count = (await ChatApi.GetSessionMessagesAsync(_sessionId)).Count;
+        // Beklerken yeni bir tur başladıysa sayaç o turun payıdır; üzerine yazılmaz.
+        if (!_isStreaming) _serverMessageCount = count;
+    }
+
+    /// <summary>Başarısız turun kullanıcı balonunu ve hata balonunu kaldırıp aynı metni yeniden gönderir.</summary>
+    private async Task RetryAsync(ChatMsg failed)
+    {
+        if (_isStreaming || failed.RetryText is not { } text) return;
+        var index = _messages.IndexOf(failed);
+        if (index < 1 || _messages[index - 1].Role != "user") return;
+
+        _messages.RemoveRange(index - 1, 2);
+        await SendAsync(text);
+    }
+
     // ── Geçmiş konuşmalar ─────────────────────────────────────────────────────
     // Sayfa yenilenince / tarayıcı kapanıp açılınca konuşma kaybolmasın. Hangi oturumun "aktif" olduğu bu tarayıcıda
     // tutulur (localStorage); "Yeni sohbet" bunu siler, böylece yenilemede eski konuşma istenmeden geri gelmez.
@@ -1840,6 +1919,7 @@
         if (history.Count == 0) { await ForgetSessionAsync(); return; }
 
         await NewChatAsync();
+        (_serverMessageCount, _baselineKnown) = (history.Count, true);
         foreach (var m in history)
             _messages.Add(new ChatMsg
             {
@@ -1858,6 +1938,7 @@
         try { await JS.InvokeVoidAsync("_stopPersistentEvents"); } catch { }
         _messages.Clear();
         _sessionId           = null;
+        (_serverMessageCount, _baselineKnown, _lastSentText, _turnFailed) = (0, true, null, false);
         await ForgetSessionAsync();
         _input               = string.Empty;
         _pendingPhotos.Clear();

@@ -2605,3 +2605,12 @@ body {
     padding: 2px 9px; border: 1px solid var(--color-border); border-radius: var(--radius-full);
     background: var(--color-surface-alt); color: var(--color-text-secondary);
 }
+
+/* ── Başarısız tur: tekrar dene ── */
+.turn-retry { margin-top: 6px; }
+.turn-retry-btn {
+    padding: 5px 12px; font-size: 13px; border: 1px solid var(--color-border); border-radius: var(--radius-full);
+    background: var(--color-surface); color: var(--color-text); cursor: pointer;
+    transition: background var(--transition), border-color var(--transition);
+}
+.turn-retry-btn:hover { background: var(--color-surface-alt); border-color: var(--color-border-strong); }

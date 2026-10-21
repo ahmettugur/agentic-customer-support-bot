@@ -62,3 +62,19 @@ Bot yanıtını verirken bilgi tabanından makaleler bağlama girdiyse (RAG), ya
 atıf iddiası olurdu. Gösterilen, bu tur bağlama **gerçekten enjekte edilen** makalelerdir — bağlam bütçesine sığmayanlar gösterilmez;
 dersler ve episodik bellek hiç gösterilmez. Bileşik sorguda her alt görevin ipucu birleştirilir. Makale müşteriye açık bir sayfa olmadığı
 için başlık düz metindir (bağlantı yok).
+
+## Başarısız tur: yanıtı kurtarma ve tekrar deneme
+
+İstemci bağlantıyı keserse sunucu turu **iptal eder** (aksi halde LLM çağrısı boşuna sürerdi); yani kopan bir akışın yanıtı genellikle
+sonradan gelmez. İki durum ayrılır:
+
+1. **Tur sunucuda yine de tamamlandı** (sahte kopma, proxy zaman aşımı): sayfa oturum geçmişine bakar; gönderilen soruyu ve hemen
+   ardından bir bot yanıtını **yeni mesajlar olarak** bulursa yanıtı gösterir (`StreamRecovery`). Eşleşme sıkıdır ve yeniliği,
+   tur gönderilmeden önceki mesaj sayısına göre doğrular — müşteri aynı soruyu daha önce de sormuş olabilir, eski bir yanıt yeni sanılmaz.
+   Sayaç bilinmiyorsa (temsilci devraldı / sesli görüşme kullanıldı) kurtarma denenmez.
+2. **Tamamlanmadı:** hata görünür ve **↻ Tekrar dene** düğmesi çıkar; aynı metin yeniden gönderilir (kullanıcı ve hata balonu yeniden
+   çizilir, ikilenmez). Sunucunun bildirdiği hata olaylarında (ör. zaman aşımı) da aynı düğme vardır. Fotoğraflı mesajda düğme yoktur
+   (ek kimlikleri tüketildi).
+
+Bilinen sınır: sunucu süreci ölürse (çökme/deploy) ve `WorkflowCheckpointing` açıksa tur başka bir pod'da bitirilir ve yanıt geçmişe yazılır;
+bu ~90 sn sürebildiği için sayfa beklemez — yanıt, konuşma geri yüklenince (yenileme) ya da **Konuşmalarım**'dan açılınca görünür.
