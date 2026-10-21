@@ -84,6 +84,8 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
         services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
+        services.Configure<Services.Chat.OutputGuardrailOptions>(configuration.GetSection(Services.Chat.OutputGuardrailOptions.SectionName));
+        services.AddSingleton<Services.Chat.OutputGuardrailService>();
         services.Configure<Services.Budget.LlmBudgetOptions>(configuration.GetSection(Services.Budget.LlmBudgetOptions.SectionName));
         services.Configure<Services.Conversations.ConversationClosingOptions>(
             configuration.GetSection(Services.Conversations.ConversationClosingOptions.SectionName));

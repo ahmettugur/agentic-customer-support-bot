@@ -104,3 +104,29 @@ geçerse akış kapanır. Metin istemcide Razor ile kaçışlı basılır (kargo
 **Sınırlar (bilerek).** Bildirim *geçicidir*: sohbet açık değilse (ya da bağlantı kopukken) kaybolur ve yeniden gönderilmez —
 kalıcı kanal e-postadır. Sesli görüşme / A2A / MCP gibi kalıcı oturum akışı olmayan yüzeylere inmez. Yayın başarısız olursa
 durum güncellemesi etkilenmez (hata yutulup loglanır).
+
+## Çıktı guardrail'i
+
+`InputGuard` müşteri mesajını LLM'e gitmeden denetler; `OutputGuardrail` bunun ters yönü: turun **kanonik yanıtı** müşteriye
+(`response_complete`) ve konuşma geçmişine yazılmadan önce deterministik olarak taranır. LLM çağrısı yoktur, gecikme ihmal edilebilir.
+
+| Bulgu | Eylem |
+|---|---|
+| E-posta / telefon — müşterinin kendi kaydı, **kendi yazdığı** metin ya da izinli destek iletişimi **değilse** | Yalnızca o kısım `[gizlendi]` ile maskelenir (`Redacted`) |
+| Sır: JWT, `sk-…` anahtarı, `Bearer …`, `Password=`/`ApiKey=` bağlantı dizesi | Yanıt tamamen güvenli bir metinle değiştirilir (`Blocked`) |
+| Sistem istemi sızıntısı (`system prompt`, `sistem talimat…`, `talimatlarım`) ve yapılandırılmış yasak ifadeler | `Blocked` |
+
+**Karar kuralları.** Bilinen iletişim = doğrulanmış müşterinin kayıtlı e-postası + müşterinin bu konuşmada *yazdığı* e-posta/telefonlar
++ `Email:FromAddress` + `OutputGuardrail:AllowedContacts`. Botun önceki mesajları bilinen sayılmaz (botun söylediği, müşterinin
+verdiği anlamına gelmez). Telefon yalnızca `0…`/`+90`/`90` önekli ya da ayraçlı 10 haneli diziyse sayılır; ayraçsız 10 haneli
+kargo takip numaraları, sipariş numaraları ve tutarlar maskelenmez.
+
+**Yapılandırma** (`OutputGuardrail`): `Enabled` (varsayılan açık), `AllowedContacts` (ör. `["0850 123 45 67"]` — bilgi tabanı
+makaleleri şirket telefonu/e-postası içeriyorsa buraya ekleyin, yoksa maskelenir), `BlockedPhrases` (kuruma özel iç ifadeler).
+
+**Gözlem.** Müdahale `chat.output_guardrail{verdict,finding}` sayacına yazılır ve uyarı olarak loglanır (içerik loglanmaz).
+
+**Sınırlar (bilerek).** (1) Ham `response_delta` akışı canlı yazıldığı için maskeleme *tam turda* yapılır: müşteri tarayıcısında ham metin
+bir an görünebilir, `response_complete` balonu ezer; geçmişe ve sonraki tura **hiç** ham metin yazılmaz. Gerçek "hiç görünmesin"
+için delta tamponlamak gerekir (akıcılık kaybı) — şimdilik yapılmadı. (2) Tarama kural tabanlıdır; paraphrase edilmiş sızıntıyı ya da
+telefon biçimi dışındaki kişisel verileri (ad, adres) yakalamaz. (3) Sesli görüşme / A2A / MCP yüzeyleri bu kapıdan geçmez.
