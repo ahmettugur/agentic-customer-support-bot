@@ -89,7 +89,8 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<Services.Chat.ModelRoutingOptions>(configuration.GetSection(Services.Chat.ModelRoutingOptions.SectionName));
         services.AddSingleton<Ports.Outbound.AI.ITurnModelTier, Services.Chat.AsyncLocalTurnModelTier>();
         services.Configure<Services.Channels.InboundEmailOptions>(configuration.GetSection(Services.Channels.InboundEmailOptions.SectionName));
-        services.AddSingleton<Services.Channels.InboundEmailService>();
+        services.AddSingleton<Services.Channels.InboundEmailThrottle>();
+        services.AddScoped<Services.Channels.InboundEmailService>();
         services.Configure<Services.Chat.LowConfidenceHandoffOptions>(configuration.GetSection(Services.Chat.LowConfidenceHandoffOptions.SectionName));
         services.Configure<Services.Chat.OutputGuardrailOptions>(configuration.GetSection(Services.Chat.OutputGuardrailOptions.SectionName));
         services.AddSingleton<Services.Chat.OutputGuardrailService>();

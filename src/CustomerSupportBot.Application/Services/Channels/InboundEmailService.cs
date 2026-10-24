@@ -54,10 +54,11 @@ public sealed class InboundEmailService(
     IOptions<InboundEmailOptions> options,
     IOptions<EmailOptions> email,
     ILogger<InboundEmailService> logger,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    InboundEmailThrottle? throttle = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
-    private readonly ConcurrentDictionary<string, Queue<DateTime>> _windows = new(StringComparer.OrdinalIgnoreCase);
+    private readonly InboundEmailThrottle _throttle = throttle ?? new InboundEmailThrottle();
 
     public async Task<InboundEmailOutcome> HandleAsync(InboundEmail mail, CancellationToken ct = default)
     {
@@ -122,18 +123,7 @@ public sealed class InboundEmailService(
         return all.Where(s => s.LastActivity >= cutoff).OrderByDescending(s => s.LastActivity).FirstOrDefault()?.SessionId;
     }
 
-    private bool AllowSender(string from, int perHour)
-    {
-        var now = _clock.GetUtcNow().UtcDateTime;
-        var window = _windows.GetOrAdd(from, _ => new Queue<DateTime>());
-        lock (window)
-        {
-            while (window.Count > 0 && now - window.Peek() >= TimeSpan.FromHours(1)) window.Dequeue();
-            if (window.Count >= Math.Max(1, perHour)) return false;
-            window.Enqueue(now);
-            return true;
-        }
-    }
+    private bool AllowSender(string from, int perHour) => _throttle.TryAcquire(from, perHour, _clock.GetUtcNow().UtcDateTime);
 
     private InboundEmailOutcome Log(InboundEmailOutcome outcome, string from)
     {
@@ -154,5 +144,26 @@ public sealed class InboundEmailService(
                    + (link is null ? "" : $"<p><a href=\"{System.Net.WebUtility.HtmlEncode(link)}\">Sohbeti uygulamada sürdürün</a></p>")
                    + "<p style=\"color:#64748b;font-size:12px\">Bu yanıt otomatik oluşturulmuştur; yanıtlayarak konuşmayı sürdürebilirsiniz.</p>";
         return new EmailMessage(to, name, subjectLine, text, html);
+    }
+}
+
+/// <summary>
+/// Gönderici başına kayan saatlik pencere. Durum burada tutulur (SINGLETON); <see cref="InboundEmailService"/> ise istek başına
+/// (scoped) çözülür çünkü kapsamlı bağımlılıklara (sohbet portu) ihtiyaç duyar. Pod başınadır: çok pod'da gerçek sınır pod sayısıyla çarpılır.
+/// </summary>
+public sealed class InboundEmailThrottle
+{
+    private readonly ConcurrentDictionary<string, Queue<DateTime>> _windows = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool TryAcquire(string sender, int perHour, DateTime nowUtc)
+    {
+        var window = _windows.GetOrAdd(sender, _ => new Queue<DateTime>());
+        lock (window)
+        {
+            while (window.Count > 0 && nowUtc - window.Peek() >= TimeSpan.FromHours(1)) window.Dequeue();
+            if (window.Count >= Math.Max(1, perHour)) return false;
+            window.Enqueue(nowUtc);
+            return true;
+        }
     }
 }

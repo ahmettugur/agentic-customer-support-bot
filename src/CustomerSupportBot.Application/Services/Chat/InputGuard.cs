@@ -95,9 +95,10 @@ public sealed partial class InputGuard : IInputGuard
 
         // 3. Hard injection pattern → reject
         var injectionMatch = InjectionPattern.Match(normalized);
-        if (injectionMatch.Success)
+        var extra = injectionMatch.Success ? null : DetectObfuscatedOrParaphrasedInjection(normalized);
+        if (injectionMatch.Success || extra is not null)
         {
-            flags.Add($"injection_pattern:{injectionMatch.Value.ToLowerInvariant()}");
+            flags.Add($"injection_pattern:{(extra ?? injectionMatch.Value).ToLowerInvariant()}");
             return new InputGuardResult(
                 InputGuardVerdict.Reject,
                 normalized,
@@ -247,6 +248,71 @@ public sealed partial class InputGuard : IInputGuard
         return sum % 10 == 0;
     }
 
+    /// <summary>
+    /// Sert desenin kaçırdığı biçimler: Türkçe ek/diyakritik varyantları, "ignore the above", aralıklı harf ("i g n o r e"),
+    /// leet ("1gnore"), base64 sarmalı ve rol/araç çağrısı enjeksiyonları. Eşleşme metni yalnızca BU kopyada aranır;
+    /// müşterinin metni (SanitizedInput) değişmez. Doğal dil saldırısı için tam çözüm değildir — bkz. RedTeamCorpusTests.
+    /// </summary>
+    private static string? DetectObfuscatedOrParaphrasedInjection(string text)
+    {
+        var folded = FoldForMatching(text);
+        var hit = ParaphrasedInjectionPattern.Match(folded);
+        if (hit.Success) return hit.Value;
+
+        var deobfuscated = FoldForMatching(Deobfuscate(text));
+        if (!ReferenceEquals(deobfuscated, folded) && deobfuscated != folded)
+        {
+            hit = ParaphrasedInjectionPattern.Match(deobfuscated);
+            if (hit.Success) return hit.Value;
+            var hard = InjectionPattern.Match(deobfuscated);
+            if (hard.Success) return hard.Value;
+        }
+
+        foreach (Match token in Base64TokenPattern.Matches(text))
+        {
+            string decoded;
+            try { decoded = Encoding.UTF8.GetString(Convert.FromBase64String(token.Value)); }
+            catch (FormatException) { continue; }
+
+            // Yalnızca okunabilir metne dönüşenler: rastgele ikili veri yanlış pozitif üretmesin.
+            if (decoded.Any(c => char.IsControl(c) && c is not ('\n' or '\r' or '\t'))) continue;
+            var inner = FoldForMatching(decoded);
+            var innerHit = ParaphrasedInjectionPattern.Match(inner);
+            if (innerHit.Success) return $"base64:{innerHit.Value}";
+            var innerHard = InjectionPattern.Match(decoded);
+            if (innerHard.Success) return $"base64:{innerHard.Value}";
+        }
+        return null;
+    }
+
+    /// <summary>Küçük harf + Türkçe diyakritik katlama (ı/İ→i, ş→s, ğ→g, ü→u, ö→o, ç→c). Yalnızca desen eşleştirme içindir.</summary>
+    private static string FoldForMatching(string s)
+    {
+        var sb = new StringBuilder(s.Length);
+        foreach (var c in s)
+            sb.Append(c switch
+            {
+                'İ' or 'I' or 'ı' => 'i',
+                'Ş' or 'ş' => 's',
+                'Ğ' or 'ğ' => 'g',
+                'Ü' or 'ü' => 'u',
+                'Ö' or 'ö' => 'o',
+                'Ç' or 'ç' => 'c',
+                _ => char.ToLowerInvariant(c)
+            });
+        return sb.ToString();
+    }
+
+    /// <summary>"i g n o r e" → "ignore" ve leet ("1gnore", "pr3vious") → harf. Yalnızca desen eşleştirme kopyasında kullanılır.</summary>
+    private static string Deobfuscate(string s)
+    {
+        var joined = SpacedLettersPattern.Replace(s, m => m.Value.Replace(" ", "").Replace("\t", ""));
+        var sb = new StringBuilder(joined.Length);
+        foreach (var c in joined)
+            sb.Append(c switch { '1' or '!' => 'i', '0' => 'o', '3' => 'e', '4' or '@' => 'a', '5' or '$' => 's', '7' => 't', _ => c });
+        return sb.ToString();
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Regex tanımları (compile-time generated)
     // ─────────────────────────────────────────────────────────────────────
@@ -260,10 +326,51 @@ public sealed partial class InputGuard : IInputGuard
            jailbreak|dan\s+mode|developer\s+mode|admin\s+mode|root\s+access|
            bypass\s+(your|the)\s+(rules|filter|safety)|disable\s+(safety|filter)|
            kurallar[iı]n[iı]?\s+(yok\s+say|unut|değiştir)|
-           kayd[iı]\s+sil|başka(s[iı])?n[iı]n\s+(verisini|hesab[iı]n[iı]?))",
+           başka(s[iı])?n[iı]n\s+(verisini|hesab[iı]n[iı]?))",
         RegexOptions.CultureInvariant | RegexOptions.IgnorePatternWhitespace,
         matchTimeoutMilliseconds: 200)]
     private static partial Regex InjectionRegex();
+
+    /// <summary>"ignore the above", "önceki talimatları unut", sistem istemi sızdırma, rol/yetki enjeksiyonu, başka müşteri verisi, araç çağrısı sözdizimi.
+    /// FoldForMatching çıktısına uygulanır (ASCII, küçük harf, diyakritiksiz).</summary>
+    private static readonly Regex ParaphrasedInjectionPattern = ParaphrasedInjectionRegex();
+
+    private static readonly Regex SpacedLettersPattern = SpacedLettersRegex();
+
+    private static readonly Regex Base64TokenPattern = Base64TokenRegex();
+
+    [GeneratedRegex(
+        @"(?ix)(
+          (ignore|disregard|forget|override|skip)\s+(all\s+|any\s+|the\s+)*(previous|prior|above|earlier|preceding|foregoing)\s+(\w+\s+)?(instructions?|rules?|prompts?|messages?|directives?)|
+          (onceki|yukaridaki|baslangic|ilk|tum|butun|mevcut)\s+(\w+\s+)?(talimat|kural|yonerge|komut)\w*\s+(\w+\s+)?(yok\s*say|unut|gormezden\s*gel|goz\s*ardi|gecersiz|devre\s*disi|iptal\s*et|kaldir|dikkate\s*alma)|
+          (guvenlik|filtre|koruma|kisitlama|sinir)\w*\s+(\w+\s+)?(kapat|devre\s*disi|kaldir|atla|asma)|
+          (system|sistem|developer|gelistirici|initial|original|hidden|gizli|baslangic|ilk|your|senin)\s+(\w+\s+)?(instructions?|prompts?|messages?|talimat\w*|kural\w*|yonerge\w*)|
+          (talimat|yonerge)\w*\s+(\w+\s+)?(tekrar|goster|yaz|acikla|paylas|soyle|anlat|dok)|
+          (hidden|secret|system|developer|initial|original|gizli)\s+(\w+\s+)?rules?|
+          (repeat|print|reveal|show|display|dump|output|leak)\s+(me\s+)?(the\s+)?(text|words|content|everything)\s+above|
+          (pretend\s+(you|to\s+be)|from\s+now\s+on\s+you\s+are)|
+          (unrestricted|no\s+(restrictions|rules|limits|filters)|without\s+(any\s+)?(restrictions|rules|limits|filters))|
+          (kuralsiz|kisitlamasiz|sinirsiz\s+(bir\s+)?(asistan|yapay))|
+          (gelistirici|developer|admin|yonetici)\s+mod(unda|dasin|dayim)|
+          rol\s*(yap|oyna)\w*.{0,40}(kural|kisit)|
+          (^|\n)\s*(system|assistant|developer)\s*:|
+          \#{2,}\s*(new|yeni)\s+(instructions?|talimat)|
+          (new|yeni)\s+(instructions?|talimat\w*)\s*:|
+          (baska|diger|tum|butun)\s+musteri\w*\s+(\w+\s+)?(siparis|e-?posta|eposta|veri|bilgi|hesap|sifre|telefon|adres)\w*|
+          veritaban\w*\s+(\w+\s+){0,3}(dok|listele|goster|kopyala|export|indir)\w*|
+          (dump|export)\s+(the\s+)?(database|all\s+(orders|customers|users))|
+          \b[a-z]+(_[a-z]+)*_tool\b
+        )",
+        RegexOptions.CultureInvariant | RegexOptions.IgnorePatternWhitespace,
+        matchTimeoutMilliseconds: 200)]
+    private static partial Regex ParaphrasedInjectionRegex();
+
+    // En az 4 tek harf, aralarında tek boşluk: "i g n o r e".
+    [GeneratedRegex(@"\b(?:\p{L}[ \t]){3,}\p{L}\b", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
+    private static partial Regex SpacedLettersRegex();
+
+    [GeneratedRegex(@"[A-Za-z0-9+/]{24,}={0,2}", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 200)]
+    private static partial Regex Base64TokenRegex();
 
     [GeneratedRegex(
         @"(?ix)(`{3}\s*json|<\|.*?\|>|\[INST\]|\[\/INST\]|<system>|<\/system>|""approved""\s*:\s*true|""rejected""\s*:\s*false)",
