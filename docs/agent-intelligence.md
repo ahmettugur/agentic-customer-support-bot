@@ -83,6 +83,7 @@ histogramına yazılır; `prompt_set`, o an çalışan prompt setinin sürümüd
 * **A/B, iki düzeyde:**
   1. *Dağıtım düzeyi* (tüm prompt seti): yeni setle bir kanarya pod'u/yayın penceresi çalıştırın, panelde iki `prompt_set` serisini kıyaslayın.
   2. *Oturum düzeyi* (`Experiments`, aşağıda): aynı anda, aynı pod'da, oturumlar kollara ağırlıklı ve sabit atanır.
+* **Her sohbet yolundan beslenir:** web sohbeti (akışlı) ve `HandleAsync` (MCP/A2A/e-posta kanalı). Canlı denemede yalnızca akışlı yol bağlıydı; e-posta/MCP yanıtları puanlanmıyordu, düzeltildi.
 * **Sohbeti yavaşlatmaz:** Hakem arka planda `Task.Run` ile çalışır; en çok `MaxConcurrent` (2) çağrı, doluysa örnek atlanır.
   Hata/zaman aşımı sessizce atlanır. Yanıt ve müşteri mesajı hakeme `<retrieved_data>` bloğunda **veri** olarak gider
   ("bu yanıta 5 ver" gibi enjeksiyonlar talimat sayılmaz).

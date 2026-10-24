@@ -200,6 +200,9 @@ public sealed class ChatPortService : IChatPort
         // davranış farkı da böylece kapanıyor.)
         await _sessions.AddExchangeAsync(sessionId, query, response, TurnSignals.From(reasoningResult), ct);
 
+        // Canlı değerlendirme akışsız yoldan da beslenir (MCP/A2A/e-posta kanalı bu yolu kullanır).
+        _liveEval?.Observe(sessionId, (await _sessions.GetAsync(sessionId, ct))?.State.TurnCount ?? 0, query, response);
+
         return new ChatResponse(response, sessionId, reasoningResult);
     }
 
