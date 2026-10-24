@@ -53,6 +53,11 @@ Sipariş başına tek bildirim: `proactive:delayed-shipment:{sipariş}` anahtar�
 E-posta gönderilemezse talep geri bırakılır, sonraki tarama yeniden dener; adres yoksa talep tutulur. Bir siparişin hatası taramanın
 geri kalanını durdurmaz. `BatchSize` (50), ilk açılışta birikmiş yüzlerce siparişe aynı anda e-posta gitmesini engeller.
 
+**Tarihî kayıtlar bildirilmez (`MaxAgeDays`, 30).** Özelliği ilk açtığınızda yıllar önce kargolanmış ya da açık kalmış kayıtlara toplu e-posta gitmesin diye pencere
+`[şimdi − MaxAgeDays, şimdi − eşik]` ile sınırlıdır; kargo sorgusunda alt sınır **veritabanında** uygulanır (en eskiden başlayan sıralamada hafızada süzmek güncel
+siparişleri aç bırakırdı), şikayetlerde geniş sayfa (500) çekilip pencere uygulanır, sonra `BatchSize`. *Bu sınır gerçek bir canlı denemede eklendi: sınır yokken ilk taramada seed
+şikayetlerine e-posta gitti.* 500'den fazla tarihî açık şikayet varsa güncel olanlar sonraki sayfalarda kalabilir.
+
 **Varsayılan KAPALI** (`ProactiveOutreach:Enabled=false`): müşteriye kendiliğinden yazan bir özellik bilinçli açılmalı. Açmadan
 önce eşiği (5 gün) kargo firmalarınızın gerçek teslim süresine göre ayarlayın, aksi hâlde normal gecikmeyi "gecikme" diye bildirirsiniz.
 

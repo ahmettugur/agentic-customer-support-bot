@@ -23,6 +23,12 @@ public sealed class ProactiveOutreachOptions
     /// <summary>Açık bir şikayet bu kadar gündür güncellenmediyse müşteriye bir kez haber verilir.</summary>
     public int StaleComplaintDays { get; set; } = 3;
 
+    /// <summary>
+    /// Bu süreden ESKİ kayıtlar tarihî sayılır ve bildirilmez. Özelliği ilk açtığınızda yıllar önce kargolanmış/açık kalmış kayıtlara
+    /// toplu e-posta gitmesini önler (gerçek bir canlı denemede tek taramada seed şikayetlerine e-posta gitti).
+    /// </summary>
+    public int MaxAgeDays { get; set; } = 30;
+
     public int PollIntervalMinutes { get; set; } = 30;
 
     /// <summary>Bir taramada işlenecek en çok sipariş (ilk açılışta birikmiş yüzlerce siparişe aynı anda e-posta gitmesin).</summary>
@@ -58,7 +64,7 @@ public sealed class ProactiveOutreachService(
         var cutoff = now.AddDays(-Math.Max(1, o.DelayedShipmentDays));
         var notified = 0;
 
-        foreach (var (orderId, order) in orders.GetShippedBefore(cutoff, Math.Max(1, o.BatchSize)))
+        foreach (var (orderId, order) in orders.GetShippedBefore(cutoff, Math.Max(1, o.BatchSize), now.AddDays(-Math.Max(1, o.MaxAgeDays))))
         {
             ct.ThrowIfCancellationRequested();
             try
@@ -94,8 +100,14 @@ public sealed class ProactiveOutreachService(
         var cutoff = now.AddDays(-Math.Max(1, o.StaleComplaintDays));
         var notified = 0;
 
-        var page = await complaints.ListAsync(new ComplaintQuery(ComplaintQuery.OpenStatus, PageSize: Math.Max(1, o.BatchSize)), ct);
-        foreach (var (complaintId, c) in page.Items.Where(i => i.Complaint.UpdatedAt <= cutoff).Select(i => (i.ComplaintId, i.Complaint)))
+        var floor = now.AddDays(-Math.Max(1, o.MaxAgeDays));
+
+        // Açık şikayetler en eskiden başlar: tarihî kayıtlar sığ bir sayfayı doldurup güncelleri aç bırakmasın diye geniş sayfa çekilir,
+        // pencere (tarihî < güncelleme <= eşik) bellekte uygulanır, sonra parti sınırı. (Repo sayfa boyutunu 500'e kırpar.)
+        var page = await complaints.ListAsync(new ComplaintQuery(ComplaintQuery.OpenStatus, PageSize: 500), ct);
+        var window = page.Items.Where(i => i.Complaint.UpdatedAt <= cutoff && i.Complaint.UpdatedAt >= floor)
+            .Take(Math.Max(1, o.BatchSize)).Select(i => (i.ComplaintId, i.Complaint));
+        foreach (var (complaintId, c) in window)
         {
             ct.ThrowIfCancellationRequested();
             try

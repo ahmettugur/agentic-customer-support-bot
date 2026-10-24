@@ -161,14 +161,15 @@ public sealed class OrderRepository : IOrderRepository
             .ToList();
     }
 
-    public IReadOnlyList<(string OrderId, OrderInfo Order)> GetShippedBefore(DateTime cutoffUtc, int limit)
+    public IReadOnlyList<(string OrderId, OrderInfo Order)> GetShippedBefore(DateTime cutoffUtc, int limit, DateTime? notBeforeUtc = null)
     {
         var cutoff = DateTime.SpecifyKind(cutoffUtc, DateTimeKind.Utc);
+        var floor = notBeforeUtc is { } nb ? DateTime.SpecifyKind(nb, DateTimeKind.Utc) : (DateTime?)null;
         using var ctx = _dbFactory.CreateDbContext();
         return ctx.Orders
             .AsNoTracking()
             .Include(o => o.Details).ThenInclude(d => d.Product)
-            .Where(o => o.Status == WellKnown.OrderStatuses.Shipped && o.ShippedAt != null && o.ShippedAt < cutoff)
+            .Where(o => o.Status == WellKnown.OrderStatuses.Shipped && o.ShippedAt != null && o.ShippedAt < cutoff && (floor == null || o.ShippedAt >= floor))
             .OrderBy(o => o.ShippedAt)
             .Take(Math.Max(1, limit))
             .AsEnumerable()

@@ -62,7 +62,8 @@ public interface IOrderRepository
 
     /// <summary>
     /// Hâlâ "Kargolandı" olup <paramref name="cutoffUtc"/>'dan ÖNCE kargolanmış siparişler (en eskiden yeniye, en çok <paramref name="limit"/>).
-    /// Proaktif geciken-kargo taraması içindir; kargo tarihi olmayan kayıtlar dönmez.
+    /// Proaktif geciken-kargo taraması içindir; kargo tarihi olmayan kayıtlar dönmez. <paramref name="notBeforeUtc"/> verilirse ondan ESKİ
+    /// kayıtlar sorguda elenir (sınırı hafızada uygulamak, en eskiden başlayan sıralamada güncel siparişleri aç bırakırdı).
     /// </summary>
-    IReadOnlyList<(string OrderId, OrderInfo Order)> GetShippedBefore(DateTime cutoffUtc, int limit);
+    IReadOnlyList<(string OrderId, OrderInfo Order)> GetShippedBefore(DateTime cutoffUtc, int limit, DateTime? notBeforeUtc = null);
 }

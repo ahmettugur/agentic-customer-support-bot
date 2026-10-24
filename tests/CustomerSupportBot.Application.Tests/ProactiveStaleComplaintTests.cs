@@ -26,7 +26,7 @@ public class ProactiveStaleComplaintTests
     private static Rig Build(IReadOnlyList<ComplaintListItem> open, Action<ProactiveOutreachOptions>? configure = null)
     {
         var orders = Substitute.For<IOrderRepository>();
-        orders.GetShippedBefore(Arg.Any<DateTime>(), Arg.Any<int>()).Returns([]);
+        orders.GetShippedBefore(Arg.Any<DateTime>(), Arg.Any<int>(), Arg.Any<DateTime?>()).Returns([]);
         var complaints = Substitute.For<IComplaintRepository>();
         complaints.ListAsync(Arg.Any<ComplaintQuery>(), Arg.Any<CancellationToken>()).Returns(new ComplaintPage(open, open.Count));
         var customers = Substitute.For<ICustomerRepository>();
@@ -70,6 +70,25 @@ public class ProactiveStaleComplaintTests
     }
 
     [Fact]
+    public async Task HistoricalComplaints_AreNeverReminded()
+    {
+        var r = Build([Item("c-old", updatedDaysAgo: 60)]);
+
+        (await r.Svc.RunOnceAsync(Ct)).Should().Be(0);
+        r.Sent.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AncientComplaints_DoNotStarveTheRecentOnes_WithinTheBatch()
+    {
+        var open = new List<ComplaintListItem> { Item("c-old-1", updatedDaysAgo: 90), Item("c-old-2", updatedDaysAgo: 80), Item("c-new", updatedDaysAgo: 5) };
+        var r = Build(open, o => o.BatchSize = 1);
+
+        (await r.Svc.RunOnceAsync(Ct)).Should().Be(1);
+        r.Sent.Single().Subject.Should().Contain("c-new");
+    }
+
+    [Fact]
     public async Task EachComplaint_IsRemindedOnce()
     {
         var r = Build([Item("c-1")]);
@@ -96,7 +115,7 @@ public class ProactiveStaleComplaintTests
         await r.Svc.RunOnceAsync(Ct);
 
         await r.Complaints.Received(1).ListAsync(
-            Arg.Is<ComplaintQuery>(q => q.Status == ComplaintQuery.OpenStatus && q.PageSize == 7), Arg.Any<CancellationToken>());
+            Arg.Is<ComplaintQuery>(q => q.Status == ComplaintQuery.OpenStatus && q.PageSize >= 7), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -111,7 +130,7 @@ public class ProactiveStaleComplaintTests
     public async Task WithoutAComplaintRepository_OnlyShipmentsAreScanned()
     {
         var orders = Substitute.For<IOrderRepository>();
-        orders.GetShippedBefore(Arg.Any<DateTime>(), Arg.Any<int>()).Returns([]);
+        orders.GetShippedBefore(Arg.Any<DateTime>(), Arg.Any<int>(), Arg.Any<DateTime?>()).Returns([]);
         var svc = new ProactiveOutreachService(orders, Substitute.For<IEmailSender>(), new InMemoryNotificationLedger(),
             Substitute.For<ICustomerRepository>(), null, Options.Create(new ProactiveOutreachOptions { Enabled = true }),
             Options.Create(new EmailOptions()), NullLogger<ProactiveOutreachService>.Instance, new FakeTimeProvider(Now));

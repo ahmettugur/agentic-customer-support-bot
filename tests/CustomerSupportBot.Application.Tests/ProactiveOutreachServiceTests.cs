@@ -36,7 +36,7 @@ public class ProactiveOutreachServiceTests
         bool emailEnabled = true, string? email = "ayse@example.com")
     {
         var orders = Substitute.For<IOrderRepository>();
-        orders.GetShippedBefore(Arg.Any<DateTime>(), Arg.Any<int>()).Returns(delayed ?? [("1044", Shipped())]);
+        orders.GetShippedBefore(Arg.Any<DateTime>(), Arg.Any<int>(), Arg.Any<DateTime?>()).Returns(delayed ?? [("1044", Shipped())]);
         var customers = Substitute.For<ICustomerRepository>();
         customers.GetEmailAsync(1001, Arg.Any<CancellationToken>()).Returns(email);
         customers.GetFullNameAsync(1001, Arg.Any<CancellationToken>()).Returns("Ayşe Yılmaz");
@@ -92,7 +92,17 @@ public class ProactiveOutreachServiceTests
 
         await h.Service.RunOnceAsync(Ct);
 
-        h.Orders.Received(1).GetShippedBefore(Now.UtcDateTime.AddDays(-3), 7);
+        h.Orders.Received(1).GetShippedBefore(Now.UtcDateTime.AddDays(-3), 7, Now.UtcDateTime.AddDays(-30));
+    }
+
+    [Fact]
+    public async Task TheScanWindow_HasALowerBound_SoHistoricalOrdersAreNeverMailed()
+    {
+        var h = Build(configure: o => o.MaxAgeDays = 10);
+
+        await h.Service.RunOnceAsync(Ct);
+
+        h.Orders.Received(1).GetShippedBefore(Arg.Any<DateTime>(), Arg.Any<int>(), Now.UtcDateTime.AddDays(-10));
     }
 
     [Fact]
@@ -102,7 +112,7 @@ public class ProactiveOutreachServiceTests
 
         (await h.Service.RunOnceAsync(Ct)).Should().Be(0);
 
-        h.Orders.DidNotReceive().GetShippedBefore(Arg.Any<DateTime>(), Arg.Any<int>());
+        h.Orders.DidNotReceive().GetShippedBefore(Arg.Any<DateTime>(), Arg.Any<int>(), Arg.Any<DateTime?>());
         h.Sent.Should().BeEmpty();
     }
 

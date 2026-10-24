@@ -43,6 +43,17 @@ public class PostgresShippedBeforeTests(PostgresCatalogFixture fixture)
     }
 
     [Fact]
+    public async Task TheLowerBound_ExcludesHistoricalOrders_WithoutStarvingRecentOnes()
+    {
+        var ancient = await OrderAsync(WellKnown.OrderStatuses.Shipped, shippedDaysAgo: 400);
+        var recent = await OrderAsync(WellKnown.OrderStatuses.Shipped, shippedDaysAgo: 8);
+
+        var ids = fixture.OrderRepo.GetShippedBefore(DateTime.UtcNow.AddDays(-5), 1000, DateTime.UtcNow.AddDays(-30)).Select(x => x.OrderId).ToList();
+
+        ids.Should().Contain(recent).And.NotContain(ancient);
+    }
+
+    [Fact]
     public async Task TheLimit_IsHonoured()
     {
         await OrderAsync(WellKnown.OrderStatuses.Shipped, 8);
