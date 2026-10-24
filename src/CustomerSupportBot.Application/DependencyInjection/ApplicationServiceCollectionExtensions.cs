@@ -85,9 +85,11 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
         services.Configure<Services.Notifications.ProactiveOutreachOptions>(configuration.GetSection(Services.Notifications.ProactiveOutreachOptions.SectionName));
+        services.Configure<Services.Evaluation.LiveEvaluationOptions>(configuration.GetSection(Services.Evaluation.LiveEvaluationOptions.SectionName));
         services.Configure<Services.Chat.LowConfidenceHandoffOptions>(configuration.GetSection(Services.Chat.LowConfidenceHandoffOptions.SectionName));
         services.Configure<Services.Chat.OutputGuardrailOptions>(configuration.GetSection(Services.Chat.OutputGuardrailOptions.SectionName));
         services.AddSingleton<Services.Chat.OutputGuardrailService>();
+        services.AddSingleton<Services.Evaluation.LiveEvaluationService>();
         services.Configure<Services.Budget.LlmBudgetOptions>(configuration.GetSection(Services.Budget.LlmBudgetOptions.SectionName));
         services.Configure<Services.Conversations.ConversationClosingOptions>(
             configuration.GetSection(Services.Conversations.ConversationClosingOptions.SectionName));

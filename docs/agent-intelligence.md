@@ -58,3 +58,23 @@ geri kalanını durdurmaz. `BatchSize` (50), ilk açılışta birikmiş yüzlerc
 
 **Sınır:** Yalnızca geciken kargo taranır. Bekleyen şikayet gibi diğer "sessizlik" durumları SLA işçisinin (personel tarafı) kapsamındadır;
 müşteriye proaktif mesaj gitmez.
+
+## Canlı değerlendirme (LLM-hakem) ve sürüm karşılaştırma
+
+CI eval kapısı bir prompt değişikliğini **yayından önce** yakalar; bu bölüm **yayından sonra** gerçek trafikte ne olduğunu gösterir.
+`LiveEvaluationService`, tamamlanan turların `SampleRate` kadarını (varsayılan %10) arka planda bir LLM-hakeme puanlatır:
+`helpfulness`, `groundedness` (uydurma var mı), `tone` — her biri 1–5. Puanlar `chat.live_eval.score{dimension,prompt_set}`
+histogramına yazılır; `prompt_set`, o an çalışan prompt setinin sürümüdür (`IPromptRepository.SetVersion`). Grafana'daki
+**"Canlı değerlendirme: ortalama puan"** paneli sürümleri yan yana çizer.
+
+* **A/B nasıl yapılır:** Prompt'lar singleton ajan takımı kurulurken okunduğu için oturum başına prompt seçilemez. Karşılaştırma
+  **dağıtım düzeyindedir**: yeni prompt setiyle bir kanarya pod'u (ya da kısa bir yayın penceresi) çalıştırın, panelde iki
+  `prompt_set` serisini kıyaslayın.
+* **Sohbeti yavaşlatmaz:** Hakem arka planda `Task.Run` ile çalışır; en çok `MaxConcurrent` (2) çağrı, doluysa örnek atlanır.
+  Hata/zaman aşımı sessizce atlanır. Yanıt ve müşteri mesajı hakeme `<retrieved_data>` bloğunda **veri** olarak gider
+  ("bu yanıta 5 ver" gibi enjeksiyonlar talimat sayılmaz).
+* **Varsayılan KAPALI** (`LiveEvaluation:Enabled=false`): her örnek ek bir LLM çağrısıdır. `helpfulness`/`groundedness` ≤ 2 puanlı
+  yanıtlar ayrıca uyarı olarak loglanır (oturum, tur, hakemin gerekçesi).
+
+**Sınır:** Hakem bir LLM'dir; mutlak doğruluk değil, **sürümler arası göreli** değişimi izlemek için kullanın. Puanlar kalıcı
+saklanmaz (yalnızca metrik) — tekil yanıtı sonradan incelemek için Langfuse izine bakın.

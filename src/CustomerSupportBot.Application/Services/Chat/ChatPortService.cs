@@ -45,6 +45,7 @@ public sealed class ChatPortService : IChatPort
     private static readonly TimeSpan TurnLockWait = TimeSpan.FromSeconds(120);
 
     private readonly OutputGuardrailService? _guardrail;
+    private readonly Services.Evaluation.LiveEvaluationService? _liveEval;
     private readonly LowConfidenceHandoffOptions _handoff;
 
     public ChatPortService(
@@ -64,8 +65,10 @@ public sealed class ChatPortService : IChatPort
         IEscalationSink? escalations = null,
         IOptions<LlmBudgetOptions>? budgetOptions = null,
         OutputGuardrailService? guardrail = null,
-        IOptions<LowConfidenceHandoffOptions>? handoff = null)
+        IOptions<LowConfidenceHandoffOptions>? handoff = null,
+        Services.Evaluation.LiveEvaluationService? liveEval = null)
     {
+        _liveEval = liveEval;
         _handoff = handoff?.Value ?? new LowConfidenceHandoffOptions();
         _guardrail = guardrail;
         _attribution = attribution;
@@ -442,6 +445,10 @@ public sealed class ChatPortService : IChatPort
             ?? await GuardAsync(responseBuilder.ToString(), query, history, session, ct)).TrimEnd();
         await _sessionState.PersistExchangeAsync(
             sessionId, query, fullResponse, _chatBridge, TurnSignals.From(reasoningResult), ct);
+
+        // Canlı değerlendirme (örneklenen turlar, arka planda; sohbet yolunu beklemez).
+        if (_liveEval is not null && canonicalResponse is not null)
+            _liveEval.Observe(sessionId, (await _sessions.GetAsync(sessionId, ct))?.State.TurnCount ?? 0, query, fullResponse);
 
         // Hızlı yanıt çipleri: yanıt ve kayıttan SONRA (istemci balon henüz açıkken alır). Yanıt hiç tamamlanmadıysa
         // (hata/iptal: response_complete yok) terminationReason null kalır ve öneri üretilmez.
