@@ -78,3 +78,29 @@ histogramına yazılır; `prompt_set`, o an çalışan prompt setinin sürümüd
 
 **Sınır:** Hakem bir LLM'dir; mutlak doğruluk değil, **sürümler arası göreli** değişimi izlemek için kullanın. Puanlar kalıcı
 saklanmaz (yalnızca metrik) — tekil yanıtı sonradan incelemek için Langfuse izine bakın.
+
+## Model yönlendirme
+
+Her tur aynı (en yetenekli) modele gitmek basit sorular için gereksiz maliyet ve gecikmedir. `ModelRouting` açıkken planlama sonucuna
+göre tur **hızlı modele** (`AI:OpenAI:FastModel` / `AI:AzureOpenAI:FastDeployment`) ya da standart modele gider.
+
+Hızlı model YALNIZCA şu koşulların **hepsi** sağlanınca kullanılır (`ModelTierPolicy`):
+
+* niyet salt-okunur bir niyet: `ürün_bilgisi`, `sipariş_sorgulama`, `sipariş_listeleme`, `genel` (`ModelRouting:FastIntents` ile değişir);
+* planlama güveni ≥ `MinConfidence` (0.75), reasoning yer tutucu (`IsFallback`) değil;
+* alt görevlere bölünmüş (compound) sorgu değil;
+* müşteri memnuniyetsiz değil (duygu skoru negatif eşiğin altında değil).
+
+Sipariş verme, iptal, iade, şikayet ve temsilci talebi **asla** hızlı modele gitmez. Karar `chat.model_tier{tier}` sayacına yazılır.
+
+**Nasıl çalışır:** Ajan takımı tek `IChatClient` ile bir kez kurulur; seçim çağrı anında yapılır. `ModelRoutingChatClient`, ortam bağlamdaki
+`ITurnModelTier`'a bakıp isteği standart ya da hızlı istemciye yollar. `ChatPortService` takım akarken katmanı her `MoveNextAsync`
+çevresinde yeniden açar (async iterator'da AsyncLocal `yield`'i aşmaz). Her istemci kendi modeliyle telemetri ve bütçe
+sarmalayıcısına girer, yani maliyet doğru modelin fiyatıyla hesaplanır (`Telemetry:Pricing`'e hızlı modeli ekleyin).
+
+**Açmak için:** `AI:OpenAI:FastModel` (ör. küçük bir model) + `ModelRouting:Enabled=true`. `FastModel` yoksa sessizce standart kullanılır.
+Önce `LiveEvaluation`'ı açıp `chat.live_eval.score`'u hızlı/standart arasında karşılaştırmanız önerilir — hızlı modelin kaliteyi düşürüp
+düşürmediğini ölçmeden maliyet kazancına güvenmeyin.
+
+**Yapılmadı: anlamsal yanıt önbelleği.** Bilerek. Yanıtlar canlı veriye (stok, sipariş/kargo durumu) ve müşteriye bağlı; bir önbellek bayat
+stok ya da başka bir müşterinin bilgisini döndürebilir. Önbelleğe uygun tek küme (statik SSS/politika) için ayrı bir tasarım gerekir.

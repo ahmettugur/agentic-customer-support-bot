@@ -104,6 +104,9 @@ public sealed class OpenAiOptions
     public string? Model { get; set; }
     public string? ReasoningModel { get; set; }
     public string? ReasoningEffort { get; set; }
+
+    /// <summary>Basit turlar için daha ucuz/hızlı sohbet modeli (bkz. ModelRouting). Boşsa model yönlendirme yapılamaz.</summary>
+    public string? FastModel { get; set; }
 }
 
 /// <summary>Azure OpenAI settings (deployment-based).</summary>
@@ -114,4 +117,7 @@ public sealed class AzureOpenAiOptions
     public string? Deployment { get; set; }
     public string? ReasoningDeployment { get; set; }
     public string? ReasoningEffort { get; set; }
+
+    /// <summary>Basit turlar için daha ucuz/hızlı dağıtım (bkz. ModelRouting).</summary>
+    public string? FastDeployment { get; set; }
 }

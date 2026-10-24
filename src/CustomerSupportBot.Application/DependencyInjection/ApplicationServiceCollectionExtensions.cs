@@ -86,6 +86,8 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
         services.Configure<Services.Notifications.ProactiveOutreachOptions>(configuration.GetSection(Services.Notifications.ProactiveOutreachOptions.SectionName));
         services.Configure<Services.Evaluation.LiveEvaluationOptions>(configuration.GetSection(Services.Evaluation.LiveEvaluationOptions.SectionName));
+        services.Configure<Services.Chat.ModelRoutingOptions>(configuration.GetSection(Services.Chat.ModelRoutingOptions.SectionName));
+        services.AddSingleton<Ports.Outbound.AI.ITurnModelTier, Services.Chat.AsyncLocalTurnModelTier>();
         services.Configure<Services.Chat.LowConfidenceHandoffOptions>(configuration.GetSection(Services.Chat.LowConfidenceHandoffOptions.SectionName));
         services.Configure<Services.Chat.OutputGuardrailOptions>(configuration.GetSection(Services.Chat.OutputGuardrailOptions.SectionName));
         services.AddSingleton<Services.Chat.OutputGuardrailService>();

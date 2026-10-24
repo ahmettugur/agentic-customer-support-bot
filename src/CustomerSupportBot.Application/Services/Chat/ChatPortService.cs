@@ -5,6 +5,7 @@ using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Application.Services.Attachments;
 using CustomerSupportBot.Application.Services.Budget;
 using CustomerSupportBot.Domain.Exceptions;
@@ -45,6 +46,12 @@ public sealed class ChatPortService : IChatPort
     private static readonly TimeSpan TurnLockWait = TimeSpan.FromSeconds(120);
 
     private readonly OutputGuardrailService? _guardrail;
+    private static readonly System.Diagnostics.Metrics.Counter<long> TierCounter = new System.Diagnostics.Metrics.Meter(
+        Ports.Outbound.Observability.TelemetryConstants.MeterName, "1.0.0").CreateCounter<long>(
+        "chat.model_tier", unit: "{turn}", description: "Model yönlendirme kararı (tier=standard|fast).");
+
+    private readonly ITurnModelTier? _modelTier;
+    private readonly ModelRoutingOptions _routing;
     private readonly Services.Evaluation.LiveEvaluationService? _liveEval;
     private readonly LowConfidenceHandoffOptions _handoff;
 
@@ -66,8 +73,12 @@ public sealed class ChatPortService : IChatPort
         IOptions<LlmBudgetOptions>? budgetOptions = null,
         OutputGuardrailService? guardrail = null,
         IOptions<LowConfidenceHandoffOptions>? handoff = null,
-        Services.Evaluation.LiveEvaluationService? liveEval = null)
+        Services.Evaluation.LiveEvaluationService? liveEval = null,
+        ITurnModelTier? modelTier = null,
+        IOptions<ModelRoutingOptions>? routing = null)
     {
+        _modelTier = modelTier;
+        _routing = routing?.Value ?? new ModelRoutingOptions();
         _liveEval = liveEval;
         _handoff = handoff?.Value ?? new LowConfidenceHandoffOptions();
         _guardrail = guardrail;
@@ -166,6 +177,7 @@ public sealed class ChatPortService : IChatPort
         string response;
         try
         {
+            using var tierScope = BeginModelTier(reasoningResult);
             response = await _team.RunAsync(query, history, session, reasoningResult, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -323,6 +335,40 @@ public sealed class ChatPortService : IChatPort
         return decision;
     }
 
+    private ModelTier ChooseTier(ReasoningResult? reasoning)
+    {
+        if (_modelTier is null) return ModelTier.Standard;
+        var tier = ModelTierPolicy.Choose(reasoning, Services.Reasoning.SubTaskOrchestrator.IsCompoundQuery(reasoning), _routing);
+        if (_routing.Enabled) TierCounter.Add(1, new KeyValuePair<string, object?>("tier", tier.ToString().ToLowerInvariant()));
+        return tier;
+    }
+
+    private IDisposable? BeginModelTier(ReasoningResult? reasoning) =>
+        _modelTier is null ? null : _modelTier.Begin(ChooseTier(reasoning));
+
+    /// <summary>
+    /// Takımın akışını model katmanı kapsamında numaralandırır — <see cref="WithCostScope{T}"/> ile aynı sebep: async iterator
+    /// içinde AsyncLocal'a verilen değer <c>yield</c>'i aşmaz, bu yüzden kapsam her <c>MoveNextAsync</c> çevresinde yeniden açılır.
+    /// </summary>
+    private async IAsyncEnumerable<T> WithModelTier<T>(
+        IAsyncEnumerable<T> source, ModelTier tier, [EnumeratorCancellation] CancellationToken ct)
+    {
+        if (_modelTier is null || tier == ModelTier.Standard)
+        {
+            await foreach (var item in source.WithCancellation(ct)) yield return item;
+            yield break;
+        }
+
+        await using var e = source.GetAsyncEnumerator(ct);
+        while (true)
+        {
+            bool hasNext;
+            using (_modelTier.Begin(tier)) hasNext = await e.MoveNextAsync();
+            if (!hasNext) yield break;
+            yield return e.Current;
+        }
+    }
+
     /// <summary>Yanıtı çıktı guardrail'inden geçirir; müdahale yoksa AYNI string referansı döner.</summary>
     private async Task<string> GuardAsync(
         string answer, string query, IReadOnlyList<ConversationMessage> history, AgentSession session, CancellationToken ct)
@@ -420,7 +466,8 @@ public sealed class ChatPortService : IChatPort
         var responseBuilder = new System.Text.StringBuilder();
         string? canonicalResponse = null;
         string? terminationReason = null;
-        await foreach (var evt in WithCostScope(_team.RunStreamingAsync(query, history, session, reasoningResult, ct), sessionId, ct))
+        await foreach (var evt in WithCostScope(
+            WithModelTier(_team.RunStreamingAsync(query, history, session, reasoningResult, ct), ChooseTier(reasoningResult), ct), sessionId, ct))
         {
             var outgoing = evt;
             if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is TextDeltaPayload { Text.Length: > 0 } delta)
