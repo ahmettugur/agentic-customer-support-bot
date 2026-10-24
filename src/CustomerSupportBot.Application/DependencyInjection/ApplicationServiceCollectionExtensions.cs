@@ -192,6 +192,7 @@ public static class ApplicationServiceCollectionExtensions
         // Kimlik/tarih system mesajı — yazılı workflow ve sesli native mod aynı örneği kullanır.
         services.AddSingleton<CustomerIdentityHintBuilder>();
 
+        services.AddSingleton<IContextProvider, TurnNoticeContextProvider>();
         services.AddSingleton<IContextProvider, ExperimentContextProvider>();
         services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
         services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();

@@ -243,4 +243,16 @@ public class InboundEmailServiceTests
 
         r.Sent.Single().Subject.Should().NotContain("\r").And.NotContain("\n");
     }
+
+    [Fact]
+    public async Task MarkdownEmphasis_IsStrippedFromThePlainAndHtmlBodies()
+    {
+        var r = Build(reply: "Siparişiniz **teslim edildi**.\n- Ürün: `Çay`\n## Not\n*kısa* not");
+
+        await r.Svc.HandleAsync(Mail(), Ct);
+
+        var mail = r.Sent.Single();
+        mail.TextBody.Should().Contain("teslim edildi").And.NotContain("**").And.NotContain("`").And.NotContain("## ");
+        mail.HtmlBody.Should().NotContain("**").And.NotContain("`");
+    }
 }

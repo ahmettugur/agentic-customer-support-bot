@@ -36,7 +36,8 @@ public sealed record TurnSignals(
     string? Intent,
     string? SentimentLabel,
     double? SentimentScore,
-    double? ConfidenceScore = null)
+    double? ConfidenceScore = null,
+    bool Clarifying = false)
 {
     /// <summary>
     /// Reasoning sonucundan sinyalleri süzer. "Üretilmedi" sayılan değerler <c>null</c>'a
@@ -68,12 +69,20 @@ public sealed record TurnSignals(
         double? confidence = reasoning.IsFallback || reasoning.ConfidenceScore == 0.5 ? null : reasoning.ConfidenceScore;
         var lowConfidence = confidence is < WellKnown.ConfidenceThresholds.Low;
 
-        if (intent is null && !hasSentiment && !lowConfidence) return null;
+        // Canlı veride planlama güveni belirsiz mesajlarda bile 0,6 altına inmiyor (model "yüksek" diyor); asıl sinyal: niyet "genel" kaldı
+        // ve plan yalnızca netleştirme sorusu. Tanınmış bir niyetin içindeki netleştirme (ürün/adet sormak) normaldir, sayılmaz.
+        var clarifying = !reasoning.IsFallback
+            && reasoning.Intent == WellKnown.Intents.General
+            && reasoning.Steps.Count > 0
+            && reasoning.Steps.All(s => string.Equals(s.Action, "clarify", StringComparison.OrdinalIgnoreCase));
+
+        if (intent is null && !hasSentiment && !lowConfidence && !clarifying) return null;
 
         return new TurnSignals(
             intent,
             hasSentiment ? reasoning.Sentiment : null,
             hasSentiment ? reasoning.SentimentScore : null,
-            confidence);
+            confidence,
+            clarifying);
     }
 }

@@ -181,6 +181,16 @@ public sealed class InboundEmailService(
         return outcome;
     }
 
+    /// <summary>Sohbet yanıtı markdown içerir; e-postada ham işaretler (**kalın**, `kod`, ## başlık) görünmesin.</summary>
+    internal static string StripMarkdown(string s)
+    {
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"(\*\*|__)(.+?)\1", "$2");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", "$1");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"`+([^`]*)`+", "$1");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"(?m)^\s{0,3}#{1,6}\s+", "");
+        return s;
+    }
+
     private static EmailMessage Compose(string to, string? name, string? subject, string answer, string? publicBaseUrl)
     {
         // Başlık enjeksiyonu: konu satırında satır sonu olamaz.
@@ -189,6 +199,7 @@ public sealed class InboundEmailService(
         var subjectLine = clean.StartsWith("Re:", StringComparison.OrdinalIgnoreCase) ? clean : $"Re: {(clean.Length == 0 ? "Destek talebiniz" : clean)}";
 
         var link = string.IsNullOrWhiteSpace(publicBaseUrl) ? null : publicBaseUrl.TrimEnd('/') + "/";
+        answer = StripMarkdown(answer);
         var text = answer + (link is null ? "" : $"\n\nSohbeti uygulamada sürdürmek için: {link}") + "\n\nBu yanıt otomatik oluşturulmuştur; yanıtlayarak konuşmayı sürdürebilirsiniz.";
         var html = $"<p>{System.Net.WebUtility.HtmlEncode(answer).Replace("\n", "<br>")}</p>"
                    + (link is null ? "" : $"<p><a href=\"{System.Net.WebUtility.HtmlEncode(link)}\">Sohbeti uygulamada sürdürün</a></p>")

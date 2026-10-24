@@ -331,8 +331,8 @@ public sealed class ChatPortService : IChatPort
             SessionId = sessionId,
             AgentName = "LowConfidence",
             UserQuery = query,
-            Reason = string.Create(CultureInfo.InvariantCulture,
-                $"Bot art arda {current.State.LowConfidenceTurns} turdur isteği anlayamadı (güven < {WellKnown.ConfidenceThresholds.Low:F2})")
+            // Neden müşteriye de gösterilir (handoff_pending): iç sayaç/eşik değil, sade bir cümle.
+            Reason = "İsteğinizi tam netleştiremedim; bir temsilci size yardımcı olacak."
         });
         _logger.LogInformation("[Handoff] Düşük güven eskalasyonu açıldı | session={SessionId} turns={Turns}",
             sessionId, current.State.LowConfidenceTurns);
@@ -345,12 +345,14 @@ public sealed class ChatPortService : IChatPort
     /// </summary>
     private async Task<IReadOnlyList<object>> ApplyPreferencesAsync(AgentSession session, string text, CancellationToken ct)
     {
+        session.State.TurnNotice = null;   // önceki turdan kalan not asla taşınmaz
         var customerId = session.State.AuthenticatedCustomerId;
         if (_profiles is null || string.IsNullOrWhiteSpace(customerId)) return [];
         var changes = Domain.Model.Memory.PreferenceIntentParser.ParseAll(text);
         if (changes.Count == 0) return [];
 
         var hints = new List<object>();
+        var notices = new List<string>();
         try
         {
             foreach (var c in changes)
@@ -359,10 +361,13 @@ public sealed class ChatPortService : IChatPort
                 {
                     await _profiles.ClearPreferencesAsync(customerId, ct);
                     hints.Add(new { kind = "preferences_cleared" });
+                    notices.Add("Müşterinin kayıtlı tüm tercihleri silindi.");
                 }
                 else if (await _profiles.SetPreferenceAsync(customerId, c.Key, c.Value!, ct))
                 {
-                    hints.Add(new { kind = "preference_saved", key = c.Key, value = c.Value, label = Domain.Model.Memory.CustomerPreferences.LabelOf(c.Key, c.Value!) });
+                    var label = Domain.Model.Memory.CustomerPreferences.LabelOf(c.Key, c.Value!);
+                    hints.Add(new { kind = "preference_saved", key = c.Key, value = c.Value, label });
+                    notices.Add($"Müşterinin kalıcı tercihi kaydedildi: {label}.");
                 }
             }
         }
@@ -370,6 +375,10 @@ public sealed class ChatPortService : IChatPort
         {
             _logger.LogWarning(ex, "[Preferences] Tercih kaydedilemedi | session={SessionId}", session.SessionId);
         }
+
+        // Ajan, sistemin az önce yaptığını bilmeli: aksi halde "tercihlerimi sıfırla"ya "hangi tercihleri?" diye soruyordu (canlı denemede görüldü).
+        if (notices.Count > 0)
+            session.State.TurnNotice = string.Join(" ", notices) + " Bunu tek cümleyle teyit et; müşteriye tekrar sorma, ek bir işlem gerekmiyor.";
         return hints;
     }
 
@@ -529,6 +538,7 @@ public sealed class ChatPortService : IChatPort
         }
 
         // Kanonik metin hiç gelmediyse (hata/iptal) delta birleşimi de geçmişe yazılmadan önce kontrolden geçer.
+        session.State.TurnNotice = null;   // not yalnızca bu turun bağlamı içindi
         var fullResponse = (canonicalResponse
             ?? await GuardAsync(responseBuilder.ToString(), query, history, session, ct)).TrimEnd();
         await _sessionState.PersistExchangeAsync(

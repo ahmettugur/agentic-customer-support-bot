@@ -32,7 +32,7 @@ public class LowConfidenceHandoffChatTests
         public string GetWorkflowDiagram() => "";
     }
 
-    private sealed class Reasoning(double confidence) : IReasoningPort
+    private sealed class Reasoning(double confidence, bool clarify = false) : IReasoningPort
     {
         public Task<ReasoningResult> ReasonAsync(string q, AgentSession? s = null, List<ConversationMessage>? h = null,
             CancellationToken ct = default) => Task.FromResult(new ReasoningResult());
@@ -41,13 +41,15 @@ public class LowConfidenceHandoffChatTests
             List<ConversationMessage>? h = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
         {
             yield return new StreamEvent(StreamEventTypes.ReasoningComplete,
-                new ReasoningResult { Intent = WellKnown.Intents.OrderInquiry, ConfidenceScore = confidence });
+                clarify
+                    ? new ReasoningResult { Intent = WellKnown.Intents.General, ConfidenceScore = confidence, Steps = [new ReasoningStep { Order = 1, Action = "clarify", Description = "netleştir" }] }
+                    : new ReasoningResult { Intent = WellKnown.Intents.OrderInquiry, ConfidenceScore = confidence });
             await Task.CompletedTask;
         }
     }
 
     private static (ChatPortService Chat, IEscalationSink Esc, InMemorySessionManager Sessions) Build(
-        double confidence, LowConfidenceHandoffOptions? options = null)
+        double confidence, LowConfidenceHandoffOptions? options = null, bool clarify = false)
     {
         var sessions = new InMemorySessionManager(new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 5 })));
         var esc = Substitute.For<IEscalationSink>();
@@ -55,7 +57,7 @@ public class LowConfidenceHandoffChatTests
         esc.CreateAsync(Arg.Any<EscalationRequest>()).Returns(ci => ci.Arg<EscalationRequest>());
         var modes = Substitute.For<IChatModeRegistry>();
         modes.GetMode(Arg.Any<string>()).Returns(ChatMode.Bot);
-        var chat = new ChatPortService(new Team(), new Reasoning(confidence), sessions, modes, Substitute.For<IChatBridge>(),
+        var chat = new ChatPortService(new Team(), new Reasoning(confidence, clarify), sessions, modes, Substitute.For<IChatBridge>(),
             new SessionStateService(sessions, NullLogger<SessionStateService>.Instance), Substitute.For<IApprovalContextAccessor>(),
             new InMemoryDistributedLock(Options.Create(new RedisOptions { DefaultLockTimeoutSeconds = 5 })),
             NullLogger<ChatPortService>.Instance, escalations: esc,
@@ -100,7 +102,7 @@ public class LowConfidenceHandoffChatTests
 
         await esc.Received(1).CreateAsync(Arg.Is<EscalationRequest>(r =>
             r.SessionId == sid && r.AgentName == "LowConfidence" && r.UserQuery == "yine bi şey"
-            && r.Reason.Contains("art arda")));
+            && r.Reason.Contains("netleştiremedim")));
     }
 
     [Fact]
@@ -125,5 +127,17 @@ public class LowConfidenceHandoffChatTests
 
         Chips(events).Should().NotContain(j => j.Contains("Temsilciyle görüşmek istiyorum"));
         await esc.DidNotReceive().CreateAsync(Arg.Any<EscalationRequest>());
+    }
+
+    [Fact]
+    public async Task ARepeatedClarificationLoop_Escalates_EvenWhenTheModelStatesHighConfidence()
+    {
+        // Canlı veri: belirsiz mesajlarda bile model 0,8+ güven bildiriyor; sinyal "genel niyet + yalnızca netleştirme".
+        var (chat, esc, _) = Build(0.86, clarify: true);
+        var sid = SessionIdOf(await TurnAsync(chat, "s-clarify", "mmm şey işte o"));
+
+        await TurnAsync(chat, sid, "olmadı yine o mevzu");
+
+        await esc.Received(1).CreateAsync(Arg.Is<EscalationRequest>(r => r.SessionId == sid && r.AgentName == "LowConfidence"));
     }
 }

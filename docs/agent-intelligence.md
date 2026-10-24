@@ -4,21 +4,26 @@ Sohbet ajan sisteminin kalitesini ve güvenilirliğini artıran bölümler. Her 
 
 ## Düşük güvende insana devir
 
-`ReasoningResult.ConfidenceScore` (planlama güveni) `0.5`'in **altındaysa** tur "düşük güvenli" sayılır
-(`WellKnown.ConfidenceThresholds.Low`). Sayaç `SessionState.LowConfidenceTurns` içinde ardışık turları tutar ve —
-duygu sayacı gibi — yalnızca `SessionStateExtractor` tarafından yazılır.
+Bot art arda isteği **netleştiremiyorsa** (kullanıcı ne istediğini söylemiyor ya da bot anlamıyor) konuşma insana devredilir. "Belirsiz tur" iki sinyalden biriyle tanınır;
+sayaç `SessionState.LowConfidenceTurns` içinde ardışık turları tutar ve — duygu sayacı gibi — yalnızca `SessionStateExtractor` tarafından yazılır:
+
+1. `ReasoningResult.ConfidenceScore < 0.5` (`WellKnown.ConfidenceThresholds.Low`);
+2. **niyet `genel` kaldı ve planın TÜM adımları `clarify`** (`TurnSignals.Clarifying`). Tanınmış bir niyetin içindeki netleştirme (ürün/adet sormak) normaldir, sayılmaz.
+
+> **Canlı veriden öğrenilen:** 48 gerçek izde planlama güveni **hiç 0,6'nın altına inmedi** ve model belirsiz mesajlarda bile "yüksek" dedi — yani yalnızca 1. sinyal pratikte
+> hiç tetiklenmezdi. İkinci sinyal bu yüzden eklendi ve canlı denemede belirsiz iki mesajla doğrulandı.
 
 | Ardışık düşük tur | Davranış |
 |---|---|
 | 1 | Yanıtın altındaki hızlı yanıt çiplerinin başına "Temsilciyle görüşmek istiyorum" eklenir |
-| ≥ `ConsecutiveTurnsForEscalation` (2) | Eskalasyon açılır (`AgentName=LowConfidence`, sebep: "Bot art arda N turdur isteği anlayamadı"); müşteri `handoff_pending`'i, temsilci Agent Assist özetini görür |
+| ≥ `ConsecutiveTurnsForEscalation` (2) | Eskalasyon açılır (`AgentName=LowConfidence`, sebep müşteriye de gösterildiği için sade: "İsteğinizi tam netleştiremedim; bir temsilci size yardımcı olacak."); müşteri `handoff_pending`'i, temsilci Agent Assist özetini görür |
 
 Atlanır: temsilci modu, oturumda açık eskalasyon, açık "temsilci istiyorum" niyeti (kendi yolu var), `Enabled=false`.
 Zaman aşımı/hata yer tutucusu (`IsFallback`) ve parser varsayılanı (`0.5`) güven sinyali sayılmaz — botun anlayamadığı
 anlamına gelmezler. Ayar: `LowConfidenceHandoff:Enabled`, `LowConfidenceHandoff:ConsecutiveTurnsForEscalation`.
 
-**Sınır:** Güven, *planlama* aşamasının isteği anlama güvenidir; son yanıtın doğruluğunu ölçmez. Yanıt metnindeki "bilmiyorum"
-gibi ifadeleri yakalamaz.
+**Sınır:** Sinyaller *planlama* aşamasına bakar; son yanıtın doğruluğunu ölçmez ve yanıt metnindeki "bilmiyorum" gibi ifadeleri yakalamaz. Netleştirme döngüsü yalnızca
+`genel` niyette sayıldığı için, tanınmış bir niyette (sipariş vb.) tekrar tekrar soru soran bot bu kapıya takılmaz.
 
 ## Politika kod olarak: iade/iptal kural motoru
 

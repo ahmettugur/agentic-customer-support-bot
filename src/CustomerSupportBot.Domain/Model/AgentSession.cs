@@ -93,6 +93,13 @@ public class SessionState
     public int LowConfidenceTurns { get; set; }
 
     /// <summary>
+    /// Bu turda SİSTEMİN müşteri adına yaptığı işlemin ajan için kısa notu (ör. "tercihi kaydedildi"). Yalnızca turun ömrü boyunca bellekte
+    /// yaşar, kalıcı değildir; <c>TurnNoticeContextProvider</c> bağlama koyar, ChatPortService her tur başında temizler.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? TurnNotice { get; set; }
+
+    /// <summary>
     /// Görüşmeye bir insan dahil oldu mu (eskalasyon açıldı ya da temsilci devraldı)? Yapay zekâ çözüm
     /// oranının (containment) temeli — bkz. HumanInvolvementTracker. Bir kez true olur, geri dönmez.
     /// </summary>
