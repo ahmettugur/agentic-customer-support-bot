@@ -49,6 +49,11 @@ public sealed class SemanticMemoryOptions
         public string Model { get; set; } = "text-embedding-3-small";
         /// <summary>Vektör boyutu (text-embedding-3-small = 1536, -large = 3072).</summary>
         public int Dimension { get; set; } = 1536;
+
+        /// <summary>Sorgu embedding önbelleği: en çok bu kadar metin (0 = kapalı). Yanıt önbelleği DEĞİLDİR (bkz. CachingEmbeddingPort).</summary>
+        public int QueryCacheSize { get; set; } = 1000;
+
+        public int QueryCacheMinutes { get; set; } = 60;
     }
 
     public sealed class CollectionOptions

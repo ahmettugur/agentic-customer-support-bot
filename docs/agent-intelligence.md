@@ -105,8 +105,12 @@ sarmalayıcısına girer, yani maliyet doğru modelin fiyatıyla hesaplanır (`T
 Önce `LiveEvaluation`'ı açıp `chat.live_eval.score`'u hızlı/standart arasında karşılaştırmanız önerilir — hızlı modelin kaliteyi düşürüp
 düşürmediğini ölçmeden maliyet kazancına güvenmeyin.
 
-**Yapılmadı: anlamsal yanıt önbelleği.** Bilerek. Yanıtlar canlı veriye (stok, sipariş/kargo durumu) ve müşteriye bağlı; bir önbellek bayat
-stok ya da başka bir müşterinin bilgisini döndürebilir. Önbelleğe uygun tek küme (statik SSS/politika) için ayrı bir tasarım gerekir.
+**Önbellek: yanıt değil, embedding.** Anlamsal *yanıt* önbelleği bilerek yapılmadı: yanıtlar canlı veriye (stok, kargo/sipariş durumu) ve müşteriye bağlı; bir
+önbellek bayat ya da başkasının bilgisini döndürebilir. Bunun yerine güvenle önbelleğe alınabilen kısım önbelleğe alındı: **sorgu embedding'i**
+(`CachingEmbeddingPort`). Embedding metnin saf, deterministik fonksiyonudur (aynı soru → aynı vektör); her tur semantik bellek, dersler ve bilgi tabanı için
+yaptığı embedding çağrıları tekrarlayan sorularda API'ye gitmez. Anahtar metnin SHA-256'sıdır (düz metin tutulmaz), kayıtlar kopya olarak verilir,
+başarısız çağrı önbelleğe girmez, toplu (KB ingest) çağrılar geçer. Ayar: `SemanticMemory:Embedding:QueryCacheSize` (1000; 0 = kapalı), `QueryCacheMinutes` (60).
+Pod başına bellektedir.
 
 ## Kanal sürekliliği: e-posta yanıtı aynı konuşmaya düşer
 
