@@ -136,8 +136,25 @@ sağlayıcı (Mailgun/SendGrid/Postmark…)  ──POST /channels/email/inbound�
 * Tekrar teslim: `messageId` defterden talep edilir; tur başarısız olursa talep geri bırakılır, sağlayıcının yeniden denemesi işlenir.
 * Gönderici başına saatte en çok `MaxPerSenderPerHour` (10) — **pod başına** sayaç (çok pod'da gerçek sınır pod sayısıyla çarpılır).
 
-**Sınırlar:** Sağlayıcıya özgü ayrıştırıcı (multipart/form → bu JSON) bu depoda YOK; sağlayıcınızın webhook'unu normalize eden küçük bir köprü gerekir.
-Ekler (fotoğraf) işlenmez. HITL onayı gerektiren işlemler e-postadan da onay kuyruğuna düşer; onay sonucu mevcut bildirim e-postasıyla gelir.
+**Sağlayıcı uçları** (hazır, köprü gerekmez):
+
+| Uç | Sağlayıcı | Kimlik doğrulaması |
+|---|---|---|
+| `POST /channels/email/inbound` | normalize JSON (kendi köprünüz) | `authenticated` yükte; `X-Inbound-Secret` |
+| `POST /channels/email/inbound/postmark` | Postmark inbound (JSON) | `Authentication-Results` başlığı; gizli = Basic parola |
+| `POST /channels/email/inbound/sendgrid` | SendGrid Inbound Parse (multipart) | `dkim` + `SPF`/`envelope` alanları; gizli = Basic parola |
+
+Webhook URL'sine kimlik gömün: `https://inbound:<Secret>@host/channels/email/inbound/postmark` (sağlayıcılar özel başlık koyamaz; uç hem `X-Inbound-Secret`
+hem Basic parolayı kabul eder). Sağlayıcı uçlarında `authenticated` yükten **alınmaz**; gönderenle **hizalı** DKIM imzasından ya da (zarf göndereni hizalı) SPF
+geçişinden türetilir — `dkim=pass` tek başına yetmez, saldırganın kendi alanından geçen imza da "pass" döner. Alan eşleşmesi gevşek hizalamadır
+(`mail.example.com` ↔ `example.com`); `notexample.com` hizalı değildir.
+
+**Fotoğraf ekleri:** E-postadaki görseller (en çok `MaxAttachments`=3, yalnızca `image/*`) sohbetteki yüklemeyle **aynı porttan** geçer — JPEG/PNG doğrulama, metadata
+temizleme, görsel analiz, sahiplik; ilk yükleme yeni oturum açarsa tur o oturumda koşar. Reddedilen/hatalı fotoğraf metin turunu engellemez; yalnızca fotoğraflı
+(metinsiz) e-posta "Fotoğraf ekledim." notuyla işlenir.
+
+**Sınırlar:** Mailgun için ayrıştırıcı yok (yük kimlik doğrulama sonucu taşımaz; imza doğrulaması ayrı bir iş). Pod başına gönderici sınırı çok pod'da pod sayısıyla çarpılır.
+HITL onayı gerektiren işlemler e-postadan da onay kuyruğuna düşer; onay sonucu mevcut bildirim e-postasıyla gelir.
 
 ## Müşteri hafızası: kayıttan "açık konular"
 

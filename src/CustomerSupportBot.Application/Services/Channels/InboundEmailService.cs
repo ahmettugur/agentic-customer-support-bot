@@ -33,11 +33,18 @@ public sealed class InboundEmailOptions
 
     /// <summary>Bir göndericiden saatte en çok bu kadar e-posta işlenir (pod başına; LLM maliyeti ve kötüye kullanım koruması).</summary>
     public int MaxPerSenderPerHour { get; set; } = 10;
+
+    /// <summary>Bir e-postadan alınacak en çok fotoğraf (sohbetteki mesaj başına sınırla aynı mantık).</summary>
+    public int MaxAttachments { get; set; } = 3;
 }
 
 /// <param name="Authenticated">Sağlayıcının SPF/DKIM doğrulama sonucu.</param>
 /// <param name="AutoSubmitted"><c>Auto-Submitted</c> başlığı (varsa).</param>
-public sealed record InboundEmail(string From, string? Subject, string? Text, string? MessageId, bool Authenticated, string? AutoSubmitted);
+public sealed record InboundEmail(
+    string From, string? Subject, string? Text, string? MessageId, bool Authenticated, string? AutoSubmitted,
+    IReadOnlyList<InboundAttachment>? Attachments = null);
+
+public sealed record InboundAttachment(string Name, string ContentType, byte[] Data);
 
 public enum InboundEmailOutcome
 {
@@ -55,7 +62,8 @@ public sealed class InboundEmailService(
     IOptions<EmailOptions> email,
     ILogger<InboundEmailService> logger,
     TimeProvider? clock = null,
-    InboundEmailThrottle? throttle = null)
+    InboundEmailThrottle? throttle = null,
+    IChatAttachmentPort? attachments = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private readonly InboundEmailThrottle _throttle = throttle ?? new InboundEmailThrottle();
@@ -77,7 +85,10 @@ public sealed class InboundEmailService(
         if (customerId is null) return Log(InboundEmailOutcome.UnknownSender, from);
 
         var text = EmailReplyExtractor.ExtractNewText(mail.Text, InputGuard.MaxInputLength);
-        if (text.Length == 0) return Log(InboundEmailOutcome.Empty, from);
+        var photos = ImagesOf(mail, o);
+        // Yalnızca fotoğraflı e-posta geçerli: metni boşsa kısa bir not konur (sohbetteki fotoğraf-only mesajla aynı).
+        if (text.Length == 0 && (photos.Count == 0 || attachments is null)) return Log(InboundEmailOutcome.Empty, from);
+        if (text.Length == 0) text = "Fotoğraf ekledim.";
 
         if (!AllowSender(from, o.MaxPerSenderPerHour)) return Log(InboundEmailOutcome.Throttled, from);
 
@@ -92,7 +103,10 @@ public sealed class InboundEmailService(
         {
             var customer = customerId.Value.ToString();
             var sessionId = await ContinuedSessionAsync(customer, o, ct);
-            var response = await chat.HandleAsync(new ChatRequest(guard.SanitizedInput, sessionId, CustomerId: customer), ct);
+            var (attachmentIds, uploadSession) = await UploadPhotosAsync(photos, sessionId, customer, ct);
+            var response = await chat.HandleAsync(
+                new ChatRequest(guard.SanitizedInput, uploadSession ?? sessionId, CustomerId: customer,
+                    AttachmentIds: attachmentIds.Count == 0 ? null : attachmentIds), ct);
 
             // Yanıt, e-postada yazanın değil KAYITLI adrese gider.
             var to = await customers.GetEmailAsync(customerId.Value, ct);
@@ -114,6 +128,42 @@ public sealed class InboundEmailService(
             }
             throw;
         }
+    }
+
+    private static List<InboundAttachment> ImagesOf(InboundEmail mail, InboundEmailOptions o) =>
+        (mail.Attachments ?? []).Where(a => a.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) && a.Data.Length > 0)
+            .Take(Math.Max(0, o.MaxAttachments)).ToList();
+
+    /// <summary>
+    /// Fotoğraflar sohbetteki yüklemeyle AYNI porttan geçer (doğrulama, metadata temizleme, görsel analiz, sahiplik). İlk yükleme yeni oturum
+    /// açabilir; sonrakiler ve tur o oturumu kullanır. Reddedilen/hatalı fotoğraf metin turunu engellemez.
+    /// </summary>
+    private async Task<(List<string> Ids, string? SessionId)> UploadPhotosAsync(
+        List<InboundAttachment> photos, string? sessionId, string customerId, CancellationToken ct)
+    {
+        var ids = new List<string>();
+        if (attachments is null) return (ids, null);
+
+        string? current = sessionId;
+        foreach (var p in photos)
+        {
+            try
+            {
+                var r = await attachments.UploadAsync(current, customerId, p.Data, ct);
+                if (r.Status != AttachmentUploadStatus.Ok || r.AttachmentId is null)
+                {
+                    logger.LogInformation("[InboundEmail] Fotoğraf reddedildi ({Status})", r.Status);
+                    continue;
+                }
+                ids.Add(r.AttachmentId);
+                current = r.SessionId ?? current;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "[InboundEmail] Fotoğraf işlenemedi");
+            }
+        }
+        return (ids, ids.Count > 0 ? current : null);
     }
 
     private async Task<string?> ContinuedSessionAsync(string customerId, InboundEmailOptions o, CancellationToken ct)
