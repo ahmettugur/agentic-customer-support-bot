@@ -1404,6 +1404,13 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("completed_at");
 
+                    b.Property<string>("ContextPartsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("[]")
+                        .HasColumnName("context_parts");
+
                     b.Property<string>("Error")
                         .HasColumnType("text")
                         .HasColumnName("error");

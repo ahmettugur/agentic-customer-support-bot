@@ -245,6 +245,8 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore, ICacheWa
             existing.ReasoningJson = Serialize(t.Reasoning);
             existing.PlanningJson = Serialize(t.Planning);
             existing.SpecialistReasoningsJson = Serialize(t.SpecialistReasonings) ?? "[]";
+            existing.FinalCritiqueJson = Serialize(t.SelfCritique);
+            existing.ContextPartsJson = Serialize(t.ContextParts) ?? "[]";
             existing.AgentVisitsJson = Serialize(t.AgentVisits) ?? "[]";
             existing.ToolCallsJson = Serialize(t.ToolCalls) ?? "[]";
         }
@@ -267,6 +269,8 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore, ICacheWa
         ReasoningJson = Serialize(t.Reasoning),
         PlanningJson = Serialize(t.Planning),
         SpecialistReasoningsJson = Serialize(t.SpecialistReasonings) ?? "[]",
+        FinalCritiqueJson = Serialize(t.SelfCritique),
+        ContextPartsJson = Serialize(t.ContextParts) ?? "[]",
         AgentVisitsJson = Serialize(t.AgentVisits) ?? "[]",
         ToolCallsJson = Serialize(t.ToolCalls) ?? "[]"
     };
@@ -287,6 +291,8 @@ public sealed class PostgresReasoningTraceStore : IReasoningTraceStore, ICacheWa
         Reasoning = Deserialize<ReasoningResult>(e.ReasoningJson),
         Planning = Deserialize<PlanningResult>(e.PlanningJson),
         SpecialistReasonings = Deserialize<List<SpecialistReasoning>>(e.SpecialistReasoningsJson) ?? new(),
+        SelfCritique = Deserialize<SelfCritique>(e.FinalCritiqueJson),
+        ContextParts = Deserialize<List<ContextPartUsage>>(e.ContextPartsJson) ?? new(),
         AgentVisits = Deserialize<List<AgentVisit>>(e.AgentVisitsJson) ?? new(),
         ToolCalls = Deserialize<List<ToolInvocation>>(e.ToolCallsJson) ?? new()
     };
