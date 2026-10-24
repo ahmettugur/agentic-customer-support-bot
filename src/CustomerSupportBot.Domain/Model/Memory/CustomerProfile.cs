@@ -44,6 +44,12 @@ public sealed class CustomerProfile
     /// <summary>Admin'in elle eklediği serbest not (override).</summary>
     public string? AdminNote { get; set; }
 
+    /// <summary>
+    /// Müşterinin AÇIKÇA söylediği kalıcı tercihler (bkz. <see cref="CustomerPreferences"/>): kapalı sözlük, serbest metin yok.
+    /// KVKK: profilin parçası olduğu için dışa aktarmada görünür, silmede gider.
+    /// </summary>
+    public Dictionary<string, string> Preferences { get; set; } = new();
+
     /// <summary>Toplam oturum sayısı.</summary>
     public int TotalSessions { get; set; }
 

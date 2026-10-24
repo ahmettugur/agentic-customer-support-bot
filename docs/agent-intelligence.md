@@ -171,8 +171,22 @@ diye işaretlidir; ajan buradan tahmin yürütmek yerine araçla doğrular.
 **Güvenlik:** yalnızca JWT'ye bağlı kimlik (`AuthenticatedCustomerId`) kullanılır — LLM'in metinden çıkardığı `CustomerId` asla; müşterinin serbest metni (şikayet açıklaması)
 bağlama **girmez**; yönetici girdisi olan kargo firması/takip no sanitize edilip 64 karaktere kırpılır. Depo hatasında tur bozulmaz, blok boş kalır.
 
-**Yapılmadı:** konuşmadan LLM ile "tercih çıkarıp kalıcı saklama" (ör. "mağazadan teslim ister"). Yanlış çıkarım kalıcı hâle gelir ve KVKK silme/dışa aktarma kapsamını
-genişletir; mevcut `Traits` zaten güven skoruyla bu işi yapıyor. Tercihleri güvenilir kılmak için müşteriye açıkça onaylatan bir akış gerekir.
+### Açıkça söylenen kalıcı tercihler
+
+Müşteri "**bundan sonra** kısa yanıt ver", "her zaman mağazadan teslim alacağım", "artık e-postayla bildirin" dediğinde tercih profilde **kalıcı** saklanır
+ve sonraki tüm konuşmaların bağlamına girer ("Müşterinin açıkça belirttiği tercihler (uygula): kısa yanıtlar, mağazadan teslim").
+
+Bilerek **LLM çıkarımı değil, deterministik ayrıştırma** (`PreferenceIntentParser`) — yanlış çıkarım kalıcı hâle gelip KVKK kapsamını genişletmesin diye:
+
+* **Kapalı sözlük:** yalnızca `reply_style` (kısa/ayrıntılı), `delivery` (mağaza/adres), `contact` (e-posta/sohbet). Serbest metin saklanmaz → enjeksiyon/PII yüzeyi yok.
+* **Kalıcılık işareti şart:** "bundan sonra / bundan böyle / her zaman / hep / artık / daima / sürekli". İşaret yoksa ("kısa yanıt verir misin?") ya da geçici ifade varsa
+  ("bu seferlik", "şimdilik") hiçbir şey kaydedilmez; aynı anahtar için çelişen iki değer (kısa + ayrıntılı) belirsizdir → kaydedilmez.
+* **Yalnızca doğrulanmış müşteri** (JWT'ye bağlı kimlik); anonim oturum tercih saklayamaz. Kayıt, profil kilidi altında yapılır (tur güncellemesi tercihi ezmez).
+* **Müşteriye görünür onay:** sohbete "✅ Tercihiniz kaydedildi: kısa yanıtlar. Silmek için "tercihlerimi sıfırla" yazabilirsiniz." notu düşer; "tercihlerimi sıfırla/sil/unut" hepsini siler.
+* **KVKK:** tercihler profilin parçasıdır → veri dışa aktarmada görünür, silmede profille birlikte gider (yeni `personalization.customer_profiles.preferences` jsonb sütunu, migration `AddCustomerPreferences`).
+
+**Sınır:** Yalnızca bu üç tercih ve Türkçe kalıplar tanınır; "kısa olsun ama ayrıntılı da" gibi karmaşık ifadeler bilerek yok sayılır. Tercih bağlama *yönerge* olarak girer;
+ajanın uyması bir LLM davranışıdır, kural motoru gibi garanti değildir (ör. kısa yanıt tercihi iade gerekçesi gibi zorunlu bilgiyi kesmemelidir).
 
 ## Kırmızı takım derlemi (regresyon kapısı)
 

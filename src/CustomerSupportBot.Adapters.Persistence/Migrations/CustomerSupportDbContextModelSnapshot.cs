@@ -1598,6 +1598,13 @@ namespace CustomerSupportBot.Adapters.Persistence.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("last_interaction_at");
 
+                    b.Property<string>("PreferencesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("{}")
+                        .HasColumnName("preferences");
+
                     b.Property<string>("PreferredLanguage")
                         .IsRequired()
                         .HasMaxLength(8)

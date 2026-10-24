@@ -13,6 +13,7 @@ using System.Text;
 
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Domain.Model;
+using CustomerSupportBot.Domain.Model.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace CustomerSupportBot.Application.Services.Providers;
@@ -51,6 +52,8 @@ public sealed class CustomerProfileContextProvider : IContextProvider
         if (!string.IsNullOrWhiteSpace(u.AdminNote))
             sb.AppendLine($"- Admin notu: {u.AdminNote}");
         sb.AppendLine($"- Tercih edilen dil: {u.PreferredLanguage}, ton: {u.PreferredTone}");
+        if (u.Preferences is { Count: > 0 } && CustomerPreferences.Describe(u.Preferences) is { Length: > 0 } prefs)
+            sb.AppendLine($"- Müşterinin açıkça belirttiği tercihler (uygula): {prefs}");
         sb.AppendLine($"- Toplam oturum: {u.TotalSessions}, toplam tur: {u.TotalTurns}");
 
         if (u.TopIntents.Count > 0)

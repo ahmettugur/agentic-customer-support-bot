@@ -1540,6 +1540,8 @@
                         .Take(3)
                         .ToList();
                 }
+                if (PreferenceHintLogic.Message(jd) is { } preferenceNote)
+                    _messages.Add(new ChatMsg { Role = "system", Content = preferenceNote });
                 if (_currentBot is not null
                     && jd.TryGetProperty("kind", out var hintKind)
                     && hintKind.GetString() == "category_picker"

@@ -50,6 +50,7 @@ public sealed class ChatPortService : IChatPort
         Ports.Outbound.Observability.TelemetryConstants.MeterName, "1.0.0").CreateCounter<long>(
         "chat.model_tier", unit: "{turn}", description: "Model yönlendirme kararı (tier=standard|fast).");
 
+    private readonly ICustomerProfileService? _profiles;
     private readonly ITurnModelTier? _modelTier;
     private readonly ModelRoutingOptions _routing;
     private readonly Services.Evaluation.LiveEvaluationService? _liveEval;
@@ -75,8 +76,10 @@ public sealed class ChatPortService : IChatPort
         IOptions<LowConfidenceHandoffOptions>? handoff = null,
         Services.Evaluation.LiveEvaluationService? liveEval = null,
         ITurnModelTier? modelTier = null,
-        IOptions<ModelRoutingOptions>? routing = null)
+        IOptions<ModelRoutingOptions>? routing = null,
+        ICustomerProfileService? profiles = null)
     {
+        _profiles = profiles;
         _modelTier = modelTier;
         _routing = routing?.Value ?? new ModelRoutingOptions();
         _liveEval = liveEval;
@@ -173,6 +176,7 @@ public sealed class ChatPortService : IChatPort
 
         var reasoningResult = await _reasoning.ReasonAsync(query, session, history, ct);
 
+        await ApplyPreferencesAsync(session, request.Query, ct);
         using var approvalScope = _approvalContext.SetScope(sessionId, null, query, session.State.AuthenticatedCustomerId);
         string response;
         try
@@ -335,6 +339,40 @@ public sealed class ChatPortService : IChatPort
         return decision;
     }
 
+    /// <summary>
+    /// Açık, kalıcılık işaretli tercih ifadesini (kapalı sözlük; bkz. PreferenceIntentParser) doğrulanmış müşterinin profiline yazar ve müşteriye
+    /// görünür onay için ui_hint döner. Anonim oturumda hiçbir şey kaydedilmez. Hata turu bozmaz.
+    /// </summary>
+    private async Task<IReadOnlyList<object>> ApplyPreferencesAsync(AgentSession session, string text, CancellationToken ct)
+    {
+        var customerId = session.State.AuthenticatedCustomerId;
+        if (_profiles is null || string.IsNullOrWhiteSpace(customerId)) return [];
+        var changes = Domain.Model.Memory.PreferenceIntentParser.ParseAll(text);
+        if (changes.Count == 0) return [];
+
+        var hints = new List<object>();
+        try
+        {
+            foreach (var c in changes)
+            {
+                if (c.Key is null)
+                {
+                    await _profiles.ClearPreferencesAsync(customerId, ct);
+                    hints.Add(new { kind = "preferences_cleared" });
+                }
+                else if (await _profiles.SetPreferenceAsync(customerId, c.Key, c.Value!, ct))
+                {
+                    hints.Add(new { kind = "preference_saved", key = c.Key, value = c.Value, label = Domain.Model.Memory.CustomerPreferences.LabelOf(c.Key, c.Value!) });
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "[Preferences] Tercih kaydedilemedi | session={SessionId}", session.SessionId);
+        }
+        return hints;
+    }
+
     private ModelTier ChooseTier(ReasoningResult? reasoning)
     {
         if (_modelTier is null) return ModelTier.Standard;
@@ -430,6 +468,9 @@ public sealed class ChatPortService : IChatPort
             yield break;
         }
 
+        // Müşterinin AÇIKÇA söylediği kalıcı tercih (bundan sonra kısa yanıt ver): tur başlamadan kaydedilir ki bu turun bağlamına girsin.
+        var preferenceHints = await ApplyPreferencesAsync(session, request.Query, ct);
+
         // Harcama limiti aşıldıysa LLM'e gidilmez; sabit metin normal bir yanıt gibi akar.
         if (await BudgetReplyAsync(sessionId, query, ct) is { } budgetReply)
         {
@@ -509,6 +550,7 @@ public sealed class ChatPortService : IChatPort
             suggestions = SuggestedRepliesPolicy.WithHuman(suggestions);
         if (suggestions.Count > 0)
             yield return new StreamEvent(StreamEventTypes.UiHint, new { kind = "suggested_replies", suggestions });
+        foreach (var hint in preferenceHints) yield return new StreamEvent(StreamEventTypes.UiHint, hint);
 
         // Sentiment events
         //
