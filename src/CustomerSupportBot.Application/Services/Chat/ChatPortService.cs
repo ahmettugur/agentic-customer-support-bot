@@ -203,7 +203,7 @@ public sealed class ChatPortService : IChatPort
         // Canlı değerlendirme akışsız yoldan da beslenir (MCP/A2A/e-posta kanalı bu yolu kullanır).
         _liveEval?.Observe(sessionId, (await _sessions.GetAsync(sessionId, ct))?.State.TurnCount ?? 0, query, response);
 
-        return new ChatResponse(response, sessionId, reasoningResult);
+        return new ChatResponse(response, sessionId, await CustomerReasoningAsync(reasoningResult, query, history, session, ct));
     }
 
     /// <summary>
@@ -385,6 +385,17 @@ public sealed class ChatPortService : IChatPort
         return hints;
     }
 
+    /// <summary>Reasoning'in müşteriye giden görünümü: iç alanlar çıkarılır, serbest metinler çıktı guardrail'inden geçer.</summary>
+    private async Task<CustomerReasoningView?> CustomerReasoningAsync(
+        ReasoningResult? reasoning, string query, IReadOnlyList<ConversationMessage> history, AgentSession session, CancellationToken ct)
+    {
+        if (reasoning is null) return null;
+        Func<string, string> clean = _guardrail is null
+            ? static s => s
+            : await _guardrail.CreateTextSanitizerAsync(query, history, session.State.AuthenticatedCustomerId, ct);
+        return CustomerReasoningView.From(reasoning, clean);
+    }
+
     private ModelTier ChooseTier(ReasoningResult? reasoning)
     {
         if (_modelTier is null) return ModelTier.Standard;
@@ -497,14 +508,30 @@ public sealed class ChatPortService : IChatPort
         var history = await _sessions.GetHistoryAsync(sessionId, ct);
 
         // Reasoning stream
+        //
+        // Müşteriye ham reasoning ÇIKMAZ: modelin akıttığı JSON parçalarından yalnızca analysis metni iletilir; reasoning_complete'in yükü iç
+        // alanları (nextAction, rationale, sanity uyarıları, doğrulanmış kimlikler…) taşımayan, temizlenmiş müşteri görünümüdür. Tur kararları
+        // (niyet, güven, alt görevler, model katmanı…) yine İÇ ReasoningResult'tan okunur.
         ReasoningResult? reasoningResult = null;
+        var analysisStreamer = new ReasoningAnalysisStreamer();
         await foreach (var evt in WithCostScope(_reasoning.ReasonStreamingAsync(query, session, history, ct), sessionId, ct))
         {
-            yield return evt;
+            if (evt.Type == StreamEventTypes.ReasoningDelta && evt.Data is TextDeltaPayload rawDelta)
+            {
+                var plain = analysisStreamer.Feed(rawDelta.Text);
+                if (plain.Length > 0) yield return new StreamEvent(StreamEventTypes.ReasoningDelta, new TextDeltaPayload(plain));
+                continue;
+            }
+
             if (evt.Type == StreamEventTypes.ReasoningComplete && evt.Data is ReasoningResult rr)
             {
                 reasoningResult = rr;
+                yield return new StreamEvent(StreamEventTypes.ReasoningComplete,
+                    await CustomerReasoningAsync(rr, query, history, session, ct));
+                continue;
             }
+
+            yield return evt;
         }
 
         using var approvalScope = _approvalContext.SetScope(sessionId, null, query, session.State.AuthenticatedCustomerId);

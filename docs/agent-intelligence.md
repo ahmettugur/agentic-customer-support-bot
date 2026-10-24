@@ -245,3 +245,43 @@ deneyler birbirinden bağımsızdır) ve kolun operatör metni (`Hint`) tur bağ
 `LiveEvaluation` açıksa puanlar `chat.live_eval.experiment_score{experiment,arm,dimension}` olarak da yazılır; Grafana'daki **"A/B deneyi"** paneli kolları
 karşılaştırır. `Hint` yapılandırmadan gelir (güvenilir); müşteri girdisi bu bloğa girmez. **Sınır:** Bu, prompt dosyalarını değil *ek yönergeyi* değiştirir;
 hakem puanları göreli ve gürültülüdür — kolları yorumlamadan önce yeterli örnek (yüzlerce oturum) toplayın, istatistiksel anlamlılık testi yapılmaz.
+
+## Ajan katmanı denetimi: yüksek öncelikli düzeltmeler
+
+Reasoning/Planning katmanının denetiminde (gerçek izler + probla doğrulanan) üç yüksek öncelikli hata bulundu ve düzeltildi.
+
+### 1. Bileşik sorgu planı artık turu düşürmüyor
+
+`SubTaskOrchestrator.ValidateExecutionPlan` fail-closed idi ve **gerçekçi** model çıktılarını reddediyordu; red, `error` olayıyla iç metin
+("Alt görev 2 desteklenmeyen entity içeriyor: 'product_name'") olarak müşteriye bot yanıtı gibi gidiyordu. Üç kusur probla doğrulandı:
+ürün alanı taşıyan alt görev, **önceki mesajdan** gelen sipariş numarası ("o siparişi iptal et"), açıklamada tekrar edilmeyen numara.
+
+`PrepareExecutionPlan` artık zararsız kusurları **onarır** (izinli olmayan anahtar ve sayısal olmayan değer yok sayılır; numara, mesajda *ya da konuşmada*
+— botun araç çıktısından söylediği numaralar dahil — geçiyorsa kabul) ve yalnızca şunları **reddeder**: yapısal hata (bilinmeyen ajan, sınır aşımı,
+bozuk bağımlılık), kullanıcı/konuşmada geçmeyen (uydurma) numara — entity'de *ya da açıklamada* — ve başka alt görevin numarasıyla yer değiştirmiş numara.
+**Red turu düşürmez:** `DecomposedRunner` sorguyu bölmeden **tek koşuyla** yürütür (Planning tek ajanı seçer), nedeni loglar ve
+`agent.decomposition.fallbacks{reason}` sayacına yazar. `ValidateExecutionPlan` fırlatan sarmalayıcı olarak durur. Reasoning prompt'u izinli
+anahtarları (`order_id`, `complaint_id`) açıkça söyler. İz (trace), modelin ürettiği planı olduğu gibi gösterir (onarım kopyada yapılır).
+
+### 2. Öz-eleştiri ve bağlam kullanımı kalıcı
+
+`SelfCritique` ve `ContextParts` yalnızca bellekteki iz nesnesinde yaşıyordu: depo `final_critique` sütununu hiç yazmıyor, bağlam kullanımı için sütun yoktu
+(dev veritabanında 56 izin hiçbirinde öz-eleştiri yoktu). Yeniden başlatmada ya da başka pod'da LessonMiner'ın "öz-eleştiri sorun işaret ediyorsa ders çıkar"
+sinyali kayboluyordu. Artık ikisi de tamamlanmada yazılır ve DB'den/önbellek ısıtmasından okunur (`reasoning_traces.context_parts`, migration
+`AddTraceContextParts`). Canlı doğrulama: gerçek bir turda öz-eleştiri ve 7 bağlam parçası kaydedildi.
+`WasRevised`/`FirstDraftResponse` alanlarına hâlâ hiçbir kod yazmıyor (revizyon mekanizması yok) — ölü alan.
+
+### 3. Reasoning müşteriye süzülerek gidiyor
+
+Tüm `ReasoningResult` SSE'ye ve /chat yanıtına olduğu gibi yazılıyordu (`nextAction` "OrderAgent'e yönlendir", `rationale`, varsayımlar, `decisionReason`,
+sanity uyarıları, doğrulanmış kimlik, adım önkoşulları); çıktı guardrail'i yalnızca `response_complete`'i taradığından bu yol korumasızdı. Şimdi:
+
+* `reasoning_complete` ve `/chat` yanıtındaki `reasoning`, **`CustomerReasoningView`**: yalnızca panelin gösterdiği alanlar (analiz, adımlar —
+  açıklama/action/grounding/güven —, niyet, gerekli bilgi, güven etiketi, alt görevler). Serbest metinler **çıktı guardrail'inden** geçer (başkasının e-posta/telefonu
+  `[gizlendi]`, sır/istem sızıntısı alanın tamamını gizler) ve sınırlıdır; temizleyici hata verirse alan **boş** gider, ham gitmez.
+* `reasoning_delta`, ham JSON parçaları yerine yalnızca **`analysis` metnini** artımlı çözerek akıtır (`ReasoningAnalysisStreamer`; kaçış/`\uXXXX` parça sınırında bölünse de doğru).
+* Turun kararları (niyet, güven, alt görevler, model katmanı, devir sayacı) hâlâ **iç** `ReasoningResult`'tan okunur; izler ve yönetici panelleri tam sonucu görmeye devam eder.
+* İstemci (`ReasoningTextLogic`) hem yeni düz metni hem eski ham JSON akışını doğru gösterir.
+
+**Sınır:** Akıtılan analiz parçaları reasoning_complete gelene kadar *temizlenmeden* görünür (parça sınırında bölünen bir kalıp artımlı taranamaz);
+`reasoning_complete` analizi guardrail'den geçmiş hâliyle **ezer**. Analiz modelin kendi 1–2 cümlelik özetidir, sır içermesi beklenmez ama garanti de edilmez.
