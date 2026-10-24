@@ -104,3 +104,30 @@ düşürmediğini ölçmeden maliyet kazancına güvenmeyin.
 
 **Yapılmadı: anlamsal yanıt önbelleği.** Bilerek. Yanıtlar canlı veriye (stok, sipariş/kargo durumu) ve müşteriye bağlı; bir önbellek bayat
 stok ya da başka bir müşterinin bilgisini döndürebilir. Önbelleğe uygun tek küme (statik SSS/politika) için ayrı bir tasarım gerekir.
+
+## Kanal sürekliliği: e-posta yanıtı aynı konuşmaya düşer
+
+Müşteriye giden e-postalar (bildirim, proaktif haber, bu bölümün yanıtları) "yanıtlayarak konuşmayı sürdürebilirsiniz" der. Müşteri yanıtladığında
+bot, uygulamadaki sohbetle **aynı oturumda** cevap verir ve cevabı e-postayla döndürür.
+
+```
+sağlayıcı (Mailgun/SendGrid/Postmark…)  ──POST /channels/email/inbound──►  InboundEmailService
+  { from, subject, text, messageId, authenticated, autoSubmitted? }
+  + X-Inbound-Secret                         │ gönderen → müşteri (tam bir eşleşme) → son 7 günlük oturum ya da yeni oturum
+                                             │ IChatPort.HandleAsync(CustomerId = eşleşen müşteri)  → yanıt kayıtlı adrese e-posta
+```
+
+**Güvenlik** (gelen e-posta güvenilmez girdidir):
+
+* Uç `InboundEmail:Enabled=false` iken **404**; açıkken `X-Inbound-Secret` sabit zamanlı karşılaştırılır, gizli yoksa ya da yanlışsa **401** — gizli
+  yapılandırılmamışsa hiçbir istek geçmez.
+* "From" başlığı sahte olabilir: sağlayıcı SPF/DKIM sonucunu `authenticated` ile bildirmeli, aksi halde yok sayılır (`RequireAuthenticatedSender`).
+* Gönderen yalnızca **tam bir** müşteriye eşleşirse tanınır; bilinmeyen/belirsiz gönderen için hesap açılmaz, yanıt gitmez. Yanıt, e-postada yazan değil
+  **kayıtlı** adrese gider. Yanıt gövdesi sonucu söylemez (her durumda boş 202) — uç "bu adres müşteri mi" sorgusuna dönüşmez.
+* Metin `InputGuard`'dan geçer (prompt injection reddedilir). Alıntılar, "… wrote:/yazdı:" başlıkları, imza ve "Sent from my…" kesilir; yalnızca yeni metin bota gider.
+* Döngü koruması: otomatik yanıt, `noreply@`, geri dönen posta, `Auto-Submitted` ve kendi gönderen adresimiz yok sayılır. Konu satırındaki satır sonları temizlenir (başlık enjeksiyonu).
+* Tekrar teslim: `messageId` defterden talep edilir; tur başarısız olursa talep geri bırakılır, sağlayıcının yeniden denemesi işlenir.
+* Gönderici başına saatte en çok `MaxPerSenderPerHour` (10) — **pod başına** sayaç (çok pod'da gerçek sınır pod sayısıyla çarpılır).
+
+**Sınırlar:** Sağlayıcıya özgü ayrıştırıcı (multipart/form → bu JSON) bu depoda YOK; sağlayıcınızın webhook'unu normalize eden küçük bir köprü gerekir.
+Ekler (fotoğraf) işlenmez. HITL onayı gerektiren işlemler e-postadan da onay kuyruğuna düşer; onay sonucu mevcut bildirim e-postasıyla gelir.

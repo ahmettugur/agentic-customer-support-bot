@@ -18,6 +18,13 @@ public interface ICustomerRepository
     /// </summary>
     Task<bool> IsEmailOwnedByCustomerAsync(long customerId, string email, CancellationToken ct = default);
 
+    /// <summary>
+    /// E-posta adresinden müşteri kimliği (büyük/küçük harf duyarsız). Adres TAM OLARAK bir müşteriye aitse o müşteri;
+    /// yoksa ya da birden çok müşteri aynı adresi taşıyorsa <c>null</c> — belirsizlikte kimlik tahmin edilmez.
+    /// Gelen e-posta kanalının göndericiyi eşlemesi içindir.
+    /// </summary>
+    Task<long?> FindIdByEmailAsync(string email, CancellationToken ct = default);
+
     Task<string?> GetFullNameAsync(long customerId, CancellationToken ct = default);
 
     /// <summary>Müşteri kaydındaki e-posta adresi (bildirimler için); kayıt ya da adres yoksa <c>null</c>.</summary>

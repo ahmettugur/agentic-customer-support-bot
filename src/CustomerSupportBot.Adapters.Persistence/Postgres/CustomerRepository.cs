@@ -17,6 +17,20 @@ public sealed class CustomerRepository : ICustomerRepository
         return ctx.Customers.Any(c => c.Id == customerId);
     }
 
+    public async Task<long?> FindIdByEmailAsync(string email, CancellationToken ct = default)
+    {
+        var normalized = email?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(normalized)) return null;
+
+        await using var ctx = await _dbFactory.CreateDbContextAsync(ct);
+        var ids = await ctx.Customers
+            .Where(c => c.Email != null && c.Email.ToLower() == normalized)
+            .Select(c => c.Id)
+            .Take(2)
+            .ToListAsync(ct);
+        return ids.Count == 1 ? ids[0] : null;
+    }
+
     public async Task<bool> IsEmailOwnedByCustomerAsync(
         long customerId, string email, CancellationToken ct = default)
     {
