@@ -4,6 +4,7 @@
 // her biri sırayla ayrı bir workflow run olarak yürütülür ve sonuçlar birleştirilir.
 
 using System.Text;
+using System.Text.RegularExpressions;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Domain.Model;
 
@@ -14,7 +15,7 @@ namespace CustomerSupportBot.Application.Services.Reasoning;
 /// Reasoning sonucundaki SubTasks listesine göre her alt görevi
 /// sırayla ayrı bir workflow run olarak yürütür.
 /// </summary>
-public class SubTaskOrchestrator
+public partial class SubTaskOrchestrator
 {
     private static readonly HashSet<string> AllowedEntityKeys = new(StringComparer.Ordinal)
     {
@@ -73,83 +74,133 @@ public class SubTaskOrchestrator
     }
 
     /// <summary>
-    /// LLM tarafından üretilen alt görev planını workflow fan-out başlamadan önce doğrular.
-    /// Bağımlılıklar yalnızca daha önceki görevlere işaret edebilir; eksik kenarlar, ileri
-    /// bağımlılıklar ve döngüler yürütme başlamadan fail-closed davranır.
+    /// LLM'in ürettiği alt görev planını fan-out'tan ÖNCE hazırlar: zararsız kusurları onarır, yürütülemez ya da uydurma numara
+    /// içeren planı reddeder. Red turu DÜŞÜRMEZ — çağıran (DecomposedRunner) sorguyu bölmeden tek koşuyla yürür.
+    ///
+    /// <para><b>Onarılır</b> (canlı probda planı düşüren gerçekçi model çıktıları):</para>
+    /// <list type="bullet">
+    /// <item>izinli olmayan entity anahtarı (<c>product_name</c>, <c>quantity</c>…) → yok sayılır; bilgi zaten açıklamada,</item>
+    /// <item>sayısal olmayan kimlik değeri → yok sayılır,</item>
+    /// <item>numaranın açıklamada tekrar edilmemesi → kullanıcı girdisinde geçiyorsa kabul,</item>
+    /// <item>numaranın önceki mesajlardan gelmesi ("o siparişi iptal et") → konuşma geçmişi de kaynak sayılır.</item>
+    /// </list>
+    /// <para><b>Reddedilir:</b> yapısal hata (bilinmeyen hedef ajan, sınır aşımı, bozuk bağımlılık), kullanıcı girdisinde/konuşmada
+    /// geçmeyen numara (entity'de ya da açıklamada — model uydurmuş), başka alt görevin açıklamasına ait numara (yer değiştirmiş).</para>
+    /// <para>Girdi <see cref="ReasoningResult"/> değiştirilmez: iz, modelin ürettiği planı olduğu gibi gösterir.</para>
     /// </summary>
-    public static List<SubTask> ValidateExecutionPlan(
+    public static PlanPreparation PrepareExecutionPlan(
         ReasoningResult reasoning,
         string originalQuery,
-        ParallelExecutionOptions options)
+        ParallelExecutionOptions options,
+        IReadOnlyList<ConversationMessage>? history = null)
     {
         ArgumentNullException.ThrowIfNull(reasoning);
+        var repairs = new List<string>();
 
         var ordered = reasoning.SubTasks.OrderBy(s => s.Order).ToList();
         if (ordered.Count == 0)
-            throw new InvalidOperationException("Alt görev planı boş olamaz.");
+            return PlanPreparation.Reject(PlanRejection.Structure, "Alt görev planı boş olamaz.", repairs);
         if (ordered.Count > options.MaxSubTasks)
-            throw new InvalidOperationException(
-                $"Compound plan {ordered.Count} alt görev içeriyor; izin verilen üst sınır {options.MaxSubTasks}.");
+            return PlanPreparation.Reject(PlanRejection.Structure,
+                $"Compound plan {ordered.Count} alt görev içeriyor; izin verilen üst sınır {options.MaxSubTasks}.", repairs);
 
         var orders = ordered.Select(s => s.Order).ToHashSet();
         if (orders.Count != ordered.Count || ordered.Any(s => s.Order <= 0))
-            throw new InvalidOperationException("Alt görev sıraları pozitif ve benzersiz olmalıdır.");
+            return PlanPreparation.Reject(PlanRejection.Structure, "Alt görev sıraları pozitif ve benzersiz olmalıdır.", repairs);
 
         foreach (var sub in ordered)
         {
             if (string.IsNullOrWhiteSpace(sub.Description))
-                throw new InvalidOperationException($"Alt görev {sub.Order} açıklama içermiyor.");
-            if (!WellKnown.AgentNames.Specialists.Contains(
-                    sub.TargetAgent, StringComparer.OrdinalIgnoreCase))
-                throw new InvalidOperationException(
-                    $"Alt görev {sub.Order} bilinmeyen specialist hedefliyor: '{sub.TargetAgent}'.");
-
+                return PlanPreparation.Reject(PlanRejection.Structure, $"Alt görev {sub.Order} açıklama içermiyor.", repairs);
+            if (!WellKnown.AgentNames.Specialists.Contains(sub.TargetAgent, StringComparer.OrdinalIgnoreCase))
+                return PlanPreparation.Reject(PlanRejection.Structure,
+                    $"Alt görev {sub.Order} bilinmeyen specialist hedefliyor: '{sub.TargetAgent}'.", repairs);
             if (sub.Dependencies.Count != sub.Dependencies.Distinct().Count())
-                throw new InvalidOperationException($"Alt görev {sub.Order} yinelenen bağımlılık içeriyor.");
+                return PlanPreparation.Reject(PlanRejection.Structure, $"Alt görev {sub.Order} yinelenen bağımlılık içeriyor.", repairs);
             if (sub.Dependencies.Any(dependency => !orders.Contains(dependency)))
-                throw new InvalidOperationException($"Alt görev {sub.Order} mevcut olmayan bir göreve bağımlı.");
+                return PlanPreparation.Reject(PlanRejection.Structure, $"Alt görev {sub.Order} mevcut olmayan bir göreve bağımlı.", repairs);
             if (sub.Dependencies.Any(dependency => dependency >= sub.Order))
-                throw new InvalidOperationException(
-                    $"Alt görev {sub.Order} yalnızca kendisinden önceki görevlere bağımlı olabilir.");
-
-            ValidateEntities(sub, reasoning.VerifiedEntities, originalQuery);
+                return PlanPreparation.Reject(PlanRejection.Structure,
+                    $"Alt görev {sub.Order} yalnızca kendisinden önceki görevlere bağımlı olabilir.", repairs);
         }
 
-        return ordered;
-    }
+        // Numaranın "kullanıcıdan geldiği" kaynaklar: bu mesaj + konuşmanın önceki mesajları (botun söyledikleri de — onlar müşterinin
+        // kendi kayıtlarından gelen araç çıktılarıdır) + doğrulanmış üst entity'ler.
+        var corpus = new List<string> { originalQuery };
+        if (history is not null) corpus.AddRange(history.Select(m => m.Text).Where(t => !string.IsNullOrEmpty(t)));
 
-    private static void ValidateEntities(
-        SubTask sub,
-        VerifiedEntities? parentEntities,
-        string originalQuery)
-    {
-        foreach (var (key, value) in sub.Entities)
+        var prepared = new List<SubTask>(ordered.Count);
+        foreach (var sub in ordered)
         {
-            if (!AllowedEntityKeys.Contains(key))
-                throw new InvalidOperationException(
-                    $"Alt görev {sub.Order} desteklenmeyen entity içeriyor: '{key}'.");
-            if (string.IsNullOrWhiteSpace(value) || !value.All(char.IsAsciiDigit))
-                throw new InvalidOperationException(
-                    $"Alt görev {sub.Order} için '{key}' geçerli sayısal formatta değil.");
-            if (!ContainsNumericToken(sub.Description, value))
-                throw new InvalidOperationException(
-                    $"Alt görev {sub.Order} için '{key}' değeri görev açıklamasına bağlı değil.");
+            var entities = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var (key, value) in sub.Entities)
+            {
+                if (!AllowedEntityKeys.Contains(key))
+                {
+                    repairs.Add($"Alt görev {sub.Order}: desteklenmeyen '{key}' alanı yok sayıldı.");
+                    continue;
+                }
+                if (string.IsNullOrWhiteSpace(value) || !value.All(char.IsAsciiDigit))
+                {
+                    repairs.Add($"Alt görev {sub.Order}: '{key}' sayısal değil, yok sayıldı.");
+                    continue;
+                }
+                if (!IsGrounded(value, corpus, reasoning.VerifiedEntities))
+                    return PlanPreparation.Reject(PlanRejection.UngroundedEntity,
+                        $"Alt görev {sub.Order} için '{key}' değeri kullanıcı girdisinden doğrulanamadı.", repairs);
+                if (!ContainsNumericToken(sub.Description, value)
+                    && ordered.Any(other => other.Order != sub.Order && ContainsNumericToken(other.Description, value)))
+                    return PlanPreparation.Reject(PlanRejection.CrossWiredEntity,
+                        $"Alt görev {sub.Order} için '{key}' değeri başka bir alt görevin açıklamasına ait.", repairs);
+                entities[key] = value;
+            }
 
-            var appearsInQuery = ContainsNumericToken(originalQuery, value);
-            var appearsInVerifiedParent = ParentContains(parentEntities, key, value);
-            if (!appearsInQuery && !appearsInVerifiedParent)
-                throw new InvalidOperationException(
-                    $"Alt görev {sub.Order} için '{key}' değeri kullanıcı girdisinden doğrulanamadı.");
+            // Açıklamadaki numaralar da alt görev workflow'una sorgu olarak gider: uydurulmuşsa entity'den ayıklamak yetmez.
+            foreach (Match token in IdTokenRegex().Matches(sub.Description))
+            {
+                if (!IsGrounded(token.Value, corpus, reasoning.VerifiedEntities))
+                    return PlanPreparation.Reject(PlanRejection.UngroundedEntity,
+                        $"Alt görev {sub.Order} açıklamasındaki '{token.Value}' kullanıcı girdisinden doğrulanamadı.", repairs);
+            }
+
+            prepared.Add(new SubTask
+            {
+                Order = sub.Order,
+                Intent = sub.Intent,
+                Description = sub.Description,
+                TargetAgent = sub.TargetAgent,
+                Entities = entities,
+                Dependencies = sub.Dependencies.ToList()
+            });
         }
+
+        return new PlanPreparation(prepared, null, null, repairs);
     }
 
-    private static bool ParentContains(VerifiedEntities? parent, string key, string value) => key switch
+    /// <summary>
+    /// <see cref="PrepareExecutionPlan"/>'in fırlatan sarmalayıcısı (geriye dönük uyumluluk): plan reddedilirse
+    /// <see cref="InvalidOperationException"/>.
+    /// </summary>
+    public static List<SubTask> ValidateExecutionPlan(
+        ReasoningResult reasoning,
+        string originalQuery,
+        ParallelExecutionOptions options,
+        IReadOnlyList<ConversationMessage>? history = null)
     {
-        "order_id" => string.Equals(parent?.OrderId?.Value, value, StringComparison.Ordinal),
-        "customer_id" => string.Equals(parent?.CustomerId?.Value, value, StringComparison.Ordinal),
-        "complaint_id" => string.Equals(parent?.ComplaintId?.Value, value, StringComparison.Ordinal),
-        _ => false
-    };
+        var prepared = PrepareExecutionPlan(reasoning, originalQuery, options, history);
+        if (!prepared.IsValid) throw new InvalidOperationException(prepared.Rejection);
+        return prepared.Plan!.ToList();
+    }
+
+    private static bool IsGrounded(string value, IReadOnlyList<string> corpus, VerifiedEntities? parent) =>
+        corpus.Any(text => ContainsNumericToken(text, value))
+        || string.Equals(parent?.OrderId?.Value, value, StringComparison.Ordinal)
+        || string.Equals(parent?.CustomerId?.Value, value, StringComparison.Ordinal)
+        || string.Equals(parent?.ComplaintId?.Value, value, StringComparison.Ordinal);
+
+    /// <summary>4+ haneli numara — sistemdeki sipariş/şikayet/müşteri numaralarının biçimi.</summary>
+    [GeneratedRegex(@"(?<!\d)\d{4,}(?!\d)")]
+    private static partial Regex IdTokenRegex();
 
     private static bool ContainsNumericToken(string text, string value)
     {
@@ -309,3 +360,26 @@ public class SubTaskOrchestrator
 /// ile başlatılabilir; aksi halde sırayla yürütülmelidir.
 /// </summary>
 public record SubTaskGroup(bool Parallel, IReadOnlyList<SubTask> Items);
+
+/// <summary><see cref="SubTaskOrchestrator.PrepareExecutionPlan"/> red kategorileri (metrik etiketi; düşük kardinaliteli).</summary>
+public static class PlanRejection
+{
+    public const string Structure = "structure";
+    public const string UngroundedEntity = "ungrounded_entity";
+    public const string CrossWiredEntity = "cross_wired_entity";
+}
+
+/// <summary>
+/// Hazırlanmış (gerekirse onarılmış) alt görev planı ya da red gerekçesi. <see cref="Rejection"/> iç tanılama metnidir —
+/// müşteriye gösterilmez.
+/// </summary>
+public sealed record PlanPreparation(
+    IReadOnlyList<SubTask>? Plan,
+    string? RejectionCode,
+    string? Rejection,
+    IReadOnlyList<string> Repairs)
+{
+    public bool IsValid => Plan is not null;
+
+    internal static PlanPreparation Reject(string code, string message, List<string> repairs) => new(null, code, message, repairs);
+}

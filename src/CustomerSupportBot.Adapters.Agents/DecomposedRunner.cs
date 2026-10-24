@@ -10,6 +10,8 @@ using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.Reasoning;
 using CustomerSupportBot.Domain.Model;
 using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CustomerSupportBot.Adapters.Agents;
 
@@ -20,14 +22,17 @@ internal sealed class DecomposedRunner
     private readonly IUiHintEmitter _uiHint;
     private readonly IApprovalContextAccessor _approvalContext;
     private readonly TurnFinalizer _finalizer;
+    private readonly ILogger _logger;
 
     public DecomposedRunner(
         IWorkflowRunner runner,
         ParallelExecutionOptions parallelOptions,
         IUiHintEmitter uiHint,
         IApprovalContextAccessor approvalContext,
-        TurnFinalizer finalizer)
+        TurnFinalizer finalizer,
+        ILogger<DecomposedRunner>? logger = null)
     {
+        _logger = (ILogger?)logger ?? NullLogger.Instance;
         _runner = runner;
         _parallelOptions = parallelOptions;
         _uiHint = uiHint;
@@ -42,7 +47,10 @@ internal sealed class DecomposedRunner
         ReasoningResult reasoning,
         CancellationToken ct)
     {
-        var ordered = SubTaskOrchestrator.ValidateExecutionPlan(reasoning, query, _parallelOptions);
+        var prepared = PreparePlan(reasoning, query, conversationHistory, session);
+        if (!prepared.IsValid)
+            return await _runner.RunAsync(query, conversationHistory, session, reasoning, ct).ConfigureAwait(false);
+        var ordered = prepared.Plan!.ToList();
         var baseHistory = conversationHistory != null
             ? new List<ConversationMessage>(conversationHistory)
             : new List<ConversationMessage>();
@@ -126,6 +134,23 @@ internal sealed class DecomposedRunner
         return aggregate;
     }
 
+    /// <summary>Planı hazırlar; red ya da onarım olursa iz bırakır (gerekçe iç tanılamadır, müşteriye gitmez).</summary>
+    private PlanPreparation PreparePlan(
+        ReasoningResult reasoning, string query, List<ConversationMessage>? history, AgentSession? session)
+    {
+        var prepared = SubTaskOrchestrator.PrepareExecutionPlan(reasoning, query, _parallelOptions, history);
+        if (prepared.Repairs.Count > 0)
+            _logger.LogInformation("[Decompose] Plan onarıldı | session={SessionId} repairs={Repairs}",
+                session?.SessionId, string.Join(" | ", prepared.Repairs));
+        if (!prepared.IsValid)
+        {
+            _logger.LogWarning("[Decompose] Plan reddedildi, sorgu bölünmeden tek koşuyla yürüyor | session={SessionId} code={Code} reason={Reason}",
+                session?.SessionId, prepared.RejectionCode, prepared.Rejection);
+            WorkflowMetrics.RecordDecompositionFallback(prepared.RejectionCode ?? PlanRejection.Structure);
+        }
+        return prepared;
+    }
+
     public async IAsyncEnumerable<StreamEvent> RunDecomposedStreamingAsync(
         string query,
         List<ConversationMessage>? conversationHistory,
@@ -134,22 +159,16 @@ internal sealed class DecomposedRunner
         [EnumeratorCancellation] CancellationToken ct)
     {
         var sessionId = session?.SessionId ?? string.Empty;
-        List<SubTask>? ordered = null;
-        string? validationError = null;
-        try
+        var prepared = PreparePlan(reasoning, query, conversationHistory, session);
+        if (!prepared.IsValid)
         {
-            ordered = SubTaskOrchestrator.ValidateExecutionPlan(reasoning, query, _parallelOptions);
-        }
-        catch (Exception ex)
-        {
-            validationError = ex.Message;
-        }
-
-        if (validationError != null)
-        {
-            yield return new StreamEvent(StreamEventTypes.Error, new { message = validationError });
+            // Bölünemeyen plan turu düşürmez: sorgu tek koşuyla yürür (Planning tek bir ajanı seçer). Eskiden burada iç doğrulama
+            // metni error olayıyla müşteriye gidiyor ve tur yanıtsız kalıyordu.
+            await foreach (var evt in _runner.RunStreamingAsync(query, conversationHistory, session, reasoning, ct).ConfigureAwait(false))
+                yield return evt;
             yield break;
         }
+        var ordered = prepared.Plan!.ToList();
 
         var baseHistory = conversationHistory != null
             ? new List<ConversationMessage>(conversationHistory)
@@ -157,7 +176,7 @@ internal sealed class DecomposedRunner
         var completed = new Dictionary<int, CompletedSubTask>();
 
         var collected = new SortedDictionary<int, string>();
-        var total = ordered!.Count;
+        var total = ordered.Count;
         var groups = SubTaskOrchestrator.Partition(ordered, _parallelOptions);
         var parallelGroupCount = groups.Count(g => g.Parallel && g.Items.Count > 1);
 

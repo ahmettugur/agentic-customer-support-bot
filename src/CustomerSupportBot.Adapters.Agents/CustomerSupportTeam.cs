@@ -58,7 +58,8 @@ public class CustomerSupportTeam : IAgentTeamPort, ITurnResumer
             factory, finalizer, guards, traceStore,
             approvalGate, uiHint, loggerFactory, traceProcessor, messageBuilder, checkpointing, approvalContext);
 
-        _decomposed = new DecomposedRunner(_runner, parallelOptions.Value, uiHint, approvalContext, finalizer);
+        _decomposed = new DecomposedRunner(_runner, parallelOptions.Value, uiHint, approvalContext, finalizer,
+            loggerFactory.CreateLogger<DecomposedRunner>());
     }
 
     public Task<string> RunAsync(
