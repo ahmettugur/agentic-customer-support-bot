@@ -36,6 +36,7 @@ public static class ChatNotificationLogic
         "complaint_in_review" => "🔎",
         "complaint_closed" => "✅",
         "shipment_delayed" => "⏳",
+        "complaint_waiting" => "⏳",
         _ => "🔔"
     };
 

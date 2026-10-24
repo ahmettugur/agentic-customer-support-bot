@@ -56,8 +56,11 @@ geri kalanını durdurmaz. `BatchSize` (50), ilk açılışta birikmiş yüzlerc
 **Varsayılan KAPALI** (`ProactiveOutreach:Enabled=false`): müşteriye kendiliğinden yazan bir özellik bilinçli açılmalı. Açmadan
 önce eşiği (5 gün) kargo firmalarınızın gerçek teslim süresine göre ayarlayın, aksi hâlde normal gecikmeyi "gecikme" diye bildirirsiniz.
 
-**Sınır:** Yalnızca geciken kargo taranır. Bekleyen şikayet gibi diğer "sessizlik" durumları SLA işçisinin (personel tarafı) kapsamındadır;
-müşteriye proaktif mesaj gitmez.
+**Bekleyen şikayet:** Aynı tarama, `StaleComplaintDays` (3) gündür güncellenmeyen **açık** şikayetleri de bulur ve müşteriye bir kez haber verir
+("şikayetiniz hâlâ sonuçlanmadı, ekibimiz ilgileniyor"; e-posta + sohbet içi `complaint_waiting`). Şikayetin serbest metni (müşteri girdisi) e-postaya
+girmez; yalnızca numara, sipariş ve bekleme süresi. Personel tarafındaki SLA uyarıları ayrıdır (SLA işçisi); bu müşteriye giden mesajdır.
+
+**Sınır:** Şikayet hatırlatması şikayet başına **bir kez** gider (yeniden hatırlatma yok) ve vaat vermez; çözüm süresi belirtmez.
 
 ## Canlı değerlendirme (LLM-hakem) ve sürüm karşılaştırma
 

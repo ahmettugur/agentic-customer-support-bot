@@ -20,6 +20,9 @@ public sealed class ProactiveOutreachOptions
     /// <summary>Kargolanalı bu kadar gün geçtiği hâlde teslim edilmemiş sipariş "geciken" sayılır.</summary>
     public int DelayedShipmentDays { get; set; } = 5;
 
+    /// <summary>Açık bir şikayet bu kadar gündür güncellenmediyse müşteriye bir kez haber verilir.</summary>
+    public int StaleComplaintDays { get; set; } = 3;
+
     public int PollIntervalMinutes { get; set; } = 30;
 
     /// <summary>Bir taramada işlenecek en çok sipariş (ilk açılışta birikmiş yüzlerce siparişe aynı anda e-posta gitmesin).</summary>
@@ -40,7 +43,8 @@ public sealed class ProactiveOutreachService(
     IOptions<ProactiveOutreachOptions> options,
     IOptions<EmailOptions> email,
     ILogger<ProactiveOutreachService> logger,
-    TimeProvider? clock = null)
+    TimeProvider? clock = null,
+    IComplaintRepository? complaints = null)
 {
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
 
@@ -78,25 +82,63 @@ public sealed class ProactiveOutreachService(
             }
         }
 
-        if (notified > 0) logger.LogInformation("[Proactive] {Count} geciken kargo bildirildi", notified);
+        notified += await NotifyStaleComplaintsAsync(o, now, ct);
+
+        if (notified > 0) logger.LogInformation("[Proactive] {Count} proaktif bildirim gönderildi", notified);
         return notified;
     }
 
-    private async Task<bool> SendEmailAsync(string key, string orderId, Domain.Model.OrderInfo order, long customerId, int days, CancellationToken ct)
+    private async Task<int> NotifyStaleComplaintsAsync(ProactiveOutreachOptions o, DateTime now, CancellationToken ct)
+    {
+        if (complaints is null) return 0;
+        var cutoff = now.AddDays(-Math.Max(1, o.StaleComplaintDays));
+        var notified = 0;
+
+        var page = await complaints.ListAsync(new ComplaintQuery(ComplaintQuery.OpenStatus, PageSize: Math.Max(1, o.BatchSize)), ct);
+        foreach (var (complaintId, c) in page.Items.Where(i => i.Complaint.UpdatedAt <= cutoff).Select(i => (i.ComplaintId, i.Complaint)))
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                if (!long.TryParse(c.CustomerId, out var customerId)) continue;
+                var key = $"proactive:stale-complaint:{complaintId}";
+                if (!await ledger.TryClaimAsync(key, ct)) continue;
+
+                var days = Math.Max(1, (int)Math.Floor((now - c.UpdatedAt).TotalDays));
+                hub?.Publish(c.CustomerId, CustomerNotifications.ForStaleComplaint(complaintId, c, days, now));
+                notified++;
+
+                if (!email.Value.Enabled || !sender.IsEnabled) continue;
+                if (!await SendAsync(key, async address =>
+                    ProactiveEmailComposer.StaleComplaint(complaintId, c, days, address, await customers.GetFullNameAsync(customerId, ct), email.Value.PublicBaseUrl),
+                    customerId, complaintId, ct)) notified--;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "[Proactive] Bekleyen şikayet bildirimi işlenemedi | complaint={ComplaintId}", complaintId);
+            }
+        }
+        return notified;
+    }
+
+    private Task<bool> SendEmailAsync(string key, string orderId, Domain.Model.OrderInfo order, long customerId, int days, CancellationToken ct) =>
+        SendAsync(key, async address => ProactiveEmailComposer.DelayedShipment(
+            orderId, order, days, address, await customers.GetFullNameAsync(customerId, ct), email.Value.PublicBaseUrl), customerId, orderId, ct);
+
+    private async Task<bool> SendAsync(string key, Func<string, Task<EmailMessage>> compose, long customerId, string reference, CancellationToken ct)
     {
         try
         {
             var address = await customers.GetEmailAsync(customerId, ct);
             if (string.IsNullOrWhiteSpace(address)) return true; // talep tutulur: adres yokken yeniden denemenin anlamı yok
 
-            var name = await customers.GetFullNameAsync(customerId, ct);
-            await sender.SendAsync(ProactiveEmailComposer.DelayedShipment(orderId, order, days, address, name, email.Value.PublicBaseUrl), ct);
-            logger.LogInformation("[Proactive] Geciken kargo e-postası gönderildi | order={OrderId} to={To}", orderId, PiiMasker.MaskEmail(address));
+            await sender.SendAsync(await compose(address), ct);
+            logger.LogInformation("[Proactive] E-posta gönderildi | ref={Reference} to={To}", reference, PiiMasker.MaskEmail(address));
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(ex, "[Proactive] Geciken kargo e-postası gönderilemedi | order={OrderId}", orderId);
+            logger.LogError(ex, "[Proactive] E-posta gönderilemedi | ref={Reference}", reference);
             try { await ledger.ReleaseAsync(key, CancellationToken.None); }
             catch (Exception releaseEx) { logger.LogWarning(releaseEx, "[Proactive] Defter kaydı geri bırakılamadı | key={Key}", key); }
             return false;
