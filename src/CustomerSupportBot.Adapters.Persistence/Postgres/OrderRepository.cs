@@ -250,8 +250,8 @@ public sealed class OrderRepository : IOrderRepository
         // sipariş tarihinden sayılıyordu; geç teslim edilen bir siparişin müşterisine fiilen
         // birkaç gün kalıyordu. Teslim tarihi olmayan eski kayıtlar sipariş tarihine düşer —
         // bilinen en erken, dolayısıyla en tutucu tarih.
-        var windowStart = e.DeliveredAt ?? e.OrderDate;
-        if ((DateTime.UtcNow - windowStart).TotalDays > 14)
+        var windowStart = OrderPolicy.ReturnWindowStart(e.DeliveredAt, e.OrderDate);
+        if (!OrderPolicy.IsWithinReturnWindow(windowStart, DateTime.UtcNow))
             return false;
 
         e.Status = WellKnown.OrderStatuses.ReturnRequested;

@@ -19,3 +19,23 @@ anlamına gelmezler. Ayar: `LowConfidenceHandoff:Enabled`, `LowConfidenceHandoff
 
 **Sınır:** Güven, *planlama* aşamasının isteği anlama güvenidir; son yanıtın doğruluğunu ölçmez. Yanıt metnindeki "bilmiyorum"
 gibi ifadeleri yakalamaz.
+
+## Politika kod olarak: iade/iptal kural motoru
+
+İptal ve iade kuralları `Domain/Model/OrderPolicy.cs` içinde **tek yerde** durur. Önceden kural üç yerde (depo, araç mesajı,
+prompt) ayrı ayrı yaşıyor, süre dolduğunda araç "süresi dolmuş **olabilir**" diye tahmin yürütüyordu.
+
+| Karar | Kural |
+|---|---|
+| İptal | Yalnızca `İşleniyor` / `Kargolandı`; teslim edilmişse "iade talebi oluşturulabilir" yönlendirmesi |
+| İade | Yalnızca `Teslim Edildi` **ve teslimden itibaren 14 gün** (teslim tarihi yoksa sipariş tarihi — en tutucu); son gün dahil |
+| Zaten iptal / iade var | Ayrı kodlarla reddedilir |
+
+Her karar `PolicyDecision` döner: izin, kod, müşteriye aynen söylenebilecek gerekçe, son tarih ve kalan gün
+("Teslimden itibaren 14 günlük iade süresi 18.10.2026 tarihinde doldu.").
+
+**Yeni araç `order_eligibility_tool`** (salt-okunur, onay gerektirmez): müşteri "iade edebilir miyim?", "süre doldu mu?" diye
+sorduğunda ajan talep **açmadan** kural motorundan kesin cevap alır. Sahiplik önce doğrulanır; başka müşterinin siparişi
+sızdırılmaz. Depo (`RequestReturn`) ve `ReturnRequestTool` hata mesajı aynı kuralı kullanır, yani tool ile depo ayrışamaz.
+
+**Sınır:** Sesli görüşme (Realtime) araç listesine eklenmedi; orada iade kuralı hâlâ yürütme anında uygulanır.

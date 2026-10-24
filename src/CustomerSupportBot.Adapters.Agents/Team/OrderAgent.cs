@@ -40,6 +40,7 @@ internal sealed class OrderAgent : SupportAgentBase
                     Tools = [
                         approvalGate.BuildOrderPlacementTool(),
                         approvalGate.BuildOrderStatusTool(),
+                        approvalGate.BuildOrderEligibilityTool(),
                         approvalGate.BuildGetLastOrderTool(),
                         approvalGate.BuildGetAllOrdersTool(),
                         approvalGate.BuildOrderCancelTool(),

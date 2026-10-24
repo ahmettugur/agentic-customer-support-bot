@@ -16,13 +16,17 @@ public sealed class OrderToolsService : IOrderToolsService
     private readonly SideEffectIdempotencyCache _idempotency;
     private readonly IUiHintEmitter? _uiHint;
 
+    private readonly TimeProvider _clock;
+
     public OrderToolsService(
         IOrderRepository orders,
         IProductCatalogRepository products,
         ICustomerRepository customers,
         SideEffectIdempotencyCache? idempotency = null,
-        IUiHintEmitter? uiHint = null)
+        IUiHintEmitter? uiHint = null,
+        TimeProvider? clock = null)
     {
+        _clock = clock ?? TimeProvider.System;
         _uiHint = uiHint;
         _orders = orders;
         _products = products;
@@ -328,6 +332,40 @@ public sealed class OrderToolsService : IOrderToolsService
             data: new { orderId, previousStatus = order.Status, newStatus = WellKnown.OrderStatuses.Cancelled, reason });
     }
 
+    [Description("Bir siparişin iade veya iptal edilip edilemeyeceğini kural motoruna göre söyler (SALT-OKUNUR; hiçbir talep oluşturmaz). " +
+                 "Müşteri 'iade edebilir miyim?', 'iptal edebilir miyim?', 'iade süresi ne zaman doluyor?' diye sorduğunda kullanın.")]
+    public ToolResult OrderEligibilityTool(
+        [Description("Sipariş numarası (zorunlu, ör. '1042')")] string orderId,
+        [Description("Sorulan işlem: 'return' (iade) veya 'cancel' (iptal)")] string action,
+        string customerId)
+    {
+        var parsed = action?.Trim().ToLowerInvariant() switch
+        {
+            "return" or "iade" => (OrderAction?)OrderAction.Return,
+            "cancel" or "iptal" => OrderAction.Cancel,
+            _ => null
+        };
+        if (parsed is null)
+            return ToolResult.ValidationError("İşlem 'return' (iade) veya 'cancel' (iptal) olmalıdır.", "action");
+
+        // Sahiplik önce: başka müşterinin siparişinin tarihleri/durumu sızdırılmaz.
+        if (ValidateOrderActionable(orderId, customerId) is { } blocked) return blocked;
+
+        var order = _orders.Get(orderId)!;
+        var decision = OrderPolicy.Evaluate(parsed.Value, order, _clock.GetUtcNow().UtcDateTime);
+        return ToolResult.Ok(
+            message: decision.Message,
+            data: new
+            {
+                orderId,
+                action = parsed.Value == OrderAction.Return ? "return" : "cancel",
+                eligible = decision.Allowed,
+                code = decision.Code,
+                deadline = decision.DeadlineUtc,
+                daysLeft = decision.DaysLeft
+            });
+    }
+
     [Description("Teslim edilmiş bir sipariş için iade talebi oluşturur. Sadece 'Teslim Edildi' durumundaki " +
                  "ve teslimden itibaren 14 gün içindeki siparişler iade edilebilir. Sonuç ToolResult olarak döner.")]
     public ToolResult ReturnRequestTool(
@@ -355,12 +393,11 @@ public sealed class OrderToolsService : IOrderToolsService
 
         if (!_orders.RequestReturn(orderId, reason))
         {
-            var detail = order.Status != WellKnown.OrderStatuses.Delivered
-                ? $"Sipariş durumu '{order.Status}' — sadece 'Teslim Edildi' durumundaki siparişler iade edilebilir."
-                : "Teslimden itibaren 14 günlük iade süresi dolmuş olabilir.";
+            // Gerekçe tahmin edilmez: kural motorundan (süre dolduysa tam tarih dahil).
+            var decision = OrderPolicy.EvaluateReturn(order, _clock.GetUtcNow().UtcDateTime);
             return ToolResult.Conflict(
-                WellKnown.ToolErrorCodes.ReturnNotEligible,
-                $"'{orderId}' numaralı sipariş iade edilemez. {detail}");
+                decision.Allowed ? WellKnown.ToolErrorCodes.ReturnNotEligible : decision.Code,
+                $"'{orderId}' numaralı sipariş iade edilemez. {(decision.Allowed ? "Talep şu an işlenemedi; lütfen tekrar deneyin." : decision.Message)}");
         }
 
         return ToolResult.Ok(

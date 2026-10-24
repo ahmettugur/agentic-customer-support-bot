@@ -120,6 +120,9 @@ public static class WellKnown
         public const string GetAllOrders = "get_all_orders_tool";
         public const string OrderCancel = "order_cancel_tool";
         public const string ReturnRequest = "return_request_tool";
+
+        /// <summary>İade/iptal uygunluğu (SALT-OKUNUR, kural motoru). Yazma karşılıkları: <see cref="OrderCancel"/>, <see cref="ReturnRequest"/>.</summary>
+        public const string OrderEligibility = "order_eligibility_tool";
         public const string HumanHandoff = "human_handoff_tool";
     }
 
