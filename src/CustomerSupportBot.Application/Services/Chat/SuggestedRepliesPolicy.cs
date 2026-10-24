@@ -45,6 +45,10 @@ public static class SuggestedRepliesPolicy
         return suggestions.Take(MaxSuggestions).ToArray();
     }
 
+    /// <summary>Düşük güvende temsilci seçeneğini listenin başına koyar (en fazla <see cref="MaxSuggestions"/>).</summary>
+    public static IReadOnlyList<string> WithHuman(IReadOnlyList<string> suggestions) =>
+        suggestions.Contains(Human) ? suggestions : [Human, .. suggestions.Take(MaxSuggestions - 1)];
+
     private static bool AsksTheCustomer(string response)
     {
         var text = response.TrimEnd();

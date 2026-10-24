@@ -72,6 +72,10 @@ public static class SessionStateExtractor
             state.ConsecutiveNegativeTurns++;
         else
             state.ConsecutiveNegativeTurns = 0;
+
+        // Ardışık düşük güven sayacı — yalnızca bu tur bir güven sinyali geldiyse ilerler/sıfırlanır.
+        if (llm?.ConfidenceScore is { } confidence)
+            state.LowConfidenceTurns = confidence < WellKnown.ConfidenceThresholds.Low ? state.LowConfidenceTurns + 1 : 0;
     }
 
     /// <summary>

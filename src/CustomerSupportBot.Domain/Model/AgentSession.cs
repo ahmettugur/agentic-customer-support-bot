@@ -87,6 +87,12 @@ public class SessionState
     public int ConsecutiveNegativeTurns { get; set; }
 
     /// <summary>
+    /// Ardışık düşük güvenli tur sayısı (planlama güven skoru &lt; <see cref="WellKnown.ConfidenceThresholds.Low"/>).
+    /// Bot art arda isteği anlayamıyorsa insana devir kararının girdisi; bkz. LowConfidenceHandoffPolicy.
+    /// </summary>
+    public int LowConfidenceTurns { get; set; }
+
+    /// <summary>
     /// Görüşmeye bir insan dahil oldu mu (eskalasyon açıldı ya da temsilci devraldı)? Yapay zekâ çözüm
     /// oranının (containment) temeli — bkz. HumanInvolvementTracker. Bir kez true olur, geri dönmez.
     /// </summary>

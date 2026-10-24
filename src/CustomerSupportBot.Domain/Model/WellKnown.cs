@@ -450,6 +450,12 @@ public static class WellKnown
     }
 
     /// <summary>Duygu eşikleri.</summary>
+    public static class ConfidenceThresholds
+    {
+        /// <summary>Planlama güven skoru bunun ALTINDAYSA tur "düşük güvenli" sayılır.</summary>
+        public const double Low = 0.5;
+    }
+
     public static class SentimentThresholds
     {
         /// <summary>Bu skorun altında negative kabul edilir.</summary>

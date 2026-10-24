@@ -45,6 +45,7 @@ public sealed class ChatPortService : IChatPort
     private static readonly TimeSpan TurnLockWait = TimeSpan.FromSeconds(120);
 
     private readonly OutputGuardrailService? _guardrail;
+    private readonly LowConfidenceHandoffOptions _handoff;
 
     public ChatPortService(
         IAgentTeamPort team,
@@ -62,8 +63,10 @@ public sealed class ChatPortService : IChatPort
         ILlmSpendGuard? spendGuard = null,
         IEscalationSink? escalations = null,
         IOptions<LlmBudgetOptions>? budgetOptions = null,
-        OutputGuardrailService? guardrail = null)
+        OutputGuardrailService? guardrail = null,
+        IOptions<LowConfidenceHandoffOptions>? handoff = null)
     {
+        _handoff = handoff?.Value ?? new LowConfidenceHandoffOptions();
         _guardrail = guardrail;
         _attribution = attribution;
         _spendGuard = spendGuard;
@@ -290,6 +293,33 @@ public sealed class ChatPortService : IChatPort
         return _budget.ConversationLimitMessage;
     }
 
+    /// <summary>
+    /// Düşük güven sayacına göre devir kararı; Escalate ise eskalasyonu burada açar (müşteri
+    /// <c>handoff_pending</c> olayını kalıcı akıştan alır, temsilci Agent Assist'ten özet görür).
+    /// </summary>
+    private async Task<HandoffDecision> DecideHandoffAsync(string sessionId, string query, string? intent, CancellationToken ct)
+    {
+        var current = await _sessions.GetAsync(sessionId, ct);
+        if (current is null) return HandoffDecision.None;
+
+        var hasOpen = _escalations?.GetOpen().Any(e => e.SessionId == sessionId) ?? true; // sink yoksa otomatik açılamaz
+        var decision = LowConfidenceHandoffPolicy.Decide(
+            current.State.LowConfidenceTurns, intent, _modeRepo.GetMode(sessionId), hasOpen, _handoff);
+        if (decision != HandoffDecision.Escalate) return decision;
+
+        await _escalations!.CreateAsync(new EscalationRequest
+        {
+            SessionId = sessionId,
+            AgentName = "LowConfidence",
+            UserQuery = query,
+            Reason = string.Create(CultureInfo.InvariantCulture,
+                $"Bot art arda {current.State.LowConfidenceTurns} turdur isteği anlayamadı (güven < {WellKnown.ConfidenceThresholds.Low:F2})")
+        });
+        _logger.LogInformation("[Handoff] Düşük güven eskalasyonu açıldı | session={SessionId} turns={Turns}",
+            sessionId, current.State.LowConfidenceTurns);
+        return decision;
+    }
+
     /// <summary>Yanıtı çıktı guardrail'inden geçirir; müdahale yoksa AYNI string referansı döner.</summary>
     private async Task<string> GuardAsync(
         string answer, string query, IReadOnlyList<ConversationMessage> history, AgentSession session, CancellationToken ct)
@@ -418,6 +448,11 @@ public sealed class ChatPortService : IChatPort
         var suggestions = SuggestedRepliesPolicy.Suggest(
             reasoningResult?.Intent, terminationReason, canonicalResponse,
             isCompound: Services.Reasoning.SubTaskOrchestrator.IsCompoundQuery(reasoningResult));
+
+        // Düşük güven: sayaç PersistExchangeAsync içinde (SessionStateExtractor) güncellendi.
+        var handoff = await DecideHandoffAsync(sessionId, query, reasoningResult?.Intent, ct);
+        if (handoff == HandoffDecision.Offer && terminationReason == WellKnown.Termination.ReasonCompleted)
+            suggestions = SuggestedRepliesPolicy.WithHuman(suggestions);
         if (suggestions.Count > 0)
             yield return new StreamEvent(StreamEventTypes.UiHint, new { kind = "suggested_replies", suggestions });
 
