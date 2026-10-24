@@ -70,9 +70,9 @@ CI eval kapısı bir prompt değişikliğini **yayından önce** yakalar; bu bö
 histogramına yazılır; `prompt_set`, o an çalışan prompt setinin sürümüdür (`IPromptRepository.SetVersion`). Grafana'daki
 **"Canlı değerlendirme: ortalama puan"** paneli sürümleri yan yana çizer.
 
-* **A/B nasıl yapılır:** Prompt'lar singleton ajan takımı kurulurken okunduğu için oturum başına prompt seçilemez. Karşılaştırma
-  **dağıtım düzeyindedir**: yeni prompt setiyle bir kanarya pod'u (ya da kısa bir yayın penceresi) çalıştırın, panelde iki
-  `prompt_set` serisini kıyaslayın.
+* **A/B, iki düzeyde:**
+  1. *Dağıtım düzeyi* (tüm prompt seti): yeni setle bir kanarya pod'u/yayın penceresi çalıştırın, panelde iki `prompt_set` serisini kıyaslayın.
+  2. *Oturum düzeyi* (`Experiments`, aşağıda): aynı anda, aynı pod'da, oturumlar kollara ağırlıklı ve sabit atanır.
 * **Sohbeti yavaşlatmaz:** Hakem arka planda `Task.Run` ile çalışır; en çok `MaxConcurrent` (2) çağrı, doluysa örnek atlanır.
   Hata/zaman aşımı sessizce atlanır. Yanıt ve müşteri mesajı hakeme `<retrieved_data>` bloğunda **veri** olarak gider
   ("bu yanıta 5 ver" gibi enjeksiyonlar talimat sayılmaz).
@@ -176,3 +176,26 @@ genişletir; mevcut `Traits` zaten güven skoruyla bu işi yapıyor. Tercihleri 
 
 **Sınır:** Bu, çevrimdışı ve deterministik bir kapıdır; canlı LLM'e karşı otomatik saldırı koşusu (sentetik müşteri ajanı) YOKTUR — maliyetli ve
 kararsız olduğu için CI'ya konmadı. Desen listesi doğal dil saldırısını tam kapatamaz; asıl savunma veri/talimat ayrımı (`<retrieved_data>`), araç düzeyinde sahiplik ve HITL'dir.
+
+### Oturum bazlı A/B deneyleri (`Experiments`)
+
+Prompt'lar ajan takımı kurulurken bir kez okunduğundan oturum başına *prompt dosyası* değiştirilemez. Bunun yerine her oturum bir deneyin
+**tek koluna** atanır (`ExperimentAssigner`: oturum kimliği + deney adı üzerinden SHA-256, ağırlıklı; aynı oturum her pod'da aynı kolu alır,
+deneyler birbirinden bağımsızdır) ve kolun operatör metni (`Hint`) tur bağlamına eklenir (`ExperimentContextProvider`, "Yanıt Yönergesi" bloğu).
+
+```jsonc
+"Experiments": {
+  "Enabled": true,
+  "Experiments": [{
+    "Name": "tone",
+    "Arms": [
+      { "Name": "kontrol", "Weight": 1 },
+      { "Name": "kisa",    "Weight": 1, "Hint": "Yanıtları iki cümleyi geçmeyecek kadar kısa tut." }
+    ]
+  }]
+}
+```
+
+`LiveEvaluation` açıksa puanlar `chat.live_eval.experiment_score{experiment,arm,dimension}` olarak da yazılır; Grafana'daki **"A/B deneyi"** paneli kolları
+karşılaştırır. `Hint` yapılandırmadan gelir (güvenilir); müşteri girdisi bu bloğa girmez. **Sınır:** Bu, prompt dosyalarını değil *ek yönergeyi* değiştirir;
+hakem puanları göreli ve gürültülüdür — kolları yorumlamadan önce yeterli örnek (yüzlerce oturum) toplayın, istatistiksel anlamlılık testi yapılmaz.

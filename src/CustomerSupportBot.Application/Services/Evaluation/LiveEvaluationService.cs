@@ -85,6 +85,9 @@ public sealed class LiveEvaluationService
     public const string PromptKey = "services/live-judge";
 
     private static readonly Meter Meter = new(TelemetryConstants.MeterName, "1.0.0");
+    private static readonly Histogram<double> ExperimentHistogram = Meter.CreateHistogram<double>(
+        "chat.live_eval.experiment_score", unit: "{score}", description: "Canlı LLM-hakem puanı 1-5 (experiment, arm, dimension).");
+
     private static readonly Histogram<double> ScoreHistogram = Meter.CreateHistogram<double>(
         "chat.live_eval.score", unit: "{score}", description: "Canlı LLM-hakem puanı 1-5 (dimension, prompt_set).");
 
@@ -94,11 +97,14 @@ public sealed class LiveEvaluationService
     private readonly LiveEvaluationOptions _options;
     private readonly ILogger<LiveEvaluationService> _logger;
     private readonly SemaphoreSlim _slots;
+    private readonly ExperimentOptions _experiments;
 
     public LiveEvaluationService(
         IGeneralChatClient llm, IPromptRepository prompts, IContextSanitizer sanitizer,
-        IOptions<LiveEvaluationOptions> options, ILogger<LiveEvaluationService> logger)
+        IOptions<LiveEvaluationOptions> options, ILogger<LiveEvaluationService> logger,
+        IOptions<ExperimentOptions>? experiments = null)
     {
+        _experiments = experiments?.Value ?? new ExperimentOptions();
         _llm = llm;
         _prompts = prompts;
         _sanitizer = sanitizer;
@@ -151,6 +157,7 @@ public sealed class LiveEvaluationService
             Record("helpfulness", scores.Helpfulness, promptSet);
             Record("groundedness", scores.Groundedness, promptSet);
             Record("tone", scores.Tone, promptSet);
+            RecordExperiments(sessionId, scores);
 
             if (scores.Helpfulness <= 2 || scores.Groundedness <= 2)
                 _logger.LogWarning("[LiveEval] Düşük puanlı yanıt | session={SessionId} turn={Turn} helpfulness={H} groundedness={G} issue={Issue}",
@@ -161,6 +168,19 @@ public sealed class LiveEvaluationService
         {
             _logger.LogDebug(ex, "[LiveEval] Puanlama başarısız | session={SessionId}", sessionId);
             return null;
+        }
+    }
+
+    private void RecordExperiments(string sessionId, JudgeScores scores)
+    {
+        if (!_experiments.Enabled) return;
+        foreach (var experiment in _experiments.Effective)
+        {
+            var arm = ExperimentAssigner.Assign(sessionId, experiment);
+            if (arm is null) continue;
+            foreach (var (dimension, value) in new[] { ("helpfulness", scores.Helpfulness), ("groundedness", scores.Groundedness), ("tone", scores.Tone) })
+                ExperimentHistogram.Record(value, new KeyValuePair<string, object?>("experiment", experiment.Name),
+                    new KeyValuePair<string, object?>("arm", arm.Name), new KeyValuePair<string, object?>("dimension", dimension));
         }
     }
 

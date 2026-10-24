@@ -85,6 +85,7 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
         services.Configure<Services.Notifications.ProactiveOutreachOptions>(configuration.GetSection(Services.Notifications.ProactiveOutreachOptions.SectionName));
+        services.Configure<Services.Evaluation.ExperimentOptions>(configuration.GetSection(Services.Evaluation.ExperimentOptions.SectionName));
         services.Configure<Services.Evaluation.LiveEvaluationOptions>(configuration.GetSection(Services.Evaluation.LiveEvaluationOptions.SectionName));
         services.Configure<Services.Chat.ModelRoutingOptions>(configuration.GetSection(Services.Chat.ModelRoutingOptions.SectionName));
         services.AddSingleton<Ports.Outbound.AI.ITurnModelTier, Services.Chat.AsyncLocalTurnModelTier>();
@@ -191,6 +192,7 @@ public static class ApplicationServiceCollectionExtensions
         // Kimlik/tarih system mesajı — yazılı workflow ve sesli native mod aynı örneği kullanır.
         services.AddSingleton<CustomerIdentityHintBuilder>();
 
+        services.AddSingleton<IContextProvider, ExperimentContextProvider>();
         services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
         services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();
         services.AddSingleton<IContextProvider, CustomerOpenMattersContextProvider>();

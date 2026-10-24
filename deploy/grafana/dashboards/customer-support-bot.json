@@ -293,6 +293,36 @@
           "legendFormat": "{{dimension}} · {{prompt_set}}"
         }
       ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "A/B deneyi: ortalama puan (deney × kol × boyut)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 1,
+          "max": 5
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (experiment, arm, dimension) (increase(chat_live_eval_experiment_score_sum[1h])) / sum by (experiment, arm, dimension) (increase(chat_live_eval_experiment_score_count[1h]))",
+          "legendFormat": "{{experiment}}/{{arm}} · {{dimension}}"
+        }
+      ]
     }
   ]
 }
