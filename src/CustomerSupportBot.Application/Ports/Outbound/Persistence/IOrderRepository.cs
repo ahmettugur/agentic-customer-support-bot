@@ -59,4 +59,10 @@ public interface IOrderRepository
 
     /// <summary><c>Kargolandı → Teslim Edildi</c>; <c>DeliveredAt</c> yazılır (iade süresi buradan sayılır).</summary>
     OrderStatusUpdateResult MarkDelivered(string orderId, DateTime deliveredAtUtc);
+
+    /// <summary>
+    /// Hâlâ "Kargolandı" olup <paramref name="cutoffUtc"/>'dan ÖNCE kargolanmış siparişler (en eskiden yeniye, en çok <paramref name="limit"/>).
+    /// Proaktif geciken-kargo taraması içindir; kargo tarihi olmayan kayıtlar dönmez.
+    /// </summary>
+    IReadOnlyList<(string OrderId, OrderInfo Order)> GetShippedBefore(DateTime cutoffUtc, int limit);
 }

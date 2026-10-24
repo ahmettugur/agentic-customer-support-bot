@@ -39,3 +39,22 @@ sorduğunda ajan talep **açmadan** kural motorundan kesin cevap alır. Sahiplik
 sızdırılmaz. Depo (`RequestReturn`) ve `ReturnRequestTool` hata mesajı aynı kuralı kullanır, yani tool ile depo ayrışamaz.
 
 **Sınır:** Sesli görüşme (Realtime) araç listesine eklenmedi; orada iade kuralı hâlâ yürütme anında uygulanır.
+
+## Proaktif ajan: geciken kargo
+
+Bildirimlerin geri kalanı bir olaya tepki verir (kargolandı, teslim edildi). Burada sistem **olay olmadığını** fark eder:
+`ProactiveOutreachWorker` her `PollIntervalMinutes` (30 dk) bir `ProactiveOutreachService.RunOnceAsync` çalıştırır; hâlâ
+`Kargolandı` durumunda olup `DelayedShipmentDays` (5) günden önce kargolanmış siparişleri bulur ve müşteriye haber verir:
+
+* **E-posta** (kalıcı): "Siparişiniz hâlâ yolda — #…"; kargo firması/takip no ile, tüm metin HTML-escape'li.
+* **Sohbet içi bildirim** (anlık, müşteri o an sohbetteyse): `shipment_delayed` türü, ⏳ ikonu.
+
+Sipariş başına tek bildirim: `proactive:delayed-shipment:{sipariş}` anahtarı `INotificationLedger`'da talep edilir (çok pod'da da).
+E-posta gönderilemezse talep geri bırakılır, sonraki tarama yeniden dener; adres yoksa talep tutulur. Bir siparişin hatası taramanın
+geri kalanını durdurmaz. `BatchSize` (50), ilk açılışta birikmiş yüzlerce siparişe aynı anda e-posta gitmesini engeller.
+
+**Varsayılan KAPALI** (`ProactiveOutreach:Enabled=false`): müşteriye kendiliğinden yazan bir özellik bilinçli açılmalı. Açmadan
+önce eşiği (5 gün) kargo firmalarınızın gerçek teslim süresine göre ayarlayın, aksi hâlde normal gecikmeyi "gecikme" diye bildirirsiniz.
+
+**Sınır:** Yalnızca geciken kargo taranır. Bekleyen şikayet gibi diğer "sessizlik" durumları SLA işçisinin (personel tarafı) kapsamındadır;
+müşteriye proaktif mesaj gitmez.

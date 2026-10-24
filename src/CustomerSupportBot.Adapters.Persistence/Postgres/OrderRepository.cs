@@ -161,6 +161,21 @@ public sealed class OrderRepository : IOrderRepository
             .ToList();
     }
 
+    public IReadOnlyList<(string OrderId, OrderInfo Order)> GetShippedBefore(DateTime cutoffUtc, int limit)
+    {
+        var cutoff = DateTime.SpecifyKind(cutoffUtc, DateTimeKind.Utc);
+        using var ctx = _dbFactory.CreateDbContext();
+        return ctx.Orders
+            .AsNoTracking()
+            .Include(o => o.Details).ThenInclude(d => d.Product)
+            .Where(o => o.Status == WellKnown.OrderStatuses.Shipped && o.ShippedAt != null && o.ShippedAt < cutoff)
+            .OrderBy(o => o.ShippedAt)
+            .Take(Math.Max(1, limit))
+            .AsEnumerable()
+            .Select(e => (e.Code.ToString(), MapToModel(e)))
+            .ToList();
+    }
+
     public (string OrderId, OrderInfo Order)? GetLast(string customerId)
     {
         if (!long.TryParse(customerId, out var cid)) return null;

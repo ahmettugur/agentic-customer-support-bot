@@ -84,6 +84,7 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
         services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
+        services.Configure<Services.Notifications.ProactiveOutreachOptions>(configuration.GetSection(Services.Notifications.ProactiveOutreachOptions.SectionName));
         services.Configure<Services.Chat.LowConfidenceHandoffOptions>(configuration.GetSection(Services.Chat.LowConfidenceHandoffOptions.SectionName));
         services.Configure<Services.Chat.OutputGuardrailOptions>(configuration.GetSection(Services.Chat.OutputGuardrailOptions.SectionName));
         services.AddSingleton<Services.Chat.OutputGuardrailService>();
@@ -157,6 +158,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<Services.Notifications.CustomerNotificationHub>(sp => new Services.Notifications.CustomerNotificationHub(
             sp.GetService<Ports.Outbound.Messaging.IMessageBusPort>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Notifications.CustomerNotificationHub>>()));
+        services.AddSingleton<Services.Notifications.ProactiveOutreachService>();
         services.AddSingleton<Services.Notifications.OrderStatusEmailService>();
         services.AddSingleton<IOrderFulfillmentPort, Services.Orders.OrderFulfillmentService>();
         services.AddSingleton<Services.Notifications.ComplaintStatusEmailService>();

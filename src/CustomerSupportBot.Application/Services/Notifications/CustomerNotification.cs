@@ -19,6 +19,7 @@ public static class CustomerNotificationKinds
     public const string OrderDelivered = "order_delivered";
     public const string ComplaintInReview = "complaint_in_review";
     public const string ComplaintClosed = "complaint_closed";
+    public const string ShipmentDelayed = "shipment_delayed";
 }
 
 /// <summary>Bildirim metinleri (saf). Bilinmeyen tür için null döner — çağıran hiçbir şey yayınlamaz.</summary>
@@ -44,6 +45,11 @@ public static class CustomerNotifications
                 return null;
         }
     }
+
+    public static CustomerNotification ForDelayedShipment(string orderId, OrderInfo order, int daysInTransit, DateTime? now = null) =>
+        new(CustomerNotificationKinds.ShipmentDelayed, "Siparişiniz hâlâ yolda",
+            $"#{orderId} numaralı sipariş {daysInTransit} gündür kargoda. Takibi bizimle kontrol edebilir ya da temsilciye bağlanabilirsiniz.",
+            orderId, now ?? DateTime.UtcNow);
 
     public static CustomerNotification? ForComplaint(string complaintId, ComplaintInfo complaint, string kind, DateTime? now = null)
     {
