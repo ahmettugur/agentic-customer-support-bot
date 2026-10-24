@@ -131,3 +131,21 @@ sağlayıcı (Mailgun/SendGrid/Postmark…)  ──POST /channels/email/inbound�
 
 **Sınırlar:** Sağlayıcıya özgü ayrıştırıcı (multipart/form → bu JSON) bu depoda YOK; sağlayıcınızın webhook'unu normalize eden küçük bir köprü gerekir.
 Ekler (fotoğraf) işlenmez. HITL onayı gerektiren işlemler e-postadan da onay kuyruğuna düşer; onay sonucu mevcut bildirim e-postasıyla gelir.
+
+## Müşteri hafızası: kayıttan "açık konular"
+
+`CustomerProfile` davranıştan **çıkarım** yapar ("kısa yanıt sever", "sık iade ister"). Eksik olan, kayıttaki **kesin** durumdu: bot müşteri sormadan
+neyin açık olduğunu bilmiyordu. `CustomerOpenMattersContextProvider` her turda bağlama şunları ekler:
+
+* son sipariş ve durumu (kargodaysa firma, takip no, kaç gün önce kargolandı); teslim edilmiş ve 30 günden eski ise eklenmez,
+* bekleyen iade talepleri,
+* açık şikayetler (en çok 3; numara, sipariş, durum, son güncelleme).
+
+Böylece ajan "Merhaba Ahmet Bey, 1057 numaralı siparişiniz 5 gündür kargoda; şikayetiniz incelemede" diyebilir. Blok açıkça "kesin bilgi, ayrıntı için aracı çağır"
+diye işaretlidir; ajan buradan tahmin yürütmek yerine araçla doğrular.
+
+**Güvenlik:** yalnızca JWT'ye bağlı kimlik (`AuthenticatedCustomerId`) kullanılır — LLM'in metinden çıkardığı `CustomerId` asla; müşterinin serbest metni (şikayet açıklaması)
+bağlama **girmez**; yönetici girdisi olan kargo firması/takip no sanitize edilip 64 karaktere kırpılır. Depo hatasında tur bozulmaz, blok boş kalır.
+
+**Yapılmadı:** konuşmadan LLM ile "tercih çıkarıp kalıcı saklama" (ör. "mağazadan teslim ister"). Yanlış çıkarım kalıcı hâle gelir ve KVKK silme/dışa aktarma kapsamını
+genişletir; mevcut `Traits` zaten güven skoruyla bu işi yapıyor. Tercihleri güvenilir kılmak için müşteriye açıkça onaylatan bir akış gerekir.

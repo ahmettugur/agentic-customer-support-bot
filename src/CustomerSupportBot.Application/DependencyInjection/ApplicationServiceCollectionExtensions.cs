@@ -192,6 +192,7 @@ public static class ApplicationServiceCollectionExtensions
 
         services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
         services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();
+        services.AddSingleton<IContextProvider, CustomerOpenMattersContextProvider>();
         services.AddSingleton<IContextProvider, ProductRecommendationContextProvider>();
         services.AddSingleton<ContextPipeline>();
         services.AddSingleton<IContextPipeline>(sp => sp.GetRequiredService<ContextPipeline>());
