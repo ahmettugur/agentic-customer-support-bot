@@ -84,8 +84,18 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<SlaOptions>(configuration.GetSection(SlaOptions.SectionName));
         services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
+        services.Configure<Services.Notifications.ProactiveOutreachOptions>(configuration.GetSection(Services.Notifications.ProactiveOutreachOptions.SectionName));
+        services.Configure<Services.Evaluation.ExperimentOptions>(configuration.GetSection(Services.Evaluation.ExperimentOptions.SectionName));
+        services.Configure<Services.Evaluation.LiveEvaluationOptions>(configuration.GetSection(Services.Evaluation.LiveEvaluationOptions.SectionName));
+        services.Configure<Services.Chat.ModelRoutingOptions>(configuration.GetSection(Services.Chat.ModelRoutingOptions.SectionName));
+        services.AddSingleton<Ports.Outbound.AI.ITurnModelTier, Services.Chat.AsyncLocalTurnModelTier>();
+        services.Configure<Services.Channels.InboundEmailOptions>(configuration.GetSection(Services.Channels.InboundEmailOptions.SectionName));
+        services.AddSingleton<Services.Channels.InboundEmailThrottle>();
+        services.AddScoped<Services.Channels.InboundEmailService>();
+        services.Configure<Services.Chat.LowConfidenceHandoffOptions>(configuration.GetSection(Services.Chat.LowConfidenceHandoffOptions.SectionName));
         services.Configure<Services.Chat.OutputGuardrailOptions>(configuration.GetSection(Services.Chat.OutputGuardrailOptions.SectionName));
         services.AddSingleton<Services.Chat.OutputGuardrailService>();
+        services.AddSingleton<Services.Evaluation.LiveEvaluationService>();
         services.Configure<Services.Budget.LlmBudgetOptions>(configuration.GetSection(Services.Budget.LlmBudgetOptions.SectionName));
         services.Configure<Services.Conversations.ConversationClosingOptions>(
             configuration.GetSection(Services.Conversations.ConversationClosingOptions.SectionName));
@@ -156,6 +166,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<Services.Notifications.CustomerNotificationHub>(sp => new Services.Notifications.CustomerNotificationHub(
             sp.GetService<Ports.Outbound.Messaging.IMessageBusPort>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Notifications.CustomerNotificationHub>>()));
+        services.AddSingleton<Services.Notifications.ProactiveOutreachService>();
         services.AddSingleton<Services.Notifications.OrderStatusEmailService>();
         services.AddSingleton<IOrderFulfillmentPort, Services.Orders.OrderFulfillmentService>();
         services.AddSingleton<Services.Notifications.ComplaintStatusEmailService>();
@@ -181,8 +192,11 @@ public static class ApplicationServiceCollectionExtensions
         // Kimlik/tarih system mesajı — yazılı workflow ve sesli native mod aynı örneği kullanır.
         services.AddSingleton<CustomerIdentityHintBuilder>();
 
+        services.AddSingleton<IContextProvider, TurnNoticeContextProvider>();
+        services.AddSingleton<IContextProvider, ExperimentContextProvider>();
         services.AddSingleton<IContextProvider, ConversationSummaryProvider>();
         services.AddSingleton<IContextProvider, CustomerProfileContextProvider>();
+        services.AddSingleton<IContextProvider, CustomerOpenMattersContextProvider>();
         services.AddSingleton<IContextProvider, ProductRecommendationContextProvider>();
         services.AddSingleton<ContextPipeline>();
         services.AddSingleton<IContextPipeline>(sp => sp.GetRequiredService<ContextPipeline>());

@@ -217,6 +217,7 @@ public static class ApplicationServicesExtensions
         // Çökme/deploy yüzünden yarım kalan workflow turlarını bitirir — WorkflowCheckpointing ayarları (varsayılan kapalı).
         services.AddSingleton<IShutdownSignal, HostShutdownSignal>();
         services.AddHostedService<WorkflowRecoveryWorker>();
+        services.AddHostedService<ProactiveOutreachWorker>();
         // RoutingLoadTrackerService kaldırıldı — load-tracking HumanAgentPortService constructor'ında.
 
         // KnowledgeBase startup adapter — use-case mantığı Application katmanında; bu sadece startup tetikleyicisi

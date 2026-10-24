@@ -35,7 +35,9 @@ namespace CustomerSupportBot.Domain.Model;
 public sealed record TurnSignals(
     string? Intent,
     string? SentimentLabel,
-    double? SentimentScore)
+    double? SentimentScore,
+    double? ConfidenceScore = null,
+    bool Clarifying = false)
 {
     /// <summary>
     /// Reasoning sonucundan sinyalleri süzer. "Üretilmedi" sayılan değerler <c>null</c>'a
@@ -61,11 +63,26 @@ public sealed record TurnSignals(
                            !(reasoning.Sentiment == WellKnown.Sentiments.Neutral &&
                              reasoning.SentimentScore == 0.5);
 
-        if (intent is null && !hasSentiment) return null;
+        // Güven: yalnızca gerçek bir reasoning'den. Zaman aşımı/hata yer tutucusu (IsFallback) botun isteği
+        // anlayamadığını göstermez. Düşük skor tek başına da sinyaldir (intent/sentiment olmasa bile).
+        // 0.5 parser'ın alan hiç dönmediğinde koyduğu varsayılandır (neutral@0.5 gibi) → sinyal sayılmaz.
+        double? confidence = reasoning.IsFallback || reasoning.ConfidenceScore == 0.5 ? null : reasoning.ConfidenceScore;
+        var lowConfidence = confidence is < WellKnown.ConfidenceThresholds.Low;
+
+        // Canlı veride planlama güveni belirsiz mesajlarda bile 0,6 altına inmiyor (model "yüksek" diyor); asıl sinyal: niyet "genel" kaldı
+        // ve plan yalnızca netleştirme sorusu. Tanınmış bir niyetin içindeki netleştirme (ürün/adet sormak) normaldir, sayılmaz.
+        var clarifying = !reasoning.IsFallback
+            && reasoning.Intent == WellKnown.Intents.General
+            && reasoning.Steps.Count > 0
+            && reasoning.Steps.All(s => string.Equals(s.Action, "clarify", StringComparison.OrdinalIgnoreCase));
+
+        if (intent is null && !hasSentiment && !lowConfidence && !clarifying) return null;
 
         return new TurnSignals(
             intent,
             hasSentiment ? reasoning.Sentiment : null,
-            hasSentiment ? reasoning.SentimentScore : null);
+            hasSentiment ? reasoning.SentimentScore : null,
+            confidence,
+            clarifying);
     }
 }

@@ -6,6 +6,8 @@ using CustomerSupportBot.Adapters.AI.OpenAi;
 using CustomerSupportBot.Adapters.AI.Qdrant;
 using CustomerSupportBot.Adapters.AI.Realtime;
 using CustomerSupportBot.Application.Ports.Outbound.AI;
+using CustomerSupportBot.Application.Services.Memory;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -38,7 +40,13 @@ public static class AiAdapterServiceCollectionExtensions
 
         if (memOpts.Enabled)
         {
-            services.AddSingleton<IEmbeddingPort, OpenAiEmbeddingAdapter>();
+            services.AddSingleton<OpenAiEmbeddingAdapter>();
+            services.AddSingleton<IEmbeddingPort>(sp =>
+            {
+                var emb = sp.GetRequiredService<IOptions<SemanticMemoryOptions>>().Value.Embedding;
+                return new CachingEmbeddingPort(sp.GetRequiredService<OpenAiEmbeddingAdapter>(),
+                    emb.QueryCacheSize, TimeSpan.FromMinutes(Math.Max(1, emb.QueryCacheMinutes)));
+            });
             services.AddSingleton<IVectorMemoryPort, QdrantVectorMemoryAdapter>();
         }
 

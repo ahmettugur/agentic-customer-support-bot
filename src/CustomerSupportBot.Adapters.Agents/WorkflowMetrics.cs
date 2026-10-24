@@ -23,6 +23,13 @@ internal static class WorkflowMetrics
         "agent.workflow.recoveries", unit: "{turn}",
         description: "Çökme sonrası devam taramasının sonuçları (result: resumed / discarded / failed).");
 
+    private static readonly Counter<long> DecompositionFallbacks = Meter.CreateCounter<long>(
+        "agent.decomposition.fallbacks", unit: "{turn}",
+        description: "Bileşik plan reddedildi, sorgu bölünmeden tek koşuyla yürüdü (reason: structure / ungrounded_entity / cross_wired_entity).");
+
+    public static void RecordDecompositionFallback(string reason) =>
+        DecompositionFallbacks.Add(1, new KeyValuePair<string, object?>("reason", reason));
+
     public static void RecordRecovery(string result) =>
         Recoveries.Add(1, new KeyValuePair<string, object?>("result", result));
 

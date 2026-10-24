@@ -32,7 +32,15 @@ public static class AiServicesExtensions
         {
             var options = sp.GetRequiredService<IOptions<AiOptions>>().Value;
             var inner = AiClientFactory.CreateStandardChatClient(options);
-            return WrapWithTelemetry(sp, inner, ResolveStandardModel(options), options.Provider.ToString());
+            var standard = WrapWithTelemetry(sp, inner, ResolveStandardModel(options), options.Provider.ToString());
+
+            // Model yönlendirme: hızlı model yapılandırılmışsa her çağrı turun katmanına göre seçilir. Hızlı istemci KENDİ
+            // modeliyle telemetriye/bütçeye sarılır — maliyet doğru modelin fiyatıyla hesaplanır.
+            if (!sp.GetRequiredService<IOptions<ModelRoutingOptions>>().Value.Enabled) return standard;
+            var fastInner = AiClientFactory.CreateFastChatClient(options);
+            if (fastInner is null) return standard;
+            var fast = WrapWithTelemetry(sp, fastInner, ResolveFastModel(options), options.Provider.ToString());
+            return new ModelRoutingChatClient(standard, fast, sp.GetRequiredService<ITurnModelTier>());
         });
 
         services.AddSingleton<ReasoningChatClient>(sp =>
@@ -109,6 +117,12 @@ public static class AiServicesExtensions
     {
         AiProvider.AzureOpenAI => options.AzureOpenAI.Deployment ?? "(unknown)",
         _                      => options.OpenAI.Model ?? "(unknown)"
+    };
+
+    private static string ResolveFastModel(AiOptions options) => options.Provider switch
+    {
+        AiProvider.AzureOpenAI => options.AzureOpenAI.FastDeployment ?? "(unknown)",
+        _                      => options.OpenAI.FastModel ?? "(unknown)"
     };
 
     private static string ResolveReasoningModel(AiOptions options) => options.Provider switch

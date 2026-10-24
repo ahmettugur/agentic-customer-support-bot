@@ -227,6 +227,7 @@ agentScope.MapAgentSavedReplyEndpoints();
 agentScope.MapAgentConversationClosingEndpoints();
 agentScope.MapAgentComplaintEndpoints();
 
+app.MapInboundEmailEndpoints();
 app.MapAnalyticsEndpoints();
 
 app.Run();

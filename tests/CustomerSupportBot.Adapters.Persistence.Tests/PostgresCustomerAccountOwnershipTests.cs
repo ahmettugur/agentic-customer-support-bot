@@ -133,4 +133,33 @@ public class PostgresCustomerAccountOwnershipTests
         IsActive = true,
         CreatedAt = DateTime.UtcNow,
     };
+
+    // ─── FindIdByEmailAsync: gelen e-posta göndericisini müşteriye eşler ───
+
+    [Fact]
+    public async Task FindIdByEmail_ResolvesAUniqueAddress_CaseInsensitively()
+    {
+        var mail = $"benzersiz-{Guid.NewGuid():N}@example.com";
+        var id = await NewCustomerAsync(mail);
+
+        (await NewRepo().FindIdByEmailAsync(mail.ToUpperInvariant(), TestContext.Current.CancellationToken)).Should().Be(id);
+    }
+
+    [Fact]
+    public async Task FindIdByEmail_ReturnsNull_WhenTwoCustomersShareTheAddress()
+    {
+        var mail = $"ortak-{Guid.NewGuid():N}@example.com";
+        await NewCustomerAsync(mail);
+        await NewCustomerAsync(mail);
+
+        (await NewRepo().FindIdByEmailAsync(mail, TestContext.Current.CancellationToken))
+            .Should().BeNull("belirsizlikte kimlik tahmin edilmez");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("kayitsiz-adres@example.com")]
+    public async Task FindIdByEmail_ReturnsNull_ForBlankOrUnknown(string mail) =>
+        (await NewRepo().FindIdByEmailAsync(mail, TestContext.Current.CancellationToken)).Should().BeNull();
 }

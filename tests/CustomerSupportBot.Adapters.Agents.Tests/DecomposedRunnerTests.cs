@@ -460,8 +460,13 @@ public class DecomposedRunnerTests
             .Should().Contain(text => text!.Contains("failed", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Yürütülemeyen plan turu DÜŞÜRMEZ ve müşteriye iç hata metni GİTMEZ: sorgu bölünmeden, tek bir koşuyla yürür.
+    /// Eskiden burada bir error olayı yayınlanıyor, arayüz de "Compound plan 3 alt görev içeriyor…" metnini bot yanıtı
+    /// olarak gösteriyordu.
+    /// </summary>
     [Fact]
-    public async Task InvalidFanOut_StreamReturnsErrorBeforeStartingAnySubTask()
+    public async Task InvalidFanOut_FallsBackToOneUndecomposedRun_WithoutAnError()
     {
         var runner = new FakeRunner();
         var options = new ParallelExecutionOptions { MaxSubTasks = 2 };
@@ -472,9 +477,43 @@ public class DecomposedRunnerTests
 
         var events = await CollectAsync(Build(runner, options), reasoning);
 
-        runner.Calls.Should().BeEmpty();
-        events.Should().ContainSingle(e => e.Type == StreamEventTypes.Error);
-        events.Should().NotContain(e => e.Type == StreamEventTypes.ResponseStart);
+        runner.Calls.Should().Equal("bileşik sorgu");
+        events.Should().NotContain(e => e.Type == StreamEventTypes.Error);
+        CompleteText(events).Should().Be("yanıt<bileşik sorgu>");
+    }
+
+    [Fact]
+    public async Task InvalidFanOut_NonStreaming_AlsoFallsBackToOneRun()
+    {
+        var runner = new FakeRunner();
+        var reasoning = Reasoning(
+            Sub(1, "9999 siparişini iptal et", WellKnown.AgentNames.Order),
+            Sub(2, "ürünleri listele", WellKnown.AgentNames.Product));
+
+        var answer = await Build(runner).RunDecomposedAsync(
+            "siparişimi iptal et ve ürünleri listele", null, new AgentSession { SessionId = "s1" }, reasoning, CancellationToken.None);
+
+        answer.Should().Be("yanıt<siparişimi iptal et ve ürünleri listele>");
+        runner.Calls.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AnIdFromTheConversationHistory_KeepsTheTurnDecomposed()
+    {
+        var runner = new FakeRunner();
+        var reasoning = Reasoning(
+            new SubTask { Order = 1, Description = "1030 siparişini iptal et", TargetAgent = WellKnown.AgentNames.Order, Intent = "x",
+                          Entities = new() { ["order_id"] = "1030" } },
+            Sub(2, "ürün listesini göster", WellKnown.AgentNames.Product));
+        var history = new List<ConversationMessage> { new(ConversationRoles.User, "1030 numaralı siparişim nerede?") };
+
+        var events = new List<StreamEvent>();
+        await foreach (var e in Build(runner).RunDecomposedStreamingAsync(
+            "o siparişi iptal et ve ürün listesini göster", history, new AgentSession { SessionId = "s1" }, reasoning, CancellationToken.None))
+            events.Add(e);
+
+        runner.Calls.Should().HaveCount(2, "plan geçerli: iki alt görev ayrı koşulur");
+        events.Should().NotContain(e => e.Type == StreamEventTypes.Error);
     }
 
     [Theory]

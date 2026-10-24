@@ -21,6 +21,16 @@ public static class AiClientFactory
         _ => CreateOpenAIChatClient(options.OpenAI, Require(options.OpenAI.Model, "AI:OpenAI:Model")),
     };
 
+    /// <summary>Hızlı (ucuz) sohbet istemcisi; <c>FastModel</c>/<c>FastDeployment</c> yapılandırılmamışsa <c>null</c>.</summary>
+    public static IChatClient? CreateFastChatClient(AiOptions options) => options.Provider switch
+    {
+        AiProvider.AzureOpenAI when !string.IsNullOrWhiteSpace(options.AzureOpenAI.FastDeployment) =>
+            CreateAzureChatClient(options.AzureOpenAI, options.AzureOpenAI.FastDeployment!),
+        AiProvider.OpenAI when !string.IsNullOrWhiteSpace(options.OpenAI.FastModel) =>
+            CreateOpenAIChatClient(options.OpenAI, options.OpenAI.FastModel!),
+        _ => null
+    };
+
     /// <summary>Reasoning model wrapper'ı üretir.</summary>
     /// <param name="decorate">
     /// İç IChatClient'ı (telemetri vb.) dekore etmek için opsiyonel sarmalayıcı.

@@ -5,6 +5,7 @@ using CustomerSupportBot.Application.Ports.Outbound.Observability;
 using CustomerSupportBot.Application.Ports.Outbound.Locking;
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Ports.Outbound.AI;
 using CustomerSupportBot.Application.Services.Attachments;
 using CustomerSupportBot.Application.Services.Budget;
 using CustomerSupportBot.Domain.Exceptions;
@@ -45,6 +46,15 @@ public sealed class ChatPortService : IChatPort
     private static readonly TimeSpan TurnLockWait = TimeSpan.FromSeconds(120);
 
     private readonly OutputGuardrailService? _guardrail;
+    private static readonly System.Diagnostics.Metrics.Counter<long> TierCounter = new System.Diagnostics.Metrics.Meter(
+        Ports.Outbound.Observability.TelemetryConstants.MeterName, "1.0.0").CreateCounter<long>(
+        "chat.model_tier", unit: "{turn}", description: "Model yönlendirme kararı (tier=standard|fast).");
+
+    private readonly ICustomerProfileService? _profiles;
+    private readonly ITurnModelTier? _modelTier;
+    private readonly ModelRoutingOptions _routing;
+    private readonly Services.Evaluation.LiveEvaluationService? _liveEval;
+    private readonly LowConfidenceHandoffOptions _handoff;
 
     public ChatPortService(
         IAgentTeamPort team,
@@ -62,8 +72,18 @@ public sealed class ChatPortService : IChatPort
         ILlmSpendGuard? spendGuard = null,
         IEscalationSink? escalations = null,
         IOptions<LlmBudgetOptions>? budgetOptions = null,
-        OutputGuardrailService? guardrail = null)
+        OutputGuardrailService? guardrail = null,
+        IOptions<LowConfidenceHandoffOptions>? handoff = null,
+        Services.Evaluation.LiveEvaluationService? liveEval = null,
+        ITurnModelTier? modelTier = null,
+        IOptions<ModelRoutingOptions>? routing = null,
+        ICustomerProfileService? profiles = null)
     {
+        _profiles = profiles;
+        _modelTier = modelTier;
+        _routing = routing?.Value ?? new ModelRoutingOptions();
+        _liveEval = liveEval;
+        _handoff = handoff?.Value ?? new LowConfidenceHandoffOptions();
         _guardrail = guardrail;
         _attribution = attribution;
         _spendGuard = spendGuard;
@@ -156,10 +176,12 @@ public sealed class ChatPortService : IChatPort
 
         var reasoningResult = await _reasoning.ReasonAsync(query, session, history, ct);
 
+        await ApplyPreferencesAsync(session, request.Query, ct);
         using var approvalScope = _approvalContext.SetScope(sessionId, null, query, session.State.AuthenticatedCustomerId);
         string response;
         try
         {
+            using var tierScope = BeginModelTier(reasoningResult);
             response = await _team.RunAsync(query, history, session, reasoningResult, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -178,7 +200,10 @@ public sealed class ChatPortService : IChatPort
         // davranış farkı da böylece kapanıyor.)
         await _sessions.AddExchangeAsync(sessionId, query, response, TurnSignals.From(reasoningResult), ct);
 
-        return new ChatResponse(response, sessionId, reasoningResult);
+        // Canlı değerlendirme akışsız yoldan da beslenir (MCP/A2A/e-posta kanalı bu yolu kullanır).
+        _liveEval?.Observe(sessionId, (await _sessions.GetAsync(sessionId, ct))?.State.TurnCount ?? 0, query, response);
+
+        return new ChatResponse(response, sessionId, await CustomerReasoningAsync(reasoningResult, query, history, session, ct));
     }
 
     /// <summary>
@@ -290,6 +315,121 @@ public sealed class ChatPortService : IChatPort
         return _budget.ConversationLimitMessage;
     }
 
+    /// <summary>
+    /// Düşük güven sayacına göre devir kararı; Escalate ise eskalasyonu burada açar (müşteri
+    /// <c>handoff_pending</c> olayını kalıcı akıştan alır, temsilci Agent Assist'ten özet görür).
+    /// </summary>
+    private async Task<HandoffDecision> DecideHandoffAsync(string sessionId, string query, string? intent, CancellationToken ct)
+    {
+        var current = await _sessions.GetAsync(sessionId, ct);
+        if (current is null) return HandoffDecision.None;
+
+        var hasOpen = _escalations?.GetOpen().Any(e => e.SessionId == sessionId) ?? true; // sink yoksa otomatik açılamaz
+        var decision = LowConfidenceHandoffPolicy.Decide(
+            current.State.LowConfidenceTurns, intent, _modeRepo.GetMode(sessionId), hasOpen, _handoff);
+        if (decision != HandoffDecision.Escalate) return decision;
+
+        await _escalations!.CreateAsync(new EscalationRequest
+        {
+            SessionId = sessionId,
+            AgentName = "LowConfidence",
+            UserQuery = query,
+            // Neden müşteriye de gösterilir (handoff_pending): iç sayaç/eşik değil, sade bir cümle.
+            Reason = "İsteğinizi tam netleştiremedim; bir temsilci size yardımcı olacak."
+        });
+        _logger.LogInformation("[Handoff] Düşük güven eskalasyonu açıldı | session={SessionId} turns={Turns}",
+            sessionId, current.State.LowConfidenceTurns);
+        return decision;
+    }
+
+    /// <summary>
+    /// Açık, kalıcılık işaretli tercih ifadesini (kapalı sözlük; bkz. PreferenceIntentParser) doğrulanmış müşterinin profiline yazar ve müşteriye
+    /// görünür onay için ui_hint döner. Anonim oturumda hiçbir şey kaydedilmez. Hata turu bozmaz.
+    /// </summary>
+    private async Task<IReadOnlyList<object>> ApplyPreferencesAsync(AgentSession session, string text, CancellationToken ct)
+    {
+        session.State.TurnNotice = null;   // önceki turdan kalan not asla taşınmaz
+        var customerId = session.State.AuthenticatedCustomerId;
+        if (_profiles is null || string.IsNullOrWhiteSpace(customerId)) return [];
+        var changes = Domain.Model.Memory.PreferenceIntentParser.ParseAll(text);
+        if (changes.Count == 0) return [];
+
+        var hints = new List<object>();
+        var notices = new List<string>();
+        try
+        {
+            foreach (var c in changes)
+            {
+                if (c.Key is null)
+                {
+                    await _profiles.ClearPreferencesAsync(customerId, ct);
+                    hints.Add(new { kind = "preferences_cleared" });
+                    notices.Add("Müşterinin kayıtlı tüm tercihleri silindi.");
+                }
+                else if (await _profiles.SetPreferenceAsync(customerId, c.Key, c.Value!, ct))
+                {
+                    var label = Domain.Model.Memory.CustomerPreferences.LabelOf(c.Key, c.Value!);
+                    hints.Add(new { kind = "preference_saved", key = c.Key, value = c.Value, label });
+                    notices.Add($"Müşterinin kalıcı tercihi kaydedildi: {label}.");
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "[Preferences] Tercih kaydedilemedi | session={SessionId}", session.SessionId);
+        }
+
+        // Ajan, sistemin az önce yaptığını bilmeli: aksi halde "tercihlerimi sıfırla"ya "hangi tercihleri?" diye soruyordu (canlı denemede görüldü).
+        if (notices.Count > 0)
+            session.State.TurnNotice = string.Join(" ", notices) + " Bunu tek cümleyle teyit et; müşteriye tekrar sorma, ek bir işlem gerekmiyor.";
+        return hints;
+    }
+
+    /// <summary>Reasoning'in müşteriye giden görünümü: iç alanlar çıkarılır, serbest metinler çıktı guardrail'inden geçer.</summary>
+    private async Task<CustomerReasoningView?> CustomerReasoningAsync(
+        ReasoningResult? reasoning, string query, IReadOnlyList<ConversationMessage> history, AgentSession session, CancellationToken ct)
+    {
+        if (reasoning is null) return null;
+        Func<string, string> clean = _guardrail is null
+            ? static s => s
+            : await _guardrail.CreateTextSanitizerAsync(query, history, session.State.AuthenticatedCustomerId, ct);
+        return CustomerReasoningView.From(reasoning, clean);
+    }
+
+    private ModelTier ChooseTier(ReasoningResult? reasoning)
+    {
+        if (_modelTier is null) return ModelTier.Standard;
+        var tier = ModelTierPolicy.Choose(reasoning, Services.Reasoning.SubTaskOrchestrator.IsCompoundQuery(reasoning), _routing);
+        if (_routing.Enabled) TierCounter.Add(1, new KeyValuePair<string, object?>("tier", tier.ToString().ToLowerInvariant()));
+        return tier;
+    }
+
+    private IDisposable? BeginModelTier(ReasoningResult? reasoning) =>
+        _modelTier is null ? null : _modelTier.Begin(ChooseTier(reasoning));
+
+    /// <summary>
+    /// Takımın akışını model katmanı kapsamında numaralandırır — <see cref="WithCostScope{T}"/> ile aynı sebep: async iterator
+    /// içinde AsyncLocal'a verilen değer <c>yield</c>'i aşmaz, bu yüzden kapsam her <c>MoveNextAsync</c> çevresinde yeniden açılır.
+    /// </summary>
+    private async IAsyncEnumerable<T> WithModelTier<T>(
+        IAsyncEnumerable<T> source, ModelTier tier, [EnumeratorCancellation] CancellationToken ct)
+    {
+        if (_modelTier is null || tier == ModelTier.Standard)
+        {
+            await foreach (var item in source.WithCancellation(ct)) yield return item;
+            yield break;
+        }
+
+        await using var e = source.GetAsyncEnumerator(ct);
+        while (true)
+        {
+            bool hasNext;
+            using (_modelTier.Begin(tier)) hasNext = await e.MoveNextAsync();
+            if (!hasNext) yield break;
+            yield return e.Current;
+        }
+    }
+
     /// <summary>Yanıtı çıktı guardrail'inden geçirir; müdahale yoksa AYNI string referansı döner.</summary>
     private async Task<string> GuardAsync(
         string answer, string query, IReadOnlyList<ConversationMessage> history, AgentSession session, CancellationToken ct)
@@ -351,6 +491,9 @@ public sealed class ChatPortService : IChatPort
             yield break;
         }
 
+        // Müşterinin AÇIKÇA söylediği kalıcı tercih (bundan sonra kısa yanıt ver): tur başlamadan kaydedilir ki bu turun bağlamına girsin.
+        var preferenceHints = await ApplyPreferencesAsync(session, request.Query, ct);
+
         // Harcama limiti aşıldıysa LLM'e gidilmez; sabit metin normal bir yanıt gibi akar.
         if (await BudgetReplyAsync(sessionId, query, ct) is { } budgetReply)
         {
@@ -365,14 +508,30 @@ public sealed class ChatPortService : IChatPort
         var history = await _sessions.GetHistoryAsync(sessionId, ct);
 
         // Reasoning stream
+        //
+        // Müşteriye ham reasoning ÇIKMAZ: modelin akıttığı JSON parçalarından yalnızca analysis metni iletilir; reasoning_complete'in yükü iç
+        // alanları (nextAction, rationale, sanity uyarıları, doğrulanmış kimlikler…) taşımayan, temizlenmiş müşteri görünümüdür. Tur kararları
+        // (niyet, güven, alt görevler, model katmanı…) yine İÇ ReasoningResult'tan okunur.
         ReasoningResult? reasoningResult = null;
+        var analysisStreamer = new ReasoningAnalysisStreamer();
         await foreach (var evt in WithCostScope(_reasoning.ReasonStreamingAsync(query, session, history, ct), sessionId, ct))
         {
-            yield return evt;
+            if (evt.Type == StreamEventTypes.ReasoningDelta && evt.Data is TextDeltaPayload rawDelta)
+            {
+                var plain = analysisStreamer.Feed(rawDelta.Text);
+                if (plain.Length > 0) yield return new StreamEvent(StreamEventTypes.ReasoningDelta, new TextDeltaPayload(plain));
+                continue;
+            }
+
             if (evt.Type == StreamEventTypes.ReasoningComplete && evt.Data is ReasoningResult rr)
             {
                 reasoningResult = rr;
+                yield return new StreamEvent(StreamEventTypes.ReasoningComplete,
+                    await CustomerReasoningAsync(rr, query, history, session, ct));
+                continue;
             }
+
+            yield return evt;
         }
 
         using var approvalScope = _approvalContext.SetScope(sessionId, null, query, session.State.AuthenticatedCustomerId);
@@ -387,7 +546,8 @@ public sealed class ChatPortService : IChatPort
         var responseBuilder = new System.Text.StringBuilder();
         string? canonicalResponse = null;
         string? terminationReason = null;
-        await foreach (var evt in WithCostScope(_team.RunStreamingAsync(query, history, session, reasoningResult, ct), sessionId, ct))
+        await foreach (var evt in WithCostScope(
+            WithModelTier(_team.RunStreamingAsync(query, history, session, reasoningResult, ct), ChooseTier(reasoningResult), ct), sessionId, ct))
         {
             var outgoing = evt;
             if (evt.Type == StreamEventTypes.ResponseDelta && evt.Data is TextDeltaPayload { Text.Length: > 0 } delta)
@@ -408,18 +568,29 @@ public sealed class ChatPortService : IChatPort
         }
 
         // Kanonik metin hiç gelmediyse (hata/iptal) delta birleşimi de geçmişe yazılmadan önce kontrolden geçer.
+        session.State.TurnNotice = null;   // not yalnızca bu turun bağlamı içindi
         var fullResponse = (canonicalResponse
             ?? await GuardAsync(responseBuilder.ToString(), query, history, session, ct)).TrimEnd();
         await _sessionState.PersistExchangeAsync(
             sessionId, query, fullResponse, _chatBridge, TurnSignals.From(reasoningResult), ct);
+
+        // Canlı değerlendirme (örneklenen turlar, arka planda; sohbet yolunu beklemez).
+        if (_liveEval is not null && canonicalResponse is not null)
+            _liveEval.Observe(sessionId, (await _sessions.GetAsync(sessionId, ct))?.State.TurnCount ?? 0, query, fullResponse);
 
         // Hızlı yanıt çipleri: yanıt ve kayıttan SONRA (istemci balon henüz açıkken alır). Yanıt hiç tamamlanmadıysa
         // (hata/iptal: response_complete yok) terminationReason null kalır ve öneri üretilmez.
         var suggestions = SuggestedRepliesPolicy.Suggest(
             reasoningResult?.Intent, terminationReason, canonicalResponse,
             isCompound: Services.Reasoning.SubTaskOrchestrator.IsCompoundQuery(reasoningResult));
+
+        // Düşük güven: sayaç PersistExchangeAsync içinde (SessionStateExtractor) güncellendi.
+        var handoff = await DecideHandoffAsync(sessionId, query, reasoningResult?.Intent, ct);
+        if (handoff == HandoffDecision.Offer && terminationReason == WellKnown.Termination.ReasonCompleted)
+            suggestions = SuggestedRepliesPolicy.WithHuman(suggestions);
         if (suggestions.Count > 0)
             yield return new StreamEvent(StreamEventTypes.UiHint, new { kind = "suggested_replies", suggestions });
+        foreach (var hint in preferenceHints) yield return new StreamEvent(StreamEventTypes.UiHint, hint);
 
         // Sentiment events
         //

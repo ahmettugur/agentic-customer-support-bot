@@ -88,6 +88,12 @@ internal sealed class ReasoningTraceConfiguration : IEntityTypeConfiguration<Rea
             .HasColumnName("final_critique")
             .HasColumnType("jsonb");
 
+        builder.Property(t => t.ContextPartsJson)
+            .HasColumnName("context_parts")
+            .HasColumnType("jsonb")
+            .HasDefaultValue("[]")
+            .IsRequired();
+
         builder.Property(t => t.AgentVisitsJson)
             .HasColumnName("agent_visits")
             .HasColumnType("jsonb")

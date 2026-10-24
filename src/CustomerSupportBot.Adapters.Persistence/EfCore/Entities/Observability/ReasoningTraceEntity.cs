@@ -25,7 +25,11 @@ public sealed class ReasoningTraceEntity
     public string? ReasoningJson { get; set; }
     public string? PlanningJson { get; set; }
     public string SpecialistReasoningsJson { get; set; } = "[]";
+    /// <summary>ResponseAgent'ın öz-eleştirisi (<c>SelfCritique</c>) — eskiden hiç yazılmıyordu.</summary>
     public string? FinalCritiqueJson { get; set; }
+
+    /// <summary>Bağlam sağlayıcılarının bu turdaki katkısı ("model neyi biliyordu").</summary>
+    public string ContextPartsJson { get; set; } = "[]";
     public string AgentVisitsJson { get; set; } = "[]";
     public string ToolCallsJson { get; set; } = "[]";
 }

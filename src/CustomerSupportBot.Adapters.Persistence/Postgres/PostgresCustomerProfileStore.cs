@@ -171,6 +171,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore, ICache
             entity.ProductInterestsJson = mapped.ProductInterestsJson;
             entity.RecentRatingsJson = mapped.RecentRatingsJson;
             entity.TraitsJson = mapped.TraitsJson;
+            entity.PreferencesJson = mapped.PreferencesJson;
             entity.Summary = mapped.Summary;
             entity.AdminNote = mapped.AdminNote;
             entity.TotalSessions = mapped.TotalSessions;
@@ -247,6 +248,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore, ICache
         ProductInterestsJson = JsonSerializer.Serialize(p.ProductInterests, _json),
         RecentRatingsJson = JsonSerializer.Serialize(p.RecentRatings, _json),
         TraitsJson = JsonSerializer.Serialize(p.Traits, _json),
+        PreferencesJson = JsonSerializer.Serialize(p.Preferences, _json),
         Summary = p.Summary,
         AdminNote = p.AdminNote,
         TotalSessions = p.TotalSessions,
@@ -265,6 +267,7 @@ public sealed class PostgresCustomerProfileStore : ICustomerProfileStore, ICache
         ProductInterests = JsonSerializer.Deserialize<List<string>>(e.ProductInterestsJson, _json) ?? new(),
         RecentRatings = JsonSerializer.Deserialize<List<int>>(e.RecentRatingsJson, _json) ?? new(),
         Traits = JsonSerializer.Deserialize<List<InferredTrait>>(e.TraitsJson, _json) ?? new(),
+        Preferences = JsonSerializer.Deserialize<Dictionary<string, string>>(e.PreferencesJson, _json) ?? new(),
         Summary = e.Summary,
         AdminNote = e.AdminNote,
         TotalSessions = e.TotalSessions,

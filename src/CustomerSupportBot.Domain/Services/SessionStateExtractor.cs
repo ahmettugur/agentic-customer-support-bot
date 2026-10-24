@@ -72,6 +72,14 @@ public static class SessionStateExtractor
             state.ConsecutiveNegativeTurns++;
         else
             state.ConsecutiveNegativeTurns = 0;
+
+        // Ardışık düşük güven sayacı — yalnızca bu tur bir güven sinyali geldiyse ilerler/sıfırlanır.
+        // Belirsiz tur = düşük güven YA DA "genel niyet + yalnızca netleştirme" (bkz. TurnSignals.Clarifying).
+        if (llm is { Clarifying: true } || llm?.ConfidenceScore is { })
+        {
+            var unclear = llm!.Clarifying || llm.ConfidenceScore < WellKnown.ConfidenceThresholds.Low;
+            state.LowConfidenceTurns = unclear ? state.LowConfidenceTurns + 1 : 0;
+        }
     }
 
     /// <summary>

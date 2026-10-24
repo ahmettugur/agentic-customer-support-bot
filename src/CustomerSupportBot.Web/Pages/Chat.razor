@@ -360,7 +360,7 @@
                                                    eskiden akış bittiği hâlde ReasoningData boşsa ham JSON olduğu
                                                    gibi ekrana basılıyordu; canlıda eşzamanlı iki tur çakışınca
                                                    kullanıcı yarım kesilmiş JSON metni gördü. *@
-                                                var partial = ExtractAnalysisFromPartialJson(msg.ReasoningText);
+                                                var partial = ReasoningTextLogic.PartialAnalysis(msg.ReasoningText);
                                                 @if (!string.IsNullOrWhiteSpace(partial))
                                                 {
                                                     <div class="reasoning-section-text">@partial</div>
@@ -859,30 +859,6 @@
         new(Markdig.Markdown.ToHtml(text ?? "", _mdPipeline));
 
     // ── Reasoning helpers ───────────────────────────────────────────────────
-    private static string ExtractAnalysisFromPartialJson(string raw)
-    {
-        const string marker = "\"analysis\"";
-        var idx = raw.IndexOf(marker, StringComparison.Ordinal);
-        if (idx < 0) return "";
-        // Find the opening quote of the value
-        var afterKey = idx + marker.Length;
-        var colonIdx = raw.IndexOf(':', afterKey);
-        if (colonIdx < 0) return "";
-        var quoteStart = raw.IndexOf('"', colonIdx + 1);
-        if (quoteStart < 0) return "";
-        // Extract until closing quote or end of string
-        var valueStart = quoteStart + 1;
-        var quoteEnd = -1;
-        for (int i = valueStart; i < raw.Length; i++)
-        {
-            if (raw[i] == '\\') { i++; continue; }
-            if (raw[i] == '"') { quoteEnd = i; break; }
-        }
-        return quoteEnd > valueStart
-            ? raw[valueStart..quoteEnd]
-            : raw[valueStart..];
-    }
-
     private static string? GetJsonString(JsonElement el, string prop)
     {
         if (el.TryGetProperty(prop, out var v))
@@ -1540,6 +1516,8 @@
                         .Take(3)
                         .ToList();
                 }
+                if (PreferenceHintLogic.Message(jd) is { } preferenceNote)
+                    _messages.Add(new ChatMsg { Role = "system", Content = preferenceNote });
                 if (_currentBot is not null
                     && jd.TryGetProperty("kind", out var hintKind)
                     && hintKind.GetString() == "category_picker"

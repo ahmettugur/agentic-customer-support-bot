@@ -16,6 +16,9 @@ public sealed class CustomerProfileEntity
 
     public string TraitsJson { get; set; } = "[]";
 
+    /// <summary>Müşterinin açıkça söylediği kalıcı tercihler (kapalı sözlük; bkz. CustomerPreferences).</summary>
+    public string PreferencesJson { get; set; } = "{}";
+
     public string? Summary { get; set; }
     public string? AdminNote { get; set; }
     public int TotalSessions { get; set; }

@@ -161,6 +161,22 @@ public sealed class OrderRepository : IOrderRepository
             .ToList();
     }
 
+    public IReadOnlyList<(string OrderId, OrderInfo Order)> GetShippedBefore(DateTime cutoffUtc, int limit, DateTime? notBeforeUtc = null)
+    {
+        var cutoff = DateTime.SpecifyKind(cutoffUtc, DateTimeKind.Utc);
+        var floor = notBeforeUtc is { } nb ? DateTime.SpecifyKind(nb, DateTimeKind.Utc) : (DateTime?)null;
+        using var ctx = _dbFactory.CreateDbContext();
+        return ctx.Orders
+            .AsNoTracking()
+            .Include(o => o.Details).ThenInclude(d => d.Product)
+            .Where(o => o.Status == WellKnown.OrderStatuses.Shipped && o.ShippedAt != null && o.ShippedAt < cutoff && (floor == null || o.ShippedAt >= floor))
+            .OrderBy(o => o.ShippedAt)
+            .Take(Math.Max(1, limit))
+            .AsEnumerable()
+            .Select(e => (e.Code.ToString(), MapToModel(e)))
+            .ToList();
+    }
+
     public (string OrderId, OrderInfo Order)? GetLast(string customerId)
     {
         if (!long.TryParse(customerId, out var cid)) return null;
@@ -250,8 +266,8 @@ public sealed class OrderRepository : IOrderRepository
         // sipariş tarihinden sayılıyordu; geç teslim edilen bir siparişin müşterisine fiilen
         // birkaç gün kalıyordu. Teslim tarihi olmayan eski kayıtlar sipariş tarihine düşer —
         // bilinen en erken, dolayısıyla en tutucu tarih.
-        var windowStart = e.DeliveredAt ?? e.OrderDate;
-        if ((DateTime.UtcNow - windowStart).TotalDays > 14)
+        var windowStart = OrderPolicy.ReturnWindowStart(e.DeliveredAt, e.OrderDate);
+        if (!OrderPolicy.IsWithinReturnWindow(windowStart, DateTime.UtcNow))
             return false;
 
         e.Status = WellKnown.OrderStatuses.ReturnRequested;

@@ -56,6 +56,9 @@ public sealed class CustomerSupportToolsService : ICustomerSupportToolsService
     public ToolResult ReturnRequestTool(string orderId, string reason, string customerId)
         => _order.ReturnRequestTool(orderId, reason, customerId);
 
+    public ToolResult OrderEligibilityTool(string orderId, string action, string customerId)
+        => _order.OrderEligibilityTool(orderId, action, customerId);
+
     // ─── IComplaintToolsService ───
     public ToolResult ComplaintStatusTool(string complaintId, string customerId)
         => _complaint.ComplaintStatusTool(complaintId, customerId);

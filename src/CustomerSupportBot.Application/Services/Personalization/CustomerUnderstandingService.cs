@@ -24,7 +24,8 @@ public sealed class CustomerUnderstandingService : ICustomerUnderstandingService
         if (string.IsNullOrWhiteSpace(customerId)) return null;
 
         var profile = _store.Get(customerId);
-        if (profile is null || profile.TotalTurns == 0) return null;
+        // Hiç tur kaydedilmemiş ama açık bir tercih verilmişse (ilk mesajda "bundan sonra kısa yanıt ver") yine de bağlama girer.
+        if (profile is null || (profile.TotalTurns == 0 && profile.Preferences.Count == 0)) return null;
 
         return new CustomerUnderstanding(
             CustomerId: profile.CustomerId,
@@ -43,6 +44,7 @@ public sealed class CustomerUnderstandingService : ICustomerUnderstandingService
             RatingCount: profile.RecentRatings.Count,
             TotalSessions: profile.TotalSessions,
             TotalTurns: profile.TotalTurns,
-            LastConsolidatedAt: profile.LastConsolidatedAt);
+            LastConsolidatedAt: profile.LastConsolidatedAt,
+            Preferences: profile.Preferences);
     }
 }

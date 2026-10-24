@@ -79,6 +79,28 @@ public sealed partial class CustomerProfileService : ICustomerProfileService
         return await RecordInteractionCoreAsync(customerId, userQuery, botResponse, intent, rating, isNewSession);
     }
 
+    public async Task<bool> SetPreferenceAsync(string customerId, string key, string value, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(customerId) || !CustomerPreferences.IsAllowed(key, value)) return false;
+
+        await using var handle = await _distributedLock.AcquireAsync($"profile:{customerId}", ct: ct).ConfigureAwait(false);
+        var profile = await _store.GetOrCreateAsync(customerId);
+        profile.Preferences[key] = value;
+        await _store.UpsertAsync(profile);
+        return true;
+    }
+
+    public async Task ClearPreferencesAsync(string customerId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(customerId)) return;
+
+        await using var handle = await _distributedLock.AcquireAsync($"profile:{customerId}", ct: ct).ConfigureAwait(false);
+        var profile = _store.Get(customerId);
+        if (profile is null || profile.Preferences.Count == 0) return;
+        profile.Preferences.Clear();
+        await _store.UpsertAsync(profile);
+    }
+
     private async Task<CustomerProfile?> RecordInteractionCoreAsync(
         string customerId,
         string userQuery,

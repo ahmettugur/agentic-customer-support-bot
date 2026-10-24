@@ -46,6 +46,10 @@ public class CompoundTurnFinalizationTests
             if (DelayMilliseconds > 0) await Task.Delay(DelayMilliseconds, ct);
             return null;
         }
+
+        public Task<bool> SetPreferenceAsync(string customerId, string key, string value, CancellationToken ct = default) => Task.FromResult(false);
+
+        public Task ClearPreferencesAsync(string customerId, CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private static TurnFinalizer Build(RecordingMemory memory, CountingProfile profile)

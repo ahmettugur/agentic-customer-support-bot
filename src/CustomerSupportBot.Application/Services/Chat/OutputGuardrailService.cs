@@ -37,6 +37,43 @@ public sealed class OutputGuardrailService(
 
     private readonly OutputGuardrailOptions _options = options.Value;
 
+    /// <summary>
+    /// Kısa, serbest metin alanları (ör. reasoning analizi) için tek seferlik bağlamlı temizleyici: kayıtlı e-postayı bir kez okur, sonra
+    /// her metni <see cref="OutputGuardrail"/>'dan geçirir. Maskelenecek kişisel veri varsa <c>[gizlendi]</c> görünür; sır/istem sızıntısı
+    /// (Blocked) varsa alanın TAMAMI <c>[gizlendi]</c> olur. Kapalıysa metni olduğu gibi döner.
+    /// </summary>
+    public async Task<Func<string, string>> CreateTextSanitizerAsync(
+        string query, IReadOnlyList<ConversationMessage> history, string? customerId, CancellationToken ct)
+    {
+        if (!_options.Enabled) return s => s;
+
+        string? ownEmail = null;
+        if (long.TryParse(customerId, out var id))
+        {
+            try { ownEmail = await customers.GetEmailAsync(id, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "[Guardrail] Müşteri e-postası okunamadı; temizleyici e-postasız sürüyor");
+            }
+        }
+
+        var allowed = new List<string>(_options.EffectiveAllowedContacts);
+        if (!string.IsNullOrWhiteSpace(email.Value.FromAddress)) allowed.Add(email.Value.FromAddress);
+        var userTexts = history.Where(m => m.Role == ConversationRoles.User).Select(m => m.Text).Append(query).ToList();
+        var context = new OutputGuardContext(userTexts, ownEmail, allowed, _options.EffectiveBlockedPhrases);
+
+        return text =>
+        {
+            var result = OutputGuardrail.Inspect(text, context);
+            return result.Verdict switch
+            {
+                OutputGuardVerdict.Clean => text,
+                OutputGuardVerdict.Redacted => result.Text,
+                _ => OutputGuardrail.RedactedMark
+            };
+        };
+    }
+
     public async Task<OutputGuardResult> InspectAsync(
         string answer, string query, IReadOnlyList<ConversationMessage> history, string? customerId, CancellationToken ct)
     {

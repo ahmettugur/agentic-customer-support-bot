@@ -159,6 +159,17 @@ public class ApprovalGateService
                 "Sipariş durumunu sipariş numarasıyla sorgular. Sadece login'li müşterinin kendi siparişleri " +
                 "sorgulanabilir; müşteri kimliği login'den otomatik alınır.");
 
+    /// <summary>İade/iptal uygunluğu (SALT-OKUNUR): HITL gerekmez; müşteri kimliği login'den gelir.</summary>
+    public AIFunction BuildOrderEligibilityTool() =>
+        AIFunctionFactory.Create(
+            ([System.ComponentModel.Description("Sipariş numarası (zorunlu, ör. '1030')")] string orderId,
+             [System.ComponentModel.Description("Sorulan işlem: 'return' (iade) veya 'cancel' (iptal)")] string action) =>
+                _tools.OrderEligibilityTool(orderId, action, CurrentCustomerId),
+            name: WellKnown.ToolNames.OrderEligibility,
+            description:
+                "Bir siparişin iade veya iptal edilip edilemeyeceğini kural motoruna göre söyler (son iade tarihi dahil). " +
+                "Hiçbir talep OLUŞTURMAZ; müşteri 'iade edebilir miyim?' diye sorduğunda kullanın.");
+
     public AIFunction BuildGetLastOrderTool() =>
         AIFunctionFactory.Create(
             () => _tools.GetLastOrderTool(CurrentCustomerId),

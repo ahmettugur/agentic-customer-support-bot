@@ -56,4 +56,5 @@ public sealed record CustomerUnderstanding(
     int RatingCount,
     int TotalSessions,
     int TotalTurns,
-    DateTime? LastConsolidatedAt);
+    DateTime? LastConsolidatedAt,
+    IReadOnlyDictionary<string, string>? Preferences = null);

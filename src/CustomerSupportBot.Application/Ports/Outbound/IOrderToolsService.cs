@@ -50,4 +50,10 @@ public interface IOrderToolsService
     /// <paramref name="customerId"/> LLM parametresi DEĞİL — bkz. <see cref="OrderStatusTool"/>.
     /// </summary>
     ToolResult ReturnRequestTool(string orderId, string reason, string customerId);
+
+    /// <summary>
+    /// İade/iptal uygunluğu (SALT-OKUNUR) — kararı <see cref="OrderPolicy"/> verir. <paramref name="customerId"/>
+    /// LLM parametresi DEĞİL — bkz. <see cref="OrderStatusTool"/>.
+    /// </summary>
+    ToolResult OrderEligibilityTool(string orderId, string action, string customerId);
 }
