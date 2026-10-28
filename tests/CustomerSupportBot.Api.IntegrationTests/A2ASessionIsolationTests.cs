@@ -70,6 +70,17 @@ public sealed class RecordingAgentSessionStore : AgentSessionStore
         _observedKeys.Enqueue(key);
         return ValueTask.CompletedTask;
     }
+
+    // Agent Framework 1.26: AgentSessionStore'a silme işlemi eklendi (soyut üye). Silme de aynı
+    // izolasyon anahtarıyla gelir; diğer işlemler gibi kaydedilir.
+    public override ValueTask DeleteSessionAsync(
+        AIAgent agent,
+        AgentSessionStoreKey key,
+        CancellationToken cancellationToken = default)
+    {
+        _observedKeys.Enqueue(key);
+        return ValueTask.CompletedTask;
+    }
 }
 #pragma warning restore MAAI001
 

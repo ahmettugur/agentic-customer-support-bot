@@ -40,6 +40,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<global::Program>
         // override edilmesiyle sağlanıyor — provider ayarı zaten hiçbir yerde okunmuyor.
         builder.UseSetting("AI:Provider", "OpenAI");
         builder.UseSetting("AI:ApiKey", "test-key");
+        // Bağlayıcının GERÇEKTE okuduğu yol bu (AiOptions.OpenAI.ApiKey). Yukarıdaki "AI:ApiKey" hiçbir şeye bağlanmaz; testler
+        // bu yüzden geliştiricinin yerel appsettings.Development.json'ındaki gerçek anahtara dayanıyordu ve o dosya
+        // temizlendiğinde (ya da CI'da hiç olmadığında) host açılışta "AI:OpenAI:ApiKey bulunamadı" ile düşüyordu.
+        builder.UseSetting("AI:OpenAI:ApiKey", "test-key");
         builder.UseSetting("AI:ModelId", "gpt-4o-mini");
         builder.UseSetting(
             "Jwt:SigningKey",

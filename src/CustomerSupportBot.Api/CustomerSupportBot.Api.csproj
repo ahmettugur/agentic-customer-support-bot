@@ -9,12 +9,12 @@
 
   <ItemGroup>
     <!-- Api katmanına özgü paketler -->
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.13" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <!-- contentfiles kasıtlı olarak DAHIL DEĞİL: bu paketin content item'ları (**/*.resx glob'u
          dahil) MSBuild tarafından consuming proje köküne göre çözülüyor. bin/obj derinleştikçe
          (nested publish/build çıktıları) bu glob kendi içine katlanıp MSB3552 ile patlıyordu. -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
       <IncludeAssets>runtime; build; native; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -42,10 +42,10 @@
          TypeLoadException/MissingMethodException olarak çıkar. Yani "build temiz" hiçbir
          şey kanıtlamaz. Çekirdek sürümü yükseltilirken bu paket de birlikte yükseltilmeli;
          köprünün gerçekten ayakta olduğunu A2AHostingSpikeTests ölçer. -->
-    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
-    <PackageReference Include="A2A" Version="1.0.0-preview2" />
-    <PackageReference Include="A2A.AspNetCore" Version="1.0.0-preview2" />
-    <PackageReference Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.22.0-preview.260918.1" />
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.3.0" />
+    <PackageReference Include="A2A" Version="1.0.0-preview3" />
+    <PackageReference Include="A2A.AspNetCore" Version="1.0.0-preview3" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.26.0-preview.261023.1" />
   </ItemGroup>
 
   <!-- Knowledge Base markdown dosyalarını build çıktısına kopyala — KnowledgeBaseIngestor okur. -->
