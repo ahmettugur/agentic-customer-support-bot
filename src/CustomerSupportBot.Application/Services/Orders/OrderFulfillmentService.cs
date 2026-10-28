@@ -37,6 +37,14 @@ public sealed class OrderFulfillmentService(
             return new OrderFulfillmentResult(OrderFulfillmentStatus.Invalid, orderId, null,
                 $"Takip numarası en fazla {MaxTrackingLength} karakter olabilir.");
 
+        // Değer müşteri ekranına, e-postaya ve bildirime gider: biçimlendirme/etiket karakterleri düz metin alanında anlamsızdır.
+        if (HasMarkup(carrier))
+            return new OrderFulfillmentResult(OrderFulfillmentStatus.Invalid, orderId, null,
+                "Kargo firması '<' ve '>' karakterlerini içeremez.");
+        if (HasMarkup(trackingNumber))
+            return new OrderFulfillmentResult(OrderFulfillmentStatus.Invalid, orderId, null,
+                "Takip numarası '<' ve '>' karakterlerini içeremez.");
+
         var result = orders.MarkShipped(orderId, carrier, trackingNumber, _clock.GetUtcNow().UtcDateTime);
         return await CompleteAsync(orderId, result, OrderStatusEmailService.Shipped, ct);
     }
@@ -67,6 +75,8 @@ public sealed class OrderFulfillmentService(
         };
         return new OrderFulfillmentResult(status, orderId, result.Order);
     }
+
+    private static bool HasMarkup(string? s) => s is not null && s.AsSpan().IndexOfAny('<', '>') >= 0;
 
     private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }

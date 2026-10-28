@@ -131,6 +131,11 @@ public static class ToolCardLogic
         return $"{local.Day:00}.{local.Month:00}.{local.Year}";
     }
 
+    /// <summary>Kargo satırının parçaları (boşsa null): firma kartta kalın, takip numarası normal gösterilir. Değerler düz metindir.</summary>
+    public static (string? Carrier, string? Tracking) ShippingParts(OrderCardView order) =>
+        (string.IsNullOrWhiteSpace(order.Carrier) ? null : order.Carrier,
+         string.IsNullOrWhiteSpace(order.TrackingNumber) ? null : order.TrackingNumber);
+
     /// <summary>"Yurtiçi Kargo · YK123456" / yalnızca biri / hiçbiri (null).</summary>
     public static string? Shipping(OrderCardView order)
     {

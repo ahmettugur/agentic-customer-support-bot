@@ -112,6 +112,14 @@ public class ToolCardLogicTests
         ToolCardLogic.Shipping(new("1", "İşleniyor", Ordered, [], 0, null, null, null, null, null)).Should().BeNull();
     }
 
+    [Fact]
+    public void ShippingParts_SplitCarrierAndTracking_SoTheCarrierCanBeBold()
+    {
+        ToolCardLogic.ShippingParts(new("1", "Kargolandı", Ordered, [], 0, "Yurtiçi Kargo", "YK1", null, null, null)).Should().Be(("Yurtiçi Kargo", "YK1"));
+        ToolCardLogic.ShippingParts(new("1", "Kargolandı", Ordered, [], 0, " ", "YK1", null, null, null)).Should().Be((null, "YK1"));
+        ToolCardLogic.ShippingParts(new("1", "İşleniyor", Ordered, [], 0, null, null, null, null, null)).Should().Be((null, null));
+    }
+
     // ═══ ilgili makaleler ═══
 
     private static JsonElement Hint(string json) => JsonSerializer.Deserialize<JsonElement>(json);
