@@ -245,4 +245,86 @@ public class CustomerSupportChatManagerTests
 
         (await InvokeSelectAsync(mgr, PlanToOrder())).Name.Should().Be(WellKnown.AgentNames.Order);
     }
+
+    // ─── Deterministik yönlendirici: ilk ajan dışarıdan verilir, Planning atlanır ───
+
+    private static CustomerSupportChatManager BuildWithFirstAgent(string? firstAgent, string? constrained = null) =>
+        new([MakeAgent(WellKnown.AgentNames.Planning), MakeAgent(WellKnown.AgentNames.Response), MakeAgent(WellKnown.AgentNames.Order),
+             MakeAgent(WellKnown.AgentNames.Product), MakeAgent(WellKnown.AgentNames.HumanHandoff)],
+            new WorkflowGuardOptions(), NullLogger<CustomerSupportChatManager>.Instance, constrained, firstAgent);
+
+    private static List<ChatMessage> UserOnly() => [new(ChatRole.User, "1057 siparişim nerede")];
+
+    private static ChatMessage Spoken(string agent, string text) => new(ChatRole.Assistant, text) { AuthorName = agent };
+
+    [Fact]
+    public async Task WithAPreselectedFirstAgent_PlanningIsSkipped()
+    {
+        var picked = await InvokeSelectAsync(BuildWithFirstAgent(WellKnown.AgentNames.Order), UserOnly());
+
+        picked.Name.Should().Be(WellKnown.AgentNames.Order);
+    }
+
+    [Fact]
+    public async Task OnceThePreselectedAgentHasSpoken_ItIsNotPickedAgain_AndReflectionTakesOver()
+    {
+        var mgr = BuildWithFirstAgent(WellKnown.AgentNames.Order);
+        var history = UserOnly();
+        history.Add(Spoken(WellKnown.AgentNames.Order, "{\"postToolReflection\":{\"status\":\"done\",\"taskComplete\":true}}"));
+
+        var picked = await InvokeSelectAsync(mgr, history);
+
+        picked.Name.Should().Be(WellKnown.AgentNames.Response, "uzman bitirdi → yanıt; ilk ajan döngüye girmemeli");
+    }
+
+    [Fact]
+    public async Task APreselectedResponseAgent_HandlesGreetingsAndClarificationsDirectly()
+    {
+        var picked = await InvokeSelectAsync(BuildWithFirstAgent(WellKnown.AgentNames.Response), UserOnly());
+
+        picked.Name.Should().Be(WellKnown.AgentNames.Response);
+    }
+
+    [Fact]
+    public async Task ReflectionHandoff_StillWorks_AfterAPreselectedFirstAgent()
+    {
+        var mgr = BuildWithFirstAgent(WellKnown.AgentNames.Product);
+        var history = UserOnly();
+        history.Add(Spoken(WellKnown.AgentNames.Product,
+            "{\"postToolReflection\":{\"status\":\"needs_followup\",\"handoffSuggestion\":\"" + WellKnown.AgentNames.Order + "\"}}"));
+
+        var picked = await InvokeSelectAsync(mgr, history);
+
+        picked.Name.Should().Be(WellKnown.AgentNames.Order);
+    }
+
+    [Fact]
+    public async Task WithoutAPreselection_ThePlanningPathIsUnchanged()
+    {
+        var picked = await InvokeSelectAsync(BuildWithFirstAgent(null), UserOnly());
+
+        picked.Name.Should().Be(WellKnown.AgentNames.Planning);
+    }
+
+    [Fact]
+    public async Task AnUnknownPreselectedName_IsIgnored_AndPlanningRuns()
+    {
+        var picked = await InvokeSelectAsync(BuildWithFirstAgent("UydurmaAgent"), UserOnly());
+
+        picked.Name.Should().Be(WellKnown.AgentNames.Planning, "yanlış ad turu düşürmemeli — güvenli yola dönülür");
+    }
+
+    [Fact]
+    public async Task APreselectedAgent_StillCountsTowardsTheHandoffLimit()
+    {
+        var mgr = new CustomerSupportChatManager(
+            [MakeAgent(WellKnown.AgentNames.Planning), MakeAgent(WellKnown.AgentNames.Response), MakeAgent(WellKnown.AgentNames.Order)],
+            new WorkflowGuardOptions { MaxHandoffsPerAgent = 1 }, NullLogger<CustomerSupportChatManager>.Instance, null, WellKnown.AgentNames.Order);
+
+        var first = await InvokeSelectAsync(mgr, UserOnly());
+        var second = await InvokeSelectAsync(mgr, UserOnly());
+
+        first.Name.Should().Be(WellKnown.AgentNames.Order);
+        second.Name.Should().Be(WellKnown.AgentNames.Response, "sınır ilk seçim için de geçerli");
+    }
 }

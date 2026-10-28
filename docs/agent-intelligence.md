@@ -285,3 +285,69 @@ sanity uyarıları, doğrulanmış kimlik, adım önkoşulları); çıktı guard
 
 **Sınır:** Akıtılan analiz parçaları reasoning_complete gelene kadar *temizlenmeden* görünür (parça sınırında bölünen bir kalıp artımlı taranamaz);
 `reasoning_complete` analizi guardrail'den geçmiş hâliyle **ezer**. Analiz modelin kendi 1–2 cümlelik özetidir, sır içermesi beklenmez ama garanti de edilmez.
+
+## Yönlendirme: deterministik yönlendirici (`AgentRouting`)
+
+**Sorun.** Reasoning niyeti zaten belirliyor; PlanningAgent çoğu turda aynı kararı (niyet → ajan) **ana modelle** yeniden üretiyordu. Ölçüm (dev izleri):
+netleştirme dışındaki turların %100'ünde Planning'in seçtiği ajan, niyetten çıkan ajanla aynıydı; netleştirme sorusunu da ResponseAgent yeniden yazıyordu.
+Planning, tur başına bir ana-model çağrısı (≈ %20 maliyet, ≈ 2 sn).
+
+**Çözüm.** `IntentRouter`, Reasoning'in niyetinden ilk ajanı bir **tablodan** seçer (LLM yok):
+
+| Niyet | İlk ajan |
+|---|---|
+| `sipariş_oluşturma/sorgulama/listeleme/iptali`, `iade_talebi` | OrderAgent |
+| `şikayet` | ComplaintAgent |
+| `ürün_bilgisi` | ProductAgent |
+| `talep_temsilci` (açık temsilci isteği **ya da** yönetici yetkisi gerektiren işlem) | HumanHandoffAgent |
+| `genel` (selamlama, konu dışı, enjeksiyon, araç adını doğrudan çağırma) | ResponseAgent (yanıtı ön-analizden yazar) |
+| zorunlu bilgi **eksik** (`requiredInfo` dolu; müşteri kimliği sayılmaz) | ResponseAgent — soruyu tek mesajda sorar (Planning'in `needsClarification` davranışı) |
+| alt görev koşusu | bölmede seçilen ajan |
+| **bilinmeyen niyet, Reasoning yok/fallback** | **susar** → eski Planning yolu (güvenlik ağı) |
+
+**Üç mod** (`AgentRouting:Mode`, çalışırken `IOptionsMonitor` ile değişir):
+
+| Mod | Davranış |
+|---|---|
+| `Planner` | Eski davranış. |
+| `Shadow` *(varsayılan)* | **Davranış değişmez**: Planning karar verir. Yönlendirici yanında kendi kararını üretir, tur sonunda Planning'inkiyle karşılaştırır ve sayar. |
+| `Deterministic` | Yönlendirici karar verdiyse **Planning atlanır**; susarsa Planning çalışır. |
+
+**Gölge ölçümü.** `agent.routing.decisions{mode,outcome,router,planner,reason}`: `outcome` = `match` / `mismatch` / `router_abstained` / `unobserved`.
+`mismatch`, düzeltilecek tablo satırının işaretidir ve `[Routing] Gölge uyuşmazlığı` olarak loglanır (niyet, iki ajan, neden; **kullanıcı metni yok**). Grafana'daki
+**"Yönlendirme gölge ölçümü"** paneli dağılımı gösterir. Geçiş kararı için iki oran:
+
+```promql
+# Doğruluk: karar verdiği turlarda Planning ile aynı mı?
+sum(increase(agent_routing_decisions_total{mode="shadow",outcome="match"}[7d]))
+  / sum(increase(agent_routing_decisions_total{mode="shadow",outcome=~"match|mismatch"}[7d]))
+# Kapsam: kaç turda karar verebildi (kalanı Planning'e düşerdi)?
+sum(increase(agent_routing_decisions_total{mode="shadow",outcome=~"match|mismatch"}[7d]))
+  / sum(increase(agent_routing_decisions_total{mode="shadow"}[7d]))
+```
+
+**Geçiş.** Yeterli gerçek trafikte doğruluk yüksekse ve uyuşmazlıklar tablo/prompt düzeltmesiyle kapandıysa `AgentRouting:Mode=Deterministic`. Geri dönüş tek ayar
+(`Shadow`/`Planner`), yeniden başlatma gerekmez. Deterministik modda `agent.routing.decisions{mode=deterministic,outcome=routed|fallback_to_planner}` sayılır.
+
+**Neden güvenli.** Güvenlik sınırları yönlendirmede değil başka yerde: JWT kimliği, araç sahiplik kontrolleri, HITL onayı, idempotency (planning prompt'u da bunu söyler).
+Planning'in yalnızca kendi prompt'unda yazılı iki güvenlik yönlendirmesi (araç adını doğrudan çağırma → `genel`; yönetici yetkisi isteyen işlem → `talep_temsilci`) Reasoning prompt'una
+taşındı ve `PromptContractTests` ile kilitlendi. ResponseAgent, uzman/plan mesajı olmadan doğrudan yanıtlamayı (selamlama, eksik bilgiyi tek mesajda isteme) prompt'undan bilir.
+
+**Değişenler.** Planning atlandığında: izde `Planning` bölümü yoktur (yönetici paneli bunu null-güvenli gösterir), onay gerekçesi Reasoning'in `rationale`'ına düşer,
+arayüzde "Planlama Ajanı" çipi çıkmaz. Checkpoint'ten devam eden bir tur (çökme sonrası) ilk ajan henüz konuşmadan kesildiyse Planning yoluyla başlar — kabul edilen küçük sapma.
+
+**Sınır.** Tablo yalnızca Reasoning'in niyetine güvenir; niyet yanlışsa yönlendirme de yanlış olur (Planning bunu bazen yakalıyordu). Gölge ölçüm tam bu farkı görünür kılmak içindir.
+Ek bir tasarruf (Reasoning'in kullanılmayan çıktı alanlarını kesmek) bu değişikliğin parçası değildir.
+
+## Tur sonu token özeti (`[Usage]` logu)
+
+Her sohbet turu bittiğinde (akışlı ve akışsız yol) Reasoning, Planning ve çalışan her ajanın harcadığı token tek satırda loglanır:
+
+```
+[Usage] oturum=b931ee93 toplam in 21596/out 886 (5 çağrı) | Reasoning in 3914/out 304 (1 çağrı) | PlanningAgent in 4417/out 181 (1 çağrı) | ProductAgent in 6070/out 301 (2 çağrı) | ResponseAgent in 7195/out 100 (1 çağrı)
+```
+
+- Yalnızca sayılar ve ajan adları yazılır; kullanıcı metni ve tam oturum kimliği yoktur (ilk 8 karakter).
+- Bir ajanın birden çok çağrısı (araç döngüsü) tek satırda toplanır; çağrı sayısı parantezdedir.
+- Kayıt `UsageLabelingChatClient` ile alınır (ajan başına ve Reasoning istemcisinde); paralel alt görevlerden gelen çağrılar thread-safe toplanır.
+- Tur kapsamı dışındaki arka plan çağrıları (canlı değerlendirme yargıcı, profil birleştirme, görsel analiz) bu özete girmez; onlar `llm_call_usage` tablosunda görüşme bazında durur.

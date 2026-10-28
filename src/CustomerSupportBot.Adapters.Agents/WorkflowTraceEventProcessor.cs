@@ -42,6 +42,9 @@ internal sealed class WorkflowTraceEventProcessor
         public int IterationCount { get; set; }
         public string Result { get; set; } = "";
 
+        /// <summary>Gölge modda yönlendiricinin kararı; tur sonunda PlanningAgent'ınkiyle karşılaştırılır (bkz. WorkflowRunner).</summary>
+        public CustomerSupportBot.Application.Services.Reasoning.RouteDecision? ShadowRoute { get; set; }
+
         /// <summary>
         /// ResponseAgent'ın gerçek token akışından en az bir karakter yayınlandıysa true —
         /// bu turda <see cref="StreamEventTypes.ResponseStart"/> zaten gönderilmiş demektir,

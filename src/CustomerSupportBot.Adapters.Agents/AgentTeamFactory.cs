@@ -42,7 +42,8 @@ internal sealed class AgentTeamFactory
         ICustomerSupportToolsService tools,
         WorkflowGuardOptions guards,
         ILoggerFactory loggerFactory,
-        IApprovalContextAccessor approvalContext)
+        IApprovalContextAccessor approvalContext,
+        ITurnUsageTracker? usage = null)
     {
         _guards = guards;
         _loggerFactory = loggerFactory;
@@ -50,12 +51,15 @@ internal sealed class AgentTeamFactory
 
         var sourceName = TelemetryConstants.ActivitySourceName;
 
-        PlanningAgent     = WrapWithTelemetry(new PlanningAgent(chatClient, prompts), sourceName);
-        ProductAgent      = WrapWithTelemetry(new ProductAgent(chatClient, prompts, tools), sourceName);
-        OrderAgent        = WrapWithTelemetry(new OrderAgent(chatClient, prompts, approvalGate), sourceName);
-        ComplaintAgent    = WrapWithTelemetry(new ComplaintAgent(chatClient, prompts, approvalGate), sourceName);
-        HumanHandoffAgent = WrapWithTelemetry(new HumanHandoffAgent(chatClient, prompts), sourceName);
-        ResponseAgent     = WrapWithTelemetry(new ResponseAgent(chatClient, prompts), sourceName);
+        // Tur sonu token özeti için her ajan kendi etiketiyle sarılır (bkz. UsageLabelingChatClient).
+        IChatClient For(string label) => usage is null ? chatClient : new UsageLabelingChatClient(chatClient, label, usage);
+
+        PlanningAgent     = WrapWithTelemetry(new PlanningAgent(For(nameof(PlanningAgent)), prompts), sourceName);
+        ProductAgent      = WrapWithTelemetry(new ProductAgent(For(nameof(ProductAgent)), prompts, tools), sourceName);
+        OrderAgent        = WrapWithTelemetry(new OrderAgent(For(nameof(OrderAgent)), prompts, approvalGate), sourceName);
+        ComplaintAgent    = WrapWithTelemetry(new ComplaintAgent(For(nameof(ComplaintAgent)), prompts, approvalGate), sourceName);
+        HumanHandoffAgent = WrapWithTelemetry(new HumanHandoffAgent(For(nameof(HumanHandoffAgent)), prompts), sourceName);
+        ResponseAgent     = WrapWithTelemetry(new ResponseAgent(For(nameof(ResponseAgent)), prompts), sourceName);
     }
 
     private AIAgent WrapWithTelemetry(AIAgent agent, string sourceName)
@@ -70,7 +74,8 @@ internal sealed class AgentTeamFactory
         return await next(invocation, ct).ConfigureAwait(false);
     }
 
-    public Workflow CreateWorkflow(string? constrainedSpecialistName = null)
+    /// <param name="firstAgentName">Doluysa ilk konuşan ajan budur ve PlanningAgent atlanır (bkz. <c>IntentRouter</c>); boşsa eski yol.</param>
+    public Workflow CreateWorkflow(string? constrainedSpecialistName = null, string? firstAgentName = null)
     {
         return AgentWorkflowBuilder
             .CreateGroupChatBuilderWith(agents =>
@@ -79,7 +84,8 @@ internal sealed class AgentTeamFactory
                     agents,
                     _guards,
                     _loggerFactory.CreateLogger<CustomerSupportChatManager>(),
-                    constrainedSpecialistName)
+                    constrainedSpecialistName,
+                    firstAgentName)
                 {
                     MaximumIterationCount = _guards.MaxIterations
                 };

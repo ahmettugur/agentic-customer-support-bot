@@ -30,7 +30,7 @@ public class AgentWorkflowRegressionTests
         public CustomerSupportTeam Team { get; }
         public ICustomerProfileService Profile { get; } = Substitute.For<ICustomerProfileService>();
 
-        public Harness(bool loop = false, int maxIterations = 8, bool parallel = true)
+        public Harness(bool loop = false, int maxIterations = 8, bool parallel = true, AgentRoutingMode? routing = null)
         {
             var emitter = new UiHintEmitter(Context);
             var products = Substitute.For<IProductCatalogRepository>();
@@ -56,7 +56,8 @@ public class AgentWorkflowRegressionTests
                 Options.Create(new WorkflowGuardOptions { MaxIterations = maxIterations, TimeoutSeconds = 3 }),
                 Options.Create(new ParallelExecutionOptions { Enabled = parallel }), new InMemoryReasoningTraceStore(), prompts,
                 gate, tools, emitter, Context, NullLoggerFactory.Instance,
-                new CustomerIdentityHintBuilder(Substitute.For<ICustomerRepository>()), profileService: Profile);
+                new CustomerIdentityHintBuilder(Substitute.For<ICustomerRepository>()), profileService: Profile,
+                routing: routing is null ? null : new FixedMonitor<AgentRoutingOptions>(new AgentRoutingOptions { Mode = routing.Value }));
         }
     }
 
@@ -154,10 +155,179 @@ public class AgentWorkflowRegressionTests
         h.Profile.ReceivedCalls().Should().ContainSingle();
     }
 
+    // ═══ Deterministik yönlendirme (gerçek MAF workflow'u) ═══════════════════════════════════════════════
+
+    private const string PlanningKey = "agents/planning-agent";
+
+    private static ReasoningResult Reasoned(string intent, params string[] requiredInfo) =>
+        new() { Intent = intent, ConfidenceScore = 0.9, RequiredInfo = requiredInfo.ToList() };
+
+    private static async Task<(Harness H, string Response)> RunAsync(AgentRoutingMode mode, ReasoningResult? reasoning, string query = "ürünleri göster")
+    {
+        var h = new Harness(routing: mode);
+        var session = new AgentSession { SessionId = "route-" + Guid.NewGuid().ToString("N") };
+        using var scope = h.Context.SetScope(session.SessionId, null, query, "1001");
+        var response = await h.Team.RunAsync(query, session: session, reasoning: reasoning, ct: TestContext.Current.CancellationToken);
+        return (h, response);
+    }
+
+    private static List<(string Mode, string Outcome, string Router, string Planner, string Reason)> CaptureRouting(Action run)
+    {
+        var seen = new List<(string, string, string, string, string)>();
+        using var listener = new System.Diagnostics.Metrics.MeterListener();
+        listener.InstrumentPublished = (i, l) => { if (i.Name == "agent.routing.decisions") l.EnableMeasurementEvents(i); };
+        listener.SetMeasurementEventCallback<long>((_, _, tags, _) =>
+        {
+            string mode = "", outcome = "", router = "", planner = "", reason = "";
+            foreach (var t in tags)
+            {
+                var v = t.Value as string ?? "";
+                switch (t.Key)
+                {
+                    case "mode": mode = v; break;
+                    case "outcome": outcome = v; break;
+                    case "router": router = v; break;
+                    case "planner": planner = v; break;
+                    case "reason": reason = v; break;
+                }
+            }
+            lock (seen) seen.Add((mode, outcome, router, planner, reason));
+        });
+        listener.Start();
+        run();
+        return seen;
+    }
+
+    [Fact]
+    public async Task Deterministic_ASpecialistIntent_SkipsPlanning_AndStillAnswers()
+    {
+        var (h, response) = await RunAsync(AgentRoutingMode.Deterministic, Reasoned(WellKnown.Intents.ProductInfo));
+
+        h.Client.Instructions.Should().NotContain(PlanningKey, "yönlendirici kararı verdi → ana-model Planning çağrısı yapılmaz");
+        h.Client.Instructions.Should().Contain("agents/product-agent").And.Contain("agents/response-agent");
+        h.ToolResults.Should().ContainSingle("ürün aracı gerçekten çağrıldı");
+        response.Should().Be("Fresh answer");
+    }
+
+    [Fact]
+    public async Task Deterministic_AGreeting_GoesStraightToTheResponseAgent_InOneModelCall()
+    {
+        var (h, response) = await RunAsync(AgentRoutingMode.Deterministic, Reasoned(WellKnown.Intents.General), "merhaba");
+
+        h.Client.Instructions.Should().Equal("agents/response-agent");
+        response.Should().Be("Fresh answer");
+    }
+
+    [Fact]
+    public async Task Deterministic_MissingInformation_IsAskedByTheResponseAgent_WithoutCallingTheSpecialist()
+    {
+        var (h, _) = await RunAsync(AgentRoutingMode.Deterministic,
+            Reasoned(WellKnown.Intents.OrderCancellation, "sipariş_numarası", "iptal_sebebi"), "iptal etmek istiyorum");
+
+        h.Client.Instructions.Should().Equal("agents/response-agent");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Deterministic_WhenTheRouterAbstains_PlanningRunsAsTheSafetyNet(bool fallbackResult)
+    {
+        var reasoning = fallbackResult
+            ? new ReasoningResult { Intent = WellKnown.Intents.ProductInfo, IsFallback = true }
+            : Reasoned("uydurma_niyet");
+
+        var (h, response) = await RunAsync(AgentRoutingMode.Deterministic, reasoning);
+
+        h.Client.Instructions.First().Should().Be(PlanningKey);
+        response.Should().Be("Fresh answer");
+    }
+
+    [Fact]
+    public async Task Deterministic_WithoutReasoning_PlanningRuns()
+    {
+        var (h, _) = await RunAsync(AgentRoutingMode.Deterministic, reasoning: null);
+
+        h.Client.Instructions.First().Should().Be(PlanningKey);
+    }
+
+    [Fact]
+    public async Task Deterministic_Streaming_SkipsPlanningToo()
+    {
+        var h = new Harness(routing: AgentRoutingMode.Deterministic);
+        var session = new AgentSession { SessionId = "route-stream" };
+        using var scope = h.Context.SetScope(session.SessionId, null, "ürünleri göster", "1001");
+        var events = new List<StreamEvent>();
+
+        await foreach (var e in h.Team.RunStreamingAsync("ürünleri göster", session: session,
+                           reasoning: Reasoned(WellKnown.Intents.ProductInfo), ct: TestContext.Current.CancellationToken))
+            events.Add(e);
+
+        h.Client.Instructions.Should().NotContain(PlanningKey);
+        events.Last().Type.Should().Be(StreamEventTypes.ResponseComplete);
+    }
+
+    [Fact]
+    public async Task Deterministic_ASubTaskRun_GoesToItsConstrainedSpecialist_WithoutPlanning()
+    {
+        var reasoning = Reasoned(WellKnown.Intents.ProductInfo);
+        reasoning.ConstrainedTargetAgent = WellKnown.AgentNames.Product;
+
+        var (h, _) = await RunAsync(AgentRoutingMode.Deterministic, reasoning);
+
+        h.Client.Instructions.Should().NotContain(PlanningKey);
+        h.ToolResults.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Shadow_ChangesNothing_PlanningStillDecides_AndAgreementIsCounted()
+    {
+        (Harness H, string Response) result = default;
+        var seen = CaptureRouting(() => result = RunAsync(AgentRoutingMode.Shadow, Reasoned(WellKnown.Intents.ProductInfo)).GetAwaiter().GetResult());
+
+        result.H.Client.Instructions.First().Should().Be(PlanningKey, "gölge mod davranışı değiştirmez");
+        result.Response.Should().Be("Fresh answer");
+        seen.Should().Contain(("shadow", "match", WellKnown.AgentNames.Product, WellKnown.AgentNames.Product, "intent"));
+    }
+
+    [Fact]
+    public async Task Shadow_ADisagreement_IsCounted_WithBothSides()
+    {
+        // Betikli Planning her zaman ProductAgent seçer; yönlendirici sipariş niyetinde OrderAgent der.
+        var seen = CaptureRouting(() => RunAsync(AgentRoutingMode.Shadow, Reasoned(WellKnown.Intents.OrderInquiry)).GetAwaiter().GetResult());
+
+        seen.Should().Contain(("shadow", "mismatch", WellKnown.AgentNames.Order, WellKnown.AgentNames.Product, "intent"));
+    }
+
+    [Fact]
+    public async Task Shadow_AnAbstainingRouter_IsCountedWithThePlannersChoice()
+    {
+        var seen = CaptureRouting(() => RunAsync(AgentRoutingMode.Shadow, Reasoned("uydurma_niyet")).GetAwaiter().GetResult());
+
+        seen.Should().Contain(("shadow", "router_abstained", "-", WellKnown.AgentNames.Product, "unknown_intent"));
+    }
+
+    [Fact]
+    public async Task PlannerMode_RecordsNothing()
+    {
+        var seen = CaptureRouting(() => RunAsync(AgentRoutingMode.Planner, Reasoned(WellKnown.Intents.ProductInfo)).GetAwaiter().GetResult());
+
+        seen.Should().NotContain(x => x.Router == WellKnown.AgentNames.Product && x.Reason == "intent" && x.Mode == "planner");
+    }
+
+    private sealed class FixedMonitor<T>(T value) : IOptionsMonitor<T>
+    {
+        public T CurrentValue => value;
+        public T Get(string? name) => value;
+        public IDisposable? OnChange(Action<T, string?> listener) => null;
+    }
+
     private sealed class ScriptedClient(ApprovalContextAccessor accessor, bool loop) : IChatClient
     {
         public record Observation(string? SessionId, string[] UserTexts);
         public ConcurrentQueue<Observation> Observations { get; } = new();
+
+        /// <summary>Her LLM çağrısının talimat anahtarı (hangi ajanlar çalıştı?).</summary>
+        public ConcurrentQueue<string?> Instructions { get; } = new();
         private int _calls;
         public int Calls => _calls;
 
@@ -168,6 +338,7 @@ public class AgentWorkflowRegressionTests
             var messages = input.ToList();
             Observations.Enqueue(new(accessor.Context?.SessionId,
                 messages.Where(m => m.Role == ChatRole.User).Select(m => m.Text).ToArray()));
+            Instructions.Enqueue(options?.Instructions);
             await Task.Delay(1, cancellationToken);
             if (options?.Instructions == "agents/planning-agent")
                 return new(new ChatMessage(ChatRole.Assistant,

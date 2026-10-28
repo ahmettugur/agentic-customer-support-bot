@@ -40,7 +40,8 @@ public class CustomerSupportChatManager : GroupChatManager
         IReadOnlyList<AIAgent> agents,
         WorkflowGuardOptions guards,
         ILogger<CustomerSupportChatManager> logger,
-        string? constrainedSpecialistName = null)
+        string? constrainedSpecialistName = null,
+        string? firstAgentName = null)
     {
         _guards = guards;
         _logger = logger;
@@ -72,6 +73,11 @@ public class CustomerSupportChatManager : GroupChatManager
             }
         }
 
+        // Yönlendiricinin seçtiği ilk ajan. Bilinmeyen bir ad turu DÜŞÜRMEZ: uyarıp Planning yoluna dönülür.
+        AIAgent? firstAgent = null;
+        if (!string.IsNullOrWhiteSpace(firstAgentName) && !agentsByName.TryGetValue(firstAgentName, out firstAgent))
+            logger.LogWarning("Preselected first agent '{Agent}' is not a workflow participant; falling back to PlanningAgent", firstAgentName);
+
         var ctx = new RoutingContext
         {
             AgentsByName = agentsByName,
@@ -79,7 +85,8 @@ public class CustomerSupportChatManager : GroupChatManager
             ResponseAgent = _responseAgent,
             Guards = _guards,
             Logger = _logger,
-            ConstrainedSpecialist = constrainedSpecialist
+            ConstrainedSpecialist = constrainedSpecialist,
+            FirstAgent = firstAgent
         };
 
         _strategies =
