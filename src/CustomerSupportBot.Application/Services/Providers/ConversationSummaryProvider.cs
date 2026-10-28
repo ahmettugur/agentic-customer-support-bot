@@ -77,8 +77,13 @@ public class ConversationSummaryProvider : IContextProvider
             // yarışabilir — ikisi de aynı "eski özet"i okuyup farklı deltaları katlarsa
             // biri sessizce kaybolur (bkz. PostgresSessionManager.MutateStateAsync'teki
             // aynı desen). Kilit bu yarışı serileştirir.
+            //
+            // 🐞 Anahtar "session:{id}" OLAMAZ: kalıcı yazım (MutateStateAsync → WriteStateAsync) o anahtarı KENDİ alır ve
+            // dağıtık kilit yeniden girilebilir değildir. Aynı anahtarı tutarken yazan sağlayıcı kendi kendini bekliyordu:
+            // özet hiç kalıcılaşmıyor, her uzun konuşma turu kilit zaman aşımını ve boşa giden bir LLM çağrısını ödüyordu
+            // (log: "Konuşma özetleme başarısız oldu — TaskCanceledException ... WriteStateAsync").
             await using var handle = await _distributedLock
-                .AcquireAsync($"session:{session.SessionId}", ct: ct)
+                .AcquireAsync(SummaryLockKey(session.SessionId), ct: ct)
                 .ConfigureAwait(false);
 
             // Kilit beklerken aynı süreçte başka bir çağrı zaten katlamış olabilir
@@ -126,6 +131,9 @@ public class ConversationSummaryProvider : IContextProvider
             return null;
         }
     }
+
+    /// <summary>Özetleme kilidi — durum yazımının <c>session:{id}</c> kilidinden bilerek ayrı (bkz. <see cref="GetContextAsync"/>).</summary>
+    internal static string SummaryLockKey(string sessionId) => $"session-summary:{sessionId}";
 
     /// <summary>
     /// Yeni mesajları özete katlar. <paramref name="existingSummary"/> <c>null</c>ise ilk

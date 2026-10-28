@@ -439,6 +439,7 @@
                                         {
                                             var steps = ToolCardLogic.Steps(order, CardOffset);
                                             var shipping = ToolCardLogic.Shipping(order);
+                                            var (shipCarrier, shipTracking) = ToolCardLogic.ShippingParts(order);
                                             <article class="tool-card tone-@ToolCardLogic.OrderTone(order.Status)">
                                                 <header class="tool-card-head">
                                                     <span class="tool-card-title">Sipariş #@order.OrderId</span>
@@ -461,7 +462,7 @@
                                                 </ol>
                                                 @if (shipping is not null)
                                                 {
-                                                    <div class="tool-card-shipping"><span aria-hidden="true">📦</span> @shipping</div>
+                                                    <div class="tool-card-shipping"><span aria-hidden="true">📦</span> @if (shipCarrier is not null) { <strong>@shipCarrier</strong> }@if (shipCarrier is not null && shipTracking is not null) { <span> · </span> }@if (shipTracking is not null) { <span>@shipTracking</span> }</div>
                                                 }
                                             </article>
                                         }
@@ -1494,7 +1495,7 @@
                 if (jd.TryGetProperty("agent", out var hintAgent) && hintAgent.ValueKind == JsonValueKind.String)
                 {
                     var hintAgentName = hintAgent.GetString();
-                    if (!string.IsNullOrEmpty(hintAgentName) && !_agentChips.Any(c => c.Name == hintAgentName))
+                    if (!string.IsNullOrEmpty(hintAgentName) && !_agentChips.Any(c => AgentChipLogic.SameAgent(c.Name, hintAgentName)))
                         UpsertAgentChip(hintAgentName, "running");
                 }
                 if (_currentBot is not null && jd.TryGetProperty("kind", out var cardKind))
@@ -2067,7 +2068,7 @@
         // Yanıt akmaya başladıktan sonra gelen geç ajan olayları paneli yeniden AÇMAMALI.
         if (_agentChipsSealed) return;
 
-        var existing = _agentChips.FirstOrDefault(c => c.Name == name);
+        var existing = _agentChips.FirstOrDefault(c => AgentChipLogic.SameAgent(c.Name, name));
         if (existing != null) existing.Status = status;
         else _agentChips.Add(new AgentChip { Name = name, Status = status, SortOrder = _agentChipSeq++ });
     }

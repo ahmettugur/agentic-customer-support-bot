@@ -47,7 +47,11 @@ public static class AiServicesExtensions
         {
             var options = sp.GetRequiredService<IOptions<AiOptions>>().Value;
             return AiClientFactory.CreateReasoningChatClient(options, inner =>
-                WrapWithTelemetry(sp, inner, ResolveReasoningModel(options), options.Provider.ToString()));
+            {
+                var wrapped = WrapWithTelemetry(sp, inner, ResolveReasoningModel(options), options.Provider.ToString());
+                var usage = sp.GetService<ITurnUsageTracker>();
+                return usage is null ? wrapped : new CustomerSupportBot.Adapters.Agents.UsageLabelingChatClient(wrapped, "Reasoning", usage);
+            });
         });
         services.AddSingleton<IReasoningChatClient>(sp =>
             sp.GetRequiredService<ReasoningChatClient>());

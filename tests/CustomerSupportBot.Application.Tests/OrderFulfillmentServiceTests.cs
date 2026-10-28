@@ -19,7 +19,7 @@ public class OrderFulfillmentServiceTests
 
     private static OrderInfo Order(string status) => new()
     {
-        CustomerId = "1001", Status = status, Carrier = "Yurtiçi Kargo", TrackingNumber = "YK<123>",
+        CustomerId = "1001", Status = status, Carrier = "Yurtiçi Kargo", TrackingNumber = "YK&123",
         Lines = [new OrderLine("Kahve Makinesi", 1)]
     };
 
@@ -57,16 +57,16 @@ public class OrderFulfillmentServiceTests
     {
         var h = Build();
 
-        var r = await h.Service.MarkShippedAsync("1044", " Yurtiçi Kargo ", " YK<123> ", Ct);
+        var r = await h.Service.MarkShippedAsync("1044", " Yurtiçi Kargo ", " YK&123 ", Ct);
 
         r.Status.Should().Be(OrderFulfillmentStatus.Updated);
-        h.Orders.Received(1).MarkShipped("1044", "Yurtiçi Kargo", "YK<123>", Arg.Any<DateTime>());
+        h.Orders.Received(1).MarkShipped("1044", "Yurtiçi Kargo", "YK&123", Arg.Any<DateTime>());
         var mail = h.Sent.Should().ContainSingle().Subject;
         mail.To.Should().Be("ayse@example.com");
         mail.Subject.Should().Be("Siparişiniz kargoya verildi — #1044");
         mail.TextBody.Should().Contain("Merhaba Ayşe Yılmaz").And.Contain("Kahve Makinesi")
-            .And.Contain("Yurtiçi Kargo").And.Contain("YK<123>").And.Contain("https://destek.example.com/");
-        mail.HtmlBody.Should().Contain("YK&lt;123&gt;").And.NotContain("YK<123>");
+            .And.Contain("Yurtiçi Kargo").And.Contain("YK&123").And.Contain("https://destek.example.com/");
+        mail.HtmlBody.Should().Contain("YK&amp;123").And.NotContain("YK&123");
     }
 
     [Fact]
@@ -99,6 +99,19 @@ public class OrderFulfillmentServiceTests
 
         (await h.Service.MarkShippedAsync("1044", new string('k', 65), null, Ct)).Status.Should().Be(OrderFulfillmentStatus.Invalid);
         (await h.Service.MarkShippedAsync("1044", null, new string('t', 65), Ct)).Status.Should().Be(OrderFulfillmentStatus.Invalid);
+
+        h.Orders.DidNotReceiveWithAnyArgs().MarkShipped(default!, default, default, default);
+    }
+
+    [Theory]
+    [InlineData("<b>Yurtiçi</b> Kargo", null)]
+    [InlineData("Yurtiçi Kargo", "<script>x</script>")]
+    [InlineData(null, "YK>1")]
+    public async Task MarkupInCarrierOrTracking_IsInvalid_AndTheOrderIsNotTouched(string? carrier, string? tracking)
+    {
+        var h = Build();
+
+        (await h.Service.MarkShippedAsync("1044", carrier, tracking, Ct)).Status.Should().Be(OrderFulfillmentStatus.Invalid);
 
         h.Orders.DidNotReceiveWithAnyArgs().MarkShipped(default!, default, default, default);
     }

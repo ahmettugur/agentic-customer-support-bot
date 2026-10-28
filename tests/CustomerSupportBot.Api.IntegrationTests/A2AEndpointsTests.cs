@@ -19,6 +19,7 @@ using CustomerSupportBot.Api.Endpoints;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace CustomerSupportBot.Api.IntegrationTests;
 
@@ -29,6 +30,8 @@ public sealed class A2AEnabledFactory : TestWebApplicationFactory
         base.ConfigureWebHost(builder);
         builder.UseSetting("A2A:Enabled", "true");
         builder.UseSetting("A2A:SubjectTokenMinutes", "5");
+        // Ajana mesaj gönderen testler (akış, içerik türü) GERÇEK modele gitmemeli: deterministik sahte istemci.
+        builder.ConfigureServices(s => s.Replace(ServiceDescriptor.Singleton<Microsoft.Extensions.AI.IChatClient>(new EchoChatClient())));
         // Partner tanımı bilinçli olarak BOŞ bırakılıyor: varsayılanın reddetmek olduğunu
         // doğrulayan testler bunu kullanıyor.
     }
@@ -487,7 +490,7 @@ public class A2AEndpointsTests : IClassFixture<A2AEnabledFactory>
         var client = ClientWith(MintToken(A2ARoles.Partner), requestedVersion);
 
         var response = await client.GetAsync(
-            "/a2a/product/card", TestContext.Current.CancellationToken);
+            "/a2a/product/tasks", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/a2a+json");
@@ -508,10 +511,70 @@ public class A2AEndpointsTests : IClassFixture<A2AEnabledFactory>
         var client = ClientWith(MintToken(A2ARoles.Partner), "1.0");
 
         var response = await client.GetAsync(
-            "/a2a/product/card", TestContext.Current.CancellationToken);
+            "/a2a/product/tasks", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/a2a+json");
+    }
+
+    // ═══ Hata sözleşmesi — dış bir istemci hata KODUNA bakarak karar verir ═══
+
+    /// <summary>
+    /// Bu kanalda hiçbir zaman görev (Task) üretilmez (yanıt her zaman tek Message): bilinmeyen görev
+    /// sorgusu A2A'nın TaskNotFound hatasını (-32001) makine okunur sebebiyle döndürmeli. SDK sürüm
+    /// güncellemelerinde bu eşleme sessizce değişirse istemciler hatayı yanlış sınıflandırır.
+    /// </summary>
+    [Fact]
+    public async Task JsonRpc_GetUnknownTask_ReturnsTaskNotFound()
+    {
+        var client = ClientWith(MintToken(A2ARoles.Partner));
+
+        var response = await client.PostAsJsonAsync("/a2a/product", new
+        {
+            jsonrpc = "2.0", id = "t1", method = "GetTask", @params = new { id = "no-such-task" }
+        }, TestContext.Current.CancellationToken);
+
+        using var body = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var error = body.RootElement.GetProperty("error");
+        error.GetProperty("code").GetInt32().Should().Be(-32001);
+        error.GetProperty("data")[0].GetProperty("reason").GetString().Should().Be("TASK_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task HttpJson_GetUnknownTask_Returns404WithTaskNotFoundReason()
+    {
+        var client = ClientWith(MintToken(A2ARoles.Partner));
+
+        var response = await client.GetAsync("/a2a/product/tasks/no-such-task", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/a2a+json");
+        using var body = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        body.RootElement.GetProperty("error").GetProperty("details")[0].GetProperty("reason").GetString()
+            .Should().Be("TASK_NOT_FOUND");
+    }
+
+    /// <summary>
+    /// A2A 1.0 HTTP+JSON istemcileri gövdeyi <c>application/a2a+json</c> ile gönderebilir; yalnızca
+    /// <c>application/json</c> kabul eden bir sunucu onları 415 ile geri çevirirdi.
+    /// </summary>
+    [Fact]
+    public async Task HttpJson_AcceptsTheA2AJsonContentType()
+    {
+        var client = ClientWith(MintToken(A2ARoles.Partner));
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/a2a/product/message:send")
+        {
+            Content = new StringContent(
+                "{\"message\":{\"messageId\":\"ct1\",\"role\":\"ROLE_USER\",\"parts\":[{\"text\":\"Çay fiyatı?\"}]}}",
+                System.Text.Encoding.UTF8, "application/a2a+json")
+        };
+
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().NotBe(HttpStatusCode.UnsupportedMediaType);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     // ═══ Girdi sınırları — istek SAYISI sınırı "ne kadar" sorusunu kapsamaz ═══

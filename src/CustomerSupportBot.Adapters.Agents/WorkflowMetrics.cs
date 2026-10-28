@@ -30,6 +30,17 @@ internal static class WorkflowMetrics
     public static void RecordDecompositionFallback(string reason) =>
         DecompositionFallbacks.Add(1, new KeyValuePair<string, object?>("reason", reason));
 
+    private static readonly Counter<long> RoutingDecisions = Meter.CreateCounter<long>(
+        "agent.routing.decisions", unit: "{turn}",
+        description: "İlk ajan yönlendirmesi. mode=shadow: outcome=match|mismatch|router_abstained|unobserved (yönlendirici ↔ Planning); " +
+                     "mode=deterministic: outcome=routed|fallback_to_planner.");
+
+    public static void RecordRouting(string mode, string outcome, string router, string planner, string reason) =>
+        RoutingDecisions.Add(1,
+            new KeyValuePair<string, object?>("mode", mode), new KeyValuePair<string, object?>("outcome", outcome),
+            new KeyValuePair<string, object?>("router", router), new KeyValuePair<string, object?>("planner", planner),
+            new KeyValuePair<string, object?>("reason", reason));
+
     public static void RecordRecovery(string result) =>
         Recoveries.Add(1, new KeyValuePair<string, object?>("result", result));
 

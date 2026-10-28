@@ -46,6 +46,42 @@ public class ReplayStepBuilderTests
             .Should().Be(T0.AddMilliseconds(3561 + 3493), "ajanın bitiş zamanı");
     }
 
+    private const string Evaluated = """{"preToolCheck":{"canProceed":true,"reasoning":"r"},"resultConfidence":1,"postToolReflection":{"status":"done","summary":"s"}}""";
+
+    [Fact]
+    public void SpecialistReasoning_IsNotRepeated_WhenTheAgentCardAlreadyShowsTheEvaluation()
+    {
+        // Ajan kartı çıktısındaki ön kontrol/güven/sonucu zaten gösteriyor; aynısını ayrı kartla tekrarlamak kafa karıştırır.
+        var trace = Trace(
+        [
+            Visit("PlanningAgent_b58d", 7, 3553),
+            new TraceAgentVisit("OrderAgent_f183", T0.AddMilliseconds(3561), 3493, Evaluated),
+            Visit("ResponseAgent_5964", 7060, 2300)
+        ], """{"agentName":"OrderAgent","resultConfidence":1}""");
+
+        Titles(trace).Should().Equal(
+            "Müşteri mesajı", "Ön analiz", "→ ComplaintAgent",
+            "PlanningAgent_b58d", "OrderAgent_f183", "ResponseAgent_5964", "Asistanın yanıtı");
+    }
+
+    [Fact]
+    public void WhenOnlyOneOfTwoVisitsShowsTheEvaluation_TheOtherKeepsItsReasoningCard()
+    {
+        // Yeniden planlama: ilk ziyaretin çıktısı değerlendirmeyi taşıyor, ikincisinin çıktısı düz metin. Değerlendirmeler
+        // ziyaretlerle sırayla eşleşir: yalnızca ikinci ziyaretinki gösterilmeye devam etmeli.
+        var trace = Trace(
+        [
+            new TraceAgentVisit("OrderAgent_a", T0, 1000, Evaluated),
+            Visit("PlanningAgent_b", 1100, 500),
+            Visit("OrderAgent_c", 1700, 1000)
+        ], """{"agentName":"OrderAgent","resultNotes":"ilk"}""", """{"agentName":"OrderAgent","resultNotes":"ikinci"}""");
+
+        var kept = ReplayStepBuilder.Build(trace).Where(s => s.Title == "Değerlendirme: OrderAgent").ToList();
+
+        kept.Should().ContainSingle();
+        ((ReplayJsonPayload)kept[0].Payload).Json.Should().Contain("ikinci");
+    }
+
     [Fact]
     public void SameAgentVisitedTwice_EachReasoningFollowsItsOwnVisit()
     {

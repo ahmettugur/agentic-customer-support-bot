@@ -396,10 +396,13 @@ public static class A2AEndpoints
     ///
     /// <para>
     /// <b><c>Streaming = true</c>:</b> köprü, streaming metotlarını (<c>SendStreamingMessage</c> ve
-    /// HTTP+JSON <c>message:stream</c>) map ediyor ve İKİSİ DE çalışıyor — ölçüldü: sırasıyla 45 ve
-    /// 53 SSE olayı, içerik akışsız yanıtla aynı. Uzun süre <c>false</c> ilan edilmesinin sebebi bir
-    /// ölçüm hatasıydı: yol, 0.2 biçimli gövdeyle (<c>role:"user"</c>, <c>kind:"text"</c>) denenip
-    /// 500 alınmış ve "desteklenmiyor" sanılmıştı; doğru 1.0 proto adlandırmasıyla 200 dönüyor.
+    /// HTTP+JSON <c>message:stream</c>) map ediyor ve İKİSİ DE çalışıyor: <c>text/event-stream</c> döner
+    /// ve içerik akışsız yanıtla aynıdır. <c>AgentRunMode.ReturnMessage</c> ile yanıt TEK bir tam
+    /// <c>message</c> olayı olarak gelir (token token artımlı akış YOKTUR) — köprü sürümü 1.22 ve 1.26'da
+    /// ölçüldü, ikisinde de bir olay. A2A bunu geçerli kılar (akış, Message ile de sonlanabilir). Uzun süre
+    /// <c>false</c> ilan edilmesinin sebebi bir ölçüm hatasıydı: yol, 0.2 biçimli gövdeyle
+    /// (<c>role:"user"</c>, <c>kind:"text"</c>) denenip 500 alınmış ve "desteklenmiyor" sanılmıştı;
+    /// doğru 1.0 proto adlandırmasıyla 200 dönüyor.
     /// Çalışan bir yeteneği <c>false</c> ilan etmek, kartın var olma sebebine aykırıdır: keşifle
     /// bulunamayan ama çağrılabilen bir yüzey bırakırdı. Kimlik akışı bu yolda da doğru kurulur —
     /// bkz. <c>A2ASubjectScopeFilter.ScopedResult</c> ve <c>A2AScopeTimingTests</c>.

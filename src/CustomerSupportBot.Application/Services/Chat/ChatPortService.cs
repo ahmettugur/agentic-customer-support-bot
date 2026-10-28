@@ -33,6 +33,7 @@ public sealed class ChatPortService : IChatPort
     private readonly IAttachmentStore? _attachments;
     private readonly AttachmentOptions _attachmentOptions;
     private readonly Ports.Outbound.Observability.ILlmCallAttribution? _attribution;
+    private readonly Ports.Outbound.Observability.ITurnUsageTracker? _usage;
     private readonly ILlmSpendGuard? _spendGuard;
     private readonly IEscalationSink? _escalations;
     private readonly LlmBudgetOptions _budget;
@@ -77,8 +78,10 @@ public sealed class ChatPortService : IChatPort
         Services.Evaluation.LiveEvaluationService? liveEval = null,
         ITurnModelTier? modelTier = null,
         IOptions<ModelRoutingOptions>? routing = null,
-        ICustomerProfileService? profiles = null)
+        ICustomerProfileService? profiles = null,
+        Ports.Outbound.Observability.ITurnUsageTracker? usage = null)
     {
+        _usage = usage;
         _profiles = profiles;
         _modelTier = modelTier;
         _routing = routing?.Value ?? new ModelRoutingOptions();
@@ -143,6 +146,7 @@ public sealed class ChatPortService : IChatPort
         var sessionId = session.SessionId;
         // Görüşme başına maliyet: bu turdaki tüm LLM çağrıları (akıl yürütme + ajanlar) bu görüşmeye atfedilir.
         using var costScope = _attribution?.BeginSession(sessionId);
+        using var usageTurn = BeginUsageTurn(sessionId);
         // Kilit BİNDDEN ÖNCE alınır. Bind bir "oku-karar ver-yaz" dizisidir: oturum henüz
         // kimseye bağlı değilse çağıranı bağlar. Kilidin dışında kalırsa, sahipsiz aynı
         // oturuma eşzamanlı gelen iki farklı müşteri de "bağlı değil" görüp ikisi de
@@ -227,6 +231,32 @@ public sealed class ChatPortService : IChatPort
     {
         if (!await SessionIdentityBinder.TryBindAsync(session, customerId, _sessions, ct))
             throw new UnauthorizedSessionAccessException(session.SessionId);
+    }
+
+    /// <summary>
+    /// Turun token harcamasını izlemeye başlar; dönen kapsam bitince (akış tükenince ya da iptal edilince) Reasoning,
+    /// Planning ve ajanların harcamasını tek satırlık özet olarak loglar. Çağrı yapılmayan tur (ör. temsilci modu) log üretmez.
+    /// </summary>
+    private IDisposable BeginUsageTurn(string sessionId)
+    {
+        if (_usage is null) return NoopDisposable.Instance;
+        _usage.Begin(sessionId);
+        return new UsageTurnScope(this, sessionId);
+    }
+
+    private sealed class UsageTurnScope(ChatPortService owner, string sessionId) : IDisposable
+    {
+        public void Dispose()
+        {
+            var summary = owner._usage?.Complete(sessionId);
+            if (summary is not null) owner._logger.LogInformation("{Usage}", summary.Format(sessionId));
+        }
+    }
+
+    private sealed class NoopDisposable : IDisposable
+    {
+        public static readonly NoopDisposable Instance = new();
+        public void Dispose() { }
     }
 
     /// <summary>
@@ -456,6 +486,7 @@ public sealed class ChatPortService : IChatPort
         var sessionId = session.SessionId;
         // Görüşme başına maliyet: bu turdaki tüm LLM çağrıları (akıl yürütme + ajanlar) bu görüşmeye atfedilir.
         using var costScope = _attribution?.BeginSession(sessionId);
+        using var usageTurn = BeginUsageTurn(sessionId);
 
         // Kilit BİNDDEN ÖNCE (gerekçe için bkz. HandleAsync). Human-mode dalı da kilit
         // altındadır: orada bot turu yok ama geçmişe yazma var, dolayısıyla sıraya girmesi

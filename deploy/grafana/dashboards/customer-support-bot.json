@@ -323,6 +323,39 @@
           "legendFormat": "{{experiment}}/{{arm}} · {{dimension}}"
         }
       ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Yönlendirme gölge ölçümü: yönlendirici ↔ Planning (saatlik)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (increase(agent_routing_decisions_total{mode=\"shadow\"}[1h]))",
+          "legendFormat": "{{outcome}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (outcome) (increase(agent_routing_decisions_total{mode=\"deterministic\"}[1h]))",
+          "legendFormat": "deterministic · {{outcome}}"
+        }
+      ]
     }
   ]
 }

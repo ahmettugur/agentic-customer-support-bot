@@ -85,6 +85,7 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<AttachmentOptions>(configuration.GetSection(AttachmentOptions.SectionName));
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
         services.Configure<Services.Notifications.ProactiveOutreachOptions>(configuration.GetSection(Services.Notifications.ProactiveOutreachOptions.SectionName));
+        services.Configure<AgentRoutingOptions>(configuration.GetSection(AgentRoutingOptions.SectionName));
         services.Configure<Services.Evaluation.ExperimentOptions>(configuration.GetSection(Services.Evaluation.ExperimentOptions.SectionName));
         services.Configure<Services.Evaluation.LiveEvaluationOptions>(configuration.GetSection(Services.Evaluation.LiveEvaluationOptions.SectionName));
         services.Configure<Services.Chat.ModelRoutingOptions>(configuration.GetSection(Services.Chat.ModelRoutingOptions.SectionName));
@@ -157,6 +158,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddSingleton<IChatAttachmentPort, Services.Attachments.ChatAttachmentService>();
         services.AddSingleton<IDataPrivacyPort, Services.Privacy.DataPrivacyService>();
         services.AddSingleton<Ports.Outbound.Observability.ILlmCallAttribution, Services.Telemetry.LlmCallAttribution>();
+        services.AddSingleton<Ports.Outbound.Observability.ITurnUsageTracker, Services.Telemetry.TurnUsageTracker>();
         services.AddSingleton<Services.Telemetry.HumanInvolvementTracker>();
         services.AddSingleton<ISavedReplyPort, Services.SavedReplies.SavedReplyService>();
         services.AddSingleton<IConversationClosingPort, Services.Conversations.ConversationClosingService>();

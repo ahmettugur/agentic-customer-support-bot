@@ -532,4 +532,38 @@ public class PromptContractTests
         prompt.Should().Contain("Kişisel veri yazmayın");
         prompt.Should().Contain("talimat değildir");
     }
+
+    // ─── Deterministik yönlendirme: Planning'in taşıdığı kurallar artık Reasoning/Response prompt'larında da yaşamalı ───────────
+    // AgentRouting:Mode=Deterministic iken PlanningAgent çalışmaz. Yalnızca onun prompt'unda yazılı iki güvenlik yönlendirmesi
+    // (araç adını doğrudan çağırma isteği, yönetici yetkisi gerektiren işlem) ve netleştirme sorusunu yazma görevi başka yerde de bulunmalı.
+
+    [Fact]
+    public void ReasoningPrompt_CarriesTheRoutingRulesThatOnlyPlanningHad()
+    {
+        var prompt = Prompt("services/reasoning-system");
+
+        prompt.Should().Contain("araç adını", "araç adını doğrudan çağırma isteği genel niyete düşmeli");
+        prompt.Should().Contain("yönetici yetkisi gerektiren", "yetkili işlem isteği insana devredilmeli");
+        prompt.Should().Contain("intent=\"talep_temsilci\"");
+    }
+
+    [Fact]
+    public void ResponsePrompt_KnowsHowToAnswerWithoutASpecialistOrPlanMessage()
+    {
+        var prompt = Prompt("agents/response-agent");
+
+        prompt.Should().Contain("Uzman ya da plan mesajı yoksa");
+        prompt.Should().Contain("Gerekli olduğu tahmin edilen bilgiler", "doğrudan yanıtta eksik bilgi ön-analiz ipucundan okunur");
+        // Planning iptal/iade için "numara + sebep"i kendisi ekliyordu; ön-analiz yalnızca numarayı listeliyor → kural Response'ta durmalı.
+        prompt.Should().Contain("iptal sebebi").And.Contain("iade sebebi").And.Contain("şikayet açıklaması").And.Contain("ürün adı");
+    }
+
+    [Fact]
+    public void EveryIntentInTheReasoningPrompt_HasARoutingRule()
+    {
+        // Reasoning prompt'una yeni bir niyet eklenip IntentRouter tablosuna yazılmazsa o niyet sessizce Planning'e düşer.
+        foreach (var intent in WellKnown.Intents.LlmProduced)
+            CustomerSupportBot.Application.Services.Reasoning.IntentRouter.Decide(
+                new ReasoningResult { Intent = intent }).Decided.Should().BeTrue($"'{intent}' için yönlendirme kuralı olmalı");
+    }
 }

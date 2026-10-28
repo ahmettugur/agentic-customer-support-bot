@@ -30,25 +30,6 @@ namespace CustomerSupportBot.Api.IntegrationTests;
 /// <summary>A2A açık + LLM yerine deterministik sahte istemci.</summary>
 public class A2AConformanceFactory : TestWebApplicationFactory
 {
-    private sealed class EchoChatClient : IChatClient
-    {
-        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> m, ChatOptions? o = null, CancellationToken ct = default)
-        {
-            var text = string.Join(" ", m.Where(x => x.Role == ChatRole.User).Select(x => x.Text));
-            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, $"echo: {text}")));
-        }
-
-        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
-            IEnumerable<ChatMessage> m, ChatOptions? o = null, [EnumeratorCancellation] CancellationToken ct = default)
-        {
-            var r = await GetResponseAsync(m, o, ct);
-            foreach (var msg in r.Messages) yield return new ChatResponseUpdate(msg.Role, msg.Text);
-        }
-
-        public object? GetService(Type t, object? k = null) => null;
-        public void Dispose() { }
-    }
-
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         base.ConfigureWebHost(builder);

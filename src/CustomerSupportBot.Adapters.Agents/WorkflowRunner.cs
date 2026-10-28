@@ -12,6 +12,8 @@ using CustomerSupportBot.Adapters.Agents.Checkpointing;
 using CustomerSupportBot.Application.Ports.Inbound;
 using CustomerSupportBot.Application.Ports.Outbound;
 using CustomerSupportBot.Application.Services.Approval;
+using CustomerSupportBot.Application.Services.Reasoning;
+using Microsoft.Extensions.Options;
 using CustomerSupportBot.Domain.Model;
 using CustomerSupportBot.Domain.Services;
 using AgentSession = CustomerSupportBot.Domain.Model.AgentSession;
@@ -34,6 +36,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
     private readonly WorkflowMessageBuilder _messageBuilder;
     private readonly WorkflowCheckpointing? _checkpointing;
     private readonly IApprovalContextAccessor? _approvalContext;
+    private readonly IOptionsMonitor<AgentRoutingOptions>? _routing;
 
     public WorkflowRunner(
         AgentTeamFactory factory,
@@ -46,8 +49,10 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         WorkflowTraceEventProcessor traceProcessor,
         WorkflowMessageBuilder messageBuilder,
         WorkflowCheckpointing? checkpointing = null,
-        IApprovalContextAccessor? approvalContext = null)
+        IApprovalContextAccessor? approvalContext = null,
+        IOptionsMonitor<AgentRoutingOptions>? routing = null)
     {
+        _routing = routing;
         _factory = factory;
         _finalizer = finalizer;
         _guards = guards;
@@ -104,7 +109,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         st.Trace.EstimatedTokens = TokenEstimator.Estimate(messages.Select(m => m.Text));
         st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
-        var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent);
+        var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent, ResolveFirstAgent(reasoning, st));
         var checkpoint = await BeginCheckpointingAsync(session, conversationHistory, reasoning, st, query);
         await using var turnGuard = checkpoint is null ? null : new CheckpointTurnGuard(checkpoint, st.Trace.TraceId, ct);
         var runTimer = Stopwatch.StartNew();
@@ -271,7 +276,7 @@ internal sealed class WorkflowRunner : IWorkflowRunner
         st.Trace.EstimatedTokens = TokenEstimator.Estimate(messages.Select(m => m.Text));
         st.Trace.ContextParts = ToContextUsage(prompt.Context);
 
-        var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent);
+        var workflow = _factory.CreateWorkflow(reasoning?.ConstrainedTargetAgent, ResolveFirstAgent(reasoning, st));
         var checkpoint = await BeginCheckpointingAsync(session, conversationHistory, reasoning, st, query);
         await using var turnGuard = checkpoint is null ? null : new CheckpointTurnGuard(checkpoint, st.Trace.TraceId, ct);
         var runTimer = Stopwatch.StartNew();
@@ -500,6 +505,49 @@ internal sealed class WorkflowRunner : IWorkflowRunner
     /// olarak imkânsız hale getirildi; her iki çağıran da turun bütçesine bağlı token'ı geçer.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// İlk ajanı belirler. <see cref="AgentRoutingMode.Planner"/>: <c>null</c> (Planning). <see cref="AgentRoutingMode.Shadow"/>: yine <c>null</c>
+    /// (davranış değişmez) ama yönlendiricinin kararı turun sonunda Planning'inkiyle karşılaştırılmak üzere saklanır.
+    /// <see cref="AgentRoutingMode.Deterministic"/>: yönlendirici karar verdiyse o ajan (Planning atlanır), susarsa <c>null</c> (Planning güvenlik ağı).
+    /// </summary>
+    private string? ResolveFirstAgent(ReasoningResult? reasoning, WorkflowTraceEventProcessor.TraceState st)
+    {
+        var mode = _routing?.CurrentValue.Mode ?? AgentRoutingMode.Planner;
+        if (mode == AgentRoutingMode.Planner) return null;
+
+        var decision = IntentRouter.Decide(reasoning);
+
+        if (mode == AgentRoutingMode.Shadow)
+        {
+            // Alt görev koşusunda hedef bölme anında seçildi; Planning'le kıyaslamanın anlamı yok.
+            if (decision.Reason != "subtask") st.ShadowRoute = decision;
+            return null;
+        }
+
+        if (decision.Decided)
+        {
+            WorkflowMetrics.RecordRouting("deterministic", "routed", decision.Agent!, "-", decision.Reason);
+            return decision.Agent;
+        }
+
+        WorkflowMetrics.RecordRouting("deterministic", "fallback_to_planner", "-", "-", decision.Reason);
+        return null;
+    }
+
+    /// <summary>Gölge modun ölçümü: yönlendirici ↔ Planning karşılaştırması. Uyuşmazlık, düzeltilecek tablo satırının işaretidir.</summary>
+    private void RecordShadowComparison(WorkflowTraceEventProcessor.TraceState st)
+    {
+        if (st.ShadowRoute is not { } route) return;
+
+        var c = RoutingComparison.Compare(route, st.Trace.Planning);
+        WorkflowMetrics.RecordRouting("shadow", c.Outcome, route.Agent ?? "-", c.PlannerAgent, route.Reason);
+        if (c.Outcome == RoutingComparison.Mismatch)
+            // Metin loglanmaz (kullanıcı verisi); yalnızca karar bileşenleri.
+            _loggerFactory.CreateLogger<WorkflowRunner>().LogInformation(
+                "[Routing] Gölge uyuşmazlığı | trace={TraceId} intent={Intent} router={Router}({Reason}) planner={Planner} requiredInfo={RequiredInfo}",
+                st.Trace.TraceId, st.Trace.Reasoning?.Intent, route.Agent, route.Reason, c.PlannerAgent, st.Trace.Reasoning?.RequiredInfo.Count ?? 0);
+    }
+
     private async Task<(string Result, string TerminationReason)> BuildFinalResultAsync(
         WorkflowTraceEventProcessor.TraceState st,
         AgentSession? session,
@@ -516,6 +564,8 @@ internal sealed class WorkflowRunner : IWorkflowRunner
             terminationReason = WellKnown.Termination.ReasonMaxMessages;
             st.Result = "İşlemi bu turda güvenilir biçimde tamamlayamadım. Lütfen talebinizi netleştirin.";
         }
+
+        RecordShadowComparison(st);
 
         // selfCritique HAM çıktıdan okunur — RemoveTechnicalJsonBlocks bloğu birazdan silecek.
         st.Trace.SelfCritique = SelfCritiqueParser.TryParse(st.Result);

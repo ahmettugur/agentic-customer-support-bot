@@ -44,19 +44,21 @@ public class CustomerSupportTeam : IAgentTeamPort, ITurnResumer
         CustomerIdentityHintBuilder identityHint,
         ISemanticMemoryWriter? semanticMemory = null,
         ICustomerProfileService? profileService = null,
-        WorkflowCheckpointing? checkpointing = null)
+        WorkflowCheckpointing? checkpointing = null,
+        IOptionsMonitor<AgentRoutingOptions>? routing = null,
+        ITurnUsageTracker? usage = null)
     {
         var guards = guardOptions.Value;
         _uiHint = uiHint;
 
-        var factory = new AgentTeamFactory(chatClient, prompts, approvalGate, tools, guards, loggerFactory, approvalContext);
+        var factory = new AgentTeamFactory(chatClient, prompts, approvalGate, tools, guards, loggerFactory, approvalContext, usage);
         var finalizer = new TurnFinalizer(traceStore, approvalGate, loggerFactory, semanticMemory, profileService);
         var traceProcessor = new WorkflowTraceEventProcessor(traceStore, approvalContext, prompts);
         var messageBuilder = new WorkflowMessageBuilder(contextPipeline, prompts, chatClient, loggerFactory, identityHint);
 
         _runner = new WorkflowRunner(
             factory, finalizer, guards, traceStore,
-            approvalGate, uiHint, loggerFactory, traceProcessor, messageBuilder, checkpointing, approvalContext);
+            approvalGate, uiHint, loggerFactory, traceProcessor, messageBuilder, checkpointing, approvalContext, routing);
 
         _decomposed = new DecomposedRunner(_runner, parallelOptions.Value, uiHint, approvalContext, finalizer,
             loggerFactory.CreateLogger<DecomposedRunner>());

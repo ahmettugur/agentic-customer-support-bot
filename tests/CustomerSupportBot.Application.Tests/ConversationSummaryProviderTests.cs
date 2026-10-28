@@ -85,6 +85,68 @@ public class ConversationSummaryProviderTests
         return (provider, chatClient, sessions);
     }
 
+    /// <summary>
+    /// Kalıcı yazım (<c>PostgresSessionManager.WriteStateAsync</c>) <c>session:{id}</c> dağıtık kilidini KENDİ alır ve kilit
+    /// yeniden girilebilir değildir. Sağlayıcı aynı anahtarı tutarken yazarsa kendi kendini bekler: özet hiç kalıcılaşmaz,
+    /// her uzun konuşma turu kilit zaman aşımını (ve boşa giden LLM çağrısını) öder. Bu test o yazımı taklit eder.
+    /// </summary>
+    [Fact]
+    public async Task PersistingTheSummary_DoesNotWaitOnALockTheProviderItselfHolds()
+    {
+        var distributedLock = new InMemoryDistributedLock(Options.Create(new RedisOptions()));
+        var chatClient = Substitute.For<IGeneralChatClient>();
+        chatClient.CompleteAsync(Arg.Any<IReadOnlyList<ConversationMessage>>(), Arg.Any<CancellationToken>()).Returns("yeni özet");
+        var sessions = Substitute.For<ISessionManager>();
+        sessions.GetHistoryAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(History(8));
+        var persisted = new SessionState();
+        sessions.MutateStateAsync(Arg.Any<string>(), Arg.Any<Action<SessionState>>(), Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                await using var handle = await distributedLock.AcquireAsync(
+                    $"session:{call.ArgAt<string>(0)}", TimeSpan.FromMilliseconds(300), call.ArgAt<CancellationToken>(2));
+                call.ArgAt<Action<SessionState>>(1)(persisted);
+            });
+        var provider = new ConversationSummaryProvider(
+            chatClient, sessions, distributedLock, new ContextSanitizer(), NullLogger<ConversationSummaryProvider>.Instance);
+
+        var result = await provider.GetContextAsync(Session(), "soru", TestContext.Current.CancellationToken);
+
+        result.Should().Contain("yeni özet");
+        persisted.ConversationSummary.Should().Be("yeni özet");
+        persisted.SummarizedMessageCount.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task ConcurrentFolds_ForTheSameSession_AreStillSerialized()
+    {
+        var distributedLock = new InMemoryDistributedLock(Options.Create(new RedisOptions()));
+        var running = 0;
+        var maxRunning = 0;
+        var chatClient = Substitute.For<IGeneralChatClient>();
+        chatClient.CompleteAsync(Arg.Any<IReadOnlyList<ConversationMessage>>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                var now = Interlocked.Increment(ref running);
+                maxRunning = Math.Max(maxRunning, now);
+                await Task.Delay(100, TestContext.Current.CancellationToken);
+                Interlocked.Decrement(ref running);
+                return "özet";
+            });
+        var sessions = Substitute.For<ISessionManager>();
+        sessions.GetHistoryAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(History(12));
+        var provider = new ConversationSummaryProvider(
+            chatClient, sessions, distributedLock, new ContextSanitizer(), NullLogger<ConversationSummaryProvider>.Instance);
+
+        // Aynı AgentSession'a iki eşzamanlı istek (çift-submit): özetleme tek tek çalışmalı, sonra ikincisi hazır özeti kullanmalı.
+        var session = Session();
+        await Task.WhenAll(
+            provider.GetContextAsync(session, "a", TestContext.Current.CancellationToken),
+            provider.GetContextAsync(session, "b", TestContext.Current.CancellationToken));
+
+        maxRunning.Should().Be(1, "iki LLM katlaması aynı anda koşarsa biri diğerinin deltasını sessizce kaybeder");
+        await chatClient.Received(1).CompleteAsync(Arg.Any<IReadOnlyList<ConversationMessage>>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task BelowThreshold_ReturnsNull_NoLlmCall()
     {

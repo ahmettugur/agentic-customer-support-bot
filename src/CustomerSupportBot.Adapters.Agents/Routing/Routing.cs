@@ -14,6 +14,7 @@ internal readonly record struct RoutingResult(AIAgent Agent, string Branch);
 internal static class Branches
 {
     public const string FirstTurn = "first_turn";
+    public const string FirstTurnRouted = "first_turn_routed";
     public const string PlanParseFailed = "plan_parse_failed";
     public const string PlanClarification = "plan_clarification";
     public const string PlanUnknownAgent = "plan_unknown_agent";
@@ -34,6 +35,22 @@ internal sealed class RoutingContext
     public required WorkflowGuardOptions Guards { get; init; }
     public required ILogger Logger { get; init; }
     public AIAgent? ConstrainedSpecialist { get; init; }
+
+    /// <summary>
+    /// Deterministik yönlendiricinin seçtiği ilk ajan (bkz. IntentRouter). Doluysa PlanningAgent ATLANIR: kimse konuşmadan önce bu ajan
+    /// seçilir. Boşsa eski yol: ilk ajan PlanningAgent.
+    /// </summary>
+    public AIAgent? FirstAgent { get; init; }
+
+    /// <summary>Bu mesaj workflow katılımcılarından birine mi ait? (Başlangıçtaki kullanıcı/sistem mesajlarında yazar adı yoktur.)</summary>
+    public bool IsParticipantMessage(ChatMessage msg)
+    {
+        var author = msg.AuthorName;
+        if (string.IsNullOrEmpty(author)) return false;
+        foreach (var name in AgentsByName.Keys)
+            if (author.StartsWith(name, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 
     public AIAgent? Resolve(string? name) =>
         string.IsNullOrWhiteSpace(name) ? null
@@ -80,6 +97,16 @@ internal sealed class FirstTurnStrategy : IRoutingStrategy
     public ValueTask<RoutingResult?> TrySelectAsync(
         IReadOnlyList<ChatMessage> history, ChatMessage? lastMessage, CancellationToken ct)
     {
+        if (_ctx.FirstAgent is { } routed)
+        {
+            // İlk ajanı yönlendirici seçti: henüz kimse konuşmadıysa o, konuştuysa diğer stratejiler devralır.
+            // (Planning'deki gibi "Planning konuştu mu" bakılamaz — Planning hiç çalışmayacak.)
+            for (int i = 0; i < history.Count; i++)
+                if (_ctx.IsParticipantMessage(history[i]))
+                    return ValueTask.FromResult<RoutingResult?>(null);
+            return ValueTask.FromResult<RoutingResult?>(new RoutingResult(routed, Branches.FirstTurnRouted));
+        }
+
         for (int i = 0; i < history.Count; i++)
         {
             if (string.Equals(history[i].AuthorName,
