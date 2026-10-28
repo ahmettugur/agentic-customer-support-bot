@@ -58,10 +58,16 @@ public static class ReplayStepBuilder
             var agentName = TryGetProp(sr, "agentName", out var an) && an.ValueKind is not JsonValueKind.Null
                 ? an.GetString() ?? "?"
                 : "?";
+            // Eşleşen ziyaret HER durumda tüketilir (recordedAt olsa bile): sıradaki değerlendirme sıradaki ziyaretle eşleşmeli.
+            var visitIndex = NextVisitIndex(trace.AgentVisits, agentName, usedVisits);
+
+            // Ajan kartı çıktısındaki değerlendirmeyi zaten gösteriyor: aynısı ayrı kartla tekrarlanmaz.
+            if (visitIndex is { } vi && ShowsEvaluation(trace.AgentVisits[vi].Output)) continue;
+
             var t = TryGetProp(sr, "recordedAt", out var ra) && ra.ValueKind is not JsonValueKind.Null
                     && DateTimeOffset.TryParse(ra.GetString(), out var parsed)
                 ? parsed
-                : FinishOfNextVisit(trace.AgentVisits, agentName, usedVisits) ?? trace.StartedAt;
+                : visitIndex is { } i ? trace.AgentVisits[i].StartedAt.AddMilliseconds(trace.AgentVisits[i].DurationMs ?? 0) : trace.StartedAt;
             events.Add((t, "reasoning", $"Değerlendirme: {agentName}", new ReplayJsonPayload(JsonSerializer.Serialize(sr, Pretty))));
         }
 
@@ -90,10 +96,10 @@ public static class ReplayStepBuilder
                  .ToList();
 
     /// <summary>
-    /// Ajanın henüz bir değerlendirmeyle eşleşmemiş ilk ziyaretinin bitiş zamanı. Ziyaret adları örnek
+    /// Ajanın henüz bir değerlendirmeyle eşleşmemiş ilk ziyaretinin sırası; eşleşen yoksa null. Ziyaret adları örnek
     /// soneki taşır (<c>ComplaintAgent_f183…</c>), değerlendirmedeki ad taşımaz (<c>ComplaintAgent</c>).
     /// </summary>
-    private static DateTimeOffset? FinishOfNextVisit(IReadOnlyList<TraceAgentVisit> visits, string agentName, HashSet<int> used)
+    private static int? NextVisitIndex(IReadOnlyList<TraceAgentVisit> visits, string agentName, HashSet<int> used)
     {
         for (var i = 0; i < visits.Count; i++)
         {
@@ -101,9 +107,21 @@ public static class ReplayStepBuilder
             if (used.Contains(i) || name is null) continue;
             if (name != agentName && !name.StartsWith(agentName + "_", StringComparison.Ordinal)) continue;
             used.Add(i);
-            return visits[i].StartedAt.AddMilliseconds(visits[i].DurationMs ?? 0);
+            return i;
         }
         return null;
+    }
+
+    /// <summary>Ajan çıktısı uzman değerlendirmesini (<c>preToolCheck</c>) taşıyan JSON mu — Replay'de ajan kartı onu gösterir.</summary>
+    private static bool ShowsEvaluation(string? agentOutput)
+    {
+        if (string.IsNullOrWhiteSpace(agentOutput)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(agentOutput);
+            return TryGetProp(doc.RootElement, "preToolCheck", out _);
+        }
+        catch (JsonException) { return false; }
     }
 
     /// <summary>Büyük/küçük harf duyarsız özellik arama: tam ad, PascalCase, camelCase.</summary>
