@@ -276,7 +276,7 @@ public class PromptContractTests
         // appsettings'teki IntentSkillMap anahtarları ReasoningResult.Intent ile tam-string
         // karşılaştırılır (SkillsBasedRouter.ExtractRequiredSkills). Sözlükte olmayan bir
         // anahtar ölü konfigürasyondur — o skill hiçbir zaman gerekli sayılmaz.
-        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/appsettings.json")));
+        using var settings = ParseAppSettings();
 
         var keys = settings.RootElement
             .GetProperty("Routing").GetProperty("IntentSkillMap")
@@ -348,7 +348,7 @@ public class PromptContractTests
         // İlk yazımda TimeoutSeconds için sınıf varsayılanı (60) yazılmıştı; appsettings'teki
         // gerçek değer 180. Bu test o karışıklığı tekrarlanamaz kılar.
         var doc = SourceOf("docs/agent-architecture.html");
-        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/appsettings.json")));
+        using var settings = ParseAppSettings();
 
         var guards = settings.RootElement.GetProperty("WorkflowGuards");
         foreach (var key in new[] { "TimeoutSeconds", "MaxIterations", "MaxHandoffsPerAgent", "MaxDuplicateToolCalls" })
@@ -369,7 +369,7 @@ public class PromptContractTests
         // SLA eşikleri doküman tablosunda sayı olarak yazılı; config değişirse sunumdaki
         // rakam yanlışa döner. Guard değerleriyle aynı sapma sınıfı.
         var doc = SourceOf("docs/agent-architecture.html");
-        using var settings = JsonDocument.Parse(File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/appsettings.json")));
+        using var settings = ParseAppSettings();
         var sla = settings.RootElement.GetProperty("Sla");
 
         foreach (var (group, key) in new[]
@@ -439,6 +439,42 @@ public class PromptContractTests
         Regex.IsMatch(doc, @"(src|href)\s*=\s*""https?://").Should().BeFalse(
             "agent-architecture.html harici script/stil/font yüklememeli");
     }
+
+    /// <summary>
+    /// <c>gpt-live-1</c> devretmeyi bu ifadeyle öğrenmiş; "arka plana devret" gibi bir çeviri işi başlatmaz. Sağlayıcı rehberi etiketlerin
+    /// aynen kalmasını ister: Türkçeye çevrilirse model konuşur ama tool çağrılmaz.
+    /// </summary>
+    [Theory]
+    [InlineData("Backchannel policy:")]
+    [InlineData("Interruption policy:")]
+    [InlineData("Delegation policy:")]
+    [InlineData("Backend tools:")]
+    [InlineData("Generate <|SpawnThinking|> when:")]
+    [InlineData("Do not generate <|SpawnThinking|> when:")]
+    [InlineData("Generate <|SpawnThinking|> before giving an answer that depends on backend work.")]
+    public void LiveVoicePrompt_KeepsTheLabelsTheModelWasTrainedOn(string label)
+    {
+        File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/Prompts/services/live-voice.md")).Should().Contain(label);
+    }
+
+    /// <summary>
+    /// İki motor aynı tool'ları çalıştırır ve aynı sonuçları döner. Realtime talimatındaki bir hata kodu kuralı Live arka plan talimatına
+    /// geçmezse model o hatayı yanlış yorumlar (ör. "başka birine ait" diyerek kaydın varlığını sızdırır).
+    /// </summary>
+    [Fact]
+    public void LiveBackendPrompt_CarriesEveryToolRuleOfTheRealtimePrompt()
+    {
+        var realtime = File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/Prompts/services/realtime-voice.md"));
+        var backend = File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/Prompts/services/live-backend.md"));
+
+        var codes = System.Text.RegularExpressions.Regex.Matches(realtime, "[A-Z]{2,}(?:_[A-Z]+)+").Select(m => m.Value).Distinct().ToList();
+
+        codes.Should().NotBeEmpty();
+        backend.Should().ContainAll(codes).And.Contain("pendingApproval").And.Contain("sızdırmak YASAKTIR");
+    }
+
+    private static JsonDocument ParseAppSettings() =>
+        AppSettingsJson.Parse(File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/appsettings.json")));
 
     private static string RepoPath(string repoRelativePath)
     {

@@ -21,6 +21,8 @@ ve `Get(key)` / `Render(key, vars)` metodlarıyla erişim sağlar.
   - `routing-rewrite-system.md` — Dahili yönlendirme mesajını kullanıcı dostu Türkçe yanıta çevirme kuralları
   - `routing-rewrite-user.md` — Rewrite isteğinin kullanıcı şablonu; `{{ORIGINAL_QUERY}}` ve `{{ROUTING_MESSAGE}}` placeholder'ları + 5 örnek senaryo
   - `realtime-voice.md` — Sesli görüşme (OpenAI Realtime) sistem talimatı. `OpenAiRealtimeClientAdapter` oturum kurulurken okur; sonuna oturuma özel `OTURUM BİLGİSİ` (müşteri adı, tarih) eklenir. Yazılı ajanların (OrderAgent, ComplaintAgent, HumanHandoffAgent) iş/güvenlik kuralları değişirse **burası da güncellenmeli** — sesli kanalda bu ajanlar yoktur, model kuralları yalnızca bu dosyadan öğrenir.
+  - `live-voice.md` — GPT-Live ses modelinin talimatı: konuşma üslubu ve ne zaman arka plana devredeceği. `<|SpawnThinking|>` ifadesi ve `Backend tools` / `Generate <|SpawnThinking|> when` / `Do not generate <|SpawnThinking|> when` etiketleri modelin eğitildiği biçimdir, çevrilmez
+  - `live-backend.md` — GPT-Live arka plan modelinin talimatı: iş kuralları, onay akışı ve tool sonucu okuma. `realtime-voice.md` ile aynı kuralları taşır; biri değişince diğeri de güncellenmeli
 
 ## Dosya-dışı (kod içinde üretilen) system mesajları
 

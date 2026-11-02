@@ -45,7 +45,7 @@ public class JwtSigningKeyGuardTests
     private static string CommittedSigningKey()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
-        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        using var doc = AppSettingsJson.Parse(File.ReadAllText(path));
         return doc.RootElement.GetProperty("Jwt").GetProperty("SigningKey").GetString()!;
     }
 

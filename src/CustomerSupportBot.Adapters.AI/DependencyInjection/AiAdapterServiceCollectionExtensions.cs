@@ -34,6 +34,7 @@ public static class AiAdapterServiceCollectionExtensions
         // Realtime: tool şemaları Singleton, WS client bağlantı başına Scoped.
         services.AddSingleton<RealtimeFunctionTools>();
         services.AddScoped<IRealtimeVoiceTransport, OpenAiRealtimeClientAdapter>();
+        services.AddScoped<ILiveVoiceTransport, OpenAiLiveClientAdapter>();
 
         var memOpts = configuration.GetSection(SemanticMemoryOptions.SectionName)
                           .Get<SemanticMemoryOptions>() ?? new SemanticMemoryOptions();
