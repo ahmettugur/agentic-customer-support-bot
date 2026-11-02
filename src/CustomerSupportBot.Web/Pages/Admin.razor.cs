@@ -31,6 +31,7 @@ public partial class Admin
     private List<ApprovalRequest>    _historyApprovals   = [];
     private List<ApprovalRequest>    _stuckApprovals     = [];
     private List<EscalationRequest>  _openEscalations    = [];
+    private readonly Dictionary<string, IReadOnlyList<ConversationExcerptLine>> _escalationConversations = new();
     private List<EscalationRequest>  _closedEscalations  = [];
     private List<EscalationRequest>  _historyEscalations = [];
     private List<ActiveChatSession>  _activeChats        = [];
@@ -278,6 +279,19 @@ public partial class Admin
         catch { /* badge hatalarını sessizce geç */ }
     }
 
+    /// <summary>
+    /// Özetler tek istekte ve yalnızca yeni kayıt geldiğinde çekilir: kayıt anındaki konuşma değişmez, 15 sn'lik yenilemede tekrar istemek
+    /// boşa kota harcardı. Okunamazsa boş kalır, kart kayıttaki cümleyi gösterir.
+    /// </summary>
+    private async Task LoadEscalationConversationsAsync()
+    {
+        if (_openEscalations.All(e => _escalationConversations.ContainsKey(e.Id))) return;
+
+        var conversations = await AdminApi.GetOpenEscalationConversationsAsync();
+        foreach (var e in _openEscalations)
+            _escalationConversations[e.Id] = conversations?.GetValueOrDefault(e.Id) ?? [];
+    }
+
     private async Task RefreshActiveTabAsync()
     {
         try
@@ -294,6 +308,7 @@ public partial class Admin
                     var recent         = await AdminApi.GetRecentEscalationsAsync(30);
                     _closedEscalations = recent.Where(e => e.Status is "resolved" or "dismissed").ToList();
                     if (!_isAgent) _agentPresence = await AdminApi.GetAgentPresenceAsync();
+                    await LoadEscalationConversationsAsync();
                     break;
                 case "performance":
                     if (_performancePanel is not null) await _performancePanel.RefreshAsync();
@@ -1314,6 +1329,14 @@ public partial class Admin
             _ => null
         };
     }
+
+    /// <summary>Kuyruk satırında müşteriden sonra gelen özet — bkz. <see cref="ApprovalView.Summary"/>.</summary>
+    private static string? ApprovalRowSummary(ApprovalRequest a) =>
+        ApprovalView.Summary(
+            ApprovalLines(a.Parameters)?.Select(l => (l.Product, l.Quantity)).ToList(),
+            ParamString(a.Parameters, "orderId"),
+            ParamString(a.Parameters, a.ToolName == ToolComplaint ? "complaintText" : "reason"),
+            a.UserQuery);
 
     private static string FormatOrderId(string? orderId) =>
         string.IsNullOrWhiteSpace(orderId) ? "—" : $"#{orderId}";

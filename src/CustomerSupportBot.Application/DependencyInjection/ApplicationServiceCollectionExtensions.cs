@@ -86,6 +86,17 @@ public static class ApplicationServiceCollectionExtensions
         services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
         services.Configure<Services.Notifications.ProactiveOutreachOptions>(configuration.GetSection(Services.Notifications.ProactiveOutreachOptions.SectionName));
         services.Configure<AgentRoutingOptions>(configuration.GetSection(AgentRoutingOptions.SectionName));
+        // Yanlış yazılmış bir motor adı ilk görüşmede değil açılışta görünsün.
+        services.AddOptions<VoiceEngineOptions>()
+            .Bind(configuration.GetSection(VoiceEngineOptions.SectionName))
+            .Validate(o => Enum.IsDefined(o.Engine), "AI:Realtime:Engine 'Realtime' ya da 'Live' olmalı.")
+            .ValidateOnStart();
+        services.AddOptions<LiveVoiceOptions>()
+            .Bind(configuration.GetSection(LiveVoiceOptions.SectionName))
+            .Validate(o => o.UserPauseMs > 0 && o.AssistantPauseMs > 0, "AI:Realtime:Live duraklama süreleri pozitif olmalı.")
+            .Validate(o => o.IdleTimeoutSeconds > 0 && o.MaxSessionSeconds > 0,
+                "AI:Realtime:Live süre sınırları pozitif olmalı: GPT-Live sessizliği de ücretlendirir.")
+            .ValidateOnStart();
         services.Configure<Services.Evaluation.ExperimentOptions>(configuration.GetSection(Services.Evaluation.ExperimentOptions.SectionName));
         services.Configure<Services.Evaluation.LiveEvaluationOptions>(configuration.GetSection(Services.Evaluation.LiveEvaluationOptions.SectionName));
         services.Configure<Services.Chat.ModelRoutingOptions>(configuration.GetSection(Services.Chat.ModelRoutingOptions.SectionName));
@@ -118,7 +129,13 @@ public static class ApplicationServiceCollectionExtensions
         // Singleton lifetime: tutarlı, gereksiz allokasyon yok, event subscription'lar tek sefer.
 
         // Realtime oturumları bağlantı başına durum taşıdığından Scoped kaydedilir.
-        services.AddScoped<IRealtimeNativeBridge, RealtimeNativeService>();
+        // Motor her bağlantıda ayardan seçilir: appsettings değişince yeni görüşmeler yeniden başlatmadan yeni motorla açılır.
+        services.AddScoped<RealtimeNativeService>();
+        services.AddScoped<LiveVoiceService>();
+        services.AddScoped<IRealtimeNativeBridge>(sp =>
+            sp.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<VoiceEngineOptions>>().CurrentValue.Engine == VoiceEngine.Live
+                ? sp.GetRequiredService<LiveVoiceService>()
+                : sp.GetRequiredService<RealtimeNativeService>());
 
         services.AddSingleton<ISessionPort, SessionPortService>();
         services.AddSingleton<IApprovalPort, ApprovalPortService>();

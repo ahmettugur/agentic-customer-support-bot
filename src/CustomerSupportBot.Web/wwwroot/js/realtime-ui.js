@@ -298,7 +298,9 @@
                     finalizeAssistantBubble();
                     const label = reason === 'idle_timeout'
                         ? 'Görüşme sessizlik nedeniyle sonlandırıldı.'
-                        : 'Görüşme sonlandırıldı.';
+                        : reason === 'max_duration'
+                            ? 'Görüşme süre sınırına ulaştığı için sonlandırıldı.'
+                            : 'Görüşme sonlandırıldı.';
                     call('ended', label);
                     playTone('end');
                     setStatus('idle');
@@ -453,7 +455,8 @@
         order_cancel_tool: 'İptal talebi onaya gönderiliyor',
         return_request_tool: 'İade talebi onaya gönderiliyor',
         complaint_registration_tool: 'Şikayet kaydı onaya gönderiliyor',
-        human_handoff_tool: 'Temsilci talebi oluşturuluyor'
+        human_handoff_tool: 'Temsilci talebi oluşturuluyor',
+        end_conversation: 'Görüşme sonlandırılıyor'
     };
 
     // Kısa görüşme sesleri — dosya yok, Web Audio ile üretilir. Kısık seviye; tarayıcı engellerse sessizce geçer.

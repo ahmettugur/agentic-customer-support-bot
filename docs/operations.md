@@ -219,7 +219,7 @@ LLM harcama limiti. Tasarım: [superpowers/specs/2026-10-05-llm-spend-cap-design
   Redis/sayaç hatasında kontrol atlanır (fail-open) ve uyarı loglanır.
 - Limit aşılınca: sohbet turu LLM'siz yanıtlanır (`UnavailableMessage` / `ConversationLimitMessage`), arka plan
   işleri `LlmBudgetExceededException` alır, yeni sesli bağlantı 503 ile reddedilir.
-- **Bilinen sınır:** Realtime ses maliyeti sayaçlara girmez (tokenlar `IChatClient`'tan geçmiyor).
+- **Bilinen sınır:** Realtime ses maliyeti sayaçlara girmez (tokenlar `IChatClient`'tan geçmiyor). GPT-Live motorunda ses süresi ve arka plan token'ları sayılır, aşımda görüşme kapanır (bkz. [gpt-live.md](gpt-live.md)).
 
 ### `ConversationClosing`
 

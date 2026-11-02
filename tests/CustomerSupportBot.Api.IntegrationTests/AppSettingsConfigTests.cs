@@ -32,7 +32,7 @@ public class AppSettingsConfigTests
         // kadar kuyrukta kalmalı. Sla.Approvals.OnBreach=AutoReject, bunu 60 saniyeye
         // indirip tasarımı geçersiz kılar.
         var json = File.ReadAllText(RepoPath("src/CustomerSupportBot.Api/appsettings.json"));
-        using var doc = JsonDocument.Parse(json);
+        using var doc = AppSettingsJson.Parse(json);
         var onBreach = doc.RootElement
             .GetProperty("Sla").GetProperty("Approvals").GetProperty("OnBreach").GetString();
 
@@ -47,7 +47,7 @@ public class AppSettingsConfigTests
         var devPath = RepoPathIfExists("src/CustomerSupportBot.Api/appsettings.Development.json");
         if (devPath is null) return; // Bu makinede dosya yok (gitignored) — kontrol edilecek bir şey yok.
 
-        using var doc = JsonDocument.Parse(File.ReadAllText(devPath));
+        using var doc = AppSettingsJson.Parse(File.ReadAllText(devPath));
         // Anahtarların herhangi biri yoksa dev dosyası bu ayarı hiç override etmiyor demektir —
         // base'den miras alır, bu güvenli/önerilen durumdur.
         if (!doc.RootElement.TryGetProperty("Sla", out var sla)) return;

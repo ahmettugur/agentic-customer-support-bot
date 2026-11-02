@@ -79,6 +79,8 @@ sohbeti devralması (Live Takeover). `AdminEndpoints` **Admin** rolü için, `Ag
 | `GET /approvals/recent?count=50` | Son N karar (geçmiş). |
 | `GET /approvals/stuck` | Onaylanmış ama yürütmesi askıda kalmış kayıtlar (tarih sınırı yok). |
 | `GET /approvals/{id}` | Tek onay kaydı. |
+| `GET /approvals/{id}/conversation` | Talebe götüren son 6 mesaj (temsilci: `/agent/approvals/{id}/conversation`). Tur onaydan sonra yazıldığı için onay anından önceki mesajlara kayıttaki tetikleyici cümle eklenir. |
+| `GET /escalations/open/conversations` | Açık eskalasyonların konuşma özetleri, tek istekte (kart başına istek genel sınıra takılırdı). Temsilci: `/agent/escalations/open/conversations`, `/escalations/open` ile aynı kapsam. |
 | `POST /approvals/{id}/approve` | Onaylar; `body: { Reason?, DecidedBy? }`. Yüksek riskli tool'larda `Reason` zorunlu. |
 | `POST /approvals/{id}/reject` | Reddeder; `body: { Reason?, DecidedBy? }`. |
 | `GET /escalations/open` \| `/recent` \| `/{id}` | Eskalasyon listeleme/tekil görüntüleme. |

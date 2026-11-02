@@ -120,6 +120,35 @@ public sealed class AdminApiService(HttpClient http, AppAuthStateProvider authSt
     public async Task<bool> DeleteSavedReplyAsync(string id) =>
         (await http.DeleteAsync($"/saved-replies/{Uri.EscapeDataString(id)}")).IsSuccessStatusCode;
 
+    /// <summary>Onay kartının konuşma özeti; okunamazsa null (kart kayıttaki cümleyi gösterir).</summary>
+    public async Task<List<ConversationExcerptLine>?> GetApprovalConversationAsync(string id)
+    {
+        try
+        {
+            var prefix = await PrefixAsync();
+            return await http.GetFromJsonAsync<List<ConversationExcerptLine>>(
+                $"{prefix}/approvals/{Uri.EscapeDataString(id)}/conversation");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Açık eskalasyonların konuşma özetleri, tek istekte; okunamazsa null (kartlar kayıttaki cümleyi gösterir).</summary>
+    public async Task<Dictionary<string, List<ConversationExcerptLine>>?> GetOpenEscalationConversationsAsync()
+    {
+        try
+        {
+            var prefix = await PrefixAsync();
+            return await http.GetFromJsonAsync<Dictionary<string, List<ConversationExcerptLine>>>($"{prefix}/escalations/open/conversations");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
     public async Task<List<ApprovalRequest>> GetPendingApprovalsAsync()
     {
         var prefix = await PrefixAsync();

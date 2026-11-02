@@ -18,6 +18,10 @@
     'use strict';
 
     const SAMPLE_RATE = 24000;
+    // Live: kuyruk boşken ilk ses bu kadar geç başlar. Ses gerçek zamanlı aktığı için tampon yoksa ağ dalgalanmasında çıtırtı olur.
+    const DUPLEX_LEAD_SECONDS = 0.15;
+    // Live: söze girildiğinde bundan fazla ses birikmişse atılır. Az ise modelin kendisinin susması yeterlidir.
+    const BARGE_IN_FLUSH_SECONDS = 0.5;
 
     class RealtimeClient {
         constructor({ baseUrl, sessionId, callbacks, endpoint }) {
@@ -35,6 +39,8 @@
             // Asistan TTS playback için ayrı context
             this.playCtx = null;
             this._playCursor = 0; // sıralı playback için zaman damgası
+            this._sources = new Set(); // çalan/planlanmış sesler — kesmek için tek tek durdurulur
+            this._duplex = false;      // sunucu "live" derse tam çift yönlü: mikrofon asistan konuşurken de açık kalır
 
             this.state = 'idle'; // idle | connecting | listening | speaking | error
             this._disposed = false;
@@ -73,7 +79,7 @@
         setMuted(muted) {
             this._muted = !!muted;
             if (this._micTrack) {
-                try { this._micTrack.enabled = !this._muted && this.state !== 'speaking'; } catch { }
+                try { this._micTrack.enabled = !this._muted && (this._duplex || this.state !== 'speaking'); } catch { }
             }
             this._emit('muted', { muted: this._muted });
         }
@@ -243,6 +249,7 @@
             switch (msg.type) {
                 case 'connected':
                     this.sessionId = msg.sessionId || this.sessionId;
+                    this._duplex = msg.mode === 'live';
                     this._setState('listening');
                     this._emit('connected', msg);
                     break;
@@ -260,8 +267,12 @@
                     this._emit('user_transcript_delta', msg);
                     break;
                 case 'assistant_text':
-                    this._setState('speaking');
+                    // Live'da bu olay tur bittikten sonra gelir; konuşma durumunu çalan ses belirler.
+                    if (!this._duplex) this._setState('speaking');
                     this._emit('assistant_text', msg);
+                    break;
+                case 'barge_in':
+                    this._onBargeIn(!!msg.force);
                     break;
                 case 'assistant_text_delta':
                     this._emit('assistant_text_delta', msg);
@@ -332,17 +343,35 @@
             const src = this.playCtx.createBufferSource();
             src.buffer = buffer;
             src.connect(this._outAnalyser || this.playCtx.destination);
+            this._sources.add(src);
+            src.onended = () => this._sources.delete(src);
 
             const now = this.playCtx.currentTime;
-            const startAt = Math.max(now, this._playCursor);
+            const queueEmpty = this._playCursor <= now;
+            const startAt = queueEmpty && this._duplex ? now + DUPLEX_LEAD_SECONDS : Math.max(now, this._playCursor);
             src.start(startAt);
             this._playCursor = startAt + buffer.duration;
+
+            // Live'da konuşmanın bittiğini bildiren olay yok: kuyruk boşalınca dinlemeye dönülür.
+            if (this._duplex) this._scheduleListeningTransition();
+        }
+
+        _onBargeIn(force) {
+            if (!this.playCtx) return;
+            const queued = this._playCursor - this.playCtx.currentTime;
+            if (!force && queued <= BARGE_IN_FLUSH_SECONDS) return;
+            clearTimeout(this._micReopenTimer);
+            this._stopPlayback();
+            if (this.state === 'speaking') this._setState('listening');
         }
 
         _stopPlayback() {
             if (!this.playCtx) return;
-            // Mevcut tüm planlanmış ses node'larını durdurmak için context'i suspend+resume
-            try { this.playCtx.suspend().then(() => this.playCtx.resume()); } catch { }
+            // Planlanmış sesler tek tek durdurulur: bağlamı duraklatıp sürdürmek onları iptal etmez, kaldığı yerden çalarlar.
+            for (const src of this._sources) {
+                try { src.stop(); } catch { }
+            }
+            this._sources.clear();
             this._playCursor = this.playCtx.currentTime;
         }
 
@@ -378,7 +407,8 @@
             this.state = s;
             // Mikrofon gating: bot konuşurken track'i kapatıp echo'yu kaynaktan kes.
             // listening/idle dönersek tekrar aç. error durumunda da kapatılı kalsın.
-            if (this._micTrack) {
+            // Live tam çift yönlüdür: söze girilebilmesi için mikrofon hiç kapatılmaz.
+            if (this._micTrack && !this._duplex) {
                 if (s === 'speaking') {
                     try { this._micTrack.enabled = false; } catch { }
                 } else if (s === 'listening' || s === 'idle') {

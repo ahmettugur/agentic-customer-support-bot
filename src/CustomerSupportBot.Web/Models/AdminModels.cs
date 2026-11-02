@@ -360,3 +360,6 @@ public sealed record AgentPresenceItem(
 // ─── Hazır yanıtlar ──────────────────────────────────────────────────────────
 
 public sealed record SavedReplyItem(string Id, string Title, string Body, string? Shortcut, string? CreatedBy, DateTimeOffset UpdatedAt);
+
+/// <summary>Onay ve eskalasyon kartlarının konuşma özeti satırı. <c>Speaker</c>: <c>customer</c> ya da <c>assistant</c>.</summary>
+public sealed record ConversationExcerptLine(string Speaker, string Text);

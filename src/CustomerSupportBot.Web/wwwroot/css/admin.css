@@ -473,6 +473,73 @@
     word-break: break-word;
 }
 
+.approval-quote-label {
+    margin: 0 0 var(--space-1);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+
+.approval-conv-box {
+    margin: 0 0 var(--space-3);
+}
+
+.approval-conv-box > summary {
+    cursor: pointer;
+    width: fit-content;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+
+.approval-conv-box > summary:focus-visible {
+    outline: 2px solid var(--color-primary, currentColor);
+    outline-offset: 2px;
+}
+
+.approval-conv-box > summary .muted {
+    font-weight: 400;
+}
+
+.approval-conv-box[open] > summary {
+    margin-bottom: var(--space-1);
+}
+
+.approval-conv {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--space-1);
+}
+
+.approval-conv li {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: var(--space-2);
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+}
+
+.approval-conv-who {
+    font-size: var(--font-size-xs);
+    line-height: 1.75;
+    color: var(--color-text-secondary);
+}
+
+.approval-conv-text {
+    word-break: break-word;
+    white-space: pre-line;
+}
+
+.approval-conv .from-assistant .approval-conv-text {
+    color: var(--color-text-secondary);
+}
+
+.approval-conv .from-customer .approval-conv-text {
+    font-weight: 500;
+}
+
 .approval-rationale {
     margin: 0 0 var(--space-3);
     font-size: var(--font-size-xs);

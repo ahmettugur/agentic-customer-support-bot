@@ -3,6 +3,7 @@
 
 using CustomerSupportBot.Application.Ports.Outbound.Persistence;
 using CustomerSupportBot.Application.Ports.Inbound;
+using CustomerSupportBot.Application.Services.Chat;
 using CustomerSupportBot.Domain.Model;
 using Microsoft.Extensions.Logging;
 
@@ -17,12 +18,15 @@ public sealed class ApprovalPortService : IApprovalPort
     private readonly IApprovalQueue _approvalQueue;
     private readonly ICustomerRepository _customers;
     private readonly ILogger<ApprovalPortService> _logger;
+    private readonly IConversationExcerptStore? _excerpts;
 
     public ApprovalPortService(
         IApprovalQueue approvalQueue,
         ICustomerRepository customers,
-        ILogger<ApprovalPortService> logger)
+        ILogger<ApprovalPortService> logger,
+        IConversationExcerptStore? excerpts = null)
     {
+        _excerpts = excerpts;
         _approvalQueue = approvalQueue;
         _customers = customers;
         _logger = logger;
@@ -130,6 +134,20 @@ public sealed class ApprovalPortService : IApprovalPort
         }
 
         return result;
+    }
+
+    public async Task<IReadOnlyList<ConversationExcerptLine>?> GetConversationAsync(string id, CancellationToken ct = default)
+    {
+        var request = await _approvalQueue.GetAsync(id, ct);
+        if (request is null) return null;
+
+        // Oturum silinmişse (KVKK) ya da hiç yoksa özet kayıttaki cümleye düşer.
+        IReadOnlyList<ConversationMessage> before = _excerpts is null || string.IsNullOrEmpty(request.SessionId)
+            ? []
+            // Sesli yer tutucular ve boş mesajlar elenebilir: gösterilecek kadar mesaj kalsın diye fazladan okunur.
+            : await _excerpts.GetBeforeAsync(request.SessionId, request.RequestedAt, ConversationExcerpt.MaxMessages * 2, ct);
+
+        return ConversationExcerpt.Build(before, request.UserQuery);
     }
 
     public Task<ApprovalRequest?> GetAsync(string id, CancellationToken ct = default) =>

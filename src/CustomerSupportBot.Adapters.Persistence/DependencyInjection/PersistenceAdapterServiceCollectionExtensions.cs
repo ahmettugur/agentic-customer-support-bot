@@ -57,6 +57,7 @@ public static class PersistenceAdapterServiceCollectionExtensions
         services.AddSingleton<IWorkflowCheckpointRepository, PostgresWorkflowCheckpointRepository>();
         services.AddSingleton<ISavedReplyStore, PostgresSavedReplyStore>();
         services.AddSingleton<IConversationSearchStore, PostgresConversationSearchStore>();
+        services.AddSingleton<IConversationExcerptStore, PostgresConversationExcerptStore>();
         services.AddSingleton<IPerformanceStore, PostgresPerformanceStore>();
         services.AddSingleton<IOrderRepository, OrderRepository>();
         services.AddSingleton<ICustomerRepository, CustomerRepository>();

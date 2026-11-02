@@ -4,6 +4,7 @@
 //   - GET   /approvals/recent?count=50    : Son N karar (history)
 //   - GET   /approvals/stuck              : Onaylanmış ama yürütmesi askıda kalmış kayıtlar
 //   - GET   /approvals/{id}               : Tek request
+//   - GET   /approvals/{id}/conversation  : Talebe götüren son mesajlar
 //   - POST  /approvals/{id}/approve       : Onayla
 //   - POST  /approvals/{id}/reject        : Reddet (body: { reason? })
 //   - GET   /escalations/open             : Açık eskalasyonlar
@@ -34,9 +35,15 @@ namespace CustomerSupportBot.Api.Endpoints;
 
 public static class AdminEndpoints
 {
+    /// <summary>Onay kartının konuşma özeti; temsilci paneli de aynı işleyiciyi kullanır.</summary>
+    internal static async Task<IResult> ApprovalConversationAsync(string id, IApprovalPort approvals, CancellationToken ct) =>
+        await approvals.GetConversationAsync(id, ct) is { } lines ? Results.Json(lines) : Results.NotFound();
+
     public static IEndpointRouteBuilder MapAdminEndpoints(this IEndpointRouteBuilder app)
     {
         // ─── APPROVALS ───
+        app.MapGet("/approvals/{id}/conversation", ApprovalConversationAsync);
+
         // Onay kartındaki fotoğraflar (Parameters["attachmentIds"]).
         app.MapGet("/attachments/{id}", ChatAttachmentEndpoints.HandleStaffGetAsync);
 
@@ -104,6 +111,10 @@ public static class AdminEndpoints
 
         app.MapGet("/escalations/recent", (IEscalationPort escalations, int count = 50) =>
             Results.Json(escalations.GetRecent(count)));
+
+        // Kart başına istek atılmaz: kuyruk uzadıkça panel genel istek sınırına (429) takılırdı.
+        app.MapGet("/escalations/open/conversations", async (IEscalationPort escalations, CancellationToken ct) =>
+            Results.Json(await escalations.GetConversationsAsync(escalations.GetOpen(), ct)));
 
         app.MapGet("/escalations/{id}", (string id, IEscalationPort escalations) =>
         {
