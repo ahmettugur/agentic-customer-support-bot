@@ -28,6 +28,9 @@ public interface IApprovalPort
     /// <summary>Tek istek.</summary>
     ApprovalRequest? Get(string id);
 
+    /// <summary>Talebe götüren konuşmanın son mesajları, eskiden yeniye; kayıt yoksa <c>null</c>.</summary>
+    Task<IReadOnlyList<ConversationExcerptLine>?> GetConversationAsync(string id, CancellationToken ct = default);
+
     /// <summary>Reads the durable request for decision and authorization checks.</summary>
     Task<ApprovalRequest?> GetAsync(string id, CancellationToken ct = default);
 

@@ -33,6 +33,12 @@ public interface IEscalationPort
     /// <summary>Tek eskalasyon kaydı.</summary>
     EscalationRequest? Get(string id);
 
+    /// <summary>
+    /// Verilen kayıtların konuşma özetleri (kayıt kimliğine göre). Kapsam denetimi çağıranındır: yalnızca görebildiği kayıtları vermelidir.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<ConversationExcerptLine>>> GetConversationsAsync(
+        IReadOnlyList<EscalationRequest> escalations, CancellationToken ct = default);
+
     /// <summary>Admin kararı: "acknowledge", "resolve", "dismiss".</summary>
     Task<bool> DecideAsync(string id, string action, string? assignedTo = null, string? resolution = null);
 

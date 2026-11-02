@@ -1,0 +1,30 @@
+@* Onay kartı: konuşma özetini kayıt kimliğiyle yükler. *@
+@inject AdminApiService AdminApi
+
+<ConversationExcerptView Lines="_lines" Loading="_loading" Fallback="@Fallback" />
+
+@code {
+    [Parameter, EditorRequired] public string ApprovalId { get; set; } = "";
+    [Parameter] public string? Fallback { get; set; }
+
+    private List<ConversationExcerptLine>? _lines;
+    private string _loadedId = "";
+    private bool _loading;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Kart yoklamada yeniden çizilir; aynı kayıt için yeniden yüklenmez.
+        if (ApprovalId == _loadedId) return;
+        _loadedId = ApprovalId;
+        _lines = null;
+        _loading = true;
+
+        var requested = ApprovalId;
+        var lines = await AdminApi.GetApprovalConversationAsync(requested);
+
+        // Beklerken başka karta geçildiyse geç gelen sonuç o kartın üstüne yazılmaz.
+        if (requested != _loadedId) return;
+        _lines = lines;
+        _loading = false;
+    }
+}

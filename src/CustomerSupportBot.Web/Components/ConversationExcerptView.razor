@@ -1,0 +1,33 @@
+@* Kayda götüren son mesajlar: onay ve eskalasyon kartlarında aynı görünüm. Kapalı gelir, kuyruk kısa kalır; tıklayınca açılır.
+   Özet yoksa kayıttaki müşteri cümlesine düşer. *@
+
+@if (Lines is { Count: > 0 })
+{
+    <details class="approval-conv-box">
+        <summary>Konuşma özeti <span class="muted">(son @Lines.Count mesaj)</span></summary>
+        <ol class="approval-conv">
+            @foreach (var line in Lines)
+            {
+                <li class="@(line.Speaker == "customer" ? "from-customer" : "from-assistant")">
+                    <span class="approval-conv-who">@(line.Speaker == "customer" ? "Müşteri" : "Asistan")</span>
+                    <span class="approval-conv-text">@line.Text</span>
+                </li>
+            }
+        </ol>
+    </details>
+}
+else if (Loading)
+{
+    <p class="approval-quote-label" role="status">Konuşma yükleniyor…</p>
+}
+else if (!string.IsNullOrWhiteSpace(Fallback))
+{
+    <p class="approval-quote-label">@ApprovalView.QuoteLabel(Fallback)</p>
+    <blockquote class="approval-quote">@Fallback</blockquote>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<ConversationExcerptLine>? Lines { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public string? Fallback { get; set; }
+}

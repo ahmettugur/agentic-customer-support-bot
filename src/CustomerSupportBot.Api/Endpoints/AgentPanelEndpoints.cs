@@ -14,6 +14,7 @@
 //   GET  /agent/approvals/pending           → Bekleyen onaylar
 //   GET  /agent/approvals/recent            → Son N karar (geçmiş sekmesi)
 //   GET  /agent/approvals/stuck             → Yürütmesi askıda kalmış onaylar
+//   GET  /agent/approvals/{id}/conversation → Talebe götüren son mesajlar
 //
 // Onay (Approval):
 //   GET  /agent/approvals/pending            → Onay bekleyen tool çağrıları
@@ -92,13 +93,16 @@ public static class AgentPanelEndpoints
         {
             if (!TryResolveEscalationScope(ctx, out var agentScope, out var denied)) return denied!;
 
-            var all = escalations.GetOpen();
-            var visible = agentScope is null
-                ? all
-                : all.Where(e => string.IsNullOrEmpty(e.AssignedTo)
-                               || string.Equals(e.AssignedTo, agentScope, StringComparison.OrdinalIgnoreCase))
-                     .ToList();
-            return Results.Json(visible);
+            return Results.Json(VisibleOpenEscalations(escalations, agentScope));
+        });
+
+        // Konuşma özetleri /escalations/open ile aynı kapsamdadır; istemciden kimlik alınmaz, başka temsilcinin kaydı istenemez.
+        group.MapGet("/escalations/open/conversations", async (
+            HttpContext ctx, IEscalationPort escalations, CancellationToken ct) =>
+        {
+            if (!TryResolveEscalationScope(ctx, out var agentScope, out var denied)) return denied!;
+
+            return Results.Json(await escalations.GetConversationsAsync(VisibleOpenEscalations(escalations, agentScope), ct));
         });
 
         // ─── Üstlen (herhangi bir agent herhangi bir açık eskalasyonu üstlenebilir) ───
@@ -214,6 +218,8 @@ public static class AgentPanelEndpoints
         // alıyordu — admin'de çalışan bir ekran agent'ta sessizce boş kalıyordu.
         group.MapGet("/approvals/recent", async (IApprovalPort approvals, CancellationToken ct, int count = 50) =>
             Results.Json(await approvals.GetRecentAsync(count, ct)));
+
+        group.MapGet("/approvals/{id}/conversation", AdminEndpoints.ApprovalConversationAsync);
 
         group.MapGet("/approvals/stuck", async (IApprovalPort approvals, CancellationToken ct) =>
             Results.Json(await approvals.GetStuckExecutionsAsync(ct)));
@@ -483,6 +489,16 @@ public static class AgentPanelEndpoints
     /// claim yoksa 400 döner — liste uçlarının onlardan daha geniş olması tutarsızlıktı.
     /// </para>
     /// </summary>
+    private static IReadOnlyList<EscalationRequest> VisibleOpenEscalations(IEscalationPort escalations, string? agentScope)
+    {
+        var all = escalations.GetOpen();
+        return agentScope is null
+            ? all
+            : all.Where(e => string.IsNullOrEmpty(e.AssignedTo)
+                           || string.Equals(e.AssignedTo, agentScope, StringComparison.OrdinalIgnoreCase))
+                 .ToList();
+    }
+
     private static bool TryResolveEscalationScope(
         HttpContext ctx, out string? agentScope, out IResult? denied)
     {

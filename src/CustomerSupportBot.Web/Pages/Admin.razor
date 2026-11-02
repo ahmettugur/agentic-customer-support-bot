@@ -94,6 +94,7 @@
                                 var item = row;
                                 var isSel = selected?.Id == row.Id;
                                 var rowCustomer = row.CustomerName ?? row.CustomerId ?? ParamString(row.Parameters, "customerId");
+                                var rowSummary = ApprovalRowSummary(row);
                                 <button type="button" role="listitem" class="md-row @(isSel ? "selected" : "") @(_decidingApprovals.Contains(row.Id) ? "deciding" : "")"
                                         aria-current="@(isSel ? "true" : null)" @onclick="() => SelectApproval(item)">
                                     <span class="type-icon @ToolTone(row.ToolName)"><Icon Name="@ToolIcon(row.ToolName)" Size="17" /></span>
@@ -102,7 +103,7 @@
                                             @ToolDisplayName(row.ToolName)
                                             @if (row.ReasonRequired) { <span class="risk-tag">Yüksek risk</span> }
                                         </span>
-                                        <span class="md-row-sub">@(rowCustomer ?? "Müşteri bilinmiyor")@(string.IsNullOrWhiteSpace(row.UserQuery) ? "" : $" · {row.UserQuery}")</span>
+                                        <span class="md-row-sub">@(rowCustomer ?? "Müşteri bilinmiyor")@(rowSummary is null ? "" : $" · {rowSummary}")</span>
                                     </span>
                                     <span class="wait @(IsLongWait(row) ? "long" : "")" title="@row.RequestedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm:ss")">
                                         <Icon Name="clock" Size="13" StrokeWidth="2" />@FmtRelative(row.RequestedAt).Replace(" önce", "")
@@ -211,10 +212,7 @@
                                     <ApprovalPhotos Ids="photoIds" />
                                 }
 
-                                @if (!string.IsNullOrWhiteSpace(a.UserQuery))
-                                {
-                                    <blockquote class="approval-quote">@a.UserQuery</blockquote>
-                                }
+                                <ApprovalConversationExcerpt @key="a.Id" ApprovalId="@a.Id" Fallback="@a.UserQuery" />
 
                                 @if (HasMeaningfulJustification(a.Justification))
                                 {
@@ -364,7 +362,7 @@
                                 var esc = e;
                                 var isAcknowledged = e.Status is "acknowledged";
                                 var menuOpen = _escMenuOpenId == e.Id;
-                                <article class="card card-escalation @(isAcknowledged ? "card-acknowledged" : "")">
+                                <article @key="e.Id" class="card card-escalation @(isAcknowledged ? "card-acknowledged" : "")">
                                     <header class="esc-header">
                                         <span class="esc-status @(isAcknowledged ? "taken" : "open")">
                                             @if (isAcknowledged && e.AssignedTo is not null)
@@ -384,10 +382,9 @@
                                         <span>Atanan: @(e.AssignedTo ?? "—")</span>
                                         <code class="card-id" title="@e.Id">@ShortId(e.Id)</code>
                                     </div>
-                                    @if (!string.IsNullOrWhiteSpace(e.UserQuery))
-                                    {
-                                        <blockquote class="approval-quote">@e.UserQuery</blockquote>
-                                    }
+                                    <ConversationExcerptView Lines="@_escalationConversations.GetValueOrDefault(e.Id)"
+                                                             Loading="@(!_escalationConversations.ContainsKey(e.Id))"
+                                                             Fallback="@e.UserQuery" />
                                     @if (!string.IsNullOrWhiteSpace(e.ResponseSummary))
                                     {
                                         <p class="esc-summary"><strong>Asistan özeti:</strong> @e.ResponseSummary</p>

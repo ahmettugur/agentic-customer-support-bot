@@ -20,10 +20,20 @@ public sealed class EscalationPortService : IEscalationPort
     public event EventHandler<EscalationRequest>? RequestCreated;
     public event EventHandler<EscalationRequest>? RequestDecided;
 
+    /// <summary>
+    /// Eskalasyon turun sonunda oluşur; mesajlar kayıttan birkaç saniye sonraya kadar yazılabilir (ölçüldü: en çok 2 sn). Pencere bu turu
+    /// kapsar, sonraki turlara uzanmaz.
+    /// </summary>
+    private static readonly TimeSpan TurnWindow = TimeSpan.FromSeconds(5);
+
+    private readonly IConversationExcerptStore? _excerpts;
+
     public EscalationPortService(
         IEscalationSink escalations,
-        ILogger<EscalationPortService> logger)
+        ILogger<EscalationPortService> logger,
+        IConversationExcerptStore? excerpts = null)
     {
+        _excerpts = excerpts;
         _escalations = escalations;
         _logger = logger;
 
@@ -57,6 +67,22 @@ public sealed class EscalationPortService : IEscalationPort
         // Filtreleme burada YAPILMAZ; adaptöre devredilir. Cache üzerinde elemek, cache'in
         // kendisi bir "son N" penceresi olduğu için sınırı ötelemekten ibarettir.
         return _escalations.GetRecentForAgentAsync(agentId, count, ct);
+    }
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<ConversationExcerptLine>>> GetConversationsAsync(
+        IReadOnlyList<EscalationRequest> escalations, CancellationToken ct = default)
+    {
+        var map = new Dictionary<string, IReadOnlyList<ConversationExcerptLine>>(escalations.Count, StringComparer.Ordinal);
+        foreach (var escalation in escalations)
+        {
+            IReadOnlyList<ConversationMessage> before = _excerpts is null || string.IsNullOrEmpty(escalation.SessionId)
+                ? []
+                : await _excerpts.GetBeforeAsync(
+                    escalation.SessionId, escalation.CreatedAt + TurnWindow, ConversationExcerpt.MaxMessages * 2, ct);
+
+            map[escalation.Id] = ConversationExcerpt.Build(before, escalation.UserQuery, turnMayBeAnswered: true);
+        }
+        return map;
     }
 
     public EscalationRequest? Get(string id)
