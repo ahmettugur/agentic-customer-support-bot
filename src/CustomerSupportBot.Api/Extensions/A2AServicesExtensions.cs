@@ -30,33 +30,29 @@ public static class A2AServicesExtensions
         services.AddHttpContextAccessor();
         services.UseClaimsBasedAgentIsolation();
 
-        // AgentRunMode.ReturnMessage bilinçli (eski adıyla DisallowBackground — 1.22 SDK'sında
-        // AgentRunMode enum'dan statik property'li bir struct'a dönüştü ve isim değişti, davranış
-        // aynı): arka plan (uzun süreli, AgentTask olarak pollanan) görevler dış çağıranın
-        // sunucuda iş biriktirmesine izin verirdi. Bu kanal salt-okunur sorgular içindir — her
-        // çağrı istek ömrü içinde başlar ve biter, yanıt her zaman tek bir AgentMessage'a
-        // toplanır.
+        // Yanıt her zaman tek bir AgentMessage'dır (AgentRunMode.ReturnMessage): arka plan (uzun
+        // süreli, AgentTask olarak pollanan) görevler dış çağıranın sunucuda iş biriktirmesine izin
+        // verirdi. Bu kanal salt-okunur sorgular içindir — her çağrı istek ömrü içinde başlar ve biter.
         //
-        // MEAI001 yalnızca BURADA bastırılıyor (proje genelinde değil): AgentRunMode henüz
-        // deneysel işaretli. Bastırmayı dar tutmak, aynı uyarının başka bir deneysel API
-        // kullanıldığında hâlâ görünmesini sağlar. Sürüm yükseltmelerinde bu pragma'nın
-        // hâlâ gerekli olup olmadığı kontrol edilmeli.
-#pragma warning disable MEAI001
+        // 1.28'de bu artık bir seçenek değil: AddA2AServer'ın kurduğu handler sabit olarak
+        // ReturnMessage kullanır (paket kodundan doğrulandı); kayıt seçeneklerindeki AgentRunMode
+        // kaldırıldı. Başka bir mod ancak ajan adıyla keyed bir IAgentHandler kaydedilerek seçilir —
+        // bu projede bilerek yapılmıyor. Sürüm yükseltmelerinde bu varsayılanın değişmediği,
+        // A2AEndpointsTests'teki "tek message olayı" sözleşmesiyle de denetlenir.
         services
             .AddAIAgent(A2AAgentNames.Product,
                 (sp, _) => sp.GetRequiredService<A2AAgentCatalog>().Product)
-            .AddA2AServer(o => o.AgentRunMode = AgentRunMode.ReturnMessage);
+            .AddA2AServer();
 
         services
             .AddAIAgent(A2AAgentNames.Order,
                 (sp, _) => sp.GetRequiredService<A2AAgentCatalog>().Order)
-            .AddA2AServer(o => o.AgentRunMode = AgentRunMode.ReturnMessage);
+            .AddA2AServer();
 
         services
             .AddAIAgent(A2AAgentNames.Complaint,
                 (sp, _) => sp.GetRequiredService<A2AAgentCatalog>().Complaint)
-            .AddA2AServer(o => o.AgentRunMode = AgentRunMode.ReturnMessage);
-#pragma warning restore MEAI001
+            .AddA2AServer();
 
         return services;
     }

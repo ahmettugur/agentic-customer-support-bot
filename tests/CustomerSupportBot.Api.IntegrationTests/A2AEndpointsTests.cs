@@ -517,6 +517,36 @@ public class A2AEndpointsTests : IClassFixture<A2AEnabledFactory>
         response.Content.Headers.ContentType?.MediaType.Should().Be("application/a2a+json");
     }
 
+    /// <summary>
+    /// Kanal salt-okunurdur: yanıt her zaman tek bir Message olmalı, sunucuda izlenen bir Task değil (bkz. A2AServicesExtensions).
+    /// Paketin 1.28 sürümünde bu bir seçenek olmaktan çıktı ve hazır handler'ın sabit davranışına dönüştü; bir sürüm yükseltmesi
+    /// bu varsayılanı değiştirirse dış çağıranlar sunucuda iş biriktirebilir hâle gelirdi.
+    /// </summary>
+    [Theory]
+    [InlineData("SendMessage")]
+    [InlineData("SendStreamingMessage")]
+    public async Task Responses_AreAlwaysASingleMessage_NeverATask(string method)
+    {
+        var client = ClientWith(MintToken(A2ARoles.Partner));
+
+        var response = await client.PostAsJsonAsync("/a2a/product", new
+        {
+            jsonrpc = "2.0", id = "m1", method,
+            @params = new { message = new { role = "ROLE_USER", messageId = "m1", parts = new[] { new { text = "Çay fiyatı?" } } } }
+        }, TestContext.Current.CancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var payloads = method == "SendMessage"
+            ? [body]
+            : body.Split('\n').Where(l => l.StartsWith("data:")).Select(l => l["data:".Length..].Trim()).ToList();
+
+        payloads.Should().ContainSingle("yanıt artımlı parçalara ya da görev olaylarına bölünmemeli");
+        using var doc = System.Text.Json.JsonDocument.Parse(payloads[0]);
+        var result = doc.RootElement.GetProperty("result");
+        result.TryGetProperty("message", out _).Should().BeTrue();
+        result.TryGetProperty("task", out _).Should().BeFalse();
+    }
+
     // ═══ Hata sözleşmesi — dış bir istemci hata KODUNA bakarak karar verir ═══
 
     /// <summary>

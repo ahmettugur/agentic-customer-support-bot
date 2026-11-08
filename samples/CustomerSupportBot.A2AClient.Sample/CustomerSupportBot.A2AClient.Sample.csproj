@@ -15,14 +15,14 @@
          bir partnerin elindekinden fazlasina sahip degildir. Referans verseydik
          paylasilan tiplerle calisir ve entegrasyonu degil kendi ic tutarliligimizi
          test etmis olurduk. -->
-    <PackageReference Include="A2A" Version="1.0.0-preview3" />
+    <PackageReference Include="A2A" Version="1.0.0-preview4" />
     <!-- Markdig: ajan yanitlarindaki Markdown'i AYRISTIRMAK icin. Elle regex yazmak
          tablolari, ic ice listeleri ve kod bloklarini dogru cozemez; kendi ayristiricimizi
          yazmak bu ornegin konusu degil. -->
-    <PackageReference Include="Markdig" Version="1.5.0" />
-    <PackageReference Include="Microsoft.Agents.AI" Version="1.26.0" />
-    <PackageReference Include="Microsoft.Agents.AI.A2A" Version="1.26.0-preview.261023.1" />
-    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.26.0" />
+    <PackageReference Include="Markdig" Version="1.6.0" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.28.0" />
+    <PackageReference Include="Microsoft.Agents.AI.A2A" Version="1.28.0-preview.261106.1" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.28.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.11.0" />
 
@@ -36,7 +36,7 @@
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.20.1" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.20.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.20.2" />
   </ItemGroup>
 
   <ItemGroup>
